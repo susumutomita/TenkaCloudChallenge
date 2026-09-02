@@ -6,7 +6,7 @@
 > the TenkaCloud repository, not to the course operators.
 
 **Track:** `advanced-cryptography-2026` · **Order:** 10 · **Chapter:** Bridge 0 / Experimental
-Workflow · **Role:** `diagnostic` · **Time:** 20–30 minutes · **Points:** 100
+Workflow · **Role:** `diagnostic` · **Time:** 40–60 minutes · **Points:** 100
 
 ## Start here
 
@@ -116,21 +116,20 @@ make reset               # restore starter/counter.py
 
 ## Scoring
 
-Four boxes, marked independently. Wrong answers cost 5 points each.
-
-Portal prepares and submits two of the four values from the current editor state. You work out
-the other two and type them directly into their answer fields — nothing in the problem computes
-them for you, and that is deliberate.
+Seven boxes, marked independently. Wrong answers cost 5 points each.
 
 | Box | Points | Where the value comes from | What you write |
-|---|---:|---|---|
-| `environment` | 20 | Portal | The pass phrase, exactly as printed |
-| `predict` | 25 | **you, by hand** | The number you end on, as one number — worked out **before** you run anything |
-| `first-broken` | 25 | **you, by hand** | Which position holds the number that does not belong, counting from 0 at the left |
-| `generalize` | 30 | Portal | Your whole `counter.py`, run against numbers you have not seen |
+|---|---|---|---|
+| `environment` | 10 | Portal | Just press Submit; the pass phrase is sent for you |
+| `predict` | 10 | **you, by hand** | The number you end on, as one number — worked out **before** you run anything |
+| `first-broken` | 10 | **you, by hand** | Which position holds the number that does not belong, counting from 0 at the left |
+| `generalize` | 20 | Portal | Your whole `counter.py`, run against numbers you have not seen |
+| `walkback` | 15 | **you, by hand** | From the second walk's final number, how many rounds it took (the recipe is in the statement) |
+| `no-walkback` | 15 | **you, constructed** | Keeping that walk's step, one ring size on which no undo number exists (graded as a property) |
+| `count-no-walkback` | 20 | Portal | `count_no_walkback` in `counter.py`: how many ring sizes in a range cannot undo the step; ranges reach 10^12, so a one-by-one walk times out |
 
-Hints are available on `first-broken` (10) and `generalize` (10, then 5). Opening every hint
-still leaves you 75 of 100.
+Hints are available on `first-broken` (5), `generalize` (5, 5), `walkback` (4, 3), `no-walkback` (4, 3) and `count-no-walkback` (5, 5). Opening every hint
+leaves 61 of the 100 points.
 
 On `predict`: you can trivially get this one by running your code first and copying the answer.
 Nobody will catch you. You will also have removed the only thing the box measures, in the one

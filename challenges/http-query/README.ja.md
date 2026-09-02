@@ -10,7 +10,7 @@
 | 難易度    | 3 / 5 (中級)                                            |
 | 想定時間  | 30〜45 分                                                |
 | status    | `ready`                                                 |
-| スコア    | `flag` (`points`: 300, `wrongAnswerPenalty`: 15)        |
+| スコア    | `flag` (`points`: 200, `wrongAnswerPenalty`: 10)        |
 
 ## ストーリー
 
@@ -96,7 +96,7 @@ curl -s -X QUERY "$SEARCH_ENDPOINT" \
 # -> 200 ... Flag: TC{...}
 ```
 
-`TC{…}` を Participant Portal に貼る。 正解 → +300 pt。 誤答 → -15 pt。
+`TC{…}` を Participant Portal に貼る。 正解 → +200 pt。 誤答 → -10 pt。
 
 ### 厳格な body 取り扱い (バックエンドの設計)
 
@@ -117,16 +117,16 @@ curl -s -X QUERY "$SEARCH_ENDPOINT" \
 
 | hint   | 内容                                                                                                  | ペナルティ |
 | ------ | ---------------------------------------------------------------------------------------------------- | ---------- |
-| hint-1 | アプリは正常: `GET` は 200 を返し、 Lambda ログには QUERY が一切届いていない。 アプリではなく **エッジ** (ALB) を疑え。 | -15  |
-| hint-2 | ALB listener rule には HTTP メソッドの allow-list (`http-request-method`) がある。 今のルールは GET/HEAD/POST/OPTIONS だけ許可していて、 **QUERY が入っていない** ので default の 405 に落ちる。 | -25 |
-| hint-3 | `aws elbv2 modify-rule … HttpRequestMethodConfig={Values=[GET,HEAD,POST,OPTIONS,QUERY]}` で QUERY を足し、 もう一度 QUERY を送る。 | -35 |
+| hint-1 | アプリは正常: `GET` は 200 を返し、 Lambda ログには QUERY が一切届いていない。 アプリではなく **エッジ** (ALB) を疑え。 | -20 |
+| hint-2 | ALB listener rule には HTTP メソッドの allow-list (`http-request-method`) がある。 今のルールは GET/HEAD/POST/OPTIONS だけ許可していて、 **QUERY が入っていない** ので default の 405 に落ちる。 | -30 |
+| hint-3 | `aws elbv2 modify-rule … HttpRequestMethodConfig={Values=[GET,HEAD,POST,OPTIONS,QUERY]}` で QUERY を足し、 もう一度 QUERY を送る。 | -50 |
 
 ## スコア
 
 | 状態                                                       | スコア |
 | ---------------------------------------------------------- | ------ |
-| 正解 (仕様準拠 QUERY が返した `TC{…}`)                      | +300   |
-| 誤答                                                       | -15    |
+| 正解 (仕様準拠 QUERY が返した `TC{…}`)                      | +200   |
+| 誤答                                                       | -10    |
 
 ## コスト
 

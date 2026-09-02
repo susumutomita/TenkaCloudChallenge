@@ -38,6 +38,9 @@ Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/veri
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import os
 import resource
@@ -54,6 +57,66 @@ from fixtures.generate import public_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+
+
+#: Mirrors `participant/workbench.py`'s `PortalEditorSupport` problem id: the seal key is
+#: derived from it and this deployment's seed, so a submission sealed for another
+#: problem or another deployment never unwraps here.
+PROBLEM_ID = "ac26-w5-extract-key-switch"
+#: Every checkpoint here is a code checkpoint. Kept as a tuple so the unwrap rule below
+#: stays the shape of ac26-w4-commit-open's, which does have manual ones.
+MANUAL_CHECKPOINTS: tuple[str, ...] = ()
+
+
+def _b64decode(text: str) -> bytes:
+    padding = "=" * (-len(text) % 4)
+    return base64.urlsafe_b64decode(text + padding)
+
+
+def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
+    """Undo the Workbench's `tcw1.` seal and check it against this deployment.
+
+    `participant/workbench.py`'s `prepare_submissions` seals every code checkpoint's
+    source with an HMAC over (problem id, seed), and the Portal forwards that sealed
+    string to `/verify` unchanged. Until this function existed, this verifier wrote the
+    sealed string itself to the submission file and every submission -- the unedited
+    starter included -- failed with "could not be imported: NameError". Found by a
+    firewalled playtest that could only see what a participant sees.
+
+    The derivation is duplicated from `PortalEditorSupport._seal_manual` rather than
+    imported, because that module lives only in the participant image. An unsealed
+    code submission still passes through unchanged, which is the format `/verify`
+    accepted before the Workbench sealed anything.
+    """
+    if not isinstance(submission, str) or not submission.startswith("tcw1."):
+        return None if checkpoint_id in MANUAL_CHECKPOINTS else submission
+    try:
+        prefix, encoded_payload, encoded_signature = submission.split(".", 2)
+        if prefix != "tcw1":
+            return None
+        payload = _b64decode(encoded_payload)
+        signature = _b64decode(encoded_signature)
+        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        decoded = json.loads(payload.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    if decoded.get("v") != 1 or decoded.get("checkpointId") != checkpoint_id:
+        return None
+    answer = decoded.get("answer")
+    # More than one editable file is sealed as one JSON object of file name to source.
+    if isinstance(answer, str) and answer.lstrip().startswith("{"):
+        try:
+            parsed = json.loads(answer)
+        except json.JSONDecodeError:
+            return answer
+        if isinstance(parsed, dict):
+            return parsed
+    return answer
 
 MAX_BODY_BYTES = 256 * 1024
 RUN_TIMEOUT_SECONDS = 30
@@ -138,7 +201,7 @@ def _failure_message(failures: list[object]) -> str | None:
     is dropped rather than serialized, so a checker bug cannot push raw values
     through the message field.
     """
-    text = "; ".join(item for item in failures if isinstance(item, str))
+    text = "; ".join(dict.fromkeys(item for item in failures if isinstance(item, str)))
     return text[:MAX_MESSAGE_CHARS] if text else None
 
 
@@ -268,8 +331,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         # Every checkpoint here is a code checkpoint, so a submission is the file itself --
         # `participant/server.py`'s Portal adapter is what formats it, and this process
-        # never sees a direct-answer envelope to unwrap.
-        submission = body.get("submission")
+        submission = _unwrap_submission(checkpoint_id, body.get("submission"))
         try:
             correct, message = evaluate_with_message(checkpoint_id, submission)
         except Exception:  # noqa: BLE001 - a broken checkpoint must fail closed

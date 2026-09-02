@@ -110,6 +110,61 @@ def advance(start, step, rounds, modulus):
 ]
 
 
+COUNT_MUTATIONS: list[tuple[str, str]] = [
+    (
+        "count walks the range one number at a time",
+        """
+def count_no_walkback(step, low, high):
+    from math import gcd
+    return sum(1 for m in range(low, high + 1) if gcd(step, m) > 1)
+""",
+    ),
+    (
+        "count only the multiples of step itself",
+        """
+def count_no_walkback(step, low, high):
+    return high // step - (low - 1) // step
+""",
+    ),
+    (
+        "count adds the multiples of each prime factor without removing overlaps",
+        """
+def count_no_walkback(step, low, high):
+    total = 0
+    for prime in _prime_factors(step):
+        total += high // prime - (low - 1) // prime
+    return total
+""",
+    ),
+    (
+        "count handles two prime factors only",
+        """
+def count_no_walkback(step, low, high):
+    primes = _prime_factors(step)
+    def up_to(n):
+        if n < 1:
+            return 0
+        total = sum(n // p for p in primes)
+        if len(primes) >= 2:
+            total -= n // (primes[0] * primes[1])
+        return total
+    return up_to(high) - up_to(low - 1)
+""",
+    ),
+    (
+        "count ignores low",
+        """
+def count_no_walkback(step, low, high):
+    primes = _prime_factors(step)
+    products = [(1, 0)]
+    for prime in primes:
+        products += [(product * prime, size + 1) for product, size in products]
+    return sum((high // product if size % 2 else -(high // product)) for product, size in products if size)
+""",
+    ),
+]
+
+
 def _load(source: str):
     namespace: dict[str, object] = {}
     exec(compile(source, "<mutation>", "exec"), namespace)  # noqa: S102 - our own fixtures
@@ -146,6 +201,24 @@ def main() -> int:
     else:
         print("KILLED verifier accepts an empty-trace submission")
 
+    # count-no-walkback: mutants go through the verifier (subprocess + time limit), because
+    # the one that matters most -- walking the range one number at a time -- never
+    # finishes, and running it in-process would hang this suite.
+    count_reference = reference_source
+    for name, count_source in COUNT_MUTATIONS:
+        mutant = count_reference[: count_reference.index("def count_no_walkback")] + count_source
+        correct, _message = evaluate("count-no-walkback", mutant)
+        if correct:
+            survivors.append(name)
+            print(f"SURVIVED {name}")
+        else:
+            print(f"KILLED {name}")
+    if not evaluate("count-no-walkback", reference_source)[0]:
+        survivors.append("reference count_no_walkback rejected by the verifier")
+        print("FAIL reference count_no_walkback rejected by the verifier")
+    else:
+        print("PASS reference count_no_walkback passes through the verifier")
+
     if evaluate("environment", "not-the-token")[0]:
         survivors.append("verifier accepts a wrong health token")
         print("SURVIVED verifier accepts a wrong health token")
@@ -158,7 +231,7 @@ def main() -> int:
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(MUTATIONS) + 2} mutations killed.")
+    print(f"All {len(MUTATIONS) + len(COUNT_MUTATIONS) + 2} mutations killed.")
     return 0
 
 

@@ -10,7 +10,7 @@ A Challenge built on **RFC 10008 — the HTTP `QUERY` method** (Standards Track,
 | Difficulty     | 3 / 5 (intermediate)                                          |
 | Estimated time | 30–45 min                                                     |
 | status         | `ready`                                                       |
-| Scoring        | `flag` (`points`: 300, `wrongAnswerPenalty`: 15)             |
+| Scoring        | `flag` (`points`: 200, `wrongAnswerPenalty`: 10)             |
 
 ## Story
 
@@ -96,7 +96,7 @@ curl -s -X QUERY "$SEARCH_ENDPOINT" \
 # -> 200 ... Flag: TC{...}
 ```
 
-Paste `TC{…}` into the Participant Portal. Correct → +300 pt. Wrong → -15 pt.
+Paste `TC{…}` into the Participant Portal. Correct → +200 pt. Wrong → -10 pt.
 
 ### Strict body handling (the backend, by design)
 
@@ -117,16 +117,16 @@ The API does **no content sniffing** — it teaches RFC 10008's strict request h
 
 | hint   | Content                                                                                                 | Penalty |
 | ------ | ------------------------------------------------------------------------------------------------------ | ------- |
-| hint-1 | The app is fine: `GET` returns 200 and the Lambda logs show no QUERY arrived. Suspect the **edge** (ALB), not the app. | -15     |
-| hint-2 | ALB listener rules have an HTTP-method allow-list (`http-request-method`). The current rule allows GET/HEAD/POST/OPTIONS — **QUERY isn't in it**, so QUERY hits the default 405. | -25     |
-| hint-3 | Add QUERY to the rule's Values via `aws elbv2 modify-rule … HttpRequestMethodConfig={Values=[GET,HEAD,POST,OPTIONS,QUERY]}`, then re-send the QUERY. | -35     |
+| hint-1 | The app is fine: `GET` returns 200 and the Lambda logs show no QUERY arrived. Suspect the **edge** (ALB), not the app. | -20 |
+| hint-2 | ALB listener rules have an HTTP-method allow-list (`http-request-method`). The current rule allows GET/HEAD/POST/OPTIONS — **QUERY isn't in it**, so QUERY hits the default 405. | -30 |
+| hint-3 | Add QUERY to the rule's Values via `aws elbv2 modify-rule … HttpRequestMethodConfig={Values=[GET,HEAD,POST,OPTIONS,QUERY]}`, then re-send the QUERY. | -50 |
 
 ## Scoring
 
 | State                                                      | Score |
 | ---------------------------------------------------------- | ----- |
-| Correct (`TC{…}` returned by a spec-compliant QUERY)       | +300  |
-| Wrong                                                      | -15   |
+| Correct (`TC{…}` returned by a spec-compliant QUERY)       | +200  |
+| Wrong                                                      | -10   |
 
 ## Cost
 

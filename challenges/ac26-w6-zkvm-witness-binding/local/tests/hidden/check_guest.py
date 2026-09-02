@@ -582,7 +582,7 @@ def _one_run(module, built: dict, record: dict, private: dict, what: str) -> lis
     if not isinstance(got, dict):
         return ["run_guest did not return a dict"]
     if set(got) != set(RUN_FIELDS):
-        return [f"run_guest reported {sorted(got)}; a run reports {sorted(RUN_FIELDS)}"]
+        return [f"run_guest reported {sorted(got)}; not a run's field set"]
 
     failures: list[str] = []
     hinted = _misleading(want)
@@ -768,8 +768,7 @@ def _journal_failures(module, seed: str, label: str) -> list[str]:
             continue
         if set(got) != set(JOURNAL_FIELDS):
             failures.append(
-                f"seal_journal published {sorted(got)}; a journal is exactly "
-                f"{sorted(JOURNAL_FIELDS)}"
+                f"seal_journal published {sorted(got)}; not a journal's field set"
             )
             continue
         sealed[what] = got
@@ -791,9 +790,9 @@ def _journal_failures(module, seed: str, label: str) -> list[str]:
         measurements = got["measurements"]
         if not isinstance(measurements, dict) or set(measurements) != set(MEASUREMENT_NAMES):
             failures.append(
-                f"seal_journal's measurements are not exactly {sorted(MEASUREMENT_NAMES)}; a "
-                "measurement is safe when a reader could already compute it, and everything "
-                "else is the witness at lower resolution"
+                "seal_journal's measurements are not exactly the expected set; a measurement "
+                "is safe when a reader could already compute it, and everything else is the "
+                "witness at lower resolution"
             )
         elif measurements != want["measurements"]:
             failures.append("seal_journal's step count is not the one this run took")

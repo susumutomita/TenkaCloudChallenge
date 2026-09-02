@@ -158,8 +158,9 @@ def _compare(
         if actual[day] != total:
             failures.append(
                 # §15: the actual total is the submission's own output; the expected total
-                # would hand the checkpoint its answer, so it stays out of the message.
-                f"{what}: {day} totalled {actual[day]}, which is not the day's true sum"
+                # and which specific day it is would hand the checkpoint its answer, so
+                # neither leaves this message.
+                f"{what}: one of the days totalled {actual[day]}, which is not its true sum"
             )
             break
     if sum(actual.values()) != sum(expected.values()):

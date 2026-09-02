@@ -179,7 +179,11 @@ else:
     # is built only from real str items via trusted C-backed methods, and never
     # changes the verdict — a tampering failure downgrades to a bare FAIL record.
     try:
-        detail = trusted_join(item for item in failures[:40] if item.__class__ is trusted_str)
+        seen = []
+        for item in failures[:40]:
+            if item.__class__ is trusted_str and item not in seen:
+                seen.append(item)
+        detail = trusted_join(seen)
         detail_bytes = detail.replace("\\r", " ").replace("\\n", " ")[:1900].encode("utf-8", "replace")
     except Exception:
         detail_bytes = b""

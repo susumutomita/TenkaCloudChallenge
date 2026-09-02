@@ -166,7 +166,7 @@ def _failure_message(failures: list[object]) -> str | None:
     is dropped rather than serialized, so a checker bug cannot push raw values
     through the message field.
     """
-    text = "; ".join(item for item in failures if isinstance(item, str))
+    text = "; ".join(dict.fromkeys(item for item in failures if isinstance(item, str)))
     return text[:MAX_MESSAGE_CHARS] if text else None
 
 

@@ -149,7 +149,11 @@ else:
 os._exit = hard_exit
 sys.stdout = trusted_stdout
 if failures:
-    detail = "; ".join(item for item in failures if isinstance(item, str))
+    seen = []
+    for item in failures:
+        if isinstance(item, str) and item not in seen:
+            seen.append(item)
+    detail = "; ".join(seen)
     detail = " ".join(detail.split())[:{max_message_chars}]
     if detail:
         trusted_write({detail_record!r} + detail.encode("utf-8", "replace") + b"\\n")

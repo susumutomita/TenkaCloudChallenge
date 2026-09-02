@@ -16,6 +16,7 @@ SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
+import counter  # noqa: E402
 from counter import advance  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -60,17 +61,17 @@ CASE = PUBLIC["predict"]
 
 def _assert_contract_shape_and_range(case: dict[str, int]) -> None:
     numbers = advance(case["start"], case["step"], case["rounds"], case["modulus"])
-    assert len(numbers) == case["rounds"]
+    assert len(numbers) == case["rounds"], "the list must have exactly one number per round"
     for value in numbers:
-        assert 0 <= value < case["modulus"]
+        assert 0 <= value < case["modulus"], "every number must be 0 or more and below modulus"
 
 
 def test_the_list_has_one_number_per_round() -> None:
-    assert len(advance(**CASE)) == CASE["rounds"]
+    assert len(advance(**CASE)) == CASE["rounds"], "the list must have exactly one number per round"
 
 
 def test_zero_rounds_is_empty() -> None:
-    assert advance(CASE["start"], CASE["step"], 0, CASE["modulus"]) == []
+    assert advance(CASE["start"], CASE["step"], 0, CASE["modulus"]) == [], "rounds == 0 must give an empty list"
 
 
 def test_every_entry_is_in_range() -> None:
@@ -89,9 +90,25 @@ def test_step_larger_than_modulus_stays_in_range() -> None:
     _assert_contract_shape_and_range({**CASE, "step": CASE["step"] + CASE["modulus"] * 3})
 
 
+def test_count_matches_a_direct_check_on_small_ranges() -> None:
+    from math import gcd
+
+    count = getattr(counter, "count_no_walkback", None)
+    assert callable(count), "count_no_walkback must be defined in counter.py"
+    for step, low, high in ((6, 1, 10), (10, 3, 25), (7, 1, 20), (12, 5, 5)):
+        direct = sum(1 for m in range(low, high + 1) if gcd(step, m) > 1)
+        assert count(step, low, high) == direct, "the count must match a one-by-one check on a small range"
+
+
+def test_count_worked_example_from_the_statement() -> None:
+    count = getattr(counter, "count_no_walkback", None)
+    assert callable(count), "count_no_walkback must be defined in counter.py"
+    assert count(6, 1, 10) == 7, "step 6 on ring sizes 1..10 must count 7 (the statement's example)"
+
+
 def test_first_entry_is_start_plus_step() -> None:
     numbers = advance(**CASE)
-    assert numbers[0] == (CASE["start"] + CASE["step"]) % CASE["modulus"]
+    assert numbers[0] == (CASE["start"] + CASE["step"]) % CASE["modulus"], "the first number must be start + step, reduced into the ring"
 
 
 # Three invariants used to live here as sweeps over hundreds of seeds unrelated to this
@@ -147,7 +164,7 @@ def test_workbench_prepare_returns_the_producible_portal_values() -> None:
     assert result["ok"] is True
     submissions = result["submissions"]
     # predict and first-broken are worked out by the learner, never produced here.
-    assert set(submissions) == {"environment", "generalize"}
+    assert set(submissions) == {"environment", "generalize", "count-no-walkback"}
     assert submissions["environment"] == PUBLIC["environment"]["healthToken"]
     assert "def advance" in submissions["generalize"]
 
@@ -159,7 +176,7 @@ def test_workbench_prepare_rejects_an_empty_source() -> None:
     assert result["ok"] is False
 
 
-def test_portal_editor_replaces_static_assets() -> None:
+def test_workbench_portal_editor_replaces_static_assets() -> None:
     assert not (ROOT / "workbench").exists()
     server = (ROOT / "participant" / "server.py").read_text(encoding="utf-8")
     for endpoint in ("/api/config", "/api/starter", "/api/inspect", "/api/test", "/api/prepare"):
