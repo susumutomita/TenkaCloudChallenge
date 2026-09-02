@@ -36,6 +36,7 @@ import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { computeChallenge } from "./schnorr-transcript.ts";
 import { computePartial } from "./mpc.ts";
 import type {
+  CoordinationContext,
   Contract,
   ContractProjection,
   ProofArtifact,
@@ -198,8 +199,28 @@ function summarizeStep(
  * `expect(result.violations).toEqual([])`), not to crash the process that
  * is trying to observe that drift.
  */
+/**
+ * [Issue #677] A fresh match that has already been started.
+ *
+ * `initialState` now returns a match in `waiting`, where the belt issues
+ * nothing and the clock does not run, so that a deployed-but-unplayed match
+ * stays as deployed instead of bleeding expiry penalties into a floored score.
+ * Almost every test and every scripted playtest is about the match once it is
+ * under way, so they build state through here; the tests that are specifically
+ * about `waiting` call `initialState` directly.
+ */
+export function startedMatch(
+  ctx: CoordinationContext,
+  config?: Partial<CryptoBattleConfig>,
+): CryptoBattleState {
+  const state = initialState(ctx, config);
+  const starter = ctx.teamIds[0];
+  // A roster-less match has nobody to start it, and nothing to play either.
+  return starter === undefined ? state : applyOp(state, starter, { kind: "start" });
+}
+
 export function runScript(script: PlaytestScript): PlaytestResult {
-  let state = initialState(
+  let state = startedMatch(
     {
       eventId: script.eventId,
       teamIds: script.teams,

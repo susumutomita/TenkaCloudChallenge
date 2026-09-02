@@ -75,7 +75,18 @@ export interface CoordinationContext {
 
 export type ValidateResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
-export type Phase = "build" | "pressure" | "endgame" | "ended";
+/**
+ * [Issue #677] `waiting` is the state a deployed match sits in until someone
+ * starts it, and it exists because the alternative was destroying every match
+ * that was not being played at that exact moment.
+ *
+ * Orders arrive six at a time every five minutes and cost 15 points each when
+ * they lapse, so an unattended match bled 90 points per five minutes into a
+ * score floored at zero. An organiser who deployed at 09:00 for a 10:30 start
+ * had a room full of teams already buried before anyone opened the portal, and
+ * the ninety-minute clock had run out an hour before the event began.
+ */
+export type Phase = "waiting" | "build" | "pressure" | "endgame" | "ended";
 
 export interface ScoreRules {
   /**
@@ -703,6 +714,17 @@ export type CryptoBattleOp =
    * that cannot type a dice face must not be a scoring disadvantage.
    */
   | { readonly kind: "cipher"; readonly contractId: string; readonly answer: readonly string[] }
+  /**
+   * [Issue #677] Starts the match. Until this arrives the belt issues nothing
+   * and the clock does not run, so a deployed-but-unplayed match stays exactly
+   * as it was deployed.
+   *
+   * It is an op rather than a platform hook because only the players know when
+   * they are ready, and the platform has no gesture that means "the room is
+   * seated". The first team to send it starts the match for everyone, which is
+   * the same thing a referee's whistle does.
+   */
+  | { readonly kind: "start" }
   /**
    * [Issue #659 §2] A HUNT that breaks a ladder key rather than reconstructing
    * a Shamir secret.

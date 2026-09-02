@@ -47,7 +47,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { initialState } from "./reducer.ts";
-import { isTickStep, runScript, type PlaytestOpStep } from "./playtest.ts";
+import { isTickStep, runScript, type PlaytestOpStep, startedMatch } from "./playtest.ts";
 import {
   ATTACKER,
   buildVerticalPlaytestScript,
@@ -72,7 +72,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("MUST 1: both teams start with a secret and shareCount shares (initialState, independently)", () => {
-    const fresh = initialState(
+    const fresh = startedMatch(
       { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
       VERTICAL_CONFIG,
     );
@@ -158,7 +158,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
       // real reducer, purely to have something concrete to assert absence
       // of below -- this does NOT feed into how the hunt op itself was
       // built (that already happened, live, inside buildVerticalPlaytestScript).
-      const fresh = initialState(
+      const fresh = startedMatch(
         { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
         VERTICAL_CONFIG,
       );

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildClearingOp } from "./playtest.ts";
+import { buildClearingOp, startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleOp, CryptoBattleState } from "./types.ts";
 
 /**
@@ -66,7 +66,7 @@ function openContractsFor(state: CryptoBattleState, teamId: string) {
  */
 function walkMatch(clearImmediately: boolean) {
   const config = DEFAULT_CONFIG;
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   const samples: { atMs: number; open: number; phase: string }[] = [];
   // [Issue #659] The final state is not a history -- resolved and lapsed Orders
   // are pruned from the persisted row past a short retention window. A question

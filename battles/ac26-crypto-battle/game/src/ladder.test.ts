@@ -8,6 +8,7 @@ import {
   toSymbols,
 } from "./ladder.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState } from "./types.ts";
 
 /**
@@ -82,7 +83,7 @@ describe("the rung's arithmetic is the arithmetic a person does by hand", () => 
   test("the Order shows pictures, never words, so neither language is favoured", () => {
     // #659 §3: the plaintext is symbols. A word-based Order would hand an
     // advantage to whoever speaks the language it was written in.
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const task = projected(state, "teamA", ladderOrder(state, "teamA").id);
     // Every value indexes a real symbol, and no symbol is a letter or a digit
     // -- a word-based Order would favour whoever speaks its language.
@@ -106,7 +107,7 @@ describe("the rung's arithmetic is the arithmetic a person does by hand", () => 
 
 describe("CIPHER: the team does the work and nothing is published", () => {
   test("the hand-computed answer is accepted, pays the full rate, and posts nothing", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     const ledgerBefore = state.publicLedger.length;
 
@@ -121,7 +122,7 @@ describe("CIPHER: the team does the work and nothing is published", () => {
   });
 
   test("a wrong answer is refused, and the refusal does not walk you to the right one", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     const correct = answerByHand(state, "teamA", order);
     const wrong = [...correct];
@@ -138,7 +139,7 @@ describe("CIPHER: the team does the work and nothing is published", () => {
   });
 
   test("another team's key does not answer your Order", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     const task = projected(state, "teamA", order.id);
     const theirKey = projected(state, "teamB", ladderOrder(state, "teamB").id).myKey;
@@ -151,7 +152,7 @@ describe("CIPHER: the team does the work and nothing is published", () => {
   });
 
   test("a malformed answer is rejected rather than thrown on", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     for (const answer of [["nope"], [], ["1", "2"]]) {
       expect(validateOp(state, "teamA", { kind: "cipher", contractId: order.id, answer }).ok).toBe(false);
@@ -161,7 +162,7 @@ describe("CIPHER: the team does the work and nothing is published", () => {
 
 describe("LEAK: the pair goes public, and on this rung the pair IS the key", () => {
   test("leaking publishes the plaintext next to its ciphertext, and pays the leak rate", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
 
@@ -179,7 +180,7 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
   test("one published pair really does hand over the key -- one subtraction, from the ledger alone", () => {
     // The claim the whole rung rests on, computed the way an opponent would:
     // from the PUBLIC record, with no access to the victim's state.
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
 
@@ -198,7 +199,7 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
 
 describe("breaking a rung costs what breaking a rung is worth", () => {
   function brokenMatch() {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
     const key = deriveCipherKey(state.seed, "teamA", 1, RUNG);
@@ -263,7 +264,7 @@ describe("breaking a rung costs what breaking a rung is worth", () => {
 
 describe("ROTATE defends the ladder, the same way it defends the secret", () => {
   test("rotating changes the key, so a published pair stops being worth anything", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
     const oldKey = deriveCipherKey(state.seed, "teamA", 1, RUNG);
@@ -293,7 +294,7 @@ describe("a match persisted before the ladder existed still loads", () => {
   test("a team row with no cipherHuntedGenerations survives a break", () => {
     // Third new required field in three slices. Without the backfill,
     // `applyHuntCipher` reads `[rung]` off undefined and takes the match down.
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
     const persisted = JSON.parse(JSON.stringify(state)) as CryptoBattleState;

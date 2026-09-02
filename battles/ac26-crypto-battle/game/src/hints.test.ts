@@ -10,9 +10,15 @@ import type { ContractProjection, CryptoBattleState, OrderTaskKind } from "./typ
 
 const CTX = { eventId: "hints", teamIds: ["teamA", "teamB"] } as const;
 
-/** A started match with one batch of Orders on every team's belt. */
+/**
+ * A started match with one batch of Orders on every team's belt.
+ *
+ * [Issue #677] Started by the op a player sends, not by a tick. A match now
+ * waits in `waiting` until someone presses START -- ticking an unstarted match
+ * issues nothing, which is the whole point of that phase.
+ */
 function startedMatch(seed = "s".repeat(64)): CryptoBattleState {
-  return tick(initialState({ ...CTX, matchSecret: seed }), 0);
+  return applyOp(initialState({ ...CTX, matchSecret: seed }), "teamA", { kind: "start" });
 }
 
 function firstOpenOrder(state: CryptoBattleState, teamId: string): ContractProjection {

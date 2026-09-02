@@ -15,13 +15,14 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
+import { startedMatch } from "./playtest.ts";
 import type { CryptoBattleState, CryptoBattleOp } from "./types.ts";
 
 const CTX = { eventId: "prove-basic", teamIds: ["teamA", "teamB"] } as const;
 
 describe("prove: happy path", () => {
   test("a valid proof completes the contract, pays the contract's points, and posts a proof (not a share) artifact", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -51,7 +52,7 @@ describe("prove: happy path", () => {
   });
 
   test("PROVE never adds a ShareArtifact to the public ledger, unlike LEAK", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -66,7 +67,7 @@ describe("prove: happy path", () => {
 
 describe("prove: ProofArtifact normalization [independent review, low #4]", () => {
   test("a proof submitted with a leading zero (still /^\\d{1,700}$/-canonical and still numerically valid) is stored in the Public Ledger in normalized decimal form, not verbatim", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -96,7 +97,7 @@ describe("prove: ProofArtifact normalization [independent review, low #4]", () =
 
 describe("prove: invalid proof is rejected", () => {
   test("a tampered response is rejected by validateOp and the contract stays open", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -110,7 +111,7 @@ describe("prove: invalid proof is rejected", () => {
   });
 
   test("a tampered commitment is rejected", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -122,7 +123,7 @@ describe("prove: invalid proof is rejected", () => {
   });
 
   test("a proof built from another team's secret against this team's contract is rejected", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const teamB = state.teams.teamB;
@@ -138,7 +139,7 @@ describe("prove: invalid proof is rejected", () => {
 
 describe("prove: wrong-contract binding", () => {
   test("a proof created for contract A is rejected when submitted against contract B (Fiat-Shamir contractId binding)", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const contractA = state.contracts.find((c) => c.teamId === "teamA");
     if (!contractA) throw new Error("expected a contract for teamA");
     // Advance to get a second, distinct open contract for teamA.
@@ -160,7 +161,7 @@ describe("prove: wrong-contract binding", () => {
 
 describe("prove: replay", () => {
   test("submitting the same successful proof to the same contract a second time is rejected (contract already completed)", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -188,7 +189,7 @@ describe("prove: cross-resolution double-completion is rejected [independent rev
   // same-method replay tests above.
 
   test("a Contract already completed via PROVE cannot then be LEAKed", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -208,7 +209,7 @@ describe("prove: cross-resolution double-completion is rejected [independent rev
   });
 
   test("a Contract already completed via LEAK cannot then be PROVEn", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -232,7 +233,7 @@ describe("prove: cross-resolution double-completion is rejected [independent rev
 
 describe("prove: wrong generation", () => {
   test("a proof bound to the pre-rotate generation fails post-rotate; a freshly-built post-rotate proof for the same contract succeeds", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const preRotateTeam = state.teams.teamA;
     if (!preRotateTeam) throw new Error("expected teamA");
     const preRotateGeneration = preRotateTeam.generation;
@@ -287,7 +288,7 @@ describe("prove: wrong generation", () => {
 
 describe("prove: secret non-leakage", () => {
   test("the ledger artifact and another team's projection never contain the secret, witness, or any share value after a PROVE", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;
@@ -331,7 +332,7 @@ describe("prove: secret non-leakage", () => {
  */
 describe("prove: Scoring MUST -- PROVE pays MORE than LEAK for the same Order", () => {
   test("completing one contract via LEAK and an equal-points contract via PROVE yields DIFFERENT score deltas", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const leakContract = state.contracts.find((c) => c.teamId === "teamA");
     if (!leakContract) throw new Error("expected a contract for teamA");
 
@@ -371,7 +372,7 @@ describe("prove: Scoring MUST -- PROVE pays MORE than LEAK for the same Order", 
   });
 
   test("an Order carries both rates, so the trade is visible before it is made", () => {
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const order = state.contracts.find((c) => c.teamId === "teamA");
     if (!order) throw new Error("expected a contract for teamA");
     // A participant choosing LEAK is giving up points, not just accepting risk.
@@ -383,7 +384,7 @@ describe("prove: Scoring MUST -- PROVE pays MORE than LEAK for the same Order", 
 
 describe("prove: match end", () => {
   test("is rejected once the match has ended, even for a contract that is still open by its own TTL", () => {
-    let state = tick(initialState(CTX), 0);
+    let state = tick(startedMatch(CTX), 0);
     const team = state.teams.teamA;
     if (!team) throw new Error("expected teamA");
     const stillOpenContract = {

@@ -344,6 +344,15 @@ export function submitRevealHint(
   return client.submitOp(op);
 }
 
+/**
+ * [Issue #677] Builds and submits a START op. Exported for direct testing --
+ * see this file's header.
+ */
+export function submitStart(client: PortalCoordinationClient): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "start" };
+  return client.submitOp(op);
+}
+
 /** Builds and submits a ROTATE op. Exported for direct testing -- see this file's header. */
 export function submitRotate(client: PortalCoordinationClient): Promise<PortalCoordinationOutcome> {
   const op: CryptoBattleOp = { kind: "rotate" };

@@ -109,7 +109,18 @@ export function createMatch(
   ctx: CoordinationContext,
   config?: Partial<CryptoBattleConfig>,
 ): MatchHost {
-  return { ctx, state: initialState(ctx, config), version: 0 };
+  // [Issue #677] Started, because every scenario here is a match in progress.
+  // A real match now waits in `waiting` until a team presses START, so that a
+  // deployed-but-unplayed match does not issue Orders into an empty room and
+  // charge the expiry penalty for every one of them. The one scenario that IS
+  // about that screen builds its state without this helper.
+  const state = initialState(ctx, config);
+  const starter = ctx.teamIds[0];
+  return {
+    ctx,
+    state: starter === undefined ? state : applyOp(state, starter, { kind: "start" }),
+    version: 0,
+  };
 }
 
 export type SubmitOutcome =

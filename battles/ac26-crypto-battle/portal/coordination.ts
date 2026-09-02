@@ -57,7 +57,12 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
 
-  if (typeof v.phase !== "string" || !["build", "pressure", "endgame", "ended"].includes(v.phase)) {
+  // [Issue #677] "waiting" belongs on this list. It was added to `Phase` for the
+  // deployed-but-unstarted match, and a guard that does not know a phase fails
+  // closed on it -- which showed the participant "the match service is
+  // unavailable" for a match that was simply waiting for them to press START.
+  const phases = ["waiting", "build", "pressure", "endgame", "ended"];
+  if (typeof v.phase !== "string" || !phases.includes(v.phase)) {
     return false;
   }
   if (typeof v.matchRemainingMs !== "number" && v.matchRemainingMs !== undefined) return false;

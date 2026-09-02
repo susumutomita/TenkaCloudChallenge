@@ -13,22 +13,32 @@ interface QuickRulesCopy {
 export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
   en: {
     title: "Your first move",
-    summary: "Pick one blue ORDER card. Then choose one of the two large buttons below it.",
+    // [Issue #677] Press START first. Nothing arrives until someone does, and a
+    // player told to pick an Order from an empty belt has been sent to a screen
+    // that cannot answer them.
+    summary:
+      "Press START THE MATCH. Orders arrive at once; pick one blue ORDER card, then choose one of the two large buttons below it.",
     choice: "LEAK = score now, but publish a secret fragment. PROVE = do a calculation and keep the fragment protected.",
   },
   ja: {
     title: "最初にやること",
-    summary: "青い ORDER カードを1枚選び、その下にある大きなボタンを1つ選びます。",
+    summary:
+      "「試合を始める」を押します。すぐに ORDER が届くので、青い ORDER カードを1枚選び、その下にある大きなボタンを1つ選びます。",
     choice: "LEAK = すぐ得点する代わりに秘密の破片を公開。PROVE = 計算して破片を守る。",
   },
 };
 
+// [Issue #677] A panel that paints its own background states its own text
+// colour too. Without this the text inherited the host page's colour, which on
+// a dark host is white -- white on a pale blue card. The same omission has now
+// been fixed three times in this problem's portal; see BOARD_CSS's header.
 const panelStyle = {
   border: "2px solid #0972d3",
   borderRadius: "8px",
   padding: "12px",
   marginBottom: "12px",
   background: "#f1f8ff",
+  color: "#16212e",
 } as const;
 
 export default function QuickRules({ locale }: Pick<PortalSlotProps, "locale">) {

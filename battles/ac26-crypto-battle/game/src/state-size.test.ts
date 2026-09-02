@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, tick, validateOp } from "./reducer.ts";
-import { buildLeakOp } from "./playtest.ts";
+import { buildLeakOp, startedMatch } from "./playtest.ts";
 import { HINT_LEVELS } from "./hints.ts";
 import { TERMINAL_ORDER_RETENTION_BATCHES } from "./reducer.ts";
 
@@ -105,7 +105,7 @@ const HEAVY_TEST_TIMEOUT_MS = 60_000;
  */
 function playFullMatch(teamCount: number) {
   const teamIds = Array.from({ length: teamCount }, (_, i) => `team-${i}`);
-  let state = initialState({ eventId: "state-size", teamIds, matchSecret: "s".repeat(64) });
+  let state = startedMatch({ eventId: "state-size", teamIds, matchSecret: "s".repeat(64) });
   for (let atMs = 0; atMs <= DEFAULT_CONFIG.matchDurationMs; atMs += DEFAULT_CONFIG.contractIntervalMs) {
     state = tick(state, atMs);
     for (const teamId of teamIds) {
