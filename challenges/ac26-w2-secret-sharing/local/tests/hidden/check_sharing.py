@@ -458,15 +458,17 @@ def _privacy_probe(module, seed: str, case: dict[str, object]) -> list[str]:
     slope -> party i's y is a bijection on 0..p-1 -- then every y is reachable from
     every secret, by exactly one slope, and seeing one point rules nothing out. A
     collision means some y is unreachable for that secret, and that y would rule the
-    secret out. Sampled on a few hundred distinct slopes for two secrets, through the
-    learner's own share_line, so any construction with the property passes here too.
+    secret out. Checked on every slope 0..p-1 for two secrets (2 x p calls of the
+    learner's own share_line per case), so any construction with the property passes
+    here too. Sampling a few hundred slopes was not enough: a share_line that folds a
+    single slope onto another one collides only if both happen to be drawn.
     """
     p = case["p"]
     probe = privacy_probe(seed, case["label"], p, case["secret"])
     collided = [False] * len(LINE_PARTIES)
     for secret in probe["secrets"]:
         seen: list[set[int]] = [set() for _ in LINE_PARTIES]
-        for slope in probe["slopes"]:
+        for slope in range(p):
             points, failure = _line_points(module, secret, p, slope)
             if failure is not None or points is None:
                 return [failure or "share_line did not return three points"]
@@ -489,7 +491,7 @@ def check_line_privacy(module, seed: str) -> list[str]:
     position by *some* slope value -- checked with the learner's own `share_line`, so
     any construction with the property passes, not only the reference line. On the
     small-modulus cases that is a p x p search per point; on the ~10^4 cases it is the
-    equivalent bijection condition, sampled (see `_privacy_probe`).
+    equivalent bijection condition on every slope (see `_privacy_probe`).
     """
     failures = _line_functions_present(module)
     if failures:
