@@ -103,8 +103,8 @@ hidden phaseは性質を1段ずつ足す。
 
 - `replay`: 同じkey + canonical-equivalent bodyがexact replayになり、副作用は1件。
 - `bind`: 異なるvalid bodyは409で、validationはkeyを消費しない。
-- `generalize`: concurrentな初回試行 (moduleのcopy 2つに分けた8 thread。次節の決定論的interleaveで駆動)、別の
-  keyを混ぜる回、handler再生成でも、keyごとの副作用と保存済み応答は1つ。
+- `generalize`: concurrentな初回試行 (1つのSQLite fileに対する8つのworker process。次節の決定論的interleaveで
+  駆動)、別のkeyを混ぜる回、新しいprocessでのhandler再生成でも、keyごとの副作用と保存済み応答は1つ。
 
 このpublic-hidden gapが演習である。example testのgreenはprotocol invariantを証明しない。
 
@@ -114,22 +114,31 @@ hidden phaseは性質を1段ずつ足す。
 素朴なcheck-then-insertは読みと挿入を1 ms未満で終えるため毎回通り、規則9が警告する反パターンを採点は実際には
 試していなかった。
 
-hidden checkerは今、submissionをimportする前に`sqlite3.connect`の周りにhookを入れる (`from sqlite3 import
-connect`も対象)。concurrent roundの間、参加者threadはSELECTの結果をfetchした直後 — check-then-insertが「無い」と
-決めた瞬間 — に止まり、まだ到着し得る全threadが到着したとき、または残りがSQLiteの中で待たされていて50 msの
-stallが過ぎたときに、止まっていたthreadが一斉に解放される。したがって正しい`BEGIN IMMEDIATE`は直列化された
-読み1回につき1 stallを払うだけで、check-then-insertは8 thread全部が「無い」を読んでから挿入する。試行は参加者
-moduleの独立したcopy 2つ (同じfileを`importlib`で再実行) に分けて流す。gatewayがworker processに要求を分ける
-のと同じで、module-levelの`threading.Lock`では直列化にならない。2回目のroundは2つのkeyを混ぜ、restart round
-は再送の前にmoduleを再実行する。失敗messageは性質 (keyごとに1行、応答の一致、receipt 1件、例外なし) を名指し、
-例外のclass名だけをechoする。hiddenのkeyやpayloadは含まない。
+concurrent roundの8本の試行は今、1本ずつ別のworker processで動く。各workerは`python -I`で起動した新しい
+interpreterで、hidden checkerをfile pathで読み込み、`sqlite3.connect`の周りにhookを入れて (`from sqlite3 import
+connect`も対象)、そのあとでsubmissionをimportする。workerどうしが共有するのはSQLite fileだけで、pre-fork型
+gatewayのworkerと同じである。`threading.Lock`や辞書は、submissionのglobalsに置いても共有の`sqlite3` moduleに
+載せてもprocessごとに別物なので、worker境界を越える直列化はdatabase側にしか作れない。roundの間、workerは
+SELECTの結果をfetchした直後 — check-then-insertが「無い」と決めた瞬間 — にpipe越しにcoordinatorへ報告して
+止まり、まだ到着し得るworkerが全部到着したとき、または残りがSQLiteのbusy handlerで待たされていて最初の停止
+から50 ms経ったときに、止まっていたworkerが一斉に解放される。したがって正しい`BEGIN IMMEDIATE`は直列化された
+読み1回につき1 stallを払うだけで、check-then-insertは8 worker全部が「無い」を読んでから挿入する。待ちには全部
+deadlineがあり (round 4 s、phase 12 s)、固まるsubmissionはverifierの無言timeoutではなく性質messageを受け取る。
+workerは試行ごとに自分のalarmを仕掛けるので、参加者codeの中で固まったworkerはrunnerが消えても数秒で終わる。2回目のroundは同じworkerで
+2つのkeyを混ぜ、restart roundは初回をrunnerで処理し、再送をあとから起動したprocessに渡す。失敗messageは性質
+(keyごとに1行、応答の一致、receipt 1件、例外なし、応答があること) を名指し、例外のclass名だけをechoする。
+hiddenのkeyやpayloadは含まない。
 
-作者のcheckoutで、in-processとverifier subprocessの両方で各10回ずつ確認した。reference、starterのlegacy
-isolation modeでの教科書どおりの`BEGIN IMMEDIATE`、`PRIMARY KEY` + `IntegrityError`方式、`with connection:`
-形は10/10通過。素朴なcheck-then-insert、process内lock、読みの後ろに置いた`BEGIN IMMEDIATE`、deferred `BEGIN`、
-負けた側のledger行が残る制約方式、例外を処理しない制約方式は10/10落ちる。同じ実行をsuite 4本並列でCPUに負荷を
-かけて繰り返した。local modeの他の部分と同じくhonor-systemである。hookはverifier imageにあり、Dockerを管理する
-参加者は読める。
+作者のcheckoutで、Python 3.11と3.13の両方、in-processとverifier subprocessの両方で、連続10回ずつ確認した。
+referenceと、`local/mutants/honest_*.py`として同梱した3つのhonest shape (starterのlegacy isolation modeでの
+教科書どおりの`BEGIN IMMEDIATE`、`PRIMARY KEY` + `IntegrityError`方式、`with connection:`形) は10/10通過。
+素朴なcheck-then-insert、programのcopy 1つの中のlock、共有の`sqlite3` moduleに載せたlock (旧の「1 process内に
+copy 2つ」のroundは毎回通していた)、読みの後ろに置いた`BEGIN IMMEDIATE`、例外を処理しない制約方式は10/10落ちる。
+deferred `BEGIN`と負けた側のledger行が残る制約方式は`mutation.py`が両interpreterで殺す。`check_generalize`の
+wall timeはreferenceで約1.6 s (`PRIMARY KEY`方式は0.5 s、落ちる形は0.5–0.8 s。worker 8つの起動は約0.1 s) で、
+verifierのrunner上限15 sに対して十分小さい。workerの中で固まるsubmissionは約8 sで性質のリストを受け取る。
+同じ実行をsuite 4本並列 (4 core) でCPUに負荷をかけて繰り返した。local modeの他の部分と同じくhonor-systemである。
+hookはverifier imageにあり、Dockerを管理する参加者は読める。
 
 ## Participant Portalでの進め方
 
@@ -157,7 +166,7 @@ make down
 作者とCIだけが使う。
 
 ```bash
-make reference-test   # reference + hidden properties + 13 mutations kill + verifier near-miss check
+make reference-test   # reference + hidden properties + 14 mutations kill + honest shape 3つ + verifier near-miss check
 ```
 
 ## Checkpoint
@@ -169,7 +178,7 @@ make reference-test   # reference + hidden properties + 13 mutations kill + veri
 | `audit` | 30 | 1つの論理操作を二重計上した後発ledger indexを挙げる |
 | `replay` | 35 | durableなsame-key/same-request exact replayを実装する |
 | `bind` | 40 | keyをfingerprintへ結び、別requestを409にする |
-| `generalize` | 60 | program copy 2つに分けたinterleave同時試行とhandler再生成でも、keyごとの副作用を1件に保つ |
+| `generalize` | 60 | 別々のworker processに分けたinterleave同時試行と、新しいprocessでのhandler再生成でも、keyごとの副作用を1件に保つ |
 
 ## 保証範囲
 

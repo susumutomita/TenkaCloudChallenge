@@ -6,6 +6,7 @@ import json
 import os
 import resource
 import secrets
+import signal
 import subprocess
 import sys
 import tempfile
@@ -189,6 +190,18 @@ os._exit(0)
 """
 
 
+def _kill_process_group(runner: subprocess.Popen[str]) -> None:
+    """End a timed-out runner together with every worker process it started."""
+    try:
+        os.killpg(runner.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        runner.kill()
+    try:
+        runner.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def _check_code(phase: str, submission: object) -> tuple[bool, str]:
     if not isinstance(submission, str) or not submission.strip() or len(submission) > MAX_BODY_BYTES:
         return False, ''
@@ -201,7 +214,7 @@ def _check_code(phase: str, submission: object) -> tuple[bool, str]:
         transcript = Path(workspace, "stdout")
         try:
             with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(
+                runner = subprocess.Popen(
                     [
                         sys.executable,
                         "-I",
@@ -218,22 +231,29 @@ def _check_code(phase: str, submission: object) -> tuple[bool, str]:
                     stdout=sink,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
                     preexec_fn=partial(_limits, nproc_limit),
                     cwd=workspace,
-                    # glibc otherwise creates a large malloc arena for each checker
-                    # thread. The concurrency property can approach the 512 MiB
-                    # address-space cap before participant data is allocated at all.
+                    # glibc otherwise creates a large malloc arena per thread. The
+                    # hidden suite's worker processes inherit this environment, so
+                    # each of them stays small under the 512 MiB address-space cap.
                     env={
                         "PATH": "/usr/local/bin:/usr/bin:/bin",
                         "MALLOC_ARENA_MAX": "2",
                     },
-                    check=False,
+                    # The runner leads its own process group: the concurrency property
+                    # runs the submission in worker processes, and a timeout must end
+                    # those as well, not only the runner.
+                    start_new_session=True,
                 )
+                try:
+                    runner.wait(timeout=RUN_TIMEOUT_SECONDS)
+                except subprocess.TimeoutExpired:
+                    _kill_process_group(runner)
+                    return False, ''
             output = transcript.read_text(encoding="utf-8", errors="replace")[-MAX_OUTPUT_BYTES:]
-        except (OSError, ValueError, subprocess.TimeoutExpired):
+        except (OSError, ValueError):
             return False, ''
-    if completed.returncode != 0:
+    if runner.returncode != 0:
         return False, ""
     lines = output.splitlines()
     if not lines:

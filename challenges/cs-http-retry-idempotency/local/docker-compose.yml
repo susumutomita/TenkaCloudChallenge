@@ -42,6 +42,10 @@ services:
       VERIFY_PORT: "18351"
     networks:
       - lab
+    # The hidden suite grades the concurrency property in worker processes. A runner
+    # killed on timeout would leave them as orphans; an init process reaps them so
+    # they cannot accumulate against pids_limit.
+    init: true
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=128m
