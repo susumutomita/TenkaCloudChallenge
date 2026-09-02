@@ -74,8 +74,14 @@ def setting(seed: str) -> dict:
     n = _draw(seed, "n", 12, 24)
 
     # Two plain values that both exceed n, so the wrap is visible rather than hypothetical.
+    # Neither may be a multiple of n: a value that wraps to 0 makes the multiplication
+    # line's three-tuple trivial (0, 0, 0) and empties the prediction it is there to test.
     u = _draw(seed, "u", n + 3, 3 * n)
     v = _draw(seed, "v", n + 3, 3 * n)
+    if u % n == 0:
+        u -= 1
+    if v % n == 0:
+        v -= 1
 
     # The secret and its cover. The cover is what makes the secret disappear.
     secret = _draw(seed, "secret", 1, n - 1)

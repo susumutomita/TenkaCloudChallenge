@@ -73,5 +73,5 @@ def product(a: int, b: int, x: int) -> tuple:
 
 
 def wall(a: int, b: int, x: int) -> bool:
-    """Line 11 — is the leftover of line 9 exactly x * x?"""
+    """Line 11 — is the leftover of line 10 exactly x * x?"""
     return product(a, b, x)[2] == x * x
