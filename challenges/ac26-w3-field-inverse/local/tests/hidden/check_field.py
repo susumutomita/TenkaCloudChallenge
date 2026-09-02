@@ -305,9 +305,9 @@ def _check_units_modulus(module, modulus: int) -> list[str]:
         return ["inversion is not one-to-one on the elements that have an inverse"]
 
     # Division follows inversion: by an invertible element it undoes multiplication, by
-    # anything else it raises. Sampled from both sides, smallest first.
-    without = sorted(set(range(1, modulus)) - invertible)
-    for divisor in sorted(invertible)[:6] + without[:6]:
+    # anything else it raises. Every divisor, not a sample -- a `/` that special-cases
+    # the smallest values passed the sampled version of this check.
+    for divisor in range(1, modulus):
         b = ring.element(divisor)
         a = ring.element(divisor + 7)
         try:
