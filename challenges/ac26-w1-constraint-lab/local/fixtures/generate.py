@@ -211,14 +211,19 @@ RANGE_MAX_BITS = 6
 
 
 def range_bits(seed: str, label: str) -> int:
-    """Width of the range gadget for one hidden label: 1-2 / 3-4 / 5-6.
+    """Width of the range gadget for one hidden label: 1 / 3-4 / 5-6.
 
     Spread by label rather than drawn freely so that every deployment covers both
     ends -- the one-bit case that needs no adder chain, and the widest case where a
-    per-bit doubling chain approaches the 5 x bits constraint budget.
+    per-bit doubling chain approaches the 5 x bits constraint budget.  The one-bit
+    case is fixed, not drawn: a loop generalised from the statement's three-bit
+    example tends to emit only the digit's boolean at bits = 1 and never mention the
+    signal itself, and that gadget must fail on every deployment, not on half.
     """
+    if label == "h0":
+        return 1
     s = _stream(seed, f"range:{label}")
-    base = {"h0": 1, "h1": 3, "h2": 5}.get(label, 3)
+    base = {"h1": 3, "h2": 5}.get(label, 3)
     return min(base + s[0] % 2, RANGE_MAX_BITS)
 
 
