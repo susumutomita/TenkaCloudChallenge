@@ -4,6 +4,11 @@ Additive secret sharing over F_p: a secret s is split into n shares that sum to 
 The property that makes it useful is not the arithmetic -- that part is trivial --
 but that any n-1 of the shares are *independent of the secret*. That independence is
 what the checkpoints make the learner demonstrate rather than assert.
+
+The two-of-three checkpoint adds a second split, a line y = s + r*x whose value at
+x = 0 is the secret and whose points at x = 1, 2, 3 go to three parties: any two of
+them walk back to the secret, one alone is consistent with every secret. `line_cases`
+below carries its settings.
 """
 
 from __future__ import annotations
@@ -11,6 +16,14 @@ from __future__ import annotations
 import hashlib
 
 PRIMES = (97, 101, 103, 107, 109, 113, 127, 131, 137, 139)
+#: Moduli for the two-of-three checkpoint's large cases. Deliberately far above anything
+#: a participant sees on screen: the statement's trial search for "the number that
+#: multiplies to 1" still finishes in about 10^4 steps, while trying every
+#: (secret, slope) pair is about 10^8 steps per reconstruction and runs into the
+#: verifier's time limit.
+LARGE_PRIMES = (10007, 10009, 10037, 10039, 10061, 10067, 10069, 10079, 10091, 10093)
+#: Party x holds the point of the line at x. x = 0 -- the secret itself -- goes to nobody.
+LINE_PARTIES = (1, 2, 3)
 
 
 def _stream(seed: str, label: str) -> list[int]:
@@ -62,7 +75,13 @@ def share_randomness(seed: str, label: str, count: int, p: int, secret: int) -> 
 
 
 def rerandomization_randomness(seed: str, label: str, count: int, p: int) -> list[int]:
-    """A draw whose zero-sharing changes at least one share."""
+    """A draw whose zero-sharing changes at least one share.
+
+    This is the contract the statement states for the rerandomize checkpoint: the
+    randomness handed to the learner is never all zeros, so following the procedure
+    always moves at least one share and the "not identical to the input" relation is
+    satisfiable by construction.
+    """
     return _non_degenerate_randomness(
         seed,
         label,
@@ -77,6 +96,56 @@ def reference_shares(seed: str, label: str = "public") -> list[int]:
     p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
     head = share_randomness(seed, label, n - 1, p, secret)
     return [*head, (secret - sum(head)) % p]
+
+
+def line_slope(seed: str, label: str, p: int) -> int:
+    """The one randomness value `share_line` receives: a slope in 1 .. p-1.
+
+    Never 0: with slope 0 all three points equal the secret, and a `reconstruct_line`
+    that never walks back to x = 0 would pass that case by accident.
+    """
+    s = _stream(seed, f"line:{label}")
+    return _pick(s, 0, 1, p - 1)
+
+
+def line_cases(seed: str) -> list[dict[str, int]]:
+    """Settings for the two-of-three checkpoint: modulus, secret and slope per case.
+
+    Three small cases whose modulus differs from this deployment's public `p` -- so a
+    modulus copied off the screen cannot pass -- followed by two cases on the ~10^4
+    moduli of `LARGE_PRIMES`. The large secrets are drawn from the upper half of the
+    field: a search that walks candidate secrets upward from 0 then pays at least
+    p/2 * p steps per reconstruction and cannot finish inside the verifier's limit,
+    while the statement's trial search for the multiplicative partner stays at ~p.
+    The privacy property (one point fits every secret) is only checked on the small
+    cases; see tests/hidden/check_sharing.py.
+    """
+    public_p = setting(seed)["p"]
+    others = [prime for prime in PRIMES if prime != public_p]
+    s = _stream(seed, "line:cases")
+    cases: list[dict[str, int]] = []
+    start = s[0] % len(others)
+    for k in range(3):
+        # len(others) == 9 and a stride of 3 keeps the three picks distinct.
+        p = others[(start + 3 * k) % len(others)]
+        cases.append(
+            {
+                "p": p,
+                "secret": _pick(s, 2 + 2 * k, 0, p - 1),
+                "slope": line_slope(seed, f"small-{k}", p),
+            }
+        )
+    for k in range(2):
+        # len(LARGE_PRIMES) == 10 and a stride of 5 keeps the two picks distinct.
+        p = LARGE_PRIMES[(s[10] + 5 * k) % len(LARGE_PRIMES)]
+        cases.append(
+            {
+                "p": p,
+                "secret": _pick(s, 12 + 2 * k, p // 2, p - 1),
+                "slope": line_slope(seed, f"large-{k}", p),
+            }
+        )
+    return cases
 
 
 def health_token(seed: str) -> str:
@@ -105,6 +174,9 @@ def public_payload(seed: str) -> dict[str, object]:
     from the participant surface since the problem was written. It is not worth points --
     `complete_shares` is graded against every element of F_p, not this one -- and `show.py`
     still does not print it, which is what keeps the `hides-the-secret` reasoning intact.
+
+    `lineRandomness` is the one slope value the public tests hand to `share_line`; the
+    graded two-of-three cases (`line_cases`) use other moduli and other slopes.
     """
     cfg = setting(seed)
     p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
@@ -114,6 +186,7 @@ def public_payload(seed: str) -> dict[str, object]:
         "healthToken": health_token(seed),
         "shareRandomness": share_randomness(seed, "public", n - 1, p, secret),
         "rerandomizationRandomness": rerandomization_randomness(seed, "rr", n - 1, p),
+        "lineRandomness": [line_slope(seed, "public", p)],
         # The n-1 shares `show.py` displays. The last one is withheld here as well as
         # there: printing it would hand over the answer to `complete_shares` for this
         # deployment's own secret.

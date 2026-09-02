@@ -66,7 +66,10 @@ def main() -> None:
     print("  those values? Write your answer down, then make complete_shares prove it.")
     print()
     print("== randomness you are given ==")
-    print(f"  {json.dumps(payload['shareRandomness'])}")
+    print(f"  for share:      {json.dumps(payload['shareRandomness'])}")
+    print(f"  for share_line: {json.dumps(payload.get('lineRandomness', []))}")
+    print("  (the second list is the slope for the two-of-three field; the graded")
+    print("   runs use other moduli, some around 10000)")
     print()
     print(f"health token: {payload['healthToken']}")
 
