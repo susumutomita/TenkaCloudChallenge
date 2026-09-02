@@ -1,14 +1,20 @@
 """Hidden property checks for the three code checkpoints.
 
-The claim is about two days a year. Nothing here is sampled or timed: the checker
-builds its own expectation with the same calendar the contract names, and every zone
-and date is derived from the verifier seed, so a submission cannot special-case the
-week it saw in the public tests.
+The claim is about two days a year — and about every day after them, once a rollup
+reads its offset at the start of the range and keeps it. Nothing here is sampled or
+timed: the checker builds its own expectation with the same calendar the contract
+names, and every zone and date is derived from the verifier seed, so a submission
+cannot special-case the week it saw in the public tests.
 
 The transitions used are real ones from the system tz database. Only zones whose
 switch happens away from midnight are used, so a local midnight always exists — the
 lesson here is that a day can be 23 or 25 hours long, not that a wall-clock time can
 fail to exist at all.
+
+The last checkpoint is graded as a property, never against an expected value: the
+submission's `counterexample` is called with public parameters, and the one event it
+returns is totalled both the fixed-offset way and the calendar's way. It passes when
+some day that is not a switch day comes up short under the fixed offset.
 """
 
 from __future__ import annotations
@@ -17,6 +23,7 @@ import hashlib
 import random
 from datetime import date, datetime, timedelta, timezone
 from types import ModuleType
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 ZONES = (
@@ -45,12 +52,9 @@ def transitions(zone_name: str, year: int) -> list[date]:
     found: list[date] = []
     cursor = date(year, 1, 1)
     while cursor.year == year:
-        following = cursor + timedelta(days=1)
-        start = datetime(cursor.year, cursor.month, cursor.day, tzinfo=zone)
-        end = datetime(following.year, following.month, following.day, tzinfo=zone)
-        if (end.astimezone(timezone.utc) - start.astimezone(timezone.utc)) != timedelta(hours=24):
+        if _is_switch_day(zone, cursor):
             found.append(cursor)
-        cursor = following
+        cursor += timedelta(days=1)
     return found
 
 
@@ -65,6 +69,18 @@ def pick_zone_and_day(seed: str, label: str) -> tuple[str, date]:
 
 def _local_midnight(zone: ZoneInfo, day: date) -> datetime:
     return datetime(day.year, day.month, day.day, tzinfo=zone)
+
+
+def _is_switch_day(zone: ZoneInfo, day: date) -> bool:
+    """True when the local day is not twenty-four hours long."""
+    start = _local_midnight(zone, day).astimezone(timezone.utc)
+    end = _local_midnight(zone, day + timedelta(days=1)).astimezone(timezone.utc)
+    return end - start != timedelta(hours=24)
+
+
+def _midnight_offset(zone: ZoneInfo, day: date) -> timedelta:
+    offset = _local_midnight(zone, day).utcoffset()
+    return offset if offset is not None else timedelta(0)
 
 
 def _events_for_day(
@@ -294,10 +310,15 @@ def _transition_properties(module: ModuleType, seed: str, phase: str) -> list[st
     return failures
 
 
-def _generalize_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
-    """Both transitions, several zones, and a range that spans one."""
-    failures = _transition_properties(module, seed, phase)
+def _sweep_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
+    """Both transitions, several zones, and a range that spans one.
 
+    This is what the transition checkpoint promises — "a 23-hour day and a 25-hour
+    day, for either direction of switch" — and the one seed-chosen transition of
+    `_transition_properties` only ever exercises one direction. An implementation
+    tuned to the switch it saw fails here on the day the clocks move the other way.
+    """
+    failures: list[str] = []
     rng = _rng(seed, f"{phase}:zones")
     for zone_name in rng.sample(ZONES, 3):
         zone = ZoneInfo(zone_name)
@@ -338,17 +359,184 @@ def _generalize_properties(module: ModuleType, seed: str, phase: str) -> list[st
     return failures
 
 
+def _full_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
+    """Everything `daily_totals` has to satisfy: the transition probes plus the sweep."""
+    return _transition_properties(module, seed, phase) + _sweep_properties(module, seed, phase)
+
+
+# --- the counterexample checkpoint --------------------------------------------------
+
+Counterexample = Callable[[str, str, str], object]
+
+#: The two pairs the statement itself works through. They come first so the first
+#: failure a participant reads is about numbers they have already seen.
+STATEMENT_CASES: tuple[tuple[str, date, date], ...] = (
+    ("America/New_York", date(2026, 10, 31), date(2026, 11, 1)),
+    ("America/New_York", date(2026, 3, 7), date(2026, 3, 8)),
+)
+#: The contract's own limit on a range, in days.
+MAX_RANGE_DAYS = 400
+
+
+def _start_with_the_new_offset(zone: ZoneInfo, switch: date, rng: random.Random) -> date | None:
+    """A range start, months before the switch, whose midnight already carries the
+    offset the switch moves *to*.
+
+    From such a start the days after the switch are not misplaced at all — the
+    misplaced ones lie between the start and the switch, on the other side of the
+    boundary hour. A rule keyed on the switch's direction alone puts the event on the
+    wrong side there; the rule the statement gives (compare the start's offset with
+    the day's own) does not.
+    """
+    after = _midnight_offset(zone, switch + timedelta(days=1))
+    candidates = [
+        switch - timedelta(days=distance)
+        for distance in range(60, MAX_RANGE_DAYS - 9)
+        if _midnight_offset(zone, switch - timedelta(days=distance)) == after
+    ]
+    return candidates[rng.randrange(len(candidates))] if candidates else None
+
+
+def counterexample_cases(seed: str) -> list[tuple[str, date, date]]:
+    """(zone, start_day, switch_day) triples: several zones, both directions of switch,
+    and for each switch a start on the day itself, a start a few days earlier, and a
+    start months earlier that already carries the new offset."""
+    cases = list(STATEMENT_CASES)
+    rng = _rng(seed, "counterexample:cases")
+    for zone_name in rng.sample(ZONES, 3):
+        zone = ZoneInfo(zone_name)
+        for year in (2026, 2027):
+            for switch in transitions(zone_name, year):
+                cases.append((zone_name, switch, switch))
+                cases.append((zone_name, switch - timedelta(days=rng.randrange(1, 30)), switch))
+                far = _start_with_the_new_offset(zone, switch, rng)
+                if far is not None:
+                    cases.append((zone_name, far, switch))
+    return cases
+
+
+def _parse_instant(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    text = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        moment = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    return moment.astimezone(timezone.utc) if moment.tzinfo is not None else None
+
+
+def _parse_day(value: object) -> date | None:
+    if not isinstance(value, str) or len(value) != 10:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _parse_event(value: object) -> tuple[datetime, int] | None:
+    """One event in the `daily_totals` shape, or None when the contract rejects it."""
+    if not isinstance(value, dict) or set(value) != {"id", "at", "amount"}:
+        return None
+    if not isinstance(value["id"], str) or not value["id"]:
+        return None
+    moment = _parse_instant(value["at"])
+    amount = value["amount"]
+    if moment is None or type(amount) is not int or not 0 <= amount <= 1_000_000:
+        return None
+    return moment, amount
+
+
+def _rollup(
+    parsed: list[tuple[datetime, int]],
+    zone: ZoneInfo,
+    first: date,
+    last: date,
+    fixed_offset: timedelta | None,
+) -> dict[str, int]:
+    """Per-day totals. With `fixed_offset` this is the starter's broken arithmetic
+    (one offset added to every instant); without it, the calendar's."""
+    days: dict[str, int] = {}
+    cursor = first
+    while cursor <= last:
+        days[cursor.isoformat()] = 0
+        cursor += timedelta(days=1)
+    for moment, amount in parsed:
+        if fixed_offset is None:
+            key = moment.astimezone(zone).date().isoformat()
+        else:
+            key = (moment + fixed_offset).date().isoformat()
+        if key in days:
+            days[key] += amount
+    return days
+
+
+def _counterexample_failures(
+    build: Counterexample, zone_name: str, start: date, switch: date
+) -> list[str]:
+    """Property failures for one (zone, start_day, switch_day) triple.
+
+    Every message names a documented rule of the checkpoint and echoes only the public
+    parameters the submission was called with (AGENTS.md §15).
+    """
+    where = f"{zone_name}, range from {start.isoformat()} with the switch on {switch.isoformat()}"
+    try:
+        result = build(zone_name, start.isoformat(), switch.isoformat())
+    except Exception as error:  # noqa: BLE001 - a raising solution is a failing solution
+        return [f"{where}: counterexample() raised {type(error).__name__}"]
+    if not isinstance(result, dict) or set(result) != {"end_day", "events"}:
+        return [f"{where}: counterexample() did not return a dict with exactly end_day and events"]
+    end = _parse_day(result["end_day"])
+    if end is None or end < switch or (end - start).days > MAX_RANGE_DAYS:
+        return [
+            f"{where}: end_day must be a YYYY-MM-DD date on or after the switch day, "
+            f"at most {MAX_RANGE_DAYS} days after start_day"
+        ]
+    events = result["events"]
+    if not isinstance(events, list) or len(events) != 1:
+        return [f"{where}: the counterexample must contain exactly one event"]
+    parsed = _parse_event(events[0])
+    if parsed is None or parsed[1] < 1:
+        return [
+            f"{where}: the event does not follow the daily_totals event shape "
+            "(id, at carrying an offset, amount 1 or more)"
+        ]
+    zone = ZoneInfo(zone_name)
+    truth = _rollup([parsed], zone, start, end, None)
+    fixed = _rollup([parsed], zone, start, end, _midnight_offset(zone, start))
+    short = [day for day, total in truth.items() if fixed[day] < total]
+    if not short:
+        return [f"{where}: under the fixed-offset rollup no day comes up short"]
+    if all(_is_switch_day(zone, date.fromisoformat(day)) for day in short):
+        return [
+            f"{where}: the only day that comes up short under the fixed-offset rollup "
+            "is a switch day; an ordinary day must"
+        ]
+    return []
+
+
+def check_counterexample(module: ModuleType, seed: str) -> list[str]:
+    """Failures for the counterexample checkpoint. Empty means it passes."""
+    build = getattr(module, "counterexample", None)
+    if not callable(build):
+        return ["submission does not define counterexample()"]
+    failures: list[str] = []
+    for zone_name, start, switch in counterexample_cases(seed):
+        failures.extend(_counterexample_failures(build, zone_name, start, switch))
+        if len(failures) >= 3:
+            # Three triples are enough to explain the gap; the rest would only repeat.
+            break
+    return failures
+
+
 def check_rollup(module: ModuleType, seed: str) -> list[str]:
     return _ordinary_properties(module, seed, "rollup-checkpoint")
 
 
 def check_transition(module: ModuleType, seed: str) -> list[str]:
-    return _transition_properties(module, seed, "transition-checkpoint")
-
-
-def check_generalize(module: ModuleType, seed: str) -> list[str]:
-    return _generalize_properties(module, seed, "generalize-checkpoint")
+    return _full_properties(module, seed, "transition-checkpoint")
 
 
 def run(module: ModuleType, seed: str) -> list[str]:
-    return _generalize_properties(module, seed, "full-run")
+    return _full_properties(module, seed, "full-run")
