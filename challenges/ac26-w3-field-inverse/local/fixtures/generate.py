@@ -20,6 +20,16 @@ PRIMES = (101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 
 # Composites with small prime factors, so a non-invertible element is easy to construct
 # and easy to check.
 COMPOSITES = (91, 95, 111, 115, 119, 121, 123, 129, 133, 141, 143, 145)
+# Composites for the `units` checkpoint only: three digits, each a product of two distinct
+# odd primes or an odd prime's square, and disjoint from `COMPOSITES` so that nothing a
+# deployment ever shows (`compositeModulus`) or grades elsewhere (the `h0`..`h2` labels)
+# carries over. Over any of these the shortcut `pow(a, m - 2, m)` returns a number for
+# every element and the *inverse* for only a minority of the units -- that is what the
+# checkpoint is for. None is a Carmichael number (the smallest is 561): over one of those
+# the shortcut would invert every unit, and only the non-units would be left to catch it.
+UNIT_COMPOSITES = (
+    187, 209, 221, 247, 253, 289, 299, 319, 323, 377, 391, 403, 407, 437, 481, 493
+)
 
 
 def _stream(seed: str, label: str) -> list[int]:
@@ -41,6 +51,11 @@ def prime_modulus(seed: str, label: str = "public") -> int:
 
 def composite_modulus(seed: str, label: str = "public") -> int:
     return COMPOSITES[_stream(seed, f"composite:{label}")[0] % len(COMPOSITES)]
+
+
+def unit_modulus(seed: str, label: str = "units") -> int:
+    """The composite modulus the `units` checkpoint enumerates. Never published."""
+    return UNIT_COMPOSITES[_stream(seed, f"units:{label}")[0] % len(UNIT_COMPOSITES)]
 
 
 def sample_values(seed: str, label: str, modulus: int, count: int = 12) -> list[int]:

@@ -56,7 +56,11 @@ class FieldElement:
         return FieldElement(self.field, 0)
 
     def __truediv__(self, other: "FieldElement") -> "FieldElement":
-        """Field division. Note that this is not Python's `/`."""
+        """Field division. Note that this is not Python's `/`.
+
+        `a / b` multiplies by `b.inverse()`, so dividing by an element that has no
+        inverse raises NotInvertible, over any modulus -- the same as inverting it.
+        """
         return FieldElement(self.field, 0)
 
 
