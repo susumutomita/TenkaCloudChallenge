@@ -43,7 +43,8 @@ def range_constraints(signal: str, bits: int) -> list[dict]:
     (5 = 1 + 0*2 + 1*4), and 0/1 digits can only ever add up to 0..7. Doubling is
     an `add` with the same signal on both sides:
         {"id": "t1", "kind": "add", "left": "b1", "right": "b1", "out": "t1"}
-    says t1 = 2 * b1. The last constraint's `out` must be `signal` itself.
+    says t1 = 2 * b1. In the example the last constraint's `out` is `signal` itself;
+    any set of constraints that pins `signal` to exactly 0 .. 2**bits - 1 is accepted.
 
     The starter returns nothing, so every value is admitted.
     """

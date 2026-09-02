@@ -80,6 +80,15 @@ def range_witness(signal, value, bits):
 # (name, {file: source})
 MUTATIONS: list[tuple[str, dict[str, str]]] = [
     (
+        "evaluate returns the raw subtraction without normalizing",
+        {
+            "circuit": _reference_source("circuit.py").replace(
+                'return field.sub(_get(witness, constraint["signal"]), int(constraint["value"]))',
+                'return _get(witness, constraint["signal"]) - int(constraint["value"])',
+            )
+        },
+    ),
+    (
         "normalize forgets negative values",
         {
             "field": _reference_source("field.py").replace(
@@ -338,6 +347,7 @@ def range_witness(signal, value, bits):
 #: Mutations whose kill must come from a specific rule, so that the rule itself is
 #: exercised (a mutation killed for an unrelated reason proves nothing about it).
 EXPECTED_REASON = {
+    "evaluate returns the raw subtraction without normalizing": "not an integer in 0 .. p-1",
     "gadgets invent a kind that only the submission's own evaluate understands": "five documented kinds",
     "trace sorts by id ascending, matching the public circuit's order": "order the circuit was given in",
     "evaluate flips the sign of mul and add residuals": "does not match the constraint's expression",

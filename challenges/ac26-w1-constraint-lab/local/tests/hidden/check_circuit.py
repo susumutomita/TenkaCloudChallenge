@@ -203,6 +203,27 @@ def check_residuals(circuit_module, field_module, seed: str) -> list[str]:
             failures.append("a residual on the broken witness does not match the constraint's expression")
         if satisfied is not None:
             failures.append("first_broken reports a break on a satisfied circuit")
+
+    # The crux the statement names: a residual is a number of the remainder world, so
+    # evaluate must return it normalized. trace rows are compared after normalizing (a
+    # trace that rounds them is still a trace), but evaluate itself is probed on three
+    # constraints whose raw subtraction is negative.
+    p = field_modulus(seed, "h0")
+    f = _field(field_module, p)
+    probes = [
+        ({"id": "n1", "kind": "const", "signal": "x", "value": 5}, {"x": 2}),
+        ({"id": "n2", "kind": "add", "left": "a", "right": "b", "out": "c"}, {"a": 1, "b": 1, "c": 5}),
+        ({"id": "n3", "kind": "mul", "left": "a", "right": "b", "out": "c"}, {"a": 2, "b": 3, "c": p - 1}),
+    ]
+    for constraint, witness in probes:
+        try:
+            got = circuit_module.evaluate(constraint, witness, f)
+        except Exception as error:  # noqa: BLE001
+            failures.append(f"evaluate raised {type(error).__name__}")
+            break
+        if isinstance(got, bool) or not isinstance(got, int) or got != reference_evaluate(constraint, witness, p):
+            failures.append("a residual is not an integer in 0 .. p-1")
+            break
     return failures
 
 
