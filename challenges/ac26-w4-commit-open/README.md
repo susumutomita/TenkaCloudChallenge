@@ -54,16 +54,16 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 
 | Checkpoint | Points | What is checked |
 |---|---:|---|
-| `encoding` | 30 | Index bound, value bound, no two pairs colliding, order-sensitive nodes |
-| `root` | 25 | The commitment, and that reordering changes it |
-| `opening` | 40 | Honest accepted; value, index, direction, length and range all rejected |
-| `order` | 35 | Challenge before commit and open before challenge both refused |
-| `adaptive` | 40 | The challenge-first counterexample |
-| `ambiguity` | 35 | Two pairs colliding under the weak encoding and not under yours |
+| `encoding` | 35 | Index bound, value bound, no two pairs colliding, order-sensitive nodes |
+| `root` | 30 | The commitment, and that reordering changes it |
+| `opening` | 45 | Honest accepted; value, index, direction, length and range all rejected |
+| `order` | 40 | Challenge before commit and open before challenge both refused |
+| `adaptive` | 45 | The challenge-first counterexample |
+| `ambiguity` | 40 | Two pairs colliding under the weak encoding and not under yours |
 | `transcript` | 35 | The challenge depends on commitment, domain and statement |
-| `lenient` | 60 | For each of the setter's verifiers A–E, an opening that passes with a claim outside the table, or `None` (scored only when all five are right) |
+| `lenient` | 30 | For each of the setter's verifiers A–E, an opening that passes with a claim outside the table, or `None` (scored only when all five are right) |
 
-Hints on six of the eight (115 points in all), each inside that checkpoint's 50% cap.
+Hints on six of the eight (100 points in all), each inside that checkpoint's 50% cap.
 
 ## The setter's five verifiers
 

@@ -52,16 +52,16 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 
 | Checkpoint | 配点 | 何を検査するか |
 |---|---:|---|
-| `encoding` | 30 | index と値の binding、2 組が衝突しないこと、節点の順序依存 |
-| `root` | 25 | commitment と、並べ替えで変わること |
-| `opening` | 40 | 正直な開示の受理と、値・index・方向・長さ・範囲の拒否 |
-| `order` | 35 | commit 前の challenge、challenge 前の open の拒否 |
-| `adaptive` | 40 | challenge が先に来る場合の反例 |
-| `ambiguity` | 35 | 弱い符号化で衝突し、自分の符号化では衝突しない 2 組 |
+| `encoding` | 35 | index と値の binding、2 組が衝突しないこと、節点の順序依存 |
+| `root` | 30 | commitment と、並べ替えで変わること |
+| `opening` | 45 | 正直な開示の受理と、値・index・方向・長さ・範囲の拒否 |
+| `order` | 40 | commit 前の challenge、challenge 前の open の拒否 |
+| `adaptive` | 45 | challenge が先に来る場合の反例 |
+| `ambiguity` | 40 | 弱い符号化で衝突し、自分の符号化では衝突しない 2 組 |
 | `transcript` | 35 | challenge が commitment・domain・statement に依存すること |
-| `lenient` | 60 | 出題側の検査器 A〜E それぞれに、表に無い主張を通す開示か `None` を返す（5 つ全部正しいときだけ加点） |
+| `lenient` | 30 | 出題側の検査器 A〜E それぞれに、表に無い主張を通す開示か `None` を返す（5 つ全部正しいときだけ加点） |
 
-hint は 8 つ中 6 つにあり（合計 115 点）、いずれもその checkpoint の 50% 上限内です。
+hint は 8 つ中 6 つにあり（合計 100 点）、いずれもその checkpoint の 50% 上限内です。
 
 ## 出題側の 5 つの検査器
 
