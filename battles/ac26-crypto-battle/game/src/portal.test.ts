@@ -52,6 +52,8 @@ import {
   nonceHuntCandidates,
   primaryActionsFor,
   rotateVoidCount,
+  ageProjection,
+  exposureRows,
   tacticAvailability,
 } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
@@ -98,6 +100,8 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
     // [Issue #645] The modulus is on the projection: a participant needs it to
     // compute an FHE or MPC answer, and it is public by construction.
     prime: DEFAULT_CONFIG.prime,
+    // [Issue #682] The exposure lane renders "N / threshold" from this.
+    threshold: DEFAULT_CONFIG.threshold,
     // 90-min matchDurationMs - 40-min elapsed = 50 min left, same numeric
     // value the earlier (buggy) absolute-epoch-based fixture used, so this
     // rewrite changes units, not the scenario the tests exercise.
@@ -820,6 +824,140 @@ describe("advanced tactics use progressive disclosure", () => {
     commitment: "11",
     response: "13",
     postedAtMs: 2,
+  });
+
+  /**
+   * [Issue #682] The lane exists to be watched while nothing is happening yet,
+   * so its tests are mostly about the boring states: everyone at zero, a rival
+   * climbing, a team that escaped by rotating.
+   */
+  describe("exposure lane", () => {
+    // Built out rather than spread over `share()`: that helper's return type is
+    // the PublicArtifact union, and overriding `shareIndex` through a spread
+    // asks TypeScript to accept the field on every arm of it.
+    const shareAt = (teamId: string, generation: number, shareIndex: number): PublicArtifact => ({
+      id: `${teamId}-${generation}-${shareIndex}`,
+      teamId,
+      generation,
+      kind: "share",
+      method: "leak",
+      shareIndex,
+      value: "7",
+      contractId: `${teamId}-c1`,
+      postedAtMs: 1,
+    });
+
+    it("lists every team on a board where nothing has been published", () => {
+      const rows = exposureRows(fixtureProjection({ publicLedger: [] }));
+      expect(rows.map((r) => [r.teamId, r.exposed, r.huntable])).toEqual([
+        ["blue", 0, false],
+        ["red", 0, false],
+      ]);
+      expect(rows[0]?.isSelf).toBe(true);
+    });
+
+    it("counts a rival's distinct shares and flags the threshold", () => {
+      const climbing = exposureRows(
+        fixtureProjection({ publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2)] }),
+      );
+      expect(climbing.find((r) => r.teamId === "red")).toMatchObject({
+        exposed: 2,
+        huntable: false,
+        shareIndices: [1, 2],
+      });
+      const reached = exposureRows(
+        fixtureProjection({
+          publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2), shareAt("red", 1, 3)],
+        }),
+      );
+      expect(reached.find((r) => r.teamId === "red")).toMatchObject({ exposed: 3, huntable: true });
+    });
+
+    it("does not count the same share twice", () => {
+      // Re-publishing index 1 is not progress toward the threshold, and a lane
+      // that said otherwise would send a hunter after a secret it cannot solve.
+      const rows = exposureRows(
+        fixtureProjection({ publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 1)] }),
+      );
+      expect(rows.find((r) => r.teamId === "red")?.exposed).toBe(1);
+    });
+
+    it("forgets shares from a generation the team has left behind", () => {
+      // ROTATE is the escape, so the lane has to show the escape working.
+      const rows = exposureRows(
+        fixtureProjection({
+          publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2), shareAt("red", 1, 3)],
+          teams: {
+            blue: { teamId: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
+            red: { teamId: "red", score: 20, generation: 2, huntedGenerationCount: 1 },
+          },
+        }),
+      );
+      expect(rows.find((r) => r.teamId === "red")).toMatchObject({ exposed: 0, huntable: false });
+    });
+
+    it("puts your own row first, then the teams closest to being hunted", () => {
+      const rows = exposureRows(
+        fixtureProjection({
+          publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2)],
+          teams: {
+            blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+            green: { teamId: "green", score: 0, generation: 1, huntedGenerationCount: 0 },
+            red: { teamId: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
+          },
+        }),
+      );
+      expect(rows.map((r) => r.teamId)).toEqual(["blue", "red", "green"]);
+    });
+
+    it("reports your own exposure from the vault's generation", () => {
+      const rows = exposureRows(
+        fixtureProjection({ publicLedger: [shareAt("blue", 1, 4), shareAt("blue", 1, 5)] }),
+      );
+      expect(rows[0]).toMatchObject({ isSelf: true, exposed: 2, huntable: false });
+    });
+  });
+
+  /**
+   * [Issue #682] The countdown the owner reported as frozen. A projection is
+   * only true at the instant it was fetched, and the battle surface polls every
+   * 30 seconds, so without ageing every timer on it sits on one number for half
+   * a minute and a lapsed Order stays on the belt at 0:00.
+   */
+  describe("ageProjection", () => {
+    it("leaves a freshly fetched projection alone", () => {
+      const p = fixtureProjection();
+      expect(ageProjection(p, 0)).toBe(p);
+      expect(ageProjection(p, -5)).toBe(p);
+    });
+
+    it("ages the match clock, every Order and the ROTATE cooldown together", () => {
+      const p = fixtureProjection();
+      const aged = ageProjection(p, 5_000);
+      if (!aged || p.matchRemainingMs === undefined) throw new Error("fixture");
+      expect(aged.matchRemainingMs).toBe(p.matchRemainingMs - 5_000);
+      expect(aged.vault.rotateCooldownRemainingMs).toBe(
+        Math.max(0, p.vault.rotateCooldownRemainingMs - 5_000),
+      );
+      for (const [i, order] of aged.myContracts.entries()) {
+        const before = p.myContracts[i];
+        if (!before) throw new Error("fixture");
+        expect(order.remainingMs).toBe(Math.max(0, before.remainingMs - 5_000));
+      }
+    });
+
+    it("floors at zero rather than counting into the negative", () => {
+      const aged = ageProjection(fixtureProjection(), 10 * 60 * 60_000);
+      expect(aged?.matchRemainingMs).toBe(0);
+      expect(aged?.myContracts.every((o) => o.remainingMs === 0)).toBe(true);
+    });
+
+    it("keeps an unstarted match's undefined clock undefined", () => {
+      // `matchRemainingMs` is undefined only before the first tick; subtracting
+      // from it would render NaN as a countdown.
+      const aged = ageProjection(fixtureProjection({ matchRemainingMs: undefined }), 5_000);
+      expect(aged?.matchRemainingMs).toBeUndefined();
+    });
   });
 
   it("keeps every advanced control off a fresh first screen", () => {

@@ -110,8 +110,8 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "reveal-share/3",
       text: {
-        ja: "同じ世代の share が復元に必要な枚数だけ公開記録に並ぶと、その世代の秘密は誰でも復元できる。いま自分の何枚が載っているかを数えてから決める。載りすぎたら ROTATE で世代を変えられる。",
-        en: "Once enough of one generation's shares sit on the public record to reconstruct it, anyone can. Count how many of yours are already there before you decide — and remember ROTATE moves you to a fresh generation.",
+        ja: "LEAK なら計算はない ― ボタンを押した時点で、求められた share がそのまま公開記録に載って完了する。PROVE を選ぶなら、金庫の秘密から proof を自分で作って提出する。どちらを押すかは「危険度」であなたの列があと何枚で埋まるかを見て決める。埋まってしまったら ROTATE で世代を変えられる。",
+        en: "LEAK needs no calculation — pressing it publishes the requested share to the public record and completes the Order. PROVE means building a proof from your vault's secret yourself and submitting that. Which one to press is a question for the EXPOSURE lane: how many more shares fill your row. Once it is full, ROTATE moves you to a fresh generation.",
       },
     },
   ],

@@ -936,6 +936,17 @@ export interface CryptoBattleProjection {
    * own wall clock.
    */
   readonly matchRemainingMs: number | undefined;
+  /**
+   * [Issue #682] How many shares of one generation reconstruct a secret.
+   *
+   * On the projection for the same reason `prime` is: the Portal has to tell a
+   * participant how close a team is to being hunted ("2 / 3"), and a threshold
+   * it hardcoded would be a game rule the Portal was told out-of-band — exactly
+   * what `prime`'s comment above argues against. It is public by construction:
+   * the problem statement says three, and `config.threshold` is what every
+   * `reconstruct` call already uses.
+   */
+  readonly threshold: number;
   readonly vault: VaultProjection;
   readonly myContracts: readonly ContractProjection[];
   readonly otherOpenContractCount: number;
