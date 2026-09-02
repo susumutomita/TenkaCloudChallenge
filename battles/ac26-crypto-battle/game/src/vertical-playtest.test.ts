@@ -53,6 +53,7 @@ import {
   buildVerticalPlaytestScript,
   DEFENDER,
   EVENT_ID,
+  MATCH_SECRET,
   TEAMS,
   VERTICAL_CONFIG,
 } from "./vertical-playtest-fixture.ts";
@@ -71,7 +72,10 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("MUST 1: both teams start with a secret and shareCount shares (initialState, independently)", () => {
-    const fresh = initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG);
+    const fresh = initialState(
+      { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
+      VERTICAL_CONFIG,
+    );
     for (const teamId of TEAMS) {
       const team = fresh.teams[teamId];
       if (!team) throw new Error(`expected team ${teamId}`);
@@ -89,17 +93,26 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     expect(alphaShares.length).toBeGreaterThanOrEqual(result.finalState.config.threshold);
   });
 
-  test("MUST 4: bravo's PROVEs never posted a ShareArtifact -- only ProofArtifacts, and never a share value", () => {
+  test("MUST 4: bravo never posted a ShareArtifact -- it only ever used methods that publish nothing reconstructable", () => {
     const bravoLedgerEntries = result.finalState.publicLedger.filter((a) => a.teamId === ATTACKER);
     expect(bravoLedgerEntries.length).toBeGreaterThan(0);
-    expect(bravoLedgerEntries.every((a) => a.kind === "proof")).toBe(true);
+    // [Issue #645] bravo now answers FHE and MPC Orders too, so its ledger
+    // carries ciphertexts and masked partials alongside its proof transcripts.
+    // The MUST that matters is unchanged and is asserted directly: not one of
+    // those entries is a share. A whitelist of "proof only" would have started
+    // failing for a reason that has nothing to do with the property.
+    expect(bravoLedgerEntries.some((a) => a.kind === "share")).toBe(false);
+    expect(new Set(bravoLedgerEntries.map((a) => a.kind))).toEqual(
+      new Set(["proof", "ciphertext", "partial"]),
+    );
   });
 
   test("PROVE and LEAK pay identical base points for a standard-kind contract (Issue #486 Scoring MUST)", () => {
-    const standardLeak = result.finalState.contracts.find(
+    const seen = [...result.ordersSeen.values()];
+    const standardLeak = seen.find(
       (c) => c.teamId === DEFENDER && c.kind === "standard" && c.resolution === "leak",
     );
-    const standardProve = result.finalState.contracts.find(
+    const standardProve = seen.find(
       (c) => c.teamId === ATTACKER && c.kind === "standard" && c.resolution === "prove",
     );
     if (!standardLeak || !standardProve) {
@@ -107,9 +120,12 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
         "test setup: expected at least one standard-kind LEAK (alpha) and one standard-kind PROVE (bravo) in this script's contract history",
       );
     }
+    // [Issue #659] Both Orders are worth the same to COMPUTE — the Order's rate
+    // does not depend on which method the team later chooses. What differs is
+    // the payout: LEAK pays `leakPoints`, and that is strictly less.
     expect(standardLeak.points).toBe(result.finalState.config.scores.contract);
     expect(standardProve.points).toBe(result.finalState.config.scores.contract);
-    expect(standardLeak.points).toBe(standardProve.points);
+    expect(standardLeak.leakPoints).toBeLessThan(standardLeak.points);
   });
 
   test("MUST 6/7/8: bravo's HUNT was built from public information only, verified by the trusted reducer, and moved both scores", () => {
@@ -142,7 +158,10 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
       // real reducer, purely to have something concrete to assert absence
       // of below -- this does NOT feed into how the hunt op itself was
       // built (that already happened, live, inside buildVerticalPlaytestScript).
-      const fresh = initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG);
+      const fresh = initialState(
+        { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
+        VERTICAL_CONFIG,
+      );
       const alpha = fresh.teams[DEFENDER];
       if (!alpha) throw new Error("test setup: expected team alpha");
       return alpha.secret;
@@ -161,7 +180,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("MUST 9: ROTATE voids alpha's own open contract, and old-generation HUNTs are rejected after it", () => {
-    const voided = result.finalState.contracts.find((c) => c.id === built.alphaContractVoidedByRotateId);
+    const voided = result.ordersSeen.get(built.alphaContractVoidedByRotateId);
     expect(voided?.status).toBe("expired");
     expect(result.finalState.teams[DEFENDER]?.generation).toBe(2);
 
@@ -197,28 +216,54 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("final score reconciliation: each team's final score equals the sum of its individual scoring events", () => {
-    function pointsForContract(contractId: string): number {
-      const contract = result.finalState.contracts.find((c) => c.id === contractId);
-      if (!contract) throw new Error(`test setup: expected contract ${contractId} in final state`);
-      return contract.points;
+    // [Issue #659] From `ordersSeen`, not the final state: resolved Orders are
+    // pruned from the persisted row past a short retention window, so the final
+    // state is a working queue rather than a history.
+    function contractById(contractId: string) {
+      const contract = result.ordersSeen.get(contractId);
+      if (!contract) throw new Error(`test setup: expected contract ${contractId} in the run`);
+      return contract;
     }
 
     const expected: Record<string, number> = { [DEFENDER]: 0, [ATTACKER]: 0 };
     for (const step of built.script.steps) {
       if (isTickStep(step) || step.expect !== "ok") continue;
-      if (step.op.kind === "leak" || step.op.kind === "prove") {
-        expected[step.teamId] = (expected[step.teamId] ?? 0) + pointsForContract(step.op.contractId);
+      // [Issue #659] Computing an Order and passing on it pay DIFFERENT rates,
+      // and the difference is the whole point of the scoring model: PROVE,
+      // CIPHER, FHE and MPC all pay the Order's `points` because all four are
+      // the team doing the work, while LEAK pays the lower `leakPoints` because
+      // the system answered and what it answered became public. Reconciling
+      // both against `points` would let a regression that paid the full rate
+      // for a LEAK pass here.
+      if (step.op.kind === "leak") {
+        expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).leakPoints;
+      } else if (
+        step.op.kind === "prove" ||
+        step.op.kind === "cipher" ||
+        step.op.kind === "fhe" ||
+        step.op.kind === "mpc"
+      ) {
+        expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).points;
       } else if (step.op.kind === "hunt") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
         expected[step.op.targetTeamId] = (expected[step.op.targetTeamId] ?? 0) - result.finalState.config.scores.huntPenalty;
       }
     }
 
-    // The additive reconciliation above does not model applyHunt's
-    // `Math.max(0, ...)` floor -- assert the floor was never actually
+    // [Issue #659] Summing the SCRIPT's steps is only a complete account of the
+    // score while nothing scores outside them, and the expiry penalty does
+    // exactly that -- it is charged by `tick`, for Orders no step ever touches.
+    // This fixture switches it off on purpose (see VERTICAL_CONFIG); assert
+    // that here, so if it is ever switched back on this reconciliation fails
+    // loudly instead of quietly checking an incomplete sum.
+    expect(result.finalState.config.scores.expiredOrder).toBe(0);
+
+    // Neither `applyHunt` nor `applyExpiryPenalties` models its `Math.max(0,
+    // ...)` floor in the sum above -- assert the floor was never actually
     // reached in this script, so a simple sum is a valid check (not a
     // coincidentally-passing one).
     expect(expected[DEFENDER]).toBeGreaterThanOrEqual(0);
+    expect(expected[ATTACKER]).toBeGreaterThanOrEqual(0);
     expect(result.finalState.teams[DEFENDER]?.score).toBe(expected[DEFENDER]);
     expect(result.finalState.teams[ATTACKER]?.score).toBe(expected[ATTACKER]);
   });
@@ -230,7 +275,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     const opSteps = built.script.steps.filter((s): s is PlaytestOpStep => !isTickStep(s));
     expect(opSteps.length).toBeGreaterThan(0);
     const kinds = new Set(opSteps.map((s) => s.op.kind));
-    expect(kinds).toEqual(new Set(["leak", "prove", "hunt", "rotate"]));
+    expect(kinds).toEqual(new Set(["leak", "prove", "cipher", "fhe", "mpc", "hunt", "rotate"]));
     expect(opSteps.some((s) => s.expect === "rejected")).toBe(true);
     expect(opSteps.some((s) => s.expect === "ok")).toBe(true);
 

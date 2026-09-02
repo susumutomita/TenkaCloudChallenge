@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { reconstruct } from "./shamir.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import type { CryptoBattleOp, PublicArtifact, ShareArtifact } from "./types.ts";
+import type {
+  Contract,
+  CryptoBattleOp,
+  CryptoBattleState,
+  PublicArtifact,
+  ShareArtifact,
+} from "./types.ts";
 
 /** Type-narrowing predicate: `PublicArtifact` is a `ShareArtifact | ProofArtifact` union since PR2 (PROVE artifacts). */
 function isShareArtifact(a: PublicArtifact): a is ShareArtifact {
@@ -35,10 +41,13 @@ function leakThreshold(stateIn: ReturnType<typeof initialState>, teamId: string)
           teamId,
           kind: "standard" as const,
           points: state.config.scores.contract,
-          requestedShareIndices: [shareIndex],
+          leakPoints: state.config.scores.contractLeak,
+          task: { kind: "reveal-share" as const, shareIndices: [shareIndex] },
           issuedAtMs: 0,
           expiresAtMs: state.config.contractTtlMs,
           status: "open" as const,
+          privacyConstraint: "none" as const,
+          allowedMethods: ["leak", "prove"] as const,
         },
       ],
     };
@@ -102,17 +111,39 @@ describe("tick: phases", () => {
 });
 
 describe("tick: contract issuance and expiry", () => {
-  test("issues one open contract per team at match start", () => {
+  test("issues a whole batch per team at match start", () => {
     const state = tick(initialState(CTX), 0);
     const open = state.contracts.filter((c) => c.status === "open");
-    expect(open).toHaveLength(2);
-    expect(new Set(open.map((c) => c.teamId))).toEqual(new Set(["teamA", "teamB"]));
+    // [Issue #659] Every team is handed `contractsPerIssue` Orders at once.
+    // Asserted against the config rather than a literal, because the batch size
+    // is the design's one tuning knob and a re-tune must not need a test edit.
+    expect(open).toHaveLength(2 * DEFAULT_CONFIG.contractsPerIssue);
+    for (const teamId of ["teamA", "teamB"]) {
+      expect(open.filter((c) => c.teamId === teamId)).toHaveLength(
+        DEFAULT_CONFIG.contractsPerIssue,
+      );
+    }
   });
 
-  test("issues another batch once contractIntervalMs elapses", () => {
+  test("the next batch REPLACES the last one rather than piling on top of it", () => {
     let state = tick(initialState(CTX), 0);
+    const firstBatch = state.contracts.map((c) => c.id);
     state = tick(state, DEFAULT_CONFIG.contractIntervalMs);
-    expect(state.contracts).toHaveLength(4);
+
+    // [Issue #659] "No prefetch" is the rule the whole scoring model rests on:
+    // a team may never hold more than the batch in front of it. If Orders
+    // accumulated, a team could leak from the backlog to free time for extra
+    // PROVEs, and LEAK would beat PROVE at any point values.
+    const open = state.contracts.filter((c) => c.status === "open");
+    expect(open).toHaveLength(2 * DEFAULT_CONFIG.contractsPerIssue);
+    expect(open.some((c) => firstBatch.includes(c.id))).toBe(false);
+
+    // The old batch is retained (expired), not dropped -- scoring and the
+    // participant's own board both need to see what lapsed.
+    expect(state.contracts).toHaveLength(4 * DEFAULT_CONFIG.contractsPerIssue);
+    for (const id of firstBatch) {
+      expect(state.contracts.find((c) => c.id === id)?.status).toBe("expired");
+    }
   });
 
   test("a tick that jumps far ahead catches up on every missed batch, bounded by match end", () => {
@@ -136,25 +167,96 @@ describe("tick: contract issuance and expiry", () => {
   });
 });
 
+/**
+ * [Issue #645] Tick forward until `teamId` has an open Order matching `want`,
+ * and return that state together with the Order.
+ *
+ * Which Orders forbid raw disclosure is derived from the seed, so "teamA's
+ * first Order" is no longer interchangeable with "an Order teamA may LEAK" --
+ * and how many ticks it takes to see one of each is a property of the seed, not
+ * something a test should hard-code. Tests say which Order they need; this
+ * plays the match until one is issued, and fails loudly rather than silently
+ * testing whatever happened to be there.
+ */
+function orderMatching(
+  want: (contract: Contract) => boolean,
+  teamId = "teamA",
+): { state: CryptoBattleState; order: Contract } {
+  let state = tick(initialState(CTX), 0);
+  for (let issued = 0; issued < 20; issued += 1) {
+    const order = state.contracts.find(
+      (c) => c.teamId === teamId && c.status === "open" && want(c),
+    );
+    if (order) return { state, order };
+    state = tick(state, (issued + 1) * DEFAULT_CONFIG.contractIntervalMs);
+  }
+  throw new Error(`no matching open order for ${teamId} within 20 issuance rounds`);
+}
+
+const allowsLeak = (contract: Contract) => contract.allowedMethods.includes("leak");
+
 describe("leak", () => {
   test("validateOp accepts an own open contract, rejects everything else", () => {
-    const state = tick(initialState(CTX), 0);
-    const mine = state.contracts.find((c) => c.teamId === "teamA")?.id as string;
-    const theirs = state.contracts.find((c) => c.teamId === "teamB")?.id as string;
+    const { state, order } = orderMatching(allowsLeak);
+    const theirs = state.contracts.find(
+      (c) => c.teamId === "teamB" && c.status === "open" && allowsLeak(c),
+    );
+    if (!theirs) throw new Error("expected an open LEAK-able order for teamB");
 
-    expect(validateOp(state, "teamA", { kind: "leak", contractId: mine })).toEqual({ ok: true });
-    expect(validateOp(state, "teamA", { kind: "leak", contractId: theirs }).ok).toBe(false);
+    expect(validateOp(state, "teamA", { kind: "leak", contractId: order.id })).toEqual({ ok: true });
+    expect(validateOp(state, "teamA", { kind: "leak", contractId: theirs.id }).ok).toBe(false);
     expect(validateOp(state, "teamA", { kind: "leak", contractId: "does-not-exist" }).ok).toBe(false);
   });
 
+  /**
+   * [Issue #645] The Level-1 "technique-specified" Order. Its client will not
+   * accept the underlying value being published, so LEAK is refused and the
+   * message names the constraint -- a participant told only "not allowed"
+   * learns nothing they can carry to the next Order.
+   */
+  test("validateOp refuses LEAK on an Order that forbids raw disclosure", () => {
+    const { state, order: constrained } = orderMatching(
+      (c) => c.privacyConstraint === "no-raw-disclosure",
+    );
+
+    expect(constrained.allowedMethods).toEqual(["prove"]);
+    const verdict = validateOp(state, "teamA", { kind: "leak", contractId: constrained.id });
+    expect(verdict.ok).toBe(false);
+    if (verdict.ok) throw new Error("unreachable");
+    expect(verdict.error).toContain("no-raw-disclosure");
+    expect(verdict.error).toContain("PROVE");
+  });
+
+  /**
+   * An unconstrained SHARE Order still accepts either method.
+   *
+   * [Issue #659] Selected by task kind as well as by constraint. The ladder
+   * added a second unconstrained shape whose free choice is `leak` or `cipher`,
+   * so "the first Order with no constraint" stopped identifying the one this
+   * test is about -- see order-mix.test.ts, which asserts both shapes exist.
+   */
+  test("an unconstrained share Order accepts both methods", () => {
+    const { order } = orderMatching(
+      (c) => c.privacyConstraint === "none" && c.task.kind === "reveal-share",
+    );
+    expect(order.allowedMethods).toEqual(["leak", "prove"]);
+  });
+
   test("applyOp posts the requested share(s) to the public ledger and pays out points", () => {
-    const state = tick(initialState(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA");
-    if (!contract) throw new Error("expected a contract");
+    // [Issue #659] LEAK now posts a share on a share Order and a
+    // (plaintext, ciphertext) pair on a ladder Order, so this test names the
+    // one it is about. `ladder.test.ts` covers the other.
+    const { state, order: contract } = orderMatching(
+      (c) => allowsLeak(c) && c.task.kind === "reveal-share",
+    );
     const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
 
-    expect(next.teams.teamA?.score).toBe(contract.points);
-    expect(next.publicLedger).toHaveLength(contract.requestedShareIndices.length);
+    // [Issue #659] LEAK pays the leak rate, not the full rate.
+    expect(next.teams.teamA?.score).toBe(contract.leakPoints);
+    expect(contract.leakPoints).toBeLessThan(contract.points);
+    expect(next.publicLedger).toHaveLength(
+      contract.task.kind === "reveal-share" ? contract.task.shareIndices.length : 0,
+    );
     const posted = next.publicLedger[0];
     if (!posted) throw new Error("expected a posted artifact");
     if (posted.kind !== "share") throw new Error("expected a share artifact");
@@ -166,9 +268,7 @@ describe("leak", () => {
   });
 
   test("the same contract cannot be leaked twice", () => {
-    const state = tick(initialState(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA");
-    if (!contract) throw new Error("expected a contract");
+    const { state, order: contract } = orderMatching(allowsLeak);
     const op: CryptoBattleOp = { kind: "leak", contractId: contract.id };
     const next = applyOp(state, "teamA", op);
     expect(validateOp(next, "teamA", op).ok).toBe(false);
@@ -402,10 +502,13 @@ describe("match end", () => {
       teamId: "teamA",
       kind: "standard" as const,
       points: state.config.scores.contract,
-      requestedShareIndices: [1],
+          leakPoints: state.config.scores.contractLeak,
+      task: { kind: "reveal-share" as const, shareIndices: [1] },
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
+      privacyConstraint: "none" as const,
+      allowedMethods: ["leak", "prove"] as const,
     };
     state = { ...state, contracts: [...state.contracts, stillOpenContract] };
 

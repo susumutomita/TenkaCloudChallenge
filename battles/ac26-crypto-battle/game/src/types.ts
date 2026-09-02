@@ -38,10 +38,39 @@
  * (`BigInt(...)` on the way in, `.toString()` on the way out).
  */
 
+import type { CipherRung } from "./ladder.ts";
+import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
+
+// Re-exported so every consumer that already imports this module's shapes gets
+// the Order vocabulary from the same place, rather than having to know that
+// methods.ts is where a method is defined (Issue #645).
+export type { PrivacyConstraint, SubmissionMethod };
+
 /** What the platform dispatcher hands a CoordinationPlugin for one event. */
 export interface CoordinationContext {
   readonly eventId: string;
   readonly teamIds: readonly string[];
+  /**
+   * [Issue #652] The platform's server-only secret for THIS match
+   * (TenkaCloud#3133). High-entropy, never projected, never sent to a browser.
+   *
+   * Every hidden value in this Battle hangs off the match seed — each team's
+   * secret and shares (`deriveTeamGeneration`), the Order belt
+   * (`deriveContractPlan`), the FHE plaintexts and the MPC inputs and masks.
+   * So the seed has to be something a participant cannot obtain.
+   *
+   * `ctx.eventId` is NOT that. It is a routing key: it appears in URLs and in
+   * `PortalSlotProps.team.eventId`, i.e. in the participant's own browser, and
+   * this repository is public so every derivation above is published. Seeding
+   * from it means any participant can recompute any team's secret and win HUNT
+   * without collecting a single share.
+   *
+   * Optional because the platform issues it only through the coordination
+   * dispatcher; local play and unit tests run without one. See
+   * `resolveMatchSeed` for what happens then, and why that path must never be
+   * used for a real event.
+   */
+  readonly matchSecret?: string;
 }
 
 export type ValidateResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
@@ -49,14 +78,54 @@ export type ValidateResult = { readonly ok: true } | { readonly ok: false; reado
 export type Phase = "build" | "pressure" | "endgame" | "ended";
 
 export interface ScoreRules {
-  /** Points for completing a standard LEAK contract. */
+  /**
+   * [Issue #659] Points for completing a standard Order, by how it was fulfilled.
+   *
+   * LEAK and PROVE used to pay the same, which made LEAK strictly dominant: it
+   * costs no computation, so an identical payout meant no reason ever to work.
+   * PROVE must pay more, or the whole "compute or expose yourself" tension does
+   * not exist.
+   */
   readonly contract: number;
+  /**
+   * [Issue #659] Points for a standard Order fulfilled WITHOUT computing —
+   * the participant let the system answer, publishing a plaintext/ciphertext
+   * pair to the public record. Strictly below {@link contract}.
+   */
+  readonly contractLeak: number;
+  /**
+   * [Issue #659] Penalty for an Order that was issued to this team and expired
+   * unanswered. Doing nothing has to be the WORST outcome — worse than leaking
+   * and then being hunted for it — or ignoring Orders becomes a safe strategy
+   * and the game stops.
+   */
+  readonly expiredOrder: number;
   /** Points for completing a "rush" LEAK contract (time-pressured, worth more). */
   readonly rushContract: number;
   /** Points an attacker earns for a successful HUNT (secret recovered and matched). */
   readonly huntBonus: number;
   /** Points a target loses when successfully HUNTed (floored at 0, never negative). */
   readonly huntPenalty: number;
+  /**
+   * [Issue #659 §9] What each successive hint on an Order costs, by level —
+   * `hintCosts[0]` for the first hint opened, `[1]` for the second, and so on.
+   * Charged as a deduction (floored at 0, like `huntPenalty`), whether or not
+   * the Order is ever answered.
+   *
+   * A LIST rather than one price because the levels are not worth the same: the
+   * first says where to look, the last walks the first step of the calculation.
+   * A flat price would either make the nudge too expensive to try or the walked
+   * step too cheap to think about.
+   *
+   * The sum is bounded by the ordering the whole scoring model rests on
+   * (#659 §15): a team that buys every hint and then computes the Order must
+   * still finish above what LEAK would have paid them, or hints turn into a
+   * roundabout way of making LEAK optimal again — the exact failure #659's
+   * simulation found. `hints.test.ts` pins `contract - sum(hintCosts) >
+   * contractLeak` against `DEFAULT_CONFIG`. Its length must match
+   * `HINT_LEVELS`; a level with no price would be a free hint.
+   */
+  readonly hintCosts: readonly number[];
 }
 
 export interface PhaseBoundaries {
@@ -82,9 +151,41 @@ export interface CryptoBattleConfig {
   readonly shareCount: number;
   readonly matchDurationMs: number;
   readonly phaseBoundaries: PhaseBoundaries;
-  /** How often (ms) a fresh LEAK contract is issued per team. */
+  /** How often (ms) a fresh batch of Orders is issued per team. */
   readonly contractIntervalMs: number;
-  /** How long (ms) an issued contract stays "open" before it expires unclaimed. */
+  /**
+   * [Issue #659] How many Orders arrive per team per issue, all at once.
+   *
+   * This is the design's ONE tuning knob, and it decides whether the match is
+   * a game at all. Set it so a fast team clears the batch and a slow team
+   * overflows: too low and nobody ever has to LEAK, so nothing is ever
+   * published and HUNT can never fire (the simulation in #659 measured
+   * literally zero hunts at a batch of 1); too high and every team overflows,
+   * so being fast stops paying.
+   *
+   * It CANNOT be derived. The plugin is handed team ids, never headcount, so
+   * it cannot see that a team has three people. #659 sizes it from the paper
+   * playtest as "team size + 1 to 2", and 6 is that figure for the standard
+   * three-person team. A match with a different team size has to re-tune it.
+   *
+   * Raising it also costs storage. The whole match is one persisted row and
+   * Orders are retained after they resolve, so the row grows with
+   * `teams x contractsPerIssue`, so raising it raises the per-team cost of the
+   * persisted row and lowers how many teams a backend can hold.
+   * `state-size.test.ts` measures both ceilings and OPERATOR.md records them.
+   */
+  readonly contractsPerIssue: number;
+  /**
+   * How long (ms) an issued Order stays "open" before it expires unclaimed.
+   *
+   * [Issue #659] Deliberately EQUAL to `contractIntervalMs`, which is the
+   * "no prefetch" rule the rest of the scoring rests on: a batch lives exactly
+   * until the next batch replaces it, so Orders cannot be stockpiled. A longer
+   * TTL would let a team hold a backlog, and with a backlog LEAK always beats
+   * PROVE no matter how the points are set -- leaking frees five minutes that
+   * convert straight into another PROVE, so the leak's points are pure profit.
+   * Raising this above the interval reintroduces that arbitrage.
+   */
   readonly contractTtlMs: number;
   /**
    * How long (ms) a "rush" contract stays open. Shorter than `contractTtlMs`
@@ -97,20 +198,164 @@ export interface CryptoBattleConfig {
   readonly scores: ScoreRules;
 }
 
+/**
+ * One ciphertext on the wire: both components are stringified decimals, the
+ * same convention as every other bigint that crosses the state/op boundary --
+ * see this file's header "JSON-SAFETY INVARIANT". `fhe.ts` works in `bigint`
+ * internally and converts here.
+ */
+export interface StoredCiphertext {
+  readonly r: string;
+  readonly y: string;
+}
+
+/**
+ * [Issue #645] What an Order actually asks for.
+ *
+ * #645's acceptance criteria require an Order to carry a task alongside its
+ * deadline, points, privacy rule and methods. Before Phase 2 every Order asked
+ * for the same thing -- reveal these share indices -- so the task was implicit
+ * in a bare `requestedShareIndices` field. FHE and MPC Orders ask for something
+ * else entirely and carry a different payload, so the task became a thing worth
+ * naming.
+ *
+ * The task is what decides which methods could possibly serve an Order; the
+ * privacy constraint then narrows that set further. Keeping them separate is
+ * what makes "this Order accepts LEAK or PROVE, your call" and "this Order
+ * accepts PROVE only, because the client will not have the raw value
+ * published" two different sentences rather than one rule with two spellings --
+ * see methods.ts's `allowedMethodsFor`.
+ *
+ * Every payload here is PUBLIC. An MPC Order's confidential material (the
+ * team's own number and its masks) is deliberately absent: it is derived per
+ * team in `projectForTeam` and never stored, so no ledger entry and no other
+ * team's projection can carry it. See mpc.ts.
+ */
+export type OrderTask =
+  | {
+      readonly kind: "reveal-share";
+      /** Which share indices the Order wants accounted for. */
+      readonly shareIndices: readonly number[];
+    }
+  | {
+      readonly kind: "homomorphic-sum";
+      /** The ciphertexts to add. Public: they hide their plaintexts (fhe.ts). */
+      readonly inputs: readonly StoredCiphertext[];
+    }
+  | {
+      readonly kind: "masked-total";
+      /** How many offices take part, including this team. */
+      readonly partyCount: number;
+    }
+  /**
+   * [Issue #659 §5] Encrypt this run of symbols with your team's key for the
+   * named rung of the cipher ladder.
+   *
+   * Everything here is public, INCLUDING the algorithm — that is Kerckhoffs's
+   * principle stated as a game rule (#659 §5). Hiding the method would only
+   * mean five minutes spent guessing what to do, and it would teach the exact
+   * misconception the ladder exists to remove. The key is the secret, and it is
+   * the only secret.
+   *
+   * `pairsToBreak` is on the Order for the same reason `leakPoints` is: the
+   * decision this Order asks for is "is passing on this worth what publishing a
+   * pair costs me", and a team cannot weigh that without knowing how many pairs
+   * their current rung survives.
+   */
+  | {
+      readonly kind: "caesar-shift";
+      readonly rung: CipherRung;
+      /**
+       * The symbols to encrypt, as VALUES — the pictures are added by
+       * `projectTask` from the rung's alphabet.
+       *
+       * Stored as numbers rather than as the dice faces a participant sees for
+       * a reason that is not micro-optimisation: the whole match is one
+       * persisted row against a 400 KB item cap (see `state-size.test.ts`), and
+       * a multi-byte glyph is roughly three times the cost of the value behind
+       * it, on every Order and again on every published pair. Presentation
+       * belongs to the projection anyway — everything derivable from the rung
+       * registry is added there, the same way MPC's private inputs are derived
+       * rather than stored.
+       */
+      readonly plaintext: readonly number[];
+    };
+
+export type OrderTaskKind = OrderTask["kind"];
+
 export type ContractKind = "standard" | "rush";
 export type ContractStatus = "open" | "completed" | "expired";
 
+/**
+ * One job on the belt. Participant-facing copy calls this an **Order**
+ * (Issue #645): a `Contract` here is a piece of work with a deadline, a reward,
+ * a stated privacy rule, and the set of methods that satisfy it -- nothing to
+ * do with a smart contract or a CloudFormation stack. The internal type name is
+ * unchanged on purpose (#646 non-goals), so a rename does not churn every
+ * reducer test at the same time as the model grows.
+ */
 export interface Contract {
   readonly id: string;
-  /** The team this contract was issued to (only that team may LEAK/PROVE against it). */
+  /** The team this Order was issued to (only that team may submit against it). */
   readonly teamId: string;
   readonly kind: ContractKind;
+  /** Points for fulfilling this Order by computing it (PROVE / FHE / MPC). */
   readonly points: number;
-  readonly requestedShareIndices: readonly number[];
+  /**
+   * [Issue #659] Points for fulfilling it by LEAK — letting the system answer
+   * and publishing the pair. Carried on the Order rather than read from config
+   * at submit time so the participant can see both numbers side by side and
+   * make the trade knowingly.
+   */
+  readonly leakPoints: number;
+  /** [Issue #645] What the Order asks for, and the public payload it needs. */
+  readonly task: OrderTask;
   readonly issuedAtMs: number;
   readonly expiresAtMs: number;
   readonly status: ContractStatus;
-  readonly resolution?: "leak" | "prove";
+  /**
+   * [Issue #645] The rule the Order's client imposes on what may become public.
+   * `allowedMethods` is derived from it -- see methods.ts on why both are
+   * stored: the constraint is the reason, the method list the consequence.
+   */
+  readonly privacyConstraint: PrivacyConstraint;
+  /**
+   * [Issue #645] Which submission methods fulfil this Order. A single-entry
+   * list is a Level-1 "required method" Order. Always
+   * `allowedMethodsFor(privacyConstraint)`; carried on the Order so a
+   * projection can show it without the portal re-deriving game rules.
+   */
+  readonly allowedMethods: readonly SubmissionMethod[];
+  /** Which method actually completed it, once one did. */
+  readonly resolution?: SubmissionMethod;
+  /**
+   * [Issue #659] Why an `expired` Order ended, once one did.
+   *
+   * Two different things end an Order unanswered -- its deadline passing, and
+   * its team ROTATE-ing away from the generation it was issued against -- and
+   * both leave `status: "expired"`. They carry the same score penalty (see
+   * `applyRotate`), so the distinction is not a scoring one; it exists so a
+   * participant reading their own board can tell "the clock beat me" from "I
+   * chose this", and so a reconciliation over final state can attribute each
+   * penalty to its cause rather than inferring it from timestamps.
+   */
+  readonly expiryCause?: "deadline" | "rotate";
+  /**
+   * [Issue #659 §9] How many hints this Order's team has opened on it.
+   *
+   * A COUNT, not the list of levels, and not the text. Hints are opened in
+   * ladder order, so the count says everything the list would — and the whole
+   * match is one persisted row against a 400 KB item cap
+   * (`state-size.test.ts`), where an array on every retained Order costs
+   * multiples of what one small integer does. The text is never stored at all:
+   * `projectForTeam` reads it from `hints.ts` by level.
+   *
+   * Absent rather than `0` on an Order nobody has bought a hint for, which is
+   * most of them — the same reason `resolution` and `expiryCause` are optional.
+   * Every read goes through `hintsRevealedOn`, so an Order persisted before
+   * this field existed needs no migration: it simply has no hints open.
+   */
+  readonly hintsRevealed?: number;
 }
 
 /**
@@ -134,6 +379,15 @@ export interface ShareArtifact {
   /** The team's secret generation this share belongs to (see ROTATE). */
   readonly generation: number;
   readonly kind: "share";
+  /**
+   * [Issue #645] Which method produced this artifact. Redundant with `kind`
+   * while there are exactly two methods and each posts one artifact shape --
+   * and deliberately recorded anyway, because #645's Public Ledger requirement
+   * is that a reader can see WHICH METHOD a team used, and Phase 2's FHE
+   * ciphertext is a third artifact whose shape does not name its method.
+   * Recording it now means the ledger's contract does not change when it lands.
+   */
+  readonly method: SubmissionMethod;
   readonly shareIndex: number;
   /** Stringified bigint -- see reducer.ts on why the ledger stores strings. */
   readonly value: string;
@@ -158,13 +412,119 @@ export interface ProofArtifact {
   /** The team's secret generation the proven public commitment Y belongs to. */
   readonly generation: number;
   readonly kind: "proof";
+  /** [Issue #645] Which method produced this artifact -- see ShareArtifact. */
+  readonly method: SubmissionMethod;
   readonly contractId: string;
   readonly commitment: string;
   readonly response: string;
   readonly postedAtMs: number;
 }
 
-export type PublicArtifact = ShareArtifact | ProofArtifact;
+/**
+ * [Issue #645 Phase 2] One entry in the Public Ledger: the ciphertext a team
+ * submitted for an FHE Order.
+ *
+ * Safe to publish, and that is the lesson. The value is an encryption under a
+ * key only the judge holds, so a reader sees a number that carries no
+ * information about the plaintexts it was computed from (see fhe.ts on why that
+ * is information-theoretic rather than a hardness assumption). A participant
+ * looking at this row learns that a team answered, and nothing about what the
+ * answer was.
+ */
+export interface CiphertextArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  readonly generation: number;
+  readonly kind: "ciphertext";
+  readonly method: SubmissionMethod;
+  readonly contractId: string;
+  /** The submitted ciphertext's two components -- stringified decimals. */
+  readonly r: string;
+  readonly y: string;
+  readonly postedAtMs: number;
+}
+
+/**
+ * [Issue #645 Phase 3] One entry in the Public Ledger: the masked partial a
+ * team published for an MPC Order.
+ *
+ * Also safe to publish, for a different reason: the value is the team's own
+ * number plus and minus masks nobody else holds, so it is consistent with every
+ * possible input (see mpc.ts). Publishing it is what lets the client add the
+ * three partials and learn the total while no office's number is ever exposed.
+ */
+export interface PartialArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  readonly generation: number;
+  readonly kind: "partial";
+  readonly method: SubmissionMethod;
+  readonly contractId: string;
+  /** The published masked partial -- a stringified decimal. */
+  readonly partial: string;
+  /**
+   * [Issue #645 Phase 3] The other two offices' published partials, and the
+   * total all three sum to.
+   *
+   * Without these the Order stopped one step short of its own story: the team
+   * published its masked subtotal, scored, and the outcome the client wanted
+   * — the total, obtained without any office revealing its number — was never
+   * produced anywhere in the runtime. The statement promises that outcome, so
+   * the runtime owes it.
+   *
+   * Safe to publish, by the same argument that makes `partial` safe: a partial
+   * is consistent with every possible input (see mpc.ts), and the total is
+   * precisely what the client is entitled to learn. Neither an input nor a
+   * mask appears here, and `mpc.test.ts` scans the serialized ledger to keep
+   * it that way.
+   */
+  readonly peerPartials: readonly string[];
+  /** `partial + peerPartials`, in the field. The client's answer. */
+  readonly total: string;
+  readonly postedAtMs: number;
+}
+
+/**
+ * [Issue #659 §2] A (plaintext, ciphertext) pair, published because its team
+ * chose to LEAK a ladder Order instead of computing it.
+ *
+ * This is the ladder's whole economy in one record. LEAK on a ladder Order does
+ * not publish a share; it publishes the ANSWER, and an answer next to its
+ * question is exactly the material that recovers a key. How much of the key it
+ * gives away depends on the rung, which is why `pairsToBreak` rides along: a
+ * reader looking at the public record can count how many pairs a team has out
+ * and know whether that team is already broken.
+ *
+ * `plaintext` and `ciphertext` are the pictures, not the values, so the record
+ * reads the same to a participant as the Order did (#659 §3).
+ */
+export interface CipherPairArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  readonly generation: number;
+  readonly kind: "cipher-pair";
+  readonly method: SubmissionMethod;
+  readonly contractId: string;
+  readonly rung: CipherRung;
+  /**
+   * The published pair, as symbol VALUES. Rendered to pictures at the edge
+   * (`ledgerPayload`, the board) from the rung's own alphabet — see
+   * `OrderTask`'s `caesar-shift` arm on why presentation is not persisted.
+   *
+   * `pairsToBreak` is likewise not stored: it is a constant of the rung, and
+   * `rungSpec(rung).pairsToBreak` is the one place that answers it.
+   */
+  readonly plaintext: readonly number[];
+  readonly ciphertext: readonly number[];
+  readonly postedAtMs: number;
+}
+
+export type PublicArtifact =
+  | ShareArtifact
+  | ProofArtifact
+  | CiphertextArtifact
+  | PartialArtifact
+  | CipherPairArtifact;
 
 /**
  * A Shamir share as it lives in `CryptoBattleState` / `CryptoBattleProjection`
@@ -194,9 +554,35 @@ export interface TeamState {
   /** All `shareCount` shares for the current generation (only some may have been LEAKed). */
   readonly shares: readonly StoredShare[];
   readonly lastRotateAtMs: number | undefined;
+  /**
+   * [Issue #659] How many Orders have been ISSUED to this team, ever.
+   *
+   * The next Order's sequence index, and the counter that makes its id unique.
+   * Held here rather than recomputed from `state.contracts.length`, which was
+   * how `tick` used to get it: that made the id depend on how many Orders the
+   * row still happens to contain, so anything that removes one -- pruning a
+   * resolved Order, or a delayed tick skipping a slot whose deadline had
+   * already passed -- rewound the counter and re-issued an id that already
+   * existed. `validateOp` then resolved that id to the OLD row and refused a
+   * live Order as "already completed".
+   */
+  readonly issuedOrderCount: number;
   readonly completedContractIds: readonly string[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
   readonly huntedGenerations: readonly number[];
+  /**
+   * [Issue #659] This team's OWN generations whose LADDER key an attacker has
+   * recovered, per rung.
+   *
+   * Kept apart from `huntedGenerations` because the two mean different things
+   * and a participant has to be able to tell them apart: one says the team's
+   * Shamir secret was reconstructed from three published shares, the other says
+   * a cipher key was recovered from published pairs. Folding a Caesar break
+   * into `huntedGenerations` would report a secret reconstruction that never
+   * happened -- and once the ladder has rungs a team can climb, "which rung of
+   * mine is broken" is the question they need answered, not "am I broken".
+   */
+  readonly cipherHuntedGenerations: Readonly<Record<string, readonly number[]>>;
 }
 
 export interface CryptoBattleState {
@@ -256,6 +642,38 @@ export interface HuntLogEntry {
 
 export type CryptoBattleOp =
   | { readonly kind: "leak"; readonly contractId: string }
+  /**
+   * [Issue #645 Phase 2] The ciphertext this team computed for an FHE Order.
+   * The judge decrypts it and compares against the hidden expected sum -- a
+   * participant never learns the plaintexts, and self-reporting "I did the
+   * addition" earns nothing.
+   */
+  | {
+      readonly kind: "fhe";
+      readonly contractId: string;
+      readonly ciphertext: StoredCiphertext;
+    }
+  /**
+   * [Issue #645 Phase 3] The masked partial this team publishes for an MPC
+   * Order. Stringified decimal, parsed through the same untrusted-decimal gate
+   * as every other participant-supplied number.
+   */
+  | { readonly kind: "mpc"; readonly contractId: string; readonly partial: string }
+  /**
+   * [Issue #645 Phase 5] A HUNT that exploits nonce reuse rather than collected
+   * shares: two of the target's proof transcripts on the Public Ledger share a
+   * commitment, which solves for the witness behind their public commitment Y.
+   * A separate op kind rather than a variant of "hunt" so each carries exactly
+   * the evidence its own check needs, and so neither branch has to ask which
+   * kind of hunt it is looking at.
+   */
+  | {
+      readonly kind: "hunt-nonce";
+      readonly targetTeamId: string;
+      readonly generation: number;
+      /** The recovered Schnorr witness w, satisfying g^w = Y. Stringified decimal. */
+      readonly recoveredWitness: string;
+    }
   | {
       readonly kind: "hunt";
       readonly targetTeamId: string;
@@ -269,8 +687,78 @@ export type CryptoBattleOp =
        */
       readonly recoveredSecret: string;
     }
+  /**
+   * [Issue #659] The ciphertext this team computed for a ladder Order.
+   *
+   * A separate op from `prove` because it carries different evidence: PROVE
+   * hands over a Schnorr transcript that proves knowledge of the Shamir secret
+   * without revealing it, while this hands over the ANSWER and relies on the
+   * judge already holding the key to check it. Both publish nothing an attacker
+   * can use, and that shared property is what makes them both "do the work
+   * yourself" methods -- but merging them would mean one branch asking which
+   * kind of evidence it was looking at, which is what `hunt-nonce`'s comment
+   * above already argues against.
+   *
+   * Accepts pictures or their numeric values (see `parseAnswer`): a keyboard
+   * that cannot type a dice face must not be a scoring disadvantage.
+   */
+  | { readonly kind: "cipher"; readonly contractId: string; readonly answer: readonly string[] }
+  /**
+   * [Issue #659 §2] A HUNT that breaks a ladder key rather than reconstructing
+   * a Shamir secret.
+   *
+   * The evidence is the key itself. What it took to get there is the rung's
+   * business, not the judge's: on Caesar it is one subtraction against a single
+   * published pair, higher up it is a period to spot or a modulus to factor,
+   * and eventually there is no way at all. The judge only ever checks whether
+   * the key is right -- deliberately, so a team that simply GUESSES on a
+   * six-symbol alphabet has its one-in-six chance. Making the ladder harder to
+   * break is the defence; policing how an attacker thought is not.
+   */
+  | {
+      readonly kind: "hunt-cipher";
+      readonly targetTeamId: string;
+      readonly generation: number;
+      readonly rung: CipherRung;
+      /** The recovered key, as a symbol value. */
+      readonly recoveredKey: number;
+    }
+  /**
+   * [Issue #659 §9] Open the next hint on one of this team's own open Orders,
+   * and pay for it.
+   *
+   * Carries no level. Hints come in ladder order and the Order already knows
+   * how many are open, so a level on the wire would be a second copy of that
+   * number for the reducer to disagree with — and a participant-supplied index
+   * to bounds-check. "Open the next one" cannot be out of range and cannot skip
+   * ahead to the cheapest-per-word level.
+   *
+   * The charge lands whether or not the Order is ever answered. That is the
+   * decision the move exists to pose: an Order you were going to let expire is
+   * a bad one to buy help on.
+   */
+  | { readonly kind: "reveal-hint"; readonly contractId: string }
   | { readonly kind: "rotate" }
   | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
+
+/**
+ * [Issue #659 §9] One rung of an Order's hint ladder, as its owner sees it.
+ *
+ * `text` is present only for a level this team has actually opened. That is the
+ * whole enforcement of the price: the Portal bundle ships to the browser, so
+ * anything compiled into it is free to whoever opens devtools, and only the
+ * side holding the state can withhold something. See `hints.ts`.
+ */
+export interface HintProjection {
+  /** 0-based position in the ladder; hints open in this order. */
+  readonly level: number;
+  /** Stable `<task kind>/<level+1>` identifier — see `hints.ts`'s `HintSpec`. */
+  readonly id: string;
+  /** What opening this level costs, from `ScoreRules.hintCosts`. */
+  readonly cost: number;
+  /** Present iff opened. Both locales; the Portal picks (`projectForTeam` has none). */
+  readonly text?: Readonly<Record<"ja" | "en", string>>;
+}
 
 export interface VaultProjection {
   readonly teamId: string;
@@ -283,14 +771,109 @@ export interface VaultProjection {
   readonly huntedGenerations: readonly number[];
 }
 
+/**
+ * [Issue #645] The task as its OWNER sees it.
+ *
+ * Identical to {@link OrderTask} except for `masked-total`, which gains the
+ * confidential inputs that team -- and only that team -- needs to compute its
+ * partial. Those are derived in `projectForTeam`, never stored, so there is no
+ * field anywhere in `CryptoBattleState` that a future ledger change could leak
+ * by accident.
+ */
+export type OrderTaskProjection =
+  | { readonly kind: "reveal-share"; readonly shareIndices: readonly number[] }
+  | { readonly kind: "homomorphic-sum"; readonly inputs: readonly StoredCiphertext[] }
+  | {
+      readonly kind: "masked-total";
+      readonly partyCount: number;
+      /** This office's confidential number -- stringified decimal. */
+      readonly myInput: string;
+      /** Masks the other offices sent to this one. */
+      readonly incomingMasks: readonly string[];
+      /** Masks this office sent to the others. */
+      readonly outgoingMasks: readonly string[];
+    }
+  /**
+   * [Issue #659] The ladder Order, plus the one thing the team may see that the
+   * public Order does not carry: their own key. It is theirs already -- the
+   * whole task is to encrypt WITH it -- and a projection is only ever handed to
+   * the team it belongs to (see `projectForTeam`), so this is the same
+   * boundary `vault.secret` already sits on.
+   */
+  | {
+      readonly kind: "caesar-shift";
+      readonly rung: CipherRung;
+      /**
+       * The symbols to encrypt, as VALUES.
+       *
+       * Values rather than pictures because the Portal DRAWS them (see
+       * `DieFace.tsx`): shipped as Unicode die faces they rendered as tofu on a
+       * real participant's screen, which fails #659 §3's whole argument in the
+       * worst way — the reader cannot see the Order at all. A drawn symbol
+       * depends on no font.
+       */
+      readonly plaintext: readonly number[];
+      /**
+       * The rung's alphabet, in value order. Its length is the modulus.
+       *
+       * Kept as strings because this is what a participant may TYPE:
+       * `parseAnswer` accepts either a face or its value, so the legend has to
+       * show the characters the input will recognise.
+       */
+      readonly symbols: readonly string[];
+      /** How many published pairs recover the key on this rung (#659 §2). */
+      readonly pairsToBreak: number;
+      /** THIS team's key for the rung, at its current generation. */
+      readonly myKey: number;
+    };
+
 export interface ContractProjection {
   readonly id: string;
   readonly kind: ContractKind;
   readonly points: number;
-  readonly requestedShareIndices: readonly number[];
-  readonly issuedAtMs: number;
-  readonly expiresAtMs: number;
+  /** [Issue #659] What LEAK pays instead — always below {@link points}. */
+  readonly leakPoints: number;
+  /**
+   * [Issue #645] What this Order asks for, plus anything the OWNING team needs
+   * to do it. For an MPC Order that includes confidential material (the team's
+   * own number and its masks) -- safe because `projectForTeam` only ever puts
+   * an Order in `myContracts` for the team it was issued to, so this shape
+   * cannot reach anyone else. See mpc.ts.
+   */
+  readonly task: OrderTaskProjection;
   readonly status: ContractStatus;
+  /** [Issue #645] The stated rule -- what the Order will not have published. */
+  readonly privacyConstraint: PrivacyConstraint;
+  /** [Issue #645] The methods that satisfy it. One entry = a required method. */
+  readonly allowedMethods: readonly SubmissionMethod[];
+  /**
+   * Ms remaining until this contract expires, AS OF the state's last
+   * `tick()` -- a duration, not a timestamp. `Contract.expiresAtMs` (which
+   * this is derived from in `projectForTeam`) lives on the same clock as
+   * `tick(state, eventNowMs)`'s `eventNowMs`, which TenkaCloud's dispatcher
+   * documents as `nowMs - eventStartMs` (elapsed ms since the event started,
+   * NOT a Unix epoch ms) -- see `CryptoBattleState.nowMs`'s doc comment.
+   * Handing a raw `expiresAtMs` to a portal that subtracts its own
+   * wall-clock `Date.now()` (an absolute epoch ms, off by a factor of
+   * roughly 10^9 from an elapsed-ms duration) silently produces a deeply
+   * negative number that every duration-formatting helper clamps to zero --
+   * this repo's own `StatusPanel.tsx` did exactly that before this field
+   * existed, rendering every live contract's deadline as a permanent
+   * "0:00" regardless of how much time was actually left. Shipping a
+   * pre-computed duration instead removes the unit mismatch at its source;
+   * the portal only adds its own wall-clock elapsed-since-last-poll delta on
+   * top (`coordination.ts`'s `receivedAtWallMs`) to animate a smooth
+   * per-second countdown between 30s polls, never a second subtraction
+   * against an absolute clock.
+   */
+  readonly remainingMs: number;
+  /**
+   * [Issue #659 §9] This Order's hint ladder, every level, with the text filled
+   * in only for the levels this team has bought. Always the full ladder, so the
+   * Portal can show what the NEXT hint costs before it is bought — a price the
+   * player cannot see is not a price they can weigh.
+   */
+  readonly hints: readonly HintProjection[];
 }
 
 export interface TeamSummaryProjection {
@@ -307,9 +890,30 @@ export interface TeamSummaryProjection {
  */
 export interface CryptoBattleProjection {
   readonly phase: Phase;
-  readonly nowMs: number | undefined;
-  readonly startedAtMs: number | undefined;
-  readonly matchEndsAtMs: number | undefined;
+  /**
+   * [Issue #645] The modulus every calculation in this Battle runs over,
+   * as a stringified decimal.
+   *
+   * Public by construction — it is in the problem statement, in the reference
+   * code, and in `field.ts`'s exported `P`. It is on the projection because a
+   * participant cannot perform an FHE addition or an MPC subtotal without it,
+   * and because leaving it off led to the workaround `playtest.ts`'s
+   * `PublicHuntParams` exists to be: a game rule the portal had to be told
+   * out-of-band. Nothing about knowing `p` weakens anything; every scheme here
+   * is public-parameter by design.
+   */
+  readonly prime: string;
+  /**
+   * Ms remaining until the match ends, AS OF the state's last `tick()` --
+   * `undefined` before the first tick (match not started). Same
+   * duration-not-timestamp rationale as `ContractProjection.remainingMs`
+   * above: `CryptoBattleState.startedAtMs` lives on `tick()`'s
+   * elapsed-since-event-start clock, not an absolute epoch, so this field
+   * is computed here rather than exposing `startedAtMs` /
+   * `state.config.matchDurationMs` for the portal to (mis)combine with its
+   * own wall clock.
+   */
+  readonly matchRemainingMs: number | undefined;
   readonly vault: VaultProjection;
   readonly myContracts: readonly ContractProjection[];
   readonly otherOpenContractCount: number;

@@ -1356,6 +1356,31 @@ function checkCoordinationPluginFile(meta: Metadata, dir: string): ValidationErr
   return [];
 }
 
+/**
+ * Whether to print one `OK <file>` line per valid problem.
+ *
+ * On a fully valid catalog those lines are 111 of the 115 lines this script
+ * emits, and every one of them says the same thing the final summary already
+ * says. That is cheap on a terminal and expensive everywhere else: CI logs,
+ * and agent transcripts where the whole run is paid for by the token.
+ *
+ * So: verbose on a TTY (a human watching wants the progress), quiet when
+ * piped. That is exactly how `bun test` and `vitest` already behave in this
+ * repository, so a reader who knows one knows this.
+ *
+ * Only the OK lines are affected. `WARN` and `NG` always print, in full, on
+ * every channel — the point is to make a failure easier to see, not harder,
+ * and a quiet mode that could swallow a failure would be worse than the noise
+ * it replaced.
+ */
+function shouldListEveryFile(argv: readonly string[]): boolean {
+  if (argv.includes("--verbose")) return true;
+  if (argv.includes("--quiet")) return false;
+  return process.stdout.isTTY === true;
+}
+
+const LIST_EVERY_FILE = shouldListEveryFile(process.argv);
+
 function main(): void {
   const validate = createSchemaValidator();
   const metadataFiles = CATEGORY_DIRS.flatMap((cat) => {
@@ -1425,7 +1450,9 @@ function validateMetadataFiles(
       continue;
     }
 
-    console.log(`OK  ${relative(REPO_ROOT, file)}${warnings.length > 0 ? " (warnings ↑)" : ""}`);
+    if (LIST_EVERY_FILE) {
+      console.log(`OK  ${relative(REPO_ROOT, file)}${warnings.length > 0 ? " (warnings ↑)" : ""}`);
+    }
   }
   return failed;
 }

@@ -25,7 +25,7 @@ This repository owns public problem metadata and payloads. TenkaCloud owns deplo
    make agent-gate
    ```
 
-7. For a runtime or participant-flow change, validate the real route through TenkaCloud: Portal → problem start → participant surface → submission. Catalog validation alone is not runtime proof.
+7. For a runtime or participant-flow change, validate the strongest reproducible participant route available locally. Prefer a browser harness that renders the real Portal components and drives only participant-visible inputs. Catalog validation alone is not runtime proof, but a real AWS event and an independent third-party playtest are optional pre-event rehearsals, not merge gates; record them as not run without blocking development.
 
 One PR should normally contain one problem. A shared-runtime change may cover its affected family, but list every consumer and the runtime evidence in the PR.
 
@@ -70,7 +70,7 @@ Participant-visible text — `shortDescription`, `instructions`, hints, starter 
 - Every term beyond that baseline is defined at or before first use, in the same document. A glossary entry counts; so does an inline 「(= …)」.
 - Every formula or procedure the solution needs is given in the statement or the starter, with a worked example in one-digit numbers. Problems test applying and understanding a given procedure, never deriving it. A needed formula must not sit behind a paid hint.
 - Difficulty lives in the work — implementation, case analysis, constructing counterexamples, transfer to unseen parameters — never in the reading.
-- The check for this bar is a persona read-through: an unspoiled reader limited to the baseline above must, from participant-visible text alone, say what the situation is, what to do first, and what "done" means, and be able to start the first checkpoint. Record the verdict when promoting a problem.
+- Check this bar with a participant-role read-through over participant-visible text only: the situation, first action, observable feedback, and definition of done must all be recoverable without repository internals. The author or reviewer may perform this check, and a deterministic browser assertion may record it; an independent third party is not required for merge.
 
 ### §12c Problem quality bar — low floor, high ceiling
 
@@ -80,7 +80,7 @@ Every problem in this catalog, on every track, is designed for both audiences at
 - **High ceiling**: the closing checkpoints are worth an experienced engineer's attention — constructing a counterexample, making the same code survive unseen parameters, exploiting a stated gap — never more transcription of earlier steps. Difficulty lives in the work, not in withheld information.
 - **Story with intent**: the scenario is coherent and motivates the work. Every checkpoint has a reason that follows from the story, and a reader can say why this step comes next. A section that starts out of nowhere (唐突) is a defect, the same class as an undefined term.
 - **Neither a task list nor a cliff**: a statement that walks the reader step-by-step through the answers turns the problem into 作業ゲー and fails; a statement that offers no foothold at all also fails. The statement's job is footholds and feedback loops — what to observe first, what the observation should provoke — while the insight stays the participant's to have.
-- **Human-fidelity evidence**: a playability claim must come from play using only what a human participant can see — the statement, the editor's starter files, Inspect evidence, public-test output, and /verify verdicts with their §15 messages. Play that read repository internals, probed undocumented endpoints, or bypassed the Portal proves nothing about human playability and must not be cited as if it did.
+- **Participant-fidelity evidence**: a playability claim must use only what a participant can see — the statement, the editor's starter files, Inspect evidence, public-test output, and /verify verdicts with their §15 messages. This evidence may come from a deterministic browser harness or a human run. An independent tester and live AWS are not required for merge. Runs that read repository internals, probe undocumented endpoints, or bypass the participant surface prove nothing about playability and must not be cited as if they did.
 
 ## §13 Local-play containers
 

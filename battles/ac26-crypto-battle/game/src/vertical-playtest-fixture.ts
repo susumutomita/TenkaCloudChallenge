@@ -16,10 +16,13 @@
  * tells and how it maps onto Issue #486's 10-item vertical-slice MUST list.
  */
 
-import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import {
+  buildCipherOp,
+  buildFheOp,
   buildHuntOp,
   buildLeakOp,
+  buildMpcOp,
   buildProveOp,
   buildRotateOp,
   type PlaytestOpStep,
@@ -30,6 +33,12 @@ import {
 import type { CryptoBattleConfig, CryptoBattleOp, CryptoBattleProjection } from "./types.ts";
 
 export const EVENT_ID = "vertical-playtest-486-pr5";
+/**
+ * [Issue #652] The platform secret this scripted playthrough runs on. A fixed
+ * value, not a real one: the point is a reproducible Order belt, and this
+ * fixture never runs a live event.
+ */
+export const MATCH_SECRET = "vertical-secret-1";
 export const TEAMS: readonly [string, string] = ["alpha", "bravo"];
 export const ATTACKER = "bravo";
 export const DEFENDER = "alpha";
@@ -41,6 +50,23 @@ export const DEFENDER = "alpha";
  * `threshold` / `shareCount` / `scores` stay at the real values, since
  * neither the Shamir math nor the scoring rules being tested are
  * time-scaled, only the match clock is.
+ *
+ * [Issue #659] Two deliberate departures from `DEFAULT_CONFIG`, both because
+ * this fixture demonstrates MECHANISM, not balance:
+ *
+ *  - The batch is scaled with the clock (2 per minute here against 6 per five
+ *    minutes in the real build) and the TTL equals the interval, so the fixture
+ *    plays under the same "no prefetch" rule the real match does. It used to
+ *    hold a TTL four times the interval, which is exactly the stockpiling #659
+ *    forbids -- a scripted fixture that demonstrates the rule being broken is
+ *    worse than no fixture.
+ *  - The expiry penalty is off. The script answers only the handful of Orders
+ *    its narrative needs (one LEAK, one PROVE, an FHE, an MPC, a HUNT, a
+ *    ROTATE) and lets the rest of the belt run past, so a live penalty would
+ *    measure how many Orders the SCRIPT happens to cover -- both teams simply
+ *    floor at zero -- rather than anything about the reducer. The penalty
+ *    itself is pinned directly, against `DEFAULT_CONFIG`, in
+ *    `expiry-penalty.test.ts`.
  */
 export const VERTICAL_CONFIG: Partial<CryptoBattleConfig> = {
   matchDurationMs: 25 * 60_000,
@@ -49,9 +75,11 @@ export const VERTICAL_CONFIG: Partial<CryptoBattleConfig> = {
     pressureToEndgameMs: 18 * 60_000,
   },
   contractIntervalMs: 60_000,
-  contractTtlMs: 4 * 60_000,
-  rushContractTtlMs: 2 * 60_000,
+  contractsPerIssue: 2,
+  contractTtlMs: 60_000,
+  rushContractTtlMs: 30_000,
   rotateCooldownMs: 3 * 60_000,
+  scores: { ...DEFAULT_CONFIG.scores, expiredOrder: 0 },
 };
 
 export interface BuiltVerticalScript {
@@ -89,7 +117,14 @@ export interface BuiltVerticalScript {
 export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   const steps: PlaytestStep[] = [];
   const narrative: string[] = [];
-  let state = initialState({ eventId: EVENT_ID, teamIds: TEAMS }, VERTICAL_CONFIG);
+  // [Issue #652] Carries a match secret because production always does — the
+  // dispatcher issues one before `initialState`. Pinning it also pins the Order
+  // belt this scripted playthrough walks: the belt derives from the seed, so a
+  // secretless fixture would re-shape every time the seed does.
+  let state = initialState(
+    { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
+    VERTICAL_CONFIG,
+  );
 
   function recordTick(atMs: number): void {
     state = tick(state, atMs);
@@ -124,6 +159,36 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     ];
   }
 
+  function hasResolution(teamId: string, method: "leak" | "prove", kind?: "standard" | "rush"): boolean {
+    return state.contracts.some(
+      (contract) =>
+        contract.teamId === teamId &&
+        contract.resolution === method &&
+        (kind === undefined || contract.kind === kind),
+    );
+  }
+
+  function ledgerKindsFor(teamId: string): Set<string> {
+    return new Set(
+      state.publicLedger
+        .filter((artifact) => artifact.teamId === teamId)
+        .map((artifact) => artifact.kind),
+    );
+  }
+
+  function narrativeRequirementsMet(): boolean {
+    const attackerKinds = ledgerKindsFor(ATTACKER);
+    return (
+      distinctLeakedShareIndices(DEFENDER).length >= state.config.threshold &&
+      hasResolution(DEFENDER, "leak", "standard") &&
+      hasResolution(ATTACKER, "prove", "standard") &&
+      ["proof", "ciphertext", "partial"].every((kind) => attackerKinds.has(kind)) &&
+      // [Issue #659] The ladder has to appear in the story too -- a vertical
+      // slice that never exercises a shipped method is not a vertical slice.
+      state.contracts.some((c) => c.resolution === "cipher")
+    );
+  }
+
   // -- MUST 2: tick(0) issues the first Contract batch to both teams.
   recordTick(0);
 
@@ -135,7 +200,7 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   // same shape as adversarial.test.ts's "adversarial 2").
   const GUARD_LIMIT = 60;
   let guard = 0;
-  while (distinctLeakedShareIndices(DEFENDER).length < state.config.threshold) {
+  while (!narrativeRequirementsMet()) {
     if (guard >= GUARD_LIMIT) {
       throw new Error(
         "buildVerticalPlaytestScript: alpha did not accumulate `threshold` distinct leaked shares within the guard bound",
@@ -143,16 +208,51 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     }
     guard += 1;
 
-    const alphaOpen = state.contracts.find((c) => c.teamId === DEFENDER && c.status === "open");
-    if (alphaOpen) {
+    // [Issue #645] Only a `reveal-share` Order can be LEAKed or PROVEd. FHE and
+    // MPC Orders are served below, in the same batch, so this script exercises
+    // all four methods against the real issuance schedule rather than a
+    // hand-built Order list.
+    const alreadyLeaked = new Set(distinctLeakedShareIndices(DEFENDER));
+    const leakable = state.contracts.filter(
+      (contract) =>
+        contract.teamId === DEFENDER &&
+        contract.status === "open" &&
+        contract.task.kind === "reveal-share" &&
+        contract.allowedMethods.includes("leak"),
+    );
+    // Prefer the property the story still needs: first a standard LEAK for
+    // the equal-points assertion, then a previously-unpublished share index
+    // so the HUNT threshold converges. Belt position is deliberately not a
+    // requirement — it changes with the server-only match seed.
+    const alphaOpen =
+      (!hasResolution(DEFENDER, "leak", "standard")
+        ? leakable.find((contract) => contract.kind === "standard")
+        : undefined) ??
+      leakable.find(
+        (contract) =>
+          contract.task.kind === "reveal-share" &&
+          contract.task.shareIndices.some((index) => !alreadyLeaked.has(index)),
+      ) ??
+      leakable[0];
+    if (alphaOpen && alphaOpen.task.kind === "reveal-share") {
       recordOp(
         DEFENDER,
         buildLeakOp(alphaOpen.id),
         "ok",
-        `Team ${DEFENDER} LEAK ${alphaOpen.id} (${alphaOpen.kind}, share #${alphaOpen.requestedShareIndices.join(",")})`,
+        `Team ${DEFENDER} LEAK ${alphaOpen.id} (${alphaOpen.kind}, share #${alphaOpen.task.shareIndices.join(",")})`,
       );
     }
-    const bravoOpen = state.contracts.find((c) => c.teamId === ATTACKER && c.status === "open");
+    const proveable = state.contracts.filter(
+      (contract) =>
+        contract.teamId === ATTACKER &&
+        contract.status === "open" &&
+        contract.task.kind === "reveal-share" &&
+        contract.allowedMethods.includes("prove"),
+    );
+    const bravoOpen =
+      (!hasResolution(ATTACKER, "prove", "standard")
+        ? proveable.find((contract) => contract.kind === "standard")
+        : undefined) ?? proveable[0];
     if (bravoOpen) {
       const bravoVault = projectForTeam(state, ATTACKER).vault;
       recordOp(
@@ -163,7 +263,57 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
       );
     }
 
-    if (distinctLeakedShareIndices(DEFENDER).length < state.config.threshold) {
+    // [Issue #645 Phase 2/3] Both new methods, built from the OWNING team's
+    // projection only -- `buildFheOp` never sees a plaintext or a key, and
+    // `buildMpcOp` sees this office's own number and nobody else's.
+    for (const teamId of [DEFENDER, ATTACKER]) {
+      const projection = projectForTeam(state, teamId);
+      const prime = state.config.prime;
+      const fheOrder = projection.myContracts.find(
+        (c) => c.status === "open" && c.task.kind === "homomorphic-sum",
+      );
+      const fheOp = fheOrder ? buildFheOp(fheOrder, prime) : undefined;
+      if (fheOrder && fheOp) {
+        recordOp(
+          teamId,
+          fheOp,
+          "ok",
+          `Team ${teamId} FHE ${fheOrder.id} -- added two ciphertexts without decrypting either`,
+        );
+      }
+      const mpcOrder = projection.myContracts.find(
+        (c) => c.status === "open" && c.task.kind === "masked-total",
+      );
+      const mpcOp = mpcOrder ? buildMpcOp(mpcOrder, prime) : undefined;
+      if (mpcOrder && mpcOp) {
+        recordOp(
+          teamId,
+          mpcOp,
+          "ok",
+          `Team ${teamId} MPC ${mpcOrder.id} -- published a masked subtotal, not its input`,
+        );
+      }
+      // [Issue #659] The cipher ladder, played the way a participant plays it:
+      // `buildCipherOp` reads the key off this team's OWN projection and does
+      // the shift, which is the same arithmetic done by hand. Only the
+      // DEFENDER leaks in this story, so the ATTACKER answering its ladder
+      // Order is also what keeps the contrast visible -- one team publishes a
+      // pair, the other does not.
+      const ladderOrder = projection.myContracts.find(
+        (c) => c.status === "open" && c.task.kind === "caesar-shift",
+      );
+      const cipherOp = ladderOrder ? buildCipherOp(ladderOrder) : undefined;
+      if (ladderOrder && cipherOp) {
+        recordOp(
+          teamId,
+          cipherOp,
+          "ok",
+          `Team ${teamId} CIPHER ${ladderOrder.id} -- encrypted with its own key, published nothing`,
+        );
+      }
+    }
+
+    if (!narrativeRequirementsMet()) {
       const nextBatchAtMs = state.nextContractAtMs ?? (state.nowMs ?? 0) + state.config.contractIntervalMs;
       recordTick(nextBatchAtMs);
     }
@@ -281,7 +431,13 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   );
 
   return {
-    script: { eventId: EVENT_ID, teams: TEAMS, steps, config: VERTICAL_CONFIG },
+    script: {
+      eventId: EVENT_ID,
+      teams: TEAMS,
+      matchSecret: MATCH_SECRET,
+      steps,
+      config: VERTICAL_CONFIG,
+    },
     narrative,
     alphaContractVoidedByRotateId: alphaOpenBeforeRotate.id,
     huntAttemptBeforeNewGenerationThreshold,

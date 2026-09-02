@@ -31,7 +31,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
-import HelpDrawer from "../../portal/HelpDrawer.tsx";
+import HelpDrawer, { PYTHON_SNIPPET } from "../../portal/HelpDrawer.tsx";
 import RegistrationPanel, {
   COPY as REGISTRATION_COPY,
   describeOutcome,
@@ -40,10 +40,47 @@ import RegistrationPanel, {
   submitProve,
   submitRotate,
 } from "../../portal/RegistrationPanel.tsx";
+import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
+import { GameBoardBody } from "../../portal/GameBoard.tsx";
+import { ledgerPayload } from "../../portal/orderTask.ts";
+import { ALL_SUBMISSION_METHODS } from "./methods.ts";
+import {
+  FAST_MOVE_COPY,
+  cipherHuntCandidates,
+  nextHintFor,
+  nonceHuntCandidates,
+  primaryActionsFor,
+  rotateVoidCount,
+  tacticAvailability,
+} from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
-import type { CryptoBattleProjection } from "./types.ts";
+import { MODP_2048_P } from "./group.ts";
+import { rungSpec } from "./ladder.ts";
+import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
+import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
 
 const FIXED_NOW = 1_700_000_000_000;
+
+/**
+ * `CryptoBattleProjection.matchRemainingMs` / `ContractProjection.remainingMs`
+ * live on the dispatcher's elapsed-since-event-start clock, NOT an absolute
+ * Unix epoch ms like `FIXED_NOW` above. `FIXED_NOW` only anchors
+ * `baseProps()`'s `PortalSlotProps.nowIso` below -- a field `StatusPanel.tsx`
+ * no longer reads at all (see its `useElapsedSincePollMs`, which anchors to
+ * `usePolledProjection`'s own `receivedAtWallMs` / `Date.now()` instead);
+ * `baseProps()` still has to supply SOME value only because `nowIso` is a
+ * required field of the SDK's `PortalSlotProps` type. An earlier version of
+ * this fixture conflated the two clocks (built `matchEndsAtMs` /
+ * `expiresAtMs` around `FIXED_NOW` as if they were absolute epoch ms, and
+ * `StatusPanel.tsx` itself used to derive its display clock from `nowIso`),
+ * which exercised only the WRONG unit assumption the real bug shipped with
+ * -- `StatusPanelBody`'s countdown math never actually saw a realistic
+ * elapsed-vs-wall-clock mismatch in this suite. This constant is a small,
+ * clearly-not-an-epoch elapsed duration (40 minutes into the match) so the
+ * fixture matches what `../game/src/reducer.ts`'s `projectForTeam` really
+ * produces.
+ */
+const ELAPSED_AT_TICK_MS = 40 * 60_000;
 
 /**
  * A well-formed `CryptoBattleProjection`, close to what
@@ -57,9 +94,13 @@ const FIXED_NOW = 1_700_000_000_000;
 function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBattleProjection {
   return {
     phase: "pressure",
-    nowMs: FIXED_NOW,
-    startedAtMs: FIXED_NOW - 40 * 60_000,
-    matchEndsAtMs: FIXED_NOW + 50 * 60_000,
+    // [Issue #645] The modulus is on the projection: a participant needs it to
+    // compute an FHE or MPC answer, and it is public by construction.
+    prime: DEFAULT_CONFIG.prime,
+    // 90-min matchDurationMs - 40-min elapsed = 50 min left, same numeric
+    // value the earlier (buggy) absolute-epoch-based fixture used, so this
+    // rewrite changes units, not the scenario the tests exercise.
+    matchRemainingMs: 90 * 60_000 - ELAPSED_AT_TICK_MS,
     vault: {
       teamId: "blue",
       secret: "123456789012345678",
@@ -81,19 +122,25 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         id: "blue-c0",
         kind: "standard",
         points: 10,
-        requestedShareIndices: [0, 1],
-        issuedAtMs: FIXED_NOW - 60_000,
-        expiresAtMs: FIXED_NOW + 5 * 60_000,
+        leakPoints: 10,
+        task: { kind: "reveal-share" as const, shareIndices: [0, 1] },
+        privacyConstraint: "none",
+        allowedMethods: ["leak", "prove"],
         status: "open",
+        remainingMs: 5 * 60_000,
+        hints: [],
       },
       {
         id: "blue-c-old",
         kind: "standard",
         points: 10,
-        requestedShareIndices: [2],
-        issuedAtMs: FIXED_NOW - 10 * 60_000,
-        expiresAtMs: FIXED_NOW - 5 * 60_000,
+        leakPoints: 10,
+        task: { kind: "reveal-share" as const, shareIndices: [2] },
+        privacyConstraint: "none",
+        allowedMethods: ["leak", "prove"],
         status: "expired",
+        remainingMs: 0,
+        hints: [],
       },
     ],
     otherOpenContractCount: 1,
@@ -103,40 +150,44 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         teamId: "red",
         generation: 1,
         kind: "share",
+        method: "leak" as const,
         shareIndex: 0,
         value: "998877",
         contractId: "red-c0",
-        postedAtMs: FIXED_NOW - 9000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 9000,
       },
       {
         id: "red-c1-share1",
         teamId: "red",
         generation: 1,
         kind: "share",
+        method: "leak" as const,
         shareIndex: 1,
         value: "776655",
         contractId: "red-c1",
-        postedAtMs: FIXED_NOW - 6000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 6000,
       },
       {
         id: "red-c2-share2",
         teamId: "red",
         generation: 1,
         kind: "share",
+        method: "leak" as const,
         shareIndex: 2,
         value: "554433",
         contractId: "red-c2",
-        postedAtMs: FIXED_NOW - 3000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 3000,
       },
       {
         id: "blue-c-old-proof",
         teamId: "blue",
         generation: 1,
         kind: "proof",
+        method: "prove" as const,
         contractId: "blue-c-old",
         commitment: "112233",
         response: "445566",
-        postedAtMs: FIXED_NOW - 1000,
+        postedAtMs: ELAPSED_AT_TICK_MS - 1000,
       },
     ],
     teams: {
@@ -277,7 +328,7 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
   for (const locale of ["ja", "en"] as const) {
     it(`renders all 3 lanes without crashing, with locale-correct copy (${locale})`, () => {
       const html = renderToStaticMarkup(
-        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, nowMs: FIXED_NOW }),
+        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, elapsedSincePollMs: 0 }),
       );
       expect(html.length).toBeGreaterThan(0);
       expect(html).toContain("Contract Queue");
@@ -289,9 +340,42 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
       expect(html).toContain(locale === "ja" ? "スコア" : "Score");
       expect(html).toContain(locale === "ja" ? "フェーズ" : "Phase");
       expect(html).toContain(locale === "ja" ? "自チームにのみ表示されます" : "Only your team can see this");
+      // My Vault shows the team's own teamId -- the only on-screen source
+      // for PROVE's Python `team` variable.
+      // (React HTML-escapes the English copy's apostrophe to `&#x27;`, so
+      // this checks the apostrophe-free tail of that string instead.)
+      expect(html).toContain(locale === "ja" ? "PROVE の `team` 変数" : "`team` variable");
       // Raw ledger data (participant-facing, allowed) is present.
       expect(html).toContain("998877");
       expect(html).toContain("554433");
+    });
+
+    /**
+     * [Issue #645 Phase 5] A proof's challenge binds five values -- domain,
+     * team, contract, generation, R, Y -- and the nonce-reuse HUNT needs two
+     * challenges recomputed from ledger rows. Two of those inputs reached no
+     * participant surface at all: `ledgerPayload` dropped the Order id, and Y
+     * was rendered nowhere. A reader who understood the maths perfectly still
+     * could not compute a single challenge, so the HUNT was unplayable by hand
+     * no matter what the statement said.
+     */
+    it(`renders every value a proof's challenge binds (${locale})`, () => {
+      const projection = fixtureProjection();
+      const html = renderToStaticMarkup(
+        createElement(StatusPanelBody, { projection, locale, elapsedSincePollMs: 0 }),
+      );
+      const proof = projection.publicLedger.find((a) => a.kind === "proof");
+      if (proof?.kind !== "proof") throw new Error("expected a proof row in the fixture");
+
+      expect(html).toContain(proof.teamId);
+      expect(html).toContain(proof.contractId);
+      expect(html).toContain(proof.commitment);
+      expect(html).toContain(String(proof.generation));
+      // Every team's Y, not only the target's -- it is public for all of them,
+      // and rendering only one would be the platform choosing a target.
+      for (const y of Object.values(projection.publicCommitments)) {
+        expect(html).toContain(y);
+      }
     });
 
     it(`does not state or imply that a leaked threshold has been reached (${locale}) [Issue #486 UI principle]`, () => {
@@ -303,7 +387,7 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
       // shown, and reading whether that's enough to reconstruct is left to
       // the participant.
       const html = renderToStaticMarkup(
-        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, nowMs: FIXED_NOW }),
+        createElement(StatusPanelBody, { projection: fixtureProjection(), locale, elapsedSincePollMs: 0 }),
       );
       const lower = html.toLowerCase();
       const forbidden = [
@@ -324,6 +408,93 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
   }
 });
 
+describe("StatusPanelBody against a REAL projection (live-deploy report: onboarding repair)", () => {
+  // Every test above hand-fabricates `fixtureProjection()`. That never
+  // exercised the actual seam a live match uses:
+  // `initialState` -> `tick(state, eventNowMs)` -> `projectForTeam` ->
+  // `StatusPanelBody`. `tick`'s `eventNowMs` is elapsed-since-event-start
+  // (TenkaCloud's dispatcher: `eventNowMs = nowMs - eventStartMs`), so
+  // `projectForTeam`'s output only reflects that clock correctly if this
+  // seam is actually run end-to-end -- a hand-written fixture can encode
+  // any (possibly wrong) unit convention its author assumed, and did: an
+  // earlier fixture here built `matchEndsAtMs` / `expiresAtMs` around an
+  // absolute-epoch-looking `FIXED_NOW`, which is exactly the wrong
+  // assumption `StatusPanel.tsx`'s now-removed `useLiveNowMs` also made --
+  // subtracting a real `Date.now()` from an elapsed-since-start duration
+  // produces a deeply negative number that `formatDuration` clamps to
+  // zero, rendering every live match's countdown as a permanent "0:00"
+  // regardless of how much time was actually left (confirmed against a
+  // live deployed match). This test runs the real engine and asserts that
+  // failure mode cannot recur.
+  it("renders a non-zero match and contract countdown right after the first tick", () => {
+    const state0 = initialState({ eventId: "evt-countdown-regression", teamIds: ["blue"] });
+    // eventNowMs = 0 for the very first tick: `tick`'s `startedAtMs ??
+    // eventNowMs` then anchors the match start at exactly 0, so every
+    // resulting duration below is an exact, non-flaky expected value
+    // rather than depending on wall-clock timing.
+    const state1 = tick(state0, 0);
+    const projection = projectForTeam(state1, "blue");
+
+    // Data-level assertion (the actual regression): a live match's
+    // countdown durations must be positive right after issuance, never
+    // zero/negative from a unit mismatch.
+    expect(projection.matchRemainingMs).toBe(90 * 60_000);
+    expect(projection.myContracts.length).toBeGreaterThan(0);
+    for (const contract of projection.myContracts) {
+      expect(contract.remainingMs).toBeGreaterThan(0);
+    }
+
+    // Render-level assertion: the match timer shows the real 90-minute
+    // remaining duration ("1:30:00", `formatDuration`'s h>0 branch) and the
+    // contract's countdown cell shows its real TTL, not the bug's
+    // once-permanent "Time left" / "Expires in" value of exactly zero.
+    // (A naive `not.toContain("0:00")` would be a false negative here --
+    // "1:30:00" itself ends in the substring "0:00" -- so this checks the
+    // two full expected duration strings instead.)
+    const html = renderToStaticMarkup(
+      createElement(StatusPanelBody, { projection, locale: "en", elapsedSincePollMs: 0 }),
+    );
+    expect(html).toContain("1:30:00");
+    const contractTtlMs = projection.myContracts[0]?.remainingMs;
+    if (contractTtlMs === undefined) throw new Error("test setup: expected at least one contract");
+    const totalSeconds = Math.floor(contractTtlMs / 1000);
+    const expectedContractCountdown = `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, "0")}`;
+    expect(expectedContractCountdown).not.toBe("0:00"); // sanity: the TTL itself must be non-zero
+    expect(html).toContain(expectedContractCountdown);
+  });
+
+  it("remainingMs decreases across LATER ticks, not just the first one (the live match this fix was diagnosed against was ~20-24 min in, not freshly started)", () => {
+    // The single-tick test above only proves `projectForTeam` is correct
+    // when `state.nowMs === state.startedAtMs` (elapsed 0) -- the easiest
+    // possible case. The live match this fix was diagnosed against showed
+    // contracts `blue-c10` / `-c11` / `-c12` (sequenceIndex 10-12, i.e.
+    // roughly 20-24 minutes and many ticks past the first one), so this
+    // asserts `projectForTeam` keeps using the MOST RECENT tick's `nowMs`
+    // (not the first tick's) for every duration it computes.
+    let state = initialState({ eventId: "evt-multi-tick-regression", teamIds: ["blue"] });
+    state = tick(state, 0);
+    const first = projectForTeam(state, "blue");
+    const contractId = first.myContracts[0]?.id;
+    if (contractId === undefined) throw new Error("test setup: expected at least one contract after the first tick");
+    const remainingAtFirstTick = first.myContracts[0]?.remainingMs;
+    if (remainingAtFirstTick === undefined) throw new Error("test setup: expected remainingMs on the first contract");
+
+    // 1 minute later, in the same event-relative units `tick` expects.
+    // Well under both `contractTtlMs` (5 min) and `rushContractTtlMs`
+    // (2.5 min), so the SAME contract is still open, not expired/replaced --
+    // this isolates "did remainingMs decrease" from "did a new contract get
+    // issued".
+    state = tick(state, 60_000);
+    const later = projectForTeam(state, "blue");
+    const sameContract = later.myContracts.find((c) => c.id === contractId);
+    if (!sameContract) throw new Error(`test setup: expected contract ${contractId} to still be present`);
+
+    expect(sameContract.status).toBe("open");
+    expect(sameContract.remainingMs).toBe(remainingAtFirstTick - 60_000);
+    expect(later.matchRemainingMs).toBe((first.matchRemainingMs ?? 0) - 60_000);
+  });
+});
+
 describe("HelpDrawer.tsx -- ja/en smoke render", () => {
   for (const locale of ["ja", "en"] as const) {
     it(`renders without crashing, with locale-correct copy (${locale})`, () => {
@@ -335,7 +506,83 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
       expect(html).toContain("ROTATE");
       expect(html).toContain(locale === "ja" ? "この Battle の遊び方" : "How this Battle works");
     });
+
+    /**
+     * [Issue #645] The Help Drawer is the Portal's COMPLETE rules reference —
+     * the statement points at it for the full detail. Adding FHE and MPC to
+     * the live method set without updating it left a participant who opened
+     * help after receiving one of those Orders reading an obsolete ruleset
+     * that said there were four moves.
+     *
+     * Driven off `ALL_SUBMISSION_METHODS` rather than a hardcoded list, so a
+     * fifth method fails here instead of silently going undocumented.
+     */
+    it(`documents every submission method the game accepts (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      for (const method of ALL_SUBMISSION_METHODS) {
+        expect(html).toContain(method.toUpperCase());
+      }
+      // And no longer claims a fixed count that the method set can outgrow.
+      expect(html).not.toContain("The 4 moves");
+      expect(html).not.toContain("4 つの操作");
+    });
   }
+
+  it("PROVE Python snippet's prime is byte-for-byte the real RFC 3526 Group 14 constant", () => {
+    // An earlier version of this snippet shipped `p = <RFC 3526 Group 14
+    // prime>` -- a syntactically invalid placeholder, despite the
+    // surrounding copy promising "そのまま動く Python" / "runnable
+    // Python". This test is the machine-checkable half of fixing that: it
+    // fails if a future edit ever reintroduces a placeholder, drifts from
+    // `group.ts`'s real constant, or mistypes even one of its 512 hex
+    // digits (see `group.ts`'s own header on why that specific failure
+    // mode is otherwise silent -- Schnorr verification "still computes a
+    // number", it does not throw on a wrong prime).
+    const match = PYTHON_SNIPPET.match(/^p = 0x([0-9a-f]+)/m);
+    if (!match?.[1]) throw new Error("PYTHON_SNIPPET: expected a `p = 0x<hex>` line");
+    expect(BigInt(`0x${match[1]}`)).toBe(MODP_2048_P);
+  });
+
+  it("PROVE Python snippet, run for real, matches createProof()'s real output and verifies", async () => {
+    // The other half of "runnable Python" is actually running it. This
+    // repo's Python isn't itself under `bun test`, so this asserts the
+    // TRANSCRIPTION is exact (every hash label, the length-prefix framing,
+    // the operation order) by re-deriving the same proof in TypeScript
+    // using the identical primitives the snippet calls out to
+    // (`prng.ts`'s `deriveBigInt` == the snippet's `derive`,
+    // `schnorr-transcript.ts`'s length-prefix + fixed-width framing == the
+    // snippet's `lp` / `fw`) -- one-time manual verification against a real
+    // `python3` run of this exact snippet (same secret/team/generation/
+    // contract) additionally confirmed identical `commitment` / `response`
+    // decimal strings, which this test cannot itself shell out to `python3`
+    // to re-check on every run without adding that as a test-time
+    // dependency this repo does not otherwise have.
+    const { createProof } = await import("./schnorr-prover.ts");
+    const { verifyProof } = await import("./schnorr-verifier.ts");
+    const { derivePublicCommitment } = await import("./schnorr-witness.ts");
+
+    const secret = 123456789012345678n;
+    const team = "blue";
+    const generation = 1;
+    const contract = "blue-c0";
+
+    const proof = createProof(secret, generation, team, contract);
+    // These exact decimal strings were also produced by running
+    // PYTHON_SNIPPET's real Python (with the same inputs) by hand before
+    // this fix shipped -- pinning them here means a future accidental
+    // change to the framing (this snippet's OR schnorr-prover.ts's) that
+    // still "verifies" but silently diverges from what a participant
+    // copy-pasting this exact Python would compute gets caught too.
+    expect(proof.commitment).toBe(
+      "12491904079717215833289811861220956048131206574919718145925209972398991206550006999619986512335299316987035579151265564160905430804756070893245491304906574426512819514797618407919681861453404509081259916574473758059436583306737429056168559213105116239617298111422348935851536075343460252578596791285162186249960968769354288041789857921094185762502840065986960829626732425410297434567412792768095341828845359892161906091162086495027395998743458945660683858268942938522993404146830635328411484578493755418282595586209950518050109052386659393336806948058372378342971254888277990456825964420607659201042108347562933100138",
+    );
+    expect(proof.response).toBe(
+      "8240697219374735644623142365545472691120352149005885012557939550420978958098898382175055561578100915092772978845894423099683761252258163195079737990667",
+    );
+
+    const publicY = derivePublicCommitment(secret, generation, team);
+    expect(verifyProof(publicY, proof, { teamId: team, contractId: contract, generation })).toBe(true);
+  });
 });
 
 describe("RegistrationPanel.tsx -- ja/en smoke render + fail-closed", () => {
@@ -424,4 +671,714 @@ describe("RegistrationPanel.tsx describeOutcome -- localized display text for ev
       expect(describeOutcome({ kind: "not_configured" }, copy)).toBe(copy.notConfiguredResult);
     });
   }
+});
+
+describe("the advanced forms only offer Orders their own method can fulfil [Issue #645]", () => {
+  /**
+   * `CoreRegistrationPanel` used to hand every open Order to both LeakForm and
+   * ProveForm. With only LEAK and PROVE in the world that was harmless -- one
+   * of the two always applied. Adding FHE and MPC made it a selector full of
+   * moves the judge is certain to refuse.
+   */
+  const orders: ContractProjection[] = [
+    {
+      id: "free", kind: "standard", points: 10, leakPoints: 10,
+      task: { kind: "reveal-share", shareIndices: [0] },
+      privacyConstraint: "none", allowedMethods: ["leak", "prove"],
+      status: "open", remainingMs: 60_000,
+      hints: [],
+    },
+    {
+      id: "prove-only", kind: "standard", points: 10, leakPoints: 10,
+      task: { kind: "reveal-share", shareIndices: [1] },
+      privacyConstraint: "no-raw-disclosure", allowedMethods: ["prove"],
+      status: "open", remainingMs: 60_000,
+      hints: [],
+    },
+    {
+      id: "fhe", kind: "standard", points: 10, leakPoints: 10,
+      task: { kind: "homomorphic-sum", inputs: [{ r: "1", y: "2" }, { r: "3", y: "4" }] },
+      privacyConstraint: "no-raw-disclosure", allowedMethods: ["fhe"],
+      status: "open", remainingMs: 60_000,
+      hints: [],
+    },
+    {
+      id: "mpc", kind: "standard", points: 10, leakPoints: 10,
+      task: { kind: "masked-total", partyCount: 3, myInput: "5", incomingMasks: ["1", "2"], outgoingMasks: ["3", "4"] },
+      privacyConstraint: "no-raw-disclosure", allowedMethods: ["mpc"],
+      status: "open", remainingMs: 60_000,
+      hints: [],
+    },
+  ];
+
+  it("offers LEAK only the Order whose rule permits it", () => {
+    expect(contractsForMethod(orders, "leak").map((c) => c.id)).toEqual(["free"]);
+  });
+
+  it("offers PROVE both share Orders and neither compute Order", () => {
+    expect(contractsForMethod(orders, "prove").map((c) => c.id)).toEqual(["free", "prove-only"]);
+  });
+
+  it("never offers a form an Order its method cannot perform", () => {
+    for (const method of ["leak", "prove"] as const) {
+      for (const order of contractsForMethod(orders, method)) {
+        expect(order.allowedMethods).toContain(method);
+        expect(order.task.kind).toBe("reveal-share");
+      }
+    }
+  });
+});
+
+describe("the nonce-HUNT card offers candidates without judging exploitability [Issue #645]", () => {
+  const proof = (teamId: string, generation: number, contractId: string, commitment: string) =>
+    ({
+      id: `${contractId}-proof`, teamId, generation, kind: "proof" as const,
+      method: "prove" as const, contractId, commitment, response: "9", postedAtMs: 1,
+    });
+
+  const projectionWith = (
+    ledger: readonly PublicArtifact[],
+    redGeneration: number,
+  ): CryptoBattleProjection =>
+    fixtureProjection({
+      publicLedger: ledger,
+      teams: {
+        blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+        red: { teamId: "red", score: 0, generation: redGeneration, huntedGenerationCount: 0 },
+      },
+    });
+
+  /**
+   * The load-bearing pair. An earlier version listed a team only once it had
+   * found two proof rows sharing a commitment — so the card changed the moment
+   * the reuse appeared, and the Portal was announcing the pattern the
+   * participant is supposed to spot. These two assert the card looks the SAME
+   * either way: the reading stays the participant's.
+   */
+  it("offers a team that has posted proofs, whether or not a commitment repeats", () => {
+    const reused = nonceHuntCandidates(
+      projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 1),
+    );
+    const distinct = nonceHuntCandidates(
+      projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "88")], 1),
+    );
+    expect(reused).toEqual([{ teamId: "red", generation: 1 }]);
+    expect(distinct).toEqual(reused);
+  });
+
+  it("offers a team with a single proof row, which cannot be hunted at all", () => {
+    // Precisely the case an exploitability-computing list would hide, and
+    // hiding it is what would leak the verdict.
+    expect(nonceHuntCandidates(projectionWith([proof("red", 1, "red-c0", "77")], 1))).toEqual([
+      { teamId: "red", generation: 1 },
+    ]);
+  });
+
+  it("names each team's current generation, so a stale target cannot be offered", () => {
+    // The victim rotated after those rows were written. The candidate carries
+    // generation 2 — what `validateOp` will accept — not the ledger's 1.
+    expect(
+      nonceHuntCandidates(
+        projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 2),
+      ),
+    ).toEqual([]);
+  });
+
+  it("never offers your own team", () => {
+    expect(
+      nonceHuntCandidates(
+        projectionWith([proof("blue", 1, "blue-c0", "77"), proof("blue", 1, "blue-c1", "77")], 1),
+      ),
+    ).toEqual([]);
+  });
+
+  it("offers nothing when no other team has posted a proof", () => {
+    expect(nonceHuntCandidates(projectionWith([], 1))).toEqual([]);
+  });
+});
+
+describe("advanced tactics use progressive disclosure", () => {
+  const share = (teamId: string, generation: number): PublicArtifact => ({
+    id: `${teamId}-${generation}-share`,
+    teamId,
+    generation,
+    kind: "share",
+    method: "leak",
+    shareIndex: 1,
+    value: "7",
+    contractId: `${teamId}-c1`,
+    postedAtMs: 1,
+  });
+  const proof = (teamId: string, generation: number): PublicArtifact => ({
+    id: `${teamId}-${generation}-proof`,
+    teamId,
+    generation,
+    kind: "proof",
+    method: "prove",
+    contractId: `${teamId}-c2`,
+    commitment: "11",
+    response: "13",
+    postedAtMs: 2,
+  });
+
+  it("keeps every advanced control off a fresh first screen", () => {
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [] }))).toEqual({
+      hunt: false,
+      nonceHunt: false,
+      cipherHunt: false,
+      rotate: false,
+    });
+  });
+
+  it("reveals only tactics backed by the current projection", () => {
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [share("red", 1)] }))).toEqual({
+      hunt: true,
+      nonceHunt: false,
+      cipherHunt: false,
+      rotate: false,
+    });
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [proof("red", 1)] }))).toEqual({
+      hunt: false,
+      nonceHunt: true,
+      cipherHunt: false,
+      rotate: false,
+    });
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [share("blue", 1)] }))).toEqual({
+      hunt: false,
+      nonceHunt: false,
+      cipherHunt: false,
+      rotate: true,
+    });
+  });
+
+  it("does not offer ROTATE for an old-generation leak", () => {
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [share("blue", 0)] })).rotate).toBe(false);
+  });
+});
+
+describe("the game board ties each method to the Order that accepts it [Issue #645]", () => {
+  /**
+   * This board got it wrong twice before this shape.
+   *
+   * First a hardcoded LEAK / OR / PROVE row, which named methods an FHE Order
+   * rejects — and `StatusPanel` renders this board first, so that was the
+   * participant's first instruction.
+   *
+   * Then the union of every open Order's methods. Orders are issued every
+   * `contractIntervalMs` (2 min) and live `contractTtlMs` (5 min), so up to
+   * three overlap and the deterministic task cycle puts a share Order beside
+   * an FHE one routinely. The row then read "LEAK OR PROVE OR FHE" — three
+   * methods presented as interchangeable when each belongs to a different
+   * card.
+   *
+   * A method list is only ever true of ONE Order. These tests pin that it is
+   * rendered there and nowhere else.
+   */
+  const order = (
+    id: string,
+    task: ContractProjection["task"],
+    allowedMethods: ContractProjection["allowedMethods"],
+  ): ContractProjection => ({
+    id, kind: "standard", points: 10, leakPoints: 10, task,
+    privacyConstraint: allowedMethods.includes("leak") ? "none" : "no-raw-disclosure",
+    allowedMethods, status: "open", remainingMs: 60_000,
+    hints: [],
+  });
+
+  const SHARE = order("s", { kind: "reveal-share", shareIndices: [0] }, ["leak", "prove"]);
+  const FHE = order(
+    "f",
+    { kind: "homomorphic-sum", inputs: [{ r: "1", y: "2" }, { r: "3", y: "4" }] },
+    ["fhe"],
+  );
+  const MPC = order(
+    "m",
+    {
+      kind: "masked-total", partyCount: 3,
+      myInput: "5", incomingMasks: ["1", "2"], outgoingMasks: ["3", "4"],
+    },
+    ["mpc"],
+  );
+
+  const render = (myContracts: readonly ContractProjection[]): string =>
+    renderToStaticMarkup(
+      createElement(GameBoardBody, { projection: fixtureProjection({ myContracts }), locale: "en" }),
+    );
+
+  /** Method chips, in render order, matched by class rather than by the words. */
+  const chips = (html: string): string[] =>
+    [...html.matchAll(/tc-method tc-method-(\w+)/g)].map(([, method]) => method ?? "");
+
+  it("shows a share Order's two methods on its own card", () => {
+    expect(chips(render([SHARE]))).toEqual(["leak", "prove"]);
+  });
+
+  /**
+   * [Issue #659] Computing an Order and passing on it pay different amounts,
+   * and the gap between them is the decision the Order exists to ask. A card
+   * that shows only the higher number reveals the trade in the confirmation --
+   * after it has already been made.
+   */
+  it("shows BOTH rates on an Order a team is allowed to pass on", () => {
+    const priced: ContractProjection = { ...SHARE, points: 30, leakPoints: 10 };
+    const html = render([priced]);
+    expect(html).toContain("+30");
+    expect(html).toContain("+10");
+  });
+
+  it("quotes no pass rate on an Order that cannot be passed on", () => {
+    // A `no-raw-disclosure` Order has no LEAK route at all. Printing a price
+    // next to a move that will be rejected is worse than printing nothing.
+    const priced: ContractProjection = { ...FHE, points: 30, leakPoints: 10 };
+    const html = render([priced]);
+    expect(html).toContain("+30");
+    expect(html).not.toContain("+10");
+  });
+
+  it("shows FHE alone for an FHE Order", () => {
+    expect(chips(render([FHE]))).toEqual(["fhe"]);
+  });
+
+  /**
+   * The case that broke the union version: two Orders open at once whose
+   * methods are NOT interchangeable. Each card carries its own, and no
+   * combined claim is made anywhere.
+   */
+  it("keeps each Order's methods on its own card when several are open", () => {
+    expect(chips(render([SHARE, FHE, MPC]))).toEqual(["leak", "prove", "fhe", "mpc"]);
+  });
+
+  it("makes no method claim at all when nothing is open", () => {
+    expect(chips(render([]))).toEqual([]);
+  });
+
+  it("no longer renders a board-level choice row", () => {
+    // The row is gone rather than corrected: any statement it could make is
+    // either tied to one Order (so it belongs on that card) or false.
+    const html = render([SHARE, FHE]);
+    expect(html).not.toContain("crypto-battle-primary-choice");
+    expect(html).not.toContain("tc-choice-arrow");
+  });
+});
+
+describe("the MPC ledger row describes an addition that actually reproduces [Issue #645]", () => {
+  /**
+   * `total` is the three partials summed and then reduced mod p, and three
+   * field elements almost always add to more than p. Rendering that as a plain
+   * `a + b + c = total` was therefore FALSE in the common case — and false in
+   * the worst direction, because the row exists precisely to invite a hand
+   * check, and that check would not come out.
+   */
+  const P = BigInt(DEFAULT_CONFIG.prime);
+  const partials = [P - 5n, P - 7n, 9n];
+  const total = partials.reduce((acc, v) => (acc + v) % P, 0n);
+
+  const artifact = {
+    id: "teamA-c3-partial",
+    teamId: "teamA",
+    generation: 1,
+    kind: "partial" as const,
+    method: "mpc" as const,
+    contractId: "teamA-c3",
+    partial: partials[0]?.toString() ?? "",
+    peerPartials: [partials[1]?.toString() ?? "", partials[2]?.toString() ?? ""],
+    total: total.toString(),
+    postedAtMs: 1,
+  };
+
+  it("uses a fixture whose plain sum really does exceed the modulus", () => {
+    // Otherwise the test would pass against the unqualified `=` too.
+    expect(partials.reduce((acc, v) => acc + v, 0n) > P).toBe(true);
+  });
+
+  for (const locale of ["ja", "en"] as const) {
+    it(`states the remainder rather than a bare equality (${locale})`, () => {
+      const rendered = ledgerPayload(artifact, locale);
+      for (const value of [...partials.map(String), total.toString()]) {
+        expect(rendered).toContain(value);
+      }
+      expect(rendered).toContain(locale === "ja" ? "余り" : "remainder");
+      // And the numbers on the row are self-consistent under that operation.
+      const shown = rendered.match(/\d+/g)?.map(BigInt) ?? [];
+      const [a, b, c, shownTotal] = shown;
+      if (a === undefined || b === undefined || c === undefined || shownTotal === undefined) {
+        throw new Error("expected four numbers on the row");
+      }
+      expect((a + b + c) % P).toBe(shownTotal);
+    });
+  }
+});
+
+/**
+ * [Issue #659] ROTATE voids every Order still open, and each one now costs what
+ * letting it expire costs -- up to a whole batch. That is a bigger surprise
+ * than the LEAK rate the board already discloses, and it lands at the worst
+ * moment: a team rotates because it is under attack. The panel states the price
+ * before the button is pressed, counting the Orders actually at stake rather
+ * than quoting a rule.
+ */
+describe("the ROTATE control says what rotating will cost", () => {
+  const openOrder = (id: string): ContractProjection => ({
+    id, kind: "standard", points: 30, leakPoints: 10,
+    task: { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: "none", allowedMethods: ["leak", "prove"],
+    status: "open", remainingMs: 60_000,
+    hints: [],
+  });
+
+  it("counts every Order a rotate would void", () => {
+    const projection = fixtureProjection({ myContracts: [openOrder("a"), openOrder("b")] });
+    expect(rotateVoidCount(projection)).toBe(2);
+  });
+
+  it("counts nothing once the batch is resolved, because rotating is then free", () => {
+    const resolved: ContractProjection = { ...openOrder("a"), status: "completed" };
+    expect(rotateVoidCount(fixtureProjection({ myContracts: [resolved] }))).toBe(0);
+    expect(rotateVoidCount(fixtureProjection({ myContracts: [] }))).toBe(0);
+  });
+
+  it("says nothing at all when there is no projection yet", () => {
+    expect(rotateVoidCount(null)).toBe(0);
+  });
+});
+
+/**
+ * [Issue #659 §2] The ladder HUNT has to be OFFERED, and offered only when it
+ * is real.
+ *
+ * #645 Phase 5 shipped `hunt-nonce` with no participant-facing sender at all:
+ * the reducer accepted it, the README advertised it, and nothing in the Portal
+ * could produce one. This is the same class of gap for the ladder, so it is
+ * pinned the same way.
+ *
+ * "Real" is the rung's own threshold. A team below it is not broken, and
+ * listing it would turn 「相手の段を見て狩る価値があるか判断する」 into a list of
+ * everyone -- which is exactly the judgement the ladder exists to create.
+ */
+describe("the ladder HUNT is offered only against teams that are actually broken", () => {
+  const pair = (teamId: string, generation: number, id: string): PublicArtifact => ({
+    id,
+    teamId,
+    generation,
+    kind: "cipher-pair",
+    method: "leak",
+    contractId: `${teamId}-c1`,
+    rung: "caesar",
+    // Symbol VALUES, not pictures: the ledger stores values and the edge
+    // renders them through the rung's alphabet (see `CipherPairArtifact`).
+    plaintext: [0, 1],
+    ciphertext: [2, 3],
+    postedAtMs: 1,
+  });
+
+  it("offers a team that has published enough pairs to give its key away", () => {
+    const candidates = cipherHuntCandidates(
+      fixtureProjection({ publicLedger: [pair("red", 1, "p1")] }),
+    );
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]?.teamId).toBe("red");
+    expect(candidates[0]?.pairs).toHaveLength(1);
+  });
+
+  it("offers a team only once its pairs reach the rung's own threshold", () => {
+    // The threshold is a constant of the RUNG (`rungSpec(rung).pairsToBreak`),
+    // not of the artifact, so a fixture cannot dial it down to build a
+    // not-yet-broken case. With Caesar the only rung shipped and its threshold
+    // at 1, every published pair IS a break -- so what is checkable today is
+    // the invariant itself, which holds for whatever rung comes next.
+    const ledgers = [[], [pair("red", 1, "p1")], [pair("red", 1, "p1"), pair("red", 1, "p2")]];
+    for (const publicLedger of ledgers) {
+      for (const candidate of cipherHuntCandidates(fixtureProjection({ publicLedger }))) {
+        expect(candidate.pairs.length).toBeGreaterThanOrEqual(candidate.pairsToBreak);
+        expect(candidate.pairsToBreak).toBe(rungSpec(candidate.rung).pairsToBreak);
+      }
+    }
+    // A team that has published nothing is never a target.
+    expect(cipherHuntCandidates(fixtureProjection({ publicLedger: [] }))).toEqual([]);
+  });
+
+  it("never offers your own team, and never a retired generation", () => {
+    // Hunting yourself is refused by the reducer; offering it would be offering
+    // a move that cannot be made.
+    const own = fixtureProjection({ publicLedger: [pair("blue", 1, "p1")] });
+    expect(own.vault.teamId).toBe("blue");
+    expect(cipherHuntCandidates(own)).toEqual([]);
+    // A pair from an older generation groups separately, so a ROTATEd target
+    // cannot be hunted with stale material through this control.
+    const stale = cipherHuntCandidates(
+      fixtureProjection({ publicLedger: [pair("red", 1, "p1"), pair("red", 2, "p2")] }),
+    );
+    expect(stale.map((c) => c.generation).sort()).toEqual([1, 2]);
+  });
+
+  it("says nothing at all when there is no projection yet", () => {
+    expect(cipherHuntCandidates(null)).toEqual([]);
+  });
+});
+
+/**
+ * [Issue #659] The LEAK / PROVE action area is gated on what the Order ACCEPTS,
+ * not on which task it is.
+ *
+ * Those were the same thing while `reveal-share` was the only Order that took
+ * LEAK. The ladder Order takes it too, and a `task.kind === "reveal-share"`
+ * test hid the button on the one Order whose entire point is the choice between
+ * computing it and passing on it -- the card advertised LEAK, the working panel
+ * warned what LEAKing would cost, and there was nothing to press. Found by
+ * playing the harness, which is why it is pinned here.
+ */
+describe("the primary actions follow what the Order accepts", () => {
+  const order = (
+    kind: ContractProjection["task"]["kind"],
+    allowedMethods: ContractProjection["allowedMethods"],
+  ): ContractProjection => ({
+    id: "o",
+    kind: "standard",
+    points: 30,
+    leakPoints: 10,
+    task:
+      kind === "caesar-shift"
+        ? { kind: "caesar-shift", rung: "caesar", plaintext: [0], symbols: ["⚀", "⚁"], pairsToBreak: 1, myKey: 1 }
+        : { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: allowedMethods.includes("leak") ? "none" : "no-raw-disclosure",
+    allowedMethods,
+    status: "open",
+    remainingMs: 60_000,
+    hints: [],
+  });
+
+  it("shows the area for a ladder Order, because a ladder Order can be LEAKed", () => {
+    const actions = primaryActionsFor(order("caesar-shift", ["leak", "cipher"]));
+    expect(actions.visible).toBe(true);
+    expect(actions.leakAllowed).toBe(true);
+    // PROVE cannot serve a ladder Order, so it is offered-and-disabled rather
+    // than silently absent.
+    expect(actions.proveAllowed).toBe(false);
+  });
+
+  it("still shows both for a share Order", () => {
+    const actions = primaryActionsFor(order("reveal-share", ["leak", "prove"]));
+    expect(actions).toEqual({ visible: true, leakAllowed: true, proveAllowed: true });
+  });
+
+  it("hides the area entirely for an Order neither method can serve", () => {
+    // An FHE Order takes neither, and its own panel is the whole interface for
+    // it -- two permanently-dead buttons above it would be noise.
+    expect(primaryActionsFor(order("reveal-share", ["fhe"])).visible).toBe(false);
+  });
+
+  it("shows the area before any Order is picked, so the panel does not jump", () => {
+    expect(primaryActionsFor(undefined).visible).toBe(true);
+  });
+});
+
+/**
+ * [Issue #659] What the board is FOR, once there is more than one Order on it.
+ *
+ * From a real screenshot of a live match: six cards that looked alike, in issue
+ * order, with the score as a 12px chip in a row of three identical chips. The
+ * operator's words were 「ボードが小さくてよくわからない。ついでに何をみればいい
+ * のかよくわからない」 — which is a layout problem, not a data problem: every
+ * number was on screen and none of them answered "what do I do now".
+ */
+describe("the board answers what to do next", () => {
+  const order = (id: string, remainingMs: number): ContractProjection => ({
+    id,
+    kind: "standard",
+    points: 30,
+    leakPoints: 10,
+    task: { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: "none",
+    allowedMethods: ["leak", "prove"],
+    status: "open",
+    remainingMs,
+    hints: [],
+  });
+
+  const render = (myContracts: readonly ContractProjection[]): string =>
+    renderToStaticMarkup(
+      createElement(GameBoardBody, { projection: fixtureProjection({ myContracts }), locale: "en" }),
+    );
+
+  it("puts the soonest deadline first, whatever order the Orders arrived in", () => {
+    // Issue order is arbitrary with respect to urgency: a rush Order issued
+    // last can be the one about to lapse.
+    const html = render([order("t-c0", 240_000), order("t-c1", 30_000), order("t-c2", 120_000)]);
+    const seen = [...html.matchAll(/ORDER #(\d)/g)].map(([, n]) => n);
+    expect(seen).toEqual(["1", "2", "0"]);
+  });
+
+  it("names the one that is due first", () => {
+    const html = render([order("t-c0", 240_000), order("t-c1", 30_000)]);
+    expect(html).toContain("DUE FIRST");
+    // Exactly one CARD carries it — marking several would be marking none.
+    // Counted on the class attribute, not the whole document: the stylesheet
+    // this component injects also contains the selector.
+    expect(html.match(/class="tc-order-card[^"]*tc-order-next/g)).toHaveLength(1);
+  });
+
+  it("shows the score as the largest thing on the board", () => {
+    // It was a chip indistinguishable from "phase" and "time left"; it is the
+    // number that changes when you play.
+    const html = render([order("t-c0", 240_000)]);
+    expect(html).toContain("tc-scoreline-value");
+    expect(html).toContain("tc-scoreline-hint");
+  });
+
+  it("keeps the vault out of the way until it is asked for", () => {
+    // Five 19-digit numbers took a third of the board and matter only while
+    // building a PROVE. The generation stays visible because ROTATE moves it.
+    const html = render([order("t-c0", 240_000)]);
+    expect(html).toContain("tc-vault-details");
+    expect(html).not.toMatch(/<details class="tc-vault-details"[^>]*\sopen/);
+  });
+});
+
+/**
+ * [Issue #659] The Battle's actual goal: a player leaves understanding secure
+ * computation, homomorphic encryption and zero-knowledge proofs — the
+ * primitives blockchains are built on.
+ *
+ * They already performed all three. An FHE Order IS homomorphic addition, an
+ * MPC Order IS secure multi-party computation, a PROVE IS a zero-knowledge
+ * proof. But the words appeared ZERO times anywhere a participant could see,
+ * and the only mention of blockchain was a disclaimer saying a Contract is NOT
+ * one — so a player could finish the match having done all three and be unable
+ * to name any of them.
+ */
+describe("the help drawer names what the player is learning", () => {
+  for (const locale of ["ja", "en"] as const) {
+    it(`names all three modern primitives (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      const expected =
+        locale === "ja"
+          ? ["準同型暗号", "秘密計算", "ゼロ知識証明"]
+          : ["Homomorphic encryption", "Secure computation", "Zero-knowledge proofs"];
+      for (const term of expected) expect(html).toContain(term);
+    });
+
+    it(`says where they are used, rather than only that they exist (${locale})`, () => {
+      // The motivation the operator gave: these matter because blockchains are
+      // made of them. Without it the three names are trivia.
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).toContain(locale === "ja" ? "ブロックチェーン" : "blockchain");
+    });
+
+    it(`frames the historical cipher as the way in, not the destination (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).toContain(locale === "ja" ? "シーザー" : "Caesar");
+    });
+  }
+});
+
+/**
+ * [Issue #659] Each Order teaches three things: what it is used for, why the
+ * trick works, and what to actually do. The operator's constraint was that the
+ * text stay short — 「文章は少なくしないと楽しめない」 — so it is three labelled
+ * lines, not a paragraph.
+ *
+ * The procedure alone was what shipped before, which meant a player could
+ * complete a homomorphic addition without ever learning that adding ciphertexts
+ * is supposed to work, let alone why.
+ */
+describe("each Order carries its use, its mechanism, and its procedure", () => {
+  it("gives the FHE Order all three, with the identity that makes it work", () => {
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.fheUse).toContain("つかいみち");
+    // The mechanism is one line and it is the actual identity, not a paraphrase.
+    expect(copy.fheWhy).toContain("Enc(a) + Enc(b) = Enc(a+b)");
+    expect(copy.fheHelp).toContain("やること");
+  });
+
+  it("gives the MPC Order the cancellation that makes it work", () => {
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.mpcUse).toContain("つかいみち");
+    expect(copy.mpcWhy).toContain("a+b+c");
+    expect(copy.mpcHelp).toContain("やること");
+  });
+
+  it("frames the ladder Order as the breakable one, and says why it breaks", () => {
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.cipherUse).toContain("破れる");
+    expect(copy.cipherWhy).toContain("鍵");
+  });
+
+  it("keeps each line short enough to be read mid-match", () => {
+    // The constraint that makes this usable rather than a wall of text.
+    const copy = FAST_MOVE_COPY.ja;
+    for (const line of [copy.fheUse, copy.fheWhy, copy.mpcUse, copy.mpcWhy, copy.cipherUse, copy.cipherWhy]) {
+      expect(line.length).toBeLessThan(70);
+    }
+  });
+
+  it("names the blocked method correctly, per method", () => {
+    // A ladder Order accepts LEAK and refuses PROVE. One shared string naming
+    // LEAK told the reader LEAK was refused while the LEAK button sat enabled
+    // beside it.
+    const copy = FAST_MOVE_COPY.ja;
+    expect(copy.leakBlocked).toContain("LEAK");
+    expect(copy.proveBlocked).toContain("PROVE");
+    expect(copy.leakBlocked).not.toEqual(copy.proveBlocked);
+  });
+});
+
+/**
+ * [Issue #659 §9] The hint control on the ticket.
+ *
+ * `renderToStaticMarkup` never runs the polling effect (see this file's
+ * header), so the panel itself has no projection under test and what is pinned
+ * here is the decision behind the control: which rung is offered next, and what
+ * the button says it costs.
+ */
+describe("the hint control offers the next unopened rung, at its stated price", () => {
+  const withHints = (hints: ContractProjection["hints"]): ContractProjection => ({
+    id: "o",
+    kind: "standard",
+    points: 30,
+    leakPoints: 10,
+    task: { kind: "reveal-share", shareIndices: [0] },
+    privacyConstraint: "none",
+    allowedMethods: ["leak", "prove"],
+    status: "open",
+    remainingMs: 60_000,
+    hints,
+  });
+
+  const rung = (level: number, cost: number, opened: boolean) => ({
+    level,
+    id: `reveal-share/${level + 1}`,
+    cost,
+    ...(opened ? { text: { ja: `ja-${level}`, en: `en-${level}` } } : {}),
+  });
+
+  it("offers the first rung when nothing is open", () => {
+    const next = nextHintFor(withHints([rung(0, 2, false), rung(1, 4, false)]));
+    expect(next?.level).toBe(0);
+    expect(next?.cost).toBe(2);
+  });
+
+  it("offers the rung after the last one opened, never one already paid for", () => {
+    // The failure this rules out is charging a team again for a hint they can
+    // already read, which is what a Portal-side counter would eventually do.
+    const next = nextHintFor(withHints([rung(0, 2, true), rung(1, 4, false), rung(2, 8, false)]));
+    expect(next?.level).toBe(1);
+  });
+
+  it("offers nothing once the ladder is exhausted", () => {
+    expect(nextHintFor(withHints([rung(0, 2, true), rung(1, 4, true)]))).toBeUndefined();
+  });
+
+  it("offers nothing when no Order is selected", () => {
+    expect(nextHintFor(undefined)).toBeUndefined();
+  });
+
+  it("prints the price on the button, in both locales", () => {
+    // A cost the player only discovers after paying it is not a choice they
+    // made, so the number has to be in the label itself.
+    for (const locale of ["ja", "en"] as const) {
+      expect(FAST_MOVE_COPY[locale].hintBuy(4)).toContain("4");
+      expect(FAST_MOVE_COPY[locale].hintsHint.length).toBeGreaterThan(0);
+      expect(FAST_MOVE_COPY[locale].hintsExhausted.length).toBeGreaterThan(0);
+    }
+  });
 });

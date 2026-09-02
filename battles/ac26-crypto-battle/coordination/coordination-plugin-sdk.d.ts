@@ -23,6 +23,15 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
   export interface CoordinationContext {
     readonly eventId: string;
     readonly teamIds: readonly string[];
+    /**
+     * [Issue #652 / TenkaCloud#3133] The platform's server-only per-match
+     * secret. Mirrors the field the real SDK now declares.
+     *
+     * Optional there and here: the dispatcher issues it, so local play and
+     * unit tests run without one. See `game/src/reducer.ts`'s
+     * `resolveMatchSeed` for what this Battle does in that case.
+     */
+    readonly matchSecret?: string;
   }
 
   /** operation の受理可否。 不可のとき error は機械可読な短い理由コード。 */
@@ -35,6 +44,11 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
     applyOp(state: State, teamId: string, op: Op): State;
     tick?(state: State, eventNowMs: number): State;
     projectForTeam(state: State, teamId: string): Projection;
+    /**
+     * [Issue #659] 各 team の現在得点 (絶対値)。宣言すると platform の scoreboard へ反映される。
+     * 差分ではなく絶対値なのは、plugin が権威で platform は写すだけだから (= 再送で二重加算しない)。
+     */
+    teamScores?(state: State): Readonly<Record<string, number>>;
   }
 
   export type DispatchResult<State> =

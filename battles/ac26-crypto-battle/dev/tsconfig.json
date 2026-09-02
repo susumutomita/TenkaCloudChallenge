@@ -1,0 +1,52 @@
+{
+  // Issue #644: the local development harness's own typecheck.
+  //
+  // The compiler options below deliberately MIRROR ../game/tsconfig.json (the
+  // project that owns ../portal/*.tsx). This harness imports those components,
+  // so they enter this program transitively whether or not they are listed —
+  // and if the two projects disagreed about strictness, `bun run typecheck`
+  // here would report errors that the portal's own project calls fine, or miss
+  // ones it catches. Keep the two in step; ../game/tsconfig.json is the source
+  // of truth and carries the reasoning for each option.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "noUncheckedIndexedAccess": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    // "DOM" is the one genuine difference from ../game/tsconfig.json: that
+    // project renders components through `react-dom/server` in a test, while
+    // this one mounts them in a real browser and talks to `fetch` /
+    // `document`.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["bun"],
+    // Same rationale as ../game/tsconfig.json's `paths`: react's runtime
+    // packages ship no declarations of their own, so bare specifiers are
+    // mapped straight at the @types packages installed in THIS directory.
+    "baseUrl": ".",
+    "paths": {
+      "react": ["node_modules/@types/react"],
+      "react/jsx-runtime": ["node_modules/@types/react/jsx-runtime"],
+      "react/jsx-dev-runtime": ["node_modules/@types/react/jsx-dev-runtime"],
+      "react-dom": ["node_modules/@types/react-dom"],
+      "react-dom/client": ["node_modules/@types/react-dom/client"],
+      "react-dom/server": ["node_modules/@types/react-dom/server"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    // The ambient `declare module "@tenkacloud/portal-plugin-sdk"` stub. It
+    // must be IN the program, not merely reachable: an ambient module
+    // declaration is only visible to files compiled alongside it, and every
+    // ../portal/*.tsx this harness mounts imports that specifier.
+    "../portal/portal-plugin-sdk.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}

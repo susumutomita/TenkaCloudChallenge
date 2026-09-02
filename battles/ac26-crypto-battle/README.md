@@ -1,161 +1,176 @@
-# PROVE / LEAK / HUNT -- Advanced Cryptography Battle
+# PROVE / LEAK / HUNT — Cryptography Battle
 
-> Japanese version: [README.ja.md](./README.ja.md)
+## What is going on
 
-| Field          | Value                        |
-| -------------- | ----------------------------- |
-| Category       | Battle (real-time PvP)        |
-| Difficulty     | 4 / 5 (advanced)              |
-| Estimated time | 120 min                       |
-| status         | `draft`                       |
+Your team holds one secret. It is split into five pieces, and **any three of
+them rebuild it. Two tell you nothing.**
 
-Your team holds a `secret`, split via **Shamir (t, n) threshold secret
-sharing** into `shareCount` shares. Over the course of the match, Contracts
-arrive addressed to your team. Every move you make -- reveal a share, attack
-another team's exposure, or refresh your own secret -- is a real cryptographic
-operation, not a simulated one. Cryptographic correctness is never left to
-luck: only a computation that actually checks out moves the score.
+Work (Orders) arrives six at a time every five minutes, and ignoring one costs
+you points. There are two ways to finish one — **hand over a piece and answer
+instantly**, or **compute, and keep the piece**. Hand over three and someone
+rebuilds your secret.
 
-## The core loop
+That is the whole bet.
 
-- **LEAK** -- complete a Contract by revealing the share(s) it asks for. You
-  score immediately. The revealed value is published to the **Public
-  Ledger**, permanently, for every team to see. LEAK itself is never
-  penalized -- the cost of leaking is not paid now, it is paid *later*, if
-  someone collects enough of your shares to reconstruct your secret.
-- **HUNT** -- collect `threshold` of another team's shares from the Public
-  Ledger, reconstruct their secret via **Lagrange interpolation**, and submit
-  the recovered value. If it matches their actual secret exactly, you score
-  and they take a penalty. If it does not match -- because you are short a
-  share, guessed, or the shares you collected span two different secret
-  generations -- nothing happens. There is no partial credit for a plausible
-  guess.
-- **ROTATE** -- advance your own secret to a new generation. Every share you
-  leaked before this point becomes worthless for reconstructing your
-  *current* secret: the new generation is an independent, freshly-derived
-  polynomial, so mixing old and new shares in a HUNT does not reconstruct
-  anything real. ROTATE has a cooldown, so you cannot spam it as a blanket
-  defense.
-- **PROVE** -- score by demonstrating knowledge of your secret without
-  revealing it at all: a non-interactive Schnorr proof, not a direct
-  disclosure. It pays exactly what LEAKing the same Contract would. Unlike
-  LEAK, nothing that could reconstruct your secret ever goes public -- but
-  the proof itself is still posted to the Public Ledger, for audit, so
-  anyone can independently replay the check and confirm it actually holds.
+## The moves
 
-## The three lanes
+| | What it does | What it costs |
+| --- | --- | --- |
+| **LEAK** | Hand over one piece and answer instantly | Fast — but the piece never comes back |
+| **PROVE** | Compute, and answer without handing anything over | The piece stays safe — but it costs a calculation |
+| **HUNT** | When someone has three pieces exposed, take their points | — |
+| **ROTATE** | Remake your pieces. Everything published stops counting | — |
+| **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
 
-- **Contract Queue** -- the LEAK requests addressed to your team right now.
-  Each names which share index(es) it wants revealed, how many points it is
-  worth, and a deadline. Miss the deadline and it expires unclaimed.
-- **My Vault** -- your team's current secret, this generation's shares, your
-  score, and how long until your ROTATE cooldown clears. Nobody else can see
-  any of this.
-- **Public Ledger** -- every share every team has ever LEAKed, and every
-  proof transcript every team has ever PROVEn, in the open, forever. This is
-  where a HUNT starts: watch it for another team crossing the threshold of
-  exposed shares for their current generation. A PROVE entry, by contrast,
-  never carries anything that helps reconstruct a secret.
+The order is **do nothing < LEAK and get hunted < LEAK and get away with it <
+PROVE**. Every Order card shows both rates side by side, so you compare before
+you commit.
 
-## How PROVE works
+## These are real things
 
-PROVE is a real cryptographic protocol, not a flavor-text alternative to
-LEAK -- it is a non-interactive **Schnorr proof of knowledge**, the same
-construction taught in `ac26-w3-schnorr`. Completing a Contract with PROVE
-instead of LEAK follows three steps:
+| Order | Technique | Where it runs |
+| --- | --- | --- |
+| add without decrypting | **Homomorphic encryption** | confidential smart contracts, sealed-bid voting |
+| masked subtotal | **Secure computation (MPC)** | MPC wallets, threshold signatures |
+| PROVE | **Zero-knowledge proofs** | zkRollups, private transfers |
 
-1. **Derive your witness.** Your team's actual `secret` is never used as an
-   exponent directly -- it lives in too small a space for that to be safe
-   (see `game/src/schnorr-witness.ts`'s doc comment for why). Instead, hash
-   your secret together with your team id and current generation into a
-   witness `w` over a 2048-bit group (RFC 3526 Group 14).
-2. **Build a proof.** From `w`, construct a Schnorr commitment/response pair
-   bound to the specific Contract you are completing -- `game/src/schnorr-prover.ts`'s
-   `createProof(secret, generation, teamId, contractId)` does exactly this,
-   deterministically (no randomness to leak).
-3. **Submit it.** Submitting a valid proof for an open Contract addressed to
-   you scores exactly what LEAKing that same Contract would. The proof
-   transcript is posted to the Public Ledger so anyone can independently
-   re-check it -- but the transcript alone gives an observer nothing they
-   could use to reconstruct your secret or a share.
+You will have performed all three by hand by the time the match ends. Caesar
+shows up too, but as the way in — **meeting a breakable cipher first is what
+makes an unbreakable one worth something.**
 
-Because the proof is bound to one specific Contract id, it cannot be
-replayed against a different Contract; because your witness changes on every
-ROTATE, a proof built before a ROTATE stops verifying after one.
+## Goal
 
-## Scoring, in one sentence
+Each team's secret is split into five shares. Three distinct shares from the same generation reconstruct it.
 
-LEAK and PROVE pay identically for completing the same Contract -- PROVE is
-never worth more just for being the harder path; HUNT only pays out on an
-exact, verified reconstruction; ROTATE costs a cooldown but retroactively
-devalues every share you leaked before it. The team that plays the tempo
-between "score now with LEAK", "score safely with PROVE", and "stay safe
-with ROTATE" while reading the Public Ledger for the other team's exposure
-wins.
+- When another team exposes three distinct shares, compute a **HUNT**.
+- When your own exposure becomes risky, **ROTATE** into a new generation.
+- Score while preventing reconstruction of your current generation.
 
-## Learning goals
+Repeating one share index still counts as one distinct share. Shares from different generations cannot be mixed.
 
-- Apply Shamir (t, n) threshold secret sharing and Lagrange interpolation
-  from both the attacking (HUNT) and defending (ROTATE) sides.
-- Understand that revealing a share (LEAK) costs nothing immediately -- the
-  cost arrives later, as HUNT risk.
-- Verify, executably, that fewer than the threshold of shares reveal nothing
-  about the secret.
-- Experience how secret rotation invalidates previously leaked shares.
-- Build and check a non-interactive Schnorr proof of knowledge (PROVE), and
-  see first-hand why it is Fiat-Shamir-bound to one specific Contract and one
-  specific secret generation.
+## Orders arrive six at a time, every five minutes
 
-## Using the Portal
+A batch of six Orders arrives every five minutes and expires after five. **There
+is no stockpiling** -- you cannot take next batch's work early, and you cannot
+carry this batch's leftovers forward.
 
-Once your team is deployed, the Participant Portal shows this Battle through
-three panels:
+More arrive than a team can compute. Which ones you compute, which you pass on,
+and what you do with the time left over -- that is the game.
 
-- **Status** -- your Score / Time left / Phase, then the three lanes above
-  (Contract Queue / My Vault / Public Ledger), refreshed every 30 seconds.
-  The Public Ledger shown there is raw data only -- team id, generation,
-  share index and value for a LEAK, or the commitment/response transcript
-  for a PROVE -- never a computed "you can reconstruct this now" verdict.
-  Reading it is on you.
-- **Submit a move** -- one form per move.
-  - **LEAK** just needs picking one of your open contracts from a list.
-  - **PROVE** needs a `{ commitment, response }` proof, and **HUNT** needs a
-    recovered secret. Build both **locally, before you open the form** --
-    this repo's `game/src/schnorr-prover.ts`'s `createProof` and
-    `game/src/shamir.ts`'s `reconstruct` are the reference implementations
-    of that math (see "How PROVE works" above for PROVE's steps). The
-    portal never computes either one for you: that local computation is the
-    move's actual cost, not busywork the UI could shortcut.
-  - **ROTATE** asks for a confirmation before it fires, since it voids every
-    currently-open contract addressed to you.
-  - A rejected submission shows the reason (e.g. "contract already
-    completed", "proof failed verification") -- that is different from an
-    infrastructure hiccup, which shows a generic retry message instead.
-- **Help** -- the rules above, condensed to one screen inside the portal
-  itself, for a quick refresher mid-match.
+## ORDER types
 
-## After the match: replay and debrief
+| What the card asks for | What you do |
+| --- | --- |
+| reveal a share | choose LEAK or PROVE |
+| encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
+| encrypted addition | add both pairs component by component, remainder p |
+| masked subtotal | compute my number + received masks - sent masks, remainder p |
 
-The match does not end when the clock hits zero. Every LEAK, PROVE, HUNT
-success, and ROTATE your team made is still there afterward, in order, with
-real timestamps -- a facilitator can walk through it during the debrief
-window and point at exactly where things turned: which LEAK is the one that
-finally crossed the threshold and made your secret reconstructable, and how
-many of your leaked shares a ROTATE actually invalidated. This replay is
-built entirely from what already happened during the match -- it does not
-show anything that was not already true, and it never reveals a secret or
-share value your team did not already leak yourselves. It is a *debrief*
-tool, not a live one: it is generated after the fact, not exposed anywhere
-in the Portal while the match is running.
+Every card shows its deadline, points, task, and accepted methods. A method absent from the card cannot perform the task or violates its disclosure condition.
 
-## Related files
+## Moves
 
-- [`metadata.json`](./metadata.json) -- problem metadata (source of truth for
-  UI / scoring engine)
-- [`template.yaml`](./template.yaml) -- the one-page CFn template deployed
-  into the competitor account (participant access baseline only -- see
-  `OPERATOR.md` for why match state is not per-team AWS infrastructure)
-- [`game/`](./game/) -- the pure game model (state / reducer / Shamir
-  implementation) this Battle runs on
-- [`OPERATOR.md`](./OPERATOR.md) -- organizer-facing architecture and
-  implementation roadmap
+| Move | Meaning |
+| --- | --- |
+| LEAK | let the system answer the ORDER. What becomes public depends on the ORDER |
+| PROVE | complete it with a Schnorr proof and publish no share |
+| CIPHER | encrypt the symbols with your key and submit. Nothing is published |
+| FHE | add ciphertexts without decrypting |
+| MPC | submit one subtotal while each office's input stays private |
+| HUNT | submit a secret, a reused-nonce key, or a cipher key recovered from public records |
+| ROTATE | replace your secret and shares with a fresh generation |
+| HINT | open the next step of the selected ORDER's hint ladder. Nothing is published |
+
+## Stuck? — HINT
+
+Every ORDER carries **three hints**. The first says where to look, the second
+gives the rule, the third walks the first step. Even after the third, the
+calculation is still yours to do.
+
+Each one costs points, and they get more expensive as you climb (**-2 / -4 /
+-8**). The price is printed on the button, so you compare before you press.
+
+**Buying all three and then computing the Order still beats passing on it.** But
+the charge does not come back if you never answer — the worst hint to buy is one
+on an Order you were going to abandon.
+
+Hints never reach the public record. Nobody can see that you bought one.
+
+## The cipher ladder
+
+"Encrypt with your key" Orders sit on a **rung**. Exactly one thing changes from
+rung to rung: **how many published pairs give your key away.**
+
+| Rung | Pairs that recover the key | The break |
+| --- | --- | --- |
+| Caesar | 1 | ciphertext − plaintext. One subtraction |
+
+The method is printed on the Order. That is deliberate, and it is how real
+cryptography works: the algorithm is public and **only the key is secret**. Every
+team knows how every cipher works, and the teams that keep their key are the
+teams that survive.
+
+LEAK publishes the symbols **next to** their encrypted form. On the Caesar rung
+that single pair is the key. The public record shows how many pairs a team has
+out against how many its rung survives, so whether an opponent is already broken
+is something you can read off the board.
+
+ROTATE moves your key to a new generation too, and every pair published before it
+stops being worth anything.
+
+The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE matches `ac26-w3-schnorr`; share reconstruction matches `ac26-w2-secret-sharing`.
+
+## Reading the screen
+
+1. **Order Belt** — requests you can act on now
+2. **MAKE A MOVE** — the action for your selected request
+3. **My Vault** — your generation and shares
+4. **Public Ledger** — records everyone chose to publish
+5. **Next tactic from the public record** — opens only when material exists
+6. **Practice and help** — open only when needed
+
+HUNT, reused-nonce HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
+
+## Data boundary
+
+- The match secret and complete match state stay on TenkaCloud's trusted side.
+- The browser receives only `projectForTeam` output.
+- A team's vault and Orders are visible only to that team.
+- Opponent secrets, un-leaked shares, and the match secret are never projected.
+- The Public Ledger contains only artifacts participants chose to publish.
+
+Production hidden values derive from the server-only `matchSecret`, never the public `eventId`. Local-only runs use the explicit non-secret marker `local-play-not-secret:<eventId>`.
+
+## Local UI check
+
+```bash
+cd battles/ac26-crypto-battle/dev
+bun install --frozen-lockfile
+bun test
+bun run typecheck
+bun run dev                 # http://localhost:5644
+```
+
+The harness uses the real reducer and Portal components but fake authentication and persistence. It is useful for UI checks, not evidence of tenant isolation or real AWS E2E.
+
+Game checks:
+
+```bash
+cd ../game
+bun install --frozen-lockfile
+bun test
+bun run typecheck
+```
+
+## Completion boundary
+
+The release gate is the game/dev test and typecheck suites plus the browser harness running the real Portal components. The harness checks the first move, interaction, and result using participant-visible inputs only. A real-AWS walkthrough and an independent third-party playtest are optional pre-event rehearsals; not running them does not block development or merge.
+
+## Files
+
+- `game/src/reducer.ts` — rules, validation, team projection
+- `game/src/types.ts` — state / op / projection
+- `coordination/crypto-battle.ts` — platform adapter
+- `portal/` — participant UI
+- `dev/` — local UI harness
+- `OPERATOR.md` — current operating boundary and checks

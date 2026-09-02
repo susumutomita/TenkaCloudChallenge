@@ -15,7 +15,7 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
-import type { CryptoBattleOp } from "./types.ts";
+import type { CryptoBattleState, CryptoBattleOp } from "./types.ts";
 
 const CTX = { eventId: "prove-basic", teamIds: ["teamA", "teamB"] } as const;
 
@@ -244,8 +244,17 @@ describe("prove: wrong generation", () => {
     // Rotate voids every pre-rotate open contract for this team (see
     // reducer.ts's applyRotate) -- advance the clock to get a fresh open
     // contract under the NEW generation to submit the stale proof against.
-    state = tick(state, (state.nowMs ?? 0) + state.config.contractIntervalMs);
-    const postRotateContract = state.contracts.find((c) => c.teamId === "teamA" && c.status === "open");
+    // [Issue #645] PROVE only answers a share Order, and the belt now also
+    // carries FHE and MPC Orders -- so advance until a share Order appears
+    // rather than assuming the next one is.
+    const findShareOrder = (from: CryptoBattleState) =>
+      from.contracts.find(
+        (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share",
+      );
+    for (let round = 0; round < 8 && !findShareOrder(state); round += 1) {
+      state = tick(state, (state.nowMs ?? 0) + state.config.contractIntervalMs);
+    }
+    const postRotateContract = findShareOrder(state);
     if (!postRotateContract) throw new Error("expected a fresh open contract for teamA after rotate");
 
     // Attacker who captured the pre-rotate secret, still trying to prove
@@ -312,8 +321,16 @@ describe("prove: secret non-leakage", () => {
   });
 });
 
-describe("prove: Scoring MUST -- PROVE pays the same as LEAK for an equal-value contract", () => {
-  test("completing one contract via LEAK and an equal-points contract via PROVE yields equal score deltas", () => {
+/**
+ * [Issue #659] PROVE must pay MORE than LEAK. This suite used to assert the
+ * opposite ("equal pay"), which made LEAK strictly dominant: it costs no
+ * computation, so an identical payout meant there was never a reason to work.
+ * With equal pay a rational team leaks every Order, nothing is ever computed,
+ * and the whole "compute or expose yourself" tension the Battle is built on
+ * does not exist.
+ */
+describe("prove: Scoring MUST -- PROVE pays MORE than LEAK for the same Order", () => {
+  test("completing one contract via LEAK and an equal-points contract via PROVE yields DIFFERENT score deltas", () => {
     let state = tick(initialState(CTX), 0);
     const leakContract = state.contracts.find((c) => c.teamId === "teamA");
     if (!leakContract) throw new Error("expected a contract for teamA");
@@ -326,10 +343,13 @@ describe("prove: Scoring MUST -- PROVE pays the same as LEAK for an equal-value 
       teamId: "teamA",
       kind: "standard" as const,
       points: leakContract.points,
-      requestedShareIndices: leakContract.requestedShareIndices,
+      leakPoints: 10,
+      task: leakContract.task,
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
+      privacyConstraint: "none" as const,
+      allowedMethods: ["leak", "prove"] as const,
     };
     state = { ...state, contracts: [...state.contracts, proveContract] };
 
@@ -344,8 +364,20 @@ describe("prove: Scoring MUST -- PROVE pays the same as LEAK for an equal-value 
     const afterProve = applyOp(state, "teamA", { kind: "prove", contractId: proveContract.id, proof });
     const proveDelta = (afterProve.teams.teamA?.score ?? 0) - scoreBefore;
 
-    expect(proveDelta).toBe(leakDelta);
+    // The ordering the design rests on: doing the work pays more than not doing it.
+    expect(proveDelta).toBeGreaterThan(leakDelta);
     expect(proveDelta).toBe(leakContract.points);
+    expect(leakDelta).toBe(leakContract.leakPoints);
+  });
+
+  test("an Order carries both rates, so the trade is visible before it is made", () => {
+    const state = tick(initialState(CTX), 0);
+    const order = state.contracts.find((c) => c.teamId === "teamA");
+    if (!order) throw new Error("expected a contract for teamA");
+    // A participant choosing LEAK is giving up points, not just accepting risk.
+    // Carrying both numbers on the Order is what makes that choice informed.
+    expect(order.leakPoints).toBeLessThan(order.points);
+    expect(order.leakPoints).toBe(state.config.scores.contractLeak);
   });
 });
 
@@ -359,10 +391,13 @@ describe("prove: match end", () => {
       teamId: "teamA",
       kind: "standard" as const,
       points: state.config.scores.contract,
-      requestedShareIndices: [1],
+      leakPoints: 10,
+      task: { kind: "reveal-share" as const, shareIndices: [1] },
       issuedAtMs: state.nowMs ?? 0,
       expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
       status: "open" as const,
+      privacyConstraint: "none" as const,
+      allowedMethods: ["leak", "prove"] as const,
     };
     const proof = createProof(BigInt(team.secret), team.generation, "teamA", stillOpenContract.id);
     state = { ...state, contracts: [...state.contracts, stillOpenContract] };

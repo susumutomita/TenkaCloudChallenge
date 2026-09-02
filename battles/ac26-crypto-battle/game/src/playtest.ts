@@ -2,9 +2,9 @@
  * Deterministic scripted-playtest runner (Issue #486 PR5).
  *
  * A `PlaytestScript` is a plain-data fixture -- a fully pre-authored, ordered
- * list of `tick` / op `Step`s for a fixed `eventId` and team roster, plus an
- * optional scaled-down `config` (e.g. a 20-30 min vertical slice instead of
- * the full 90-min match). `runScript` replays it against a fresh
+ * list of `tick` / op `Step`s for a fixed `eventId`, team roster and optional
+ * TEST match secret, plus an optional scaled-down `config` (e.g. a 20-30 min
+ * vertical slice instead of the full 90-min match). `runScript` replays it against a fresh
  * `initialState`, exactly the way `reducer.ts`'s own purity contract
  * guarantees: no ambient time/randomness anywhere under `src/` (see
  * reducer.ts's header), so the same script always produces the same
@@ -29,7 +29,16 @@
 import { applyOp, initialState, tick, validateOp } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
 import { reconstruct, type Share } from "./shamir.ts";
+import { addCiphertexts } from "./fhe.ts";
+import { encryptWithRung, toSymbols } from "./ladder.ts";
+import { inv, mod } from "./field.ts";
+import { groupPow, RFC3526_GROUP14 } from "./group.ts";
+import { computeChallenge } from "./schnorr-transcript.ts";
+import { computePartial } from "./mpc.ts";
 import type {
+  Contract,
+  ContractProjection,
+  ProofArtifact,
   CryptoBattleConfig,
   CryptoBattleOp,
   CryptoBattleProjection,
@@ -68,6 +77,17 @@ export function isTickStep(step: PlaytestStep): step is PlaytestTickStep {
 export interface PlaytestScript {
   readonly eventId: string;
   readonly teams: readonly [string, string];
+  /**
+   * The fixed, non-production secret used when the script was authored.
+   *
+   * #652 moved every hidden derivation off the public `eventId`. Replaying a
+   * script without the same derivation root is replaying a different match:
+   * the Order belt, proofs, FHE/MPC answers and HUNT value all stop matching.
+   * Omit only for legacy/local fixtures that intentionally exercise the
+   * self-announcing non-secret fallback. Never copy a live match secret into a
+   * script or debrief artifact.
+   */
+  readonly matchSecret?: string;
   readonly steps: readonly PlaytestStep[];
   /**
    * Optional config override, merged onto `DEFAULT_CONFIG` the same way
@@ -118,6 +138,16 @@ export interface PlaytestResult {
   readonly finalState: CryptoBattleState;
   readonly timeline: readonly PlaytestTimelineEntry[];
   readonly violations: readonly PlaytestViolation[];
+  /**
+   * [Issue #659] Every Order the run ever saw, by id.
+   *
+   * `finalState.contracts` is no longer a history: resolved and lapsed Orders
+   * are pruned from the persisted row past a short retention window, because
+   * keeping all of them made a 99-team match a 4.5 MB read-modify-write per
+   * click. An assertion about what the match DID has to observe it while it
+   * happens, which is what this is for.
+   */
+  readonly ordersSeen: ReadonlyMap<string, Contract>;
 }
 
 function summarizeStep(
@@ -169,13 +199,28 @@ function summarizeStep(
  * is trying to observe that drift.
  */
 export function runScript(script: PlaytestScript): PlaytestResult {
-  let state = initialState({ eventId: script.eventId, teamIds: script.teams }, script.config);
+  let state = initialState(
+    {
+      eventId: script.eventId,
+      teamIds: script.teams,
+      ...(script.matchSecret ? { matchSecret: script.matchSecret } : {}),
+    },
+    script.config,
+  );
   const timeline: PlaytestTimelineEntry[] = [];
   const violations: PlaytestViolation[] = [];
+  // [Issue #659] Resolved and lapsed Orders are pruned from the persisted row,
+  // so the final state is not a history. Record each Order in its LATEST seen
+  // form as the run goes, which is what an assertion about the match needs.
+  const ordersSeen = new Map<string, Contract>();
+  const remember = () => {
+    for (const c of state.contracts) ordersSeen.set(c.id, c);
+  };
 
   script.steps.forEach((step, stepIndex) => {
     if (isTickStep(step)) {
       state = tick(state, step.atMs);
+      remember();
       timeline.push(summarizeStep(state, stepIndex, step.atMs, "tick"));
       return;
     }
@@ -195,6 +240,7 @@ export function runScript(script: PlaytestScript): PlaytestResult {
     }
     if (verdict.ok) {
       state = applyOp(state, step.teamId, step.op);
+      remember();
     }
     timeline.push(
       summarizeStep(state, stepIndex, step.atMs, "op", {
@@ -206,7 +252,7 @@ export function runScript(script: PlaytestScript): PlaytestResult {
     );
   });
 
-  return { finalState: state, timeline, violations };
+  return { finalState: state, timeline, violations, ordersSeen };
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +282,202 @@ export function buildRotateOp(): CryptoBattleOp {
 export function buildProveOp(vault: VaultProjection, contractId: string): CryptoBattleOp {
   const proof = createProof(BigInt(vault.secret), vault.generation, vault.teamId, contractId);
   return { kind: "prove", contractId, proof };
+}
+
+/**
+ * [Issue #645 Phase 2] Build an FHE op from an Order's own projection.
+ *
+ * Every input comes from `ContractProjection.task` — the ciphertexts the Order
+ * published — and the operation is `fhe.ts`'s `addCiphertexts`, the same
+ * function a participant's script would call. Nothing here reads a plaintext or
+ * a key, and there is nowhere it could: the projection does not carry them.
+ * That is the property this builder exists to demonstrate, the same way
+ * `buildHuntOp` demonstrates that a HUNT is derivable from public material.
+ */
+export function buildFheOp(
+  contract: ContractProjection,
+  prime: string,
+): CryptoBattleOp | undefined {
+  if (contract.task.kind !== "homomorphic-sum") return undefined;
+  const p = BigInt(prime);
+  const inputs = contract.task.inputs.map((c) => ({ r: BigInt(c.r), y: BigInt(c.y) }));
+  const first = inputs[0];
+  if (!first) return undefined;
+  const sum = inputs.slice(1).reduce((acc, c) => addCiphertexts(acc, c, p), first);
+  return {
+    kind: "fhe",
+    contractId: contract.id,
+    ciphertext: { r: sum.r.toString(), y: sum.y.toString() },
+  };
+}
+
+/**
+ * [Issue #645 Phase 3] Build an MPC op from an Order's own projection.
+ *
+ * The team's confidential number and its masks arrive on the projection because
+ * the Order belongs to this team; the arithmetic is `mpc.ts`'s `computePartial`,
+ * again the same function a participant would write. The submitted value is the
+ * masked partial — never the input, which is the whole point.
+ */
+export function buildMpcOp(
+  contract: ContractProjection,
+  prime: string,
+): CryptoBattleOp | undefined {
+  if (contract.task.kind !== "masked-total") return undefined;
+  const p = BigInt(prime);
+  const partial = computePartial(
+    {
+      myInput: BigInt(contract.task.myInput),
+      incomingMasks: contract.task.incomingMasks.map((m) => BigInt(m)),
+      outgoingMasks: contract.task.outgoingMasks.map((m) => BigInt(m)),
+    },
+    p,
+  );
+  return { kind: "mpc", contractId: contract.id, partial: partial.toString() };
+}
+
+/**
+ * [Issue #659] Build a CIPHER op from a ladder Order's own projection.
+ *
+ * The team's key arrives on the projection because the Order belongs to this
+ * team, and the arithmetic is `ladder.ts`'s `encryptWithRung` -- the same
+ * function a participant reproduces by hand. Written here rather than inline in
+ * each test for the reason the other `build*Op` helpers exist: a test that
+ * re-derives the cipher is asserting its own copy of the rule, not the rule.
+ */
+export function buildCipherOp(contract: ContractProjection): CryptoBattleOp | undefined {
+  if (contract.task.kind !== "caesar-shift") return undefined;
+  const { rung, plaintext, myKey } = contract.task;
+  return {
+    kind: "cipher",
+    contractId: contract.id,
+    // Submitted as the pictures a participant would type. `parseAnswer` takes
+    // either those or the values; sending the faces exercises the path a human
+    // actually uses.
+    answer: [...toSymbols(encryptWithRung(plaintext, myKey, rung), rung)],
+  };
+}
+
+/**
+ * [Issue #659] Answer an Order by whichever method it actually admits.
+ *
+ * Shared because two test files had grown their own copy, and when the ladder
+ * added a fourth task kind BOTH copies silently fell through to `buildMpcOp`,
+ * which returns `undefined` for a task it cannot serve. Nothing failed: the
+ * callers skipped every ladder Order, and two tests whose whole premise is "a
+ * team that clears everything" quietly stopped clearing about a fifth of the
+ * belt.
+ *
+ * So the switch is exhaustive on purpose. A fifth task kind is a compile error
+ * here rather than a silent gap in whatever those tests were measuring.
+ */
+export function buildClearingOp(
+  contract: ContractProjection,
+  vault: CryptoBattleProjection["vault"],
+  prime: string,
+): CryptoBattleOp | undefined {
+  switch (contract.task.kind) {
+    case "reveal-share":
+      // A share Order may forbid raw disclosure, in which case PROVE is the
+      // only way to clear it. Ask the Order rather than assuming LEAK.
+      return contract.allowedMethods.includes("leak")
+        ? buildLeakOp(contract.id)
+        : buildProveOp(vault, contract.id);
+    case "caesar-shift":
+      return buildCipherOp(contract);
+    case "homomorphic-sum":
+      return buildFheOp(contract, prime);
+    case "masked-total":
+      return buildMpcOp(contract, prime);
+    default: {
+      const exhaustive: never = contract.task;
+      throw new Error(`buildClearingOp: unknown task ${JSON.stringify(exhaustive)}`);
+    }
+  }
+}
+
+/**
+ * [Issue #645 Phase 5] Recover a Schnorr witness from two transcripts that
+ * share a commitment, and build the HUNT that spends it.
+ *
+ * Reads the PUBLIC LEDGER only — the same material any participant can see —
+ * which is the property that makes this a legitimate attack rather than a
+ * privileged shortcut, exactly as `buildHuntOp` does for the Shamir route.
+ *
+ * Two proofs from one team in one generation with the same commitment R mean
+ * one nonce k answered two different challenges:
+ *
+ * ```text
+ * z1 = k + e1*w    z2 = k + e2*w        (mod q)
+ * z1 - z2 = (e1 - e2) * w
+ * w = (z1 - z2) * (e1 - e2)^-1          (mod q)
+ * ```
+ *
+ * Returns `undefined` when the target never reused a commitment — which is the
+ * normal case, because `schnorr-prover.ts` binds the nonce to the contract id.
+ * This attack exists for the team that rolled their own prover and got that
+ * wrong.
+ */
+export function buildNonceReuseHuntOp(
+  projection: CryptoBattleProjection,
+  targetTeamId: string,
+): CryptoBattleOp | undefined {
+  const target = projection.teams[targetTeamId];
+  const publicY = projection.publicCommitments[targetTeamId];
+  if (!target || publicY === undefined) return undefined;
+
+  const byCommitment = new Map<string, ProofArtifact[]>();
+  for (const artifact of projection.publicLedger) {
+    if (artifact.kind !== "proof") continue;
+    if (artifact.teamId !== targetTeamId || artifact.generation !== target.generation) continue;
+    const bucket = byCommitment.get(artifact.commitment) ?? [];
+    bucket.push(artifact);
+    byCommitment.set(artifact.commitment, bucket);
+  }
+
+  const group = RFC3526_GROUP14;
+  for (const [commitment, artifacts] of byCommitment) {
+    const [first, second] = artifacts;
+    if (!first || !second) continue;
+
+    const e1 = computeChallenge(
+      {
+        teamId: targetTeamId,
+        contractId: first.contractId,
+        generation: first.generation,
+        commitmentR: BigInt(commitment),
+        publicY: BigInt(publicY),
+      },
+      group,
+    );
+    const e2 = computeChallenge(
+      {
+        teamId: targetTeamId,
+        contractId: second.contractId,
+        generation: second.generation,
+        commitmentR: BigInt(commitment),
+        publicY: BigInt(publicY),
+      },
+      group,
+    );
+    const challengeGap = mod(e1 - e2, group.order);
+    if (challengeGap === 0n) continue;
+    const witness = mod(
+      mod(BigInt(first.response) - BigInt(second.response), group.order) * inv(challengeGap, group.order),
+      group.order,
+    );
+    // Only offer the op if the recovered value really is the witness. A
+    // participant would check this before spending their attempt, and so does
+    // the trusted side.
+    if (groupPow(group.generator, witness, group) !== BigInt(publicY)) continue;
+    return {
+      kind: "hunt-nonce",
+      targetTeamId,
+      generation: target.generation,
+      recoveredWitness: witness.toString(),
+    };
+  }
+  return undefined;
 }
 
 /** Public game-rule constants a HUNT needs but `CryptoBattleProjection` deliberately omits -- see `buildHuntOp`'s doc comment. */

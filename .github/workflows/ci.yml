@@ -33,3 +33,23 @@ jobs:
 
       - name: Validate catalog metadata and cross-references
         run: make agent-gate
+
+      - name: Install ac26 crypto battle test dependencies
+        working-directory: battles/ac26-crypto-battle/game
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Test and typecheck ac26 crypto battle
+        working-directory: battles/ac26-crypto-battle/game
+        run: bun test && bun run typecheck
+
+      # Issue #644: the local development harness. Its own package, so its own
+      # install. Without these steps the harness would rot silently the first
+      # time the reducer's or the portal's shapes moved -- which is exactly the
+      # failure mode #643 found in the problem-local tests before PR #648.
+      - name: Install ac26 crypto battle dev harness dependencies
+        working-directory: battles/ac26-crypto-battle/dev
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Test and typecheck ac26 crypto battle dev harness
+        working-directory: battles/ac26-crypto-battle/dev
+        run: bun test && bun run typecheck

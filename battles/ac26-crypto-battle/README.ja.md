@@ -1,149 +1,162 @@
-# PROVE / LEAK / HUNT — 暗号リアルタイム判断 Battle
+# PROVE / LEAK / HUNT — 暗号バトル
 
-> English: [README.md](./README.md)
+## 何が起きているか
 
-| 項目           | 値                             |
-| -------------- | ------------------------------ |
-| カテゴリ       | Battle (リアルタイム PvP)      |
-| 難易度         | 4 / 5 (上級)                    |
-| 想定時間       | 120 分                          |
-| status         | `draft`                        |
+あなたのチームは秘密を 1 つ持っています。5 個の破片に分けてあり、**3 個そろうと復元できます。2 個までなら何も分かりません。**
 
-あなたのチームは `secret` を持ち、**Shamir (t, n) しきい値秘密分散**で
-`shareCount` 個の share に分割して保持しています。試合中、自チーム宛に
-Contract が届き続けます。share を公開する・相手の隙を突く・自分の secret を
-更新する — そのどれもが実際の暗号計算であり、シミュレーションではありません。
-暗号の正しさは運にしない — 実際に成立した計算だけが得点になります。
+仕事 (ORDER) は 5 分ごとに 6 件届き、答えないと減点されます。答え方は 2 つ ── **破片を 1 つ渡して即答する**か、**計算して破片を守る**か。破片を 3 個渡した相手は、秘密を復元されます。
 
-## コアループ
+これが賭けの全部です。
 
-- **LEAK** — Contract が要求する share を公開して即座に得点する。公開した値は
-  **Public Ledger** に永久に残り、全チームから見えるようになります。LEAK
-  自体は減点されません — 漏洩のコストは「今」ではなく、「誰かがあなたの
-  share をしきい値分集めて secret を復元したとき」に、後から発生します。
-- **HUNT** — Public Ledger から相手チームの share を `threshold` 分集め、
-  **Lagrange 補間**で secret を復元し、その値を提出する。実際の secret と
-  一致すれば得点し、相手は減点されます。一致しなければ (share が足りない、
-  当て推量、あるいは異なる世代の share を混ぜてしまった、など) 何も起こり
-  ません。もっともらしい推測に部分点はありません。
-- **ROTATE** — 自チームの secret を新しい世代に更新する。この時点より前に
-  leak した share は、現行 secret の復元には無価値になります — 新しい世代は
-  独立に導出された全く別の多項式なので、旧世代と新世代の share を混ぜても
-  何も復元できません。ROTATE にはクールダウンがあり、防御として連発する
-  ことはできません。
-- **PROVE** — secret を一切明かさずに、その知識を持っているという証明
-  (非対話型 Schnorr proof) だけで得点する手段。同じ Contract を LEAK で
-  完了した場合と全く同じ得点になります。LEAK と違い secret を復元できる
-  material は一切公開されません — ただし証明そのもの (proof transcript) は
-  監査のために Public Ledger に記録され、誰でも検証を再実行できます。
+## 道具
 
-## 3 つのレーン
+| | やること | 代償 |
+| --- | --- | --- |
+| **LEAK** | 破片を 1 つ渡して即答 | 速い。ただし渡した破片は消えない |
+| **PROVE** | 計算して、破片を渡さずに答える | 破片は安全。ただし計算が要る |
+| **HUNT** | 相手の破片が 3 個そろったら点を奪う | — |
+| **ROTATE** | 破片を作り直す。公開済みが無効になる | — |
+| **HINT** | いま選んでいる ORDER の解き方を 1 段ぶん開く | 得点が減る。解けなくても戻らない |
 
-- **Contract Queue** — 今まさに自チーム宛に届いている LEAK 依頼の一覧。
-  どの share index を要求しているか、得点、期限が示されます。期限内に
-  応じないと失効します。
-- **My Vault** — 自チームの現行 secret、この世代の全 share、スコア、
-  ROTATE クールダウンの残り時間。他チームには一切見えません。
-- **Public Ledger** — 全チームがこれまでに LEAK した share と、PROVE した
-  proof transcript の全公開履歴。HUNT はここから始まります — 相手チームが
-  現行世代のしきい値を超えて share を晒していないか監視してください。
-  PROVE のエントリには、secret の復元に使える情報は一切含まれません。
+得点の順序は **何もしない < LEAK して狩られる < LEAK 無事 < PROVE**。ORDER カードには「計算したときの点」と「パスしたときの点」が並ぶので、出す前に見比べられます。
 
-## PROVE の実際の手順
+## これは実際に動いているものです
 
-PROVE は LEAK の代替となる雰囲気だけの手段ではなく、実際の暗号プロトコル
-です — `ac26-w3-schnorr` で学ぶのと同じ、非対話型 **Schnorr 知識証明**
-です。ある Contract を PROVE で完了するには、次の 3 ステップを踏みます。
+| ORDER | 技術 | 動いている場所 |
+| --- | --- | --- |
+| 暗号文のまま足す | **準同型暗号** | 秘匿スマートコントラクト、中身を伏せた投票 |
+| 覆面つき小計 | **秘密計算 (MPC)** | MPC ウォレット、しきい値署名 |
+| PROVE | **ゼロ知識証明** | zkRollup、プライバシー送金 |
 
-1. **witness を導出する。** 自チームの実際の `secret` をそのまま指数として
-   使うことはありません — 空間が小さすぎて安全ではないためです
-   (理由は `game/src/schnorr-witness.ts` のコメントを参照)。代わりに
-   secret とチーム id、現行世代をハッシュして、2048-bit 群 (RFC 3526
-   Group 14) 上の witness `w` を導出します。
-2. **proof を組み立てる。** `w` から、完了しようとしている特定の Contract
-   に紐づいた Schnorr commitment / response のペアを構築します —
-   `game/src/schnorr-prover.ts` の `createProof(secret, generation, teamId,
-   contractId)` がこれを決定的に (ランダム性を一切使わずに) 行います。
-3. **提出する。** 自チーム宛の open な Contract に対して有効な proof を
-   提出すると、その Contract を LEAK で完了した場合と全く同じ得点が入り
-   ます。proof transcript は Public Ledger に記録され誰でも独立に再検証
-   できますが、transcript 単体からは secret や share を復元するための
-   情報は一切得られません。
+3 つとも、遊び終えたときには自分の手で動かしたことになります。シーザー暗号も出てきますが、それは入口です ── **破れる暗号を先に体験しておくと、破れない暗号のありがたみが分かります。**
 
-proof は特定の Contract id に紐づいているため、別の Contract への
-使い回しはできません。また witness は ROTATE のたびに変わるため、
-ROTATE 前に作った proof は ROTATE 後には検証を通りません。
+## ゲームの目的
 
-## スコアリング、一言で
+各チームの secret は5枚の share に分かれ、同じ世代の異なる3枚がそろうと復元できます。
 
-LEAK と PROVE は同じ Contract を完了した場合、全く同じ得点になります —
-PROVE だからといって難しい分だけ多く得点することはありません。HUNT は
-検証済みの正しい復元でのみ得点、ROTATE はクールダウンというコストを払う
-代わりに、それ以前に漏洩した全 share を遡って無価値にします。「LEAK で
-今すぐ稼ぐ」「PROVE で安全に稼ぐ」「ROTATE で安全を確保する」の間の
-テンポを読みながら Public Ledger で相手の隙を監視し続けたチームが
-勝ちます。
+- 相手が3種類を公開したら、計算して **HUNT** を狙う。
+- 自分の公開が危なくなったら **ROTATE** して新しい世代へ移る。
+- 得点しながら、自分の現行世代を復元されないようにする。
 
-## 学習目的
+同じ index を何度公開しても1種類です。異なる世代の share は混ぜられません。
 
-- Shamir (t, n) しきい値秘密分散と Lagrange 補間を、攻撃 (HUNT) と防御
-  (ROTATE) の両面から実際に使う。
-- share を公開 (LEAK) するコストが即時ではなく将来の HUNT リスクとして
-  発生することを理解する。
-- しきい値未満の share が秘密について何も語らないことを実行可能な形で
-  確認する。
-- secret rotation が過去に漏洩した share を無効化する仕組みを体験する。
-- 非対話型 Schnorr 知識証明 (PROVE) を実際に構築・検証し、それが特定の
-  Contract と特定の secret generation に Fiat–Shamir で紐づけられている
-  理由を体感する。
+## ORDER は5分ごとにまとめて届く
 
-## Portal の使い方
+ORDER は5分ごとに**6枚まとめて**届き、5分で失効します。**取り置きはできません** —
+次の5分ぶんを先に取ることも、前の5分ぶんを残しておくこともできません。
 
-デプロイ後、Participant Portal では 3 つの panel からこの Battle を操作します。
+さばききれない枚数が届くように作ってあります。全部計算できるチームはまずいないので、
+どれを計算し、どれをパスし、余った時間を HUNT に回すかが勝負どころです。
 
-- **Status** — スコア / 残り時間 / フェーズのヘッダに続けて、上記の 3 レーン
-  (Contract Queue / My Vault / Public Ledger) を 30 秒ごとに更新表示します。
-  Public Ledger に表示されるのは生データのみです — LEAK なら teamId / 世代 /
-  share index / 値、PROVE なら commitment / response の transcript — 「今
-  復元可能」といった判定結果を計算して見せることはありません。判断は
-  あなた自身が行います。
-- **Submit a move** — 操作ごとに 1 つずつ form があります。
-  - **LEAK** は自チームの open な contract を一覧から選ぶだけです。
-  - **PROVE** には `{ commitment, response }` の proof、**HUNT** には
-    復元した secret が必要です。どちらも **form を開く前にローカルで
-    作成してください** — `game/src/schnorr-prover.ts` の `createProof` と
-    `game/src/shamir.ts` の `reconstruct` がその計算の参照実装です
-    (PROVE の手順は上記「PROVE の実際の手順」を参照)。この portal が
-    代わりに計算することはありません — そのローカル計算自体が各操作の
-    本来のコストであり、UI が省略してよい作業ではありません。
-  - **ROTATE** は実行前に確認を求めます。実行すると自チーム宛の open な
-    contract がすべて無効化されるためです。
-  - 却下された送信には理由が表示されます (例: 「contract は既に
-    completed」「proof が検証に失敗」)。これは基盤側の一時的な不調とは
-    別物で、その場合は代わりに再試行を促す一般的なメッセージが表示されます。
-- **Help** — 上記のルールを 1 画面に凝縮した、試合中にすぐ参照できる
-  早見表です。
+## ORDER の種類
 
-## 試合後: replay と debrief
+| カードの依頼 | 画面で行うこと |
+| --- | --- |
+| share を出す | LEAK または PROVE |
+| 自分の鍵で暗号にする | 記号を鍵の数だけ後ろへずらして提出 (CIPHER)、または LEAK |
+| 暗号文のまま足す | 2つの組を成分ごとに足し、p で割った余りを提出 |
+| 覆面つき小計 | 自分の数 + 受信マスク - 送信マスクを p で割った余りを提出 |
 
-試合は時間切れで終わっても、そこで記録が終わるわけではありません。あなたの
-チームが行った LEAK・PROVE・HUNT 成功・ROTATE はすべて、実際の時刻付きで
-時系列に残ります — debrief の時間にファシリテーターがこの記録を辿りながら、
-「このどの LEAK が最終的に threshold を超えて secret を復元可能にしたか」
-「ROTATE によって実際に何枚の leak 済み share が無効化されたか」を具体的に
-指し示すことができます。この replay は試合中に実際に起きたことだけから
-構築されます — 起きていないことを見せることはなく、あなたのチームが自ら
-leak していない secret や share を明かすこともありません。これは debrief
-専用のツールであり、試合中に Portal 上で見えるものではありません。事後に
-生成されるものです。
+カードには期限、得点、依頼内容、使える方法が表示されます。カードにない方法は、その仕事または公開条件を満たしません。
+
+## 操作
+
+| 操作 | 意味 |
+| --- | --- |
+| LEAK | ORDER の答えをシステムに出させて完了。何が公開されるかは ORDER による |
+| PROVE | Schnorr 証明で share を公開せずに完了 |
+| CIPHER | 記号列を自分の鍵で暗号化して提出。何も公開されない |
+| FHE | 暗号文を復号せずに加算 |
+| MPC | 各拠点の値を隠したまま合計用の小計を提出 |
+| HUNT | 公開情報から復元した secret、再利用 nonce の鍵、または暗号鍵を提出 |
+| ROTATE | secret と share を新しい世代へ更新 |
+| HINT | 選んでいる ORDER のヒントを次の 1 段まで開く。何も公開されない |
+
+## 詰まったら — HINT
+
+どの ORDER にも**ヒントが 3 段**あります。1 段目は「どこを見るか」、2 段目は
+「使う式」、3 段目は「最初の 1 手」。3 段目まで開いても計算はあなたがやります。
+
+開くたびに得点が減り、値段は段が上がるほど高くなります (**-2 / -4 / -8**)。ボタンに
+値段が書いてあるので、押す前に見比べられます。
+
+**全部開いてから計算しても、パスするより点は残ります。** ただし減点は ORDER を
+解けなくても戻りません。捨てるつもりの ORDER にヒントを買うのがいちばん損です。
+
+ヒントは公開記録に載りません。買ったことは相手に分かりません。
+
+## 暗号の梯子
+
+「自分の鍵で暗号にする」ORDER には**段**があります。段ごとに違うのは 1 つ、
+**何組公開すると鍵が割れるか**です。
+
+| 段 | 鍵が割れる公開数 | 割り方 |
+| --- | --- | --- |
+| シーザー | 1 組 | 暗号文 − 平文。引き算 1 回 |
+
+方式は ORDER に書いてあります。隠していません。**秘密は鍵だけ**で、これは実際の
+暗号の大原則そのものです。全チームが方式を知っていても、鍵を漏らさないチームは
+狩られません。
+
+LEAK すると平文と暗号文が**対で**公開されます。シーザーの段では、その 1 組が
+そのまま鍵です。公開記録には「いま何組出ているか / 何組で割れるか」が並ぶので、
+相手が既に割れているかどうかは見れば分かります。
+
+ROTATE すると鍵も新しい世代のものになり、それまでに公開した対は役に立たなくなります。
+
+PROVE と HUNT の式、定数、実行可能な Python は Portal の完全なルール内にあります。PROVE は `ac26-w3-schnorr`、share からの HUNT は `ac26-w2-secret-sharing` と同じ計算です。
+
+## 画面の読み順
+
+1. **Order Belt** — いま選べる依頼
+2. **MAKE A MOVE** — 選んだ依頼への操作
+3. **My Vault** — 自分の世代と share
+4. **Public Ledger** — 全員が公開した記録
+5. **公開記録からできる次の作戦** — 材料が出たときだけ開く
+6. **練習とヘルプ** — 必要なときだけ開く
+
+HUNT、nonce 再利用 HUNT、ROTATE は、関連する公開材料がない開始直後には表示しません。
+
+## データ境界
+
+- match secret と完全な match state は TenkaCloud の trusted 側だけに置く。
+- ブラウザは必ず `projectForTeam` の結果だけを受け取る。
+- 自チームの vault と ORDER は自チームだけに見せる。
+- 相手の未公開 share、secret、match secret は投影しない。
+- Public Ledger に出すのは、参加者が公開を選んだ artifact だけ。
+
+本番の隠し値はサーバー専用 `matchSecret` から導出します。`eventId` は公開情報なので使いません。ローカルだけは `local-play-not-secret:<eventId>` という明示的な非secret fallbackを使います。
+
+## ローカルUI確認
+
+```bash
+cd battles/ac26-crypto-battle/dev
+bun install --frozen-lockfile
+bun test
+bun run typecheck
+bun run dev                 # http://localhost:5644
+```
+
+このハーネスは実 reducer と実 Portal component を使いますが、認証と永続化は fake です。UI確認には使えますが、tenant isolation や実AWS E2Eの証拠にはなりません。
+
+ゲーム本体:
+
+```bash
+cd ../game
+bun install --frozen-lockfile
+bun test
+bun run typecheck
+```
+
+## 完了条件
+
+リリースゲートは game / dev のテスト・型検査と、実 Portal component を使うブラウザハーネスです。ハーネスでは participant-visible input だけで初手・操作・結果を確認します。実AWSでの通し操作と独立した第三者の試遊は、開催前の任意リハーサルであり、未実施でも開発・mergeを止めません。
 
 ## 関連ファイル
 
-- [`metadata.json`](./metadata.json) — 問題メタデータ (UI / scoring engine の
-  正本)
-- [`template.yaml`](./template.yaml) — 競技者アカウントにデプロイされる
-  1 ページ CFn テンプレート (参加者アクセスの baseline のみ — なぜ試合状態が
-  チームごとの AWS インフラではないかは `OPERATOR.md` を参照)
-- [`game/`](./game/) — この Battle が動く pure game model (state / reducer /
-  Shamir 実装)
-- [`OPERATOR.md`](./OPERATOR.md) — 運営向けアーキテクチャと実装ロードマップ
+- `game/src/reducer.ts` — ルール、判定、team projection
+- `game/src/types.ts` — state / op / projection
+- `coordination/crypto-battle.ts` — platform adapter
+- `portal/` — 参加者UI
+- `dev/` — ローカルUIハーネス
+- `OPERATOR.md` — 現在の運用境界と検証手順
