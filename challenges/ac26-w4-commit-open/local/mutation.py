@@ -104,6 +104,84 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
             )
         ],
     ),
+    # The lenient checkpoint: the four schemes are fixed in the fixtures, so what can go
+    # wrong is the answer -- declining everywhere, forging where the scheme is sound, or
+    # a forgery built on the wrong tree.
+    (
+        "returns None for every lenient scheme",
+        [('FORGEABLE_SCHEMES = ("A", "B", "E")', "FORGEABLE_SCHEMES = ()")],
+    ),
+    (
+        "claims a forgery against scheme C, whose leaf binds its index",
+        [('FORGEABLE_SCHEMES = ("A", "B", "E")', 'FORGEABLE_SCHEMES = ("A", "B", "C", "E")')],
+    ),
+    (
+        "claims a forgery against scheme D, whose verifier derives the sides from the index",
+        [('FORGEABLE_SCHEMES = ("A", "B", "E")', 'FORGEABLE_SCHEMES = ("A", "B", "D", "E")')],
+    ),
+    (
+        "declines scheme E, whose untagged node can be presented as a leaf",
+        [('FORGEABLE_SCHEMES = ("A", "B", "E")', 'FORGEABLE_SCHEMES = ("A", "B")')],
+    ),
+    (
+        "relabels a leaf for scheme E instead of presenting a node",
+        [('    if scheme == "E":\n        return _node_as_leaf(values, length)\n', "")],
+    ),
+    (
+        "presents the node with the full-length path under it",
+        [('                    "path": _scheme_open_at("E", values, 2 * pair)[1:],', '                    "path": _scheme_open_at("E", values, 2 * pair),')],
+    ),
+    (
+        "hashes the node-as-leaf value with the tagged node function",
+        [("        value = int.from_bytes(left + right, \"big\")", "        value = int.from_bytes(node_hash(left, right) + bytes(32), \"big\")")],
+    ),
+    (
+        "returns the honest opening as the forgery",
+        [
+            (
+                "            claims = ((index, value) for index in range(length) if index != position)",
+                "            claims = ((position, value),)",
+            )
+        ],
+    ),
+    (
+        "builds the forged path with the honest leaf instead of the scheme's",
+        [
+            (
+                "    level = [_scheme_leaf(scheme, position, value) for position, value in enumerate(values)]",
+                "    level = [leaf_hash(position, value) for position, value in enumerate(values)]",
+            )
+        ],
+    ),
+    (
+        "flips the side of every sibling in the forged path",
+        [
+            (
+                '        path.append({"hash": level[sibling], "sibling_is_left": sibling < position})\n'
+                "        position //= 2\n"
+                "    return path\n"
+                "\n"
+                "\n"
+                "def _node_as_leaf",
+                '        path.append({"hash": level[sibling], "sibling_is_left": sibling > position})\n'
+                "        position //= 2\n"
+                "    return path\n"
+                "\n"
+                "\n"
+                "def _node_as_leaf",
+            )
+        ],
+    ),
+    (
+        "accepts a split with a leading zero for scheme B",
+        [
+            (
+                "        if str(other_index) != head or str(other_value) != tail:\n"
+                "            continue  # a leading zero: this split does not render back to the same text\n",
+                "",
+            )
+        ],
+    ),
 )
 
 
@@ -115,7 +193,58 @@ def _load(source: str):
     return module
 
 
+def _fixture_checks() -> list[str]:
+    """The five lenient verifiers themselves, before any mutant is judged by them.
+
+    Every scheme accepts every honest opening of its own tree; the reference forges
+    exactly the schemes `FORGEABLE_SCHEMES` names; and the relabelling that gets
+    through A and B is rejected by C, D and E, whichever position it is moved to. A
+    flipped side flag is rejected by A, B and C, and ignored by D and E, which do not
+    read it.
+    """
+    from fixtures import generate as fixtures  # noqa: PLC0415 - imported late, after sys.path
+
+    reference = _load(REFERENCE)
+    problems: list[str] = []
+    for label in ("fixture-a", "fixture-b", "fixture-c", "fixture-d", "fixture-e"):
+        cfg = fixtures.lenient_setting(f"{SEED}:{label}", "h0")
+        values, length = list(cfg["values"]), cfg["length"]
+        roots = {scheme: fixtures.scheme_root(scheme, values) for scheme in fixtures.SCHEMES}
+        for scheme in fixtures.SCHEMES:
+            for index in range(length):
+                honest = fixtures.scheme_opening(scheme, values, index)
+                if not fixtures.lenient_verify(scheme, roots[scheme], index, values[index], honest, length):
+                    problems.append(f"scheme {scheme} rejects an honest opening ({label}, {index})")
+                flipped = [
+                    {"hash": step["hash"], "sibling_is_left": not step["sibling_is_left"]}
+                    for step in honest
+                ]
+                accepted = fixtures.lenient_verify(scheme, roots[scheme], index, values[index], flipped, length)
+                if accepted != (scheme in ("D", "E")):
+                    problems.append(f"scheme {scheme} {'accepts' if accepted else 'rejects'} flipped sides ({label}, {index})")
+            answer = reference.lenient_opening({"scheme": scheme, "length": length, "values": list(values)})
+            if (answer is None) == (scheme in fixtures.FORGEABLE_SCHEMES):
+                problems.append(f"the reference's answer for scheme {scheme} disagrees with FORGEABLE_SCHEMES ({label})")
+        for target in ("C", "D", "E"):
+            for position in range(length):
+                path = fixtures.scheme_opening(target, values, position)
+                for index in range(length):
+                    if index == position or values[index] == values[position]:
+                        continue
+                    if fixtures.lenient_verify(target, roots[target], index, values[position], path, length):
+                        problems.append(f"scheme {target} accepts a relabelled leaf ({label}, {position} as {index})")
+    return sorted(set(problems))
+
+
 def main() -> int:
+    fixture_problems = _fixture_checks()
+    if fixture_problems:
+        print("FAIL the lenient schemes do not behave as documented:")
+        for problem in fixture_problems[:20]:
+            print(f"  {problem}")
+        return 1
+    print("PASS the five lenient schemes accept every honest opening, and C, D and E reject relabelling")
+
     baseline = check_commit.run(_load(REFERENCE), SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")

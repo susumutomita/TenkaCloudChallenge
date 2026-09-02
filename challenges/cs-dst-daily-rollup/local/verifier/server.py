@@ -46,14 +46,14 @@ TIMEOUT_MESSAGES = {
 # here makes drift visible even though the two responsibilities are separate images.
 PORTAL_ENGLISH_CONTRACT = {
     "name": "Two days a year, the report is wrong",
-    "description": "Audit a daily report that disagrees with the ledger, total by the local calendar instead of by 86400-second blocks, then build the smallest input on which a fixed offset breaks an ordinary day.",
+    "description": "Audit a daily report that disagrees with the ledger, total by the local calendar instead of by 86400-second blocks, then build one event on which a fixed offset breaks an ordinary day.",
     "labels": {
         "environment": "environment - paste the Workbench pass phrase",
         "observe": "observe - name the report and what happened that day",
         "audit": "audit - list the days whose reported total cannot be right",
         "rollup": "rollup - total by the local calendar day, not by a fixed offset",
         "transition": "transition - keep the boundary correct on a 23- and a 25-hour day",
-        "counterexample": "counterexample - smallest input on which a fixed offset breaks an ordinary day",
+        "counterexample": "counterexample - one event on which a fixed offset breaks an ordinary day",
     },
 }
 

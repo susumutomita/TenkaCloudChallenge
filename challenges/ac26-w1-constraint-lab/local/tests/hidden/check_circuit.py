@@ -11,9 +11,10 @@ What they enforce beyond "the happy case works":
     submission's own `evaluate` understands
   - a boolean gadget rejects every non-{0,1} value in the field, not just 2
   - a membership gadget accepts exactly the allowed set, for sizes 1..5
-  - a range gadget admits 0 .. 2**bits - 1 with the submission's own witness and, for
-    values outside, admits nothing -- no assignment of its auxiliary signals satisfies
-    it (checked by an exact search, not by trusting the witness function)
+  - a range gadget admits 0 .. 2**bits - 1 with the submission's own witness, and the
+    set of values it admits under *any* assignment of its auxiliary signals -- computed
+    exactly by enumerating every solution of its constraints, never by sampling a few
+    values outside the range -- is that range and nothing more
 
 Failure messages name the property or the documented rule, never the expected value.
 """
@@ -33,7 +34,6 @@ from fixtures.generate import (  # noqa: E402
     hidden_honest_witness,
     hidden_shuffled_circuit,
     range_bits,
-    range_probe_values,
 )
 
 LABELS = ("h0", "h1", "h2")
@@ -46,10 +46,11 @@ KINDS = ("mul", "add", "const", "boolean", "member")
 RANGE_KINDS = ("boolean", "add", "mul", "const")
 #: Constraint budget of the range gadget, per bit (the statement's "5 x bits").
 RANGE_CONSTRAINTS_PER_BIT = 5
-#: Assignments the auxiliary-signal search may try for one probe value before it gives
-#: up. Decomposition gadgets need a few thousand at most; a gadget that leaves many
-#: signals free is reported against this budget rather than against a wall clock, so
-#: the verdict is deterministic.
+#: Assignments the auxiliary-signal search may try for one width -- the enumeration of
+#: every solution and, if that has to fall back, the value-by-value decisions together
+#: -- before it gives up. Decomposition gadgets need a few thousand at most (2**bits
+#: leaves); a gadget that leaves many signals free is reported against this budget
+#: rather than against a wall clock, so the verdict is deterministic.
 SEARCH_BUDGET = 200_000
 #: The signal the range gadget is asked to bind. Auxiliary names are the learner's.
 RANGE_SIGNAL = "amount"
@@ -370,56 +371,174 @@ def _candidates(constraint: dict, assignment: dict, unknown: str, p: int) -> lis
     return matching
 
 
-def has_assignment(constraints: list[dict], fixed: dict[str, int], p: int, budget: int = SEARCH_BUDGET) -> bool:
-    """Whether some assignment of the unfixed signals satisfies every constraint.
+class _Undetermined(Exception):
+    """Every remaining constraint has two or more unassigned signals, so no value can be
+    read off in closed form; the admitted set has to be decided value by value."""
 
-    Exact backtracking search: at each step the constraint with the fewest unassigned
-    signals is chosen, its next signal is tried over the candidates that constraint
-    allows, and every constraint that becomes fully assigned is checked at once.
-    Raises SearchBudgetExceeded instead of running past `budget` assignments.
+
+class _SignalSearch:
+    """Exact backtracking over a gadget's signals, driven by its single-unknown constraints.
+
+    At each step the constraint with the fewest unassigned signals is chosen (ties go to
+    list order). When it has exactly one, the values to try come from `_candidates`:
+    {0, 1} for a boolean, one value for a const or a single-occurrence add / mul, every
+    field element for a mul whose known factor is zero. A decomposition gadget therefore
+    branches only at its digits and propagates everything else. Every constraint is
+    checked the moment its last signal is assigned, so a leaf is a genuine solution.
+
+    One instance serves one width: the assignments it tries -- across `admitted_values`
+    and every `has_assignment` call -- are counted against a single budget, and
+    `SearchBudgetExceeded` is raised instead of running past it. A gadget that leaves
+    many signals free is reported against that budget rather than against a wall clock,
+    so the verdict is deterministic.
     """
-    names = [constraint_signals(c) for c in constraints]
-    assignment = dict(fixed)
-    tried = 0
 
-    def fully_assigned_ok(target: str | None) -> bool:
-        for index, signals in enumerate(names):
-            if target is not None and target not in signals:
-                continue
-            if all(name in assignment for name in signals):
-                if reference_evaluate(constraints[index], assignment, p) != 0:
-                    return False
+    def __init__(self, constraints: list[dict], p: int, budget: int) -> None:
+        self.constraints = constraints
+        self.p = p
+        self.budget = budget
+        self.tried = 0
+        self.signals = [list(dict.fromkeys(constraint_signals(c))) for c in constraints]
+        self.by_signal: dict[str, list[int]] = {}
+        for index, names in enumerate(self.signals):
+            for name in names:
+                self.by_signal.setdefault(name, []).append(index)
+        self.assignment: dict[str, int] = {}
+        self.unknown = [len(names) for names in self.signals]
+
+    def _reset(self, fixed: dict[str, int]) -> bool:
+        """Start over from `fixed`; False when `fixed` alone already breaks a constraint."""
+        self.assignment = {}
+        self.unknown = [len(names) for names in self.signals]
+        for name, value in fixed.items():
+            self._assign(name, value % self.p)
+        return all(self._holds(name) for name in fixed)
+
+    def _assign(self, name: str, value: int) -> None:
+        self.assignment[name] = value
+        for index in self.by_signal.get(name, ()):
+            self.unknown[index] -= 1
+
+    def _unassign(self, name: str) -> None:
+        del self.assignment[name]
+        for index in self.by_signal.get(name, ()):
+            self.unknown[index] += 1
+
+    def _holds(self, name: str) -> bool:
+        """Every constraint on `name` whose signals are all assigned has residual zero."""
+        for index in self.by_signal.get(name, ()):
+            if self.unknown[index] == 0 and reference_evaluate(self.constraints[index], self.assignment, self.p) != 0:
+                return False
         return True
 
-    def search() -> bool:
-        nonlocal tried
+    def _pick(self) -> int | None:
+        """The constraint with the fewest -- but some -- unassigned signals, or None."""
         best: int | None = None
-        best_free: list[str] = []
-        for index, signals in enumerate(names):
-            free = [name for name in signals if name not in assignment]
-            if not free:
-                continue
-            if best is None or len(free) < len(best_free):
-                best, best_free = index, free
-            if len(free) == 1:
-                break
-        if best is None:
+        for index, count in enumerate(self.unknown):
+            if count and (best is None or count < self.unknown[best]):
+                best = index
+                if count == 1:
+                    break
+        return best
+
+    def _free(self, index: int) -> list[str]:
+        return [name for name in self.signals[index] if name not in self.assignment]
+
+    def _try(self, name: str, value: int) -> bool:
+        """Assign one value, counting it against the budget; False when it breaks something."""
+        self.tried += 1
+        if self.tried > self.budget:
+            raise SearchBudgetExceeded
+        self._assign(name, value)
+        return self._holds(name)
+
+    def has_assignment(self, fixed: dict[str, int]) -> bool:
+        """Whether some assignment of the unfixed signals satisfies every constraint.
+
+        A constraint with two or more unassigned signals is branched over every field
+        element of one of them, which is exact and bounded only by the budget.
+        """
+        return self._reset(fixed) and self._any()
+
+    def _any(self) -> bool:
+        index = self._pick()
+        if index is None:
             return True
-        target = best_free[0]
-        candidates = _candidates(constraints[best], assignment, target, p) if len(best_free) == 1 else range(p)
+        free = self._free(index)
+        target = free[0]
+        candidates = (
+            _candidates(self.constraints[index], self.assignment, target, self.p)
+            if len(free) == 1
+            else range(self.p)
+        )
         for value in candidates:
-            tried += 1
-            if tried > budget:
-                raise SearchBudgetExceeded
-            assignment[target] = value
-            if fully_assigned_ok(target) and search():
+            if self._try(target, value) and self._any():
                 return True
-            del assignment[target]
+            self._unassign(target)
         return False
 
-    if not fully_assigned_ok(None):
-        return False
-    return search()
+    def admitted_values(self, signal: str, expected: set[int]) -> set[int]:
+        """Every value `signal` takes in some solution, by enumerating all of them.
+
+        Stops as soon as a value outside `expected` turns up (the result then contains
+        it, and is otherwise partial). A signal no constraint mentions is free, so it
+        admits the whole field. Raises `_Undetermined` when a branch runs out of
+        single-unknown constraints before every signal is assigned.
+        """
+        self._reset({})
+        admitted: set[int] = set()
+        self._all(signal, expected, admitted)
+        return admitted
+
+    def _all(self, signal: str, expected: set[int], admitted: set[int]) -> bool:
+        """Collect into `admitted`; False means stop, an unexpected value was found."""
+        index = self._pick()
+        if index is None:
+            if signal not in self.assignment:
+                admitted.update(range(self.p))
+                return False
+            admitted.add(self.assignment[signal])
+            return self.assignment[signal] in expected
+        free = self._free(index)
+        if len(free) > 1:
+            raise _Undetermined
+        target = free[0]
+        for value in _candidates(self.constraints[index], self.assignment, target, self.p):
+            keep_going = True
+            if self._try(target, value):
+                keep_going = self._all(signal, expected, admitted)
+            self._unassign(target)
+            if not keep_going:
+                return False
+        return True
+
+
+def admitted_range_values(constraints: list[dict], bits: int, p: int, budget: int = SEARCH_BUDGET) -> set[int]:
+    """The set of values the gadget lets RANGE_SIGNAL take, exactly, or a set that
+    contains one value outside 0 .. 2**bits - 1 as soon as one is found.
+
+    First the set is read off the constraints themselves: every solution of the gadget
+    is enumerated by branching at the boolean-pinned signals and propagating the add /
+    mul / const constraints in closed form, and the signal's value at each leaf is
+    collected. That is the whole answer for a decomposition gadget (2**bits leaves).
+    When some branch leaves a signal that no single constraint pins, the same search
+    instead decides each value of the field on its own -- every value in 2**bits ..
+    p - 1 first, then the in-range ones -- with the signal fixed to it. Both paths
+    share one budget; `SearchBudgetExceeded` propagates when it runs out.
+    """
+    inside = set(range(2**bits))
+    search = _SignalSearch(constraints, p, budget)
+    try:
+        return search.admitted_values(RANGE_SIGNAL, inside)
+    except _Undetermined:
+        pass
+    admitted: set[int] = set()
+    for value in [*range(2**bits, p), *range(2**bits)]:
+        if search.has_assignment({RANGE_SIGNAL: value}):
+            admitted.add(value)
+            if value not in inside:
+                break
+    return admitted
 
 
 def check_range(gadgets_module, seed: str) -> list[str]:
@@ -428,8 +547,10 @@ def check_range(gadgets_module, seed: str) -> list[str]:
     (1) shape: only boolean / add / mul / const, at most 5 x bits constraints;
     (2) every value in 0 .. 2**bits - 1 satisfies the gadget with the witness the
         submission's own `range_witness` returns for it;
-    (3) values outside the range satisfy it under no assignment of the auxiliary
-        signals at all.
+    (3) the set of values the gadget admits under any assignment of its auxiliary
+        signals -- computed exactly, see `admitted_range_values` -- is 0 .. 2**bits - 1
+        and nothing else. Every field element outside the range is covered, never a
+        sample of them.
     """
     failures: list[str] = []
     for label in LABELS:
@@ -473,21 +594,25 @@ def check_range(gadgets_module, seed: str) -> list[str]:
         if not inside_ok:
             continue
 
-        for probe in range_probe_values(seed, label):
-            try:
-                admitted = has_assignment(constraints, {RANGE_SIGNAL: probe}, p)
-            except SearchBudgetExceeded:
-                failures.append(
-                    "the search over auxiliary signals exceeded its budget;"
-                    " use fewer free auxiliary signals"
-                )
-                break
-            except ConstraintError as error:
-                failures.append(f"range gadget: {error}")
-                break
-            if admitted:
-                failures.append("the range gadget admits a value outside 0 .. 2^bits - 1")
-                break
+        try:
+            admitted = admitted_range_values(constraints, bits, p)
+        except SearchBudgetExceeded:
+            failures.append(
+                "the search over auxiliary signals exceeded its budget;"
+                " use fewer free auxiliary signals"
+            )
+            continue
+        except ConstraintError as error:
+            failures.append(f"range gadget: {error}")
+            continue
+        inside = set(range(2**bits))
+        if admitted - inside:
+            failures.append("the range gadget admits a value outside 0 .. 2^bits - 1")
+        elif inside - admitted:
+            # Unreachable once (2) passed -- the witness is itself a solution for every
+            # in-range value and the enumeration is complete -- kept so a checker
+            # defect would surface as a failure rather than a silent pass.
+            failures.append("the range gadget does not admit every value inside 0 .. 2^bits - 1")
     return failures
 
 

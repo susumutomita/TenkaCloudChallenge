@@ -227,18 +227,6 @@ def range_bits(seed: str, label: str) -> int:
     return min(base + s[0] % 2, RANGE_MAX_BITS)
 
 
-def range_probe_values(seed: str, label: str) -> list[int]:
-    """Values outside 0 .. 2**bits - 1 that the gadget must reject.
-
-    The boundary itself, the field's largest element (the classic "-1"), the midpoint
-    between them, and one seed-picked value in between.
-    """
-    p = field_modulus(seed, label)
-    low = 2 ** range_bits(seed, label)
-    s = _stream(seed, f"probe:{label}")
-    return sorted({low, p - 1, (low + p - 1) // 2, _pick(s, 0, low, p - 1)})
-
-
 def health_token(seed: str) -> str:
     return hashlib.sha256(
         f"health:{seed}:{field_modulus(seed)}".encode()

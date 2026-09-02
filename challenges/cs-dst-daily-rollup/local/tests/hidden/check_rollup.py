@@ -6,15 +6,17 @@ timed: the checker builds its own expectation with the same calendar the contrac
 names, and every zone and date is derived from the verifier seed, so a submission
 cannot special-case the week it saw in the public tests.
 
-The transitions used are real ones from the system tz database. Only zones whose
-switch happens away from midnight are used, so a local midnight always exists — the
-lesson here is that a day can be 23 or 25 hours long, not that a wall-clock time can
-fail to exist at all.
+The transitions used are real ones from the system tz database. Every zone used has a
+local midnight on every day, unambiguous and existing, so a local day always runs from
+its own 00:00 to the next — the lesson here is that a day is not always 24 hours long,
+not that a wall-clock time can fail to exist at all. The rollup checkpoints use whole-hour
+switches away from midnight; the counterexample run adds a zone whose switch is thirty
+minutes and one whose switch sits on the day boundary itself.
 
 The last checkpoint is graded as a property, never against an expected value: the
 submission's `counterexample` is called with public parameters, and the one event it
 returns is totalled both the fixed-offset way and the calendar's way. It passes when
-some day that is not a switch day comes up short under the fixed offset.
+some day inside the range that is not a switch day comes up short under the fixed offset.
 """
 
 from __future__ import annotations
@@ -374,6 +376,19 @@ STATEMENT_CASES: tuple[tuple[str, date, date], ...] = (
     ("America/New_York", date(2026, 10, 31), date(2026, 11, 1)),
     ("America/New_York", date(2026, 3, 7), date(2026, 3, 8)),
 )
+#: Zones every counterexample run includes on top of the seed-sampled ``ZONES``. Both
+#: keep a local midnight on every day, so the statement's definition of a day holds.
+#:
+#: - Lord Howe Island moves its clocks by thirty minutes (02:00 local, like the others).
+#:   The window the fixed offset misfiles is then half an hour wide, so a construction
+#:   that hard-codes a whole-hour window (23:30 when the start's offset is the bigger
+#:   one, 00:30 when it is the smaller) stays inside the day it meant to leave in the
+#:   "smaller" direction: 00:30 read thirty minutes early is 00:00 of the same day. The
+#:   boundary seconds the statement names (23:59:59 / 00:00:00) cross for any width.
+#: - Nuuk switches at the day boundary itself (23:00 → 00:00 in spring, 24:00 → 23:00 in
+#:   autumn), so the switch and the boundary hour coincide. Its midnights still exist and
+#:   are unambiguous, unlike zones whose spring switch is 00:00 → 01:00.
+COUNTEREXAMPLE_EXTRA_ZONES: tuple[str, ...] = ("Australia/Lord_Howe", "America/Nuuk")
 #: The contract's own limit on a range, in days.
 MAX_RANGE_DAYS = 400
 
@@ -400,10 +415,14 @@ def _start_with_the_new_offset(zone: ZoneInfo, switch: date, rng: random.Random)
 def counterexample_cases(seed: str) -> list[tuple[str, date, date]]:
     """(zone, start_day, switch_day) triples: several zones, both directions of switch,
     and for each switch a start on the day itself, a start a few days earlier, and a
-    start months earlier that already carries the new offset."""
+    start months earlier that already carries the new offset.
+
+    The seed-sampled zones come first, then the two zones every run includes, so the
+    first failure a participant reads is about a whole-hour switch whenever one fails.
+    """
     cases = list(STATEMENT_CASES)
     rng = _rng(seed, "counterexample:cases")
-    for zone_name in rng.sample(ZONES, 3):
+    for zone_name in (*rng.sample(ZONES, 3), *COUNTEREXAMPLE_EXTRA_ZONES):
         zone = ZoneInfo(zone_name)
         for year in (2026, 2027):
             for switch in transitions(zone_name, year):
@@ -507,7 +526,13 @@ def _counterexample_failures(
     fixed = _rollup([parsed], zone, start, end, _midnight_offset(zone, start))
     short = [day for day, total in truth.items() if fixed[day] < total]
     if not short:
-        return [f"{where}: under the fixed-offset rollup no day comes up short"]
+        # The range's ends are the submission's own arguments and its own end_day, so
+        # naming them narrows nothing (§15); the rule that the short day must lie inside
+        # the range is stated next to the end_day rule in the statement.
+        return [
+            f"{where}: under the fixed-offset rollup no day inside the range "
+            f"{start.isoformat()}..{end.isoformat()} comes up short"
+        ]
     if all(_is_switch_day(zone, date.fromisoformat(day)) for day in short):
         return [
             f"{where}: the only day that comes up short under the fixed-offset rollup "

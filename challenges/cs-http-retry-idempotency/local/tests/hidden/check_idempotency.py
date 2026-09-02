@@ -1,132 +1,151 @@
 """Hidden property checks for the three code checkpoints.
 
 The `generalize` checkpoint drives concurrent first attempts through a deterministic
-interleave instead of trusting the operating system's thread scheduler. Before this
-existed, a plain check-then-insert (read the receipt, see nothing, insert) passed the
+interleave instead of trusting the operating system's scheduler. Before this existed,
+a plain check-then-insert (read the receipt, see nothing, insert) passed the
 eight-thread barrier test on every run: each attempt finished its read and insert in
 well under a millisecond, so the window rule 9 of the statement warns about was never
-actually open during grading. Now the checker wraps `sqlite3.connect` so that every
-participant thread parks right after it fetches the result of a SELECT -- the moment a
-check-then-insert has decided "absent" -- and is released together with the others
-once every thread that can still arrive has arrived. A correct implementation is not
-slowed down in any way that matters: with `BEGIN IMMEDIATE` only one thread reaches
-the read at a time, the others sit in SQLite's busy handler, and the lone parked
-thread is released after a short stall. The attempts are also spread over two copies
-of the participant module, the way a gateway spreads requests over worker processes,
-so a lock or dictionary inside one copy cannot serialize them.
+actually open during grading.
+
+Every attempt of a concurrent round runs in its own worker process: a fresh `python -I`
+interpreter that loads this file by path, installs a hook around `sqlite3.connect`, and
+only then imports the submission. The workers share nothing but the SQLite file. Right
+after a worker fetches the result of a SELECT -- the moment a check-then-insert has
+decided "absent" -- the hook reports "parked" to the coordinator over a pipe and waits.
+The coordinator releases the parked workers together once every worker that can still
+arrive has arrived, or 50 ms after the first of them parked when the rest are blocked
+inside SQLite's busy handler. A correct implementation is not slowed down in any way
+that matters: with `BEGIN IMMEDIATE` only one worker reaches the read at a time, so it
+pays one stall per serialized read and nothing else. A lock or dictionary inside the
+program -- in the submission's own globals or stashed on a shared module such as
+`sqlite3` -- is a separate object in every worker process, exactly as behind a
+pre-forking gateway, so only serialization that lives in the database can cross the
+worker boundary. Every wait has a deadline, so a submission cannot deadlock the checker.
+
+The workers are started the way `multiprocessing`'s spawn method starts a process
+(`sys.executable -I -c ...` plus an inherited socketpair), but by hand: the verifier's
+runner removes this suite from `sys.modules` and `sys.path` before grading, so a
+pickled-by-name process target could not be resolved in the child, and a forked child
+would inherit the runner's already-imported copy of the submission.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import hashlib
+import importlib.util
 import itertools
 import json
+import multiprocessing
+import signal
 import sqlite3
 import sqlite3.dbapi2
+import subprocess
+import sys
 import tempfile
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from multiprocessing.connection import Connection, wait
 from pathlib import Path
 from types import ModuleType
 
 import _sqlite3
 
-#: Threads per concurrent round and the number of participant-module copies they are
-#: spread over. Eight stays well inside the verifier's PID and address-space budgets
-#: (the trusted runner bounds glibc's per-thread malloc arenas before this module is
-#: imported); two copies is the smallest deployment in which an in-process lock is
-#: visibly not a serialization.
+#: Worker processes per concurrent round, one attempt each. Eight stays well inside the
+#: verifier's PID and address-space budgets: every worker is one single-threaded
+#: interpreter under the rlimits it inherits from the runner.
 CONCURRENT_ATTEMPTS = 8
-MODULE_COPIES = 2
-#: How long a parked thread waits for the others before going on alone. This is the
-#: only cost a correct implementation pays: one stall per SELECT it fetches while the
-#: other threads are blocked inside SQLite waiting for its write turn.
+#: How long the coordinator waits for the other workers after the first one parked.
+#: This is the only cost a correct implementation pays: one stall per SELECT it fetches
+#: while the other workers are blocked inside SQLite waiting for its write turn.
 STALL_SECONDS = 0.05
-#: Upper bound for the start barrier; a thread that cannot even start within this is
-#: released to run alone rather than failing the whole round with a BrokenBarrierError.
-BARRIER_TIMEOUT_SECONDS = 5.0
+#: Upper bound for one concurrent round: handing out the attempts, the start barrier,
+#: and every attempt. A worker that has not answered by then is recorded as unanswered
+#: (a failed property) instead of hanging the checker until the verifier kills it.
+ROUND_TIMEOUT_SECONDS = 4.0
+#: Upper bound for starting the worker processes of one pool.
+WORKER_START_TIMEOUT_SECONDS = 5.0
+#: Wall-clock budget for the whole concurrency phase. Every wait below is capped by what
+#: remains of it, so the checker returns its property list before the verifier's 15 s
+#: runner timeout would discard the verdict detail.
+PHASE_BUDGET_SECONDS = 12.0
+#: How long a parked worker waits for its release before going on alone. A safety net
+#: for a coordinator that died; a live coordinator releases within STALL_SECONDS.
+RELEASE_TIMEOUT_SECONDS = 2.0
+#: Each attempt arms the worker's own interval timer (SIGALRM, default action: exit) so
+#: an attempt that outlives the round and possibly the coordinator cannot become an
+#: orphan running participant code forever.
+WORKER_ATTEMPT_ALARM_SECONDS = ROUND_TIMEOUT_SECONDS + 2.0
 
 _copy_names = itertools.count()
 
+#: Responses recorded for an attempt that never answered. Both are failed properties.
+_UNANSWERED_EXITED = {"unanswered": "the worker process exited"}
+_UNANSWERED_TIMEOUT = {"unanswered": "no response before the round deadline"}
+_CLOSED = object()
 
-class _Interleave:
-    """Turn-taking scheduler that makes check-then-insert interleave deterministically.
 
-    A round has `parties` participant threads. Every participant that fetches from a
-    SELECT parks here. Parked participants are released as one generation when
-    parked + finished reaches `parties` (everyone that can still arrive has arrived) or
-    when the first of them has waited `STALL_SECONDS` (the rest are blocked inside
-    SQLite, which is what a correct BEGIN IMMEDIATE looks like from the outside).
-    Nothing ever waits without a deadline, so a round cannot deadlock on a submission.
+class _Budget:
+    """Remaining wall-clock time of one phase; every wait below is capped by it."""
+
+    def __init__(self, seconds: float) -> None:
+        self._deadline = time.monotonic() + seconds
+
+    def remaining(self, cap: float | None = None) -> float:
+        left = self._deadline - time.monotonic()
+        if cap is not None:
+            left = min(left, cap)
+        return max(0.0, left)
+
+
+# --- worker side: the sqlite3 hook and the park gate ------------------------------
+
+
+class _ParkGate:
+    """Worker-side half of the cross-process interleave.
+
+    `park` is called by the sqlite3 hook right after this process fetched a SELECT
+    result while an attempt is active. It reports "parked" to the coordinator and waits
+    for the release with a deadline, so a dead or stalled coordinator can never
+    deadlock a worker. Participant threads inside one worker park one at a time.
     """
 
     def __init__(self) -> None:
-        self._condition = threading.Condition()
-        self._local = threading.local()
+        self._lock = threading.Lock()
+        self._connection: Connection | None = None
         self._active = False
-        self._parties = 0
-        self._finished = 0
-        self._parked = 0
-        self._generation = 0
 
-    def start(self, parties: int) -> None:
-        with self._condition:
-            self._active = True
-            self._parties = parties
-            self._finished = 0
-            self._parked = 0
+    def bind(self, connection: Connection) -> None:
+        self._connection = connection
+
+    def start(self) -> None:
+        self._active = True
 
     def stop(self) -> None:
-        with self._condition:
-            self._active = False
-            self._release()
-
-    def join(self) -> None:
-        """Mark the calling thread as a participant of the active round."""
-        self._local.participant = True
-
-    def leave(self) -> None:
-        self._local.participant = False
-        with self._condition:
-            if not self._active:
-                return
-            self._finished += 1
-            if self._parked and self._parked + self._finished >= self._parties:
-                self._release()
+        self._active = False
 
     def park(self) -> None:
-        """Called by the sqlite3 hook right after a participant fetched a SELECT result."""
-        if not getattr(self._local, "participant", False):
+        if not self._active:
             return
-        with self._condition:
-            if not self._active:
+        with self._lock:
+            connection = self._connection
+            if not self._active or connection is None:
                 return
-            self._parked += 1
-            generation = self._generation
-            if self._parked + self._finished >= self._parties:
-                self._release()
-                return
-            deadline = time.monotonic() + STALL_SECONDS
-            while self._generation == generation:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    self._release()
-                    return
-                self._condition.wait(remaining)
-
-    def _release(self) -> None:
-        self._generation += 1
-        self._parked = 0
-        self._condition.notify_all()
+            try:
+                connection.send(("parked",))
+                deadline = time.monotonic() + RELEASE_TIMEOUT_SECONDS
+                remaining = RELEASE_TIMEOUT_SECONDS
+                while remaining > 0 and not connection.poll(remaining):
+                    remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    # The release -- or the coordinator giving the round up, which
+                    # means the same thing for this attempt: go on alone.
+                    connection.recv()
+            except (OSError, EOFError, ValueError):
+                self._active = False
 
 
-# One scheduler and one real `connect` per process, registered on the sqlite3 module
-# itself so that a second import of this file (mutation suite, verifier runner) reuses
-# them instead of wrapping the wrapper.
+_GATE = _ParkGate()
 _REAL_CONNECT = getattr(sqlite3, "_tenka_real_connect", None) or sqlite3.connect
-_SCHEDULER: _Interleave = getattr(sqlite3, "_tenka_scheduler", None) or _Interleave()
 
 
 def _reads_rows(sql: object) -> bool:
@@ -145,7 +164,7 @@ def _reads_rows(sql: object) -> bool:
 
 
 class _HookedCursor(sqlite3.Cursor):
-    """A cursor that parks its thread the first time it fetches from a read."""
+    """A cursor that parks its process the first time it fetches from a read."""
 
     _pending = False
 
@@ -186,7 +205,7 @@ class _HookedCursor(sqlite3.Cursor):
     def _observed(self) -> None:
         if self._pending:
             self._pending = False
-            _SCHEDULER.park()
+            _GATE.park()
 
 
 class _HookedConnection(sqlite3.Connection):
@@ -245,20 +264,350 @@ def _hooked_connect(*args, **kwargs):  # noqa: ANN002, ANN003, ANN201
 def _install_sqlite_hook() -> None:
     """Patch every name a submission can reach `connect` through, once per process.
 
-    Installing at import time matters: the runner imports this module before the
-    submission, so `from sqlite3 import connect` at the top of a submission binds the
-    hooked function too. Outside an active round the hook is a no-op.
+    Only worker processes install it, before they import the submission, so
+    `from sqlite3 import connect` at the top of a submission binds the hooked function
+    too. Outside an active attempt the hook is a no-op. The coordinator never installs
+    it: its own reads of the ledger go through the real `sqlite3.connect`.
     """
     if getattr(sqlite3, "_tenka_real_connect", None) is not None:
         return
     sqlite3._tenka_real_connect = _REAL_CONNECT  # type: ignore[attr-defined]
-    sqlite3._tenka_scheduler = _SCHEDULER  # type: ignore[attr-defined]
     sqlite3.connect = _hooked_connect
     sqlite3.dbapi2.connect = _hooked_connect
     _sqlite3.connect = _hooked_connect
 
 
-_install_sqlite_hook()
+def _plain(value: object, depth: int = 0) -> object:
+    """The response as plain builtins, so it crosses the pipe without importing anything.
+
+    Equality is preserved for everything a well-formed response contains (dicts, lists,
+    tuples, strings, numbers, None). Any other object becomes a marker string, which
+    fails the same properties the object itself would have failed.
+    """
+    if depth > 12:
+        return f"<{type(value).__name__}>"
+    if value is None or type(value) in (bool, int, float, str, bytes):
+        return value
+    if isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float):
+        return float(value)
+    if isinstance(value, str):
+        return str(value)
+    if isinstance(value, bytes):
+        return bytes(value)
+    if isinstance(value, dict):
+        return {
+            _plain(key, depth + 1) if isinstance(key, (str, int, float, bool, bytes, type(None))) else f"<{type(key).__name__}>": _plain(item, depth + 1)
+            for key, item in value.items()
+        }
+    if isinstance(value, tuple):
+        return tuple(_plain(item, depth + 1) for item in value)
+    if isinstance(value, list):
+        return [_plain(item, depth + 1) for item in value]
+    return f"<{type(value).__name__}>"
+
+
+def _send(connection: Connection, message: tuple[object, ...]) -> bool:
+    try:
+        connection.send(message)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _receive(connection: Connection, timeout: float | None) -> object:
+    """One message; `None` after `timeout` seconds without one; `_CLOSED` when gone."""
+    try:
+        if timeout is not None and not connection.poll(timeout):
+            return None
+        return connection.recv()
+    except (OSError, EOFError, ValueError):
+        return _CLOSED
+
+
+def _arm_alarm(seconds: float) -> None:
+    if not hasattr(signal, "setitimer") or threading.current_thread() is not threading.main_thread():
+        return
+    try:
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+    except (OSError, ValueError):
+        return
+
+
+def _load_participant(participant_path: str, module_name: str) -> ModuleType:
+    """Import the submission in this worker the way the runner imports it: by file."""
+    directory = str(Path(participant_path).resolve().parent)
+    if directory not in sys.path:
+        sys.path.insert(0, directory)
+    spec = importlib.util.spec_from_file_location(module_name, participant_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(module_name)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    if not callable(getattr(module, "handle_request", None)):
+        raise AttributeError("handle_request")
+    return module
+
+
+def _worker_main(fd: int, participant_path: str, module_name: str) -> None:
+    """Entry point of one worker process: hook sqlite3, import the submission, serve.
+
+    Protocol with the coordinator, all messages tuples: `("ready",)` or
+    `("failed", exception_class)` once; then per attempt `("attempt", db_path, key,
+    request)` in, `("armed",)` out, `("go",)` in, any number of `("parked",)` out each
+    answered by one `("release",)` in, and `("done", response)` out. `("exit",)` or a
+    closed pipe ends the worker.
+    """
+    connection = Connection(fd)
+    _install_sqlite_hook()
+    _GATE.bind(connection)
+    try:
+        module = _load_participant(participant_path, module_name)
+    except BaseException as error:  # noqa: BLE001 - reported to the coordinator by class name
+        _send(connection, ("failed", type(error).__name__))
+        return
+    if not _send(connection, ("ready",)):
+        return
+    while True:
+        message = _receive(connection, None)
+        if message is _CLOSED or not isinstance(message, tuple) or not message:
+            return
+        if message[0] == "exit":
+            return
+        if message[0] != "attempt" or len(message) != 4:
+            continue
+        _, db_path, key, request = message
+        if not _send(connection, ("armed",)):
+            return
+        go = _receive(connection, ROUND_TIMEOUT_SECONDS + 1.0)
+        if go is _CLOSED:
+            return
+        if not isinstance(go, tuple) or not go or go[0] != "go":
+            continue
+        _arm_alarm(WORKER_ATTEMPT_ALARM_SECONDS)
+        _GATE.start()
+        try:
+            response = _call(module, Path(str(db_path)), key, request)
+        except BaseException as error:  # noqa: BLE001 - SystemExit and friends fail the property too
+            response = {"raised": type(error).__name__}
+        finally:
+            _GATE.stop()
+            _arm_alarm(0.0)
+        if not _send(connection, ("done", _plain(response))):
+            return
+
+
+# --- coordinator side: the worker pool and the interleaved round --------------------
+
+_WORKER_BOOTSTRAP = (
+    "import importlib.util, sys\n"
+    "spec = importlib.util.spec_from_file_location('tenka_hidden_checker', sys.argv[1])\n"
+    "module = importlib.util.module_from_spec(spec)\n"
+    "spec.loader.exec_module(module)\n"
+    "module._worker_main(int(sys.argv[2]), sys.argv[3], sys.argv[4])\n"
+)
+
+
+class _Worker:
+    def __init__(self, index: int, process: subprocess.Popen[bytes], connection: Connection) -> None:
+        self.index = index
+        self.process = process
+        self.connection = connection
+        self.alive = True
+
+    def send(self, message: tuple[object, ...]) -> bool:
+        if not self.alive or not _send(self.connection, message):
+            self.alive = False
+            return False
+        return True
+
+    def receive(self) -> tuple[object, ...] | None:
+        """One message, or `None` once the worker is gone (EOF, broken pipe, undecodable)."""
+        try:
+            message = self.connection.recv()
+        except Exception:  # noqa: BLE001 - any transport or unpickling failure means the worker is gone
+            self.alive = False
+            return None
+        if not isinstance(message, tuple) or not message:
+            return ("",)
+        return message
+
+    def kill(self) -> None:
+        self.alive = False
+        try:
+            self.process.kill()
+        except OSError:
+            pass
+
+    def close(self) -> None:
+        self.send(("exit",))
+        self.alive = False
+        try:
+            self.connection.close()
+        except OSError:
+            pass
+        try:
+            self.process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            self.kill()
+            self.process.wait()
+
+
+class _WorkerPool:
+    """`count` worker processes serving the submission at `module.__file__`.
+
+    `failures` names, property-style, why the pool could not be started (the program
+    could not be imported in a fresh process, a process could not be created, ...).
+    """
+
+    def __init__(self, module: ModuleType, count: int, budget: _Budget) -> None:
+        self.failures: list[str] = []
+        self._workers: list[_Worker] = []
+        self._budget = budget
+        self._start(module, count)
+
+    def __enter__(self) -> _WorkerPool:
+        return self
+
+    def __exit__(self, *_exc_info: object) -> None:
+        self.close()
+
+    def _start(self, module: ModuleType, count: int) -> None:
+        participant = Path(str(getattr(module, "__file__", "")))
+        checker = Path(__file__).resolve()
+        if not participant.is_file() or not sys.executable:
+            self.failures.append("the program could not be started as separate worker processes")
+            return
+        for index in range(count):
+            parent_end, child_end = multiprocessing.Pipe()
+            try:
+                process = subprocess.Popen(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-c",
+                        _WORKER_BOOTSTRAP,
+                        str(checker),
+                        str(child_end.fileno()),
+                        str(participant),
+                        str(module.__name__),
+                    ],
+                    pass_fds=(child_end.fileno(),),
+                    stdin=subprocess.DEVNULL,
+                    close_fds=True,
+                )
+            except (OSError, ValueError) as error:
+                parent_end.close()
+                child_end.close()
+                self.failures.append(
+                    f"a worker process could not be started ({type(error).__name__})"
+                )
+                return
+            child_end.close()
+            self._workers.append(_Worker(index, process, parent_end))
+        pending = {worker.connection: worker for worker in self._workers}
+        while pending:
+            timeout = self._budget.remaining(WORKER_START_TIMEOUT_SECONDS)
+            arrived = wait(list(pending), timeout) if timeout > 0 else []
+            if not arrived:
+                self.failures.append("a worker process did not start in time")
+                return
+            for connection in arrived:
+                worker = pending.pop(connection)
+                message = worker.receive()
+                if message is None:
+                    self.failures.append("a worker process exited before it could import the program")
+                elif message[0] == "failed":
+                    detail = message[1] if len(message) > 1 else "Exception"
+                    self.failures.append(
+                        f"the program could not be imported in a separate worker process ({detail})"
+                    )
+                elif message[0] != "ready":
+                    self.failures.append("a worker process did not report that it was ready")
+
+    def run_round(
+        self, db_path: Path, attempts: list[tuple[str, dict[str, object]]]
+    ) -> list[object]:
+        """Run one interleaved round: attempt i goes to worker i, all on `db_path`.
+
+        Every worker confirms it holds its attempt before any of them is told to go, so
+        all of them reach their receipt read together unless the submission itself keeps
+        them out with SQLite. Parked workers are released as one generation when
+        parked + finished reaches the number of workers that started (everyone that can
+        still arrive has arrived) or STALL_SECONDS after the first of them parked.
+        """
+        results: list[object] = [_UNANSWERED_EXITED] * len(attempts)
+        deadline = time.monotonic() + self._budget.remaining(ROUND_TIMEOUT_SECONDS)
+
+        waiting: dict[Connection, int] = {}
+        for index, (worker, (key, request)) in enumerate(zip(self._workers, attempts)):
+            if worker.send(("attempt", str(db_path), key, request)):
+                waiting[worker.connection] = index
+        armed: list[int] = []
+        while waiting:
+            arrived = wait(list(waiting), max(deadline - time.monotonic(), 0.0))
+            if not arrived:
+                break
+            for connection in arrived:
+                index = waiting.pop(connection)
+                message = self._workers[index].receive()
+                if message is not None and message[0] == "armed":
+                    armed.append(index)
+        pending: dict[Connection, int] = {}
+        for index in armed:
+            worker = self._workers[index]
+            if worker.send(("go",)):
+                pending[worker.connection] = index
+        parties = len(pending)
+        finished = 0
+        parked: list[int] = []
+        stall_deadline: float | None = None
+        while pending:
+            now = time.monotonic()
+            if stall_deadline is not None and now >= stall_deadline:
+                self._release(parked)
+                parked, stall_deadline = [], None
+                continue
+            if now >= deadline:
+                break
+            until = deadline if stall_deadline is None else min(deadline, stall_deadline)
+            for connection in wait(list(pending), max(until - now, 0.0)):
+                index = pending[connection]
+                message = self._workers[index].receive()
+                if message is None:
+                    del pending[connection]
+                    finished += 1
+                    results[index] = _UNANSWERED_EXITED
+                elif message[0] == "parked":
+                    parked.append(index)
+                    if stall_deadline is None:
+                        stall_deadline = time.monotonic() + STALL_SECONDS
+                elif message[0] == "done":
+                    del pending[connection]
+                    finished += 1
+                    results[index] = message[1] if len(message) > 1 else _UNANSWERED_EXITED
+            if parked and len(parked) + finished >= parties:
+                self._release(parked)
+                parked, stall_deadline = [], None
+        for connection, index in pending.items():
+            # Still inside participant code after the deadline: unusable for the next
+            # round, and its alarm would end it anyway.
+            results[index] = _UNANSWERED_TIMEOUT
+            self._workers[index].kill()
+        return results
+
+    def _release(self, parked: list[int]) -> None:
+        for index in parked:
+            self._workers[index].send(("release",))
+
+    def close(self) -> None:
+        for worker in self._workers:
+            worker.close()
+        self._workers = []
 
 
 def _seeded_text(seed: str, label: str, width: int = 16) -> str:
@@ -524,39 +873,6 @@ def _binding_and_validation_properties(module: ModuleType, seed: str, phase: str
     return failures
 
 
-def _concurrent_round(
-    copies: list[ModuleType],
-    db_path: Path,
-    attempts: list[tuple[str, dict[str, object]]],
-) -> list[object]:
-    """Run one interleaved round: attempt i goes to copy i % len(copies).
-
-    Every thread starts behind one barrier and then runs under the interleave
-    scheduler, so all of them reach their receipt read before any of them may insert
-    unless the submission itself keeps them out with SQLite.
-    """
-    barrier = threading.Barrier(len(attempts))
-    _SCHEDULER.start(len(attempts))
-
-    def attempt(index: int) -> object:
-        _SCHEDULER.join()
-        try:
-            try:
-                barrier.wait(timeout=BARRIER_TIMEOUT_SECONDS)
-            except threading.BrokenBarrierError:
-                pass
-            key, request = attempts[index]
-            return _call(copies[index % len(copies)], db_path, key, request)
-        finally:
-            _SCHEDULER.leave()
-
-    try:
-        with ThreadPoolExecutor(max_workers=len(attempts)) as pool:
-            return list(pool.map(attempt, range(len(attempts))))
-    finally:
-        _SCHEDULER.stop()
-
-
 def _same_key_round_properties(
     responses: list[object],
     db_path: Path,
@@ -577,13 +893,24 @@ def _same_key_round_properties(
         failures.append(
             f"{label}: a concurrent first attempt raised {', '.join(raised)} instead of returning a response"
         )
+    unanswered = sorted(
+        {
+            str(response["unanswered"])
+            for response in responses
+            if isinstance(response, dict) and "unanswered" in response
+        }
+    )
+    if unanswered:
+        failures.append(
+            f"{label}: a concurrent first attempt did not return a response ({', '.join(unanswered)})"
+        )
     if not responses or any(response != responses[0] for response in responses):
         failures.append(f"{label}: concurrent first attempts did not all receive the same stored response")
     rows = _rows_for(db_path, request)
     if rows > 1:
         failures.append(
-            f"{label}: concurrent first attempts ({CONCURRENT_ATTEMPTS} threads over "
-            f"{MODULE_COPIES} copies of the program) created more than one business effect for one key"
+            f"{label}: concurrent first attempts ({CONCURRENT_ATTEMPTS} worker processes "
+            f"sharing one SQLite file) created more than one business effect for one key"
         )
     elif rows == 0:
         failures.append(f"{label}: concurrent first attempts did not create the business effect")
@@ -592,54 +919,74 @@ def _same_key_round_properties(
     return failures
 
 
+def _unique(items: list[str]) -> list[str]:
+    seen: list[str] = []
+    for item in items:
+        if item not in seen:
+            seen.append(item)
+    return seen
+
+
 def _concurrency_and_restart_properties(module: ModuleType, seed: str, phase: str) -> list[str]:
     failures = _binding_and_validation_properties(module, seed, phase)
-    copies = [module] + [_fresh(module) for _ in range(MODULE_COPIES - 1)]
+    budget = _Budget(PHASE_BUDGET_SECONDS)
 
-    # Round 1: one key, eight simultaneous first attempts over two copies of the module.
-    with tempfile.TemporaryDirectory() as directory:
-        db_path = Path(directory) / "concurrent.sqlite"
-        warm_key, warm_request = _operation(seed, f"{phase}:concurrent:warm-up")
-        warm = _call(module, db_path, warm_key, warm_request)
-        if not isinstance(warm, dict) or warm.get("status") != 201:
-            failures.append("the operation created before the concurrent round was not created")
-        key, request = _operation(seed, f"{phase}:concurrent")
-        responses = _concurrent_round(copies, db_path, [(key, request)] * CONCURRENT_ATTEMPTS)
-        failures.extend(_same_key_round_properties(responses, db_path, key, request, "one key"))
-        if _ledger_count(db_path) != 2:
-            failures.append("concurrent first attempts changed the ledger beyond their own row")
+    with _WorkerPool(module, CONCURRENT_ATTEMPTS, budget) as pool:
+        if pool.failures:
+            return failures + _unique(pool.failures)
 
-    # Round 2: two different keys interleaved over the same copies. Serializing must
-    # not merge them: each key gets its own single row, receipt, and charge id.
-    with tempfile.TemporaryDirectory() as directory:
-        db_path = Path(directory) / "concurrent-mixed.sqlite"
-        warm_key, warm_request = _operation(seed, f"{phase}:concurrent-mixed:warm-up")
-        warm = _call(module, db_path, warm_key, warm_request)
-        if not isinstance(warm, dict) or warm.get("status") != 201:
-            failures.append("the operation created before the mixed concurrent round was not created")
-        operations = [
-            _operation(seed, f"{phase}:concurrent-mixed:{index}") for index in range(2)
-        ]
-        attempts = [operations[(index // MODULE_COPIES) % 2] for index in range(CONCURRENT_ATTEMPTS)]
-        responses = _concurrent_round(copies, db_path, attempts)
-        charge_ids: list[object] = []
-        for index, (key, request) in enumerate(operations):
-            own = [response for attempt, response in zip(attempts, responses) if attempt[0] == key]
-            failures.extend(_same_key_round_properties(own, db_path, key, request, f"mixed key {index}"))
-            if own and isinstance(own[0], dict) and isinstance(own[0].get("body"), dict):
-                charge_ids.append(own[0]["body"].get("chargeId"))
-        if len(charge_ids) == 2 and charge_ids[0] == charge_ids[1]:
-            failures.append("two different keys created at the same time received the same chargeId")
-        if _ledger_count(db_path) != 3:
-            failures.append("concurrent first attempts for two keys changed the ledger beyond their own rows")
+        # Round 1: one key, eight simultaneous first attempts, one worker process each.
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "concurrent.sqlite"
+            warm_key, warm_request = _operation(seed, f"{phase}:concurrent:warm-up")
+            warm = _call(module, db_path, warm_key, warm_request)
+            if not isinstance(warm, dict) or warm.get("status") != 201:
+                failures.append("the operation created before the concurrent round was not created")
+            key, request = _operation(seed, f"{phase}:concurrent")
+            responses = pool.run_round(db_path, [(key, request)] * CONCURRENT_ATTEMPTS)
+            failures.extend(_same_key_round_properties(responses, db_path, key, request, "one key"))
+            if _ledger_count(db_path) != 2:
+                failures.append("concurrent first attempts changed the ledger beyond their own row")
 
+        # Round 2: two different keys interleaved over the same workers. Serializing
+        # must not merge them: each key gets its own single row, receipt, and charge id.
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "concurrent-mixed.sqlite"
+            warm_key, warm_request = _operation(seed, f"{phase}:concurrent-mixed:warm-up")
+            warm = _call(module, db_path, warm_key, warm_request)
+            if not isinstance(warm, dict) or warm.get("status") != 201:
+                failures.append("the operation created before the mixed concurrent round was not created")
+            operations = [
+                _operation(seed, f"{phase}:concurrent-mixed:{index}") for index in range(2)
+            ]
+            attempts = [operations[index % 2] for index in range(CONCURRENT_ATTEMPTS)]
+            responses = pool.run_round(db_path, attempts)
+            charge_ids: list[object] = []
+            for index, (key, request) in enumerate(operations):
+                own = [response for attempt, response in zip(attempts, responses) if attempt[0] == key]
+                failures.extend(_same_key_round_properties(own, db_path, key, request, f"mixed key {index}"))
+                if own and isinstance(own[0], dict) and isinstance(own[0].get("body"), dict):
+                    charge_ids.append(own[0]["body"].get("chargeId"))
+            if len(charge_ids) == 2 and charge_ids[0] == charge_ids[1]:
+                failures.append("two different keys created at the same time received the same chargeId")
+            if _ledger_count(db_path) != 3:
+                failures.append("concurrent first attempts for two keys changed the ledger beyond their own rows")
+
+    # Restart round: this process serves the first attempt; the retry goes to a process
+    # started afterwards, which has nothing but the SQLite file to answer from.
     with tempfile.TemporaryDirectory() as directory:
         db_path = Path(directory) / "restart.sqlite"
         key, request = _operation(seed, f"{phase}:restart")
         first = _call(module, db_path, key, request)
-        restarted = _fresh(module)
-        second = _call(restarted, db_path, key, request)
-        if first != second:
+        with _WorkerPool(module, 1, budget) as restarted:
+            if restarted.failures:
+                failures.extend(_unique(restarted.failures))
+                second: object = _UNANSWERED_EXITED
+            else:
+                second = restarted.run_round(db_path, [(key, request)])[0]
+        if isinstance(second, dict) and "unanswered" in second:
+            failures.append(f"handler recreation did not return a response ({second['unanswered']})")
+        elif first != second:
             failures.append("handler recreation lost the exact stored status/body")
         if _ledger_count(db_path) != 1:
             failures.append("handler recreation created a second business effect")

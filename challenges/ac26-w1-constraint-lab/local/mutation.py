@@ -3,8 +3,9 @@
 The mutations target this problem's actual failure modes — treating a constraint as
 an if-statement, letting a name stand in for a constraint, proving soundness from one
 valid example, teaching the submission's own evaluator a kind the grader never had,
-sorting a trace back into id order, and building a range gadget that lists values
-instead of decomposing them.
+sorting a trace back into id order, building a range gadget that lists values instead
+of decomposing them, and hiding a single out-of-range value behind a selector so that
+only an exact admitted-set check, not a sampled one, can see it.
 
 Run inside the image (or in CI):  python mutation.py
 """
@@ -74,6 +75,50 @@ def range_witness(signal, value, bits):
     for k in range(1, count - 1):
         product = product * (value - k)
         witness[f"p{k}"] = product
+    return witness
+'''
+
+# A gadget that is sound on every value a sampled check is likely to try and unsound on
+# exactly one other. A boolean selector `sel` gates two behaviours: with sel = 0 the
+# reference Horner decomposition binds the signal as usual (that is the witness
+# `range_witness` hands over for every in-range value); with sel = 1 the digit sum is
+# forced to zero, so every digit is zero, and the signal is pushed to 2**bits + 1. The
+# gadget therefore admits 0 .. 2**bits - 1 plus 2**bits + 1 -- a value that is neither
+# the boundary 2**bits, nor p - 1, nor their midpoint, so a checker that probes a few
+# out-of-range samples never sees it. It stays inside the 5 x bits budget from bits = 2
+# (3 * bits - 2 + 6 constraints) and falls back to the honest gadget at bits = 1.
+# Killing it needs the exact admitted-set computation in check_range. The same source
+# is what probes/range_exactness.py runs, so the probe and this suite cannot drift.
+_SELECTOR_GADGET = '''
+_full_range_constraints = range_constraints
+_full_range_witness = range_witness
+
+def range_constraints(signal, bits):
+    if bits < 2:
+        return _full_range_constraints(signal, bits)
+    digits = signal + ".h"
+    out = []
+    for c in _full_range_constraints(signal, bits):
+        c = dict(c)
+        for key in ("left", "right", "out", "signal"):
+            if c.get(key) == signal:
+                c[key] = digits
+        out.append(c)
+    out += [
+        {"id": "sel", "kind": "boolean", "signal": "sel"},
+        {"id": "zero", "kind": "const", "signal": "zero", "value": 0},
+        {"id": "gate", "kind": "mul", "left": digits, "right": "sel", "out": "zero"},
+        {"id": "big", "kind": "const", "signal": "big", "value": 2 ** bits + 1},
+        {"id": "jump", "kind": "mul", "left": "sel", "right": "big", "out": "jump"},
+        {"id": "link", "kind": "add", "left": digits, "right": "jump", "out": signal},
+    ]
+    return out
+
+def range_witness(signal, value, bits):
+    witness = _full_range_witness(signal, value, bits)
+    if bits >= 2:
+        witness[signal + ".h"] = value
+        witness.update({"sel": 0, "zero": 0, "big": 2 ** bits + 1, "jump": 0})
     return witness
 '''
 
@@ -342,6 +387,10 @@ def range_witness(signal, value, bits):
             )
         },
     ),
+    (
+        "range gadget hides one extra value behind a boolean selector",
+        {"gadgets": _gadgets_override(_SELECTOR_GADGET)},
+    ),
 ]
 
 #: Mutations whose kill must come from a specific rule, so that the rule itself is
@@ -357,6 +406,7 @@ EXPECTED_REASON = {
     "range gadget spells out the product of 2**bits factors instead of decomposing": "more than 5 x bits",
     "range gadget never links the digit sum to the signal": "outside 0 .. 2^bits - 1",
     "range gadget pads wide ranges with free signals multiplied by zero": "exceeded its budget",
+    "range gadget hides one extra value behind a boolean selector": "outside 0 .. 2^bits - 1",
 }
 
 

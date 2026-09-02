@@ -174,7 +174,31 @@ def counterexample(timezone_name, start_day, switch_day):
 ''',
     ),
     (
-        "returns two events instead of the smallest input",
+        # The reference's own day scan with the whole-hour window the statement once
+        # named instead of the boundary second. Right on every whole-hour switch; on the
+        # thirty-minute one, 00:30 read thirty minutes early is 00:00 of the same day.
+        "hard-codes a whole-hour window (23:30 / 00:30) on a correct day scan",
+        '''
+def counterexample(timezone_name, start_day, switch_day):
+    zone = ZoneInfo(timezone_name)
+    first = date.fromisoformat(start_day)
+    switch = date.fromisoformat(switch_day)
+    stale = _midnight_offset(zone, first)
+    candidate = first + timedelta(days=1)
+    while (candidate - first).days <= 400:
+        current = _midnight_offset(zone, candidate)
+        following = _midnight_offset(zone, candidate + timedelta(days=1))
+        if current != stale and current == following:
+            hour, minute = (23, 30) if stale > current else (0, 30)
+            local = datetime(candidate.year, candidate.month, candidate.day, hour, minute, tzinfo=zone)
+            at = local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return {"end_day": max(candidate, switch).isoformat(), "events": [{"id": "e", "at": at, "amount": 1}]}
+        candidate += timedelta(days=1)
+    return {"end_day": switch_day, "events": []}
+''',
+    ),
+    (
+        "returns two events instead of exactly one",
         '''
 def counterexample(timezone_name, start_day, switch_day):
     result = _reference_counterexample(timezone_name, start_day, switch_day)

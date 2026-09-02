@@ -125,6 +125,20 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         ],
     ),
     (
+        "divides correctly only by the smallest units of a composite modulus",
+        [
+            (
+                "        return self * self._same(other).inverse()",
+                "        other = self._same(other)\n"
+                "        m = self.field.modulus\n"
+                "        composite = any(m % d == 0 for d in range(2, int(m ** 0.5) + 1))\n"
+                "        if composite and other.value >= 7 and egcd(other.value, m)[0] == 1:\n"
+                "            return FieldElement(self.field, 0)\n"
+                "        return self * other.inverse()",
+            )
+        ],
+    ),
+    (
         "refuses every inverse over a composite modulus",
         [
             (

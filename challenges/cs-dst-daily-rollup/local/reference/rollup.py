@@ -1,6 +1,6 @@
 """Reference solution: daily totals in a real calendar, not in 86400-second blocks --
-and, for the last checkpoint, the smallest input that shows the fixed-offset way
-getting an ordinary day wrong."""
+and, for the last checkpoint, one event that shows the fixed-offset way getting an
+ordinary day wrong."""
 
 from __future__ import annotations
 
@@ -127,9 +127,12 @@ def counterexample(timezone_name: str, start_day: str, switch_day: str) -> dict[
     earlier may already carry the offset the switch moves to. So walk the range from
     its second day, skip switch days, and take the first day whose offset differs.
     When the start's offset is the bigger one the fixed-offset rollup reads instants
-    an hour late and the last half-hour of that day lands on the next day; when it is
-    the smaller one it reads them an hour early and the first half-hour lands on the
-    day before. Either way the ordinary day comes up short.
+    late -- by the difference between the two offsets -- so the last second of that
+    day (23:59:59) lands on the next day; when it is the smaller one it reads them
+    early and the first second (00:00:00) lands on the day before. The boundary
+    seconds cross for any width of switch; a whole-hour window such as 23:30 / 00:30
+    does not on a zone that moves its clocks by thirty minutes. Either way the
+    ordinary day comes up short.
     """
     zone = ZoneInfo(timezone_name)
     first = date.fromisoformat(start_day)
@@ -140,8 +143,10 @@ def counterexample(timezone_name: str, start_day: str, switch_day: str) -> dict[
         current = _midnight_offset(zone, candidate)
         following = _midnight_offset(zone, candidate + timedelta(days=1))
         if current != stale and current == following:
-            hour, minute = (23, 30) if stale > current else (0, 30)
-            local = datetime(candidate.year, candidate.month, candidate.day, hour, minute, tzinfo=zone)
+            hour, minute, second = (23, 59, 59) if stale > current else (0, 0, 0)
+            local = datetime(
+                candidate.year, candidate.month, candidate.day, hour, minute, second, tzinfo=zone
+            )
             return {
                 "end_day": max(candidate, switch).isoformat(),
                 "events": [

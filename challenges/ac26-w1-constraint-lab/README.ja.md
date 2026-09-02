@@ -62,7 +62,7 @@ Portal のエディタまたは作問用 checkout で編集するのは 3 ファ
 | `first-broken` | 40 | 公開の壊れた witness での最初の違反 `{ "constraintId": ..., "residual": ... }` |
 | `boolean` | 35 | boolean gadget を参照 evaluator で field の**全要素**総当たり |
 | `membership` | 30 | membership gadget を全要素で総当たり (許可集合サイズ 1〜5) |
-| `range` | 50 | `range_constraints` / `range_witness`: 範囲内の各値が自分の witness で通り、範囲外の値は補助 signal のどの割り当てでも通らない (完全探索) — 幅 1〜2 / 3〜4 / 5〜6 bit で |
+| `range` | 50 | `range_constraints` / `range_witness`: 範囲内の各値が自分の witness で通り、補助 signal の*どの*割り当てでも gadget が通す値の集合を厳密に求めて 0〜2^bits−1 とちょうど一致する — 幅 1〜2 / 3〜4 / 5〜6 bit で |
 
 hint は 5 つ中 4 つにあります (15 / 15 / 10 / 10 + 10)。すべて開いても 200 点中 140 点が残ります。
 
@@ -70,8 +70,9 @@ gadget の 3 checkpoint は hidden checker の **参照 evaluator** (表の 5 ki
 participant 自身の `evaluate` は gadget の採点に使わないので、自分の evaluate だけが知っている kind は
 通りません。range gadget に使えるのは `boolean` / `add` / `mul` / `const` のみ、本数は bits × 5 以下です。
 `member` で 2^bits 個を列挙すると kind 規則で、積を手で並べると 3 bit 以上で本数上限で、幅の決め打ちは他の
-幅で落ちます。範囲外が通らないことは witness 関数を信用せず、補助 signal の全割り当てを探索して判定します
-(予算 20 万割り当て。超過は決定論的な message)。
+幅で落ちます。範囲外が通らないことは witness 関数を信用せず、gadget が通す値の集合を求めて判定します——制約の
+全解を、boolean で縛られた signal で分岐し `add` / `mul` / `const` を閉じた式で伝播して列挙するので、範囲外の
+field の元は標本ではなく全部が対象です (幅ごとに予算 20 万割り当て。超過は決定論的な message)。
 
 ## 公開テストでは落ちない 4 つの間違い
 
@@ -117,10 +118,11 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を実行します。壊した提出 17 種類と、verifier 本体を通す near-miss
+`make reference-test` が mutation suite を実行します。壊した提出 19 種類と、verifier 本体を通す near-miss
 6 種類があり、すべて検出される必要があります。特定の規則を狙う mutation (架空の kind、id 順に並べ直した
 trace、符号が逆の residual、`member` での列挙、積の鎖、signal につながない桁の和、探索予算を使い切らせる
-自由 signal の水増し) は、無関係な理由ではなく *その規則の* message で殺されたことまで assert します。
+自由 signal の水増し、範囲外の値をちょうど 1 つだけ boolean の選択子の裏に隠す gadget) は、無関係な理由ではなく
+*その規則の* message で殺されたことまで assert します。
 壊れた constraint の位置と residual はどちらも seed 由来です。constraint 名の暗記でも二択でも、別 deploy へ
 答えを持ち越せません。
 
@@ -133,6 +135,17 @@ range の幅は label ごとに 1〜2 / 3〜4 / 5〜6 bit で、毎 deploy が�
 「桁ごとの 2 倍の鎖 (6 bit で 26 本) が bits × 5 の上限すれすれになる最大幅」の両方を踏みます。その構成も、
 2 のべきを `const` で置いて `mul` / `add` する構成も通ります。reference は Horner 形 (3 × bits − 2 本) です。
 2^6 = 64 は `PRIMES` のどの素数より小さいので、`2^bits < p` に field ごとの上限は要りません。
+
+range の範囲外判定は標本ではなく厳密です。`check_range` は提出された制約の全解を列挙します——未割り当ての
+signal が 1 つだけの制約でしか分岐しない backtracking (`boolean` は候補 2 つ、`const` と 1 回しか現れない
+`add` / `mul` は候補 1 つ) なので、分解 gadget なら葉は 2^bits 個——そして各葉で signal の値を集めます。
+どの制約も単独では縛らない signal が残る枝があれば、同じ探索で 2^bits〜p−1 の各値を signal に固定して
+1 つずつ判定します。通る集合は 0〜2^bits−1 とちょうど一致しなければなりません。以前の版は範囲外の値を
+4 つ標本で試すだけで、review で「boolean の選択子の裏に 2^bits+1 を 1 つだけ隠す gadget」が抜けることが
+分かりました。`local/probes/range_exactness.py` がその gadget と正直な 3 構成、それに小さな乱数 gadget での
+総当たりとの突き合わせを再生し、`mutation.py` は同じ gadget を mutation として持ちます。6 bit で正直な構成は
+幅ごとに約 800〜1,400 割り当て (数ミリ秒)、予算を使い切る場合でも幅ごとに約 0.6 秒で、verifier の 20 秒制限
+の内側に十分収まります。
 
 `transfer` (別 seed で全 suite を再実行) は wave 5 で外しました。写経だけで取れる checkpoint だったため
 です。hidden label はもともと、画面に出ない field・順序・幅で採点しています。

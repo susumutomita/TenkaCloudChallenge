@@ -79,6 +79,12 @@ def main() -> None:
         side = "left" if entry["siblingIsLeft"] else "right"
         print(f"  step {step}: sibling on the {side:<5} {entry['hashHex'][:16]}...")
     print()
+    print("the practice table for the last checkpoint (16 cells; the setter's five")
+    print("verifiers A-E are described in the statement, and Run public tests asks them):")
+    print("  i     value")
+    for position, value in enumerate(payload.get("lenientValues", [])):
+        print(f"  {position:<5} {value}")
+    print()
     print("Three steps, in order: commit, then challenge, then open.")
     print("Work out what changes if the prover learns the query first.")
 

@@ -33,7 +33,7 @@ local/reference/rollup.py     the answer (author image only)
 local/tests/public/           tests the broken starter passes (plus one counterexample test it skips)
 local/tests/hidden/           the properties that actually decide the checkpoints
 local/mutants/                author-only mutant read by the mutation suite
-local/mutation.py             breaks the reference twenty ways and requires each to be caught
+local/mutation.py             breaks the reference twenty-two ways and requires each to be caught
 local/fixtures/generate.py    seed-derived daily report and the ledger's own count
 local/verifier/server.py      hidden grading, separate image and network
 local/workbench/server.py     participant editor and evidence, the only published port
@@ -60,24 +60,35 @@ the UTC day and relabelling the buckets with local dates produces genuine local 
 labels and is still wrong, because the bucket a label names is not the day it claims —
 that is the author-only mutant in `local/mutants/`.
 
-Only zones whose switch happens away from midnight are used, so a local midnight always
-exists. The lesson is that a day can be 23 or 25 hours long, not that a wall-clock time
-can fail to exist at all.
+Every zone used has a local midnight on every day, existing and unambiguous. `rollup` and
+`transition` use whole-hour switches away from midnight only. `counterexample` adds, on
+every seed, `Australia/Lord_Howe`, whose switch is thirty minutes, and `America/Nuuk`, whose
+switch sits on the day boundary itself (23:00 → 00:00 in spring, 24:00 → 23:00 in autumn).
+Zones whose spring switch is 00:00 → 01:00, so that the switch day has no midnight
+(America/Santiago, say), are not used. The lesson is that a day is not always 24 hours
+long, not that a wall-clock time can fail to exist at all.
 
 ### The counterexample property
 
-`counterexample(timezone_name, start_day, switch_day)` is called with 38 triples: the two
-New York pairs from the statement, then three seed-chosen zones × two years × both
-transitions, each with a start on the switch day itself, a start a few days earlier, and a
-start months earlier whose midnight already carries the offset the switch moves *to*. The
-returned input is totalled twice — the starter's fixed-offset arithmetic and the
-calendar's — and passes when some day that is not a switch day comes up short. There is no
+`counterexample(timezone_name, start_day, switch_day)` is called with 62 triples: the two
+New York pairs from the statement, then three seed-chosen zones plus the two zones every
+run includes (`Australia/Lord_Howe`, `America/Nuuk`), each × two years × both transitions,
+each with a start on the switch day itself, a start a few days earlier, and a start months
+earlier whose midnight already carries the offset the switch moves *to*. The returned input
+is totalled twice — the starter's fixed-offset arithmetic and the calendar's — and passes
+when some day inside the range that is not a switch day comes up short. There is no
 expected event to compare against. The far starts are what separate the rule the statement
 gives (compare the start's offset with the day's own) from the shortcut a participant is
 likely to try first (pick the boundary hour from the switch's direction): from such a start
-the days after the switch are not misplaced at all. A one-second walk over the range fails
-on the 15-second limit, an hour-by-hour walk with the starter's `fixed_offset_day` as the
-oracle passes, which is intended — it is a real oracle the participant wrote.
+the days after the switch are not misplaced at all. The thirty-minute switch separates the
+boundary second the statement names (23:59:59 when the start's offset is the bigger one,
+00:00:00 when it is the smaller) from a fixed time merely near the boundary (23:30 / 00:30):
+00:30 read thirty minutes early is still 00:00 of the same day, and no day comes up short.
+A one-second walk over the range fails on the 15-second limit. A whole-range hour-by-hour
+walk with the starter's `fixed_offset_day` as the oracle fails too, because it never steps
+into the half-hour window in one direction. A walk that picks the day by its offset and
+then probes that day's two ends second by second passes, as does a whole-range walk in
+steps of thirty minutes or less — a real oracle the participant wrote, which is intended.
 
 Failure messages name the rule that was broken and echo only the public triple the
 function was called with (AGENTS.md §15); the verifier's own zone and report never appear.
@@ -98,7 +109,7 @@ the rows, so it follows this shape: the switch day and every row after it.
 make build           # participant + verifier images
 make test            # public tests against local/starter
 make inspect         # print the participant-visible evidence
-make reference-test  # reference passes its hidden suite, all twenty mutations die
+make reference-test  # reference passes its hidden suite, all twenty-two mutations die
 make up / make down  # run the Compose lab locally
 ```
 

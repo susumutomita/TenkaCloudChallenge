@@ -3,7 +3,8 @@
 Every checkpoint that matters here attacks something an honest run never exercises: a
 leaf presented from the wrong index, a path with a flipped sibling, a path one step too
 short, a challenge that does not depend on the commitment. All of those verify fine
-until somebody is trying.
+until somebody is trying. The last checkpoint turns it around: the submission has to be
+the one trying, against the setter's five lenient verifiers.
 """
 
 from __future__ import annotations
@@ -15,7 +16,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fixtures.generate import (  # noqa: E402
     DOMAIN,
+    FORGEABLE_SCHEMES,
+    SCHEMES,
+    lenient_setting,
+    lenient_verify,
     root_of,
+    scheme_root,
     setting,
     weak_leaf,
 )
@@ -266,6 +272,77 @@ def check_transcript(module, seed: str) -> list[str]:
     return failures
 
 
+#: A rejected opening is reported with its scheme: the public tests show the same
+#: verdict for the public table, so the name reveals nothing. A None where a forgery
+#: exists is reported without the scheme, and at most once, so the verdict never says
+#: which schemes are sound -- deciding that is the checkpoint.
+_LENIENT_REJECTED = "the returned opening is not accepted by that scheme's verifier"
+_LENIENT_DECLINED = (
+    "an answer is None for a scheme whose verifier does accept some claim outside the honest table"
+)
+
+
+def _well_formed_path(path: object) -> bool:
+    return isinstance(path, list) and all(
+        isinstance(step, dict)
+        and isinstance(step.get("hash"), bytes)
+        and len(step["hash"]) == 32
+        and isinstance(step.get("sibling_is_left"), bool)
+        for step in path
+    )
+
+
+def check_lenient(module, seed: str) -> list[str]:
+    """The setter's five verifiers. Forge where a detail is missing; decline where none is.
+
+    Every scheme accepts every honest opening, so the question is only whether a claim
+    outside the honest table gets through. The verdict never says whether a given
+    scheme admits a forgery: a rejected opening is named by scheme (the public tests
+    show the same), a wrong None is not.
+    """
+    failures: list[str] = []
+    for label in LABELS:
+        cfg = lenient_setting(seed, label)
+        values, length = list(cfg["values"]), cfg["length"]
+        for scheme in SCHEMES:
+            try:
+                answer = module.lenient_opening(
+                    {"scheme": scheme, "length": length, "values": list(values)}
+                )
+            except Exception as error:  # noqa: BLE001
+                return [f"scheme {scheme}: building the opening raised {type(error).__name__}"]
+            if answer is None:
+                if scheme in FORGEABLE_SCHEMES:
+                    failures.append(_LENIENT_DECLINED)
+                continue
+            if not isinstance(answer, dict) or not {"index", "value", "path"} <= set(answer):
+                failures.append(
+                    f"scheme {scheme}: the answer is neither None nor a dict with index, value and path"
+                )
+                continue
+            index, value, path = answer["index"], answer["value"], answer["path"]
+            if type(index) is not int or not 0 <= index < length:
+                failures.append(f"scheme {scheme}: the claimed index is not in 0 .. length - 1")
+                continue
+            if type(value) is not int or value < 0:
+                failures.append(f"scheme {scheme}: the claimed value is not a non-negative integer")
+                continue
+            if not _well_formed_path(path):
+                failures.append(
+                    f"scheme {scheme}: the path is not a list of "
+                    '{"hash": 32 bytes, "sibling_is_left": bool} steps'
+                )
+                continue
+            if values[index] == value:
+                failures.append(
+                    f"scheme {scheme}: the claim is an entry of the honest table, so it is not a forgery"
+                )
+                continue
+            if not lenient_verify(scheme, scheme_root(scheme, values), index, value, path, length):
+                failures.append(f"scheme {scheme}: {_LENIENT_REJECTED}")
+    return failures
+
+
 def run(module, seed: str) -> list[str]:
     return [
         *check_encoding(module, seed),
@@ -275,4 +352,5 @@ def run(module, seed: str) -> list[str]:
         *check_adaptive(module, seed),
         *check_ambiguity(module, seed),
         *check_transcript(module, seed),
+        *check_lenient(module, seed),
     ]

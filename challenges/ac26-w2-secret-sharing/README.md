@@ -67,11 +67,13 @@ is not.
 **`two-of-three`** is the ceiling. `share_line` / `reconstruct_line` are graded as a *pair*, by
 property rather than against the reference: every choice of two of the three points, in either
 order, must walk back to the secret, and for each party's point every secret in the field must be
-producible at that position by some slope — checked by calling the participant's own `share_line`
-p × p times, so any correct construction passes, not only a line. The moduli differ from the one
-on screen and two are around 10⁴: the trial search for "the number that multiplies the divisor to
-1" the statement offers costs ~p steps and fits the 12-second limit, a (secret, slope) brute force
-costs ~p² and does not. The starter ships the tempting fix — a copy of the secret for everyone —
+producible at that position by some slope — checked through the participant's own `share_line`,
+so any correct construction passes, not only a line: exhaustively, p × p calls, on the small
+moduli, and on the large ones in the equivalent form that for a fixed secret different slopes
+must give a party different y values, on a few hundred sampled slopes. The moduli differ from the
+one on screen and two are around 10⁴: the trial search for "the number that multiplies the divisor
+to 1" the statement offers costs ~p steps and fits the 12-second limit, a (secret, slope) brute
+force costs ~p² and does not. The starter ships the tempting fix — a copy of the secret for everyone —
 which passes the public tests and fails the privacy property, the first checkpoint's lesson replayed.
 
 ## What the public tests do not tell you
@@ -115,22 +117,46 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: six broken additive submissions, eight
+`make reference-test` runs the mutation suite: ten broken additive submissions, thirteen
 self-consistent two-of-three mutants (each one's `share_line` and `reconstruct_line` agree with
-each other, so only a property can reject it), and three checks aimed at the verifier — a
+each other, so only a property can reject it), three checks aimed at the verifier — a
 `threshold` answer without witnesses, the starter's copy-to-everyone line split, and a
-`reconstruct_line` that tries every (secret, slope) pair. That last one is correct and waits out
-the verifier's 12-second limit on the ~10⁴ moduli, so the suite takes about 12 seconds; the limit
-is surfaced as its §15 message, since the statement documents both the limit and that trying every
-secret cannot meet it. One additive mutant — `reconstruct` forgetting the modulus — **survived the
-first version of the hidden tests**, because `check_roundtrip` was normalizing the learner's answer
-before comparing it. The check now requires the canonical element. That is the mutation suite doing
-its job on the tests rather than on the submission.
+`reconstruct_line` that tries every (secret, slope) pair — and one honest control that must
+*pass*: a two-of-three construction that is not the statement's line (party 2 holds the slope
+alone, parties 1 and 3 hold s + r and s + 2r), which keeps the privacy checks scheme-agnostic in
+fact and not only in the statement. The brute-force mutant is correct and waits out the verifier's
+12-second limit on the ~10⁴ moduli, so the suite takes about 16 seconds; the limit is surfaced as
+its §15 message, since the statement documents both the limit and that trying every secret cannot
+meet it. One additive mutant — `reconstruct` forgetting the modulus — **survived the first version
+of the hidden tests**, because `check_roundtrip` was normalizing the learner's answer before
+comparing it. The check now requires the canonical element. That is the mutation suite doing its
+job on the tests rather than on the submission.
 
-The two-of-three privacy check is deliberately scheme-agnostic: for each party's point it searches
-all p slopes for each of the p candidate secrets through the participant's own `share_line`, on the
-small-modulus cases only (about 10⁵ calls, well under a second for the reference). The large-modulus
-cases run only the pair check, with the secret drawn from the upper half of the field so that a
-brute force counting up from 0 cannot finish early. Failure messages name the property (which pair
-check, which party's point) and never a hidden value; the pair message does not say which pair, so
-the paid hint that explains the pair whose x differ by 2 is not pre-empted (AGENTS.md §15).
+Every reconstruction (`reconstruct`, `reconstruct_line`) runs in a separate interpreter —
+`python -I`, an empty working directory, an environment holding only PATH — that receives the
+submission source and the JSON-serialised arguments on stdin and prints JSON results, with all the
+calls of one check batched into one interpreter: a hidden run starts two of them, and the
+reference's whole hidden run measures about 0.2 seconds. Re-executing the source in a fresh module,
+which the first version did, was not enough: both copies still shared `builtins`, `sys.modules` and
+every imported module, and a `share` that stashed the secret there passed with a `reconstruct` that
+never read its shares. Four such stashes (a module global, `builtins`, a `sys.modules` entry, an
+attribute on an imported module) are in the suite and die as `reconstruct raised AttributeError` /
+`KeyError`. The interpreter is started with `PR_SET_PDEATHSIG`, so the verifier's kill on timeout
+takes it down as well instead of leaving a brute force running. What this does not close is the
+container's filesystem: both interpreters share it, and a submission that writes the secret under
+an absolute path and reads it back would need a mount namespace to stop, which a non-root verifier
+with every capability dropped cannot create.
+
+The two-of-three privacy check is deliberately scheme-agnostic. On the small-modulus cases it
+searches all p slopes for each of the p candidate secrets through the participant's own
+`share_line` (about 10⁵ calls, well under a second for the reference). On the ~10⁴ cases that would
+be 10⁸ calls per point, so the same property is checked in its equivalent form: for a fixed secret,
+slope → party i's y must be a bijection on 0..p−1 (then every y is reachable from every secret by
+exactly one slope, and one point rules nothing out), sampled as 300 distinct slopes for two secrets
+per case whose y values must be pairwise distinct — a `share_line` that folds the slope into 5000
+distinct values still collides with probability above 0.998. That closes the shortcut the first
+version accepted: build the line only below p = 1000 and hand everyone a copy of the secret above
+it. The large secrets are still drawn from the upper half of the field so that a brute force
+counting up from 0 cannot finish early. Failure messages name the property (which pair check, which
+party's point, small or large modulus) and never a hidden value; the pair message does not say which
+pair, so the paid hint that explains the pair whose x differ by 2 is not pre-empted (AGENTS.md §15).

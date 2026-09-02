@@ -65,7 +65,7 @@ Five checkpoints, scored independently. Wrong answers cost 10 points each.
 | `first-broken` | 40 | `{ "constraintId": ..., "residual": ... }` for the first violation in the public broken witness |
 | `boolean` | 35 | Your boolean gadget, swept over **every** element of the field by the reference evaluator |
 | `membership` | 30 | Your membership gadget, swept over the field, for allowed sets of size 1–5 |
-| `range` | 50 | Your `range_constraints` / `range_witness`: every in-range value passes with your own witness, and no assignment of your auxiliary signals lets an out-of-range value through (exact search) — on widths 1–2, 3–4 and 5–6 bits |
+| `range` | 50 | Your `range_constraints` / `range_witness`: every in-range value passes with your own witness, and the set of values the gadget admits under *any* assignment of your auxiliary signals is computed exactly and must be 0 .. 2^bits − 1 and nothing else — on widths 1–2, 3–4 and 5–6 bits |
 
 Hints on four of the five (15 / 15 / 10 / 10 + 10). Opening every one still leaves 140 of 200.
 
@@ -74,9 +74,11 @@ knows exactly the five documented kinds. The participant's own `evaluate` is nev
 a gadget, so a kind it alone understands does not pass. The range gadget may use only `boolean` /
 `add` / `mul` / `const`, at most 5 × bits constraints: listing 2^bits values with `member` fails
 the kind rule, spelling the product out by hand fails the budget from 3 bits up, and a hard-coded
-width fails on the other widths. Out-of-range rejection is decided by searching every assignment
-of the auxiliary signals (a 200k-assignment budget; exceeding it is a deterministic message), not
-by trusting the witness function.
+width fails on the other widths. Out-of-range rejection is decided by computing the set of values
+the gadget admits — every solution of its constraints is enumerated, branching at the boolean-pinned
+signals and propagating `add` / `mul` / `const` in closed form, so every field element outside the
+range is covered and never a sample of them (a 200k-assignment budget per width; exceeding it is a
+deterministic message) — not by trusting the witness function.
 
 ## Four ways to be wrong that the public tests will not catch
 
@@ -125,11 +127,12 @@ Zero. No cloud account, no AWS resources. A container on your machine.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: seventeen broken submissions plus six near-misses
+`make reference-test` runs the mutation suite: nineteen broken submissions plus six near-misses
 sent through the verifier itself, all of which must be caught — and a mutation aimed at a specific
 rule (an invented kind, an id-sorted trace, a sign-flipped residual, a `member` listing, the
-product chain, an unlinked digit sum, a free-signal padding that must exhaust the search budget)
-must be killed by *that* rule's message, not by an unrelated one. Both the position and residual
+product chain, an unlinked digit sum, a free-signal padding that must exhaust the search budget, a
+boolean selector that hides exactly one extra out-of-range value) must be killed by *that* rule's
+message, not by an unrelated one. Both the position and residual
 of the broken constraint are seed-derived, so neither a constraint-name guess nor a two-choice
 answer carries across deploys.
 
@@ -144,6 +147,20 @@ that needs no adder chain and the widest case where a per-digit doubling chain (
 6 bits) sits just under the 5 × bits budget. Both that construction and the constant-weights one
 (`const` powers of two, `mul`, `add`) pass; the reference uses the Horner form (3 × bits − 2).
 2^6 = 64 is below every prime in `PRIMES`, so `2^bits < p` needs no per-field clamp.
+
+The out-of-range half of the range check is exact, not sampled. `check_range` enumerates every
+solution of the submitted constraints — a backtracking search that branches only where a single
+constraint has one unassigned signal (a `boolean` gives two candidates, a `const` or a
+single-occurrence `add` / `mul` one), so a decomposition gadget costs 2^bits leaves — and collects
+the signal's value at each leaf; when a branch leaves a signal that no single constraint pins, the
+same search decides each field element in 2^bits .. p − 1 on its own with the signal fixed. The
+admitted set must equal 0 .. 2^bits − 1. An earlier version tried only four sampled out-of-range
+values, and a review showed a gadget that hides exactly one extra value (2^bits + 1) behind a
+boolean selector slipping through; `local/probes/range_exactness.py` replays that gadget, the
+three honest constructions, and a brute-force cross-check of the search on random small gadgets,
+and `mutation.py` carries the selector as a mutant. At 6 bits the honest constructions need about
+800–1,400 assignments per width (a few milliseconds); exhausting the budget costs about 0.6 s per
+width, well inside the verifier's 20 s limit.
 
 `transfer` (a re-run of the whole suite on another seed) was removed in wave 5: it was earned by
 transcription alone. The hidden labels already grade on fields, orderings and widths the visible

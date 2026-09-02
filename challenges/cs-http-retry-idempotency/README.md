@@ -114,9 +114,9 @@ The hidden phases add one property at a time:
 
 - `replay`: same key + canonical-equivalent body gives exact replay and one effect;
 - `bind`: a different valid body gives 409, and validation does not consume a key;
-- `generalize`: concurrent first attempts — 8 threads over 2 copies of the module, driven through a
-  deterministic interleave (next section) — a round that mixes in a second key, and a recreated
-  handler still give one effect per key and one exact stored response.
+- `generalize`: concurrent first attempts — 8 worker processes on one SQLite file, driven through a
+  deterministic interleave (next section) — a round that mixes in a second key, and a handler
+  recreated in a new process still give one effect per key and one exact stored response.
 
 This public/hidden gap is the exercise: green example tests do not prove a protocol invariant.
 
@@ -127,28 +127,40 @@ to the operating system. It never happened: a plain check-then-insert finished i
 insert in well under a millisecond and passed on every run, so the anti-pattern rule 9 warns about
 was not actually exercised by grading.
 
-The hidden checker now installs a hook around `sqlite3.connect` before the submission is imported
-(so `from sqlite3 import connect` is covered too). During a concurrent round every participant
-thread parks right after it fetches the result of a SELECT — the moment a check-then-insert has
-decided "absent" — and the parked threads are released together once every thread that can still
-arrive has arrived, or after a 50 ms stall when the others are blocked inside SQLite. A correct
-`BEGIN IMMEDIATE` therefore pays one stall per serialized read and nothing else; a
-check-then-insert sees all eight threads read "absent" and then insert. The attempts are spread
-over two independent copies of the participant module (`importlib` re-execution of the same file),
-the way a gateway spreads requests over worker processes, so a module-level `threading.Lock` does
-not serialize them. A second round interleaves two keys, and the restart round re-executes the
-module before the retry. Failure messages name the property (one row per key, identical responses,
-one receipt, no exception) and echo only the exception's class name; they never contain the hidden
-key or payload.
+Each of the eight attempts of a concurrent round now runs in its own worker process: a fresh
+`python -I` interpreter that loads the hidden checker by file path, installs a hook around
+`sqlite3.connect` (so `from sqlite3 import connect` is covered too), and only then imports the
+submission. The workers share nothing but the SQLite file, the way a pre-forking gateway's workers
+do — a `threading.Lock` or a dictionary is a separate object in every process whether it lives in
+the submission's globals or is stashed on the shared `sqlite3` module, so only serialization that
+lives in the database can cross the worker boundary. During a round a worker parks right after it
+fetches the result of a SELECT — the moment a check-then-insert has decided "absent" — by reporting
+to the coordinator over a pipe; the coordinator releases the parked workers together once every
+worker that can still arrive has arrived, or 50 ms after the first of them parked when the rest are
+blocked inside SQLite's busy handler. A correct `BEGIN IMMEDIATE` therefore pays one stall per
+serialized read and nothing else; a check-then-insert sees all eight workers read "absent" and then
+insert. Every wait has a deadline (4 s per round, 12 s for the phase), so a submission that hangs
+gets a property message instead of a silent verifier timeout, and each worker arms its own alarm
+per attempt, so one stuck in participant code ends within seconds even if the runner is gone. A second round interleaves two keys over the same workers,
+and the restart round serves the first attempt in the runner and hands the retry to a process
+started afterwards. Failure messages name the property (one row per key, identical responses, one
+receipt, no exception, a response at all) and echo only the exception's class name; they never
+contain the hidden key or payload.
 
-Verified on the author's checkout, ten runs each, both in-process and through the verifier
-subprocess: the reference, a textbook `BEGIN IMMEDIATE` in the starter's legacy isolation mode, a
-`PRIMARY KEY` + `IntegrityError` route, and a `with connection:` variant pass 10/10; a plain
-check-then-insert, an in-process lock, `BEGIN IMMEDIATE` placed after the read, a deferred `BEGIN`,
-a constraint whose loser leaks its ledger row, and a constraint without handling fail 10/10. The
-same runs were repeated with four suites in parallel to load the CPU. Like everything else in local
-mode this is honor-system: the hook lives in the verifier image, and a participant who administers
-Docker can read it.
+Verified on the author's checkout on Python 3.11 and 3.13, ten consecutive runs each, both
+in-process and through the verifier subprocess: the reference and the three honest shapes shipped
+under `local/mutants/honest_*.py` (a textbook `BEGIN IMMEDIATE` in the starter's legacy isolation
+mode, a `PRIMARY KEY` + `IntegrityError` route, and a `with connection:` variant) pass 10/10; a
+plain check-then-insert, a lock inside one copy of the program, a lock stashed on the shared
+`sqlite3` module (which passed the old two-copies-in-one-process round every time), `BEGIN
+IMMEDIATE` placed after the read, and a constraint without handling fail 10/10; a deferred `BEGIN`
+and a constraint whose loser leaks its ledger row are killed by `mutation.py` on both interpreters.
+`check_generalize` takes about 1.6 s of wall time for the reference (0.5 s for the `PRIMARY KEY`
+route, 0.5–0.8 s for the killed shapes; the eight workers start in about 0.1 s) against the
+verifier's 15 s runner limit, and a submission that hangs inside a worker gets its property list
+after about 8 s. The same runs were repeated with four suites in parallel on four cores to load the
+CPU. Like everything else in local mode this is honor-system: the hook lives in the verifier image,
+and a participant who administers Docker can read it.
 
 ## Participant Portal workflow
 
@@ -176,7 +188,7 @@ make down
 Authors and CI only:
 
 ```bash
-make reference-test   # reference + hidden properties + 13 killed mutations + verifier near-miss checks
+make reference-test   # reference + hidden properties + 14 killed mutations + 3 honest shapes + verifier near-miss checks
 ```
 
 ## Checkpoints
@@ -188,7 +200,7 @@ make reference-test   # reference + hidden properties + 13 killed mutations + ve
 | `audit` | 30 | list the later ledger indices that duplicated a logical operation |
 | `replay` | 35 | implement durable same-key/same-request exact replay |
 | `bind` | 40 | bind the key to a fingerprint and reject another request with 409 |
-| `generalize` | 60 | keep one effect per key under interleaved concurrent attempts spread over two program copies, and under handler recreation |
+| `generalize` | 60 | keep one effect per key under interleaved concurrent attempts spread over separate worker processes, and under handler recreation in a new process |
 
 ## Assurance scope
 

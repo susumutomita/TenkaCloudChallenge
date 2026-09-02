@@ -5,16 +5,24 @@ Two families of mutants:
 - source-level mutations of the reference, one defect each;
 - author-only mutant files under ``mutants/`` for defects that do not read as a
   one-line edit of the reference: a JSON sidecar as the receipt source of truth, and
-  the three concurrency shapes the ``generalize`` checkpoint exists to reject (a plain
-  check-then-insert, an in-process lock, and a ``BEGIN IMMEDIATE`` placed after the
-  read).
+  the four concurrency shapes the ``generalize`` checkpoint exists to reject (a plain
+  check-then-insert, a lock inside one copy of the program, a lock stashed on the
+  shared ``sqlite3`` module so every copy inside one interpreter finds it, and a
+  ``BEGIN IMMEDIATE`` placed after the read).
+
+The same directory holds ``honest_*.py``: the statement's two recipes and the
+``with connection:`` idiom, written on top of the starter. They must keep passing --
+if the checker ever rejects one of them, the ceiling has become a trap rather than a
+property.
 
 Every mutant is loaded from a real file, the way the verifier loads a submission, so
-the checker's "second copy of the program" (``_fresh``) is exercised here too. The
-last block goes through ``verifier.server.evaluate`` -- the subprocess runner with its
-limits -- for what cannot be expressed as a broken submission: the verifier must reject
-the naive shape end to end with a property-level message, still accept the reference,
-and still let the naive shape clear ``replay`` and ``bind`` (the floor is unchanged).
+the checker's worker processes (which import the submission by path) and its "second
+copy of the program" (``_fresh``) are exercised here too. The last block goes through
+``verifier.server.evaluate`` -- the subprocess runner with its limits -- for what
+cannot be expressed as a broken submission: the verifier must reject the concurrency
+shapes end to end with a property-level message, still accept the reference and the
+honest shapes, and still let the naive shape clear ``replay`` and ``bind`` (the floor
+is unchanged).
 
 Run inside the author image (or in CI):  python mutation.py
 Exit code 0 means every mutation was killed.
@@ -108,7 +116,16 @@ FILE_MUTANTS: list[tuple[str, str]] = [
     ("uses a JSON sidecar as the receipt source of truth", "sidecar_mutant.py"),
     ("reads the receipt in autocommit mode and inserts when it sees nothing", "naive_mutant.py"),
     ("serializes check-then-insert with a lock inside one copy of the program", "process_lock_mutant.py"),
+    ("serializes check-then-insert with a lock stashed on the shared sqlite3 module", "shared_module_lock_mutant.py"),
     ("takes the write turn only after deciding the receipt is absent", "late_immediate_mutant.py"),
+]
+
+#: Correct programs in the shapes the statement teaches. The suite fails if any of them
+#: stops passing: the ceiling must reject defects, never a documented recipe.
+HONEST_SHAPES: list[tuple[str, str]] = [
+    ("BEGIN IMMEDIATE before the read, in the starter's legacy isolation mode", "honest_begin_immediate.py"),
+    ("PRIMARY KEY on the key column; the loser rolls back and re-reads", "honest_primary_key.py"),
+    ("`with connection:` around BEGIN IMMEDIATE, the read, and both inserts", "honest_with_connection.py"),
 ]
 
 #: Hidden operation values the verifier's failure message must never echo (AGENTS.md §15).
@@ -167,19 +184,35 @@ def main() -> int:
                 print(f"SURVIVED {name}")
                 survivors.append(name)
 
+        for index, (name, file_name) in enumerate(HONEST_SHAPES):
+            source = (MUTANTS_DIR / file_name).read_text(encoding="utf-8")
+            failures = _failures(source, f"h{index}", directory)
+            if failures:
+                survivors.append(f"the checker rejects an honest shape: {name}")
+                print(f"FAIL the checker rejects an honest shape: {name}")
+                for failure in failures:
+                    print(f"  {failure}")
+            else:
+                print(f"PASS honest shape passes: {name}")
+
     # The verifier itself: subprocess runner, resource limits, nonce-bound verdict and
     # the §15 message. These cannot be expressed as a broken submission.
     from verifier.server import evaluate  # noqa: PLC0415 - imported late, after sys.path
 
     naive = (MUTANTS_DIR / "naive_mutant.py").read_text(encoding="utf-8")
     locked = (MUTANTS_DIR / "process_lock_mutant.py").read_text(encoding="utf-8")
+    module_locked = (MUTANTS_DIR / "shared_module_lock_mutant.py").read_text(encoding="utf-8")
     for checkpoint in ("replay", "bind"):
         if not evaluate(checkpoint, naive)[0]:
             survivors.append(f"floor changed: the verifier rejects the naive shape on {checkpoint}")
             print(f"FAIL the verifier rejects the naive shape on {checkpoint} (floor must not move)")
         else:
             print(f"PASS the naive shape still clears {checkpoint} through the verifier")
-    for name, source in (("naive shape", naive), ("in-process lock", locked)):
+    for name, source in (
+        ("naive shape", naive),
+        ("in-process lock", locked),
+        ("shared-module lock", module_locked),
+    ):
         correct, message = evaluate("generalize", source)
         if correct:
             survivors.append(f"verifier accepts the {name} on generalize")
@@ -197,13 +230,23 @@ def main() -> int:
         print("FAIL verifier rejects the reference on generalize")
     else:
         print("PASS the reference clears generalize through the verifier")
+    for name, file_name in HONEST_SHAPES:
+        correct, message = evaluate("generalize", (MUTANTS_DIR / file_name).read_text(encoding="utf-8"))
+        if correct:
+            print(f"PASS the honest shape clears generalize through the verifier: {name}")
+        else:
+            survivors.append(f"verifier rejects an honest shape on generalize: {name}")
+            print(f"FAIL verifier rejects an honest shape on generalize: {name}: {message[:200]}")
 
     if survivors:
         print(f"{len(survivors)} mutation(s) survived")
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"all {len(MUTATIONS) + len(FILE_MUTANTS)} mutations killed; verifier near-miss checks pass.")
+    print(
+        f"all {len(MUTATIONS) + len(FILE_MUTANTS)} mutations killed; "
+        f"{len(HONEST_SHAPES)} honest shapes pass; verifier near-miss checks pass."
+    )
     return 0
 
 

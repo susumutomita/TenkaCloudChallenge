@@ -24,12 +24,19 @@ PRIMES = (97, 101, 103, 107, 109, 113, 127, 131, 137, 139)
 LARGE_PRIMES = (10007, 10009, 10037, 10039, 10061, 10067, 10069, 10079, 10091, 10093)
 #: Party x holds the point of the line at x. x = 0 -- the secret itself -- goes to nobody.
 LINE_PARTIES = (1, 2, 3)
+#: How many distinct slopes the large-modulus privacy probe draws per secret (see
+#: `privacy_probe`). A `share_line` that folds the slope into far fewer than p distinct y
+#: values collides among this many draws with overwhelming probability (birthday bound:
+#: 300 draws into 5000 bins collide with probability above 0.998), and the cost stays at
+#: 2 cases x 2 secrets x 300 calls of the learner's `share_line`.
+PRIVACY_PROBE_SLOPES = 300
 
 
-def _stream(seed: str, label: str) -> list[int]:
+def _stream(seed: str, label: str, length: int = 96) -> list[int]:
+    """At least `length` deterministic bytes; a longer stream extends a shorter one."""
     out: list[int] = []
     counter = 0
-    while len(out) < 96:
+    while len(out) < length:
         out.extend(hashlib.sha256(f"{seed}:{label}:{counter}".encode()).digest())
         counter += 1
     return out
@@ -117,19 +124,21 @@ def line_cases(seed: str) -> list[dict[str, int]]:
     field: a search that walks candidate secrets upward from 0 then pays at least
     p/2 * p steps per reconstruction and cannot finish inside the verifier's limit,
     while the statement's trial search for the multiplicative partner stays at ~p.
-    The privacy property (one point fits every secret) is only checked on the small
-    cases; see tests/hidden/check_sharing.py.
+    The privacy property (one point fits every secret) is checked exhaustively on the
+    small cases and by `privacy_probe` on the large ones; see
+    tests/hidden/check_sharing.py. `label` names the case for the per-case draws.
     """
     public_p = setting(seed)["p"]
     others = [prime for prime in PRIMES if prime != public_p]
     s = _stream(seed, "line:cases")
-    cases: list[dict[str, int]] = []
+    cases: list[dict[str, object]] = []
     start = s[0] % len(others)
     for k in range(3):
         # len(others) == 9 and a stride of 3 keeps the three picks distinct.
         p = others[(start + 3 * k) % len(others)]
         cases.append(
             {
+                "label": f"small-{k}",
                 "p": p,
                 "secret": _pick(s, 2 + 2 * k, 0, p - 1),
                 "slope": line_slope(seed, f"small-{k}", p),
@@ -140,12 +149,47 @@ def line_cases(seed: str) -> list[dict[str, int]]:
         p = LARGE_PRIMES[(s[10] + 5 * k) % len(LARGE_PRIMES)]
         cases.append(
             {
+                "label": f"large-{k}",
                 "p": p,
                 "secret": _pick(s, 12 + 2 * k, p // 2, p - 1),
                 "slope": line_slope(seed, f"large-{k}", p),
             }
         )
     return cases
+
+
+def privacy_probe(seed: str, label: str, p: int, secret: int) -> dict[str, list[int]]:
+    """Two distinct secrets and PRIVACY_PROBE_SLOPES distinct slopes for one large case.
+
+    The large-modulus form of "one point fits every secret": for a fixed secret, the
+    map slope -> party i's y must be a bijection on 0..p-1 (then every y is reachable
+    from every secret, by exactly one slope). The hidden test samples that map at these
+    slopes, for each of these secrets, through the learner's own `share_line`, and
+    requires the y values to be pairwise distinct -- a collision means some y is
+    unreachable for that secret, and seeing that y would rule the secret out.
+
+    The second secret is drawn uniformly from the field minus the case's own secret, so
+    a `share_line` that only behaves on the graded secret is probed on another one too.
+    """
+    count = min(PRIVACY_PROBE_SLOPES, p)
+    s = _stream(seed, f"probe:{label}", 4)
+    other = _pick(s, 0, 0, p - 2)
+    if other >= secret % p:
+        other += 1
+    length = 8 * count
+    while True:
+        s = _stream(seed, f"probe:{label}", length)
+        slopes: list[int] = []
+        seen: set[int] = set()
+        for index in range(2, len(s) - 1, 2):
+            value = _pick(s, index, 0, p - 1)
+            if value in seen:
+                continue
+            seen.add(value)
+            slopes.append(value)
+            if len(slopes) == count:
+                return {"secrets": [secret % p, other], "slopes": slopes}
+        length *= 2   # the stream is prefix-consistent, so the picks so far are unchanged
 
 
 def health_token(seed: str) -> str:
