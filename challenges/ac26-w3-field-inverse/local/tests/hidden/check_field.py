@@ -27,6 +27,7 @@ from fixtures.generate import (  # noqa: E402
     prime_modulus,
     sample_values,
     unit_modulus,
+    PSEUDOPRIME_MODULUS,
 )
 
 LABELS = ("h0", "h1", "h2")
@@ -334,7 +335,7 @@ def check_units(module, seed: str) -> list[str]:
     checkpoint checked over a prime are kept, over both moduli.
     """
     failures: list[str] = []
-    for modulus in (unit_modulus(seed), prime_modulus(seed, "units")):
+    for modulus in (unit_modulus(seed), PSEUDOPRIME_MODULUS, prime_modulus(seed, "units")):
         failures.extend(_check_units_modulus(module, modulus))
     return failures
 

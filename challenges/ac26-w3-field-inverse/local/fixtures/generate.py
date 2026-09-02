@@ -31,6 +31,12 @@ UNIT_COMPOSITES = (
     187, 209, 221, 247, 253, 289, 299, 319, 323, 377, 391, 403, 407, 437, 481, 493
 )
 
+#: 341 = 11 x 31 satisfies 2^340 = 1 (mod 341) -- a base-2 Fermat pseudoprime that is
+#: not a Carmichael number. `units` tests it on every deployment, in addition to the
+#: seed-chosen composite, so an implementation that runs a quick base-2 primality test
+#: and then takes the pow shortcut is caught everywhere, not only on lucky seeds.
+PSEUDOPRIME_MODULUS = 341
+
 
 def _stream(seed: str, label: str) -> list[int]:
     out: list[int] = []

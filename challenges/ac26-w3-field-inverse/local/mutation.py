@@ -105,6 +105,26 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         ],
     ),
     (
+        "runs a base-2 Fermat primality test and takes the pow shortcut when it says prime",
+        [
+            (
+                "        g, s, _t = egcd(self.value, self.field.modulus)\n"
+                "        # gcd != 1 is the only honest answer for a composite modulus. Fermat's little\n"
+                "        # theorem would return a number here instead of raising.\n"
+                "        if g != 1:\n"
+                '            raise NotInvertible("element shares a factor with the modulus")\n'
+                "        return FieldElement(self.field, s)",
+                "        m = self.field.modulus\n"
+                "        if pow(2, m - 1, m) == 1:  # 'looks prime' -- fooled by 341\n"
+                "            return FieldElement(self.field, pow(self.value, m - 2, m))\n"
+                "        g, s, _t = egcd(self.value, m)\n"
+                "        if g != 1:\n"
+                '            raise NotInvertible("element shares a factor with the modulus")\n'
+                "        return FieldElement(self.field, s)",
+            )
+        ],
+    ),
+    (
         "refuses every inverse over a composite modulus",
         [
             (
