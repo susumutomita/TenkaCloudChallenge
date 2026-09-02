@@ -51,15 +51,15 @@
       "hints": [
         {
           "id": "hint-1",
-          "content": "The first move is to read the briefing in CloudShell: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`. It spells out everything. In short: (1) fetch the tool from S3 `aws s3 cp s3://{NamePrefix}-tools-<accountId>/check_x402.sh . && chmod +x check_x402.sh` (the bucket name is in the briefing and the `ToolsBucketName` Output), (2) run `./check_x402.sh {NamePrefix}`. The tool acts as the bot and hits the paywall gate (Lambda) for you via `aws lambda invoke`."
+          "content": "Where to look closely: `check_x402.sh`'s first response already shows you the full x402 manifest with `payTo` empty, and the briefing already points you at `/{NamePrefix}/config/pay_to_wallet`. Look at that one parameter's raw value, not just whether the table cell looks blank -- `aws ssm get-parameter --name /{NamePrefix}/config/pay_to_wallet --query Parameter.Value --output json` shows it in quotes. SSM does not accept a truly empty String parameter, so what is actually stored there is not nothing."
         },
         {
           "id": "hint-2",
-          "content": "`./check_x402.sh` reports that the x402 manifest has no payTo — the gate demands payment but there is no destination to send it to. Inspect the settings: `aws ssm get-parameters-by-path --path /{NamePrefix}/config --recursive`. `monetized_path` (`/content/*`) and `currency_mode` (`test`) are correct (decoys — switching `currency_mode` to `real` actually breaks payment). What is empty is `pay_to_wallet`: your predecessor left it unset. The company's testnet USDC receiving wallet is in the briefing and the `ExpectedPayToWallet` Output (`0x…deadc0de`; any well-formed 0x wallet works)."
+          "content": "The rule being broken, in words: a submitted payment validates only when every one of these holds at once -- currency mode is `test`, the wallet format is right (`0x` followed by 40 hex characters), the payment's own `payTo` matches what the manifest advertised, the network matches, and the amount is enough. `pay_to_wallet` has to pass that same wallet-format check before any of the rest is even evaluated; right now its stored value cannot possibly pass it, so no `X-PAYMENT` a bot builds -- however correct otherwise -- can ever be accepted. `monetized_path` and `currency_mode` are both already correct; changing either makes things worse, not better (decoys)."
         },
         {
           "id": "hint-3",
-          "content": "How to fix it (overwrite the existing parameter — do not create a new resource): `aws ssm put-parameter --name /{NamePrefix}/config/pay_to_wallet --value 0x00000000000000000000000000000000deadc0de --overwrite`. The gate Lambda re-reads the config on every invocation, so it takes effect immediately. Re-run `./check_x402.sh {NamePrefix}` and it automatically runs GET → 402 → reads payTo from the manifest → builds an X-PAYMENT header → resubmits, returning HTTP 200 together with `flag: TC{…}`. Submit that value."
+          "content": "The fix (overwrite the existing parameter -- create no new resource): `aws ssm put-parameter --name /{NamePrefix}/config/pay_to_wallet --value 0x00000000000000000000000000000000deadc0de --overwrite`. Any syntactically valid `0x` + 40-hex-character wallet works here, since currency mode is test -- this is simply the company's suggested test-net receiving address (the same value is also shown in the `ExpectedPayToWallet` Output). The gate Lambda re-reads its config on every invocation, so the change is live immediately. Re-run `./check_x402.sh {NamePrefix}` and it drives the whole handshake for you -- GET, read `payTo` from the 402 manifest, build `X-PAYMENT`, resubmit -- coming back HTTP 200 with `flag: TC{…}`. Submit that value."
         }
       ]
     }
@@ -72,17 +72,17 @@
     "hints": [
       {
         "id": "hint-1",
-        "content": "最初の一手は CloudShell で briefing を読むこと: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`。 手順が全部書いてある。 要は (1) S3 からツールを取得 `aws s3 cp s3://{NamePrefix}-tools-<accountId>/check_x402.sh . && chmod +x check_x402.sh` (バケット名は briefing と `ToolsBucketName` Output にある)、 (2) `./check_x402.sh {NamePrefix}` を実行。 ツールが Bot として課金ゲート (Lambda) を `aws lambda invoke` で叩いてくれる。",
+        "content": "細部を見る場所: `check_x402.sh` の最初の応答には、 すでに `payTo` が空の x402 マニフェスト全体が出ている。 briefing も `/{NamePrefix}/config/pay_to_wallet` を名指ししている。 テーブル表示で 「空欄に見える」 だけで済ませず、 その 1 つのパラメータの生の値を見てみる ── `aws ssm get-parameter --name /{NamePrefix}/config/pay_to_wallet --query Parameter.Value --output json` ならクォート付きで表示される。 SSM は本当に空の String パラメータを許さないので、 実際に入っている値は 「何も無い」 ではない。",
         "penalty": 20
       },
       {
         "id": "hint-2",
-        "content": "`./check_x402.sh` は 『x402 マニフェストに payTo が無い ＝ ゲートは課金を要求しているのに振込先が無い』 と報告する。 設定を見る: `aws ssm get-parameters-by-path --path /{NamePrefix}/config --recursive`。 `monetized_path` (`/content/*`) と `currency_mode` (`test`) は正しい (おとり ── `real` に変えると逆に決済できなくなる)。 空なのは `pay_to_wallet`: 前任の SRE が放置していた。 会社のテストネット USDC 受取ウォレットは briefing と `ExpectedPayToWallet` Output に載っている (`0x…deadc0de`。 形式が正しい 0x ウォレットなら何でも良い)。",
+        "content": "破れているルール、 言葉で: 送られてきた支払いが検証を通るのは、 次すべてが同時に成り立つときだけ ── 通貨モードが `test`、 ウォレットの形式が正しい (`0x` に続けて 16 進数 40 文字)、 支払い側が申告した `payTo` がマニフェストの `payTo` と一致、 ネットワークが一致、 金額が足りている。 `pay_to_wallet` はその 「形式が正しいか」 のチェックに、 検証が始まる前の時点で既に通らなければならない。 いまの値ではこのチェックそのものに絶対に通らないので、 Bot がどれだけ正しく `X-PAYMENT` を組み立てても、 検証は永遠に成立しない。 `monetized_path` と `currency_mode` はどちらも既に正しい設定で、 どちらを変えても状況は悪化するだけ (おとり)。",
         "penalty": 30
       },
       {
         "id": "hint-3",
-        "content": "直し方 (新規リソース作成ではなく既存パラメータの上書き): `aws ssm put-parameter --name /{NamePrefix}/config/pay_to_wallet --value 0x00000000000000000000000000000000deadc0de --overwrite`。 ゲートの Lambda は毎呼び出しで config を読み直すので即反映。 `./check_x402.sh {NamePrefix}` を再実行すると GET → 402 → マニフェストから payTo を読み取り X-PAYMENT を組んで再送、 までを自動でやってくれて、 HTTP 200 と共に `flag: TC{…}` が返る。 その値を提出。",
+        "content": "直し方 (新規リソース作成ではなく既存パラメータの上書き): `aws ssm put-parameter --name /{NamePrefix}/config/pay_to_wallet --value 0x00000000000000000000000000000000deadc0de --overwrite`。 通貨モードが test なので、 形式が正しい `0x` + 16 進数 40 文字のウォレットならどれでも通る ── これは会社が提案するテストネット受取先の一例で、 `ExpectedPayToWallet` Output にも同じ値が出ている。 ゲートの Lambda は毎呼び出しで config を読み直すので即反映される。 `./check_x402.sh {NamePrefix}` を再実行すると、 GET → 402 マニフェストから payTo を読む → X-PAYMENT を組む → 再送、 までを自動でやってくれて、 HTTP 200 と共に `flag: TC{…}` が返る。 その値を提出。",
         "penalty": 50
       }
     ]

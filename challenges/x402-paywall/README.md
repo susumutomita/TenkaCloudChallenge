@@ -54,7 +54,7 @@ collect nothing.
 Everything below runs from **AWS CloudShell** (which already has your stack's credentials). Replace
 `{NP}` with your team's NamePrefix (shown in the portal, e.g. `tc-x402-paywall-yourteam`).
 
-**1. Read the briefing — it has every command.**
+**1. Read the briefing — it walks through diagnosis, but stops short of the exact fix.**
 ```bash
 NP=tc-x402-paywall-yourteam
 aws ssm get-parameter --name /$NP/briefing --query Parameter.Value --output text
@@ -116,9 +116,9 @@ aws ssm put-parameter --name /$NP/config/pay_to_wallet \
 | | |
 | --- | --- |
 | Kind | `flag` (submit the `TC{…}` token once) |
-| Points | 300 |
-| Wrong-answer penalty | −15 |
-| Hints | 3 (−20 / −50 / −100), progressively revealing first-step → faulty param → exact fix |
+| Points | 200 |
+| Wrong-answer penalty | −10 |
+| Hints | 3 (−20 / −30 / −50): where to look → the rule that is broken → the exact fix |
 
 ## Cost
 

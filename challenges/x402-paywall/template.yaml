@@ -318,14 +318,16 @@ Resources:
       Value: !Sub >-
         The x402 content gate is the Lambda named in /${NamePrefix}/gate_function;
         you are a bot client that invokes it. It returns HTTP 402 but collects 0
-        USDC. STEP 1 get the tool: aws s3 cp s3://${NamePrefix}-tools-${AWS::AccountId}/check_x402.sh
-        . && chmod +x check_x402.sh. STEP 2 run it: ./check_x402.sh ${NamePrefix} --
-        it reports the x402 manifest has no payTo (the gate is misconfigured). STEP
-        3 inspect /${NamePrefix}/config/* ; monetized_path and currency_mode are
-        correct, pay_to_wallet is blank. STEP 4 fix it (no new resources): aws ssm
-        put-parameter --name /${NamePrefix}/config/pay_to_wallet --value
-        0x00000000000000000000000000000000deadc0de --overwrite. STEP 5 rerun
-        ./check_x402.sh ${NamePrefix} for HTTP 200 and the flag TC{...}. Submit it.
+        USDC. STEP 1 get the tool: aws s3 cp
+        s3://${NamePrefix}-tools-${AWS::AccountId}/check_x402.sh . && chmod +x
+        check_x402.sh. STEP 2 run it: ./check_x402.sh ${NamePrefix} -- it reports
+        the x402 manifest has no payTo (the gate is misconfigured). STEP 3 inspect
+        /${NamePrefix}/config/* ; monetized_path and currency_mode are correct,
+        pay_to_wallet is blank. STEP 4 a healthy manifest has a well-formed payTo
+        (0x followed by 40 hex characters) where pay_to_wallet is now blank;
+        getting it there is the fix, and the exact command is yours to work out.
+        STEP 5 rerun ./check_x402.sh ${NamePrefix} for HTTP 200 and the flag
+        TC{...}. Submit it.
       Description: !Sub "TenkaCloud x402-paywall briefing for ${NamePrefix}."
       Tier: Standard
 

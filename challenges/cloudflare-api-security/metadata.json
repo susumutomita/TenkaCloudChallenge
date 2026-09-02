@@ -55,15 +55,15 @@
       "hints": [
         {
           "id": "hint-1",
-          "content": "The first move is to read the briefing in CloudShell: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`. In short: (1) expand the starter with `aws s3 cp s3://{NamePrefix}-tools-<accountId>/setup.sh . && bash setup.sh`, (2) `wrangler login && wrangler deploy` to a free Cloudflare account, (3) score it with `./evaluate.sh {NamePrefix} https://<you>.workers.dev`. If you run evaluate.sh first without any fixes, it shows you stage by stage where you are failing."
+          "content": "Where to look first: open your deployed worker directly in a browser -- no login needed for this. Visit `https://<name>.workers.dev/api/profile/bob` with zero credentials attached and see whose profile comes back. Then visit an id that does not exist, e.g. `https://<name>.workers.dev/api/profile/nope123`, and read every field of the JSON error body, not just its message. Those two raw responses are the actual evidence behind the stage-2 and stage-3 failures `evaluate.sh` reports."
         },
         {
           "id": "hint-2",
-          "content": "The four `// VULN:` comments in `index.js` mark the weak spots. Stage 2 (authorization & IDOR) is the heart of it: (a) return 401 when `Authorization: Bearer <token>` is missing or invalid; (b) `GET /api/profile/:id` returns 200 only when `:id` matches the owner of the caller's token, and someone else's id returns 403. The demo tokens are `token-alice`→alice / `token-bob`→bob. Stage 1 requires rejecting malformed ids (`'`, `../`, an over-long string) with 400/404 and never emitting a 500. Stage 3 requires that error responses never expose a stack trace / path / token."
+          "content": "The rules being broken, in words (no code yet): (1) Authorization -- when the caller's token is missing or is not one of the values in the token table, the handler must stop and return 401 before doing anything else; right now an unrecognized caller is silently treated as alice instead of being refused. (2) Input validation -- `:id` must match a fixed shape (lowercase letters only, capped length) before it is looked up at all; anything outside that shape must be rejected with 400, not passed through. (3) IDOR -- `GET /api/profile/:id` may return data only when a well-formed `:id` names the same person as the caller's own token; every other id must come back 403 with no profile attached; right now nothing ever compares the two. (4) Information disclosure -- an error reply may contain nothing but a short label for the kind of error; today it also hands back the full list of valid ids and the caller's own token, and an unhandled crash hands back the stack trace."
         },
         {
           "id": "hint-3",
-          "content": "Key fixes: (1) validate the token at the top of the handler → if invalid, `json({error:'unauthorized'}, 401)`. (2) if `:id !== caller.userId`, `json({error:'forbidden'}, 403)` (blocks IDOR). (3) validate the id against an allowlist regex (e.g. `/^[a-z]{1,32}$/`) and return `400` when it does not match. (4) in the catch block, return only the fixed message `{error:'internal error'}` and never expose `err.stack`/`err.message`. Fix these, `wrangler deploy` → `./evaluate.sh {NamePrefix} https://<you>.workers.dev` for an all-stages PASS, and submit the returned `TC{…}`."
+          "content": "The fix, in code: (1) right after reading the token, before any routing: if the token is not in `USERS`, `return json({error:'unauthorized'}, 401)` -- one check, before both routes; the alice-fallback inside `/api/profile` then never runs and can be deleted too. (2) in the `/api/profile/:id` branch, check the shape first: if `!/^[a-z]{1,32}$/.test(id)`, `return json({error:'bad request'}, 400)`. (3) only then check ownership: if `id !== caller.userId`, `return json({error:'forbidden'}, 403)`. (4) in the 404 branch, return only `json({error:'not found'}, 404)` -- drop the `id`/`known`/`token` fields; in the `catch` block, return only `json({error:'internal error'}, 500)` -- drop `err.message`/`err.stack`. Apply these in this order (shape before ownership matters -- a malformed id must fail 400, not 403), `wrangler deploy`, then `./evaluate.sh {NamePrefix} https://<you>.workers.dev` for an all-stages PASS and the returned `TC{...}`."
         }
       ]
     }
@@ -76,17 +76,17 @@
     "hints": [
       {
         "id": "hint-1",
-        "content": "最初の一手は CloudShell で briefing を読むこと: `aws ssm get-parameter --name /{NamePrefix}/briefing --query Parameter.Value --output text`。 要は (1) `aws s3 cp s3://{NamePrefix}-tools-<accountId>/setup.sh . && bash setup.sh` でスターター展開、 (2) 無料 Cloudflare アカウントで `wrangler login && wrangler deploy`、 (3) `./evaluate.sh {NamePrefix} https://<あなた>.workers.dev` で採点。 まず未修正のまま evaluate.sh を撃つと、 どの段階で落ちているかが段階ごとに表示される。",
+        "content": "最初に見る場所: デプロイした Worker を、 そのままブラウザで開いてみる (ログインなどの操作は要らない)。 何の資格情報も付けずに `https://<name>.workers.dev/api/profile/bob` を開き、 誰のプロフィールが返ってくるかを見る。 次に、 存在しない id ―― 例えば `https://<name>.workers.dev/api/profile/nope123` ―― を開き、 返ってくる JSON エラーに入っている項目を、 メッセージ本文以外も含めて全部見る。 この 2 つの生の応答が、 `evaluate.sh` が報告する段階 2 ・段階 3 の失敗の実物。",
         "penalty": 20
       },
       {
         "id": "hint-2",
-        "content": "`index.js` の `// VULN:` コメントが 4 箇所の急所。 段階 2 (認可・IDOR) が本丸: (a) `Authorization: Bearer <token>` が無い/不正なら 401 を返す、 (b) `GET /api/profile/:id` は `:id` が呼び出し元トークンの所有者と一致するときだけ 200、 他人の id は 403。 デモトークンは `token-alice`→alice / `token-bob`→bob。 段階 1 は不正な id (`'`、 `../`、 超長文字列) を 400/404 で弾き 500 を出さないこと。 段階 3 はエラー応答に stack trace / path / token を出さないこと。",
+        "content": "破れているルール、 言葉で (まだコードは無し): (1) 認可 ―― 呼び出し元のトークンが無い、 またはトークン表に無い値なら、 他の処理をする前にその場で 401 を返して断らなければならない。 いまは 「わからない相手は alice として扱う」 になっていて、 断らずに通してしまう。 (2) 入力検証 ―― :id は 「英小文字のみ・長さに上限あり」 という決まった形のときしか受け付けてはいけない。 その形から外れる値は、 中身を調べる前に 400 で断る (素通りさせない)。 (3) IDOR ―― `GET /api/profile/:id` がデータを返してよいのは、 形が正しい :id が呼び出し元のトークンの持ち主本人を指しているときだけ。 それ以外は、 中身を付けずに 403 を返す。 いまは両者を比べる処理そのものが無い。 (4) 情報漏えい ―― エラーの返事に入れてよいのは 「エラーの種類を表す短い言葉」 だけ。 いまは有効な id の一覧や呼び出し元のトークンまで一緒に返ってしまい、 想定外の例外が起きたときはスタックトレースまで返っている。",
         "penalty": 30
       },
       {
         "id": "hint-3",
-        "content": "修正の要点: (1) ハンドラ先頭でトークン検証 → 無効なら `json({error:'unauthorized'}, 401)`。 (2) `:id !== caller.userId` なら `json({error:'forbidden'}, 403)` (IDOR 遮断)。 (3) id を allowlist 正規表現 (例 `/^[a-z]{1,32}$/`) で検証し、 外れたら `400`。 (4) catch 節では固定文言 `{error:'internal error'}` のみ返し `err.stack`/`err.message` を出さない。 直して `wrangler deploy` → `./evaluate.sh {NamePrefix} https://<あなた>.workers.dev` で全段階 PASS、 返る `TC{…}` を提出。",
+        "content": "修正、 コードで: (1) トークンを読み取った直後、 どちらのルートに分かれる前にも: トークンが `USERS` に無ければ `return json({error:'unauthorized'}, 401)`。 これを 1 か所でやっておけば、 `/api/profile` 内の 「alice にフォールバックする」 行はもう実行されないので削ってよい。 (2) `/api/profile/:id` では、 まず形を確認する: `!/^[a-z]{1,32}$/.test(id)` なら `return json({error:'bad request'}, 400)`。 (3) その後で持ち主を確認する: `id !== caller.userId` なら `return json({error:'forbidden'}, 403)`。 (4) 404 の分岐では `id`/`known`/`token` を含めず `json({error:'not found'}, 404)` だけを返す。 `catch` 節では `err.message`/`err.stack` を含めず `json({error:'internal error'}, 500)` だけを返す。 この順番 (形のチェックが持ち主チェックより先) が大事 ―― 崩れた id は 403 ではなく 400 で落ちる必要がある。 直したら `wrangler deploy` → `./evaluate.sh {NamePrefix} https://<あなた>.workers.dev` で全段階 PASS、 返ってくる `TC{…}` を提出。",
         "penalty": 50
       }
     ]

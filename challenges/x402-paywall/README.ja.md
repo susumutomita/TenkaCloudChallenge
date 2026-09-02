@@ -53,7 +53,7 @@ bot ──invoke {..., headers:{x-payment:<base64>}}──▶  GateFunction
 以下はすべて **AWS CloudShell** (スタックの認証情報が入っている) で実行。`{NP}` はポータルに表示される
 自チームの NamePrefix (例 `tc-x402-paywall-yourteam`) に置き換える。
 
-**1. briefing を読む ── 全コマンドが載っている。**
+**1. briefing を読む ── 診断の手順までは載っているが、直すコマンドそのものは載っていない。**
 ```bash
 NP=tc-x402-paywall-yourteam
 aws ssm get-parameter --name /$NP/briefing --query Parameter.Value --output text
@@ -114,9 +114,9 @@ aws ssm put-parameter --name /$NP/config/pay_to_wallet \
 | | |
 | --- | --- |
 | 種別 | `flag` (`TC{…}` トークンを 1 回提出) |
-| 配点 | 300 |
-| 誤答ペナルティ | −15 |
-| ヒント | 3 段 (−20 / −50 / −100)。最初の一手 → 壊れたパラメータ → 具体的な修正、と段階開示 |
+| 配点 | 200 |
+| 誤答ペナルティ | −10 |
+| ヒント | 3 段 (−20 / −30 / −50)。見る場所 → 破れている規則 → 具体的な修正、と段階開示 |
 
 ## コスト
 
