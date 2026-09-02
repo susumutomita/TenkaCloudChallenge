@@ -3,7 +3,8 @@ import { applyOp, DEFAULT_CONFIG, initialState, tick, validateOp } from "./reduc
 import { buildLeakOp, startedMatch } from "./playtest.ts";
 import { HINT_LEVELS } from "./hints.ts";
 import { TERMINAL_ORDER_RETENTION_BATCHES } from "./reducer.ts";
-import metadata from "../../metadata.json" with { type: "json" };
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * [Issue #659] How big one match's persisted state gets, and where that stops
@@ -212,6 +213,14 @@ describe("a full match's persisted state fits the backend that has to hold it", 
  * updated deliberately — which is the point.
  */
 describe("the state budget this Battle declares to the platform", () => {
+  /**
+   * Read rather than imported: an import attribute (`with { type: "json" }`)
+   * needs a newer `module` setting than this package's tsconfig uses, and
+   * loosening the tsconfig to import one file would be the wrong trade.
+   */
+  const metadata: { interTeamCoordination?: { stateBudget?: unknown } } = JSON.parse(
+    readFileSync(join(import.meta.dir, "..", "..", "metadata.json"), "utf8"),
+  );
   const declared = metadata.interTeamCoordination?.stateBudget as
     | { bytesPerTeam: number; baseBytes: number }
     | undefined;
