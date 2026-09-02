@@ -7,6 +7,11 @@
 -- Row Level Security, then restart the container. The grader re-runs and all 8
 -- assertions must pass.
 --
+-- Playing through the Portal? You do not need this file: open the Container
+-- terminal, run `psql -U postgres -d rls_demo`, and type the same statements
+-- there. They take effect immediately, but they vanish when the container
+-- restarts, because the entrypoint reloads policies from this file at every boot.
+--
 -- The identity helpers you can use are already defined in schema.sql:
 --   app.current_user_id()   -> the signed-in user's id (NULL for the anon client)
 --   app.is_authenticated()  -> true when request.jwt.role = 'authenticated'

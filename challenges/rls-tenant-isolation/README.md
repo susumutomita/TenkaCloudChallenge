@@ -15,9 +15,20 @@ make local PROBLEM=rls-tenant-isolation   # from the TenkaCloud repo root
 # opens the Participant Portal; log in with any non-empty key
 ```
 
-- **Challenge surface:** <http://127.0.0.1:18080> — the documents API.
+- **Challenge surface:** <http://127.0.0.1:18080> — the documents API. The fix
+  itself is written over `psql` in the Portal's embedded **Container terminal**
+  (`runtime.terminal` → the single compose service `rls-tenant-isolation`):
+  `psql -U postgres -d rls_demo`.
 - **Goal:** make every company's documents invisible and immutable to the other
   company, enforced in the database, then submit to pass all 8 attack tests.
+
+If your Portal build has no embedded terminal yet, you can reach the same
+database from your own machine's terminal:
+
+```bash
+docker compose -f local/docker-compose.yml exec rls-tenant-isolation \
+  psql -U postgres -d rls_demo
+```
 
 ## The story
 
@@ -98,14 +109,37 @@ denies the row regardless of which code path (or which client) reaches it.
 
 ## How to solve
 
-Enforce the boundary in Postgres. Edit `local/solution/policies.sql` (it starts
-empty → the container loads the vulnerable state), then restart:
+Enforce the boundary in Postgres. There are two ways to get policies into the
+running database; the grader does not care which, because it inspects the live
+database on every submission (see below).
+
+**Primary route — the Portal terminal (no checkout needed).** Press **Connect**
+on the Container terminal panel, then `psql -U postgres -d rls_demo`. The
+container runs as the `postgres` OS user and `entrypoint.sh` starts Postgres
+with trust auth on its Unix socket and `127.0.0.1:5432`, so no host or password
+flag is needed — the entrypoint's own `psql -d rls_demo` calls use the same
+path. Type `alter table … enable row level security;` and your `create policy …`
+statements directly; they take effect immediately, no restart. The terminal is
+a `compose exec -T` shell, so psql shows no prompt, but results still print
+after each `;`. What you create here lives only in the running container:
+`entrypoint.sh` drops every policy on `public.documents` at each boot and
+reloads the solution file (or `broken-policies.sql` when it is empty), so a
+stop/start returns the container to the vulnerable state and the SQL has to be
+pasted in again.
+
+**Secondary route — the solution file (needs a checkout).** Edit
+`local/solution/policies.sql` (it starts empty → the container loads the
+vulnerable state), then restart:
 
 ```bash
 make local PROBLEM=rls-tenant-isolation   # rebuild/restart to re-apply policies
 ```
 
-Your policies must satisfy all eight checks:
+The file is bind-mounted read-only and loaded on every boot, so this route
+survives restarts.
+
+Whichever route you take, the policies must satisfy the five requirements
+below (the grader's eight checks probe them):
 
 1. RLS **enabled** on `public.documents` (and `force` so the table owner is bound too).
 2. `SELECT` only your own org's rows.
@@ -116,15 +150,39 @@ Your policies must satisfy all eight checks:
 
 The schema (`local/db/schema.sql`) already defines the identity helpers you use
 in policies: `app.current_user_id()`, `app.is_authenticated()`,
-`app.current_org_ids()`, `app.is_owner_of(org)`. A full reference answer lives in
-`local/reference/policies.sql`.
+`app.current_org_ids()`, `app.is_owner_of(org)`. From the terminal, `\df app.*`
+lists them. A full reference answer lives in `local/reference/policies.sql`
+(author stage only — it is not in the participant image).
+
+### Checking the effect from psql
+
+RLS never applies to a superuser, so `select * from public.documents` as
+`postgres` keeps returning every row after the policies exist. To see what the
+API sees, borrow a request identity the same way `server.mjs` / `pg-client.mjs`
+do — switch to the RLS-bound role and set the two GUCs the helpers read:
+
+```sql
+set role app_api;
+select set_config('request.jwt.role', 'authenticated', false);  -- or 'anon'
+select set_config('app.user_id', 'alice-owner', false);         -- or ''
+select id, organization_id, title from public.documents;
+reset role;
+```
+
+Before the fix every row of both orgs comes back; after a correct fix only
+Acme's. `reset role` is required before further DDL — `app_api` cannot create
+policies. The statement gives participants this same snippet, so a Portal
+player without `curl` still has a feedback loop inside the container.
 
 ## How scoring works
 
 The platform holds no answer. On submit, the local scoring API forwards to the
 container's loopback `/verify` (`POST http://127.0.0.1:18081/verify`), which runs
 the grader's **8 attack assertions** against live Postgres and returns
-`{ "correct": boolean }`:
+`{ "correct": boolean }`. The submitted string is discarded (`server.mjs` reads
+the body and ignores it), so the Flag field only has to be non-empty; what is
+graded is whatever policies are in force at that instant, whether they were
+typed into psql a second ago or loaded from the solution file at boot:
 
 | # | assertion                                       | expected |
 | - | ----------------------------------------------- | -------- |
@@ -165,7 +223,11 @@ future reviewer — can verify just by reading the policy.
 
 ## Delivery model
 
-`metadata.json` declares a container runtime instead of a CloudFormation template:
+`metadata.json` declares a container runtime instead of a CloudFormation
+template, plus the embedded Portal terminal (`runtime.terminal`) attached to
+the single service (SCHEMA.json's constraint: a terminal can only attach to the
+one declared service, and that service must build with `target: participant`,
+which the docker adapter re-checks on attach):
 
 ```jsonc
 "runtime": {
@@ -174,7 +236,8 @@ future reviewer — can verify just by reading the policy.
   "entry": "local/docker-compose.yml",
   "challengeEndpoints": { "DocumentsApi": "http://127.0.0.1:18080" },
   "verifyUrl": "http://127.0.0.1:18081/verify",
-  "secretEnv": ["FLAG_SEED"]
+  "secretEnv": ["FLAG_SEED"],
+  "terminal": { "service": "rls-tenant-isolation" }
 },
 "scoring": { "kind": "verify", "points": 200, "wrongAnswerPenalty": 10, "hints": [ … ] }
 ```
@@ -183,7 +246,7 @@ future reviewer — can verify just by reading the policy.
 rls-tenant-isolation/
 ├── metadata.json                  # runtime (docker/compose) + scoring (verify) + hints
 └── local/
-    ├── docker-compose.yml         # one service, loopback-only ports + healthcheck
+    ├── docker-compose.yml         # one service (= terminal target), loopback-only ports, solution bind-mount, healthcheck
     ├── Dockerfile                 # postgres:16-alpine + node
     ├── entrypoint.sh              # boot pg, apply schema/seed, load policies, start app
     ├── app/
@@ -198,7 +261,7 @@ rls-tenant-isolation/
     │   ├── seed.sql               # 2 orgs, 2 users each, multiple docs
     │   └── broken-policies.sql    # the vulnerable starting state (RLS disabled)
     ├── solution/
-    │   └── policies.sql           # YOUR ANSWER (starts empty)
+    │   └── policies.sql           # file-route answer (starts empty; the terminal route needs no file)
     └── reference/
         └── policies.sql           # reference answer key
 ```
