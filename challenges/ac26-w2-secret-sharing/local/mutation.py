@@ -258,6 +258,16 @@ def reconstruct_line(two_points, p):
         "line: the slope is fixed everywhere (randomness ignored)",
         _replace(REFERENCE, "    r = randomness[0] % p", "    r = 1"),
     ),
+    (
+        # Codex's finding on #681: one slope folded onto another, on the large moduli
+        # only, leaves one y unreachable per party and passed a 300-slope sample.
+        "line: slope p-1 is folded onto slope 0 on the large moduli",
+        _replace(
+            REFERENCE,
+            "    r = randomness[0] % p",
+            "    r = randomness[0] % p\n    if p >= 1000 and r == p - 1:\n        r = 0",
+        ),
+    ),
 ]
 
 #: Not mutants: two-of-three constructions that are NOT the statement's line but have

@@ -152,9 +152,10 @@ searches all p slopes for each of the p candidate secrets through the participan
 `share_line` (about 10⁵ calls, well under a second for the reference). On the ~10⁴ cases that would
 be 10⁸ calls per point, so the same property is checked in its equivalent form: for a fixed secret,
 slope → party i's y must be a bijection on 0..p−1 (then every y is reachable from every secret by
-exactly one slope, and one point rules nothing out), sampled as 300 distinct slopes for two secrets
-per case whose y values must be pairwise distinct — a `share_line` that folds the slope into 5000
-distinct values still collides with probability above 0.998. That closes the shortcut the first
+exactly one slope, and one point rules nothing out), checked on every slope 0..p-1 for two secrets
+per case whose y values must be pairwise distinct (2 × p calls of `share_line` per case, about
+0.2 s) — a `share_line` that folds even one slope onto another collides here; a 300-slope sample
+caught that only when both folded slopes were drawn, about 0.1% of the time. That closes the shortcut the first
 version accepted: build the line only below p = 1000 and hand everyone a copy of the secret above
 it. The large secrets are still drawn from the upper half of the field so that a brute force
 counting up from 0 cannot finish early. Failure messages name the property (which pair check, which

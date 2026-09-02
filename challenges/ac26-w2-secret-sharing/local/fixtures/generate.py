@@ -24,11 +24,10 @@ PRIMES = (97, 101, 103, 107, 109, 113, 127, 131, 137, 139)
 LARGE_PRIMES = (10007, 10009, 10037, 10039, 10061, 10067, 10069, 10079, 10091, 10093)
 #: Party x holds the point of the line at x. x = 0 -- the secret itself -- goes to nobody.
 LINE_PARTIES = (1, 2, 3)
-#: How many distinct slopes the large-modulus privacy probe draws per secret (see
-#: `privacy_probe`). A `share_line` that folds the slope into far fewer than p distinct y
-#: values collides among this many draws with overwhelming probability (birthday bound:
-#: 300 draws into 5000 bins collide with probability above 0.998), and the cost stays at
-#: 2 cases x 2 secrets x 300 calls of the learner's `share_line`.
+#: How many distinct slopes `privacy_probe` draws per secret, for callers that want a
+#: sample. The hidden checker no longer uses the sample: it sweeps every slope 0..p-1 for
+#: each probe secret (2 x p calls per case), because a `share_line` that folds one slope
+#: onto another collides among 300 draws only when both happen to be drawn (about 0.1%).
 PRIVACY_PROBE_SLOPES = 300
 
 
@@ -163,10 +162,11 @@ def privacy_probe(seed: str, label: str, p: int, secret: int) -> dict[str, list[
 
     The large-modulus form of "one point fits every secret": for a fixed secret, the
     map slope -> party i's y must be a bijection on 0..p-1 (then every y is reachable
-    from every secret, by exactly one slope). The hidden test samples that map at these
-    slopes, for each of these secrets, through the learner's own `share_line`, and
+    from every secret, by exactly one slope). The hidden test checks that map on every
+    slope, for each of these secrets, through the learner's own `share_line`, and
     requires the y values to be pairwise distinct -- a collision means some y is
-    unreachable for that secret, and seeing that y would rule the secret out.
+    unreachable for that secret, and seeing that y would rule the secret out. The
+    sampled slopes are kept for callers that want a cheap spot check.
 
     The second secret is drawn uniformly from the field minus the case's own secret, so
     a `share_line` that only behaves on the graded secret is probed on another one too.
