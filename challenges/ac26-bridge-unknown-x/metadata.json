@@ -156,7 +156,7 @@
         "hints": [
           {
             "id": "product-hint-1",
-            "content": "3 つ組です。1 つ目は c1 * c2、2 つ目は a * b + (a + b) * x（交差項を忘れない）、3 つ目はその差。",
+            "content": "3 つ組です。1 つ目は c1 * c2、2 つ目は a * b + (a + b) * x（真ん中の (a + b) * x を忘れない）、3 つ目はその差。",
             "penalty": 4
           }
         ]
@@ -255,7 +255,7 @@
           "hints": [
             {
               "id": "product-hint-1",
-              "content": "A 3-tuple. First c1 * c2, second a * b + (a + b) * x (keep the cross term), third their difference."
+              "content": "A 3-tuple. First c1 * c2, second a * b + (a + b) * x (keep the middle term (a + b) * x), third their difference."
             }
           ]
         }
