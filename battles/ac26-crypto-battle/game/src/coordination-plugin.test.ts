@@ -54,6 +54,7 @@ import { describe, expect, it, mock } from "bun:test";
 import { LOCAL_PLAY_SEED_PREFIX } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
 import { reconstruct } from "./shamir.ts";
+import { startedMatch } from "./playtest.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState, StoredShare } from "./types.ts";
 // Type-only: resolved via ../../coordination/coordination-plugin-sdk.d.ts's
 // ambient declaration (see that file), not a real installed dependency.
@@ -111,6 +112,18 @@ const CTX = {
 /** The same event with no secret issued — the local-play / unit-test path. */
 const CTX_NO_SECRET = { eventId: "evt-486-pr3-e2e", teamIds: ["blue", "red"] } as const;
 
+/**
+ * [Issue #677] A started match, through the same dispatch seam production uses.
+ *
+ * `initialState` returns a match in `waiting`: the belt issues nothing and the
+ * clock does not run until a team sends START, so a deployed match that nobody
+ * has opened stays as deployed. These wiring tests are about a match under way,
+ * so they start it the way a participant does rather than reaching into state.
+ */
+function startedThroughPlugin(ctx: typeof CTX | typeof CTX_NO_SECRET): CryptoBattleState {
+  return expectDispatched(dispatchOp(plugin, plugin.initialState(ctx), "blue", { kind: "start" }));
+}
+
 /** `TeamState.shares` (stringified bigints) -> `shamir.ts`'s bigint `Share[]`, for `reconstruct`. */
 function bigintShares(shares: readonly StoredShare[]): { readonly index: number; readonly value: bigint }[] {
   return shares.map((s) => ({ index: s.index, value: BigInt(s.value) }));
@@ -167,7 +180,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
   });
 
   it("drives a full 2-team match through dispatchOp/runTick (the SDK's own validate->apply / tick composition): tick -> leak -> prove -> hunt", () => {
-    let state = plugin.initialState(CTX);
+    let state = startedThroughPlugin(CTX);
     state = runTick(plugin, state, 0);
 
     // -- LEAK: blue completes its first open contract by revealing a share.
@@ -240,7 +253,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
   });
 
   it("state survives a JSON round-trip (simulating Turso/DynamoDB persistence between calls) and stays usable afterward [PR3 review High #1/#2]", () => {
-    let state = plugin.initialState(CTX);
+    let state = startedThroughPlugin(CTX);
     state = runTick(plugin, state, 0);
     // [Issue #652] Pick by what LEAK requires, not by belt position. The Order
     // belt derives from `state.seed`, so "the first open contract" changed shape
@@ -298,7 +311,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     // "an actual entry round-trips intact"). This test drives a successful
     // HUNT first, so `huntLog` has a real `{ attackerTeamId, targetTeamId,
     // generation, atMs }` entry, THEN round-trips.
-    let state = plugin.initialState(CTX);
+    let state = startedThroughPlugin(CTX);
     state = runTick(plugin, state, 0);
     const redTeam = state.teams.red;
     if (!redTeam) throw new Error("test setup: expected a red team");
@@ -331,7 +344,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
   });
 
   it("HUNT works with recoveredSecret in its real wire shape, and rejects a JSON number or a non-canonical string [PR3 review High #1]", () => {
-    let state = plugin.initialState(CTX);
+    let state = startedThroughPlugin(CTX);
     state = runTick(plugin, state, 0);
     const redTeam = state.teams.red;
     if (!redTeam) throw new Error("test setup: expected a red team");

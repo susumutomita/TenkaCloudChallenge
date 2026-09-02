@@ -419,7 +419,10 @@ ${DIE_CSS}
 .tc-order-selected{border-color:#202b3c;border-width:2px;box-shadow:0 0 0 3px rgba(32,43,60,.12)}
 .tc-next-chip{margin-left:6px;font-size:9px;font-weight:800;letter-spacing:.06em;color:#0972d3;border:1px solid #9ec8ee;border-radius:999px;padding:1px 5px;vertical-align:middle;white-space:nowrap}
 .tc-game-card{border:1px solid #cfd8e3;border-radius:12px;padding:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-.tc-order-belt{border-width:2px;border-color:#0972d3;background:linear-gradient(180deg,#f5fbff,#fff)}
+/* [Issue #677] The belt keeps its heavier border, and gives back the pixel it
+   takes. Emphasis that shifts the content edge one pixel off every neighbouring
+   card is read as misalignment, not as emphasis. */
+.tc-order-belt{border-width:2px;padding:11px;border-color:#0972d3;background:linear-gradient(180deg,#f5fbff,#fff)}
 .tc-section-label{font-size:11px;font-weight:800;letter-spacing:.12em;color:#5f6b7a;margin-bottom:8px}
 .tc-section-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .tc-order-row{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px}

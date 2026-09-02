@@ -12,6 +12,7 @@ import {
   submitProve,
   submitRevealHint,
   submitRotate,
+  submitStart,
 } from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
@@ -119,6 +120,16 @@ export const FAST_MOVE_COPY = {
     rejected: "REJECTED",
     unavailable: "The match service is unavailable.",
     ended: "MATCH ENDED",
+    endedBody:
+      "This match ran its full length and is over. Scores and the Public Ledger are kept as they finished. An organiser can start a fresh match for this event from the admin API; re-deploying the problem does not, on purpose, because it would wipe a match other teams are still playing.",
+    waitingTitle: "READY WHEN YOU ARE",
+    waitingBody:
+      "Nothing is running yet. Orders start arriving the moment you press START, and the clock starts with them — so a match set up ahead of time costs you nothing while it waits.",
+    waitingNote: (minutes: number) => `Once started, the match runs ${minutes} minutes.`,
+    start: "START THE MATCH",
+    starting: "STARTING…",
+    startSuccess: "MATCH STARTED",
+    startBody: "The first Orders are on the belt.",
     fheTitle: "ENCRYPTED ADDITION",
     fheUse: "USED FOR: verifying a total without seeing anyone's amount",
     fheWhy: "WHY IT WORKS: Enc(a) + Enc(b) = Enc(a+b) — adding then locking equals locking then adding",
@@ -223,6 +234,16 @@ export const FAST_MOVE_COPY = {
     rejected: "REJECTED",
     unavailable: "試合サービスに接続できません。",
     ended: "MATCH ENDED",
+    endedBody:
+      "この試合は時間いっぱい進んで終了しました。得点と Public Ledger は終了時のまま残ります。新しい試合を始めるには運営が admin API から reset します。問題を deploy し直しても再開しないのは意図的で、他チームが進行中の試合を消してしまうためです。",
+    waitingTitle: "準備できたら始めてください",
+    waitingBody:
+      "まだ何も動いていません。START を押した瞬間に ORDER が届きはじめ、時計もそこから動きます。先に用意しておいた試合が、待っているあいだに減点されることはありません。",
+    waitingNote: (minutes: number) => `始めると ${minutes} 分の試合になります。`,
+    start: "試合を始める",
+    starting: "開始中…",
+    startSuccess: "MATCH STARTED",
+    startBody: "最初の ORDER が届きました。",
     fheTitle: "暗号文のまま足す",
     /*
       [Issue #659] 1 Order = 3 行。「つかいみち / しくみ / やること」。
@@ -296,7 +317,22 @@ function liveProjection(outcome: PortalCoordinationOutcome): CryptoBattleProject
 }
 
 function isClosed(projection: CryptoBattleProjection | null): boolean {
-  return Boolean(projection && (projection.phase === "ended" || (projection.matchRemainingMs ?? 1) <= 0));
+  if (!projection || projection.phase === "waiting") return false;
+  return projection.phase === "ended" || (projection.matchRemainingMs ?? 1) <= 0;
+}
+
+/** [Issue #677] Deployed, nobody has started it: the belt is empty on purpose. */
+function isWaiting(projection: CryptoBattleProjection | null): boolean {
+  return projection?.phase === "waiting";
+}
+
+/**
+ * How long the match will run, in minutes, read off the clock the projection
+ * already carries rather than from a constant the portal would have to keep in
+ * step with the reducer's config.
+ */
+function matchMinutes(projection: CryptoBattleProjection): number {
+  return (projection.matchRemainingMs ?? 0) / 60_000;
 }
 
 function openOrders(projection: CryptoBattleProjection | null): readonly ContractProjection[] {
@@ -516,7 +552,33 @@ ${DIE_CSS}
    chips out. A component that is only legible when the host picks a compatible
    colour is not self-contained; the dev harness renders these same components
    on a dark page, which is how it surfaced. */
-.tc-move-shell{border:2px solid #202b3c;border-radius:12px;padding:12px;background:#f8fafc;color:#16212e;display:grid;gap:12px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+/* [Issue #677] The plugin's panels line up with each other, and do so without
+   depending on the host page.
+
+   Three slots stack on the problem page and each drew its own frame at its own
+   inset: this shell at 12px padding inside a 2px border, StatusPanel and
+   HelpDrawer at 16px inside 1px. The outer edges agreed, so the difference read
+   as frames that do not quite line up rather than as a spacing choice -- and
+   nesting multiplied it, putting three different content edges at the same
+   depth. One inset for all three fixes it; the emphasis the thicker border
+   carried now comes from its colour alone.
+
+   box-sizing is declared here rather than assumed because a plugin renders
+   inside someone else's page. Without it these widths are correct only on a
+   host that ships the usual border-box reset -- the same way this file's colour
+   and background were once correct only on a host that happened to match. */
+.tc-move-shell,.tc-move-shell *,.tc-game-shell,.tc-game-shell *{box-sizing:border-box}
+/* [Issue #677] The Order belt scrolls; it does not widen the page.
+
+   Both shells are grids, and a grid item is min-width:auto by default -- it
+   refuses to shrink below its content. The belt is a flex row of six 180px
+   cards with overflow-x:auto, so "its content" is about 1150px: instead of
+   scrolling inside its track, it pushed the track, the shell, and the page out
+   to 1184px inside a 1000px window. The panel then ran off the right edge while
+   the host's own cards stopped at the window, which is what read as frames that
+   do not line up. min-width:0 is what lets the overflow container do its job. */
+.tc-move-shell>*,.tc-game-shell>*,.tc-board-grid>*{min-width:0}
+.tc-move-shell{border:1px solid #202b3c;border-radius:12px;padding:16px;background:#f8fafc;color:#16212e;display:grid;gap:12px;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .tc-move-title{font-size:12px;font-weight:900;letter-spacing:.12em}
 .tc-order-picks{display:flex;gap:7px;overflow-x:auto;padding-bottom:4px}
 /* [Issue #659] The picker is a SELECTOR, not a second board.
@@ -572,6 +634,16 @@ ${DIE_CSS}
 .tc-feedback-leak{background:#fff0d6;border:1px solid #d8a657}.tc-feedback-prove{background:#e7f6ec;border:1px solid #69b482}.tc-feedback-hunt{background:#f0eaff;border:1px solid #9a7bd1}.tc-feedback-rotate{background:#e8f3ff;border:1px solid #6ba8df}.tc-feedback-hint{background:#eef4fb;border:1px solid #7ea8d4}.tc-feedback-error{background:#fff0f0;border:1px solid #d13212}
 @keyframes tc-feedback-pop{0%{transform:translateY(7px) scale(.97);opacity:0}60%{transform:translateY(0) scale(1.02);opacity:1}100%{transform:scale(1)}}
 @media(max-width:720px){.tc-primary-actions,.tc-secondary-grid{grid-template-columns:1fr}}
+/* [Issue #677] The two gate screens -- waiting to start, and finished. Both are
+   a single centred message, because in both cases there is exactly one thing to
+   say and at most one thing to press. */
+.tc-gate{display:grid;justify-items:start;gap:10px;padding:18px;border:1px solid #cfd8e3;border-radius:12px;background:#fff;max-width:56ch}
+.tc-gate-title{font-size:15px;font-weight:900;letter-spacing:.08em}
+.tc-gate-body{margin:0;font-size:13px;line-height:1.7;color:#3b4a5a}
+.tc-gate-note{margin:0;font-size:11px;color:#5f6b7a}
+.tc-start-button{font-size:15px;font-weight:900;letter-spacing:.06em;padding:12px 22px;border-radius:10px;border:1px solid #0f5c9e;background:#0972d3;color:#fff;cursor:pointer}
+.tc-start-button:disabled{opacity:.6;cursor:default}
+.tc-start-button:not(:disabled):hover{background:#0f5c9e}
 @media(prefers-reduced-motion:reduce){.tc-feedback{animation:none!important}}
 `;
 
@@ -650,7 +722,45 @@ export default function FastMovePanel(props: PortalSlotProps) {
 
   if (!client) return null;
   if (!projection) return <section className="tc-move-shell"><style>{CSS}</style><div>{copy.unavailable}</div></section>;
-  if (isClosed(projection)) return <section className="tc-move-shell"><style>{CSS}</style><strong>{copy.ended}</strong></section>;
+  {/*
+    [Issue #677] Two dead ends used to look identical: a match that had not
+    started and a match that was over both rendered the words MATCH ENDED
+    against a blank panel, with nothing to press and nothing to read. One of
+    them is not an ending at all.
+  */}
+  if (isWaiting(projection)) {
+    return (
+      <section className="tc-move-shell" aria-label="crypto-battle-start">
+        <style>{CSS}</style>
+        <div className="tc-gate">
+          <strong className="tc-gate-title">{copy.waitingTitle}</strong>
+          <p className="tc-gate-body">{copy.waitingBody}</p>
+          <button
+            type="button"
+            className="tc-start-button"
+            disabled={submitting}
+            onClick={() => void run(
+              () => submitStart(client),
+              () => ({ kind: "prove", title: copy.startSuccess, body: copy.startBody }),
+            )}
+          >{submitting ? copy.starting : copy.start}</button>
+          <p className="tc-gate-note">{copy.waitingNote(Math.round(matchMinutes(projection)))}</p>
+          {feedback ? <p className="tc-gate-note">{feedback.body}</p> : null}
+        </div>
+      </section>
+    );
+  }
+  if (isClosed(projection)) {
+    return (
+      <section className="tc-move-shell" aria-label="crypto-battle-ended">
+        <style>{CSS}</style>
+        <div className="tc-gate">
+          <strong className="tc-gate-title">{copy.ended}</strong>
+          <p className="tc-gate-body">{copy.endedBody}</p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="tc-move-shell" aria-label="crypto-battle-fast-moves">

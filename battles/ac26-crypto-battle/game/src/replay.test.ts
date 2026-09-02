@@ -21,7 +21,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { buildFheOp, buildMpcOp } from "./playtest.ts";
+import { buildFheOp, buildMpcOp, startedMatch } from "./playtest.ts";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { runScript } from "./playtest.ts";
 import { buildReplay, keyMoments, type ReplayEvent } from "./replay.ts";
@@ -140,7 +140,7 @@ describe("buildReplay / keyMoments: against the vertical playtest's actual final
 
 describe("buildReplay: edge cases the vertical-playtest fixture does not exercise on its own", () => {
   test("an in-progress match with no successful hunt or rotate yet produces only leak/prove/phase-change events, and zero key moments", () => {
-    let state = tick(initialState({ eventId: "replay-in-progress", teamIds: TEAMS }), 0);
+    let state = tick(startedMatch({ eventId: "replay-in-progress", teamIds: TEAMS }), 0);
     const alphaOpen = state.contracts.find((c) => c.teamId === "alpha" && c.status === "open");
     if (!alphaOpen) throw new Error("test setup: expected an open contract");
     state = applyOp(state, "alpha", { kind: "leak", contractId: alphaOpen.id });
@@ -154,12 +154,12 @@ describe("buildReplay: edge cases the vertical-playtest fixture does not exercis
   });
 
   test("a match that has not reached pressure yet reports no phase-change events at all", () => {
-    const state = tick(initialState({ eventId: "replay-phase-early", teamIds: TEAMS }), 0);
+    const state = tick(startedMatch({ eventId: "replay-phase-early", teamIds: TEAMS }), 0);
     expect(buildReplay(state).filter((e) => e.kind === "phase-change")).toEqual([]);
   });
 
   test("a match ticked all the way to match end reports all three phase-change boundaries, in order", () => {
-    let state = tick(initialState({ eventId: "replay-phase-full", teamIds: TEAMS }), 0);
+    let state = tick(startedMatch({ eventId: "replay-phase-full", teamIds: TEAMS }), 0);
     state = tick(state, state.config.matchDurationMs);
     const phaseEvents = buildReplay(state).filter(
       (e): e is Extract<ReplayEvent, { kind: "phase-change" }> => e.kind === "phase-change",
@@ -168,7 +168,7 @@ describe("buildReplay: edge cases the vertical-playtest fixture does not exercis
   });
 
   test("a team that rotates more than once: only the most recent rotate's timestamp is reported, with an explicit multi-rotate note in both languages", () => {
-    let state = tick(initialState({ eventId: "replay-multi-rotate", teamIds: TEAMS }), 0);
+    let state = tick(startedMatch({ eventId: "replay-multi-rotate", teamIds: TEAMS }), 0);
     state = applyOp(state, "alpha", { kind: "rotate" });
     state = tick(state, state.config.rotateCooldownMs);
     state = applyOp(state, "alpha", { kind: "rotate" });
@@ -190,7 +190,7 @@ describe("buildReplay: edge cases the vertical-playtest fixture does not exercis
   });
 
   test("a failed HUNT attempt leaves no trace in the replay (validateOp rejects it, applyOp is never called)", () => {
-    const state = tick(initialState({ eventId: "replay-failed-hunt", teamIds: TEAMS }), 0);
+    const state = tick(startedMatch({ eventId: "replay-failed-hunt", teamIds: TEAMS }), 0);
     const before = buildReplay(state);
 
     const wrongGuess = { kind: "hunt", targetTeamId: "bravo", generation: 1, recoveredSecret: "0" } as const;
@@ -216,7 +216,7 @@ describe("buildReplay: edge cases the vertical-playtest fixture does not exercis
  */
 describe("Issue #645: the replay names every method", () => {
   test("an FHE and an MPC completion appear as themselves, never as PROVE", () => {
-    let state = tick(initialState({ eventId: "replay-645", teamIds: ["teamA", "teamB"] }), 0);
+    let state = tick(startedMatch({ eventId: "replay-645", teamIds: ["teamA", "teamB"] }), 0);
 
     for (let round = 0; round < 8; round += 1) {
       for (const order of projectForTeam(state, "teamA").myContracts) {

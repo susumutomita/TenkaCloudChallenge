@@ -9,7 +9,7 @@
 import { describe, expect, test } from "bun:test";
 import { deriveFheInputKeys, deriveFhePlaintexts } from "./fhe.ts";
 import { deriveMpcPrivateInputs } from "./mpc.ts";
-import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp } from "./playtest.ts";
+import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp, startedMatch } from "./playtest.ts";
 import { completeShares, reconstruct, type Share } from "./shamir.ts";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { CryptoBattleOp, CryptoBattleState, PublicArtifact, ShareArtifact } from "./types.ts";
@@ -85,7 +85,7 @@ test("adversarial 1: t-1 shares are consistent with every candidate secret (thre
 });
 
 test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real reducer)", () => {
-  let state = tick(initialState(ctx("adv-2")), 0);
+  let state = tick(startedMatch(ctx("adv-2")), 0);
   const target = "teamA";
   const attacker = "teamB";
 
@@ -151,7 +151,7 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
 });
 
 test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations do not reconstruct, and stale generation hunts are rejected", () => {
-  let state = tick(initialState(ctx("adv-3")), 0);
+  let state = tick(startedMatch(ctx("adv-3")), 0);
   const target = "teamA";
   const attacker = "teamB";
 
@@ -218,7 +218,7 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
 });
 
 test("adversarial 4: a successful HUNT cannot be replayed for the same (attacker, target, generation)", () => {
-  let state = tick(initialState(ctx("adv-4")), 0);
+  let state = tick(startedMatch(ctx("adv-4")), 0);
   const target = "teamA";
   const attacker = "teamB";
   for (let i = 1; i <= state.config.threshold; i += 1) {
@@ -245,7 +245,7 @@ test("adversarial 4: a successful HUNT cannot be replayed for the same (attacker
 });
 
 test("adversarial 5: projectForTeam never leaks another team's secret or shares", () => {
-  let state = tick(initialState(ctx("adv-5")), 0);
+  let state = tick(startedMatch(ctx("adv-5")), 0);
   const target = "teamA";
   const observer = "teamB";
   // Leak a couple of teamA shares onto the PUBLIC ledger -- those are fine to
@@ -272,19 +272,19 @@ test("adversarial 5: projectForTeam never leaks another team's secret or shares"
 
 describe("adversarial 6: illegal ops are rejected without any score/state change", () => {
   test("leak: nonexistent contract", () => {
-    const state = tick(initialState(ctx("adv-6a")), 0);
+    const state = tick(startedMatch(ctx("adv-6a")), 0);
     expect(validateOp(state, "teamA", { kind: "leak", contractId: "nope" }).ok).toBe(false);
   });
 
   test("leak: another team's contract", () => {
-    const state = tick(initialState(ctx("adv-6b")), 0);
+    const state = tick(startedMatch(ctx("adv-6b")), 0);
     const theirs = state.contracts.find((c) => c.teamId === "teamB");
     if (!theirs) throw new Error("expected a contract for teamB");
     expect(validateOp(state, "teamA", { kind: "leak", contractId: theirs.id }).ok).toBe(false);
   });
 
   test("leak: an already-expired contract", () => {
-    let state = tick(initialState(ctx("adv-6c")), 0);
+    let state = tick(startedMatch(ctx("adv-6c")), 0);
     const mine = state.contracts.find((c) => c.teamId === "teamA");
     if (!mine) throw new Error("expected a contract for teamA");
     state = tick(state, mine.expiresAtMs + 1);
@@ -293,7 +293,7 @@ describe("adversarial 6: illegal ops are rejected without any score/state change
   });
 
   test("hunt: cannot target your own team", () => {
-    const state = tick(initialState(ctx("adv-6d")), 0);
+    const state = tick(startedMatch(ctx("adv-6d")), 0);
     expect(
       validateOp(state, "teamA", { kind: "hunt", targetTeamId: "teamA", generation: 1, recoveredSecret: "0" })
         .ok,
@@ -301,14 +301,14 @@ describe("adversarial 6: illegal ops are rejected without any score/state change
   });
 
   test("rotate: rejected while on cooldown", () => {
-    let state = tick(initialState(ctx("adv-6e")), 0);
+    let state = tick(startedMatch(ctx("adv-6e")), 0);
     state = applyOp(state, "teamA", { kind: "rotate" });
     state = tick(state, state.config.rotateCooldownMs - 1);
     expect(validateOp(state, "teamA", { kind: "rotate" }).ok).toBe(false);
   });
 
   test("an unrecognized op kind is rejected, not thrown", () => {
-    const state = tick(initialState(ctx("adv-6f")), 0);
+    const state = tick(startedMatch(ctx("adv-6f")), 0);
     const bogus = { kind: "prove" } as unknown as CryptoBattleOp;
     expect(() => validateOp(state, "teamA", bogus)).not.toThrow();
     expect(validateOp(state, "teamA", bogus).ok).toBe(false);
@@ -327,7 +327,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 test("adversarial 7: applyOp and tick never mutate the state they are given", () => {
-  const frozen = deepFreeze(tick(initialState(ctx("adv-7")), 0));
+  const frozen = deepFreeze(tick(startedMatch(ctx("adv-7")), 0));
   const contractId = frozen.contracts.find((c) => c.teamId === "teamA")?.id;
   if (!contractId) throw new Error("expected a contract for teamA");
 
@@ -343,7 +343,7 @@ test("adversarial 7: applyOp and tick never mutate the state they are given", ()
 
 test("adversarial 8: same seed + same event sequence replays to a deeply-equal state", () => {
   function run(): CryptoBattleState {
-    let state = initialState(ctx("adv-8"));
+    let state = startedMatch(ctx("adv-8"));
     state = tick(state, 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA");
     if (!contract) throw new Error("expected a contract for teamA");
@@ -375,7 +375,7 @@ test("adversarial 8: same seed + same event sequence replays to a deeply-equal s
 test("adversarial 9: no trusted material reaches any participant-visible surface, for any method", () => {
   const matchSecret = "adversarial-9-server-only-match-secret";
   let state = tick(
-    initialState({ eventId: "adv-9", teamIds: ["teamA", "teamB"], matchSecret }),
+    startedMatch({ eventId: "adv-9", teamIds: ["teamA", "teamB"], matchSecret }),
     0,
   );
   const prime = BigInt(state.config.prime);

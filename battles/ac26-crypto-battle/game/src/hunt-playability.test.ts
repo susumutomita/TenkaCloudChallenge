@@ -32,6 +32,7 @@ import { inv, mod } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { deriveWitness } from "./schnorr-witness.ts";
+import { startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState, SchnorrProof } from "./types.ts";
 
 const CTX = { eventId: "hunt-playability", teamIds: ["victim", "attacker"] } as const;
@@ -121,7 +122,7 @@ function carelessProof(
 }
 
 function stateAfterCarelessProofs(): CryptoBattleState {
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   let open: Contract[] = [];
   // Both Orders must be open in the SAME state the proofs are submitted
   // against -- collecting across ticks would let the first one expire.

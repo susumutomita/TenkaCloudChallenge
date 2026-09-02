@@ -29,6 +29,7 @@
 import { describe, expect, it } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { startedMatch } from "./playtest.ts";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import HelpDrawer, { PYTHON_SNIPPET } from "../../portal/HelpDrawer.tsx";
@@ -427,7 +428,7 @@ describe("StatusPanelBody against a REAL projection (live-deploy report: onboard
   // live deployed match). This test runs the real engine and asserts that
   // failure mode cannot recur.
   it("renders a non-zero match and contract countdown right after the first tick", () => {
-    const state0 = initialState({ eventId: "evt-countdown-regression", teamIds: ["blue"] });
+    const state0 = startedMatch({ eventId: "evt-countdown-regression", teamIds: ["blue"] });
     // eventNowMs = 0 for the very first tick: `tick`'s `startedAtMs ??
     // eventNowMs` then anchors the match start at exactly 0, so every
     // resulting duration below is an exact, non-flaky expected value
@@ -471,7 +472,7 @@ describe("StatusPanelBody against a REAL projection (live-deploy report: onboard
     // roughly 20-24 minutes and many ticks past the first one), so this
     // asserts `projectForTeam` keeps using the MOST RECENT tick's `nowMs`
     // (not the first tick's) for every duration it computes.
-    let state = initialState({ eventId: "evt-multi-tick-regression", teamIds: ["blue"] });
+    let state = startedMatch({ eventId: "evt-multi-tick-regression", teamIds: ["blue"] });
     state = tick(state, 0);
     const first = projectForTeam(state, "blue");
     const contractId = first.myContracts[0]?.id;

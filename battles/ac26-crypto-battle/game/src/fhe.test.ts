@@ -22,7 +22,7 @@ import {
 } from "./fhe.ts";
 import { add, inv, mod, mul, P, sub } from "./field.ts";
 import { deriveBigInt } from "./prng.ts";
-import { buildFheOp } from "./playtest.ts";
+import { buildFheOp, startedMatch } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { Contract, ContractProjection, CryptoBattleState } from "./types.ts";
 
@@ -52,7 +52,7 @@ function orderWithTask(
   taskKind: "homomorphic-sum" | "masked-total",
   teamId = "teamA",
 ): { state: CryptoBattleState; order: ContractProjection } {
-  let state = tick(initialState(CTX), 0);
+  let state = tick(startedMatch(CTX), 0);
   for (let issued = 0; issued < 20; issued += 1) {
     const order = projectForTeam(state, teamId).myContracts.find(
       (c) => c.status === "open" && c.task.kind === taskKind,
@@ -243,7 +243,7 @@ describe("the FHE Order's trust boundary", () => {
     // The Order is derived from the live state's seed, not SEED — so rather
     // than compare against constants, assert on the values that Order's own
     // derivation produces.
-    const state = tick(initialState(CTX), 0);
+    const state = tick(startedMatch(CTX), 0);
     const prime = BigInt(state.config.prime);
     const liveKeys = deriveFheInputKeys(state.seed, order.id, prime);
     const livePlaintexts = deriveFhePlaintexts(state.seed, order.id, prime);

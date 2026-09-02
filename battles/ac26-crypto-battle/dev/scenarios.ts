@@ -37,7 +37,7 @@ import {
 } from "../game/src/playtest.ts";
 import { computeChallenge } from "../game/src/schnorr-transcript.ts";
 import { deriveWitness } from "../game/src/schnorr-witness.ts";
-import { projectForTeam, tick } from "../game/src/reducer.ts";
+import { initialState, projectForTeam, tick } from "../game/src/reducer.ts";
 import type {
   CryptoBattleConfig,
   CryptoBattleOp,
@@ -71,6 +71,7 @@ export const DEV_CONFIG: Partial<CryptoBattleConfig> = {
 };
 
 export const SCENARIO_IDS = [
+  "waiting",
   "fresh",
   "ledger-filling",
   "fhe-order",
@@ -88,6 +89,10 @@ export interface ScenarioCopy {
 }
 
 export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
+  waiting: {
+    ja: "デプロイ直後 — まだ誰も始めていない",
+    en: "Just deployed — nobody has started it",
+  },
   fresh: {
     ja: "開始直後 — Order が出たところ",
     en: "Just started — first Orders issued",
@@ -336,6 +341,13 @@ export function buildScenario(id: ScenarioId): Scenario {
   const driver = makeDriver();
 
   switch (id) {
+    // [Issue #677] The screen a deployed match shows before anyone plays: no
+    // Orders, no clock, one button. `makeDriver` starts the match because every
+    // other position here is a match in progress, so this one unwinds that.
+    case "waiting":
+      driver.host.state = initialState({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS }, DEV_CONFIG);
+      break;
+
     case "fresh":
       break;
 

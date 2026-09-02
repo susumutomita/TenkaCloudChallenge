@@ -25,6 +25,7 @@ import {
   buildMpcOp,
   buildProveOp,
   buildRotateOp,
+  startedMatch,
   type PlaytestOpStep,
   type PlaytestScript,
   type PlaytestStep,
@@ -121,7 +122,8 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   // dispatcher issues one before `initialState`. Pinning it also pins the Order
   // belt this scripted playthrough walks: the belt derives from the seed, so a
   // secretless fixture would re-shape every time the seed does.
-  let state = initialState(
+  // [Issue #677] Started, because this fixture walks a match in progress.
+  let state = startedMatch(
     { eventId: EVENT_ID, teamIds: TEAMS, matchSecret: MATCH_SECRET },
     VERTICAL_CONFIG,
   );
