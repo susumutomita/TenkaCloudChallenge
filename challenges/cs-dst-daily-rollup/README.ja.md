@@ -32,7 +32,7 @@ local/reference/rollup.py     正解 (author image のみ)
 local/tests/public/           壊れた starter でも通るテスト (counterexample の 1 本は skip)
 local/tests/hidden/           checkpoint を実際に決める性質
 local/mutants/                mutation suite が読む author 専用 mutant
-local/mutation.py             reference を 20 通り壊し、すべて検出させる
+local/mutation.py             reference を 22 通り壊し、すべて検出させる
 local/fixtures/generate.py    seed 由来の日次レポートと台帳の値
 local/verifier/server.py      hidden 採点。 別 image かつ別 network
 local/workbench/server.py     参加者の editor と証拠。 公開される唯一の port
@@ -56,20 +56,29 @@ zone も日付も system の tz database から取り、verifier seed ととも�
 ラベルだけ現地日付に付け替える実装は、ラベルこそ本物の現地日付になりますが、そのラベルが指す
 中身は名乗っている日ではないので、やはり誤りです。 これが `local/mutants/` の author 専用 mutant です。
 
-切替が 0 時から離れて起きる zone だけを使うので、現地の 0 時は必ず存在します。 ここで扱うのは
-1 日が 23 時間や 25 時間になることであって、壁時計時刻が存在しなくなることではありません。
+使う zone はどれも、毎日の現地 0 時が存在し、一意です。 `rollup` と `transition` は 0 時から離れた
+1 時間の切替だけを使います。 `counterexample` はそれに加えて、切替幅が 30 分の `Australia/Lord_Howe`
+と、切替が日付の境目そのもの (春は 23 時 → 0 時、秋は 24 時 → 0 時ではなく 23 時) で起きる
+`America/Nuuk` を seed によらず必ず含めます。 春の切替が 0 時 → 1 時で、切替日の 0 時が存在しない
+zone (America/Santiago など) は使いません。 ここで扱うのは 1 日が 24 時間でなくなることであって、
+壁時計時刻が存在しなくなることではありません。
 
 ### counterexample の性質
 
-`counterexample(timezone_name, start_day, switch_day)` は 38 組で呼ばれます。 本文の New York の
-2 組、そのあと seed で選んだ 3 zone × 2 年 × 両方の切替について、切替日当日から始まる範囲、
-数日前から始まる範囲、そして**切替後の offset をすでに持つ**何か月も前から始まる範囲の 3 通りです。
-返された入力を、starter の固定 offset 算術と暦の 2 通りで集計し、切替日ではない日が足りなくなれば
-合格です。 比べる期待値はありません。 何か月も前から始まる組が、本文の規則 (先頭 offset とその日の
-offset を比べる) と、参加者が最初に試しがちな近道 (切替の向きで境目の時間帯を決める) を分けます。
-そのような先頭からは、切替のあとの日は 1 件もずれないからです。 1 秒刻みの総当たりは 15 秒の制限で
-落ち、starter の `fixed_offset_day` を oracle にした 1 時間刻みの探索は通ります — それは参加者が
-自分で書いた本物の oracle なので、意図どおりです。
+`counterexample(timezone_name, start_day, switch_day)` は 62 組で呼ばれます。 本文の New York の
+2 組、そのあと seed で選んだ 3 zone と必ず入る 2 zone (`Australia/Lord_Howe`、`America/Nuuk`) の
+各 zone × 2 年 × 両方の切替について、切替日当日から始まる範囲、数日前から始まる範囲、そして
+**切替後の offset をすでに持つ**何か月も前から始まる範囲の 3 通りです。 返された入力を、starter の
+固定 offset 算術と暦の 2 通りで集計し、範囲の中の切替日ではない日が足りなくなれば合格です。 比べる
+期待値はありません。 何か月も前から始まる組が、本文の規則 (先頭 offset とその日の offset を比べる) と、
+参加者が最初に試しがちな近道 (切替の向きで境目の時間帯を決める) を分けます。 そのような先頭からは、
+切替のあとの日は 1 件もずれないからです。 30 分の切替は、本文が名指しする境目の 1 秒 (先頭 offset が
+大きければその日の 23:59:59、小さければ 0:00:00) と、境目に近いだけの固定時刻 (23:30 / 0:30) を
+分けます: 0:30 を 30 分早く読んでも同じ日の 0:00 であり、どの日も足りなくなりません。 1 秒刻みの
+総当たりは 15 秒の制限で落ちます。 starter の `fixed_offset_day` を oracle にした範囲全体の 1 時間刻みの
+探索は、30 分の窓を片方の向きで一度も踏まないので落ちます。 日を offset で選んでからその日の両端を
+秒刻みで試す探索や、30 分刻み以下の探索は通ります — 参加者が自分で書いた本物の oracle なので、
+意図どおりです。
 
 failure message は破れた規則の名前と、関数に渡した公開の 3 つ組だけを含みます (AGENTS.md §15)。
 verifier 自身の zone やレポートは決して出ません。
@@ -88,7 +97,7 @@ verifier 自身の zone やレポートは決して出ません。
 make build           # participant + verifier image
 make test            # local/starter に対する public test
 make inspect         # 参加者に見える証拠を表示
-make reference-test  # reference が hidden を通り、20 個の mutation がすべて死ぬ
+make reference-test  # reference が hidden を通り、22 個の mutation がすべて死ぬ
 make up / make down  # Compose lab をローカルで起動・停止
 ```
 

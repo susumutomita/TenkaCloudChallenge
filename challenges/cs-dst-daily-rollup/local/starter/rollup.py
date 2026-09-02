@@ -10,9 +10,8 @@ promise is anything about the two days a year when a local day is not twenty-fou
 hours long -- nor about the days after them.
 
 ``counterexample(timezone_name, start_day, switch_day)`` (the last checkpoint) builds
-the smallest input that shows the broken way of totalling getting an ordinary day
-wrong. ``fixed_offset_day`` between the two is a helper for checking it; it is not
-graded.
+one event that shows the broken way of totalling getting an ordinary day wrong.
+``fixed_offset_day`` between the two is a helper for checking it; it is not graded.
 """
 
 from __future__ import annotations
@@ -125,8 +124,8 @@ def fixed_offset_day(at: str, timezone_name: str, start_day: str) -> str:
     answer while building your counterexample. It is not graded.
 
     Example (New York; the range starts on 2026-10-31, so the offset read is -4 hours):
-    ``fixed_offset_day("2026-11-03T04:30:00Z", "America/New_York", "2026-10-31")``
-    returns ``"2026-11-03"``, whereas the calendar says that instant is 23:30 on
+    ``fixed_offset_day("2026-11-03T04:59:59Z", "America/New_York", "2026-10-31")``
+    returns ``"2026-11-03"``, whereas the calendar says that instant is 23:59:59 on
     2026-11-02 in New York.
     """
     moment = _parse_instant(at)
@@ -147,40 +146,57 @@ def counterexample(timezone_name: str, start_day: str, switch_day: str) -> dict[
       - ``timezone_name``: an IANA zone, e.g. ``"America/New_York"``.
       - ``start_day``: the first day of the range, ``"YYYY-MM-DD"``. It is the switch
         day itself or earlier -- sometimes months earlier.
-      - ``switch_day``: a day in that zone that is 23 or 25 hours long, ``"YYYY-MM-DD"``.
+      - ``switch_day``: a day in that zone that is not 24 hours long (23 or 25 hours
+        in New York), ``"YYYY-MM-DD"``.
 
     Return ``{"end_day": "YYYY-MM-DD", "events": [<exactly one event>]}``:
       - The range runs from ``start_day`` to ``end_day`` inclusive. It contains
-        ``switch_day`` and is at most 400 days long.
+        ``switch_day`` and is at most 400 days long. The day that comes up short must
+        lie inside this range too: ``daily_totals`` only reports days in the range, so
+        a day outside it cannot come up short. If the day you break is after
+        ``switch_day``, make ``end_day`` that day or later.
       - The event has the ``daily_totals`` shape ``{"id": str, "at": str, "amount": int}``
         with ``amount`` 1 or more and ``at`` carrying an offset (``...Z`` is fine).
 
     What the answer has to satisfy (graded as a property, never against one expected
     value): totalling that one event the fixed-offset way -- the offset read at
     ``start_day``'s midnight added to every instant, exactly what ``fixed_offset_day``
-    does -- leaves some day that is NOT a switch day short of its true total. A short
-    switch day does not count: that is the statement's own example, and this function
-    is about ordinary days.
+    does -- leaves some day inside the range that is NOT a switch day short of its
+    true total. A short switch day does not count: that is the statement's own
+    example, and this function is about ordinary days.
 
-    The procedure is in the statement. In Python:
-      - the offset in force on a day: ``datetime(2026, 11, 2, tzinfo=zone).utcoffset()``
-        gives ``timedelta(hours=-5)``. Two of these compare with ``<`` and ``>``.
+    The rule is in the statement: the fixed offset misfiles an event only on a day
+    whose offset differs from the start's. The misfiled window is as wide as the
+    difference between the two offsets -- one hour in New York, but not one hour in
+    every zone. When the start's offset is the bigger one, the day's LAST second
+    (23:59:59) moves to the next day whatever the width; when it is the smaller one,
+    the day's FIRST second (00:00:00) moves to the day before. A time merely near the
+    boundary (23:30, say) does not move where the difference is smaller than that.
+
+    In Python:
+      - a date from a string like ``"2026-10-31"``: ``d = date.fromisoformat(start_day)``;
+        then ``d.year``, ``d.month`` and ``d.day`` are its parts, and
+        ``d + timedelta(days=1)`` is the next day.
+      - the offset in force on a day:
+        ``datetime(d.year, d.month, d.day, tzinfo=zone).utcoffset()`` gives a value
+        like ``timedelta(hours=-5)``. Two of these compare with ``<`` and ``>``.
       - a day is a switch day when the offset at its midnight differs from the offset
         at the next day's midnight.
-      - a wall-clock time in the zone: ``datetime(2026, 11, 2, 23, 30, tzinfo=zone)``;
+      - a wall-clock time in the zone: ``datetime(2026, 11, 2, 23, 59, 59, tzinfo=zone)``;
         the same instant in UTC: ``.astimezone(timezone.utc)``; as the ``at`` string:
-        ``.strftime("%Y-%m-%dT%H:%M:%SZ")`` gives ``"2026-11-03T04:30:00Z"``.
+        ``.strftime("%Y-%m-%dT%H:%M:%SZ")`` gives ``"2026-11-03T04:59:59Z"``.
 
     Worked example: New York, start_day 2026-10-31, switch_day 2026-11-01. The offset
     read at the start is -4 hours. On 2026-11-02, an ordinary 24-hour day, the offset
     is -5 hours -- the start's offset is the bigger one, so the fixed-offset rollup
-    reads every instant of that day one hour LATE: 23:30 local (04:30Z on the 3rd) is
-    filed under the 3rd, and the 2nd comes up short. So
-    ``{"end_day": "2026-11-02", "events": [{"id": "e1", "at": "2026-11-03T04:30:00Z",
+    reads every instant of that day one hour LATE: the day's last second, 23:59:59
+    local (04:59:59Z on the 3rd), is filed under the 3rd, and the 2nd comes up short.
+    So ``{"end_day": "2026-11-02", "events": [{"id": "e1", "at": "2026-11-03T04:59:59Z",
     "amount": 1}]}`` is one valid answer.
 
-    The graded run tries several zones, both directions of switch and several start
-    days -- including start days months before the switch -- within a 15-second
-    limit. The version below is a placeholder: it returns no event at all.
+    The graded run tries several zones (including one whose switch is not a whole
+    hour), both directions of switch and several start days -- including start days
+    months before the switch -- within a 15-second limit. The version below is a
+    placeholder: it returns no event at all.
     """
     return {"end_day": switch_day, "events": []}

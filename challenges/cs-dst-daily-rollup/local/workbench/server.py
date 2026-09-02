@@ -41,7 +41,7 @@ CHECKPOINT_LABELS = {
     "audit": "audit — 報告値が正しくあり得ない日を挙げる",
     "rollup": "rollup — 固定 offset ではなく現地の暦の日で集計する",
     "transition": "transition — 23 時間の日と 25 時間の日で境界を保つ",
-    "counterexample": "counterexample — 固定 offset が普通の日を壊す最小の再現例を作る",
+    "counterexample": "counterexample — 固定 offset が普通の日を壊す再現例を 1 件作る",
 }
 
 
@@ -60,7 +60,7 @@ def config_payload() -> dict[str, object]:
     return {
         "id": "cs-dst-daily-rollup",
         "name": "年に 2 日だけ、日次レポートが合わない",
-        "description": "台帳と食い違う日次レポートを監査し、86400 秒の塊ではなく現地の暦の日で集計し、固定 offset が普通の日を壊す最小の再現例を作る。",
+        "description": "台帳と食い違う日次レポートを監査し、86400 秒の塊ではなく現地の暦の日で集計し、固定 offset が普通の日を壊す再現例を 1 件作る。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -73,14 +73,14 @@ def config_payload() -> dict[str, object]:
         "i18n": {
             "en": {
                 "name": "Two days a year, the report is wrong",
-                "description": "Audit a daily report that disagrees with the ledger, total by the local calendar instead of by 86400-second blocks, then build the smallest input on which a fixed offset breaks an ordinary day.",
+                "description": "Audit a daily report that disagrees with the ledger, total by the local calendar instead of by 86400-second blocks, then build one event on which a fixed offset breaks an ordinary day.",
                 "checkpointLabels": {
                     "environment": "environment - paste the Workbench pass phrase",
                     "observe": "observe - name the report and what happened that day",
                     "audit": "audit - list the days whose reported total cannot be right",
                     "rollup": "rollup - total by the local calendar day, not by a fixed offset",
                     "transition": "transition - keep the boundary correct on a 23- and a 25-hour day",
-                    "counterexample": "counterexample - smallest input on which a fixed offset breaks an ordinary day",
+                    "counterexample": "counterexample - one event on which a fixed offset breaks an ordinary day",
                 },
             }
         },
