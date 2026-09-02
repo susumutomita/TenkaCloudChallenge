@@ -184,7 +184,7 @@ def _failure_detail(failures: list[object]) -> str:
     state, never expected values (AGENTS.md §15). Non-string entries are dropped
     rather than serialized.
     """
-    return "; ".join(item for item in failures if isinstance(item, str))[:MAX_MESSAGE_CHARS]
+    return "; ".join(dict.fromkeys(item for item in failures if isinstance(item, str)))[:MAX_MESSAGE_CHARS]
 
 
 def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> tuple[bool, str]:

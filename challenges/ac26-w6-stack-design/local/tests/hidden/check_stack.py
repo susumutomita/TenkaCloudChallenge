@@ -122,8 +122,8 @@ def _flow_failures(module, drawn: str) -> list[str]:
             missing = sorted(set(want) - set(got))
             extra = sorted(set(got) - set(want))
             failures.append(
-                f"carried described {len(got)} edges of {name}, and the graph has {len(want)}"
-                + (f"; nothing for {missing[0]}" if missing else "")
+                f"carried described {len(got)} edges of {name}, not the graph's own edge set"
+                + ("; missing at least one edge" if missing else "")
                 + (f"; invented {extra[0]}" if extra else "")
             )
             continue
