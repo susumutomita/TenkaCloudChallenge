@@ -1,4 +1,4 @@
-"""Scratchpad for the ten lines — optional, for when you cannot open Python.
+"""Scratchpad for the eleven lines — optional, for when you cannot open Python.
 
 The drill is meant to be typed into your own `python3`, one line at a time, after
 pasting the numbers from "Inspect evidence". If you cannot open Python, fill in these
@@ -59,11 +59,16 @@ def guesses(a: int, x: int, n: int) -> int:
     return None
 
 
+def gap(a: int, b: int, x: int) -> int:
+    """Line 9 — the difference of the two covered numbers: (a + x) - (b + x)."""
+    return None
+
+
 def product(a: int, b: int, x: int) -> tuple:
-    """Line 9 — (the covered product, every term except x*x, their difference)."""
+    """Line 10 — (the covered product, every term except x*x, their difference)."""
     return None
 
 
 def wall(a: int, b: int, x: int) -> bool:
-    """Line 10 — is the leftover of line 9 exactly x * x?"""
+    """Line 11 — is the leftover of line 9 exactly x * x?"""
     return None

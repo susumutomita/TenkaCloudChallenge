@@ -48,7 +48,7 @@ REQUEST_TIMEOUT_SECONDS = 15
 
 #: No checkpoint runs learner code. The editor file is a scratchpad whose public test
 #: prints the learner's own values; the grade is the pasted value, nothing else. Eight
-#: of the ten drill lines have an answer field (the platform's maximum per problem).
+#: of the eleven drill lines have an answer field (the platform's maximum per problem).
 CHECKPOINTS = GRADED
 MANUAL_CHECKPOINTS = GRADED
 

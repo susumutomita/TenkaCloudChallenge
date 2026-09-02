@@ -1,4 +1,4 @@
-"""This deployment's numbers, and the ten values the unknown-x drill expects.
+"""This deployment's numbers, and the eleven values the unknown-x drill expects.
 
 Everything the learner types is decided here from FLAG_SEED: two small numbers a and b,
 a small cover x, a huge cover X, and the modulus n. The learner never sees the expected
@@ -37,21 +37,22 @@ LINES = (
     "held",
     "recover",
     "guesses",
+    "gap",
     "product",
     "wall",
 )
 
 # The lines that have an answer field. The platform allows at most eight checkpoints, so
-# two lines are ungraded: "same" is the True that closes the first claim, and "wall" is
-# the closing observation whose content is already carried by "product".
+# three lines are ungraded: "same" and "wall" are the True/False that close two claims,
+# and "sum-plain" is the same number as "sum-covered" once the first claim lands.
 GRADED = (
     "covered",
     "sum-covered",
-    "sum-plain",
     "huge",
     "held",
     "recover",
     "guesses",
+    "gap",
     "product",
 )
 
@@ -106,12 +107,19 @@ def setting(seed: str) -> dict:
     held_sum = sum_covered
     recovered = held_sum - 2 * x          # subtracting the cover twice returns a + b
 
-    # How many (a, b) pairs in Z_n are consistent with the single covered value a + x,
-    # if x is unknown and could be anything in Z_n. The answer is n: every value of a has
-    # exactly one x that produces this covered number. Nothing is ruled out.
+    # How many values of a are consistent with ONE covered value a + x, when x is unknown
+    # and could be anything in Z_n. The answer is n: every candidate has exactly one cover
+    # producing this number, so a single covered value rules nothing out.
+    #
+    # "ONE" is load-bearing. Both covered values here share the same cover, so anyone
+    # holding both can subtract them and the cover cancels: (a + x) - (b + x) = a - b.
+    # The difference leaks even though neither value alone says anything. That is not a
+    # flaw to hide -- it is the next problem's entire subject, and the learner meets it
+    # here, one line after being told a single value is safe. `gap` below is that leak.
     first_covered = covered[0] % n
     guesses = sum(1 for cand_a in range(n)
                   if any((cand_a + cand_x) % n == first_covered for cand_x in range(n)))
+    gap = covered[0] - covered[1]          # == a - b, with x gone
 
     # The wall. Expanding (a + x)(b + x) gives ab + (a + b)x + x², and that x² is a term
     # nobody holding only covered values can produce or cancel.
@@ -128,6 +136,7 @@ def setting(seed: str) -> dict:
         "held": (held_sum, 2 * x),
         "recover": recovered,
         "guesses": guesses,
+        "gap": gap,
         "product": (prod_covered, prod_expected_without_square, leftover),
         "wall": leftover == x * x,
     }

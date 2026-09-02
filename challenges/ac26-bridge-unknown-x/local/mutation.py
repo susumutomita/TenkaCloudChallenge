@@ -47,6 +47,10 @@ MUTATIONS: dict[str, tuple[str, str]] = {
         "    return sum_covered(a, b, x) == sum_plain(a, b, x)",
         "    return sum_covered(a, b, x) == sum_plain(a, b, x) + x",
     ),
+    "the gap taken the wrong way round": (
+        "    return (a + x) - (b + x)",
+        "    return (b + x) - (a + x)",
+    ),
     "the huge comparison with the cover counted once on the right": (
         "    return ((a + huge) + (b + huge)) - ((a + b) + 2 * huge)",
         "    return ((a + huge) + (b + huge)) - ((a + b) + huge)",
@@ -149,6 +153,7 @@ def main() -> int:
             _different(exp["recover"], exp["held"][0], -1),
         ),
         "guesses accepts the one narrowed candidate": ("guesses", 1),
+        "gap accepts the difference the wrong way round": ("gap", -exp["gap"]),
         "guesses accepts zero": ("guesses", 0),
         "product accepts the pair without the leftover": ("product", list(exp["product"][:2])),
         "product accepts a leftover of zero": (

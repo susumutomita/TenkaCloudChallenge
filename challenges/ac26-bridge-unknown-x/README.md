@@ -13,26 +13,28 @@ Computing Under a Cover · **Role:** `diagnostic` · **Time:** 20–30 minutes �
 
 The catalog's difficulty-1 entrance step. Not a write-a-function problem: you open your own
 `python3`, paste the numbers the Portal's "Inspect evidence" shows you, and then **type one
-line, paste the value it prints**, ten times. The subject is one line of school algebra —
+line, paste the value it prints**, eleven times. The subject is one line of school algebra —
 `(a + x) + (b + x) = (a + b) + 2x` — the line the whole course stands on: an addition that
 finishes without anyone knowing x.
 
 ```
 1  c1, c2 = a + x, b + x       lay the cover on                        covered
 2  c1 + c2                     add without knowing                     sum-covered
-3  (a + b) + 2 * x             the all-knowing expression              sum-plain
+3  (a + b) + 2 * x             the all-knowing expression             (no answer field)
 4  c1 + c2 == ...              the agreement check                    (no answer field)
 5  huge in place of x          the fifteen-digit cover, as a diff      huge
 6  held = c1 + c2; (held, 2x)  what the other side holds               held
 7  held - 2 * x                take the cover off                      recover
 8  count the candidates        nothing narrows                         guesses
-9  (c1*c2, ab+(a+b)x, diff)    multiplication leaves x²                product
-10 diff == x * x               the wall, touched before it has a name (no answer field)
+9  c1 - c2                     the shared cover leaks the difference   gap
+10 (c1*c2, ab+(a+b)x, diff)    multiplication leaves x²                product
+11 diff == x * x               the wall, touched before it has a name (no answer field)
 ```
 
 Every line comes with "what this line means"; every matching value unlocks "read after it
-matches". Eight of the ten lines have an answer field — the platform's per-problem maximum;
-the other two only display a `True` whose content the line before them already carries.
+matches". Eight of the eleven lines have an answer field — the platform's per-problem maximum;
+two of the other three only display a `True` whose content the line before them already
+carries, and line 3 prints the same number as line 2.
 
 ## Why the numbers are small and seed-derived
 
@@ -54,7 +56,7 @@ nothing more. The clock world itself is the next problem (`ac26-bridge-clock`).
 2. Press **Inspect evidence**: the numbers are printed as Python assignment statements. Paste
    them into `python3` first.
 3. Type line 1, paste the value into the first answer field, submit. Read the sentence for
-   that value. Continue to line 10. **Each answer field is a single-line input.**
+   that value. Continue to line 11. **Each answer field is a single-line input.**
 4. If you cannot open Python: fill in the functions of `unknown_x_drill.py` in the editor
    and press **Run public tests** — it prints your functions' values on this deployment's
    numbers, which is exactly what the REPL would print.
@@ -70,11 +72,11 @@ Eight checkpoints, graded independently. A wrong answer costs 5 points.
 |---|---:|---|---|
 | `covered` | 10 | construct | the pair (a + x, b + x) — all the other side receives |
 | `sum-covered` | 10 | construct | c1 + c2, the addition done in ignorance of x |
-| `sum-plain` | 10 | construct | (a + b) + 2x, the all-knowing expression |
 | `huge` | 15 | predict | the two sides' difference with a fifteen-digit cover |
 | `held` | 10 | construct | what returns, paired with the cover total 2x |
 | `recover` | 10 | construct | the cover taken off — a + b, never shown to anyone |
-| `guesses` | 20 | trace | the candidate count: nothing narrows |
+| `guesses` | 15 | trace | the candidate count: nothing narrows |
+| `gap` | 15 | counterexample | c1 − c2: the difference two values under one cover leak |
 | `product` | 15 | counterexample | the multiplication's leftover — exactly x² |
 
 One hint per checkpoint (penalty 3–5), naming the usual slip on that line.
@@ -107,10 +109,10 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: ten broken references (the cover never laid
+`make reference-test` runs the mutation suite: eleven broken references (the cover never laid
 on, the cover counted once in three separate places, the candidate count without the wrap,
 the expansion missing its cross terms, the wall compared against 2x, …) that the hidden
-suite must kill, plus thirteen verifier-level near-misses — the plain pair, the returned sum
+suite must kill, plus fourteen verifier-level near-misses — the plain pair, the returned sum
 unopened, the "surely it narrows to one" guess, a truncated tuple, a boolean, another
 deployment's answer — that the value grader must refuse. `make test` and `make inspect` run
 through Compose because the participant image has no `fixtures/`: the public numbers come
