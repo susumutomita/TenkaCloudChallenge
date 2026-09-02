@@ -4,14 +4,14 @@ Received: from mta-out-3.northgate-cowork.example (mta-out-3.northgate-cowork.ex
 	for <a.tanaka@kestrel-dyn.example>; Mon, 06 Jul 2026 09:14:07 +0900 (JST)
 Authentication-Results: mx.kestrel-dyn.example;
 	spf=pass (mx.kestrel-dyn.example: domain of general@northgate-cowork.example designates 203.0.113.42 as permitted sender) smtp.mailfrom=general@northgate-cowork.example;
-	dkim=pass header.i=@northgate-cowork.example header.s=s2026a header.b=Qm9ndXNTaWc;
+	dkim=pass header.i=@__DKIM_DOMAIN__ header.s=s2026a header.b=Qm9ndXNTaWc;
 	dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=northgate-cowork.example
 Received-SPF: pass (mx.kestrel-dyn.example: domain of general@northgate-cowork.example designates 203.0.113.42 as permitted sender) client-ip=203.0.113.42;
-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=northgate-cowork.example;
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=__DKIM_DOMAIN__;
 	s=s2026a; t=1751760847; bh=Rk9SRU5TSUNfUExBQ0VIT0xERVJfSEFTSA==;
 	h=From:To:Subject:Date:Message-ID:In-Reply-To:References;
 	b=Qm9ndXNTaWduYXR1cmVGb3JBRmljdGl0aW91c1NjZW5hcmlvT25seU5vdFJlYWw=
-From: "Daniel Whitmore (Northgate Cowork)" <general@northgate-cowork.example>
+From: "__IMPERSONATOR__ (Northgate Cowork)" <general@northgate-cowork.example>
 To: "Aoi Tanaka" <a.tanaka@kestrel-dyn.example>
 Subject: Re: Technical Architecture Review for Northgate Cowork
 Date: Mon, 06 Jul 2026 09:14:05 +0900
@@ -41,12 +41,12 @@ Looking forward to your feedback on the review deck.
 
 Best regards,
 
-Daniel Whitmore
+__IMPERSONATOR__
 Co-Founder, Northgate Cowork
 general@northgate-cowork.example
 
 --- On Fri, 03 Jul 2026 at 18:22, Aoi Tanaka <a.tanaka@kestrel-dyn.example> wrote:
-> Hi Daniel, sounds good — I can take the architecture review next week.
+> Hi __IMPERSONATOR_FIRST__, sounds good — I can take the architecture review next week.
 > Please send the meeting details and the deck in advance.
 > Thanks,
 > Aoi

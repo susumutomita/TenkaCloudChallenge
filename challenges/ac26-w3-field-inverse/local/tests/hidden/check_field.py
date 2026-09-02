@@ -3,12 +3,18 @@
 Properties rather than expected values, wherever a property will do. `a * a.inverse()`
 must be one for *every* non-zero element of a prime field the learner has never seen;
 that cannot be satisfied by a table, and it cannot be satisfied by an implementation
-that only normalizes at the end.
+that only normalizes at the end. `check_units` repeats that over a composite modulus
+the learner has never seen either, where the elements with an inverse and the ones
+without are mixed -- the one place the shortcut `pow(a, m - 2, m)` fails even behind a
+gcd guard, because over a composite it returns the inverse for only some of the units.
+
+Failure messages name the property, never the modulus or the element (AGENTS.md §15).
 """
 
 from __future__ import annotations
 
 import sys
+from math import gcd
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -20,6 +26,8 @@ from fixtures.generate import (  # noqa: E402
     non_invertible,
     prime_modulus,
     sample_values,
+    unit_modulus,
+    PSEUDOPRIME_MODULUS,
 )
 
 LABELS = ("h0", "h1", "h2")
@@ -249,30 +257,86 @@ def check_composite(module, seed: str) -> list[str]:
     return failures
 
 
-def check_axioms(module, seed: str) -> list[str]:
-    """Field axioms over a prime the learner has not been shown, at full coverage."""
-    failures: list[str] = []
-    p = prime_modulus(seed, "axioms")
-    field = module.Field(p)
-    elements = [field.element(v) for v in range(p)]
-    for x in elements:
-        if not _canonical(x, p):
-            return ["an element is not a canonical representative in [0, p)"]
-    for x in elements[: min(p, 24)]:
-        for y in elements[: min(p, 24)]:
-            if not _canonical(x + y, p) or not _canonical(x * y, p):
-                failures.append("closure fails: a result left the field")
-                return failures
-    inverses = set()
+def _check_units_modulus(module, modulus: int) -> list[str]:
+    """One modulus, every element. Empty means it passes.
+
+    The rule is the one the starter docstring states: an element sharing a factor with
+    the modulus raises NotInvertible, every other non-zero element returns the partner
+    that multiplies back to one -- and `/` follows `inverse()`. Over a prime modulus the
+    first set is empty and this is the old axioms check; over a composite one the two
+    sets are mixed, and a table cannot carry over because the modulus is never shown.
+    """
+    ring = module.Field(modulus)
+    try:
+        elements = [ring.element(v) for v in range(modulus)]
+    except Exception as error:  # noqa: BLE001
+        return [f"building an element raised {type(error).__name__}"]
+    if any(not _canonical(x, modulus) for x in elements):
+        return ["an element is not a canonical representative in [0, modulus)"]
+    for x in elements[: min(modulus, 24)]:
+        for y in elements[: min(modulus, 24)]:
+            try:
+                if not _canonical(x + y, modulus) or not _canonical(x * y, modulus):
+                    return ["closure fails: an arithmetic result is outside [0, modulus)"]
+            except Exception as error:  # noqa: BLE001
+                return [f"arithmetic raised {type(error).__name__}"]
+
+    invertible = {v for v in range(1, modulus) if gcd(v, modulus) == 1}
+    partners: set[int] = set()
     for x in elements[1:]:
         try:
-            inverses.add(x.inverse().value)
-        except Exception:  # noqa: BLE001
-            failures.append("some non-zero element of a prime field has no inverse")
-            return failures
-    # In a field, inversion is a bijection on the non-zero elements.
-    if inverses != set(range(1, p)):
-        failures.append("inversion is not a bijection on the non-zero elements")
+            inverse = x.inverse()
+        except module.NotInvertible:
+            if x.value in invertible:
+                return ["an element sharing no factor with the modulus was refused an inverse"]
+            continue
+        except Exception as error:  # noqa: BLE001
+            return [f"inverting an element raised {type(error).__name__}"]
+        if x.value not in invertible:
+            return ["an element sharing a factor with the modulus was given an inverse"]
+        if not _canonical(inverse, modulus):
+            return ["an inverse is not a canonical element"]
+        if (x * inverse).value != 1:
+            return ["an element times its inverse is not one"]
+        partners.add(inverse.value)
+    # The inverse is unique, so the partners of the invertible elements are exactly the
+    # invertible elements again, each once.
+    if partners != invertible:
+        return ["inversion is not one-to-one on the elements that have an inverse"]
+
+    # Division follows inversion: by an invertible element it undoes multiplication, by
+    # anything else it raises. Sampled from both sides, smallest first.
+    without = sorted(set(range(1, modulus)) - invertible)
+    for divisor in sorted(invertible)[:6] + without[:6]:
+        b = ring.element(divisor)
+        a = ring.element(divisor + 7)
+        try:
+            quotient = a / b
+        except module.NotInvertible:
+            if divisor in invertible:
+                return ["dividing by an element that has an inverse raised NotInvertible"]
+            continue
+        except Exception as error:  # noqa: BLE001
+            return [f"division raised {type(error).__name__}"]
+        if divisor not in invertible:
+            return ["dividing by an element with no inverse did not raise NotInvertible"]
+        if (quotient * b) != a:
+            return ["dividing then multiplying does not return the original"]
+    return []
+
+
+def check_units(module, seed: str) -> list[str]:
+    """Every element of a composite modulus the learner has not seen, then of a prime.
+
+    Where `pow(a, m - 2, m)` behind a gcd guard finally fails: over a composite modulus
+    it returns a number for every unit and the inverse for only some of them, while the
+    extended Euclidean table gets every element right without knowing whether the
+    modulus is prime. Closure and the one-to-one property the earlier `axioms`
+    checkpoint checked over a prime are kept, over both moduli.
+    """
+    failures: list[str] = []
+    for modulus in (unit_modulus(seed), PSEUDOPRIME_MODULUS, prime_modulus(seed, "units")):
+        failures.extend(_check_units_modulus(module, modulus))
     return failures
 
 
@@ -284,5 +348,5 @@ def run(module, seed: str) -> list[str]:
         *check_inverse(module, seed),
         *check_errors(module, seed),
         *check_composite(module, seed),
-        *check_axioms(module, seed),
+        *check_units(module, seed),
     ]

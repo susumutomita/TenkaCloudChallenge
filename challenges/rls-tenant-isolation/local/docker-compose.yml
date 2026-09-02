@@ -1,9 +1,16 @@
 # Local-play problem container for rls-tenant-isolation.
 # Bound to 127.0.0.1 only: the documents API and /verify never leave the box.
 #
-# The participant edits ./solution/policies.sql on the host (bind-mounted in) and
-# restarts the container to re-grade. Postgres state lives in a named volume so a
-# restart re-applies schema/seed/policies cleanly.
+# Two participant routes reach the same database. Primary: the Portal's embedded
+# container terminal (`runtime.terminal` names this service) — psql into the
+# running Postgres and create the policies live; the grader inspects the live
+# database on every submission, so no restart is involved. Secondary: edit
+# ./solution/policies.sql on the host (bind-mounted in, read-only) and restart the
+# container; entrypoint.sh re-applies schema/seed and reloads the policies from
+# that file at every boot. There is no persistent volume — PGDATA lives in the
+# container's writable layer — and entrypoint.sh drops every policy on
+# public.documents before reloading, so terminal-route state does not survive a
+# restart while the file route does.
 name: rls-tenant-isolation
 services:
   rls-tenant-isolation:

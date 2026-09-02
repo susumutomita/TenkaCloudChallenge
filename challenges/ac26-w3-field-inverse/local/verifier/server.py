@@ -69,8 +69,8 @@ MAX_MESSAGE_CHARS = 1900
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
-# `axioms` runs under a seed the learner has never been shown, so the prime its field
-# is built over is one they cannot have special-cased.
+# `units` runs under a seed the learner has never been shown, so the composite modulus
+# it enumerates (and the prime it repeats on) is one they cannot have special-cased.
 CODE_CHECKPOINTS = {
     "normalize": ("check_normalize",),
     "arithmetic": ("check_arithmetic",),
@@ -78,7 +78,7 @@ CODE_CHECKPOINTS = {
     "inverse": ("check_inverse",),
     "errors": ("check_errors",),
     "composite": ("check_composite",),
-    "axioms": ("check_axioms",),
+    "units": ("check_units",),
 }
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 #: Every checkpoint here is graded on the learner's file, so nothing has to arrive
@@ -221,7 +221,7 @@ def evaluate_with_message(
     checkpoint_id: str, submission: object
 ) -> tuple[bool, str | None]:
     if checkpoint_id in CODE_CHECKPOINTS:
-        seed = f"{SEED}:axioms" if checkpoint_id == "axioms" else SEED
+        seed = f"{SEED}:units" if checkpoint_id == "units" else SEED
         return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
     return False, None
 

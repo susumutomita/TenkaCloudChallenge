@@ -6,7 +6,7 @@
 > the TenkaCloud repository, not to the course operators.
 
 **Track:** `advanced-cryptography-2026` · **Order:** 110 · **Chapter:** Week 1 / Arithmetic
-Circuits · **Role:** `mechanism` · **Time:** 45–60 minutes · **Points:** 200
+Circuits · **Role:** `mechanism` · **Time:** 60–90 minutes · **Points:** 200
 · **Recommended first:** `ac26-bridge-experiment`, `ac26-bridge-properties`
 
 ## The story
@@ -38,7 +38,7 @@ member   product over allowed of (signal - a)
 
 Start the problem from Participant Portal. The three-file editor appears on the same page.
 Inspect the evidence, edit the files, run the public tests, and submit residuals / boolean /
-membership / transfer there. The first-broken answer is the first violated
+membership / range there. The first-broken answer is the first violated
 constraint's id **and its non-zero residual**, read from the broken witness's trace and entered as
 JSON in the Portal. No host terminal or checkout editing is required.
 
@@ -61,15 +61,24 @@ Five checkpoints, scored independently. Wrong answers cost 10 points each.
 
 | Checkpoint | Points | What is checked |
 |---|---:|---|
-| `residuals` | 45 | Your evaluator over three different primes, shuffled order, missing signals |
-| `first-broken` | 40 | `{ "constraintId": ..., "residual": ... }` for the first violation |
-| `boolean` | 40 | Your boolean gadget, swept over **every** element of the field |
-| `membership` | 35 | Your membership gadget, swept over the field, for allowed sets of size 1–5 |
-| `transfer` | 40 | All three files, against a field and circuit from a seed you never see |
+| `residuals` | 45 | Your evaluator over three hidden primes, a six-constraint circuit using all five kinds, handed over in a seed-derived order; residual rows on a broken witness; missing signals |
+| `first-broken` | 40 | `{ "constraintId": ..., "residual": ... }` for the first violation in the public broken witness |
+| `boolean` | 35 | Your boolean gadget, swept over **every** element of the field by the reference evaluator |
+| `membership` | 30 | Your membership gadget, swept over the field, for allowed sets of size 1–5 |
+| `range` | 50 | Your `range_constraints` / `range_witness`: every in-range value passes with your own witness, and no assignment of your auxiliary signals lets an out-of-range value through (exact search) — on widths 1–2, 3–4 and 5–6 bits |
 
-Hints on four of the five (15 / 15 / 10 / 10). Opening every one still leaves 150 of 200.
+Hints on four of the five (15 / 15 / 10 / 10 + 10). Opening every one still leaves 140 of 200.
 
-## Three ways to be wrong that the public tests will not catch
+The three gadget checkpoints are judged by the hidden checker's **reference evaluator**, which
+knows exactly the five documented kinds. The participant's own `evaluate` is never consulted for
+a gadget, so a kind it alone understands does not pass. The range gadget may use only `boolean` /
+`add` / `mul` / `const`, at most 5 × bits constraints: listing 2^bits values with `member` fails
+the kind rule, spelling the product out by hand fails the budget from 3 bits up, and a hard-coded
+width fails on the other widths. Out-of-range rejection is decided by searching every assignment
+of the auxiliary signals (a 200k-assignment budget; exceeding it is a deterministic message), not
+by trusting the witness function.
+
+## Four ways to be wrong that the public tests will not catch
 
 1. **`-1` is not zero, and neither is `p-1`.** They are the same field element. An evaluator that
    returns the raw subtraction looks right until an intermediate value goes negative.
@@ -79,6 +88,11 @@ Hints on four of the five (15 / 15 / 10 / 10). Opening every one still leaves 15
 3. **One valid witness proves nothing.** An under-constrained circuit still gives every residual
    zero on an honest witness. A membership gadget that pins only `allowed[0]` passes whenever the
    visible example happens to use that value.
+4. **A range gadget that accepts its own witnesses can still admit everything.** The public tests
+   substitute *your* witness into *your* constraints and see zeros. Drop the boolean constraints on
+   the digits, or never link the digit sum to the signal, and that still holds — while any value
+   at all now has some auxiliary assignment that satisfies the gadget. Only the search over every
+   assignment tells those apart, which is why the hidden verifier does one.
 
 ## Relationship to the official Week 1 exercise
 
@@ -111,6 +125,26 @@ Zero. No cloud account, no AWS resources. A container on your machine.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
-verifier, all of which must be caught. Both the position and residual of the broken constraint are
-seed-derived, so neither a constraint-name guess nor a two-choice answer carries across deploys.
+`make reference-test` runs the mutation suite: seventeen broken submissions plus six near-misses
+sent through the verifier itself, all of which must be caught — and a mutation aimed at a specific
+rule (an invented kind, an id-sorted trace, a sign-flipped residual, a `member` listing, the
+product chain, an unlinked digit sum, a free-signal padding that must exhaust the search budget)
+must be killed by *that* rule's message, not by an unrelated one. Both the position and residual
+of the broken constraint are seed-derived, so neither a constraint-name guess nor a two-choice
+answer carries across deploys.
+
+The hidden circuit is the public one plus a `member` constraint on a sixth signal (`tier`), so it
+uses all five kinds, and it is handed to `trace` / `first_broken` in a seed-derived order that is
+never the identity or its reverse — an implementation that sorts by id fails on the promise the
+statement makes. Each hidden label breaks a different kind (arithmetic / member / boolean), and
+the expected first violation is derived from the reference evaluator over the given order.
+
+The range width is 1–2 / 3–4 / 5–6 bits by label, so every deployment covers the one-bit case
+that needs no adder chain and the widest case where a per-digit doubling chain (26 constraints at
+6 bits) sits just under the 5 × bits budget. Both that construction and the constant-weights one
+(`const` powers of two, `mul`, `add`) pass; the reference uses the Horner form (3 × bits − 2).
+2^6 = 64 is below every prime in `PRIMES`, so `2^bits < p` needs no per-field clamp.
+
+`transfer` (a re-run of the whole suite on another seed) was removed in wave 5: it was earned by
+transcription alone. The hidden labels already grade on fields, orderings and widths the visible
+instance never shows.

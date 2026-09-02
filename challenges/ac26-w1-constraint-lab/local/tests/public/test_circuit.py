@@ -1,9 +1,11 @@
 """Public tests: the shape of your answers on the one visible circuit.
 
-They confirm your field normalizes, your trace has the right length and order, and
-your gadgets return constraint dicts. They use ONE prime and ONE circuit, so they
-cannot tell you whether your boolean gadget rejects `flag = 2` in a different field.
-That is the hidden verifier's job, deliberately.
+They confirm your field normalizes, your trace has the right length and order, your
+gadgets return constraint dicts, and your range gadget accepts its own witnesses on
+small widths. They use ONE prime and ONE circuit, so they cannot tell you whether
+your boolean gadget rejects `flag = 2` in a different field, or whether your range
+gadget lets a value outside the range through. That is the hidden verifier's job,
+deliberately.
 """
 
 from __future__ import annotations
@@ -93,6 +95,55 @@ def test_gadgets_return_constraint_dicts() -> None:
     assert isinstance(gadgets_module.membership_constraints("m", [1, 2]), list)
 
 
+# The range checkpoint's rules, on small widths. These use YOUR evaluate to substitute
+# your witness into your constraints, so they can show you a value inside the range
+# that your own gadget rejects. They cannot show you a value outside the range that
+# it admits -- that needs a search over every auxiliary assignment, which is the
+# hidden verifier's job. Reason that one out on paper: for 8 = 0 + 0*2 + 0*4 + 8, no
+# choice of three 0/1 digits reaches the last constraint.
+RANGE_KINDS = ("boolean", "add", "mul", "const")
+RANGE_WIDTHS = (1, 2, 3)
+
+
+def test_range_gadget_uses_only_the_allowed_kinds() -> None:
+    for bits in RANGE_WIDTHS:
+        constraints = gadgets_module.range_constraints("x", bits)
+        assert isinstance(constraints, list) and constraints, (
+            f"range_constraints returned no constraints for bits={bits}"
+        )
+        for constraint in constraints:
+            assert isinstance(constraint, dict) and constraint.get("kind") in RANGE_KINDS, (
+                "range_constraints may use boolean / add / mul / const only"
+            )
+        assert len(constraints) <= 5 * bits, (
+            f"range_constraints returned more than 5 x bits constraints for bits={bits}"
+        )
+
+
+def test_range_witness_assigns_the_signal() -> None:
+    for bits in RANGE_WIDTHS:
+        for value in range(2**bits):
+            witness = gadgets_module.range_witness("x", value, bits)
+            assert isinstance(witness, dict) and witness.get("x") == value, (
+                "range_witness must return a dict that assigns `value` to the signal"
+            )
+
+
+def test_range_witness_satisfies_your_own_constraints() -> None:
+    f = _field()
+    for bits in RANGE_WIDTHS:
+        constraints = gadgets_module.range_constraints("x", bits)
+        assert constraints, f"range_constraints returned no constraints for bits={bits}"
+        for value in range(2**bits):
+            witness = gadgets_module.range_witness("x", value, bits)
+            entries = circuit_module.trace(constraints, witness, f)
+            assert len(entries) == len(constraints), "trace should have one entry per range constraint"
+            broken = [e["id"] for e in entries if f.normalize(int(e["residual"])) != 0]
+            assert not broken, (
+                f"bits={bits}, value {value}: your witness leaves {broken} non-zero (by your own evaluate)"
+            )
+
+
 def test_workbench_inspect_shows_seeded_evidence_without_answers() -> None:
     from participant.server import inspect_payload
 
@@ -143,7 +194,7 @@ def test_workbench_prepare_returns_the_file_checkpoints() -> None:
     assert result["ok"] is True
     submissions = result["submissions"]
     # first-broken is read off the trace by the learner, never produced here.
-    assert set(submissions) == {"residuals", "boolean", "membership", "transfer"}
+    assert set(submissions) == {"residuals", "boolean", "membership", "range"}
     for value in submissions.values():
         assert set(json.loads(value)) == {"field.py", "circuit.py", "gadgets.py"}
 

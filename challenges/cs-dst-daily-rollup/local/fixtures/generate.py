@@ -66,10 +66,10 @@ def reported_zone(seed: str) -> dict[str, object]:
 
 
 def disputed_index(seed: str) -> int:
-    """Row number of the day whose published total is short.
+    """Row number of the switch day, the first day whose published total disagrees.
 
-    The neighbour that gained the same amount sits at ``disputed_index + 1`` and is
-    deliberately not derived here: finding it is the audit.
+    The rows after it are deliberately not derived here: the stale offset keeps
+    misplacing the boundary hour on every later day, and finding that is the audit.
     """
     day = str(reported_zone(seed)["disputedDay"])
     for index, row in enumerate(daily_report(seed)):
@@ -81,49 +81,57 @@ def disputed_index(seed: str) -> int:
 def daily_report(seed: str) -> list[dict[str, object]]:
     """The published daily report next to the ledger's own count for each day.
 
-    Only the two numbers per day are recorded. Nothing here says which days are wrong
-    or why — that is the audit.
+    The report is what a rollup that reads one offset at the start of its range and
+    adds it to every instant publishes for a range that starts before the switch.
+    Every day from the switch onward is therefore off by the amount that fell inside
+    the one hour the stale offset carries across a day boundary:
+
+      - when the clocks went back the stale offset reads every later instant an hour
+        late, so each day from the switch day on loses its last hour to the next day,
+        and the last day's share leaves the range and is counted nowhere;
+      - when the clocks went forward it reads them an hour early, so each day after
+        the switch loses its first hour to the day before, and the switch day itself
+        only gains.
+
+    Consecutive moved amounts always differ, so a day never happens to gain exactly
+    what it lost. Only the two numbers per day are recorded. Nothing here says which
+    days are wrong or why — that is the audit.
     """
     info = reported_zone(seed)
     day = date.fromisoformat(str(info["disputedDay"]))
+    clocks_went_back = int(str(info["localHoursThatDay"])) == 25
     rng = _rng(seed, "report-rows")
     before = rng.randrange(2, 5)
     after = rng.randrange(2, 5)
+    last = after + 1
+
+    ledger = {index: rng.randrange(400, 900) for index in range(-before, last + 1)}
+    moved: dict[int, int] = {}
+    previous: int | None = None
+    for index in range(0, last + 1):
+        value = rng.randrange(30, 120)
+        while value == previous:
+            value = rng.randrange(30, 120)
+        moved[index] = value
+        previous = value
 
     rows: list[dict[str, object]] = []
-    for index in range(before, 0, -1):
-        total = rng.randrange(400, 900)
-        rows.append(
-            {
-                "day": (day - timedelta(days=index)).isoformat(),
-                "reportedTotal": total,
-                "ledgerTotal": total,
-            }
-        )
-    # The switch moves events across the boundary: one day gains what the other lost.
-    moved = rng.randrange(30, 120)
-    neighbour_total = rng.randrange(400, 900)
-    day_total = rng.randrange(400, 900)
-    rows.append(
-        {
-            "day": (day - timedelta(days=0)).isoformat(),
-            "reportedTotal": day_total - moved,
-            "ledgerTotal": day_total,
-        }
-    )
-    rows.append(
-        {
-            "day": (day + timedelta(days=1)).isoformat(),
-            "reportedTotal": neighbour_total + moved,
-            "ledgerTotal": neighbour_total,
-        }
-    )
-    for index in range(2, after + 2):
-        total = rng.randrange(400, 900)
+    for index in range(-before, last + 1):
+        total = ledger[index]
+        if index < 0:
+            reported = total
+        elif clocks_went_back:
+            reported = total - moved[index] + (moved[index - 1] if index >= 1 else 0)
+        else:
+            reported = (
+                total
+                - (moved[index] if index >= 1 else 0)
+                + (moved[index + 1] if index + 1 <= last else 0)
+            )
         rows.append(
             {
                 "day": (day + timedelta(days=index)).isoformat(),
-                "reportedTotal": total,
+                "reportedTotal": reported,
                 "ledgerTotal": total,
             }
         )
@@ -154,7 +162,7 @@ def evidence(seed: str) -> dict[str, object]:
     zone = reported_zone(seed)
     disputed = disputed_index(seed)
     # Through the disputed day inclusive. The rows after it are held back because the
-    # amount this day lost turns up on a later one, and noticing that is the audit.
+    # discrepancy carries on past that day, and noticing that is the audit.
     window = [{"index": index, **row} for index, row in enumerate(rows[: disputed + 1])]
     return {
         "environment": {
@@ -176,7 +184,7 @@ def evidence(seed: str) -> dict[str, object]:
             "rows": window,
             "question": (
                 f"集計コードも台帳も変わっていません。 それでも {zone['disputedDay']} だけ "
-                f"reportedTotal が ledgerTotal に届いていません。 "
+                f"reportedTotal が ledgerTotal と合いません。 "
                 f"{zone['timezone']} の暦で、この日は他の日と何が違いますか。"
             ),
             "answerFormat": (
@@ -188,7 +196,7 @@ def evidence(seed: str) -> dict[str, object]:
                     "columns": COLUMN_GLOSSARY_EN,
                     "question": (
                         f"Neither the totalling code nor the ledger changed, yet on "
-                        f"{zone['disputedDay']} alone the reportedTotal falls short of the "
+                        f"{zone['disputedDay']} alone the reportedTotal does not match the "
                         f"ledgerTotal. In the {zone['timezone']} calendar, what is different "
                         f"about that day?"
                     ),

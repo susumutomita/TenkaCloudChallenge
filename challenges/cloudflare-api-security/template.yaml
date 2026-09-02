@@ -352,7 +352,6 @@ Resources:
               const caller = USERS[token]; // may be undefined
 
               // VULN(authorization): missing/invalid token is not rejected.
-              // FIX: if (!caller) return json({ error: "unauthorized" }, 401);
 
               if (path === "/api/profile") {
                 // VULN(authorization): defaults to "alice" when caller is missing.
@@ -364,9 +363,7 @@ Resources:
               if (m) {
                 const id = decodeURIComponent(m[1]);
                 // VULN(input-validation): no shape check on `id`.
-                // FIX: if (!/^[a-z]{1,32}$/.test(id)) return json({ error: "bad request" }, 400);
                 // VULN(idor): no ownership check -- returns ANY id's profile.
-                // FIX: if (!caller || id !== caller.userId) return json({ error: "forbidden" }, 403);
                 const p = PROFILES[id];
                 if (!p) {
                   // VULN(info-disclosure): leaks known ids and the caller's token.

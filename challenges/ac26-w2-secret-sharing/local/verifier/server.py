@@ -4,6 +4,12 @@ Same security contract as the AC26 template. Four of the five checkpoints run th
 learner's sharing.py against seeded settings; `threshold` grades a structured answer,
 because the property it asks for is machine-checkable rather than prose.
 
+`two-of-three` is graded as a pair of properties on the learner's own `share_line` /
+`reconstruct_line` (see tests/hidden/check_sharing.py), on moduli that differ from the
+public one and include two around 10^4. A run that hits the time limit there gets the
+limit itself as its `message`: the statement documents both the limit and that a
+try-every-secret search cannot meet it, so naming it narrows no hidden value.
+
 Issue 537/538 (Issue 543 option B2): this used to be the same process that also served
 the Participant Portal's config, inspect, starter, public-test and prepare endpoints, in
 the single Docker stage a learner's own `make build` produced -- so
@@ -43,7 +49,9 @@ PROBLEM_ID = "ac26-w2-secret-sharing"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 20
+#: Below the participant server's 15-second proxy timeout, so a timed-out run reaches the
+#: participant with its message instead of an empty verdict.
+RUN_TIMEOUT_SECONDS = 12
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
@@ -57,14 +65,21 @@ CODE_CHECKPOINTS = {
     "share-and-reconstruct": ("check_roundtrip", "check_no_trivial_split"),
     "hides-the-secret": ("check_completion",),
     "rerandomize": ("check_rerandomize",),
-    "transfer": (),
+    "two-of-three": ("check_line_pairs", "check_line_privacy"),
 }
 CHECKPOINTS = (
     "share-and-reconstruct",
     "hides-the-secret",
     "threshold",
     "rerandomize",
-    "transfer",
+    "two-of-three",
+)
+#: The one documented rule a timed-out two-of-three run broke (AGENTS.md §15): the
+#: statement states the limit and that the graded moduli are too large to try every
+#: secret. Other code checkpoints keep returning no detail on a timeout.
+TWO_OF_THREE_TIMEOUT_MESSAGE = (
+    f"the run did not finish within {RUN_TIMEOUT_SECONDS} seconds; "
+    "the graded moduli are too large to try every secret"
 )
 #: `threshold` is the one checkpoint the learner answers directly rather than by
 #: submitting a file, so it is the one that has to arrive sealed by the Workbench's
@@ -171,8 +186,16 @@ def _failure_message(failures: list[object]) -> str | None:
 
 
 def _run_submission(
-    submission: object, phases: tuple[str, ...], seed: str
+    submission: object,
+    phases: tuple[str, ...],
+    seed: str,
+    timeout_message: str | None = None,
 ) -> tuple[bool, str | None]:
+    """Run the named hidden phases against the submitted source in a throwaway workspace.
+
+    `timeout_message` is surfaced only when the child hit the wall-clock limit; every
+    other way of not producing a verdict stays silent.
+    """
     source = submission
     if isinstance(source, dict):
         source = source.get("sharing.py")
@@ -205,7 +228,9 @@ def _run_submission(
                     check=False,
                 )
             captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
+        except subprocess.TimeoutExpired:
+            return False, timeout_message
+        except (OSError, ValueError):
             return False, None
     if completed.returncode != 0:
         return False, None
@@ -235,8 +260,12 @@ def evaluate_with_message(
     if checkpoint_id == "threshold":
         return _check_threshold(submission), None
     if checkpoint_id in CODE_CHECKPOINTS:
-        seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
-        return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
+        timeout_message = (
+            TWO_OF_THREE_TIMEOUT_MESSAGE if checkpoint_id == "two-of-three" else None
+        )
+        return _run_submission(
+            submission, CODE_CHECKPOINTS[checkpoint_id], SEED, timeout_message
+        )
     return False, None
 
 def _b64decode(value: str) -> bytes:

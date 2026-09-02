@@ -7,7 +7,10 @@ carries the checker's property-level failure list as `message`, AGENTS.md §15),
 malformed input can never kill the process.
 
 Four of the five checkpoints run the learner's own three files against hidden
-fields, circuits and orderings; the fifth is a direct answer about a trace.
+fields, circuits and orderings; the fifth is a direct answer about a trace. The three
+gadget checkpoints (boolean, membership, range) are judged by the hidden checker's
+reference evaluator, never by the submission's own `evaluate`, so a gadget cannot
+pass by inventing a constraint kind only its author's evaluator understands.
 
 Issue 543/537: this used to be the same process that also served the Participant
 Portal's config, inspect, starter, public-test, and prepare endpoints, in the single
@@ -55,9 +58,9 @@ CODE_CHECKPOINTS = {
     "residuals": ("check_normalize", "check_residuals", "check_order_independence", "check_missing_signal"),
     "boolean": ("check_boolean",),
     "membership": ("check_membership",),
-    "transfer": (),  # empty tuple means "the whole suite"
+    "range": ("check_range",),
 }
-CHECKPOINTS = ("residuals", "first-broken", "boolean", "membership", "transfer")
+CHECKPOINTS = ("residuals", "first-broken", "boolean", "membership", "range")
 
 # Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
 # reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
@@ -158,19 +161,17 @@ except Exception as error:
     os._exit(0)
 sys.path.insert(0, {root!r})
 sys.modules.update(_hidden_modules)
-phases = {phases!r}
-if phases:
-    failures = []
-    for name in phases:
-        checker = getattr(check_circuit, name)
-        if name in ("check_normalize",):
-            failures.extend(checker(field, {seed!r}))
-        elif name in ("check_boolean", "check_membership"):
-            failures.extend(checker(gadgets, circuit, field, {seed!r}))
-        else:
-            failures.extend(checker(circuit, field, {seed!r}))
-else:
-    failures = check_circuit.run(field, circuit, gadgets, {seed!r})
+failures = []
+for name in {phases!r}:
+    checker = getattr(check_circuit, name)
+    if name in ("check_normalize",):
+        failures.extend(checker(field, {seed!r}))
+    elif name in ("check_boolean", "check_membership", "check_range"):
+        # Gadgets are judged by the reference evaluator: the submission's field and
+        # circuit modules are deliberately not handed over.
+        failures.extend(checker(gadgets, {seed!r}))
+    else:
+        failures.extend(checker(circuit, field, {seed!r}))
 print(json.dumps({{"failures": failures}}))
 sys.stdout.flush()
 os._exit(0)
@@ -222,10 +223,9 @@ def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
     if checkpoint_id == "first-broken":
         return _check_first_broken(submission), ""
     if checkpoint_id in CODE_CHECKPOINTS:
-        # The transfer checkpoint uses a different seed, so nothing tuned to the
-        # visible instance carries over.
-        seed = f"{SEED}:transfer" if checkpoint_id == "transfer" else SEED
-        return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], seed)
+        # Every code checkpoint grades on the hidden labels (h0-h2): fields, circuit
+        # orderings, allowed sets and range widths the visible instance never shows.
+        return _run_submission(submission, CODE_CHECKPOINTS[checkpoint_id], SEED)
     return False, ""
 
 

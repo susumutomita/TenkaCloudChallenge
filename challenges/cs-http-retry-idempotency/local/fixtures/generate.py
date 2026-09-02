@@ -69,7 +69,7 @@ def audit_log(seed: str) -> list[dict[str, object]]:
             "idempotencyKey": operation["idempotencyKey"],
             "account": operation["request"]["account"],
             "amount": operation["request"]["amount"],
-            "chargeId": f"ch-{_token(seed, 'audit-first', 8)}",
+            "chargeId": f"ch-{_token(seed, 'first-charge', 8)}",
             "attempt": 1,
         },
         {
@@ -77,7 +77,7 @@ def audit_log(seed: str) -> list[dict[str, object]]:
             "idempotencyKey": operation["idempotencyKey"],
             "account": operation["request"]["account"],
             "amount": operation["request"]["amount"],
-            "chargeId": f"ch-{_token(seed, 'audit-second', 8)}",
+            "chargeId": f"ch-{_token(seed, 'second-charge', 8)}",
             "attempt": 2,
         },
     ]

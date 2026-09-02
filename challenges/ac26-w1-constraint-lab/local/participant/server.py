@@ -56,15 +56,15 @@ MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
 SUBMITTED_FILES = ("field.py", "circuit.py", "gadgets.py")
-FILE_CHECKPOINTS = ("residuals", "boolean", "membership", "transfer")
+FILE_CHECKPOINTS = ("residuals", "boolean", "membership", "range")
 CODE_CHECKPOINTS_FOR_PORTAL = frozenset(FILE_CHECKPOINTS)
-CHECKPOINTS = ("residuals", "first-broken", "boolean", "membership", "transfer")
+CHECKPOINTS = ("residuals", "first-broken", "boolean", "membership", "range")
 CHECKPOINT_LABELS = {
     "residuals": "residual を計算して trace を出す",
     "first-broken": "最初の違反箇所と residual を言う",
     "boolean": "signal を 0 か 1 だけに縛る",
     "membership": "許可された値だけを通す",
-    "transfer": "見たことのない回路でも成立させる",
+    "range": "列挙できない範囲を、0/1 への分解で縛る",
 }
 
 
@@ -147,7 +147,7 @@ def config_payload() -> dict[str, object]:
             "en": {
                 "name": 'A set of things that must be zero',
                 "description": 'The new policy engine expresses access decisions as an arithmetic circuit instead of if-statements. The monitor only prints pass or fail. Make the residuals visible so a witness can be diagnosed.',
-                "checkpointLabels": {'residuals': 'Compute residuals and emit a trace', 'first-broken': 'Name the first violation and its residual', 'boolean': 'Bind a signal to 0 or 1 only', 'membership': 'Admit only the allowed values', 'transfer': 'Hold up on circuits you have not seen'},
+                "checkpointLabels": {'residuals': 'Compute residuals and emit a trace', 'first-broken': 'Name the first violation and its residual', 'boolean': 'Bind a signal to 0 or 1 only', 'membership': 'Admit only the allowed values', 'range': 'Bind a range too big to list, by splitting it into 0/1 digits'},
             }
         },
     }
@@ -250,7 +250,8 @@ def prepare_submissions(files: object) -> dict[str, object]:
     `first-broken` is deliberately absent: it is read off the broken witness's trace
     by the learner. Producing it here would erase what that checkpoint measures. No
     fixtures are needed for this one -- the bundle is just the learner's own three
-    files, so unlike `inspect`/`test` it never has to leave this process.
+    files, so unlike `inspect`/`test` it never has to leave this process. `range`
+    takes the same bundle: its two functions live in `gadgets.py`.
     """
     sources = _submission_sources(files)
     if sources is None:

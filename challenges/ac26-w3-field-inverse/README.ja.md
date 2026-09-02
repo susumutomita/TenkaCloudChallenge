@@ -55,9 +55,9 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `inverse` | 35 | 素体の全非零元と、`a / b * b == a` |
 | `errors` | 25 | zero、零除算、法の混在 |
 | `composite` | 25 | 最小の非可逆元。素数法では存在しないこと |
-| `axioms` | 25 | 見たことのない素数上での公理 |
+| `units` | 25 | 見たことのない合成数の法の全元: 掛けて 1 になる相手か `NotInvertible` か。`/` も同じ規則。1 対 1 と閉性 — 続けて未知の素数でも同じ |
 
-hint は 7 つ中 4 つにあり、いずれもその checkpoint の 50% 上限内です。
+hint は 7 つ中 5 つにあり、いずれもその checkpoint の 50% 上限内です。本文の再掲は 1 つも無く、どれも 1 桁の数での検算か、見落としやすい場合分けを持っています。
 
 ## この問題が譲らない 2 つの区別
 
@@ -67,7 +67,10 @@ hint は 7 つ中 4 つにあり、いずれもその checkpoint の 50% 上限�
 **`pow(a, p - 2, p)` は「逆元」ではありません。** `p` が素数のときは逆元です。合成数 `n` では
 `pow(a, n - 2, n)` も数を返しますが、それは逆元ではなく、検算しない限り気づけません。拡張 Euclid は
 係数と一緒に gcd を返すので、**逆元が存在しない**と言えます。この問題の mutation suite の 1 つ目は
-まさに Fermat 版で、素数の checkpoint を全部通り、合成数の checkpoint だけで落ちます。
+まさに Fermat 版で、素数の checkpoint を全部通り、合成数の checkpoint だけで落ちます。その前に gcd の
+見張りを置くと `composite` も通り、`units` 以外の全部を通ります。`units` は参加者が一度も見ない合成数の法を
+全元回します。合成数 `m` で `a^(m-2)` が `a` の逆元になるのは `a^(m-1) ≡ 1` の元だけで、単元の一部に
+過ぎません(`m = 91` なら 72 個中 36 個)。表は `m` が素数かどうかを知らずに全元を正しく扱います。
 
 ## なぜ trace を 1 行ずつ突き合わせるのか
 
@@ -81,8 +84,12 @@ trace checkpoint は当初、各行が `a*s + p*t = r` を満たすことと、�
 ## 標本ではなく全数
 
 `inverse` は素体の全非零元を回します。標本ではないので、一部の値を特別扱いする戦略は成立しません。
-`axioms` はさらに、逆元写像が非零元上の**全単射**であることを検査します。体では逆元は一意で、異なる
-元が同じ逆元を持つことはありません。
+`units` は同じことを、どの deploy も画面に出さない族(`UNIT_COMPOSITES`: 3 桁の、相異なる 2 つの奇素数の積と
+奇素数の 2 乗。Carmichael 数は無し)から引いた合成数の法で行い、続けて未知の素数でも行います。法と共通の
+約数を持たない元には掛けて 1 になる相手を、それ以外には `NotInvertible` を、`/` にも同じ規則を要求し、
+逆元写像が「逆元を持つ元」の上で**1 対 1**であること(旧 `axioms` が素数上で見ていた性質)も見ます。
+`pow(a, -1, m)` は正しい逆元なので通ります。表を要求するのは `egcd-trace` の仕事で、この checkpoint の
+仕事ではありません。
 
 ## trace は constant-time ではありません
 
@@ -115,6 +122,11 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を実行します。壊した実装 8 種類があります。Fermat 版は素数の
-checkpoint を全部通り、最終行だけの trace は当初の checkpoint を生き延びました。後者が、列全体を
-突き合わせるようになった理由です。
+`make reference-test` が mutation suite を実行します。壊した実装 12 種類を in-process で回し、`units` の
+near-miss 4 種類はさらに `verifier.server.evaluate_with_message` 経由(subprocess、`:units` seed suffix、
+message が性質名だけで数字を含まないこと)でも回します。Fermat 版は素数の checkpoint を全部通り、gcd の
+見張り付き Fermat 版は `units` 以外を全部通ります — suite はそれが本当に `units` でしか落ちないことも
+確かめます(他の checkpoint がすでに落とす near-miss は、ただのバグです)。最終行だけの trace は当初の
+checkpoint を生き延び、それが列全体を突き合わせるようになった理由です。`units` の near-miss は
+`UNIT_COMPOSITES` の 16 法すべてに対しても in-process で回し、どの法でも落ちることを確認済みなので、
+seed がどの法を引くかに verdict は依存しません。

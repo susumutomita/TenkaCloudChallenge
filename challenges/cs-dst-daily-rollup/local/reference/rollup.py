@@ -1,4 +1,6 @@
-"""Reference solution: daily totals in a real calendar, not in 86400-second blocks."""
+"""Reference solution: daily totals in a real calendar, not in 86400-second blocks --
+and, for the last checkpoint, the smallest input that shows the fixed-offset way
+getting an ordinary day wrong."""
 
 from __future__ import annotations
 
@@ -96,3 +98,59 @@ def daily_totals(
             days[local_day] += amount
 
     return {"ok": True, "days": days}
+
+
+def fixed_offset_day(at: str, timezone_name: str, start_day: str) -> str:
+    """The day the fixed-offset rollup files an event under: the starter's arithmetic,
+    kept as a helper so a counterexample can be checked against the calendar."""
+    moment = _parse_instant(at)
+    if moment is None:
+        raise ValueError("at must be an instant carrying an offset, like 2026-11-03T04:30:00Z")
+    zone = ZoneInfo(timezone_name)
+    first = date.fromisoformat(start_day)
+    offset = datetime.combine(first, datetime.min.time(), tzinfo=zone).utcoffset()
+    shifted = moment.astimezone(timezone.utc) + (offset or timedelta(0))
+    return shifted.date().isoformat()
+
+
+def _midnight_offset(zone: ZoneInfo, day: date) -> timedelta:
+    offset = datetime(day.year, day.month, day.day, tzinfo=zone).utcoffset()
+    return offset if offset is not None else timedelta(0)
+
+
+def counterexample(timezone_name: str, start_day: str, switch_day: str) -> dict[str, object]:
+    """One event the fixed-offset rollup takes away from an ordinary day.
+
+    The rule is the statement's: the fixed offset is wrong exactly on the days whose
+    real offset differs from the one read at the start of the range -- which is not
+    the same thing as "the days after the switch", because a range that starts months
+    earlier may already carry the offset the switch moves to. So walk the range from
+    its second day, skip switch days, and take the first day whose offset differs.
+    When the start's offset is the bigger one the fixed-offset rollup reads instants
+    an hour late and the last half-hour of that day lands on the next day; when it is
+    the smaller one it reads them an hour early and the first half-hour lands on the
+    day before. Either way the ordinary day comes up short.
+    """
+    zone = ZoneInfo(timezone_name)
+    first = date.fromisoformat(start_day)
+    switch = date.fromisoformat(switch_day)
+    stale = _midnight_offset(zone, first)
+    candidate = first + timedelta(days=1)
+    while (candidate - first).days <= 400:
+        current = _midnight_offset(zone, candidate)
+        following = _midnight_offset(zone, candidate + timedelta(days=1))
+        if current != stale and current == following:
+            hour, minute = (23, 30) if stale > current else (0, 30)
+            local = datetime(candidate.year, candidate.month, candidate.day, hour, minute, tzinfo=zone)
+            return {
+                "end_day": max(candidate, switch).isoformat(),
+                "events": [
+                    {
+                        "id": "boundary",
+                        "at": local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "amount": 1,
+                    }
+                ],
+            }
+        candidate += timedelta(days=1)
+    return {"end_day": switch_day, "events": []}

@@ -24,7 +24,7 @@ docker compose (127.0.0.1 のみ)
      ├─ /artifacts/proxylog.jsonl        ネットワーク観測ログ (T+45)
      ├─ GET  /rdap/domain/{name}         モック RDAP (登録日)
      ├─ GET  /api/meetings/{id}          会議メタデータ
-     ├─ POST /meetings/{id}/download     「helper」の動的発行 (マーカーのみ)
+     ├─ POST /meetings/{id}/…            「helper」の動的発行 (マーカーのみ、 パスは deploy ごとに変わる)
      └─ POST /api/heartbeat              presence ビーコン
   :18081  /verify   (loopback; ポータルが採点を委譲する)
 ```

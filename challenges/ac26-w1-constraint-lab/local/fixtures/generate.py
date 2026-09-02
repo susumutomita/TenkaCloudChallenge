@@ -119,6 +119,126 @@ def broken_diagnosis(seed: str, label: str = "public") -> dict[str, object]:
     return {"constraintId": constraint_id, "residual": residual}
 
 
+# --- hidden material -----------------------------------------------------------
+#
+# Everything below is graded only: the participant image never carries this module
+# (see ../Dockerfile), and `public_payload` deliberately builds nothing from it.
+
+HIDDEN_LABELS = ("h0", "h1", "h2")
+
+
+def hidden_circuit(seed: str, label: str) -> list[dict[str, object]]:
+    """The five public constraints plus a `member` constraint on a sixth signal.
+
+    The public circuit exercises four of the five kinds; the hidden one exercises all
+    five, so an `evaluate` that never learned `member` cannot pass on the public
+    example alone. The allowed set is the same one the membership gadget is graded on
+    for this label.
+    """
+    return [
+        *circuit(seed, label),
+        {"id": "c5", "kind": "member", "signal": "tier", "allowed": allowed_set(seed, label)},
+    ]
+
+
+def hidden_honest_witness(seed: str, label: str) -> dict[str, int]:
+    s = _stream(seed, f"tier:{label}")
+    allowed = allowed_set(seed, label)
+    witness = dict(honest_witness(seed, label))
+    witness["tier"] = allowed[_pick(s, 0, 0, len(allowed) - 1)]
+    return witness
+
+
+def hidden_order(seed: str, label: str) -> list[int]:
+    """A seed-derived permutation of the hidden circuit's positions.
+
+    Never the identity and never its reverse: the statement promises the constraints
+    arrive reordered, and a `trace` that sorts by id (ascending or descending) has to
+    fail on that promise rather than pass by luck.
+    """
+    s = _stream(seed, f"order:{label}")
+    size = len(hidden_circuit(seed, label))
+    order = list(range(size))
+    for index in range(size - 1, 0, -1):
+        other = _pick(s, 2 * index, 0, index)
+        order[index], order[other] = order[other], order[index]
+    if order == sorted(order) or order == sorted(order, reverse=True):
+        order = order[1:] + order[:1]
+    return order
+
+
+def hidden_shuffled_circuit(seed: str, label: str) -> list[dict[str, object]]:
+    """The hidden circuit in the order `trace` and `first_broken` are handed it."""
+    circ = hidden_circuit(seed, label)
+    return [circ[index] for index in hidden_order(seed, label)]
+
+
+def hidden_broken_witness(seed: str, label: str) -> dict[str, int]:
+    """A witness with a break the honest one does not have. Which kind breaks depends
+    on the label, so every deployment exercises all three shapes of break:
+
+      h0  an arithmetic constraint (`gated` or `score`, as in the public case)
+      h1  the `member` constraint (`tier` outside the allowed set)
+      h2  the `boolean` constraint (`flag` neither 0 nor 1, with `gated` and `score`
+          recomputed so that only the boolean constraint notices)
+
+    The first violated constraint is whichever of those comes first in
+    `hidden_order`; the checker derives it from the reference evaluator rather than
+    from this function, so the position and the id are both order-dependent.
+    """
+    s = _stream(seed, f"broken:{label}")
+    p = field_modulus(seed, label)
+    witness = hidden_honest_witness(seed, label)
+    variant = HIDDEN_LABELS.index(label) % 3 if label in HIDDEN_LABELS else 0
+    if variant == 0:
+        arithmetic_break, _constraint_id, _residual = _broken_case(seed, label)
+        witness.update(arithmetic_break)
+    elif variant == 1:
+        allowed = allowed_set(seed, label)
+        outside = [value for value in range(p) if value not in allowed]
+        witness["tier"] = outside[_pick(s, 2, 0, len(outside) - 1)]
+    else:
+        flag = _pick(s, 2, 2, p - 1)
+        witness["flag"] = flag
+        witness["gated"] = (witness["role"] * flag) % p
+        witness["score"] = (witness["gated"] + witness["bonus"]) % p
+    return witness
+
+
+#: Widest range the gadget is graded on. 2**6 = 64 is below every prime in PRIMES, so
+#: "2**bits < p" holds for every hidden field without a per-field clamp.
+RANGE_MAX_BITS = 6
+
+
+def range_bits(seed: str, label: str) -> int:
+    """Width of the range gadget for one hidden label: 1 / 3-4 / 5-6.
+
+    Spread by label rather than drawn freely so that every deployment covers both
+    ends -- the one-bit case that needs no adder chain, and the widest case where a
+    per-bit doubling chain approaches the 5 x bits constraint budget.  The one-bit
+    case is fixed, not drawn: a loop generalised from the statement's three-bit
+    example tends to emit only the digit's boolean at bits = 1 and never mention the
+    signal itself, and that gadget must fail on every deployment, not on half.
+    """
+    if label == "h0":
+        return 1
+    s = _stream(seed, f"range:{label}")
+    base = {"h1": 3, "h2": 5}.get(label, 3)
+    return min(base + s[0] % 2, RANGE_MAX_BITS)
+
+
+def range_probe_values(seed: str, label: str) -> list[int]:
+    """Values outside 0 .. 2**bits - 1 that the gadget must reject.
+
+    The boundary itself, the field's largest element (the classic "-1"), the midpoint
+    between them, and one seed-picked value in between.
+    """
+    p = field_modulus(seed, label)
+    low = 2 ** range_bits(seed, label)
+    s = _stream(seed, f"probe:{label}")
+    return sorted({low, p - 1, (low + p - 1) // 2, _pick(s, 0, low, p - 1)})
+
+
 def health_token(seed: str) -> str:
     return hashlib.sha256(
         f"health:{seed}:{field_modulus(seed)}".encode()

@@ -18,8 +18,9 @@ node local/safety-check.mjs         # the `make harness` equivalent — must pri
 FLAG_SEED=rehearsal node local/app/server.mjs &
 curl -s localhost:8080/healthz
 curl -s localhost:8080/rdap/domain/northgate-cowork.example   # note the registration date
+curl -s localhost:8080/artifacts/hollow-invite.eml | grep -m1 '^DKIM-Signature'  # note the d= domain
 curl -s -X POST localhost:8081/verify -H 'content-type: application/json' \
-  -d '{"checkpointId":"dkim-domain","submission":"northgate-cowork.example"}'
+  -d '{"checkpointId":"dkim-domain","submission":"<d= domain from the line above>"}'
 ```
 
 `make local PROBLEM=hollow-invite` (platform repo) injects a random `FLAG_SEED`
@@ -33,7 +34,7 @@ and binds everything to `127.0.0.1`.
 | Reporting employee | Aoi Tanaka `a.tanaka@kestrel-dyn.example` |
 | Second recipient (T+30) | Sora Mori `s.mori@kestrel-dyn.example` |
 | Impersonated company | Northgate Cowork (`northgate-cowork.example`, hijacked/re-registered) |
-| Impersonated person | Daniel Whitmore (claimed co-founder) |
+| Impersonated person | *(seed-derived — see the Answer key below)*, claimed co-founder |
 | Sender | `general@northgate-cowork.example` |
 | Fake meeting app | Vela Meet |
 | Attacker lure domain | `velameet-07.example` |
@@ -58,7 +59,7 @@ are guidance — pace to the room.
 - **T+45 — network log.** Distribute `proxylog.jsonl` (or point to
   `/artifacts/proxylog.jsonl`). It shows the reach to `velameet-07.example`, the
   periodic `POST /api/heartbeat`, the `velameet-join://` launch attempt, and the
-  dynamic `POST /meetings/<id>/download`. Move teams into static analysis of
+  dynamic `POST /meetings/<id>/<endpoint>` (endpoint name is per-deploy). Move teams into static analysis of
   `clone/app.js` → **OBJ-3 / FLAG-3** and **BONUS-3b**.
 - **T+60 — executive query.** Ask, in character: "What is the impact to our
   clients? Is Northgate Cowork real? Was anything leaked internally?" Teams draft
@@ -71,9 +72,9 @@ are guidance — pace to the room.
 | Check id | What / where | Expected finding |
 | --- | --- | --- |
 | `domain-age` (FLAG-1) | `GET /rdap/domain/northgate-cowork.example`, `registration` event | **Per-deploy** — the date the mock returns (reference `FLAG_SEED=test-seed-42` → `2026-04-28`; yours differs). |
-| `dkim-domain` (FLAG-2) | `.eml` `DKIM-Signature` `d=` (and `Authentication-Results`) | `northgate-cowork.example` |
-| `download-path` (FLAG-3) | `clone/app.js` `requestDesktopHelper()` | `/meetings/{id}/download` (concrete room id also accepted) |
-| `impersonator` (FLAG-4) | `.eml` `From`/signature and `GET /api/meetings/<id>` organizer | `Daniel Whitmore` |
+| `dkim-domain` (FLAG-2) | `.eml` `DKIM-Signature` `d=` (and `Authentication-Results`) | **Per-deploy** — `mail-relay-<word>.example`, always a different domain from the sender (reference `FLAG_SEED=test-seed-42` → `mail-relay-outrigger.example`; yours differs). |
+| `download-path` (FLAG-3) | `clone/app.js` `requestDesktopHelper()` | **Per-deploy** — `/meetings/{id}/<word>` (reference `FLAG_SEED=test-seed-42` → `/meetings/{id}/dist`; yours differs; concrete room id also accepted). |
+| `impersonator` (FLAG-4) | `.eml` `From`/signature and `GET /api/meetings/<id>` organizer | **Per-deploy** — from a fixed name list (reference `FLAG_SEED=test-seed-42` → `Owen Kessler`; yours differs). |
 
 The `/verify` grader is lenient: it accepts the bare value or a `FLAG{...}` /
 `TC{...}` wrapper, and for the path it accepts the `{id}` pattern or the concrete
@@ -112,8 +113,9 @@ portal for the flags and this rubric for the debrief; do not add them.
 - Sender: `general@northgate-cowork.example`; hijacked domain `northgate-cowork.example` (registered recently per RDAP).
 - Lure domain `velameet-07.example`; meeting URL `https://velameet-07.example/room/qrt-mkbd-zol`.
 - Custom protocol `velameet-join://join?room=…`.
-- Beacon `POST /api/heartbeat`; dynamic delivery `POST /meetings/{id}/download`; conditional `payload` by OS.
-- Impersonated identity: Daniel Whitmore, "Co-Founder, Northgate Cowork".
+- DKIM signing domain: a per-deploy `mail-relay-<word>.example`, distinct from the sender domain (see the `.eml`'s `DKIM-Signature`) — a bulk-relay indicator worth flagging on its own.
+- Beacon `POST /api/heartbeat`; dynamic delivery via `POST /meetings/{id}/<endpoint>` (endpoint name is per-deploy — see `clone/app.js` or the Answer key); conditional `payload` by OS.
+- Impersonated identity: a per-deploy name (see the live `.eml` / `GET /api/meetings/<id>`), "Co-Founder, Northgate Cowork".
 
 ## Debrief — the key message
 

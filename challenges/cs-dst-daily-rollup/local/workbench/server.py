@@ -33,15 +33,15 @@ MAX_OUTPUT_BYTES = 64 * 1024
 RUN_TIMEOUT_SECONDS = 12
 REQUEST_TIMEOUT_SECONDS = 15
 SUBMISSION_FILES = ("rollup.py",)
-CHECKPOINTS = ("environment", "observe", "audit", "rollup", "transition", "generalize")
-CODE_CHECKPOINTS = frozenset(("rollup", "transition", "generalize"))
+CHECKPOINTS = ("environment", "observe", "audit", "rollup", "transition", "counterexample")
+CODE_CHECKPOINTS = frozenset(("rollup", "transition", "counterexample"))
 CHECKPOINT_LABELS = {
     "environment": "environment — Workbench の合言葉を貼る",
     "observe": "observe — 対象レポート ID と、その日に何があったのかを答える",
     "audit": "audit — 報告値が正しくあり得ない日を挙げる",
     "rollup": "rollup — 固定 offset ではなく現地の暦の日で集計する",
     "transition": "transition — 23 時間の日と 25 時間の日で境界を保つ",
-    "generalize": "generalize — 複数 zone・両方の切替・それをまたぐ範囲でも成り立たせる",
+    "counterexample": "counterexample — 固定 offset が普通の日を壊す最小の再現例を作る",
 }
 
 
@@ -60,7 +60,7 @@ def config_payload() -> dict[str, object]:
     return {
         "id": "cs-dst-daily-rollup",
         "name": "年に 2 日だけ、日次レポートが合わない",
-        "description": "台帳と 1 日だけ食い違う日次レポートを監査し、86400 秒の塊ではなく現地の暦の日で集計する。",
+        "description": "台帳と食い違う日次レポートを監査し、86400 秒の塊ではなく現地の暦の日で集計し、固定 offset が普通の日を壊す最小の再現例を作る。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -73,14 +73,14 @@ def config_payload() -> dict[str, object]:
         "i18n": {
             "en": {
                 "name": "Two days a year, the report is wrong",
-                "description": "Audit a daily report that disagrees with the ledger on one day, then total by the local calendar instead of by 86400-second blocks.",
+                "description": "Audit a daily report that disagrees with the ledger, total by the local calendar instead of by 86400-second blocks, then build the smallest input on which a fixed offset breaks an ordinary day.",
                 "checkpointLabels": {
                     "environment": "environment - paste the Workbench pass phrase",
                     "observe": "observe - name the report and what happened that day",
                     "audit": "audit - list the days whose reported total cannot be right",
                     "rollup": "rollup - total by the local calendar day, not by a fixed offset",
                     "transition": "transition - keep the boundary correct on a 23- and a 25-hour day",
-                    "generalize": "generalize - hold for several zones, both switches and a range spanning them",
+                    "counterexample": "counterexample - smallest input on which a fixed offset breaks an ordinary day",
                 },
             }
         },
@@ -160,7 +160,7 @@ def prepare_submissions(seed: str, files: object) -> dict[str, object]:
             "environment": health_token(seed),
             "rollup": source,
             "transition": source,
-            "generalize": source,
+            "counterexample": source,
         },
     }
 

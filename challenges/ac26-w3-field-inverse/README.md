@@ -56,9 +56,9 @@ Seven checkpoints, scored independently. Wrong answers cost 10 points each.
 | `inverse` | 35 | Every non-zero element of the prime field, plus `a / b * b == a` |
 | `errors` | 25 | Zero, division by zero, and mixing two moduli |
 | `composite` | 25 | The smallest non-invertible element — and none over a prime |
-| `axioms` | 25 | The axioms over a prime you have not been shown |
+| `units` | 25 | Every element of a composite modulus you have not been shown: the partner that multiplies to 1, or `NotInvertible`; `/` follows; one-to-one and closure — then the same over an unseen prime |
 
-Hints on four of the seven, each inside that checkpoint's 50% cap.
+Hints on five of the seven, each inside that checkpoint's 50% cap. None restates the statement: each carries a check in one-digit numbers or a case that is easy to miss.
 
 ## Two distinctions this problem insists on
 
@@ -70,7 +70,11 @@ past the modulus take the same path afterwards.
 `n` it still returns a number — just not an inverse, and nothing tells you unless you check. The
 extended Euclidean algorithm returns the gcd alongside the coefficients, so it can say *there is
 no inverse*. The first mutation in this problem's suite is exactly the Fermat version: it passes
-every prime checkpoint and fails the composite one.
+every prime checkpoint and fails the composite one. Put a gcd guard in front of it and it passes
+`composite` too — and every other checkpoint but `units`, which enumerates a composite modulus the
+participant never sees. Over a composite `m`, `a^(m-2)` is the inverse of `a` only when
+`a^(m-1) ≡ 1`, which holds for a minority of the units (36 of 72 for `m = 91`). The table gets every
+element right without knowing whether `m` is prime.
 
 ## Why the trace is compared row by row
 
@@ -84,8 +88,13 @@ division makes that sequence deterministic, so there is exactly one right answer
 ## Exhaustive, not sampled
 
 `inverse` runs every non-zero element of the prime field, not a sample, so special-casing a few
-values is not a strategy. `axioms` additionally checks that inversion is a **bijection** on the
-non-zero elements: in a field the inverse is unique, and two elements never share one.
+values is not a strategy. `units` does the same over a three-digit composite modulus drawn from a
+family (`UNIT_COMPOSITES`) no deployment ever shows — products of two distinct odd primes and odd
+prime squares, no Carmichael number — and then over an unseen prime: elements sharing no factor
+with the modulus must get the partner that multiplies to 1, the rest must raise `NotInvertible`,
+`/` must follow, and inversion must be **one-to-one** on the elements that have one (the property
+the former `axioms` checkpoint checked over a prime). `pow(a, -1, m)` is a correct inverse and
+passes; requiring the table is `egcd-trace`'s job, not this checkpoint's.
 
 ## The trace is not constant-time
 
@@ -118,6 +127,12 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: eight broken implementations. The Fermat-inverse
-one passes every prime checkpoint, and the last-row-only trace survived the original checkpoint
-and is why it now compares the whole sequence.
+`make reference-test` runs the mutation suite: twelve broken implementations in-process, then the
+four `units` near-misses again through `verifier.server.evaluate_with_message` (the subprocess
+path, the `:units` seed suffix, and a message that must name properties and carry no digit). The
+Fermat-inverse one passes every prime checkpoint; the gcd-guarded one passes everything but
+`units`, and the suite asserts that it does (a near-miss another checkpoint already catches would
+be a plain bug). The last-row-only trace survived the original checkpoint and is why it now
+compares the whole sequence. The `units` near-misses were also run against all sixteen
+`UNIT_COMPOSITES` in-process; each fails on every one of them, so the verdict does not depend on
+which modulus a seed draws.

@@ -5,7 +5,7 @@
 > 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
 
 **Track:** `advanced-cryptography-2026` · **Order:** 110 · **Chapter:** Week 1 / Arithmetic
-Circuits · **Role:** `mechanism` · **想定時間:** 45〜60 分 · **配点:** 200
+Circuits · **Role:** `mechanism` · **想定時間:** 60〜90 分 · **配点:** 200
 · **推奨前提:** `ac26-bridge-experiment`、`ac26-bridge-properties`
 
 ## ストーリー
@@ -35,7 +35,7 @@ member   allowed の各要素との差の積
 ## 遊び方
 
 Participant Portal で問題を起動すると、3 ファイルのエディタが問題文と同じ画面に表示されます。
-証拠の確認、編集、公開テスト、residuals / boolean / membership / transfer の提出まで Portal 内で
+証拠の確認、編集、公開テスト、residuals / boolean / membership / range の提出まで Portal 内で
 完結します。first-broken は壊れた witness の trace を自分で読み、最初に違反した
 constraint の id と非 0 の residual を JSON で Portal へ入力します。ホスト側のターミナルや checkout の
 ファイル操作は必要ありません。
@@ -58,15 +58,22 @@ Portal のエディタまたは作問用 checkout で編集するのは 3 ファ
 
 | Checkpoint | 配点 | 何を検査するか |
 |---|---:|---|
-| `residuals` | 45 | 3 つの異なる素数、順序の入れ替え、signal 欠落での評価器 |
-| `first-broken` | 40 | 最初の違反の `{ "constraintId": ..., "residual": ... }` |
-| `boolean` | 40 | boolean gadget を field の**全要素**で総当たり |
-| `membership` | 35 | membership gadget を全要素で総当たり (許可集合サイズ 1〜5) |
-| `transfer` | 40 | 3 ファイルを、見たことのない seed 由来の field と circuit で実行 |
+| `residuals` | 45 | 3 つの hidden 素数、5 種類すべての kind を含む 6 本の回路を seed 由来の順で渡した評価器、壊れた witness の residual 行、signal 欠落 |
+| `first-broken` | 40 | 公開の壊れた witness での最初の違反 `{ "constraintId": ..., "residual": ... }` |
+| `boolean` | 35 | boolean gadget を参照 evaluator で field の**全要素**総当たり |
+| `membership` | 30 | membership gadget を全要素で総当たり (許可集合サイズ 1〜5) |
+| `range` | 50 | `range_constraints` / `range_witness`: 範囲内の各値が自分の witness で通り、範囲外の値は補助 signal のどの割り当てでも通らない (完全探索) — 幅 1〜2 / 3〜4 / 5〜6 bit で |
 
-hint は 5 つ中 4 つにあります (15 / 15 / 10 / 10)。すべて開いても 200 点中 150 点が残ります。
+hint は 5 つ中 4 つにあります (15 / 15 / 10 / 10 + 10)。すべて開いても 200 点中 140 点が残ります。
 
-## 公開テストでは落ちない 3 つの間違い
+gadget の 3 checkpoint は hidden checker の **参照 evaluator** (表の 5 kind しか知らない) で採点します。
+participant 自身の `evaluate` は gadget の採点に使わないので、自分の evaluate だけが知っている kind は
+通りません。range gadget に使えるのは `boolean` / `add` / `mul` / `const` のみ、本数は bits × 5 以下です。
+`member` で 2^bits 個を列挙すると kind 規則で、積を手で並べると 3 bit 以上で本数上限で、幅の決め打ちは他の
+幅で落ちます。範囲外が通らないことは witness 関数を信用せず、補助 signal の全割り当てを探索して判定します
+(予算 20 万割り当て。超過は決定論的な message)。
+
+## 公開テストでは落ちない 4 つの間違い
 
 1. **`-1` は 0 ではなく、`p-1` も 0 ではありません。** 両者は同じ元です。引き算の結果をそのまま返す
    評価器は、中間値が負になった瞬間に壊れます。
@@ -76,6 +83,10 @@ hint は 5 つ中 4 つにあります (15 / 15 / 10 / 10)。すべて開いて�
 3. **正しい witness が 1 つ通っても何も示せません。** 制約が足りない回路でも、正直な witness では
    全 residual が 0 になります。`allowed[0]` だけを固定する membership gadget は、公開例がたまたま
    その値のときに通ります。
+4. **自分の witness を通す range gadget が、何でも通すこともあります。** 公開テストは *自分の* witness を
+   *自分の* 制約に代入して 0 を見るだけです。桁の boolean 制約を落としても、桁の和を signal に
+   つながなくても、それは成り立ったまま——そのくせ、どんな値にも通る補助値の置き方ができています。
+   両者を分けるのは全割り当ての探索だけで、hidden verifier がそれをやるのはそのためです。
 
 ## 公式 Week 1 課題との関係
 
@@ -106,6 +117,22 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を実行します。壊した提出 6 種類と verifier を狙った 1 種類が
-あり、すべて検出される必要があります。壊れた constraint の位置と residual はどちらも seed 由来です。
-constraint 名の暗記でも二択でも、別 deploy へ答えを持ち越せません。
+`make reference-test` が mutation suite を実行します。壊した提出 17 種類と、verifier 本体を通す near-miss
+6 種類があり、すべて検出される必要があります。特定の規則を狙う mutation (架空の kind、id 順に並べ直した
+trace、符号が逆の residual、`member` での列挙、積の鎖、signal につながない桁の和、探索予算を使い切らせる
+自由 signal の水増し) は、無関係な理由ではなく *その規則の* message で殺されたことまで assert します。
+壊れた constraint の位置と residual はどちらも seed 由来です。constraint 名の暗記でも二択でも、別 deploy へ
+答えを持ち越せません。
+
+hidden 回路は公開回路に 6 本目の signal `tier` への `member` 制約を足したもので、5 種類すべての kind を
+使います。`trace` / `first_broken` には seed 由来の順 (identity と逆順は除く) で渡すので、id でソートする
+実装は問題文の約束どおり落ちます。hidden label ごとに壊れる kind が違い (算術 / member / boolean)、
+最初の違反の期待値は渡した順の上で参照 evaluator から導きます。
+
+range の幅は label ごとに 1〜2 / 3〜4 / 5〜6 bit で、毎 deploy が「足し算の鎖が要らない 1 bit」と
+「桁ごとの 2 倍の鎖 (6 bit で 26 本) が bits × 5 の上限すれすれになる最大幅」の両方を踏みます。その構成も、
+2 のべきを `const` で置いて `mul` / `add` する構成も通ります。reference は Horner 形 (3 × bits − 2 本) です。
+2^6 = 64 は `PRIMES` のどの素数より小さいので、`2^bits < p` に field ごとの上限は要りません。
+
+`transfer` (別 seed で全 suite を再実行) は wave 5 で外しました。写経だけで取れる checkpoint だったため
+です。hidden label はもともと、画面に出ない field・順序・幅で採点しています。

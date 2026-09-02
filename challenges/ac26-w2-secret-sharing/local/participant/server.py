@@ -59,7 +59,7 @@ CHECKPOINTS = (
     "hides-the-secret",
     "threshold",
     "rerandomize",
-    "transfer",
+    "two-of-three",
 )
 
 
@@ -77,13 +77,13 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w2-secret-sharing',
     problem_name='分けても、まだ何も分からない',
     problem_name_en='Split it, and still nobody knows',
-    description='秘密を n 個に分けて配る。足せば戻る。それだけなら暗号ではない。n-1 個を持っていても何も分からないことを、証拠で示す。',
-    description_en='Split a secret across n parties. Add them up and it comes back. If that were all, it would not be cryptography. Show, with evidence, that holding n-1 of them tells you nothing.',
-    checkpoint_labels={'share-and-reconstruct': '分けて、集めて、戻す', 'hides-the-secret': '足りない集合からは何も言えないことを示す', 'threshold': '必要数を、証人つきで答える', 'rerandomize': '秘密を変えずに share を入れ替える', 'transfer': '見たことのない設定でも成立させる'},
-    checkpoint_labels_en={'share-and-reconstruct': 'Split it, collect it, get it back', 'hides-the-secret': 'Show that a short set says nothing', 'threshold': 'Answer how many are needed, with witnesses', 'rerandomize': 'Refresh the shares without moving the secret', 'transfer': 'Hold up in settings you have not seen'},
+    description='秘密を n 個に分けて配る。足せば戻る。それだけなら暗号ではない。n-1 個を持っていても何も分からないことを、証拠で示す。最後に、1 人欠けても戻る分け方を自分で作る。',
+    description_en='Split a secret across n parties. Add them up and it comes back. If that were all, it would not be cryptography. Show, with evidence, that holding n-1 of them tells you nothing. Then build a split that survives one missing holder.',
+    checkpoint_labels={'share-and-reconstruct': '分けて、集めて、戻す', 'hides-the-secret': '足りない集合からは何も言えないことを示す', 'threshold': '必要数を、証人つきで答える', 'rerandomize': '秘密を変えずに share を入れ替える', 'two-of-three': '1 人欠けても戻る分け方を作る'},
+    checkpoint_labels_en={'share-and-reconstruct': 'Split it, collect it, get it back', 'hides-the-secret': 'Show that a short set says nothing', 'threshold': 'Answer how many are needed, with witnesses', 'rerandomize': 'Refresh the shares without moving the secret', 'two-of-three': 'Build a split that survives one missing holder'},
     submitted_files=('sharing.py',),
-    code_checkpoints=('share-and-reconstruct', 'hides-the-secret', 'rerandomize', 'transfer'),
-    checkpoints=('share-and-reconstruct', 'hides-the-secret', 'threshold', 'rerandomize', 'transfer'),
+    code_checkpoints=('share-and-reconstruct', 'hides-the-secret', 'rerandomize', 'two-of-three'),
+    checkpoints=('share-and-reconstruct', 'hides-the-secret', 'threshold', 'rerandomize', 'two-of-three'),
     max_body_bytes=MAX_BODY_BYTES,
     run_timeout_seconds=RUN_TIMEOUT_SECONDS,
     max_output_bytes=MAX_OUTPUT_BYTES,

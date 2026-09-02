@@ -12,7 +12,12 @@ Two things this exercise insists on that a quick implementation skips:
     it is not. The extended Euclidean algorithm tells you which case you are in, because
     it hands you the gcd. Use it.
 
-Run `make inspect A=<value> P=<modulus>` to see a worked trace of the algorithm.
+Press "Inspect evidence" (証拠を確認) in the Portal editor to see a worked trace of the
+algorithm for one a and one modulus.
+
+Reading the classes below needs only this: `self.value` is the element's number and
+`self.field.modulus` is the modulus. What you change is the `self.value = value` line
+and the body of each `return`.
 """
 
 from __future__ import annotations
@@ -56,7 +61,11 @@ class FieldElement:
         return FieldElement(self.field, 0)
 
     def __truediv__(self, other: "FieldElement") -> "FieldElement":
-        """Field division. Note that this is not Python's `/`."""
+        """Field division. Note that this is not Python's `/`.
+
+        `a / b` multiplies by `b.inverse()`, so dividing by an element that has no
+        inverse raises NotInvertible, over any modulus -- the same as inverting it.
+        """
         return FieldElement(self.field, 0)
 
 

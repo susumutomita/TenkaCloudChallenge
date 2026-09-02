@@ -1,7 +1,8 @@
-"""Public tests: the round trip on one setting. That is all.
+"""Public tests: the round trip on one setting, plus the shape of the line split. That is all.
 
-They never ask whether a partial set of shares hides anything, which is the only
-property that makes secret sharing worth doing. The hidden verifier does.
+They never ask whether a partial set of shares hides anything, nor whether one point
+of the line does -- the only properties that make secret sharing worth doing. The
+hidden verifier does.
 """
 
 from __future__ import annotations
@@ -65,6 +66,10 @@ def _shares() -> list[int]:
     )
 
 
+def _line_points() -> list:
+    return sharing.share_line(PUBLIC["secret"], PUBLIC["params"]["p"], PUBLIC["lineRandomness"])
+
+
 def test_share_returns_one_value_per_party() -> None:
     assert len(_shares()) == PUBLIC["params"]["n"]
 
@@ -88,6 +93,25 @@ def test_rerandomize_returns_one_value_per_party() -> None:
         PUBLIC["rerandomizationRandomness"],
     )
     assert len(fresh) == par["n"]
+
+
+def test_share_line_returns_three_points_at_x_1_2_3() -> None:
+    p = PUBLIC["params"]["p"]
+    points = _line_points()
+    assert isinstance(points, list) and len(points) == 3, "expected three [x, y] points"
+    for party, point in zip((1, 2, 3), points):
+        assert isinstance(point, (list, tuple)) and len(point) == 2, "each point is [x, y]"
+        x, y = point
+        assert x == party, "party 1, 2, 3 hold the points at x = 1, 2, 3, in that order"
+        assert isinstance(y, int) and 0 <= y < p, "y must be inside [0, modulus)"
+
+
+def test_two_points_of_the_line_walk_back_to_the_secret() -> None:
+    p = PUBLIC["params"]["p"]
+    points = _line_points()
+    assert isinstance(points, list) and len(points) == 3, "expected three [x, y] points"
+    recovered = sharing.reconstruct_line([list(points[0]), list(points[1])], p)
+    assert recovered == PUBLIC["secret"] % p, "parties 1 and 2 together should walk back to the secret"
 
 
 def main() -> int:
@@ -118,7 +142,8 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("Nothing above asks whether n-1 shares hide the secret. Passing is not enough.")
+    print("Nothing above asks whether n-1 shares hide the secret, whether the other pairs of")
+    print("points walk back to it, or whether one point alone hides it. Passing is not enough.")
     return 1 if failures else 0
 
 

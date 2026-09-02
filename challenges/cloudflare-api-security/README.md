@@ -69,8 +69,8 @@ Demo tokens: `token-alice` → `alice`, `token-bob` → `bob`.
 | | |
 | --- | --- |
 | Kind | `flag` (`AnswerFlag` output) |
-| Points | 400 |
-| Wrong-answer penalty | 0 |
+| Points | 200 |
+| Wrong-answer penalty | −10 |
 | Hints | 3 (progressive: run → diagnose → fix) |
 
 ## Security note (the Evaluator's own SSRF defenses)

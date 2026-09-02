@@ -28,27 +28,32 @@ MAX_PROCESSES = 128
 RUN_TIMEOUT_SECONDS = 15
 REQUEST_TIMEOUT_SECONDS = 15
 _ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-CHECKPOINTS = ("environment", "observe", "audit", "rollup", "transition", "generalize")
+CHECKPOINTS = ("environment", "observe", "audit", "rollup", "transition", "counterexample")
 CODE_CHECKPOINT_PHASES = {
     "rollup": "check_rollup",
     "transition": "check_transition",
-    "generalize": "check_generalize",
+    "counterexample": "check_counterexample",
 }
 CODE_CHECKPOINTS = frozenset(CODE_CHECKPOINT_PHASES)
+#: A run that hits the wall clock fails with this as its `message` (AGENTS.md §15): the
+#: limit is a documented rule of the checkpoint, so naming it reveals nothing hidden.
+TIMEOUT_MESSAGES = {
+    "check_counterexample": f"the run did not finish within {RUN_TIMEOUT_SECONDS} seconds",
+}
 
 # Metadata parity guard (#381) reads this authored verifier source. The participant
 # renders the same strings from workbench/server.py; keeping the full English material
 # here makes drift visible even though the two responsibilities are separate images.
 PORTAL_ENGLISH_CONTRACT = {
     "name": "Two days a year, the report is wrong",
-    "description": "Audit a daily report that disagrees with the ledger on one day, then total by the local calendar instead of by 86400-second blocks.",
+    "description": "Audit a daily report that disagrees with the ledger, total by the local calendar instead of by 86400-second blocks, then build the smallest input on which a fixed offset breaks an ordinary day.",
     "labels": {
         "environment": "environment - paste the Workbench pass phrase",
         "observe": "observe - name the report and what happened that day",
         "audit": "audit - list the days whose reported total cannot be right",
         "rollup": "rollup - total by the local calendar day, not by a fixed offset",
         "transition": "transition - keep the boundary correct on a 23- and a 25-hour day",
-        "generalize": "generalize - hold for several zones, both switches and a range spanning them",
+        "counterexample": "counterexample - smallest input on which a fixed offset breaks an ordinary day",
     },
 }
 
@@ -244,7 +249,9 @@ def _check_code(phase: str, submission: object) -> tuple[bool, str]:
                     check=False,
                 )
             output = transcript.read_text(encoding="utf-8", errors="replace")[-MAX_OUTPUT_BYTES:]
-        except (OSError, ValueError, subprocess.TimeoutExpired):
+        except subprocess.TimeoutExpired:
+            return False, TIMEOUT_MESSAGES.get(phase, "")
+        except (OSError, ValueError):
             return False, ''
     if completed.returncode != 0:
         return False, ""
@@ -272,8 +279,8 @@ def _check_transition(submission: object) -> tuple[bool, str]:
     return correct and bool(SEED), detail
 
 
-def _check_generalize(submission: object) -> tuple[bool, str]:
-    correct, detail = _check_code(CODE_CHECKPOINT_PHASES["generalize"], submission)
+def _check_counterexample(submission: object) -> tuple[bool, str]:
+    correct, detail = _check_code(CODE_CHECKPOINT_PHASES["counterexample"], submission)
     return correct and bool(SEED), detail
 
 
@@ -289,6 +296,9 @@ def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
         return _check_observe(submission), ''
     if checkpoint_id == "audit":
         return _check_audit(submission), ''
+    if checkpoint_id not in CODE_CHECKPOINTS:
+        # Unknown ids fail closed rather than resolving to an unrelated helper.
+        return False, ''
     checker = globals().get(f"_check_{checkpoint_id}")
     if not callable(checker):
         return False, ''
