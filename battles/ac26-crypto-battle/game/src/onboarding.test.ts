@@ -102,8 +102,8 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
       },
     ],
     teams: {
-      blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
-      red: { teamId: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
+      blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+      red: { teamId: "red", teamName: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
     },
     publicCommitments: { blue: "1", red: "2" },
     ...overrides,

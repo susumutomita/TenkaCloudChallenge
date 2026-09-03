@@ -425,6 +425,8 @@ function ownExposedShareCount(projection: CryptoBattleProjection | null): number
  */
 export interface ExposureRow {
   readonly teamId: string;
+  /** [Issue #3172] 表示名。 platform が解決できなければ teamId のまま。 */
+  readonly teamName: string;
   readonly isSelf: boolean;
   readonly generation: number;
   readonly exposed: number;
@@ -436,8 +438,10 @@ export interface ExposureRow {
 export function exposureRows(projection: CryptoBattleProjection | null): readonly ExposureRow[] {
   if (!projection) return [];
   const generationOf = new Map<string, number>();
+  const nameOf = new Map<string, string>();
   for (const team of Object.values(projection.teams)) {
     generationOf.set(team.teamId, team.generation);
+    nameOf.set(team.teamId, team.teamName || team.teamId);
   }
   // The vault is authoritative for our own generation: `teams` carries it too,
   // but the vault is what every other control on this surface reads.
@@ -456,6 +460,7 @@ export function exposureRows(projection: CryptoBattleProjection | null): readonl
     const exposed = [...(indices.get(teamId) ?? [])].sort((a, b) => a - b);
     return {
       teamId,
+      teamName: nameOf.get(teamId) ?? teamId,
       isSelf: teamId === projection.vault.teamId,
       generation,
       exposed: exposed.length,
@@ -1306,7 +1311,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               key={row.teamId}
               className={`tc-exposure-row${row.isSelf ? " tc-exposure-self" : ""}${row.huntable || (row.isSelf && row.exposed > 0) ? " tc-exposure-hot" : ""}`}
             >
-              <span className="tc-exposure-team">{row.isSelf ? copy.exposureSelf : row.teamId}</span>
+              <span className="tc-exposure-team">{row.isSelf ? copy.exposureSelf : row.teamName}</span>
               <span className="tc-exposure-pips" aria-label={`${row.exposed}/${projection.threshold}`}>
                 {Array.from({ length: projection.threshold }, (_, i) => (
                   <span key={i} className={`tc-pip${i < row.exposed ? " tc-pip-on" : ""}`} />
