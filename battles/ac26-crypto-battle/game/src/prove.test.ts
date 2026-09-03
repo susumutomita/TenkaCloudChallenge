@@ -15,7 +15,7 @@
 import { describe, expect, test } from "bun:test";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
-import { startedMatch } from "./playtest.ts";
+import { SUBSTRING_SAFE_FIELD, startedMatch } from "./playtest.ts";
 import type { CryptoBattleState, CryptoBattleOp } from "./types.ts";
 
 const CTX = { eventId: "prove-basic", teamIds: ["teamA", "teamB"] } as const;
@@ -291,7 +291,10 @@ describe("prove: wrong generation", () => {
 
 describe("prove: secret non-leakage", () => {
   test("the ledger artifact and another team's projection never contain the secret, witness, or any share value after a PROVE", () => {
-    const state = tick(startedMatch(CTX), 0);
+    // [Issue #696] Big field: this test's method is a substring search over a
+    // serialized projection, which cannot tell a leak from a coincidence at
+    // three digits. See SUBSTRING_SAFE_FIELD.
+    const state = tick(startedMatch(CTX, SUBSTRING_SAFE_FIELD), 0);
     const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
     if (!contract) throw new Error("expected a contract for teamA");
     const team = state.teams.teamA;

@@ -128,6 +128,35 @@ describe("90-minute contract cadence leaves no idle window", () => {
     expect(longest).toBeLessThanOrEqual(DEFAULT_CONFIG.contractIntervalMs);
   });
 
+  // [Issue #695] The gap the live two-team run actually hit, which the test
+  // above cannot see: `startedMatch` consumes the onboarding slot, so it
+  // measures the belt once the match is a contest. A real player's FIRST gap
+  // comes after the one-Order opening, and pacing that at the full interval
+  // left them looking at 「次の Order を待っています…」 for five minutes with
+  // nothing to do -- an opening that reads as a broken game.
+  test("the gap after the ONE-Order opening is the onboarding follow-up, not a full interval", () => {
+    const config = DEFAULT_CONFIG;
+    let state = applyOp(initialState(CTX), "teamA", { kind: "start" });
+    // The opening batch is one Order, and the team clears it at once.
+    expect(openContractsFor(state, "teamA")).toHaveLength(1);
+    for (const contract of openContractsFor(state, "teamA")) {
+      const op = clearingOpFor(state, "teamA", contract);
+      if (!op) throw new Error("no clearing op for the opening Order");
+      state = applyOp(state, "teamA", op);
+    }
+
+    let waitedMs = 0;
+    for (let atMs = SAMPLE_MS; atMs <= config.contractIntervalMs; atMs += SAMPLE_MS) {
+      state = tick(state, atMs);
+      if (openContractsFor(state, "teamA").length > 0) break;
+      waitedMs = atMs;
+    }
+    expect(waitedMs).toBeLessThanOrEqual(config.onboardingFollowUpMs);
+    // And the shortening is the OPENING's alone: the follow-up batch is a full
+    // one, so the match returns to its normal cadence immediately.
+    expect(openContractsFor(state, "teamA").length).toBe(config.contractsPerIssue);
+  });
+
   test("every phase issues contracts, so no phase is dead time", () => {
     const { issued } = walkMatch(false);
     const boundaries = DEFAULT_CONFIG.phaseBoundaries;

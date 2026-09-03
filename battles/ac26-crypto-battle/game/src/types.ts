@@ -124,6 +124,18 @@ export interface ScoreRules {
   /** Points a target loses when successfully HUNTed (floored at 0, never negative). */
   readonly huntPenalty: number;
   /**
+   * [Issue #696] What a WRONG HUNT costs the attacker.
+   *
+   * A wrong HUNT used to cost nothing at all: `validateOp` refused it and the
+   * op never reached `applyOp`, so no state moved. That was survivable only
+   * because the field was 2^61 - 1 and guessing was hopeless. Once the field is
+   * small enough to interpolate by hand (`prime`), free retries turn HUNT into
+   * a guessing game and break the problem's own North Star -- "cryptographic
+   * correctness is never left to luck". A wrong HUNT is now an op that lands,
+   * charges this, and burns one of `maxHuntAttemptsPerTarget`.
+   */
+  readonly wrongHunt: number;
+  /**
    * [Issue #659 §9] What each successive hint on an Order costs, by level —
    * `hintCosts[0]` for the first hint opened, `[1]` for the second, and so on.
    * Charged as a deduction (floored at 0, like `huntPenalty`), whether or not
@@ -192,6 +204,40 @@ export interface CryptoBattleConfig {
    * `state-size.test.ts` measures both ceilings and OPERATOR.md records them.
    */
   readonly contractsPerIssue: number;
+  /**
+   * [Issue #695] How long (ms) after the ONE-Order opening batch the first full
+   * batch arrives.
+   *
+   * The opening batch is a single Order on purpose (see `batchSize` in
+   * `tick`): six at once, in five different methods, is a menu rather than a
+   * first move. But pacing the batch AFTER it at the full `contractIntervalMs`
+   * meant a player who answered that single Order watched an empty belt for
+   * five minutes, which reads as a broken game rather than a slow one -- the
+   * live two-team run reported exactly that ("次のオーダーがこない").
+   *
+   * Only the opening is shortened. Every batch from the second onward keeps
+   * `contractIntervalMs`, so the no-prefetch rule that the LEAK/PROVE economy
+   * rests on is untouched for the whole match. The one bounded exception is
+   * that the opening Order (TTL `contractTtlMs`) is still open when the first
+   * full batch lands, so a team holds `contractsPerIssue + 1` Orders for the
+   * remainder of that TTL. One extra Order in the opening minutes does not
+   * give LEAK the backlog it would need to dominate PROVE, and the opening
+   * Order keeps the full TTL because charging a beginner `expiredOrder` for
+   * missing a 60-second first move is the opposite of an onboarding.
+   */
+  readonly onboardingFollowUpMs: number;
+  /**
+   * [Issue #696] How many HUNT attempts one team gets against one target's one
+   * generation, successful or not.
+   *
+   * This is what makes a hand-sized `prime` sound. Interpolating three shares
+   * has to stay the cheapest way to a target's secret: with `prime` = 251 and
+   * unlimited retries, submitting every field element costs a script two
+   * seconds, so the cap -- not the modulus -- is what forces the arithmetic to
+   * actually be done. Set it at or below `threshold` so a team can never buy
+   * more attempts than the shares it would have needed anyway.
+   */
+  readonly maxHuntAttemptsPerTarget: number;
   /**
    * How long (ms) an issued Order stays "open" before it expires unclaimed.
    *
@@ -655,6 +701,17 @@ export interface CryptoBattleState {
    * that happens to contain `|` can never collide with a different triple.
    */
   readonly successfulHunts: readonly string[];
+  /**
+   * [Issue #696] Attempts spent per `attacker:target:generation`, successful or
+   * not, against `config.maxHuntAttemptsPerTarget`.
+   *
+   * Separate from `successfulHunts` because they answer different questions:
+   * that one says "this pairing is finished", this one says "this pairing has
+   * spent N of its tries". A row written before this field existed migrates to
+   * `{}` -- an older match played in a 2^61 - 1 field where retries were
+   * pointless, so crediting it a full budget takes nothing away from anyone.
+   */
+  readonly huntAttempts: Readonly<Record<string, number>>;
   /**
    * Ordered log of successful HUNTs, WITH a timestamp (Issue #486 PR5,
    * `replay.ts`). `successfulHunts` above deliberately carries only the

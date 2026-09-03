@@ -248,8 +248,21 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
       ) {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).points;
       } else if (step.op.kind === "hunt") {
-        expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
-        expected[step.op.targetTeamId] = (expected[step.op.targetTeamId] ?? 0) - result.finalState.config.scores.huntPenalty;
+        // [Issue #696] A HUNT that lands is not necessarily a HUNT that HITS.
+        // A wrong value is now an accepted move that costs the attacker
+        // `wrongHunt` and moves nobody else -- the script exercises exactly one
+        // (MUST 9's stale reconstruction), and reconciling every hunt as a hit
+        // would silently absorb a regression that paid the bonus for a miss.
+        const hit = result.finalState.successfulHunts.includes(
+          JSON.stringify([step.teamId, step.op.targetTeamId, step.op.generation]),
+        );
+        if (hit) {
+          expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
+          expected[step.op.targetTeamId] =
+            (expected[step.op.targetTeamId] ?? 0) - result.finalState.config.scores.huntPenalty;
+        } else {
+          expected[step.teamId] = (expected[step.teamId] ?? 0) - result.finalState.config.scores.wrongHunt;
+        }
       }
     }
 

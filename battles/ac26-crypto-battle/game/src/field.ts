@@ -15,6 +15,30 @@
 /** Default field modulus: the Mersenne prime 2^61 - 1. */
 export const P = 2n ** 61n - 1n;
 
+/**
+ * [Issue #696] The field an actual MATCH runs in: the prime 251.
+ *
+ * Not a security parameter -- a legibility one. Every Order in this Battle is
+ * arithmetic the participant performs themselves, and at 2^61 - 1 that meant
+ * adding nineteen-digit numbers under a five-minute deadline. The live
+ * two-team run measured what that produces: a correct method, a carry slip in
+ * the fourteenth digit, and a REJECTED banner that taught nothing. Homomorphic
+ * addition, masked subtotals and Lagrange interpolation are structurally
+ * identical at any modulus, so the modulus should be the size a person can
+ * actually work in. At 251 the largest quantity anyone divides is five digits.
+ *
+ * Shrinking the field costs the secret its unguessability, so it is sound ONLY
+ * alongside `CryptoBattleConfig.maxHuntAttemptsPerTarget`: three tries against
+ * a 251-element space, at `scores.wrongHunt` apiece, keeps interpolating the
+ * shares strictly cheaper than guessing. Changing one of the two without the
+ * other reopens the hole -- see that field's doc comment.
+ *
+ * `P` above stays the module default because `field.ts` is a general F_p
+ * library and its own tests exercise a large modulus; nothing in a match
+ * reaches these functions without an explicit `p` from `config.prime`.
+ */
+export const HAND_PRIME = 251n;
+
 /** Reduce `a` into the canonical representative range [0, p). */
 export function mod(a: bigint, p: bigint = P): bigint {
   const r = a % p;

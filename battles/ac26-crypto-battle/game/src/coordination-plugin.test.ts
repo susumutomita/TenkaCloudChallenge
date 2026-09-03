@@ -264,7 +264,19 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     // participants -- it shows blue's own vault, never red's secret.
     const blueProjection = plugin.projectForTeam(state, "blue");
     expect(blueProjection.vault.teamId).toBe("blue");
-    expect(JSON.stringify(blueProjection)).not.toContain(redAfterHunt.secret);
+    // [Issue #696] Asserted STRUCTURALLY, not as a substring. A match now runs
+    // in a field a participant can compute in (`HAND_PRIME`), so red's secret
+    // is three digits and a substring search over this blob reports a hit on
+    // any coincidence -- it stopped being able to tell a leak from a collision.
+    // What the boundary actually says is that the projection carries exactly
+    // one vault, the reader's own, and that a team summary is a summary: no
+    // secret, no shares. That holds at any modulus and is the stronger claim.
+    expect(blueProjection.vault.secret).toBe(blueAfterHunt.secret);
+    for (const summary of Object.values(blueProjection.teams)) {
+      expect(Object.keys(summary)).not.toContain("secret");
+      expect(Object.keys(summary)).not.toContain("shares");
+    }
+    expect(Object.keys(blueProjection).filter((k) => k === "vault")).toHaveLength(1);
   });
 
   it("state survives a JSON round-trip (simulating Turso/DynamoDB persistence between calls) and stays usable afterward [PR3 review High #1/#2]", () => {

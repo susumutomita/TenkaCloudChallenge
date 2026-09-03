@@ -193,19 +193,22 @@ describe("buildReplay: edge cases the vertical-playtest fixture does not exercis
     expect(rotateEvent.summary.ja).toMatch(/直近の rotate 時刻のみ/);
   });
 
-  test("a failed HUNT attempt leaves no trace in the replay (validateOp rejects it, applyOp is never called)", () => {
+  // [Issue #696] A failed HUNT now lands (it is charged and spends budget), so
+  // "zero trace" is no longer true of the STATE. It stays true of the REPLAY:
+  // `buildReplay` reads `huntLog`, which `applyHunt` only appends to on a
+  // success, so a debrief still names hunts that happened and never invents one
+  // from a miss.
+  test("a failed HUNT attempt is charged in the state but never narrated as a hunt", () => {
     const state = tick(startedMatch({ eventId: "replay-failed-hunt", teamIds: TEAMS }), 0);
     const before = buildReplay(state);
 
     const wrongGuess = { kind: "hunt", targetTeamId: "bravo", generation: 1, recoveredSecret: "0" } as const;
-    const verdict = validateOp(state, "alpha", wrongGuess);
-    expect(verdict.ok).toBe(false);
+    expect(validateOp(state, "alpha", wrongGuess).ok).toBe(true);
+    const after = applyOp(state, "alpha", wrongGuess);
 
-    // `state` itself is untouched (applyOp is never reached for a rejected
-    // op), so the replay built from it is byte-for-byte identical to before
-    // the attempt -- per this module's header, "failed HUNT attempts leave
-    // ZERO trace" is not a documentation claim only, it is this assertion.
-    expect(buildReplay(state)).toEqual(before);
+    expect(after.huntLog).toEqual([]);
+    expect(Object.values(after.huntAttempts)).toEqual([1]);
+    expect(buildReplay(after)).toEqual(before);
   });
 });
 
