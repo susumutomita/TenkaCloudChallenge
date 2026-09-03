@@ -156,6 +156,53 @@ describe("a config persisted before this version still drives a playable match",
     expect(after.config.contractsPerIssue).toBe(DEFAULT_CONFIG.contractsPerIssue);
   });
 
+  /**
+   * [Issue #695] The pacing shortcut must not reach a match already in progress.
+   *
+   * `isOpeningBatch` asks whether EVERY team is still at zero issued Orders, so
+   * a row mid-match cannot satisfy it -- but that is an argument, and the
+   * argument is what a migration test exists to replace. An upgraded row whose
+   * teams are seven Orders in has to keep the five-minute cadence the whole
+   * scoring model rests on; shortening it there would hand every team a batch
+   * every minute for the remainder of the match.
+   */
+  test("an upgraded row mid-match keeps the full interval, not the onboarding one", () => {
+    const before = legacyConfigState();
+    const config = before.config as unknown as Record<string, unknown>;
+    delete config.onboardingFollowUpMs;
+    const teams = Object.fromEntries(
+      Object.entries(before.teams).map(([id, team]) => [id, { ...team, issuedOrderCount: 7 }]),
+    );
+    const mid: CryptoBattleState = { ...before, teams, nextContractAtMs: 0 };
+
+    const after = tick(mid, 1);
+    expect(after.config.onboardingFollowUpMs).toBe(DEFAULT_CONFIG.onboardingFollowUpMs);
+    // One batch was issued at 0, and the next is a full interval out -- not the
+    // 60s an opening would get.
+    expect(after.nextContractAtMs).toBe(DEFAULT_CONFIG.contractIntervalMs);
+  });
+
+  /**
+   * [Issue #696] The reverse direction of the same question. An old row keeps
+   * its own `prime` (2^61 - 1) because its shares were generated in that field
+   * and rewriting the modulus under a running match would invalidate every one
+   * of them -- but it GAINS the hunt budget, which is harmless there (guessing
+   * was already hopeless) and correct the moment the row is a new match.
+   */
+  test("an upgraded row keeps its own field but gains the hunt budget", () => {
+    const before = legacyConfigState();
+    const config = before.config as unknown as Record<string, unknown>;
+    config.prime = (2n ** 61n - 1n).toString();
+    delete config.maxHuntAttemptsPerTarget;
+    delete (config.scores as Record<string, unknown>).wrongHunt;
+
+    const after = tick(before, 1);
+    expect(after.config.prime).toBe((2n ** 61n - 1n).toString());
+    expect(after.config.maxHuntAttemptsPerTarget).toBe(DEFAULT_CONFIG.maxHuntAttemptsPerTarget);
+    expect(after.config.scores.wrongHunt).toBe(DEFAULT_CONFIG.scores.wrongHunt);
+    expect(after.huntAttempts).toEqual({});
+  });
+
   test("an expiry charges a real penalty rather than turning the score into NaN", () => {
     // `score + undefined` is NaN, and NaN survives every later addition: the
     // team's total is unrecoverable for the rest of the match.

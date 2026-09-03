@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
 import {
@@ -31,10 +31,29 @@ import type {
 type Locale = "ja" | "en";
 type FeedbackKind = "leak" | "prove" | "hunt" | "rotate" | "hint" | "error";
 
+/**
+ * [Issue #697] A banner before it is stamped with the submission it belongs to.
+ * Every call site describes WHAT happened; `run` decides which attempt it was,
+ * so no caller can forget to bump the counter and leave a repeat silent.
+ */
+type FeedbackDraft = Omit<Feedback, "attempt">;
+
 interface Feedback {
   readonly kind: FeedbackKind;
   readonly title: string;
   readonly body: string;
+  /**
+   * [Issue #697] Which submission produced this, counting from 1.
+   *
+   * React reuses the DOM node when the rendered banner is identical, so
+   * resubmitting a wrong answer and getting the same rejection replayed no
+   * animation and changed no pixel -- the live run reported it as
+   * 「提出しているのに反応がないからわからん」, and a player who cannot tell
+   * "rejected again" from "nothing happened" stops being able to iterate. Used
+   * as the banner's React key (so the node remounts and the pop replays) and
+   * shown on the banner from the second attempt onward.
+   */
+  readonly attempt: number;
   /**
    * [Issue #659] What the participant just DID, named.
    *
@@ -120,6 +139,7 @@ export const FAST_MOVE_COPY = {
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `GEN ${from} → GEN ${to}`,
     rejected: "REJECTED",
+    attemptLabel: (n: number) => ` · attempt ${n}`,
     unavailable: "The match service is unavailable.",
     ended: "MATCH ENDED",
     endedBody:
@@ -136,7 +156,7 @@ export const FAST_MOVE_COPY = {
     starting: "STARTING…",
     startSuccess: "MATCH STARTED",
     startBody: "The first Orders are on the belt.",
-    fheTitle: "ENCRYPTED ADDITION",
+    fheTitle: "ENCRYPTED ADDITION — FHE (homomorphic encryption)",
     fheUse: "USED FOR: verifying a total without seeing anyone's amount",
     fheWhy: "WHY IT WORKS: Enc(a) + Enc(b) = Enc(a+b) — adding then locking equals locking then adding",
     fheHelp: "DO THIS: add the two ciphertexts position by position, remainder mod p",
@@ -149,7 +169,7 @@ export const FAST_MOVE_COPY = {
     fheBody: (points: number) => `+${points} · ADDED WITHOUT DECRYPTING`,
     fheLesson:
       "That was HOMOMORPHIC ENCRYPTION: you computed on numbers you could not read, and the answer came out right. Blockchains use it so a chain can verify a total without anyone publishing the amounts.",
-    mpcTitle: "MASKED SUBTOTAL",
+    mpcTitle: "MASKED SUBTOTAL — MPC (secure multi-party computation)",
     mpcUse: "USED FOR: three companies publishing a combined total, none revealing its own",
     mpcWhy: "WHY IT WORKS: the masks cancel — (a+r₁−r₂)+(b+r₂−r₃)+(c+r₃−r₁) = a+b+c",
     mpcHelp: "DO THIS: your number + masks received − masks sent, remainder mod p",
@@ -246,6 +266,7 @@ export const FAST_MOVE_COPY = {
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `世代 ${from} → 世代 ${to}`,
     rejected: "REJECTED",
+    attemptLabel: (n: number) => ` · ${n} 回目`,
     unavailable: "試合サービスに接続できません。",
     ended: "MATCH ENDED",
     endedBody:
@@ -262,7 +283,7 @@ export const FAST_MOVE_COPY = {
     starting: "開始中…",
     startSuccess: "MATCH STARTED",
     startBody: "最初の ORDER が届きました。",
-    fheTitle: "暗号文のまま足す",
+    fheTitle: "暗号文のまま足す ― FHE (準同型暗号)",
     /*
       [Issue #659] 1 Order = 3 行。「つかいみち / しくみ / やること」。
       
@@ -282,7 +303,7 @@ export const FAST_MOVE_COPY = {
     fheBody: (points: number) => `+${points} · 復号せずに足した`,
     fheLesson:
       "いまのが「準同型暗号」です。中身を読めない数のまま計算して、答えは正しく出ました。ブロックチェーンでは、金額を誰も公開せずに合計を検証するのに使われています。",
-    mpcTitle: "覆面をかけた小計",
+    mpcTitle: "覆面をかけた小計 ― MPC (秘密計算)",
     mpcUse: "つかいみち: 3社が売上の合計だけ出す。各社の売上は誰にも見せない",
     mpcWhy: "しくみ: 覆面は足すと打ち消し合う ── (a+r₁−r₂)+(b+r₂−r₃)+(c+r₃−r₁) = a+b+c",
     mpcHelp: "やること: 自分の数 + 受け取った覆面 − 送った覆面 を、p で割った余り",
@@ -709,6 +730,7 @@ ${DIE_CSS}
 .tc-submit-small{padding:7px 10px;border:0;border-radius:7px;background:#202b3c;color:#fff;font-weight:800;cursor:pointer}.tc-submit-small:disabled{opacity:.45;cursor:not-allowed}
 .tc-feedback{border-radius:10px;padding:10px 12px;font-weight:900;animation:tc-feedback-pop .35s ease-out both}
 .tc-feedback span{display:block;font-size:11px;font-weight:600;margin-top:2px}
+.tc-feedback-attempt{font-style:normal;font-weight:600;font-size:11px;opacity:.75}
 .tc-feedback-lesson{margin-top:6px!important;font-weight:500!important;line-height:1.5;opacity:.92}
 /* [Issue #659] つかいみち / しくみ を手順の上に置く。段落 1 つより 3 行の方が
    読まれるし、通ったあとに残るのは「何のためか」と「なぜ成り立つか」の方。 */
@@ -829,6 +851,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [recoveredSecret, setRecoveredSecret] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const attemptRef = useRef(0);
 
   const setProjection = (next: CryptoBattleProjection) => {
     setPolledProjection(next);
@@ -870,25 +893,31 @@ export default function FastMovePanel(props: PortalSlotProps) {
     cipherTargets.find((t) => `${t.teamId}:${t.generation}:${t.rung}` === cipherTargetKey) ??
     cipherTargets[0];
 
-  const applyOutcome = (outcome: PortalCoordinationOutcome) => {
+  const applyOutcome = (outcome: PortalCoordinationOutcome, attempt: number) => {
     const next = liveProjection(outcome);
     if (next) setProjection(next);
     if (outcome.kind !== "ok") {
-      setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale) });
+      setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
       return false;
     }
     return true;
   };
 
-  const run = async (task: () => Promise<PortalCoordinationOutcome>, success: () => Feedback) => {
+  const run = async (task: () => Promise<PortalCoordinationOutcome>, success: () => FeedbackDraft) => {
     if (submitting) return;
     setSubmitting(true);
     setFeedback(null);
+    // [Issue #697] Counted per submission, not per distinct message: two
+    // identical rejections in a row are two answers to two questions, and the
+    // banner has to say so. Stamped here rather than at each call site so no
+    // outcome can be reported without one.
+    attemptRef.current += 1;
+    const attempt = attemptRef.current;
     try {
       const outcome = await task();
-      if (applyOutcome(outcome)) setFeedback(success());
+      if (applyOutcome(outcome, attempt)) setFeedback({ ...success(), attempt });
     } catch {
-      setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable });
+      setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable, attempt });
     } finally {
       setSubmitting(false);
     }
@@ -1505,8 +1534,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </div>
 
       {feedback && (
-        <div className={`tc-feedback tc-feedback-${feedback.kind}`}>
-          <strong>{feedback.title}</strong>
+        <div key={feedback.attempt} className={`tc-feedback tc-feedback-${feedback.kind}`}>
+          <strong>
+            {feedback.title}
+            {feedback.attempt > 1 ? <em className="tc-feedback-attempt">{copy.attemptLabel(feedback.attempt)}</em> : null}
+          </strong>
           <span>{feedback.body}</span>
           {feedback.lesson ? <span className="tc-feedback-lesson">{feedback.lesson}</span> : null}
         </div>

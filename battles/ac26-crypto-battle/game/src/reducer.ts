@@ -83,7 +83,7 @@ import {
   type PrivacyConstraint,
   type SubmissionMethod,
 } from "./methods.ts";
-import { mod, P } from "./field.ts";
+import { HAND_PRIME, mod } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { decodeLedger, encodeArtifact, encodeLedger } from "./ledger-codec.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
@@ -113,12 +113,11 @@ import type {
 
 /**
  * Issue #486 playtest seed values. Not a locked-in balance spec -- see
- * `CryptoBattleConfig`'s doc comment in types.ts. `prime` is `P.toString()`,
- * not `P`, because `CryptoBattleConfig.prime` is a stringified bigint (see
- * types.ts's "JSON-SAFETY INVARIANT").
+ * `CryptoBattleConfig`'s doc comment in types.ts. `prime` is stringified, not
+ * a bigint, per types.ts's "JSON-SAFETY INVARIANT".
  */
 export const DEFAULT_CONFIG: CryptoBattleConfig = {
-  prime: P.toString(),
+  prime: HAND_PRIME.toString(),
   threshold: 3,
   shareCount: 5,
   matchDurationMs: 90 * 60_000,
@@ -135,6 +134,12 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
   // which is what finally makes hunting worth its five minutes.
   contractIntervalMs: 5 * 60_000,
   contractsPerIssue: 6,
+  // [Issue #695] The batch after the ONE-Order opening comes in a minute, not
+  // five: clearing that single Order and then watching an empty belt for a full
+  // interval is what the live run reported as 「次のオーダーがこない」.
+  onboardingFollowUpMs: 60_000,
+  // [Issue #696] At or below `threshold` (3) -- see the field's doc comment.
+  maxHuntAttemptsPerTarget: 3,
   contractTtlMs: 5 * 60_000,
   rushContractTtlMs: 2.5 * 60_000,
   rotateCooldownMs: 3 * 60_000,
@@ -146,6 +151,10 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
     rushContract: 45,
     huntBonus: 25,
     huntPenalty: 12,
+    // [Issue #696] A wrong HUNT costs the attacker. Below `huntBonus` (25) so a
+    // team that interpolates correctly still profits after an earlier miss, and
+    // above zero so scanning the (now small) field is never free.
+    wrongHunt: 8,
     // [Issue #659 §9] Escalating, and bounded by the ordering above: buying all
     // three costs 14, so an Order computed after every hint still pays 16 —
     // above LEAK's 10. Hints that could drag a solved Order below what leaking
@@ -248,6 +257,7 @@ export function initialState(
     teams,
     publicCommitments,
     successfulHunts: [],
+    huntAttempts: {},
     huntLog: [],
   };
 }
@@ -435,7 +445,18 @@ function needsConfigMigration(config: CryptoBattleConfig): boolean {
     // written before hints existed has no price list, and `hintCostAt` reads
     // `.length`/`[level]` off it -- so without this backfill the first HINT in
     // an upgraded match throws inside `validateOp` instead of being refused.
-    config.scores?.hintCosts === undefined
+    config.scores?.hintCosts === undefined ||
+    // [Issue #695] Undefined makes `nextContractAtMs += undefined` produce NaN
+    // on the opening batch, and `nextContractAtMs <= eventNowMs` is false for
+    // NaN forever after -- the belt would stop issuing for the rest of the
+    // match, which is the same silent wind-down `contractsPerIssue` describes.
+    config.onboardingFollowUpMs === undefined ||
+    // [Issue #696] Undefined makes `spent >= undefined` false for every value,
+    // so the budget never binds and a wrong HUNT is free again -- which is
+    // exactly the hole the cap exists to close. Fail towards the cap, not past
+    // it.
+    config.maxHuntAttemptsPerTarget === undefined ||
+    config.scores?.wrongHunt === undefined
   );
 }
 
@@ -501,10 +522,22 @@ function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
   const teams = needsTeamMigration(state.teams)
     ? migrateTeams(state.teams, state.contracts)
     : state.teams;
+  // [Issue #696] A row written before the budget existed starts with a full
+  // one. `applyHunt` writes through this map and `validateOp` reads it, so
+  // leaving it undefined would make the spread in `applyHunt` throw.
+  const huntAttempts = state.huntAttempts ?? {};
+  const unchanged =
+    config === state.config && teams === state.teams && huntAttempts === state.huntAttempts;
   if (!state.contracts.some(needsMigration)) {
-    return config === state.config && teams === state.teams ? state : { ...state, config, teams };
+    return unchanged ? state : { ...state, config, teams, huntAttempts };
   }
-  return { ...state, config, teams, contracts: state.contracts.map(migrateContract) };
+  return {
+    ...state,
+    config,
+    teams,
+    huntAttempts,
+    contracts: state.contracts.map(migrateContract),
+  };
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -553,7 +586,13 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
   const fieldConfig = fieldConfigOf(state.config);
   let nextContractAtMs = state.nextContractAtMs ?? startedAtMs;
   while (nextContractAtMs <= eventNowMs && nextContractAtMs < matchEndAtMs) {
-    for (const teamId of Object.keys(state.teams)) {
+    // [Issue #695] Read BEFORE the loop below advances the counters: this asks
+    // whether the batch about to be issued is the opening one, and every team
+    // in a synchronised start is at 0 here.
+    const teamIds = Object.keys(state.teams);
+    const isOpeningBatch =
+      teamIds.length > 0 && teamIds.every((id) => (issuedCountByTeam.get(id) ?? 0) === 0);
+    for (const teamId of teamIds) {
       // [Issue #659] A whole batch lands at once. This is what makes the match
       // a contest rather than a queue: the batch is sized so a fast team clears
       // it and a slow team cannot, and everything downstream -- LEAK being a
@@ -614,7 +653,14 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
       }
     }
-    nextContractAtMs += state.config.contractIntervalMs;
+    // [Issue #695] Only the gap AFTER the one-Order opening is shortened; every
+    // batch from the second onward keeps the standard interval, so the
+    // no-prefetch rule the LEAK/PROVE economy rests on is untouched for the
+    // rest of the match. See `onboardingFollowUpMs` in types.ts for the one
+    // bounded overlap this accepts.
+    nextContractAtMs += isOpeningBatch
+      ? state.config.onboardingFollowUpMs
+      : state.config.contractIntervalMs;
   }
 
   // [Issue #659] Charge the expiry penalty to whoever let the Order lapse.
@@ -917,19 +963,31 @@ export function validateOp(
       if (state.successfulHunts.includes(huntKey(teamId, op.targetTeamId, op.generation))) {
         return { ok: false, error: "this generation was already hunted successfully by this team" };
       }
+      // [Issue #696] The attempt budget, and the reason a wrong secret is NOT
+      // refused here any more. Refusing it made a miss free -- no state moved,
+      // so nothing counted it -- which was harmless only while the field was
+      // 2^61 - 1. In a field a participant can interpolate by hand, free
+      // retries are a faster path to the secret than the interpolation, so a
+      // miss has to land, cost `scores.wrongHunt`, and spend one of these.
+      // `applyHunt` does the comparison and reports which happened.
+      const spent = state.huntAttempts[huntKey(teamId, op.targetTeamId, op.generation)] ?? 0;
+      if (spent >= state.config.maxHuntAttemptsPerTarget) {
+        return {
+          ok: false,
+          error: `no HUNT attempts left against this team's generation ${op.generation} (${state.config.maxHuntAttemptsPerTarget} used)`,
+        };
+      }
       // `op.recoveredSecret` is untrusted wire input (a participant-submitted
       // string -- see this file's header "WIRE BOUNDARY"), never a `bigint`
       // this reducer can assume it already has. Parse it through the same
       // gate PROVE's proof fields use before doing any bigint arithmetic on
       // it -- a malformed value (wrong JS type after JSON round-trip, a
       // non-canonical literal, an absurdly long string) is rejected here,
-      // not left to throw out of `mod()` / `BigInt()` uncaught.
-      const recoveredSecret = parseCanonicalDecimal(op.recoveredSecret);
-      if (recoveredSecret === undefined) {
+      // not left to throw out of `mod()` / `BigInt()` uncaught. A value that
+      // does not parse is not an attempt: nothing was guessed, so nothing is
+      // charged and no budget is spent.
+      if (parseCanonicalDecimal(op.recoveredSecret) === undefined) {
         return { ok: false, error: "recoveredSecret must be a canonical, length-bounded decimal integer" };
-      }
-      if (mod(recoveredSecret, BigInt(state.config.prime)) !== BigInt(target.secret)) {
-        return { ok: false, error: "recovered secret does not match the target's actual secret" };
       }
       return { ok: true };
     }
@@ -1759,6 +1817,25 @@ function applyHunt(
   }
   const nowMs = state.nowMs;
 
+  const key = huntKey(teamId, op.targetTeamId, op.generation);
+  const huntAttempts = { ...state.huntAttempts, [key]: (state.huntAttempts[key] ?? 0) + 1 };
+
+  // [Issue #696] The comparison moved here from `validateOp` so a miss is a
+  // move that happened rather than a request that never existed. `validateOp`
+  // has already parsed the value and confirmed the budget, so the only question
+  // left is whether it is right.
+  const recoveredSecret = parseCanonicalDecimal(op.recoveredSecret);
+  if (recoveredSecret === undefined || mod(recoveredSecret, BigInt(state.config.prime)) !== BigInt(target.secret)) {
+    return {
+      ...state,
+      teams: {
+        ...state.teams,
+        [teamId]: { ...attacker, score: Math.max(0, attacker.score - state.config.scores.wrongHunt) },
+      },
+      huntAttempts,
+    };
+  }
+
   const updatedAttacker: TeamState = {
     ...attacker,
     score: attacker.score + state.config.scores.huntBonus,
@@ -1774,7 +1851,8 @@ function applyHunt(
   return {
     ...state,
     teams: { ...state.teams, [teamId]: updatedAttacker, [op.targetTeamId]: updatedTarget },
-    successfulHunts: [...state.successfulHunts, huntKey(teamId, op.targetTeamId, op.generation)],
+    huntAttempts,
+    successfulHunts: [...state.successfulHunts, key],
     // Additive audit trail for replay.ts -- see HuntLogEntry's doc comment
     // in types.ts for why this exists alongside (not instead of)
     // successfulHunts above.

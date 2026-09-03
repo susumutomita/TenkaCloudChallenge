@@ -26,6 +26,7 @@ import {
   buildProveOp,
   buildRotateOp,
   startedMatch,
+  SUBSTRING_SAFE_FIELD,
   type PlaytestOpStep,
   type PlaytestScript,
   type PlaytestStep,
@@ -77,6 +78,13 @@ export const VERTICAL_CONFIG: Partial<CryptoBattleConfig> = {
   },
   contractIntervalMs: 60_000,
   contractsPerIssue: 2,
+  // [Issue #696] The big field, like the other trust-boundary fixtures. A real
+  // match runs in `HAND_PRIME` (251) so a participant can do the arithmetic by
+  // hand, but this fixture's leak assertions -- and `replay.test.ts`'s against
+  // its final state -- are substring searches, which cannot tell a leak from a
+  // three-digit coincidence. See `SUBSTRING_SAFE_FIELD` in playtest.ts; the
+  // property under test is structural and holds in either field.
+  ...SUBSTRING_SAFE_FIELD,
   contractTtlMs: 60_000,
   rushContractTtlMs: 30_000,
   rotateCooldownMs: 3 * 60_000,
@@ -370,9 +378,16 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   );
 
   // -- MUST 9: even re-targeting the CURRENT generation with the OLD
-  // (now-stale) reconstructed value is rejected -- the pre-rotate
-  // reconstruction genuinely does not match the post-rotate secret, not
-  // merely a generation-number mismatch.
+  // (now-stale) reconstructed value fails -- the pre-rotate reconstruction
+  // genuinely does not match the post-rotate secret, not merely a
+  // generation-number mismatch.
+  //
+  // [Issue #696] The op is now ACCEPTED and misses, where it used to be turned
+  // away by `validateOp`. That is the point of the change, not a weakening of
+  // this MUST: a wrong value has to be a move that lands and is charged, or
+  // scanning a hand-sized field would be cheaper than interpolating it. The
+  // MUST is read off the result below -- no hunt was recorded, and the rotated
+  // generation stayed locked.
   if (huntOp.kind !== "hunt") throw new Error("buildVerticalPlaytestScript: expected a hunt op");
   const staleValueAtCurrentGeneration: CryptoBattleOp = {
     kind: "hunt",
@@ -380,12 +395,18 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     generation: state.teams[DEFENDER]?.generation ?? 2,
     recoveredSecret: huntOp.recoveredSecret,
   };
+  const successfulHuntsBeforeStaleAttempt = state.successfulHunts.length;
   recordOp(
     ATTACKER,
     staleValueAtCurrentGeneration,
-    "rejected",
-    `Team ${ATTACKER} HUNTs ${DEFENDER} at the NEW generation using the OLD reconstructed secret -> rejected (does not match)`,
+    "ok",
+    `Team ${ATTACKER} HUNTs ${DEFENDER} at the NEW generation using the OLD reconstructed secret -> misses (does not match)`,
   );
+  if (state.successfulHunts.length !== successfulHuntsBeforeStaleAttempt) {
+    throw new Error(
+      "buildVerticalPlaytestScript: MUST 9 -- a stale reconstruction unlocked the rotated generation",
+    );
+  }
 
   // -- MUST 9 (structural check, not itself a Step): right after the rotate,
   // and before any generation-2 share has been leaked, buildHuntOp must

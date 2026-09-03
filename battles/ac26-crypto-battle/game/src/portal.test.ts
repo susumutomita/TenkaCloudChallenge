@@ -881,6 +881,45 @@ describe("advanced tactics use progressive disclosure", () => {
       expect(named.map((r) => r.teamName)).toEqual(["かけら隊", "red"]);
     });
 
+    /**
+     * [Issue #698] The same complaint as the exposure lane's, one panel over.
+     * The Public Ledger exists to answer "who exposed this", and it answered
+     * with a 26-character ULID -- for the reader's OWN team as well, which is
+     * what the live run screenshotted. The two surfaces sit on one screen, so
+     * they name a team the same way.
+     */
+    it("names each team on the Public Ledger, and calls the reader's own row 'you'", () => {
+      const ledger = (teamId: string, shareIndex: number): PublicArtifact => ({
+        id: `${teamId}-a${shareIndex}`,
+        kind: "share",
+        teamId,
+        contractId: `${teamId}-c0`,
+        generation: 1,
+        method: "leak",
+        postedAtMs: 0,
+        shareIndex,
+        value: "7",
+      });
+      const html = renderToStaticMarkup(
+        createElement(GameBoardBody, {
+          projection: fixtureProjection({
+            publicLedger: [ledger("blue", 1), ledger("red", 2)],
+            teams: {
+              blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+              red: { teamId: "red", teamName: "かけら隊", score: 0, generation: 1, huntedGenerationCount: 0 },
+            },
+          }),
+          locale: "ja",
+        }),
+      );
+      const titles = [...html.matchAll(/<strong>([^<]*)<\/strong>/g)].map(([, name]) => name);
+      // `blue` is the vault owner in `fixtureProjection`, so its row is the
+      // reader's own and says so rather than repeating a name back at them.
+      expect(titles).toContain("あなた");
+      expect(titles).toContain("かけら隊");
+      expect(html).not.toContain(">blue<");
+    });
+
     it("lists every team on a board where nothing has been published", () => {
       const rows = exposureRows(fixtureProjection({ publicLedger: [] }));
       expect(rows.map((r) => [r.teamId, r.exposed, r.huntable])).toEqual([

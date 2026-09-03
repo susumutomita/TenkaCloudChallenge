@@ -33,6 +33,7 @@ const COPY = {
     vault: "MY VAULT",
     generation: "GEN",
     ledger: "PUBLIC LEDGER",
+    ledgerSelf: "you",
     emptyLedger: "Nothing public yet.",
     raw: "raw",
     loading: "Loading match…",
@@ -63,6 +64,7 @@ const COPY = {
     vault: "MY VAULT",
     generation: "世代",
     ledger: "PUBLIC LEDGER",
+    ledgerSelf: "あなた",
     emptyLedger: "まだ公開情報はありません。",
     raw: "生データ",
     loading: "試合状態を読み込み中…",
@@ -113,6 +115,25 @@ interface LedgerGroup {
    * has to keep them apart.
    */
   protected: Map<PublicArtifact["kind"], number>;
+}
+
+/**
+ * [Issue #698] What to print for a team on the Public Ledger.
+ *
+ * Mirrors `exposureRows` in FastMovePanel.tsx deliberately: the two surfaces
+ * name the same teams on the same screen, and naming them differently is worse
+ * than naming them badly. The vault is authoritative for "is this me" for the
+ * same reason it is there -- it is the projection's own statement of who is
+ * reading it.
+ */
+function ledgerTeamLabel(
+  projection: CryptoBattleProjection,
+  teamId: string,
+  selfLabel: string,
+): string {
+  if (teamId === projection.vault.teamId) return selfLabel;
+  const name = projection.teams[teamId]?.teamName;
+  return name && name.trim() ? name : teamId;
 }
 
 function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
@@ -338,8 +359,17 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
         <div className="tc-ledger-grid">
           {groups.map((group) => (
             <article className="tc-ledger-team" key={`${group.teamId}:${group.generation}`}>
+              {/*
+                [Issue #698] A team is named, not identified by its ULID. The
+                board printed `group.teamId` -- a 26-character opaque string
+                that told a reader nothing about WHO had exposed a share, which
+                is the one question the Public Ledger exists to answer. The
+                reader's own row says so outright; everyone else gets the
+                display name the platform resolved (#3172), falling back to the
+                id only when it could not.
+              */}
               <div className="tc-ledger-title">
-                <strong>{group.teamId}</strong>
+                <strong>{ledgerTeamLabel(projection, group.teamId, copy.ledgerSelf)}</strong>
                 <span>{copy.generation} {group.generation}</span>
               </div>
               <div className="tc-share-grid">
@@ -461,6 +491,11 @@ ${DIE_CSS}
 .tc-ledger-grid{display:grid;gap:9px}
 .tc-ledger-team{border:1px solid #eaeded;border-radius:9px;padding:9px}
 .tc-ledger-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:12px}
+/* [Issue #698] A flex item will not shrink below its content by default, so an
+   unbreakable 26-character id pushed the generation chip down to one character
+   per line. The name half truncates; the generation half never wraps. */
+.tc-ledger-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-ledger-title span{flex:none;white-space:nowrap}
 .tc-empty{padding:12px;border:1px dashed #cfd8e3;border-radius:8px;text-align:center;color:#687078;font-size:12px}
 @keyframes tc-order-in{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
 @keyframes tc-urgent{50%{box-shadow:0 0 0 3px rgba(209,50,18,.15)}}

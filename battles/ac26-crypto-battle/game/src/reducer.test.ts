@@ -385,11 +385,56 @@ describe("hunt", () => {
     expect(() => applyOp(state, "teamA", op)).toThrow();
   });
 
-  test("a wrong guess is rejected by validateOp and never reaches applyOp", () => {
+  // [Issue #696] The REVERSE of what this pinned before, and deliberately so.
+  // It used to require `validateOp` to refuse a wrong guess, which made a miss
+  // cost nothing and leave no trace -- survivable only while the field was
+  // 2^61 - 1 and guessing was hopeless. In a field a participant interpolates
+  // by hand, a free retry is cheaper than the interpolation, so the miss has to
+  // be a move that lands: it is charged, it burns budget, and it is NOT
+  // recorded as a successful hunt.
+  test("a wrong guess lands, costs the attacker, and spends one attempt", () => {
     const state = tick(startedMatch(CTX), 0);
     const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
-    const result = validateOp(state, "teamA", wrong);
-    expect(result.ok).toBe(false);
+    expect(validateOp(state, "teamA", wrong).ok).toBe(true);
+
+    const scored = { ...state, teams: { ...state.teams, teamA: { ...state.teams.teamA!, score: 40 } } };
+    const next = applyOp(scored, "teamA", wrong);
+    expect(next.teams.teamA?.score).toBe(40 - DEFAULT_CONFIG.scores.wrongHunt);
+    expect(next.successfulHunts).toEqual([]);
+    expect(Object.values(next.huntAttempts)).toEqual([1]);
+  });
+
+  // [Issue #696] The two knobs that only make sense together. Shrinking the
+  // field is what makes an Order hand-solvable; the cap is the entire reason
+  // that is still sound. A future change that moves one without the other
+  // fails here rather than in a live match.
+  test("a hand-sized field is guarded by a cap that makes scanning it cost more than it pays", () => {
+    const prime = Number(DEFAULT_CONFIG.prime);
+    expect(prime).toBeLessThan(1000);
+    expect(DEFAULT_CONFIG.maxHuntAttemptsPerTarget).toBeLessThanOrEqual(DEFAULT_CONFIG.threshold);
+    // The budget cannot cover the field, so scanning is not a plan at all...
+    expect(DEFAULT_CONFIG.maxHuntAttemptsPerTarget).toBeLessThan(prime);
+    // ...and one blind try is a losing trade on its own: its expected payout is
+    // `huntBonus / prime`, which has to stay under what the miss costs. This is
+    // the inequality that keeps interpolating the shares the cheaper route, and
+    // it is the one that breaks first if `prime` is lowered further.
+    expect(DEFAULT_CONFIG.scores.huntBonus / prime).toBeLessThan(DEFAULT_CONFIG.scores.wrongHunt);
+  });
+
+  test("the attempt budget runs out, so the field cannot be scanned", () => {
+    let state: CryptoBattleState = tick(startedMatch(CTX), 0);
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
+    for (let i = 0; i < DEFAULT_CONFIG.maxHuntAttemptsPerTarget; i += 1) {
+      expect(validateOp(state, "teamA", wrong).ok).toBe(true);
+      state = applyOp(state, "teamA", wrong);
+    }
+    const exhausted = validateOp(state, "teamA", wrong);
+    expect(exhausted.ok).toBe(false);
+    if (!exhausted.ok) expect(exhausted.error).toMatch(/no HUNT attempts left/);
+
+    // The budget is per (attacker, target, generation): an untouched pairing is
+    // unaffected, so one exhausted target never locks a team out of the match.
+    expect(validateOp(state, "teamB", { ...wrong, targetTeamId: "teamA" }).ok).toBe(true);
   });
 
   test("hunt penalty never drops a team's score below 0", () => {
@@ -444,11 +489,11 @@ describe("hunt", () => {
       generation: 1,
       recoveredSecret: "0",
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).not.toMatch(/already hunted/);
-      expect(result.error).toMatch(/does not match/);
-    }
+    // [Issue #696] A wrong secret is no longer refused here -- it is a move
+    // that lands and is charged. What this test is actually about is the key,
+    // so the assertion is the one that still speaks to a collision: the
+    // unrelated pairing is NOT turned away as "already hunted".
+    expect(result.ok).toBe(true);
   });
 });
 

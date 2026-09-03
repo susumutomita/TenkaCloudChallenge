@@ -31,7 +31,7 @@ import { createProof } from "./schnorr-prover.ts";
 import { reconstruct, type Share } from "./shamir.ts";
 import { addCiphertexts } from "./fhe.ts";
 import { encryptWithRung, toSymbols } from "./ladder.ts";
-import { inv, mod } from "./field.ts";
+import { inv, mod, P } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
 import { computeChallenge } from "./schnorr-transcript.ts";
 import { computePartial } from "./mpc.ts";
@@ -209,6 +209,24 @@ function summarizeStep(
  * under way, so they build state through here; the tests that are specifically
  * about `waiting` call `initialState` directly.
  */
+/**
+ * [Issue #696] A config override whose field is the big one (2^61 - 1).
+ *
+ * For the trust-boundary tests ONLY, and for a reason about the test method
+ * rather than the property. Those tests ask "does this serialized projection
+ * contain a value it must not?" and answer it with a substring search, which is
+ * sound only while the forbidden values are long enough to be unique. A match
+ * now runs in `HAND_PRIME` (251) so a participant can do the arithmetic, and at
+ * three digits the search reports a hit on any coincidence -- "124" occurs
+ * inside an unrelated 2048-bit commitment.
+ *
+ * The boundary itself is structural: `projectForTeam` either copies a field or
+ * it does not, and which modulus the numbers came from has no bearing on that.
+ * Running those assertions in the big field is therefore the same test, made
+ * able to tell a leak from a coincidence -- not a weakened one.
+ */
+export const SUBSTRING_SAFE_FIELD: Partial<CryptoBattleConfig> = { prime: P.toString() };
+
 export function startedMatch(
   ctx: CoordinationContext,
   config?: Partial<CryptoBattleConfig>,
