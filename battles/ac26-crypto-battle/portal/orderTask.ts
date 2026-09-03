@@ -133,7 +133,17 @@ export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string 
     case "share":
       return `#${artifact.shareIndex} = ${artifact.value}`;
     case "proof":
-      return `${artifact.commitment} / ${artifact.response}`;
+      // [Issue #701] R / e / s -- the whole transcript, in the order the
+      // verification equation reads it. The challenge belongs on this row for
+      // two reasons: `g^s == R * Y^e` is only checkable by a reader who has
+      // `e`, and two transcripts that reuse a commitment carry two DIFFERENT
+      // challenges, which is the pair of equations the nonce-reuse HUNT solves.
+      // Since #701 bound the challenge to the match seed, this row is the only
+      // place a participant can get it. A row written before #701 has no
+      // challenge and renders the two values it does have.
+      return artifact.challenge === undefined
+        ? `${artifact.commitment} / ${artifact.response}`
+        : `${artifact.commitment} / ${artifact.challenge} / ${artifact.response}`;
     case "ciphertext":
       return `(${artifact.r}, ${artifact.y})`;
     case "partial":

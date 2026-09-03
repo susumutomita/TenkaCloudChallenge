@@ -10,7 +10,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildProveOp, startedMatch } from "./playtest.ts";
+import { buildProveCommitOp, proveThroughExchange, startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState, OrderTaskKind } from "./types.ts";
 
 const CTX = { eventId: "methods-645", teamIds: ["teamA", "teamB"] } as const;
@@ -146,11 +146,7 @@ describe("Orders carry the model the registry defines", () => {
 describe("the Order gate runs for every method", () => {
   test("PROVE fulfils an Order that forbids raw disclosure, and is recorded as the resolution", () => {
     const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share");
-    const vault = projectForTeam(state, "teamA").vault;
-    const op = buildProveOp(vault, order.id);
-
-    expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
-    const next = applyOp(state, "teamA", op);
+    const next = proveThroughExchange(state, "teamA", order.id).state;
 
     const completed = next.contracts.find((c) => c.id === order.id);
     expect(completed?.status).toBe("completed");
@@ -180,8 +176,7 @@ describe("the Order gate runs for every method", () => {
       (c) => c.teamId === "teamB" && c.status === "open",
     );
     if (!proveOrder) throw new Error("expected an open order for teamB");
-    const vault = projectForTeam(afterLeak, "teamB").vault;
-    const afterProve = applyOp(afterLeak, "teamB", buildProveOp(vault, proveOrder.id));
+    const afterProve = proveThroughExchange(afterLeak, "teamB", proveOrder.id).state;
     const proof = afterProve.publicLedger.find((a) => a.k === "proof");
     expect(proof?.m).toBe("prove");
   });
@@ -199,8 +194,10 @@ describe("the Order gate runs for every method", () => {
     );
     if (!theirs) throw new Error("expected an open order for teamB");
 
+    // [Issue #701] The gate is checked on the FIRST move: an Order belonging
+    // to another team is refused before a commitment can be posted against it.
     const vault = projectForTeam(state, "teamA").vault;
-    const verdict = validateOp(state, "teamA", buildProveOp(vault, theirs.id));
+    const verdict = validateOp(state, "teamA", buildProveCommitOp(vault, theirs.id));
     expect(verdict.ok).toBe(false);
     if (verdict.ok) throw new Error("unreachable");
     expect(verdict.error).toContain("belongs to another team");

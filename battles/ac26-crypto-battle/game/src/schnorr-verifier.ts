@@ -26,6 +26,13 @@ import type { SchnorrProof } from "./types.ts";
 export type { SchnorrProof };
 
 export interface ProveStatement {
+  /**
+   * [Issue #701] The match seed the challenge is bound to. Public inputs only
+   * still holds -- the seed is not a team's secret, it is the trusted side's
+   * own coin, and this module reads it exactly as it reads `teamId`: as an
+   * opaque string that goes into the transcript.
+   */
+  readonly matchSeed: string;
   readonly teamId: string;
   readonly contractId: string;
   readonly generation: number;
@@ -128,6 +135,7 @@ export function verifyProof(
   if (publicCommitmentY <= 1n || publicCommitmentY >= group.p) return false;
 
   const challengeInput: ChallengeInput = {
+    matchSeed: statement.matchSeed,
     teamId: statement.teamId,
     contractId: statement.contractId,
     generation: statement.generation,

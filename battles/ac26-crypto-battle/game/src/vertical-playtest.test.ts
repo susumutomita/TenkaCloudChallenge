@@ -208,7 +208,9 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     expect(postEndSteps.length).toBeGreaterThanOrEqual(4);
     expect(postEndSteps.every((s) => s.expect === "rejected")).toBe(true);
     const kinds = new Set(postEndSteps.map((s) => s.op.kind));
-    expect(kinds).toEqual(new Set(["leak", "prove", "rotate", "hunt"]));
+    // [Issue #701] PROVE's first move is what a post-end attempt looks like
+    // now: the gate refuses the commitment, so a response never gets a chance.
+    expect(kinds).toEqual(new Set(["leak", "prove-commit", "rotate", "hunt"]));
   });
 
   test("MUST 10 (UI-level 'advance / hunt / defend' tension) is NOT claimed here -- a scripted fixture has no UI or human decision point; see OPERATOR.md's Tuning notes", () => {
@@ -240,8 +242,11 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
       // for a LEAK pass here.
       if (step.op.kind === "leak") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).leakPoints;
+      } else if (step.op.kind === "prove-commit") {
+        // [Issue #701] Committing scores nothing -- the Order is paid when the
+        // response verifies, one step later.
       } else if (
-        step.op.kind === "prove" ||
+        step.op.kind === "prove-respond" ||
         step.op.kind === "cipher" ||
         step.op.kind === "fhe" ||
         step.op.kind === "mpc"
@@ -291,7 +296,9 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     const opSteps = built.script.steps.filter((s): s is PlaytestOpStep => !isTickStep(s));
     expect(opSteps.length).toBeGreaterThan(0);
     const kinds = new Set(opSteps.map((s) => s.op.kind));
-    expect(kinds).toEqual(new Set(["leak", "prove", "cipher", "fhe", "mpc", "hunt", "rotate"]));
+    expect(kinds).toEqual(
+      new Set(["leak", "prove-commit", "prove-respond", "cipher", "fhe", "mpc", "hunt", "rotate"]),
+    );
     expect(opSteps.some((s) => s.expect === "rejected")).toBe(true);
     expect(opSteps.some((s) => s.expect === "ok")).toBe(true);
 

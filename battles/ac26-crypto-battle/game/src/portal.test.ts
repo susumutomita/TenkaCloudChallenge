@@ -38,7 +38,8 @@ import RegistrationPanel, {
   describeOutcome,
   submitHunt,
   submitLeak,
-  submitProve,
+  submitProveCommit,
+  submitProveRespond,
   submitRotate,
 } from "../../portal/RegistrationPanel.tsx";
 import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
@@ -57,7 +58,7 @@ import {
   tacticAvailability,
 } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
-import { MODP_2048_P } from "./group.ts";
+import { HAND_GROUP, MODP_2048_P } from "./group.ts";
 import { rungSpec } from "./ladder.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
 import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
@@ -545,50 +546,90 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
     // digits (see `group.ts`'s own header on why that specific failure
     // mode is otherwise silent -- Schnorr verification "still computes a
     // number", it does not throw on a wrong prime).
-    const match = PYTHON_SNIPPET.match(/^p = 0x([0-9a-f]+)/m);
-    if (!match?.[1]) throw new Error("PYTHON_SNIPPET: expected a `p = 0x<hex>` line");
-    expect(BigInt(`0x${match[1]}`)).toBe(MODP_2048_P);
+    // [Issue #701] The snippet's group is the hand-sized one now, so the
+    // constant it must agree with is `HAND_GROUP`'s -- and it is checked the
+    // same way and for the same reason. `MODP_2048_P` is still the honest
+    // statement of what this is a scale model of, and `group.ts` still carries
+    // it; a reader who wants the real size finds it there.
+    const match = PYTHON_SNIPPET.match(/^p, q, g = (\d+), (\d+), (\d+)/m);
+    if (!match) throw new Error("PYTHON_SNIPPET: expected a `p, q, g = ...` line");
+    expect([BigInt(match[1] ?? 0), BigInt(match[2] ?? 0), BigInt(match[3] ?? 0)]).toEqual([
+      HAND_GROUP.p,
+      HAND_GROUP.order,
+      HAND_GROUP.generator,
+    ]);
+    expect(MODP_2048_P.toString().length).toBeGreaterThan(600);
   });
 
-  it("PROVE Python snippet, run for real, matches createProof()'s real output and verifies", async () => {
-    // The other half of "runnable Python" is actually running it. This
-    // repo's Python isn't itself under `bun test`, so this asserts the
-    // TRANSCRIPTION is exact (every hash label, the length-prefix framing,
-    // the operation order) by re-deriving the same proof in TypeScript
-    // using the identical primitives the snippet calls out to
-    // (`prng.ts`'s `deriveBigInt` == the snippet's `derive`,
-    // `schnorr-transcript.ts`'s length-prefix + fixed-width framing == the
-    // snippet's `lp` / `fw`) -- one-time manual verification against a real
-    // `python3` run of this exact snippet (same secret/team/generation/
-    // contract) additionally confirmed identical `commitment` / `response`
-    // decimal strings, which this test cannot itself shell out to `python3`
-    // to re-check on every run without adding that as a test-time
-    // dependency this repo does not otherwise have.
-    const { createProof } = await import("./schnorr-prover.ts");
+  /**
+   * [Issue #701] The other half of "runnable Python" is actually running it.
+   *
+   * This test executes the snippet's OWN arithmetic here, from the constants it
+   * prints, and requires the shipped verifier to accept the result -- so a
+   * participant who copies the snippet and types the challenge off their Order
+   * gets a response the judge takes. The transcription that matters is the
+   * group and the two derivations; the challenge is deliberately NOT in the
+   * snippet, because it cannot be (it is bound to the match seed), and the
+   * snippet says so with `e = ...`.
+   */
+  it("the PROVE snippet's arithmetic, executed, produces a response the judge accepts", async () => {
+    const { createHash } = await import("node:crypto");
     const { verifyProof } = await import("./schnorr-verifier.ts");
     const { derivePublicCommitment } = await import("./schnorr-witness.ts");
+    const { computeChallenge } = await import("./schnorr-transcript.ts");
+    const { HAND_GROUP } = await import("./group.ts");
 
-    const secret = 123456789012345678n;
+    // The constants the snippet opens with, read from the snippet itself so a
+    // change to one that is not made in the other fails here.
+    expect(PYTHON_SNIPPET).toContain("p, q, g = 227, 113, 4");
+    expect(PYTHON_SNIPPET).toContain("e = ...");
+    const p = 227n;
+    const q = 113n;
+    const g = 4n;
+    expect([HAND_GROUP.p, HAND_GROUP.order, HAND_GROUP.generator]).toEqual([p, q, g]);
+
+    const secret = 137n;
     const team = "blue";
     const generation = 1;
     const contract = "blue-c0";
+    const matchSeed = "python-snippet-seed";
 
-    const proof = createProof(secret, generation, team, contract);
-    // These exact decimal strings were also produced by running
-    // PYTHON_SNIPPET's real Python (with the same inputs) by hand before
-    // this fix shipped -- pinning them here means a future accidental
-    // change to the framing (this snippet's OR schnorr-prover.ts's) that
-    // still "verifies" but silently diverges from what a participant
-    // copy-pasting this exact Python would compute gets caught too.
-    expect(proof.commitment).toBe(
-      "12491904079717215833289811861220956048131206574919718145925209972398991206550006999619986512335299316987035579151265564160905430804756070893245491304906574426512819514797618407919681861453404509081259916574473758059436583306737429056168559213105116239617298111422348935851536075343460252578596791285162186249960968769354288041789857921094185762502840065986960829626732425410297434567412792768095341828845359892161906091162086495027395998743458945660683858268942938522993404146830635328411484578493755418282595586209950518050109052386659393336806948058372378342971254888277990456825964420607659201042108347562933100138",
-    );
-    expect(proof.response).toBe(
-      "8240697219374735644623142365545472691120352149005885012557939550420978958098898382175055561578100915092772978845894423099683761252258163195079737990667",
-    );
+    // The snippet's two derivations, transcribed line for line.
+    const sha = (text: string) => BigInt(`0x${createHash("sha256").update(text).digest("hex")}`);
+    const w = sha(`${secret}|schnorr-witness:${team}|${generation}`) % q;
+    const Y = g ** w % p;
+    const r = sha(`${w}|schnorr-nonce:${team}:${contract}|${generation}`) % q;
+    const R = g ** r % p;
 
-    const publicY = derivePublicCommitment(secret, generation, team);
-    expect(verifyProof(publicY, proof, { teamId: team, contractId: contract, generation })).toBe(true);
+    // The derivations have to agree with the shipped ones, or a participant
+    // following the snippet commits to a value the judge did not expect.
+    expect(Y).toBe(derivePublicCommitment(secret, generation, team, HAND_GROUP));
+
+    // The challenge the game would answer that commitment with -- the number
+    // the snippet tells the reader to copy off their Order.
+    const e = computeChallenge(
+      { matchSeed, teamId: team, contractId: contract, generation, commitmentR: R, publicY: Y },
+      HAND_GROUP,
+    );
+    const response = (r + e * w) % q;
+
+    expect(
+      verifyProof(
+        Y,
+        { commitment: R.toString(), response: response.toString() },
+        { matchSeed, teamId: team, contractId: contract, generation },
+        HAND_GROUP,
+      ),
+    ).toBe(true);
+  });
+
+  /**
+   * [Issue #701] And the size claim the snippet makes about itself: every
+   * exponentiation in it is something a person can do on paper.
+   */
+  it("every quantity the snippet asks a reader to multiply out fits in five digits", () => {
+    expect((227n - 1n) ** 2n).toBeLessThan(100_000n);
+    expect(113n.toString(2).length).toBeLessThanOrEqual(7);
   });
 });
 
@@ -625,11 +666,16 @@ describe("RegistrationPanel.tsx submit* helpers build the correct CryptoBattleOp
     expect(calls).toEqual([{ kind: "leak", contractId: "blue-c0" }]);
   });
 
-  it("submitProve sends { kind: 'prove', contractId, proof }", async () => {
+  it("PROVE is two ops, in order", async () => {
+    // [Issue #701] The op split IS the protocol: a single op carrying both
+    // halves could only exist if the challenge were predictable before the
+    // commitment, which is the thing the rebuild removes.
     const { client, calls } = capturingClient();
-    await submitProve(client, "blue-c1", { commitment: "111", response: "222" });
+    await submitProveCommit(client, "blue-c1", "111");
+    await submitProveRespond(client, "blue-c1", "222");
     expect(calls).toEqual([
-      { kind: "prove", contractId: "blue-c1", proof: { commitment: "111", response: "222" } },
+      { kind: "prove-commit", contractId: "blue-c1", commitment: "111" },
+      { kind: "prove-respond", contractId: "blue-c1", response: "222" },
     ]);
   });
 
@@ -1592,5 +1638,28 @@ describe("the hint control offers the next unopened rung, at its stated price", 
       expect(FAST_MOVE_COPY[locale].hintsHint.length).toBeGreaterThan(0);
       expect(FAST_MOVE_COPY[locale].hintsExhausted.length).toBeGreaterThan(0);
     }
+  });
+});
+
+/**
+ * [Issue #701] The PROVE step copy tells a participant which numbers to work
+ * with. If the group ever moves, the copy has to move with it -- a panel that
+ * says "mod 227" while the judge checks mod something else sends a player to do
+ * several minutes of arithmetic that cannot come out.
+ */
+describe("Issue #701: the PROVE instructions name the group a match actually uses", () => {
+  it("both locales quote the modulus and the scalar order", () => {
+    for (const locale of ["ja", "en"] as const) {
+      const copy = FAST_MOVE_COPY[locale];
+      expect(copy.proveStep1).toContain(HAND_GROUP.p.toString());
+      expect(copy.proveStep2).toContain(HAND_GROUP.order.toString());
+    }
+  });
+
+  it("step 1 says there is no challenge yet, and step 2 says where to read it", () => {
+    expect(FAST_MOVE_COPY.ja.proveStep1).toContain("チャレンジはまだありません");
+    expect(FAST_MOVE_COPY.ja.challengeLabel).toContain("チャレンジ");
+    expect(FAST_MOVE_COPY.en.proveStep1).toContain("no challenge yet");
+    expect(FAST_MOVE_COPY.en.challengeLabel).toContain("challenge");
   });
 });

@@ -60,16 +60,53 @@ export function createProof(
   generation: number,
   teamId: string,
   contractId: string,
+  matchSeed: string,
   group: Group = RFC3526_GROUP14,
 ): SchnorrProof {
-  const witness = deriveWitness(secret, generation, teamId, group);
-  const publicY = groupPow(group.generator, witness, group);
-  const nonce = deriveNonce(witness, teamId, contractId, generation, group);
-  const commitmentR = groupPow(group.generator, nonce, group);
-
-  const challengeInput: ChallengeInput = { teamId, contractId, generation, commitmentR, publicY };
-  const e = computeChallenge(challengeInput, group);
-  const response = mod(nonce + e * witness, group.order);
-
+  const commitmentR = proveCommitment(secret, generation, teamId, contractId, group);
+  const publicY = groupPow(group.generator, deriveWitness(secret, generation, teamId, group), group);
+  const e = computeChallenge(
+    { matchSeed, teamId, contractId, generation, commitmentR, publicY },
+    group,
+  );
+  const response = proveResponse(secret, generation, teamId, contractId, e, group);
   return { commitment: commitmentR.toString(), response: response.toString() };
+}
+
+/**
+ * [Issue #701] Step one of the interactive protocol: the commitment `R = g^k`.
+ *
+ * Split out of `createProof` because the two steps are now separated in time by
+ * the verifier's challenge, and because a participant doing this by hand needs
+ * exactly this value and nothing else. The nonce stays derived rather than
+ * random for the reason `deriveNonce`'s doc comment gives -- a reducer is pure,
+ * and a participant who wants to reproduce their own commitment on paper needs
+ * it to be reproducible.
+ */
+export function proveCommitment(
+  secret: bigint,
+  generation: number,
+  teamId: string,
+  contractId: string,
+  group: Group = RFC3526_GROUP14,
+): bigint {
+  const witness = deriveWitness(secret, generation, teamId, group);
+  return groupPow(group.generator, deriveNonce(witness, teamId, contractId, generation, group), group);
+}
+
+/**
+ * [Issue #701] Step two: `s = k + e*w mod q`, for the challenge the trusted side
+ * revealed after the commitment landed.
+ */
+export function proveResponse(
+  secret: bigint,
+  generation: number,
+  teamId: string,
+  contractId: string,
+  challenge: bigint,
+  group: Group = RFC3526_GROUP14,
+): bigint {
+  const witness = deriveWitness(secret, generation, teamId, group);
+  const nonce = deriveNonce(witness, teamId, contractId, generation, group);
+  return mod(nonce + challenge * witness, group.order);
 }

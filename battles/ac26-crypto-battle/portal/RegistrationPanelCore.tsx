@@ -233,13 +233,29 @@ export function submitLeak(client: PortalCoordinationClient, contractId: string)
   return client.submitOp(op);
 }
 
-/** Builds and submits a PROVE op. Exported for direct testing -- see this file's header. */
-export function submitProve(
+/**
+ * [Issue #701] PROVE's first move: post the commitment `R`.
+ *
+ * Two functions rather than one because the protocol is interactive: the
+ * challenge does not exist until this lands, so a form that collected R and s
+ * together would be collecting an answer to a question nobody had asked.
+ */
+export function submitProveCommit(
   client: PortalCoordinationClient,
   contractId: string,
-  proof: { readonly commitment: string; readonly response: string },
+  commitment: string,
 ): Promise<PortalCoordinationOutcome> {
-  const op: CryptoBattleOp = { kind: "prove", contractId, proof };
+  const op: CryptoBattleOp = { kind: "prove-commit", contractId, commitment };
+  return client.submitOp(op);
+}
+
+/** [Issue #701] PROVE's second move: answer the challenge the Order now shows. */
+export function submitProveRespond(
+  client: PortalCoordinationClient,
+  contractId: string,
+  response: string,
+): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "prove-respond", contractId, response };
   return client.submitOp(op);
 }
 
@@ -491,10 +507,21 @@ function ProveForm({
     if (!selected || !trimmedCommitment || !trimmedResponse || submitting) return;
     setSubmitting(true);
     setResult(null);
-    void submitProve(client, selected, { commitment: trimmedCommitment, response: trimmedResponse }).then((outcome) => {
-      setResult(describeOutcome(outcome, copy));
-      setSubmitting(false);
-    });
+    // [Issue #701] This legacy panel collects both halves at once, which the
+    // interactive protocol cannot honour -- the challenge does not exist until
+    // the commitment lands. It submits them in order instead: commit, then
+    // respond. The FastMovePanel (the surface a participant actually plays on)
+    // does this as two visible steps.
+    void submitProveCommit(client, selected, trimmedCommitment)
+      .then((committed) =>
+        committed.kind === "ok"
+          ? submitProveRespond(client, selected, trimmedResponse)
+          : committed,
+      )
+      .then((outcome) => {
+        setResult(describeOutcome(outcome, copy));
+        setSubmitting(false);
+      });
   };
 
   return (

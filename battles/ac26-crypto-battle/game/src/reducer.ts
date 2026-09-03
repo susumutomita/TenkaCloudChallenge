@@ -84,9 +84,16 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { HAND_PRIME, mod } from "./field.ts";
-import { groupPow, RFC3526_GROUP14 } from "./group.ts";
+/**
+ * [Issue #701] `PROVE_GROUP` is the group a MATCH proves in, and it is now the
+ * hand-sized one: a participant performs the exponentiation themselves, and at
+ * 2048 bits that was never possible. The 2048-bit group stays in `group.ts`
+ * beside it, as the honest statement of what this is a scale model of.
+ */
+import { groupPow, HAND_GROUP as PROVE_GROUP } from "./group.ts";
 import { decodeLedger, encodeArtifact, encodeLedger } from "./ledger-codec.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
+import { computeChallenge } from "./schnorr-transcript.ts";
 import { parseCanonicalDecimal, verifyProof } from "./schnorr-verifier.ts";
 import type {
   CipherPairArtifact,
@@ -105,6 +112,7 @@ import type {
   ProofArtifact,
   PublicArtifact,
   StoredCiphertext,
+  SchnorrProof,
   StoredShare,
   TeamState,
   TeamSummaryProjection,
@@ -155,6 +163,10 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
     // team that interpolates correctly still profits after an earlier miss, and
     // above zero so scanning the (now small) field is never free.
     wrongHunt: 8,
+    // [Issue #701] Above `contract` / order = 30/113 = 0.27, so guessing a
+    // challenge response is a losing trade. Below `huntBonus` so a team that
+    // misses once and then computes correctly still comes out ahead.
+    wrongProve: 6,
     // [Issue #659 §9] Escalating, and bounded by the ordering above: buying all
     // three costs 14, so an Order computed after every hint still pays 16 —
     // above LEAK's 10. Hints that could drag a solved Order below what leaking
@@ -241,7 +253,7 @@ export function initialState(
       huntedGenerations: [],
       cipherHuntedGenerations: {},
     };
-    publicCommitments[teamId] = derivePublicCommitment(secret, 1, teamId, RFC3526_GROUP14).toString();
+    publicCommitments[teamId] = derivePublicCommitment(secret, 1, teamId, PROVE_GROUP).toString();
   }
   return {
     config: mergedConfig,
@@ -1132,7 +1144,7 @@ export function validateOp(
       // state, so the check cannot accidentally accept a value the attacker
       // could not have derived from public material.
       if (
-        groupPow(RFC3526_GROUP14.generator, mod(recoveredWitness, RFC3526_GROUP14.order), RFC3526_GROUP14) !==
+        groupPow(PROVE_GROUP.generator, mod(recoveredWitness, PROVE_GROUP.order), PROVE_GROUP) !==
         BigInt(publicY)
       ) {
         return { ok: false, error: "recovered witness does not match the target's public commitment" };
@@ -1189,30 +1201,58 @@ export function validateOp(
       }
       return { ok: true };
     }
-    case "prove": {
+    case "prove-commit": {
       // [Issue #645] Same Order gate as every other method -- PROVE is a second
-      // way to fulfil an Order, not a different queue of things to fulfil --
-      // followed by PROVE's own trusted check. The gate runs FIRST: an Order
-      // that is expired or belongs to another team must be rejected as such,
-      // not after spending a 2048-bit verification on it.
+      // way to fulfil an Order, not a different queue of things to fulfil.
       const gate = validateOrderSubmission(state, teamId, op.contractId, "prove");
       if (!gate.ok) return gate;
-      const publicCommitmentY = state.publicCommitments[teamId];
-      if (publicCommitmentY === undefined) {
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      // [Issue #701] One live commitment per Order. Letting a team post a
+      // second one while the first still stands would hand them two
+      // independent challenges for one Order and turn 1/113 into 2/113 for
+      // free -- and if they answered the older one after seeing the newer
+      // challenge, the round structure the soundness argument counts would not
+      // exist at all.
+      if (contract?.proveCommitment !== undefined) {
+        return { ok: false, error: "a commitment is already open on this Order -- answer it first" };
+      }
+      const commitmentR = parseCanonicalDecimal(op.commitment);
+      if (commitmentR === undefined) {
+        return { ok: false, error: "commitment must be a canonical, length-bounded decimal integer" };
+      }
+      // Same range rejection the verifier applies, applied here so a commitment
+      // that could never verify is refused while the participant can still fix
+      // it, rather than costing them `wrongProve` two steps later. `<= 1`
+      // rejects the identity as well as zero -- see schnorr-verifier.ts.
+      if (commitmentR <= 1n || commitmentR >= PROVE_GROUP.p) {
+        return { ok: false, error: `commitment must be a group element: 1 < R < ${PROVE_GROUP.p}` };
+      }
+      return { ok: true };
+    }
+    case "prove-respond": {
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "prove");
+      if (!gate.ok) return gate;
+      const contract = state.contracts.find((c) => c.id === op.contractId);
+      if (contract?.proveCommitment === undefined || contract.proveChallenge === undefined) {
+        return { ok: false, error: "post a commitment first -- there is no challenge to answer yet" };
+      }
+      const response = parseCanonicalDecimal(op.response);
+      if (response === undefined) {
+        return { ok: false, error: "response must be a canonical, length-bounded decimal integer" };
+      }
+      if (response >= PROVE_GROUP.order) {
+        return { ok: false, error: `response must be reduced: 0 <= s < ${PROVE_GROUP.order}` };
+      }
+      if (state.publicCommitments[teamId] === undefined) {
         // Cannot happen for a known team -- initialState/applyRotate always
         // set this alongside TeamState. Fail loudly rather than silently
         // treating a missing commitment as "nothing to check against".
         return { ok: false, error: `no public commitment on record for team "${teamId}"` };
       }
-      const verified = verifyProof(
-        BigInt(publicCommitmentY),
-        op.proof,
-        { teamId, contractId: op.contractId, generation: team.generation },
-        RFC3526_GROUP14,
-      );
-      if (!verified) {
-        return { ok: false, error: "proof failed verification" };
-      }
+      // [Issue #701] The equation itself is checked in `applyProveRespond`, for
+      // the same reason a wrong HUNT moved there in #696: a wrong answer has to
+      // be a move that happened. Refusing it here would make guessing free, and
+      // over a 113-value challenge space free retries are the attack.
       return { ok: true };
     }
     case "cipher": {
@@ -1913,7 +1953,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   // way rotate already invalidates pre-rotate LEAK shares for HUNT above.
   const publicCommitments = {
     ...state.publicCommitments,
-    [teamId]: derivePublicCommitment(secret, generation, teamId, RFC3526_GROUP14).toString(),
+    [teamId]: derivePublicCommitment(secret, generation, teamId, PROVE_GROUP).toString(),
   };
   // Charged through the same helper the deadline path uses, so the two causes
   // cannot drift apart into different prices for the same unanswered Order.
@@ -1925,17 +1965,108 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   return { ...state, contracts, teams, publicCommitments };
 }
 
-function applyProve(
+/**
+ * [Issue #701] Step one: record the commitment and answer it with a challenge.
+ *
+ * The challenge is DERIVED, not stored-then-trusted: `verifyProof` recomputes
+ * it from the seed and the commitment when the response arrives, so the copy
+ * written onto the Order here is only there for the participant to read. A
+ * tampered `proveChallenge` on a persisted row therefore cannot make a wrong
+ * response verify -- it can only mislead the person doing the arithmetic, whose
+ * own submission would then be refused.
+ */
+function applyProveCommit(
   state: CryptoBattleState,
   teamId: string,
-  op: Extract<CryptoBattleOp, { kind: "prove" }>,
+  op: Extract<CryptoBattleOp, { kind: "prove-commit" }>,
 ): CryptoBattleState {
   const contract = state.contracts.find((c) => c.id === op.contractId);
   const team = state.teams[teamId];
-  if (!contract || !team) {
-    throw new Error("applyOp(prove): invalid op reached apply -- call validateOp() first");
+  const publicY = state.publicCommitments[teamId];
+  if (!contract || !team || publicY === undefined) {
+    throw new Error("applyOp(prove-commit): invalid op reached apply -- call validateOp() first");
+  }
+  const commitmentR = BigInt(op.commitment);
+  const challenge = computeChallenge(
+    {
+      matchSeed: state.seed,
+      teamId,
+      contractId: contract.id,
+      generation: team.generation,
+      commitmentR,
+      publicY: BigInt(publicY),
+    },
+    PROVE_GROUP,
+  );
+  return {
+    ...state,
+    contracts: state.contracts.map((c) =>
+      c.id === contract.id
+        ? { ...c, proveCommitment: commitmentR.toString(), proveChallenge: challenge.toString() }
+        : c,
+    ),
+  };
+}
+
+/**
+ * [Issue #701] Step two: check the response, and charge a wrong one.
+ *
+ * A miss burns the commitment. That is the round structure the soundness
+ * argument counts on: to try again you must commit afresh and be handed a
+ * challenge you still cannot predict, so each attempt is an independent 1/113
+ * at the price of `scores.wrongProve`. Keeping the commitment alive would let a
+ * team walk the 113 responses for one challenge until one fit.
+ */
+function applyProveRespond(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "prove-respond" }>,
+): CryptoBattleState {
+  const contract = state.contracts.find((c) => c.id === op.contractId);
+  const team = state.teams[teamId];
+  const publicY = state.publicCommitments[teamId];
+  if (!contract || !team || publicY === undefined || contract.proveCommitment === undefined) {
+    throw new Error("applyOp(prove-respond): invalid op reached apply -- call validateOp() first");
   }
 
+  const verified = verifyProof(
+    BigInt(publicY),
+    { commitment: contract.proveCommitment, response: op.response },
+    { matchSeed: state.seed, teamId, contractId: contract.id, generation: team.generation },
+    PROVE_GROUP,
+  );
+  if (!verified) {
+    return {
+      ...state,
+      contracts: state.contracts.map((c) =>
+        c.id === contract.id
+          ? { ...c, proveCommitment: undefined, proveChallenge: undefined }
+          : c,
+      ),
+      teams: {
+        ...state.teams,
+        [teamId]: { ...team, score: Math.max(0, team.score - state.config.scores.wrongProve) },
+      },
+    };
+  }
+  return completeProve(
+    state,
+    teamId,
+    contract,
+    team,
+    { commitment: contract.proveCommitment, response: op.response },
+    contract.proveChallenge,
+  );
+}
+
+function completeProve(
+  state: CryptoBattleState,
+  teamId: string,
+  contract: Contract,
+  team: TeamState,
+  proof: SchnorrProof,
+  challenge: string | undefined,
+): CryptoBattleState {
   const nowMs = state.nowMs ?? contract.issuedAtMs;
   // Audit-only transcript: commitment/response only, NEVER a share value or
   // the secret/witness they were derived from -- see types.ts's
@@ -1956,13 +2087,25 @@ function applyProve(
     kind: "proof",
     method: "prove",
     contractId: contract.id,
-    commitment: BigInt(op.proof.commitment).toString(),
-    response: BigInt(op.proof.response).toString(),
+    commitment: BigInt(proof.commitment).toString(),
+    ...(challenge === undefined ? {} : { challenge: BigInt(challenge).toString() }),
+    response: BigInt(proof.response).toString(),
     postedAtMs: nowMs,
   };
 
   const contracts = state.contracts.map((c) =>
-    c.id === contract.id ? { ...c, status: "completed" as const, resolution: "prove" as const } : c,
+    c.id === contract.id
+      ? {
+          ...c,
+          status: "completed" as const,
+          resolution: "prove" as const,
+          // [Issue #701] The round is over: the commitment has been spent, and
+          // leaving it on a completed Order would be a second live challenge on
+          // a row nothing can answer any more.
+          proveCommitment: undefined,
+          proveChallenge: undefined,
+        }
+      : c,
   );
   const updatedTeam: TeamState = {
     ...team,
@@ -2060,8 +2203,10 @@ export function applyOp(
       });
     case "rotate":
       return applyRotate(state, teamId);
-    case "prove":
-      return applyProve(state, teamId, op);
+    case "prove-commit":
+      return applyProveCommit(state, teamId, op);
+    case "prove-respond":
+      return applyProveRespond(state, teamId, op);
     case "cipher":
       return applyCipher(state, teamId, op);
     case "hunt-cipher":
@@ -2124,6 +2269,11 @@ export function projectForTeam(
       // total without an unsafe assertion.
       remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
       hints: projectHints(state, c),
+      // [Issue #701] Only ever this team's OWN Orders reach here (the filter
+      // above is `c.teamId === teamId`), so a commitment and its challenge are
+      // being handed back to the team that made it.
+      ...(c.proveCommitment === undefined ? {} : { proveCommitment: c.proveCommitment }),
+      ...(c.proveChallenge === undefined ? {} : { proveChallenge: c.proveChallenge }),
     }));
 
   const otherOpenContractCount = state.contracts.filter(

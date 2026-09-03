@@ -136,6 +136,16 @@ export interface ScoreRules {
    */
   readonly wrongHunt: number;
   /**
+   * [Issue #701] What a wrong PROVE response costs, and the reason the small
+   * group is sound.
+   *
+   * A challenge is one of 113 values, so a participant who guesses instead of
+   * computing succeeds about 0.9% of the time. `wrongProve` is what makes that
+   * a losing trade rather than a free lottery: the expected payout of a guess
+   * is `contract.points / order`, which has to stay below this.
+   */
+  readonly wrongProve: number;
+  /**
    * [Issue #659 §9] What each successive hint on an Order costs, by level —
    * `hintCosts[0]` for the first hint opened, `[1]` for the second, and so on.
    * Charged as a deduction (floored at 0, like `huntPenalty`), whether or not
@@ -392,6 +402,23 @@ export interface Contract {
   /** Which method actually completed it, once one did. */
   readonly resolution?: SubmissionMethod;
   /**
+   * [Issue #701] The PROVE commitment `R` this team has posted against this
+   * Order, if any -- set by `prove-commit`, cleared by a wrong `prove-respond`.
+   *
+   * Present on the Order rather than on the team because the challenge is bound
+   * to the Order: a commitment made for one Order cannot be spent on another,
+   * which is what stops a proof from being replayed.
+   */
+  readonly proveCommitment?: string;
+  /**
+   * [Issue #701] The challenge the trusted side answered that commitment with.
+   *
+   * Recomputed by the verifier from the seed rather than trusted from here --
+   * this copy exists so the participant can READ it, which is the whole point
+   * of an interactive protocol they perform by hand.
+   */
+  readonly proveChallenge?: string;
+  /**
    * [Issue #659] Why an `expired` Order ended, once one did.
    *
    * Two different things end an Order unanswered -- its deadline passing, and
@@ -479,6 +506,23 @@ export interface ProofArtifact {
   readonly method: SubmissionMethod;
   readonly contractId: string;
   readonly commitment: string;
+  /**
+   * [Issue #701] The challenge this transcript answered.
+   *
+   * Public by the time it is here -- the participant read it off their own
+   * Order to compute the response. Publishing it is what makes the row a
+   * TRANSCRIPT rather than two thirds of one: a reader can now check
+   * `g^s == R * Y^e` themselves, and, more to the point, two transcripts that
+   * reuse a commitment carry two different challenges, which is the pair of
+   * linear equations `hunt-nonce` solves for the witness. With the challenge
+   * bound to the match seed (#701) that pair is no longer derivable from public
+   * material any other way, so without this field the nonce-reuse HUNT would
+   * have quietly stopped being reachable by a participant.
+   *
+   * Optional so a row written before this version still decodes; the ledger
+   * codec leaves it absent rather than inventing one.
+   */
+  readonly challenge?: string;
   readonly response: string;
   readonly postedAtMs: number;
 }
@@ -856,7 +900,26 @@ export type CryptoBattleOp =
    */
   | { readonly kind: "reveal-hint"; readonly contractId: string }
   | { readonly kind: "rotate" }
-  | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
+  /**
+   * [Issue #701] PROVE, step one: the commitment `R = g^k mod p`.
+   *
+   * Two ops rather than one because the protocol is interactive now. The
+   * participant commits to R, the trusted side answers with a challenge they
+   * could not have predicted (it is bound to the match seed -- see
+   * `schnorr-transcript.ts`), and only then do they respond. That ordering is
+   * what lets the group be small enough to exponentiate on paper: over a
+   * 113-element challenge space a prover who could evaluate the challenge
+   * themselves would simply grind until they got one they could answer.
+   */
+  | { readonly kind: "prove-commit"; readonly contractId: string; readonly commitment: string }
+  /**
+   * [Issue #701] PROVE, step two: `s = k + e*w mod q` for the revealed
+   * challenge. One response per commitment -- a wrong one burns the commitment
+   * and charges `scores.wrongProve`, so another try means another commitment
+   * and another unpredictable challenge. That is the round structure the
+   * soundness argument counts: 1/113 per attempt, at a price.
+   */
+  | { readonly kind: "prove-respond"; readonly contractId: string; readonly response: string };
 
 /**
  * [Issue #659 §9] One rung of an Order's hint ladder, as its owner sees it.
@@ -991,6 +1054,18 @@ export interface ContractProjection {
    * player cannot see is not a price they can weigh.
    */
   readonly hints: readonly HintProjection[];
+  /**
+   * [Issue #701] The PROVE commitment this team has open on this Order, and the
+   * challenge the trusted side answered it with.
+   *
+   * Both are this team's own public material -- `R` is a value they chose and
+   * published, `e` is the verifier's answer to it -- so projecting them leaks
+   * nothing. They are here because an interactive protocol performed by hand
+   * needs a screen to read the challenge off: without `proveChallenge` the
+   * participant is holding a commitment nobody has answered.
+   */
+  readonly proveCommitment?: string;
+  readonly proveChallenge?: string;
 }
 
 export interface TeamSummaryProjection {

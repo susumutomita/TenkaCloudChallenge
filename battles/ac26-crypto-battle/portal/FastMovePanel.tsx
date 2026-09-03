@@ -9,7 +9,8 @@ import {
   submitHuntNonce,
   submitLeak,
   submitMpc,
-  submitProve,
+  submitProveCommit,
+  submitProveRespond,
   submitRevealHint,
   submitReady,
   submitRotate,
@@ -140,6 +141,13 @@ export const FAST_MOVE_COPY = {
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · your row and its answer → PUBLIC LEDGER. ${pairsToBreak} pair${pairsToBreak === 1 ? "" : "s"} recovers your key.`,
+    // [Issue #701] The two moves, named where the participant is standing.
+    proveStep1: "Step 1 of 2. Compute R = g^r mod 227 (at most seven squarings) and submit it. There is no challenge yet -- it is the game's answer to this.",
+    proveStep2: "Step 2 of 2. The game answered your commitment. Compute s = (r + e*w) mod 113 and submit it.",
+    challengeLabel: "the challenge e for this Order: ",
+    commitSend: "SUBMIT COMMITMENT",
+    commitDone: "COMMITMENT POSTED",
+    commitBody: "The challenge is above. Answer it to finish the Order.",
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
     proveLesson:
@@ -273,6 +281,13 @@ export const FAST_MOVE_COPY = {
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · 記号列と答えが対で公開されました。この段は ${pairsToBreak} 組で鍵が割れます。`,
+    // [Issue #701] 2 手ぶんの案内。
+    proveStep1: "1/2。R = g^r mod 227 を計算して出します (2 乗を最大 7 回)。チャレンジはまだありません — これに対するゲームの返事がそれです。",
+    proveStep2: "2/2。ゲームがチャレンジを返しました。s = (r + e*w) mod 113 を計算して出します。",
+    challengeLabel: "この Order のチャレンジ e: ",
+    commitSend: "コミットを出す",
+    commitDone: "コミットを出しました",
+    commitBody: "上に出ているチャレンジに答えると Order が完了します。",
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
     proveLesson:
@@ -738,6 +753,9 @@ ${DIE_CSS}
 .tc-action:disabled{cursor:not-allowed;opacity:.45}
 .tc-leak-button{background:#ffefd1;box-shadow:inset 0 0 0 2px #d8a657}
 .tc-prove-button{background:#e7f6ec;box-shadow:inset 0 0 0 2px #69b482}
+.tc-prove-step{margin:0 0 6px;font-size:12px;line-height:1.6;color:#3f4b57}
+.tc-prove-challenge{margin:0 0 6px;font-size:13px}
+.tc-prove-challenge strong{font-size:18px;letter-spacing:.02em}
 .tc-input-panel{border:1px solid #cfd8e3;border-radius:9px;padding:9px;background:#fff;display:grid;gap:6px}
 .tc-input-panel input,.tc-input-panel select{padding:8px;border:1px solid #aab7c4;border-radius:6px;font-size:12px;min-width:0}
 .tc-secondary-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
@@ -1342,20 +1360,49 @@ export default function FastMovePanel(props: PortalSlotProps) {
         `setProveOpen(false)` on selection is the other half — a form that
         reappears still bound to a different Order is its own surprise.
       */}
+      {/*
+        [Issue #701] PROVE is two visible steps, because it is two moves. Until
+        a commitment lands there is no challenge to answer, so showing both
+        fields at once would be asking for the answer to a question nobody has
+        asked yet. Which step is on screen is read off the Order itself
+        (`proveChallenge`), never from local state -- a reload, a poll, or the
+        other browser tab a team is sharing all land on the same step.
+      */}
       {proveOpen && selectedOrder?.task.kind === "reveal-share" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.proveOpen} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          <input aria-label="fast-prove-commitment" value={commitment} onChange={(event) => setCommitment(event.target.value)} placeholder={copy.commitment} />
-          <input aria-label="fast-prove-response" value={response} onChange={(event) => setResponse(event.target.value)} placeholder={copy.response} />
-          <button
-            type="button"
-            className="tc-submit-small"
-            disabled={submitting || !commitment.trim() || !response.trim()}
-            onClick={() => void run(
-              () => submitProve(client, selectedOrder.id, { commitment: commitment.trim(), response: response.trim() }),
-              () => ({ kind: "prove", title: copy.proveSuccess, body: copy.proveBody(selectedOrder.points), lesson: copy.proveLesson }),
-            )}
-          >{submitting ? copy.running : copy.send}</button>
+          {selectedOrder.proveChallenge === undefined ? (
+            <>
+              <p className="tc-prove-step">{copy.proveStep1}</p>
+              <input aria-label="fast-prove-commitment" value={commitment} onChange={(event) => setCommitment(event.target.value)} placeholder={copy.commitment} />
+              <button
+                type="button"
+                className="tc-submit-small"
+                disabled={submitting || !commitment.trim()}
+                onClick={() => void run(
+                  () => submitProveCommit(client, selectedOrder.id, commitment.trim()),
+                  () => ({ kind: "prove", title: copy.commitDone, body: copy.commitBody }),
+                )}
+              >{submitting ? copy.running : copy.commitSend}</button>
+            </>
+          ) : (
+            <>
+              <p className="tc-prove-step">{copy.proveStep2}</p>
+              <p className="tc-prove-challenge">
+                {copy.challengeLabel}<strong>{selectedOrder.proveChallenge}</strong>
+              </p>
+              <input aria-label="fast-prove-response" value={response} onChange={(event) => setResponse(event.target.value)} placeholder={copy.response} />
+              <button
+                type="button"
+                className="tc-submit-small"
+                disabled={submitting || !response.trim()}
+                onClick={() => void run(
+                  () => submitProveRespond(client, selectedOrder.id, response.trim()),
+                  () => ({ kind: "prove", title: copy.proveSuccess, body: copy.proveBody(selectedOrder.points), lesson: copy.proveLesson }),
+                )}
+              >{submitting ? copy.running : copy.send}</button>
+            </>
+          )}
         </div>
       )}
 

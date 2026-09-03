@@ -26,7 +26,7 @@ import {
   type StoredArtifact,
 } from "./ledger-codec.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp, startedMatch } from "./playtest.ts";
+import { buildFheOp, buildLeakOp, buildMpcOp, proveThroughExchange, startedMatch } from "./playtest.ts";
 import type { CryptoBattleOp, CryptoBattleState, PublicArtifact } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -156,10 +156,16 @@ function playMultiMethodMatch(teamCount: number, rounds: number): CryptoBattleSt
           // (and, via the ladder Order, "cipher-pair") land on the ledger,
           // rather than every team converging on the same method.
           const teamIndex = Number(teamId.split("-")[1] ?? 0);
-          op =
-            order.task.kind === "caesar-shift" || teamIndex % 2 === 0 || !order.allowedMethods.includes("prove")
-              ? buildLeakOp(order.id)
-              : buildProveOp(projectForTeam(state, teamId).vault, order.id);
+          if (
+            order.task.kind !== "caesar-shift" &&
+            teamIndex % 2 !== 0 &&
+            order.allowedMethods.includes("prove")
+          ) {
+            // [Issue #701] Two moves, so it cannot ride the single-op path.
+            state = proveThroughExchange(state, teamId, order.id).state;
+            continue;
+          }
+          op = buildLeakOp(order.id);
         } else if (order.task.kind === "homomorphic-sum") {
           op = buildFheOp(order, state.config.prime);
         } else if (order.task.kind === "masked-total") {
