@@ -78,6 +78,11 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof v.threshold !== "number" || !Number.isFinite(v.threshold) || v.threshold <= 0) {
     return false;
   }
+  // [Issue #688] The waiting screen renders "1 / 2 準備完了" from this.
+  const ready = v.ready as Record<string, unknown> | undefined;
+  if (typeof ready !== "object" || ready === null) return false;
+  if (typeof ready.count !== "number" || typeof ready.total !== "number") return false;
+  if (typeof ready.me !== "boolean") return false;
 
   const vault = v.vault;
   if (typeof vault !== "object" || vault === null) return false;

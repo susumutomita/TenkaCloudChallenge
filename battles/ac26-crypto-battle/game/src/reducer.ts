@@ -233,6 +233,7 @@ export function initialState(
     seed,
     // [Issue #677] A deployed match waits to be started -- see `Phase`.
     phase: "waiting",
+    readyTeamIds: [],
     nowMs: undefined,
     startedAtMs: undefined,
     nextContractAtMs: undefined,
@@ -553,7 +554,13 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
       // real cost, HUNT being worth its five minutes, speed converting into
       // attack -- follows from teams differing in how much of the batch they
       // get through. See `contractsPerIssue` in types.ts.
-      for (let inBatch = 0; inBatch < state.config.contractsPerIssue; inBatch += 1) {
+      // [Issue #689] The first batch a team ever gets is ONE Order, and
+      // `deriveContractPlan` pins slot 0 to a plain share reveal. Six at once
+      // with five different methods is not an opening; it is a menu with no
+      // first item.
+      const batchSize =
+        (issuedCountByTeam.get(teamId) ?? 0) === 0 ? 1 : state.config.contractsPerIssue;
+      for (let inBatch = 0; inBatch < batchSize; inBatch += 1) {
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
       const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, fieldConfig);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
@@ -846,7 +853,12 @@ export function validateOp(
   // it is unavailable after. Both directions matter: accepting a LEAK against
   // an empty belt would report a move that could not have happened, and
   // accepting a second START would rewind the clock mid-match.
-  if (op.kind === "start") {
+  // [Issue #688] READY and START are both only legal before the match runs.
+  // READY is the ordinary path — the match begins when every team has said so.
+  // START is the escape for a team that never shows up; it is deliberately a
+  // separate op so that pressing "I am ready" can never start the match for
+  // someone who has not opened the portal.
+  if (op.kind === "ready" || op.kind === "start") {
     return state.startedAtMs === undefined
       ? { ok: true }
       : { ok: false, error: "match already started" };
@@ -1903,6 +1915,22 @@ function applyProve(
  * get ahead of in practice; falling back to zero keeps the reducer total for
  * local play and tests, where the caller drives the clock itself.
  */
+/**
+ * [Issue #688] Marks one team ready, and starts the match once every team is.
+ *
+ * The roster is `state.teams`, which is fixed when the match materialises, so
+ * "everyone" is a question this state can answer on its own. A team that says
+ * ready twice changes nothing, which matters because the portal will re-send on
+ * a retry and a second READY must not be a second vote.
+ */
+function applyReady(state: CryptoBattleState, teamId: string): CryptoBattleState {
+  const ready = new Set(state.readyTeamIds ?? []);
+  ready.add(teamId);
+  const waiting = { ...state, readyTeamIds: [...ready].sort() };
+  const roster = Object.keys(state.teams);
+  return roster.every((id) => ready.has(id)) ? applyStart(waiting) : waiting;
+}
+
 function applyStart(state: CryptoBattleState): CryptoBattleState {
   const startedAtMs = state.nowMs ?? 0;
   return tick({ ...state, startedAtMs, nextContractAtMs: startedAtMs, phase: "build" }, startedAtMs);
@@ -1915,6 +1943,8 @@ export function applyOp(
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "ready":
+      return applyReady(state, teamId);
     case "start":
       return applyStart(state);
     case "leak":
@@ -2035,6 +2065,11 @@ export function projectForTeam(
     phase: state.phase,
     prime: state.config.prime,
     threshold: state.config.threshold,
+    ready: {
+      count: (state.readyTeamIds ?? []).length,
+      total: Object.keys(state.teams).length,
+      me: (state.readyTeamIds ?? []).includes(teamId),
+    },
     matchRemainingMs,
     vault: {
       teamId,

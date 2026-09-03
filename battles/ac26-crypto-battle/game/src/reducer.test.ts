@@ -189,7 +189,10 @@ describe("tick: contract issuance and expiry", () => {
     if (!teamA) throw new Error("expected teamA");
     const slots = DEFAULT_CONFIG.matchDurationMs / DEFAULT_CONFIG.contractIntervalMs;
     expect(teamA.issuedOrderCount).toBeGreaterThan(0);
-    expect(teamA.issuedOrderCount).toBeLessThanOrEqual(slots * DEFAULT_CONFIG.contractsPerIssue);
+    // [Issue #689] +1 for the onboarding Order, which is a batch of one.
+    expect(teamA.issuedOrderCount).toBeLessThanOrEqual(
+      slots * DEFAULT_CONFIG.contractsPerIssue + 1,
+    );
     expect(state.contracts.filter((c) => c.status === "open")).toEqual([]);
     expect(state.phase).toBe("ended");
   });
@@ -255,8 +258,10 @@ describe("leak", () => {
    * learns nothing they can carry to the next Order.
    */
   test("validateOp refuses LEAK on an Order that forbids raw disclosure", () => {
+    // The share Order is the one whose only remaining method is PROVE; FHE and
+    // MPC Orders also forbid raw disclosure but were never LEAK-able anyway.
     const { state, order: constrained } = orderMatching(
-      (c) => c.privacyConstraint === "no-raw-disclosure",
+      (c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share",
     );
 
     expect(constrained.allowedMethods).toEqual(["prove"]);

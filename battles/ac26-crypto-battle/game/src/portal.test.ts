@@ -102,6 +102,8 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
     prime: DEFAULT_CONFIG.prime,
     // [Issue #682] The exposure lane renders "N / threshold" from this.
     threshold: DEFAULT_CONFIG.threshold,
+    // [Issue #688] The waiting screen renders "1 / 2 準備完了" from this.
+    ready: { count: 2, total: 2, me: true },
     // 90-min matchDurationMs - 40-min elapsed = 50 min left, same numeric
     // value the earlier (buggy) absolute-epoch-based fixture used, so this
     // rewrite changes units, not the scenario the tests exercise.

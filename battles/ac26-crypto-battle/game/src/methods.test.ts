@@ -165,7 +165,11 @@ describe("the Order gate runs for every method", () => {
    * recorded now rather than after the contract has to change.
    */
   test("every artifact records the method that produced it", () => {
-    const { state, order } = orderMatching((c) => c.allowedMethods.includes("leak"));
+    // A share reveal specifically: LEAK on a ladder Order publishes a
+    // `cipher-pair`, which is a different artifact with a different shape.
+    const { state, order } = orderMatching(
+      (c) => c.allowedMethods.includes("leak") && c.task.kind === "reveal-share",
+    );
     const afterLeak = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
     for (const artifact of afterLeak.publicLedger) {
       expect(artifact.method).toBe("leak");

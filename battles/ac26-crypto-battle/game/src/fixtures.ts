@@ -182,6 +182,27 @@ export function deriveContractPlan(
     "reveal-share",
     "masked-total",
   ];
+  // [Issue #689] The very first Order is fixed, for every team and every seed.
+  //
+  // START used to hand over six Orders at once, spanning LEAK / PROVE / CIPHER /
+  // FHE / MPC, and a first-time player had no way to pick a first move out of
+  // that. This one has a single correct action — press LEAK — so the loop
+  // "an Order arrives, you choose, you press, the score moves" is learned in one
+  // round trip before the belt turns into a contest.
+  //
+  // Both the rush roll and the privacy roll are skipped rather than reused: a
+  // rush deadline would put the shortest clock on the least experienced move,
+  // and `no-raw-disclosure` would forbid the very button this Order exists to
+  // teach.
+  if (sequenceIndex === 0) {
+    const firstIndexRoll = deriveBigInt(seed, `contract-index:${teamId}`, 0, config.prime);
+    return {
+      kind: "standard",
+      taskKind: "reveal-share",
+      requestedShareIndices: [Number(firstIndexRoll % BigInt(config.shareCount)) + 1],
+      privacyConstraint: "none",
+    };
+  }
   const kindRoll = deriveBigInt(seed, `contract-kind:${teamId}`, sequenceIndex, config.prime);
   const kind: ContractKind = kindRoll % RUSH_MODULUS === 0n ? "rush" : "standard";
   const indexRoll = deriveBigInt(seed, `contract-index:${teamId}`, sequenceIndex, config.prime);
