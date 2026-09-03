@@ -348,6 +348,29 @@ export function decodeLedger(stored: readonly StoredArtifact[]): PublicArtifact[
  * one), so that is the only case handled; anything else throws rather than
  * guess at an intermediate shape nothing ever wrote.
  */
+/**
+ * `method` の無い #650 以前の artifact に `method` を戻す。
+ *
+ * `PublicArtifact.method` は #650 (`3838e52`, 2026-08-30) で入りました。 それ以前に書かれた行の
+ * share / proof はこのフィールドを持ちません。 型の上では必須なので素通りしますが、 portal は
+ * `entry.method === "leak" && entry.kind === "share"` で「晒された share」を判定しており
+ * (`portal/GameBoard.tsx`)、 `undefined` は `protected` 側に落ちます -- **晒したはずの share が
+ * 守られているように見える**。 行の TTL は 7 日なので、 #650 の直後しばらくはこの形の行が実在します。
+ *
+ * 補完は推測ではありません。 `method` を欠きうる kind は `share` (#490) と `proof` (#492) だけで、
+ * `cipher-pair` (#661) / `ciphertext` / `partial` (#651) はいずれも #650 より後に入っています。
+ * そして #650 以前は share の出所が LEAK、 proof の出所が PROVE の 1 経路ずつしかありません。
+ *
+ * ここ (移行) でだけ行い、 `encodeArtifact` は忠実なままにしてあります。 encode は「今ある値を
+ * そのまま書く」のが仕事で、 古い形の解釈は移行の仕事だからです。
+ */
+function normalizePreMethodArtifact(artifact: PublicArtifact): PublicArtifact {
+  if ((artifact as { readonly method?: unknown }).method !== undefined) return artifact;
+  if (artifact.kind === "share") return { ...artifact, method: "leak" };
+  if (artifact.kind === "proof") return { ...artifact, method: "prove" };
+  return artifact;
+}
+
 export function migrateStateV1(state: unknown, fromVersion: number): CryptoBattleState {
   if (fromVersion !== 1) {
     throw new Error(
@@ -363,6 +386,8 @@ export function migrateStateV1(state: unknown, fromVersion: number): CryptoBattl
   }
   return {
     ...v1,
-    publicLedger: encodeLedger(v1.publicLedger as readonly PublicArtifact[]),
+    publicLedger: encodeLedger(
+      (v1.publicLedger as readonly PublicArtifact[]).map(normalizePreMethodArtifact),
+    ),
   } as unknown as CryptoBattleState;
 }

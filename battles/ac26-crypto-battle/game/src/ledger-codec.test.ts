@@ -255,6 +255,66 @@ describe("ledger-codec: id derivation matches real reducer-constructed data (tes
 // content, and decodeLedger recovers it exactly.
 // ---------------------------------------------------------------------------
 
+/**
+ * [Issue #679] Codex review: `method` は #650 で入ったので、 それ以前に書かれた行の share /
+ * proof は持っていない。 portal は `entry.method === "leak" && entry.kind === "share"` で
+ * 「晒された share」を判定するため、 `undefined` だと **晒したはずの share が守られているように
+ * 見える**。 行の TTL は 7 日なので #650 直後しばらくはこの形の行が実在する。
+ */
+describe("ledger-codec: pre-#650 artifacts keep their participant-visible meaning", () => {
+  const legacyShare = {
+    id: "team-0-c0-share3",
+    teamId: "team-0",
+    generation: 1,
+    kind: "share",
+    shareIndex: 3,
+    value: "12345",
+    contractId: "team-0-c0",
+    postedAtMs: 0,
+  } as unknown as PublicArtifact;
+  const legacyProof = {
+    id: "team-0-c1-proof",
+    teamId: "team-0",
+    generation: 1,
+    kind: "proof",
+    contractId: "team-0-c1",
+    commitment: "7",
+    response: "9",
+    postedAtMs: 0,
+  } as unknown as PublicArtifact;
+
+  test("migration restores `leak` on a share written before the field existed", () => {
+    const migrated = migrateStateV1({ publicLedger: [legacyShare] }, 1);
+    const entries = decodeLedger(migrated.publicLedger);
+    expect(entries).toHaveLength(1);
+    const entry = entries[0] as PublicArtifact;
+    expect(entry.method).toBe("leak");
+    expect(entry.kind).toBe("share");
+    expect(entry.id).toBe("team-0-c0-share3");
+    // portal (GameBoard.tsx) の分類がここで反転しないことが要点。
+    expect(entry.method === "leak" && entry.kind === "share").toBe(true);
+  });
+
+  test("migration restores `prove` on a proof written before the field existed", () => {
+    const migrated = migrateStateV1({ publicLedger: [legacyProof] }, 1);
+    const entries = decodeLedger(migrated.publicLedger);
+    expect(entries).toHaveLength(1);
+    const entry = entries[0] as PublicArtifact;
+    expect(entry.method).toBe("prove");
+    expect(entry.id).toBe("team-0-c1-proof");
+  });
+
+  test("an artifact that already declares a method is left exactly as it is", () => {
+    const explicit = { ...(legacyShare as object), method: "cipher" } as unknown as PublicArtifact;
+    const migrated = migrateStateV1({ publicLedger: [explicit] }, 1);
+    expect(decodeLedger(migrated.publicLedger)[0]?.method).toBe("cipher");
+  });
+
+  test("encodeArtifact itself stays faithful -- interpreting old shapes is migration's job", () => {
+    expect(decodeLedger([encodeArtifact(legacyShare)])[0]?.method).toBeUndefined();
+  });
+});
+
 describe("ledger-codec: migrateStateV1 (test 3)", () => {
   /**
    * Builds a real v2 state (via the real reducer, exercising all 5 kinds),
