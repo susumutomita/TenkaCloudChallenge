@@ -141,7 +141,11 @@ describe("buildReplay / keyMoments: against the vertical playtest's actual final
 describe("buildReplay: edge cases the vertical-playtest fixture does not exercise on its own", () => {
   test("an in-progress match with no successful hunt or rotate yet produces only leak/prove/phase-change events, and zero key moments", () => {
     let state = tick(startedMatch({ eventId: "replay-in-progress", teamIds: TEAMS }), 0);
-    const alphaOpen = state.contracts.find((c) => c.teamId === "alpha" && c.status === "open");
+    // A share reveal: the replay event this asserts on is `leak`, and LEAK on a
+    // ladder Order records a cipher pair instead.
+    const alphaOpen = state.contracts.find(
+      (c) => c.teamId === "alpha" && c.status === "open" && c.task.kind === "reveal-share",
+    );
     if (!alphaOpen) throw new Error("test setup: expected an open contract");
     state = applyOp(state, "alpha", { kind: "leak", contractId: alphaOpen.id });
 

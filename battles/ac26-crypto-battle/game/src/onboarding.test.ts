@@ -33,6 +33,8 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
     // compute an FHE or MPC answer, and it is public by construction.
     prime: DEFAULT_CONFIG.prime,
     threshold: DEFAULT_CONFIG.threshold,
+    // [Issue #688] The waiting screen renders "1 / 2 準備完了" from this.
+    ready: { count: 2, total: 2, me: true },
     matchRemainingMs: 30_000,
     vault: {
       teamId: "blue",

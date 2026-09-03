@@ -216,7 +216,15 @@ export function startedMatch(
   const state = initialState(ctx, config);
   const starter = ctx.teamIds[0];
   // A roster-less match has nobody to start it, and nothing to play either.
-  return starter === undefined ? state : applyOp(state, starter, { kind: "start" });
+  if (starter === undefined) return state;
+  // [Issue #689] Past the onboarding Order. Slot 0 is deliberately a single
+  // hand-holding share reveal, and these fixtures are about the belt once it is
+  // a contest -- a full batch, several methods, a real choice. Consuming the
+  // slot here keeps that in one place instead of every caller ticking forward.
+  const teams = Object.fromEntries(
+    Object.entries(state.teams).map(([id, team]) => [id, { ...team, issuedOrderCount: 1 }]),
+  );
+  return applyOp({ ...state, teams }, starter, { kind: "start" });
 }
 
 export function runScript(script: PlaytestScript): PlaytestResult {

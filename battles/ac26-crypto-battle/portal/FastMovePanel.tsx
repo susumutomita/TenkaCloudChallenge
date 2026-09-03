@@ -11,12 +11,14 @@ import {
   submitMpc,
   submitProve,
   submitRevealHint,
+  submitReady,
   submitRotate,
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
 import { BOARD_CSS, Ledger, OrderBelt, Vault } from "./GameBoard.tsx";
+import QuickRules from "./QuickRules.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
 import type { CipherRung } from "../game/src/ladder.ts";
 import type {
@@ -122,10 +124,14 @@ export const FAST_MOVE_COPY = {
     ended: "MATCH ENDED",
     endedBody:
       "This match ran its full length and is over. Scores and the Public Ledger are kept as they finished. An organiser can start a fresh match for this event from the admin API; re-deploying the problem does not, on purpose, because it would wipe a match other teams are still playing.",
-    waitingTitle: "READY WHEN YOU ARE",
+    waitingTitle: "WAITING FOR THE ROOM",
     waitingBody:
-      "Nothing is running yet. Orders start arriving the moment you press START, and the clock starts with them — so a match set up ahead of time costs you nothing while it waits.",
+      "Nothing is running yet. The match begins once every team says it is ready — Orders start arriving then, and the clock starts with them. A match set up ahead of time costs you nothing while it waits.",
     waitingNote: (minutes: number) => `Once started, the match runs ${minutes} minutes.`,
+    ready: "I'M READY",
+    readyDone: "READY — waiting for the others",
+    readyCount: (count: number, total: number) => `${count} of ${total} teams ready`,
+    startAnyway: "start without waiting",
     start: "START THE MATCH",
     starting: "STARTING…",
     startSuccess: "MATCH STARTED",
@@ -244,10 +250,14 @@ export const FAST_MOVE_COPY = {
     ended: "MATCH ENDED",
     endedBody:
       "この試合は時間いっぱい進んで終了しました。得点と Public Ledger は終了時のまま残ります。新しい試合を始めるには運営が admin API から reset します。問題を deploy し直しても再開しないのは意図的で、他チームが進行中の試合を消してしまうためです。",
-    waitingTitle: "準備できたら始めてください",
+    waitingTitle: "全員がそろうのを待っています",
     waitingBody:
-      "まだ何も動いていません。START を押した瞬間に ORDER が届きはじめ、時計もそこから動きます。先に用意しておいた試合が、待っているあいだに減点されることはありません。",
+      "まだ何も動いていません。全チームが準備完了になった時点で始まり、そこから ORDER が届き、時計も動きはじめます。先に用意しておいた試合が、待っているあいだに減点されることはありません。",
     waitingNote: (minutes: number) => `始めると ${minutes} 分の試合になります。`,
+    ready: "準備完了",
+    readyDone: "準備完了 — 相手を待っています",
+    readyCount: (count: number, total: number) => `${total} チーム中 ${count} チームが準備完了`,
+    startAnyway: "全員を待たずに始める",
     start: "試合を始める",
     starting: "開始中…",
     startSuccess: "MATCH STARTED",
@@ -743,6 +753,9 @@ ${DIE_CSS}
 .tc-start-button{font-size:15px;font-weight:900;letter-spacing:.06em;padding:12px 22px;border-radius:10px;border:1px solid #0f5c9e;background:#0972d3;color:#fff;cursor:pointer}
 .tc-start-button:disabled{opacity:.6;cursor:default}
 .tc-start-button:not(:disabled):hover{background:#0f5c9e}
+/* [Issue #688] The escape, deliberately quieter than READY. */
+.tc-start-anyway{font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #cfd8e3;background:#fff;color:#5f6b7a;cursor:pointer}
+.tc-start-anyway:hover{border-color:#8c9bab;color:#16212e}
 @media(prefers-reduced-motion:reduce){.tc-feedback{animation:none!important}}
 `;
 
@@ -891,16 +904,41 @@ export default function FastMovePanel(props: PortalSlotProps) {
         <div className="tc-gate">
           <strong className="tc-gate-title">{copy.waitingTitle}</strong>
           <p className="tc-gate-body">{copy.waitingBody}</p>
+          {/*
+            [Issue #688] READY is the button, not START. The first team to press
+            START used to start the match for everyone, including teams that had
+            not opened the portal — their Orders began arriving and lapsing at
+            -15 each while nobody was there. So the ordinary path says only "I am
+            ready", and the match begins when the roster agrees.
+
+            START stays, because a team that never arrives would otherwise hold
+            the room forever. It is the second button and it says what it does.
+          */}
           <button
             type="button"
             className="tc-start-button"
-            disabled={submitting}
+            disabled={submitting || projection.ready.me}
             onClick={() => void run(
-              () => submitStart(client),
-              () => ({ kind: "prove", title: copy.startSuccess, body: copy.startBody }),
+              () => submitReady(client),
+              () => ({ kind: "prove", title: copy.readyDone, body: copy.readyCount(projection.ready.count + 1, projection.ready.total) }),
             )}
-          >{submitting ? copy.starting : copy.start}</button>
-          <p className="tc-gate-note">{copy.waitingNote(Math.round(matchMinutes(projection)))}</p>
+          >{submitting ? copy.starting : projection.ready.me ? copy.readyDone : copy.ready}</button>
+          <p className="tc-gate-note">
+            {copy.readyCount(projection.ready.count, projection.ready.total)}
+            {" · "}
+            {copy.waitingNote(Math.round(matchMinutes(projection)))}
+          </p>
+          {projection.ready.total > 1 ? (
+            <button
+              type="button"
+              className="tc-start-anyway"
+              disabled={submitting}
+              onClick={() => void run(
+                () => submitStart(client),
+                () => ({ kind: "prove", title: copy.startSuccess, body: copy.startBody }),
+              )}
+            >{copy.startAnyway}</button>
+          ) : null}
           {feedback ? <p className="tc-gate-note">{feedback.body}</p> : null}
         </div>
       </section>
@@ -921,6 +959,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
   return (
     <section className="tc-move-shell" aria-label="crypto-battle-fast-moves">
       <style>{CSS}</style>
+      {/*
+        [Issue #690] 「最初にやること」 is the first thing to read, so it is the
+        first thing on the surface. It used to live at the bottom of the help
+        drawer, below the board, the exposure lane, the Ledger and the Vault —
+        a first-time player had to scroll past the whole game to find out how to
+        start playing it.
+      */}
+      <QuickRules locale={props.locale} />
       {/*
         [Issue #659] One surface: score, tickets, the counter you work at, then
         the public record. It used to be two host slots — the board in one, the

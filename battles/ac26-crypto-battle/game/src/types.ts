@@ -604,6 +604,14 @@ export interface CryptoBattleState {
   readonly nowMs: number | undefined;
   /** Wall-clock time the match started (= the first tick's eventNowMs). */
   readonly startedAtMs: number | undefined;
+  /**
+   * [Issue #688] Teams that have said they are ready, while the match waits.
+   *
+   * Absent on a state written before this existed; treated as empty, which puts
+   * such a match back in the same place it already was — waiting for someone to
+   * start it.
+   */
+  readonly readyTeamIds?: readonly string[];
   readonly nextContractAtMs: number | undefined;
   readonly contracts: readonly Contract[];
   readonly publicLedger: readonly PublicArtifact[];
@@ -714,6 +722,16 @@ export type CryptoBattleOp =
    * that cannot type a dice face must not be a scoring disadvantage.
    */
   | { readonly kind: "cipher"; readonly contractId: string; readonly answer: readonly string[] }
+  /**
+   * [Issue #688] This team is ready. The match starts when every team has said
+   * so — not when the first one does.
+   *
+   * `start` alone made the first team to press it start the match for everyone,
+   * including teams that had not opened the portal yet: their Orders began
+   * arriving and lapsing at -15 each while nobody was there. That is #677's
+   * failure again, caused this time by another team rather than by the clock.
+   */
+  | { readonly kind: "ready" }
   /**
    * [Issue #677] Starts the match. Until this arrives the belt issues nothing
    * and the clock does not run, so a deployed-but-unplayed match stays exactly
@@ -947,6 +965,13 @@ export interface CryptoBattleProjection {
    * `reconstruct` call already uses.
    */
   readonly threshold: number;
+  /**
+   * [Issue #688] While the match waits: how many teams have said they are
+   * ready, out of how many. The waiting screen has to name what it is waiting
+   * for — "1 / 2 準備完了" is the difference between a button that seems broken
+   * and one that is obviously waiting for someone else.
+   */
+  readonly ready: { readonly count: number; readonly total: number; readonly me: boolean };
   readonly vault: VaultProjection;
   readonly myContracts: readonly ContractProjection[];
   readonly otherOpenContractCount: number;

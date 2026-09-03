@@ -345,6 +345,15 @@ export function submitRevealHint(
 }
 
 /**
+ * [Issue #688] Builds and submits a READY op — this team is ready, and the
+ * match starts when every team has said so. Exported for direct testing.
+ */
+export function submitReady(client: PortalCoordinationClient): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "ready" };
+  return client.submitOp(op);
+}
+
+/**
  * [Issue #677] Builds and submits a START op. Exported for direct testing --
  * see this file's header.
  */
