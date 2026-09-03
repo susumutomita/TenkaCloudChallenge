@@ -14,7 +14,7 @@
  * cannot either — {@link buildScenario} throws rather than fake it.
  *
  * Ops are built through `../game/src/playtest.ts`'s `buildLeakOp` /
- * `buildProveOp` / `buildHuntOp`, the same builders the committed vertical
+ * `buildProveCommitOp` / `buildProveRespondOp` / `buildHuntOp`, the same builders the committed vertical
  * playtest fixture uses. `buildHuntOp` in particular takes only a
  * `CryptoBattleProjection`, so even the HUNT that seeds the "after a successful
  * hunt" position is built from public information — the harness cannot
@@ -26,16 +26,18 @@
  */
 
 import { mod } from "../game/src/field.ts";
-import { groupPow, RFC3526_GROUP14 } from "../game/src/group.ts";
+// [Issue #701] The group a MATCH proves in -- see reducer.ts. A fixture that
+// built proofs in the 2048-bit group would build proofs the judge rejects.
+import { groupPow, HAND_GROUP as PROVE_GROUP } from "../game/src/group.ts";
 import {
   buildFheOp,
   buildHuntOp,
   buildLeakOp,
   buildMpcOp,
-  buildProveOp,
+  buildProveCommitOp,
+  buildProveRespondOp,
   buildRotateOp,
 } from "../game/src/playtest.ts";
-import { computeChallenge } from "../game/src/schnorr-transcript.ts";
 import { deriveWitness } from "../game/src/schnorr-witness.ts";
 import { initialState, projectForTeam, tick } from "../game/src/reducer.ts";
 import type {
@@ -243,7 +245,7 @@ function serveComputationOrders(driver: Driver, teamId: string): number {
  * is to let an author see the consequence on screen.
  */
 function proveTwiceWithOneNonce(driver: Driver, teamId: string): boolean {
-  const group = RFC3526_GROUP14;
+  const group = PROVE_GROUP;
   const FIXED_NONCE = 424_242n;
   let proved = 0;
   for (let round = 0; round < 12 && proved < 2; round += 1) {
@@ -255,23 +257,24 @@ function proveTwiceWithOneNonce(driver: Driver, teamId: string): boolean {
       const witness = deriveWitness(BigInt(vault.secret), vault.generation, teamId, group);
       const publicY = groupPow(group.generator, witness, group);
       const commitmentR = groupPow(group.generator, FIXED_NONCE, group);
-      const e = computeChallenge(
-        {
-          teamId,
-          contractId: order.id,
-          generation: vault.generation,
-          commitmentR,
-          publicY,
-        },
-        group,
-      );
-      const op: CryptoBattleOp = {
-        kind: "prove",
+      // [Issue #701] The challenge is READ, not computed -- it is bound to the
+      // match seed, which no participant holds. That is exactly why reusing the
+      // nonce still leaks: the two challenges this careless prover collects are
+      // values it did not choose and could not have predicted.
+      const committed: CryptoBattleOp = {
+        kind: "prove-commit",
         contractId: order.id,
-        proof: {
-          commitment: commitmentR.toString(),
-          response: mod(FIXED_NONCE + e * witness, group.order).toString(),
-        },
+        commitment: commitmentR.toString(),
+      };
+      if (!driver.play(teamId, committed)) continue;
+      const challenged = projectForTeam(driver.host.state, teamId).myContracts.find(
+        (c) => c.id === order.id,
+      );
+      if (!challenged?.proveChallenge) continue;
+      const op: CryptoBattleOp = {
+        kind: "prove-respond",
+        contractId: order.id,
+        response: mod(FIXED_NONCE + BigInt(challenged.proveChallenge) * witness, group.order).toString(),
       };
       if (driver.play(teamId, op)) proved += 1;
     }
@@ -284,8 +287,17 @@ function proveTwiceWithOneNonce(driver: Driver, teamId: string): boolean {
 function proveOldestContract(driver: Driver, teamId: string): boolean {
   const [contractId] = openContractIds(driver.host.state, teamId);
   if (!contractId) return false;
-  const vault = projectForTeam(driver.host.state, teamId).vault;
-  return driver.play(teamId, buildProveOp(vault, contractId));
+  // [Issue #701] PROVE is an exchange: commit, read back the challenge the
+  // trusted side answered with, respond. Both moves go through `driver.play`,
+  // so a scenario that reaches a "PROVE happened" position reached it the way a
+  // participant would -- which is the whole contract of this file.
+  const vault = () => projectForTeam(driver.host.state, teamId).vault;
+  if (!driver.play(teamId, buildProveCommitOp(vault(), contractId))) return false;
+  const order = projectForTeam(driver.host.state, teamId).myContracts.find(
+    (c) => c.id === contractId,
+  );
+  if (!order?.proveChallenge) return false;
+  return driver.play(teamId, buildProveRespondOp(vault(), order));
 }
 
 /**
