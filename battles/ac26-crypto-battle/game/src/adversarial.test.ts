@@ -11,6 +11,7 @@ import { deriveFheInputKeys, deriveFhePlaintexts } from "./fhe.ts";
 import { deriveMpcPrivateInputs } from "./mpc.ts";
 import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp, startedMatch } from "./playtest.ts";
 import { completeShares, reconstruct, type Share } from "./shamir.ts";
+import { decodeLedger } from "./ledger-codec.ts";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { CryptoBattleOp, CryptoBattleState, PublicArtifact, ShareArtifact } from "./types.ts";
 
@@ -96,7 +97,7 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
   let guard = 0;
   while (true) {
     const distinctIndices = new Set(
-      state.publicLedger
+      decodeLedger(state.publicLedger)
         .filter((a) => a.teamId === target)
         .filter(isShareArtifact)
         .map((a) => a.shareIndex),
@@ -124,7 +125,7 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
   }
 
   const byIndex = new Map<number, Share>();
-  for (const artifact of state.publicLedger.filter((a) => a.teamId === target).filter(isShareArtifact)) {
+  for (const artifact of decodeLedger(state.publicLedger).filter((a) => a.teamId === target).filter(isShareArtifact)) {
     byIndex.set(artifact.shareIndex, { index: artifact.shareIndex, value: BigInt(artifact.value) });
   }
   const shares = [...byIndex.values()].slice(0, state.config.threshold);
@@ -167,10 +168,11 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
   // 1 share leaked under the NEW generation, at an index not already used above.
   state = leakShareIndex(state, target, 3);
 
-  const oldLeaks = state.publicLedger
+  const ledgerAfterRotate = decodeLedger(state.publicLedger);
+  const oldLeaks = ledgerAfterRotate
     .filter((a) => a.teamId === target && a.generation === 1)
     .filter(isShareArtifact);
-  const newLeaks = state.publicLedger
+  const newLeaks = ledgerAfterRotate
     .filter((a) => a.teamId === target && a.generation === 2)
     .filter(isShareArtifact);
   expect(oldLeaks).toHaveLength(2);
@@ -202,7 +204,7 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
   // Once 3 clean shares of the NEW generation are leaked, the hunt succeeds.
   state = leakShareIndex(state, target, 4);
   state = leakShareIndex(state, target, 5);
-  const cleanNewLeaks = state.publicLedger
+  const cleanNewLeaks = decodeLedger(state.publicLedger)
     .filter((a) => a.teamId === target && a.generation === 2)
     .filter(isShareArtifact)
     .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
@@ -224,7 +226,7 @@ test("adversarial 4: a successful HUNT cannot be replayed for the same (attacker
   for (let i = 1; i <= state.config.threshold; i += 1) {
     state = leakShareIndex(state, target, i);
   }
-  const shares: Share[] = state.publicLedger
+  const shares: Share[] = decodeLedger(state.publicLedger)
     .filter((a) => a.teamId === target)
     .filter(isShareArtifact)
     .slice(0, state.config.threshold)

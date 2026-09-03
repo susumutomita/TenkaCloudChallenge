@@ -128,9 +128,12 @@ describe("dev scenarios are reachable and deterministic", () => {
   });
 
   it("should reach a mixed ledger in 'ledger-filling'", () => {
+    // `state.publicLedger` holds the compact persisted form (`StoredArtifact`,
+    // see ../game/src/ledger-codec.ts): `k` is that form's own field name for
+    // `PublicArtifact.kind`.
     const { publicLedger } = buildScenario("ledger-filling").host.state;
-    expect(publicLedger.some((artifact) => artifact.kind === "share")).toBe(true);
-    expect(publicLedger.some((artifact) => artifact.kind === "proof")).toBe(true);
+    expect(publicLedger.some((artifact) => artifact.k === "share")).toBe(true);
+    expect(publicLedger.some((artifact) => artifact.k === "proof")).toBe(true);
   });
 
   /**
@@ -204,8 +207,8 @@ describe("dev harness does not widen what a team can see", () => {
 
       const publicIndices = new Set(
         scenario.host.state.publicLedger
-          .filter((artifact) => artifact.kind === "share" && artifact.teamId === "alpha")
-          .map((artifact) => (artifact.kind === "share" ? artifact.value : "")),
+          .filter((artifact) => artifact.k === "share" && artifact.tm === "alpha")
+          .map((artifact) => (artifact.k === "share" ? artifact.v : "")),
       );
       for (const share of alpha.shares) {
         if (publicIndices.has(share.value)) continue;
@@ -253,10 +256,10 @@ describe("Issue #645 scenarios reach the position they advertise", () => {
   it("should produce two alpha transcripts sharing one commitment, and a recoverable witness", () => {
     const { host } = buildScenario("nonce-reuse");
     const proofs = host.state.publicLedger.filter(
-      (a) => a.kind === "proof" && a.teamId === "alpha",
+      (a) => a.k === "proof" && a.tm === "alpha",
     );
     expect(proofs).toHaveLength(2);
-    const commitments = new Set(proofs.map((a) => (a.kind === "proof" ? a.commitment : "")));
+    const commitments = new Set(proofs.map((a) => (a.k === "proof" ? a.o : "")));
     expect(commitments.size).toBe(1);
 
     // And the position is genuinely exploitable from bravo's public view.

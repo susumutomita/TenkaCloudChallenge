@@ -142,12 +142,15 @@ function distinctCurrentGenerationShareCount(
 ): number {
   const target = state.teams[targetTeamId];
   if (!target) return 0;
+  // [Issue #679] `state.publicLedger` holds the compact persisted form
+  // (`StoredArtifact`, see ../game/src/ledger-codec.ts) -- `k`/`tm`/`g`/`i`
+  // below are that form's own field names.
   const indices = new Set<number>();
   for (const artifact of state.publicLedger) {
-    if (artifact.kind !== "share") continue;
-    if (artifact.teamId !== targetTeamId) continue;
-    if (artifact.generation !== target.generation) continue;
-    indices.add(artifact.shareIndex);
+    if (artifact.k !== "share") continue;
+    if (artifact.tm !== targetTeamId) continue;
+    if (artifact.g !== target.generation) continue;
+    indices.add(artifact.i);
   }
   return indices.size;
 }
@@ -358,8 +361,8 @@ export function buildScenario(id: ScenarioId): Scenario {
         !playUntil(
           driver,
           (state) =>
-            state.publicLedger.some((a) => a.kind === "share") &&
-            state.publicLedger.some((a) => a.kind === "proof"),
+            state.publicLedger.some((a) => a.k === "share") &&
+            state.publicLedger.some((a) => a.k === "proof"),
           10,
         )
       ) {

@@ -108,9 +108,9 @@ function stateAfterCarelessProofs(): CryptoBattleState {
 describe("nonce reuse is a real, and really exploitable, mistake", () => {
   test("two careless proofs share a commitment, and each one verifies on its own", () => {
     const state = stateAfterCarelessProofs();
-    const proofs = state.publicLedger.filter((a) => a.kind === "proof" && a.teamId === VICTIM);
+    const proofs = state.publicLedger.filter((a) => a.k === "proof" && a.tm === VICTIM);
     expect(proofs).toHaveLength(2);
-    const commitments = new Set(proofs.map((a) => (a.kind === "proof" ? a.commitment : "")));
+    const commitments = new Set(proofs.map((a) => (a.k === "proof" ? a.o : "")));
     expect(commitments.size).toBe(1);
   });
 
@@ -153,9 +153,9 @@ describe("a team that used the shipped prover cannot be hunted this way", () => 
       state = applyOp(state, VICTIM, buildProveOp(vault, order.id));
     }
 
-    const proofs = state.publicLedger.filter((a) => a.kind === "proof" && a.teamId === VICTIM);
+    const proofs = state.publicLedger.filter((a) => a.k === "proof" && a.tm === VICTIM);
     expect(proofs.length).toBeGreaterThanOrEqual(2);
-    const commitments = new Set(proofs.map((a) => (a.kind === "proof" ? a.commitment : "")));
+    const commitments = new Set(proofs.map((a) => (a.k === "proof" ? a.o : "")));
     expect(commitments.size).toBe(proofs.length);
 
     expect(buildNonceReuseHuntOp(projectForTeam(state, ATTACKER), VICTIM)).toBeUndefined();

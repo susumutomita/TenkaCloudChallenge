@@ -8,6 +8,13 @@
  * shapes change, this file (and `crypto-battle.ts`, and `coordination-plugin.test.ts`'s
  * `bun:test` `mock.module` stub) must be updated to match.
  *
+ * [Issue #679] `CoordinationPlugin.stateSchemaVersion` / `.migrateState` below
+ * were copied from that same file as read at TenkaCloud HEAD `90c7132c`
+ * (`chore(problems): publish the exposure lane (#3168)`) -- the shape landed
+ * earlier via #3150 and its follow-up #3163
+ * (`fix(coordination): keep rollback safe...`), and was unchanged as of
+ * `90c7132c`, the commit this file's contents were actually verified against.
+ *
  * TenkaCloudChallenge does NOT and MUST NOT depend on the real
  * `@tenkacloud/coordination-plugin-sdk` package -- this repo owns problem
  * content, not platform packages (see this repo's `AGENTS.md`, "Repository
@@ -49,6 +56,21 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
      * 差分ではなく絶対値なのは、plugin が権威で platform は写すだけだから (= 再送で二重加算しない)。
      */
     teamScores?(state: State): Readonly<Record<string, number>>;
+    /**
+     * [Issue #679 / TenkaCloud#3150] この plugin が読み書きする state の schema 版。
+     * 省略時は 1 とみなす。State の形を変えたら必ず上げる -- 上げ忘れは platform 側では
+     * 検出できない (「宣言された版差」しか見えない)。
+     */
+    readonly stateSchemaVersion?: number;
+    /**
+     * [Issue #679 / TenkaCloud#3150] `fromVersion` の版で書かれた state を、この plugin の
+     * `stateSchemaVersion` へ持ち上げる純関数。`stateSchemaVersion` が 2 以上を宣言する
+     * plugin は必須 -- 持たない plugin は load 時点で拒否される。ctx は渡らない
+     * (matchSecret のような秘密材料が移行の入力に紛れ込まないようにするための意図的な設計)。
+     * throw したら platform はその行に一切触れない (initialState を呼ばない、write しない、
+     * reset しない)。
+     */
+    migrateState?(state: unknown, fromVersion: number): State;
   }
 
   export type DispatchResult<State> =

@@ -85,6 +85,7 @@ import {
 } from "./methods.ts";
 import { mod, P } from "./field.ts";
 import { groupPow, RFC3526_GROUP14 } from "./group.ts";
+import { decodeLedger, encodeArtifact, encodeLedger } from "./ledger-codec.ts";
 import { derivePublicCommitment } from "./schnorr-witness.ts";
 import { parseCanonicalDecimal, verifyProof } from "./schnorr-verifier.ts";
 import type {
@@ -769,12 +770,17 @@ function hasNonceReuse(
   targetTeamId: string,
   generation: number,
 ): boolean {
+  // Reads `state.publicLedger`'s STORED (compact) shape directly rather than
+  // decoding the whole ledger first -- `k`/`tm`/`g`/`o` are all readable off
+  // `StoredArtifact` without expanding back to `PublicArtifact`, and this
+  // scan runs on every PROVE (see ledger-codec.ts's header on why the hot
+  // path avoids a full-array decode it does not need).
   const commitments = new Set<string>();
   for (const artifact of state.publicLedger) {
-    if (artifact.kind !== "proof") continue;
-    if (artifact.teamId !== targetTeamId || artifact.generation !== generation) continue;
-    if (commitments.has(artifact.commitment)) return true;
-    commitments.add(artifact.commitment);
+    if (artifact.k !== "proof") continue;
+    if (artifact.tm !== targetTeamId || artifact.g !== generation) continue;
+    if (commitments.has(artifact.o)) return true;
+    commitments.add(artifact.o);
   }
   return false;
 }
@@ -1326,7 +1332,7 @@ function applyLeak(
   return {
     ...state,
     contracts,
-    publicLedger: [...state.publicLedger, ...artifacts],
+    publicLedger: [...state.publicLedger, ...encodeLedger(artifacts)],
     teams: { ...state.teams, [teamId]: updatedTeam },
   };
 }
@@ -1368,7 +1374,7 @@ function applyLadderLeak(
     contracts: state.contracts.map((c) =>
       c.id === contract.id ? { ...c, status: "completed" as const, resolution: "leak" as const } : c,
     ),
-    publicLedger: [...state.publicLedger, artifact],
+    publicLedger: [...state.publicLedger, encodeArtifact(artifact)],
     teams: {
       ...state.teams,
       [teamId]: {
@@ -1624,7 +1630,7 @@ function completeOrder(
   return {
     ...state,
     contracts,
-    publicLedger: [...state.publicLedger, artifact],
+    publicLedger: [...state.publicLedger, encodeArtifact(artifact)],
     teams: {
       ...state.teams,
       [teamId]: {
@@ -1888,7 +1894,7 @@ function applyProve(
   return {
     ...state,
     contracts,
-    publicLedger: [...state.publicLedger, artifact],
+    publicLedger: [...state.publicLedger, encodeArtifact(artifact)],
     teams: { ...state.teams, [teamId]: updatedTeam },
   };
 }
@@ -2086,7 +2092,15 @@ export function projectForTeam(
     },
     myContracts,
     otherOpenContractCount,
-    publicLedger: state.publicLedger,
+    // [Issue #679] `state.publicLedger` is the compact persisted form
+    // (`StoredArtifact`, ledger-codec.ts); the projection's own contract
+    // (`CryptoBattleProjection.publicLedger: readonly PublicArtifact[]`) is
+    // unchanged, so this is the boundary that expands back to it. This makes
+    // `projectForTeam` a per-call O(ledger length) allocation where the read
+    // side used to be a zero-cost passthrough (5377 entries at 99 teams,
+    // worst case) -- an intentional trade against the ~430 KB this shaves off
+    // every write's HTTP body (state-size.test.ts), not a free lunch.
+    publicLedger: decodeLedger(state.publicLedger),
     teams,
     // Public by construction (see CryptoBattleState.publicCommitments) --
     // passed through unredacted, unlike `teams` above it does not need a
