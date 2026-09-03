@@ -91,26 +91,35 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
    * The share Order is the one place where the hint is about the GAME rather
    * than the arithmetic: both methods are one click, and the whole difficulty
    * is knowing what each one costs you later.
+   *
+   * [Issue #702] Level 1 used to open with the decision -- "hand it over or
+   * answer without doing so" -- which is the second question, not the first. A
+   * live player read all three levels (-14) and came back with 「Share って
+   * そもそもなに？」 and 「このヒントが全く解ける状態じゃない」. A hint that
+   * assumes the noun is not a hint for the person who bought it. Level 1 now
+   * names the thing and names the move; the card carries the same definition
+   * for free (`shareWhat` in FastMovePanel.tsx), so a player who never buys a
+   * hint is not the one left out.
    */
   "reveal-share": [
     {
       id: "reveal-share/1",
       text: {
-        ja: "この Order は金庫の中身そのものを求めている。手を動かす計算はない。決めることは「出すか、出さずに済ませるか」だけ。",
-        en: "This Order asks for what is already in your vault. There is no calculation — the only decision is whether to hand it over or answer without doing so.",
+        ja: "かけら (share) は、あなたの秘密を 5 個に分けたうちの 1 個 — MY VAULT の #1〜#5 がそれ。この Order はそのうち指定された番号を要求している。計算は要らない。LEAK を押せば、その 1 個がそのまま公開記録に載って Order は完了する。",
+        en: "A share is one of the five pieces your secret was split into -- #1 to #5 in MY VAULT. This Order asks for the ones it names. There is no calculation: pressing LEAK publishes that piece as it is and completes the Order.",
       },
     },
     {
       id: "reveal-share/2",
       text: {
-        ja: "LEAK は求められた share をそのまま公開記録に載せる。PROVE は「秘密を持っている」ことだけを示し、share は載せない。得点が違うのは、公開される量が違うから。",
+        ja: "では、なぜ LEAK を押さない選択があるのか。公開したかけらは消えない。同じ世代のかけらが 3 個そろうと、相手はあなたの秘密を復元できる (= HUNT)。PROVE はかけらを渡さずに「秘密を持っている」ことだけを示す方法で、得点が高いのはそのぶん公開量が少ないから。",
         en: "LEAK publishes the requested share to the public record as it is. PROVE shows only that you hold the secret and publishes no share. The two pay differently because they expose different amounts.",
       },
     },
     {
       id: "reveal-share/3",
       text: {
-        ja: "LEAK なら計算はない ― ボタンを押した時点で、求められた share がそのまま公開記録に載って完了する。PROVE を選ぶなら、金庫の秘密から proof を自分で作って提出する。どちらを押すかは「危険度」であなたの列があと何枚で埋まるかを見て決める。埋まってしまったら ROTATE で世代を変えられる。",
+        ja: "判断材料は画面の「危険度」レーンにある。あなたの行の丸が何個埋まっているかが、公開済みのかけらの数。あと 1 個で 3 個に届くなら LEAK は危険で、PROVE を選ぶか、ROTATE で世代を変えてから LEAK する。まだ 0〜1 個なら LEAK が速くて安全な手。",
         en: "LEAK needs no calculation — pressing it publishes the requested share to the public record and completes the Order. PROVE means building a proof from your vault's secret yourself and submitting that. Which one to press is a question for the EXPOSURE lane: how many more shares fill your row. Once it is full, ROTATE moves you to a fresh generation.",
       },
     },

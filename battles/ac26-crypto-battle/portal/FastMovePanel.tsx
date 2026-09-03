@@ -83,6 +83,17 @@ export const FAST_MOVE_COPY = {
     selectOrder: "1. PICK AN ORDER",
     noOrder: "No Order is open right now.",
     choose: "2. CHOOSE ONE",
+    /*
+      [Issue #702] Free, and on the card rather than behind a hint. The live run
+      bought all three hint levels on this Order (-14) and came back with
+      「Share ってそもそもなに？」 -- the ladder explains WHICH BUTTON TO PRESS
+      and never once says what the noun means. Charging points to learn the
+      vocabulary is the wrong trade, and a player who does not have the noun
+      cannot use the strategy the hints are selling.
+    */
+    shareWhat: "A share is one of the 5 pieces your secret was split into — #1 to #5 in MY VAULT.",
+    shareDo: (indices: readonly number[]) =>
+      `This Order asks for ${indices.map((i) => `#${i}`).join(", ")}. LEAK hands it over and completes the Order in one press — no calculation. PROVE answers without handing it over.`,
     leak: "LEAK",
     leakHint: "FAST / PUBLIC",
     prove: "PROVE",
@@ -222,6 +233,12 @@ export const FAST_MOVE_COPY = {
     selectOrder: "1. ORDER を選ぶ",
     noOrder: "現在 open な Order はありません。",
     choose: "2. どちらかを選ぶ",
+    // [Issue #702] 無料、 かつヒントの裏ではなくカード上。 ライブ実戦では 3 段すべて
+    // (-14 点) 買ったうえで 「Share ってそもそもなに？」 と返ってきた。
+    // 用語を知るのに得点を払わせない。
+    shareWhat: "かけら (share) = 秘密を 5 個に分けたうちの 1 個。MY VAULT の #1〜#5 がそれです。",
+    shareDo: (indices: readonly number[]) =>
+      `この Order が要求しているのは ${indices.map((i) => `#${i}`).join("・")} です。LEAK を押すとそれを渡して即完了 — 計算はありません。PROVE は渡さずに答えます。`,
     leak: "LEAK",
     leakHint: "速い / 公開",
     prove: "PROVE",
@@ -238,7 +255,7 @@ export const FAST_MOVE_COPY = {
     response: "response",
     hunt: "LEDGER から HUNT",
     huntHint: "Public Ledger で見つけた相手チーム / 世代を選びます。",
-    noHuntTarget: "まだ相手の share は公開されていません。",
+    noHuntTarget: "まだ相手のかけらは公開されていません。",
     recovered: "復元した secret",
     rotate: "ROTATE",
     rotateHint: "新しい世代へ切り替えます。",
@@ -341,10 +358,10 @@ export const FAST_MOVE_COPY = {
     huntNonceSuccess: "HUNT SUCCESS",
     huntNonceBody: "復元した鍵が受理されました — nonce の使い回しを突きました。",
     tactics: "公開記録からできる次の作戦",
-    tacticsHint: "公開された share・proof、または自分の公開済み share があるときに開きます。",
+    tacticsHint: "公開されたかけら・proof、または自分の公開済みかけらがあるときに開きます。",
     exposure: "危険度",
     exposureHint: (threshold: number) =>
-      `同じ世代の share が ${threshold} 枚そろうと、そのチームの秘密は復元されます。いま全員が何枚まで来ているかです。`,
+      `同じ世代のかけらが ${threshold} 個そろうと、そのチームの秘密は復元されます。いま全員が何個まで来ているかです。`,
     exposureSelf: "あなた",
     exposureSafe: "まだ安全",
     exposureWarn: "危険 — ROTATE で消せます",
@@ -712,6 +729,9 @@ ${DIE_CSS}
 .tc-order-rule{font-size:10px;letter-spacing:.02em}
 .tc-order-rule-strict{color:#7c4a03;font-weight:600}
 .tc-action:disabled{opacity:.45;cursor:not-allowed}
+.tc-share-primer{margin:0 0 8px;padding:9px 11px;border:1px solid #cfe3f5;border-left:3px solid #4a90d9;border-radius:8px;background:#f4f9fe;font-size:12px;line-height:1.6}
+.tc-share-primer strong{display:block;margin-bottom:3px}
+.tc-share-primer span{display:block;color:#3f4b57}
 .tc-primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .tc-action{border:0;border-radius:12px;padding:16px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:900;font-size:18px}
 .tc-action small{font-size:10px;font-weight:800;letter-spacing:.06em}
@@ -1123,6 +1143,18 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {primaryActionsVisible && (
       <div>
         <div className="tc-card-title">{copy.choose}</div>
+        {/*
+          [Issue #702] The noun, then the move, before the two buttons. Placed
+          here and not in `QuickRules` because this is where the player is
+          looking when they have to decide, and it is the only Order whose whole
+          difficulty is knowing what it is asking for.
+        */}
+        {selectedOrder?.task.kind === "reveal-share" && (
+          <p className="tc-share-primer">
+            <strong>{copy.shareWhat}</strong>
+            <span>{copy.shareDo(selectedOrder.task.shareIndices)}</span>
+          </p>
+        )}
         <div className="tc-primary-actions">
           {/*
             [Issue #645] LEAK is disabled, not hidden, on an Order that forbids
