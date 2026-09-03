@@ -167,14 +167,17 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
 
     expect(state.teams.teamA?.score).toBe(order.leakPoints);
+    // `state.publicLedger` holds the compact persisted form (`StoredArtifact`,
+    // see ledger-codec.ts) -- `k`/`tm`/`r`/`p`/`x` below are that form's own
+    // field names, not `PublicArtifact`'s.
     const posted = state.publicLedger.at(-1);
-    if (posted?.kind !== "cipher-pair") throw new Error("expected a cipher pair on the ledger");
-    expect(posted.teamId).toBe("teamA");
-    expect(posted.rung).toBe(RUNG);
+    if (posted?.k !== "cipher-pair") throw new Error("expected a cipher pair on the ledger");
+    expect(posted.tm).toBe("teamA");
+    expect(posted.r).toBe(RUNG);
     if (order.task.kind !== "caesar-shift") throw new Error("expected a ladder Order");
-    expect(posted.plaintext).toEqual(order.task.plaintext);
+    expect(posted.p).toEqual(order.task.plaintext);
     // Rendered through the rung's alphabet, which is where presentation lives.
-    expect(toSymbols(posted.ciphertext, posted.rung)).toEqual(answerByHand(state, "teamA", order));
+    expect(toSymbols(posted.x, posted.r)).toEqual(answerByHand(state, "teamA", order));
   });
 
   test("one published pair really does hand over the key -- one subtraction, from the ledger alone", () => {
@@ -184,16 +187,16 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
 
-    const pair = state.publicLedger.find((a) => a.kind === "cipher-pair");
-    if (pair?.kind !== "cipher-pair") throw new Error("expected a cipher pair");
-    const modulus = rungSpec(pair.rung).symbols.length;
+    const pair = state.publicLedger.find((a) => a.k === "cipher-pair");
+    if (pair?.k !== "cipher-pair") throw new Error("expected a cipher pair");
+    const modulus = rungSpec(pair.r).symbols.length;
     // (c - p) mod n, from the first column. That is the entire attack.
-    const recovered = ((pair.ciphertext[0] ?? 0) - (pair.plaintext[0] ?? 0) + modulus) % modulus;
+    const recovered = ((pair.x[0] ?? 0) - (pair.p[0] ?? 0) + modulus) % modulus;
 
-    const op = { kind: "hunt-cipher" as const, targetTeamId: "teamA", generation: 1, rung: pair.rung, recoveredKey: recovered };
+    const op = { kind: "hunt-cipher" as const, targetTeamId: "teamA", generation: 1, rung: pair.r, recoveredKey: recovered };
     expect(validateOp(state, "teamB", op)).toEqual({ ok: true });
     // And it is genuinely the key the judge derived, not a coincidence.
-    expect(recovered).toBe(deriveCipherKey(state.seed, "teamA", 1, pair.rung));
+    expect(recovered).toBe(deriveCipherKey(state.seed, "teamA", 1, pair.r));
   });
 });
 

@@ -28,6 +28,35 @@ import { join } from "node:path";
  *
  * The Turso/libSQL backend has no comparable per-row cap, so this ceiling is
  * specifically the DynamoDB one.
+ *
+ * [Issue #679] `publicLedger`'s PERSISTED form changed (`ledger-codec.ts`) --
+ * shorter keys, same content, same `PublicArtifact` shape everywhere else.
+ * Both columns below were measured with `playWorstCase(99)` on the SAME base
+ * (post-#688-#692 `startedMatch`), the `before` column by running this file's
+ * own worst case against `origin/main` -- not carried over from an earlier
+ * measurement and not read off the declared budget.
+ *
+ *   |               | before      | after       | change |
+ *   |---------------|-------------|-------------|--------|
+ *   | whole row     | 1,682,142 B | 1,252,008 B | -25.6% |
+ *   | publicLedger  | 1,108,286 B |   678,152 B | -38.8% |
+ *   | per team      |    16,976 B |    12,636 B | -25.6% |
+ *   | ledger / row  |       65.9% |       54.2% |        |
+ *
+ * `contracts` is unchanged at 395,826 B -- this module never touches
+ * `Contract`, only `publicLedger`'s persisted shape -- so it is now the larger
+ * single field's nearest rival and, at 386.5 KB, is itself above DynamoDB's
+ * 384 KB usable ceiling. `ddbMaxTeams` moved from 17 to 24 as a direct result
+ * of the ledger shrinking.
+ *
+ * The design doc estimated 450-550 KB for the ledger. The measured 662.3 KB is
+ * ABOVE that -- the estimate was wrong, not the implementation: it forgot that
+ * `teamId` and `kind` stay (the first because retention deletes the Contract a
+ * ledger entry points at, so its owner cannot be re-derived -- 4,782 of 5,381
+ * entries at 99 teams). Adding both back to the estimate lands at ~600 KB.
+ * The remaining bytes are the VALUES (bigint-as-decimal-string share/proof/pair
+ * fields), which a key rename cannot touch and which the design doc's
+ * §"やらないこと" deliberately rules out shrinking.
  */
 
 /**
@@ -155,8 +184,11 @@ describe("a full match's persisted state fits the backend that has to hold it", 
    *
    * The public ledger is permanent by design — #659 §10 makes the fact that it
    * does not disappear the source of LEAK's weight — and it grows with every
-   * team that plays. At 99 teams it alone is about two thirds of the row. No
-   * encoding removes that: pruning it would delete the thing the game is about.
+   * team that plays. At 99 teams it is 54.0% of the row (`ledger-codec.ts`,
+   * Issue #679, shrank it from 65.7% by shortening its persisted keys -- see
+   * this file's header). No encoding removes its CONTENT: pruning it would
+   * delete the thing the game is about, and `contracts` alone (389.7 KB) is
+   * already past this test's budget on its own -- see below.
    *
    * So the honest statement is a team ceiling per backend, measured. Turso has
    * no comparable per-row cap and takes the platform's full 99; DynamoDB's
@@ -178,7 +210,13 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     let ddbMaxTeams = Math.floor(budget / (playWorstCase(8) / 8));
     while (ddbMaxTeams > 1 && playWorstCase(ddbMaxTeams) >= budget) ddbMaxTeams -= 1;
 
-    expect(ddbMaxTeams).toBeGreaterThanOrEqual(16);
+    // [Issue #679] Measured at 24 after `ledger-codec.ts` shrank the ledger's
+    // persisted keys (was 17 before that change) -- the floor below is kept a
+    // few teams under the measured value, not raised to it exactly, so an
+    // unrelated few-byte-per-team change to some OTHER field doesn't flake
+    // this test; the exact edge is still pinned precisely by the two
+    // `playWorstCase(ddbMaxTeams [+ 1])` assertions right below.
+    expect(ddbMaxTeams).toBeGreaterThanOrEqual(20);
     expect(ddbMaxTeams).toBeLessThan(PLATFORM_MAX_TEAMS);
     // A match at that size really does fit, with the headroom claimed --
     // and one team more does not, so this is the edge and not an understatement

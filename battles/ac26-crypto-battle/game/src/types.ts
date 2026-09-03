@@ -39,6 +39,7 @@
  */
 
 import type { CipherRung } from "./ladder.ts";
+import type { StoredArtifact } from "./ledger-codec.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
 
 // Re-exported so every consumer that already imports this module's shapes gets
@@ -614,7 +615,19 @@ export interface CryptoBattleState {
   readonly readyTeamIds?: readonly string[];
   readonly nextContractAtMs: number | undefined;
   readonly contracts: readonly Contract[];
-  readonly publicLedger: readonly PublicArtifact[];
+  /**
+   * [Issue #679] The PERSISTED form of the Public Ledger -- `StoredArtifact`
+   * (`ledger-codec.ts`), not `PublicArtifact`. This is a deliberate exception
+   * to this file's usual rule that `CryptoBattleState` holds the game's own
+   * shapes directly: the ledger is 65.7% of a full match's persisted row
+   * (`state-size.test.ts`), and about half of that used to be repeated key
+   * names. `reducer.ts` encodes an artifact right before appending it here
+   * and decodes at the two boundaries that need the full shape
+   * (`projectForTeam`, `replay.ts`) -- see `ledger-codec.ts`'s header for the
+   * whole design and why nothing about `PublicArtifact` itself, or
+   * `CryptoBattleProjection.publicLedger` below, changed.
+   */
+  readonly publicLedger: readonly StoredArtifact[];
   readonly teams: Readonly<Record<string, TeamState>>;
   /**
    * Every team's current-generation Schnorr public commitment

@@ -51,6 +51,7 @@
  * code -- including the `mock.module` call -- has a chance to run).
  */
 import { describe, expect, it, mock } from "bun:test";
+import { decodeLedger, migrateStateV1 } from "./ledger-codec.ts";
 import { LOCAL_PLAY_SEED_PREFIX } from "./reducer.ts";
 import { createProof } from "./schnorr-prover.ts";
 import { reconstruct } from "./shamir.ts";
@@ -145,6 +146,20 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
   });
 
   /**
+   * [Issue #679 / TenkaCloud#3150] The platform rejects a plugin at LOAD time
+   * if it declares `stateSchemaVersion` without `migrateState` -- so both have
+   * to be wired together, and `migrateState` has to be the SAME function
+   * `ledger-codec.ts` exports (not a re-implementation crypto-battle.ts wrote
+   * itself), or this file's own migration tests (below, and
+   * `ledger-codec.test.ts`) would be proving something crypto-battle.ts does
+   * not actually run in production.
+   */
+  it("declares stateSchemaVersion 2 with migrateStateV1 wired as its migrateState [Issue #679]", () => {
+    expect(plugin.stateSchemaVersion).toBe(2);
+    expect(plugin.migrateState).toBe(migrateStateV1);
+  });
+
+  /**
    * [Issue #652] The seed must come from the platform's per-match secret, not
    * from `ctx.eventId`.
    *
@@ -193,7 +208,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     // [Issue #659] LEAK pays the leak rate, not the full rate.
     expect(blueAfterLeak.score).toBe(blueContract.leakPoints);
     expect(state.publicLedger).toHaveLength(1);
-    expect(state.publicLedger[0]?.kind).toBe("share");
+    expect(decodeLedger(state.publicLedger)[0]?.kind).toBe("share");
 
     // A validateOp rejection must flow back through dispatchOp as `{ ok: false }`
     // WITHOUT changing state -- re-leaking the now-completed contract is illegal.
@@ -221,7 +236,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     if (!redAfterProve) throw new Error("test setup: expected a red team");
     expect(redAfterProve.score).toBe(redContract.points);
     expect(state.publicLedger).toHaveLength(2);
-    expect(state.publicLedger[1]?.kind).toBe("proof");
+    expect(decodeLedger(state.publicLedger)[1]?.kind).toBe("proof");
 
     // -- HUNT: blue reconstructs red's secret from `threshold` of red's
     // shares (see this file's header on why this reads state.teams directly

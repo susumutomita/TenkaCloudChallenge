@@ -172,8 +172,8 @@ describe("the Order gate runs for every method", () => {
     );
     const afterLeak = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
     for (const artifact of afterLeak.publicLedger) {
-      expect(artifact.method).toBe("leak");
-      expect(artifact.kind).toBe("share");
+      expect(artifact.m).toBe("leak");
+      expect(artifact.k).toBe("share");
     }
 
     const proveOrder = afterLeak.contracts.find(
@@ -182,8 +182,8 @@ describe("the Order gate runs for every method", () => {
     if (!proveOrder) throw new Error("expected an open order for teamB");
     const vault = projectForTeam(afterLeak, "teamB").vault;
     const afterProve = applyOp(afterLeak, "teamB", buildProveOp(vault, proveOrder.id));
-    const proof = afterProve.publicLedger.find((a) => a.kind === "proof");
-    expect(proof?.method).toBe("prove");
+    const proof = afterProve.publicLedger.find((a) => a.k === "proof");
+    expect(proof?.m).toBe("prove");
   });
 
   /**

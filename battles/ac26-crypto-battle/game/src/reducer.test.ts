@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { decodeLedger } from "./ledger-codec.ts";
 import { reconstruct } from "./shamir.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { startedMatch } from "./playtest.ts";
@@ -304,12 +305,15 @@ describe("leak", () => {
     );
     const posted = next.publicLedger[0];
     if (!posted) throw new Error("expected a posted artifact");
-    if (posted.kind !== "share") throw new Error("expected a share artifact");
-    expect(posted.teamId).toBe("teamA");
-    expect(posted.generation).toBe(1);
-    const teamShare = state.teams.teamA?.shares.find((s) => s.index === posted.shareIndex);
+    // `next.publicLedger` holds the compact persisted form (`StoredArtifact`,
+    // see ledger-codec.ts): `k`/`tm`/`g`/`i`/`v` below are that form's own
+    // field names.
+    if (posted.k !== "share") throw new Error("expected a share artifact");
+    expect(posted.tm).toBe("teamA");
+    expect(posted.g).toBe(1);
+    const teamShare = state.teams.teamA?.shares.find((s) => s.index === posted.i);
     if (!teamShare) throw new Error("expected a matching share on the team");
-    expect(posted.value).toBe(teamShare.value);
+    expect(posted.v).toBe(teamShare.value);
   });
 
   test("the same contract cannot be leaked twice", () => {
@@ -324,7 +328,7 @@ describe("hunt", () => {
   test("recovering the actual secret succeeds and moves both scores", () => {
     let state = tick(startedMatch(CTX), 0);
     state = leakThreshold(state, "teamB");
-    const leaked = state.publicLedger.filter((a) => a.teamId === "teamB").filter(isShareArtifact);
+    const leaked = decodeLedger(state.publicLedger).filter((a) => a.teamId === "teamB").filter(isShareArtifact);
     const shares = leaked.map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
     const recoveredSecret = reconstruct(shares, BigInt(state.config.prime));
     const teamB = state.teams.teamB;
@@ -391,7 +395,7 @@ describe("hunt", () => {
   test("hunt penalty never drops a team's score below 0", () => {
     let state = tick(startedMatch(CTX), 0);
     state = leakThreshold(state, "teamB");
-    const shares = state.publicLedger
+    const shares = decodeLedger(state.publicLedger)
       .filter((a) => a.teamId === "teamB")
       .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
@@ -414,7 +418,7 @@ describe("hunt", () => {
     const ctx = { eventId: "pipe-collision", teamIds: ["a|b", "c", "a", "b|c"] };
     let state = tick(startedMatch(ctx), 0);
     state = leakThreshold(state, "c");
-    const shares = state.publicLedger
+    const shares = decodeLedger(state.publicLedger)
       .filter((a) => a.teamId === "c")
       .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));

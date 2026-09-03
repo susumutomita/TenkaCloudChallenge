@@ -149,14 +149,18 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     narrative.push(`${(atMs / 1000).toFixed(0)}s ${label}`);
   }
 
+  // [Issue #679] `state.publicLedger` is the compact persisted form
+  // (`StoredArtifact`) -- both helpers below read its `k`/`tm`/`g`/`i` fields
+  // directly rather than decoding first (same style as reducer.ts's own HUNT
+  // scan; `ledger-codec.ts`'s header explains why).
   function distinctLeakedShareIndices(teamId: string): number[] {
     const team = state.teams[teamId];
     const currentGeneration = team?.generation ?? 1;
     return [
       ...new Set(
         state.publicLedger
-          .filter((a) => a.kind === "share" && a.teamId === teamId && a.generation === currentGeneration)
-          .map((a) => (a.kind === "share" ? a.shareIndex : -1)),
+          .filter((a) => a.k === "share" && a.tm === teamId && a.g === currentGeneration)
+          .map((a) => (a.k === "share" ? a.i : -1)),
       ),
     ];
   }
@@ -173,8 +177,8 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   function ledgerKindsFor(teamId: string): Set<string> {
     return new Set(
       state.publicLedger
-        .filter((artifact) => artifact.teamId === teamId)
-        .map((artifact) => artifact.kind),
+        .filter((artifact) => artifact.tm === teamId)
+        .map((artifact) => artifact.k),
     );
   }
 

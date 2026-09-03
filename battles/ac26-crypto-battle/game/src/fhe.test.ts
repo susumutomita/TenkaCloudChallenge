@@ -279,9 +279,9 @@ describe("the FHE Order's trust boundary", () => {
     if (!op) throw new Error("expected buildFheOp to construct an op");
     const next = applyOp(state, "teamA", op);
 
-    const entry = next.publicLedger.find((a) => a.kind === "ciphertext");
+    const entry = next.publicLedger.find((a) => a.k === "ciphertext");
     expect(entry).toBeDefined();
-    expect(entry?.method).toBe("fhe");
+    expect(entry?.m).toBe("fhe");
 
     const prime = BigInt(next.config.prime);
     const plaintexts = deriveFhePlaintexts(next.seed, order.id, prime);
@@ -395,8 +395,8 @@ describe("the FHE Order's trust boundary", () => {
     expect(validateOp(state, "teamA", padded)).toEqual({ ok: true });
 
     // And the ledger still records the canonical form, never the padding.
-    const entry = applyOp(state, "teamA", padded).publicLedger.find((a) => a.kind === "ciphertext");
-    expect(entry?.kind === "ciphertext" ? entry.r : "").toBe(op.ciphertext.r);
+    const entry = applyOp(state, "teamA", padded).publicLedger.find((a) => a.k === "ciphertext");
+    expect(entry?.k === "ciphertext" ? entry.r : "").toBe(op.ciphertext.r);
   });
 
   /**

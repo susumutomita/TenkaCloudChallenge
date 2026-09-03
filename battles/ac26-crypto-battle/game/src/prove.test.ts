@@ -42,13 +42,16 @@ describe("prove: happy path", () => {
     expect(next.publicLedger).toHaveLength(1);
     const posted = next.publicLedger[0];
     if (!posted) throw new Error("expected a posted artifact");
-    expect(posted.kind).toBe("proof");
-    if (posted.kind !== "proof") throw new Error("expected a proof artifact");
-    expect(posted.teamId).toBe("teamA");
-    expect(posted.contractId).toBe(contract.id);
-    expect(posted.generation).toBe(1);
-    expect(posted.commitment).toBe(proof.commitment);
-    expect(posted.response).toBe(proof.response);
+    // `next.publicLedger` holds the compact persisted form (`StoredArtifact`,
+    // see ledger-codec.ts): `k`/`tm`/`c`/`g`/`o`/`z` below are that form's own
+    // field names.
+    expect(posted.k).toBe("proof");
+    if (posted.k !== "proof") throw new Error("expected a proof artifact");
+    expect(posted.tm).toBe("teamA");
+    expect(posted.c).toBe(contract.id);
+    expect(posted.g).toBe(1);
+    expect(posted.o).toBe(proof.commitment);
+    expect(posted.z).toBe(proof.response);
   });
 
   test("PROVE never adds a ShareArtifact to the public ledger, unlike LEAK", () => {
@@ -61,7 +64,7 @@ describe("prove: happy path", () => {
     const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
     const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
 
-    expect(next.publicLedger.some((a) => a.kind === "share")).toBe(false);
+    expect(next.publicLedger.some((a) => a.k === "share")).toBe(false);
   });
 });
 
@@ -87,11 +90,11 @@ describe("prove: ProofArtifact normalization [independent review, low #4]", () =
     const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: paddedProof });
     const posted = next.publicLedger[0];
     if (!posted) throw new Error("expected a posted artifact");
-    if (posted.kind !== "proof") throw new Error("expected a proof artifact");
-    expect(posted.commitment).toBe(proof.commitment);
-    expect(posted.response).toBe(proof.response);
-    expect(posted.commitment.startsWith("0")).toBe(false);
-    expect(posted.response.startsWith("0")).toBe(false);
+    if (posted.k !== "proof") throw new Error("expected a proof artifact");
+    expect(posted.o).toBe(proof.commitment);
+    expect(posted.z).toBe(proof.response);
+    expect(posted.o.startsWith("0")).toBe(false);
+    expect(posted.z.startsWith("0")).toBe(false);
   });
 });
 
@@ -205,7 +208,7 @@ describe("prove: cross-resolution double-completion is rejected [independent rev
       expect(leakResult.error).toMatch(/completed/);
     }
     // No share ever gets published as a side effect of the rejected LEAK attempt.
-    expect(provedState.publicLedger.some((a) => a.kind === "share")).toBe(false);
+    expect(provedState.publicLedger.some((a) => a.k === "share")).toBe(false);
   });
 
   test("a Contract already completed via LEAK cannot then be PROVEn", () => {

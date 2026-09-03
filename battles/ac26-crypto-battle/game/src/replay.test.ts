@@ -126,7 +126,7 @@ describe("buildReplay / keyMoments: against the vertical playtest's actual final
       ...(result.finalState.teams[ATTACKER]?.shares ?? []),
     ]
       .map((s) => s.value)
-      .filter((v) => !result.finalState.publicLedger.some((a) => a.kind === "share" && a.value === v));
+      .filter((v) => !result.finalState.publicLedger.some((a) => a.k === "share" && a.v === v));
     expect(unleakedShareValues.length).toBeGreaterThan(0);
 
     const serialized = JSON.stringify({ replay, moments });

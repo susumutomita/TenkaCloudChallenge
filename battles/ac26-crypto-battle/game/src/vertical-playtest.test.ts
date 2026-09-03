@@ -87,22 +87,25 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
   });
 
   test("MUST 2/3/5: alpha's LEAKs actually posted ShareArtifacts to the Public Ledger", () => {
+    // `result.finalState.publicLedger` holds the compact persisted form
+    // (`StoredArtifact`, see ledger-codec.ts): `k`/`tm` below are that form's
+    // own field names.
     const alphaShares = result.finalState.publicLedger.filter(
-      (a) => a.kind === "share" && a.teamId === DEFENDER,
+      (a) => a.k === "share" && a.tm === DEFENDER,
     );
     expect(alphaShares.length).toBeGreaterThanOrEqual(result.finalState.config.threshold);
   });
 
   test("MUST 4: bravo never posted a ShareArtifact -- it only ever used methods that publish nothing reconstructable", () => {
-    const bravoLedgerEntries = result.finalState.publicLedger.filter((a) => a.teamId === ATTACKER);
+    const bravoLedgerEntries = result.finalState.publicLedger.filter((a) => a.tm === ATTACKER);
     expect(bravoLedgerEntries.length).toBeGreaterThan(0);
     // [Issue #645] bravo now answers FHE and MPC Orders too, so its ledger
     // carries ciphertexts and masked partials alongside its proof transcripts.
     // The MUST that matters is unchanged and is asserted directly: not one of
     // those entries is a share. A whitelist of "proof only" would have started
     // failing for a reason that has nothing to do with the property.
-    expect(bravoLedgerEntries.some((a) => a.kind === "share")).toBe(false);
-    expect(new Set(bravoLedgerEntries.map((a) => a.kind))).toEqual(
+    expect(bravoLedgerEntries.some((a) => a.k === "share")).toBe(false);
+    expect(new Set(bravoLedgerEntries.map((a) => a.k))).toEqual(
       new Set(["proof", "ciphertext", "partial"]),
     );
   });

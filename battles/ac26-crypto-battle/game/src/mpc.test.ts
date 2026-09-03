@@ -139,10 +139,10 @@ describe("the MPC Order's trust boundary", () => {
     if (!op) throw new Error("expected buildMpcOp to construct an op");
     const next = applyOp(state, "teamA", op);
 
-    const entry = next.publicLedger.find((a) => a.kind === "partial");
+    const entry = next.publicLedger.find((a) => a.k === "partial");
     expect(entry).toBeDefined();
-    expect(entry?.method).toBe("mpc");
-    expect(entry?.kind === "partial" ? entry.partial : "").toBe(
+    expect(entry?.m).toBe("mpc");
+    expect(entry?.k === "partial" ? entry.v : "").toBe(
       expectedMpcPartial(next.seed, order.id, BigInt(next.config.prime)).toString(),
     );
 
@@ -167,21 +167,21 @@ describe("the MPC Order's trust boundary", () => {
     if (!op) throw new Error("expected buildMpcOp to construct an op");
     const next = applyOp(state, "teamA", op);
 
-    const entry = next.publicLedger.find((a) => a.kind === "partial");
-    if (entry?.kind !== "partial") throw new Error("expected a partial artifact");
+    const entry = next.publicLedger.find((a) => a.k === "partial");
+    if (entry?.k !== "partial") throw new Error("expected a partial artifact");
 
-    expect(entry.peerPartials).toHaveLength(MPC_PARTY_COUNT - 1);
+    expect(entry.pp).toHaveLength(MPC_PARTY_COUNT - 1);
 
     const prime = BigInt(next.config.prime);
     // The four published numbers are self-consistent: adding the three
     // partials gives the total, which is what the ledger row invites the
     // participant to check by hand.
-    expect(sumInField([entry.partial, ...entry.peerPartials].map(BigInt), prime).toString()).toBe(
-      entry.total,
+    expect(sumInField([entry.v, ...entry.pp].map(BigInt), prime).toString()).toBe(
+      entry.s,
     );
     // And it is the REAL total -- the sum of the three private inputs, which
     // nobody published.
-    expect(entry.total).toBe(expectedMpcTotal(next.seed, order.id, prime).toString());
+    expect(entry.s).toBe(expectedMpcTotal(next.seed, order.id, prime).toString());
   });
 
   test("the total is published, but no input and no mask is", () => {
@@ -257,11 +257,11 @@ describe("the MPC Order's trust boundary", () => {
     const op = buildMpcOp(order, state.config.prime);
     if (!op) throw new Error("expected buildMpcOp to construct an op");
     const next = applyOp(state, "teamA", op);
-    const entry = next.publicLedger.find((a) => a.kind === "partial");
-    if (entry?.kind !== "partial") throw new Error("expected a partial artifact");
+    const entry = next.publicLedger.find((a) => a.k === "partial");
+    if (entry?.k !== "partial") throw new Error("expected a partial artifact");
 
     const prime = BigInt(next.config.prime);
-    for (const value of [entry.partial, ...entry.peerPartials, entry.total]) {
+    for (const value of [entry.v, ...entry.pp, entry.s]) {
       expect(BigInt(value) < prime).toBe(true);
       expect(BigInt(value) >= 0n).toBe(true);
     }

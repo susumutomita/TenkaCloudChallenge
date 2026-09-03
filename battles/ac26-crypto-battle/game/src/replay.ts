@@ -64,6 +64,7 @@
  */
 
 import { rungSpec } from "./ladder.ts";
+import { decodeLedger } from "./ledger-codec.ts";
 import type { CryptoBattleState, Phase } from "./types.ts";
 
 interface ReplayEventBase {
@@ -142,7 +143,12 @@ export type ReplayEvent =
 export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
   const events: ReplayEvent[] = [];
 
-  for (const artifact of state.publicLedger) {
+  // [Issue #679] `state.publicLedger` is the compact persisted form
+  // (`StoredArtifact`) -- decode once, up front, to the full `PublicArtifact`
+  // shape this function's switch below already expects, rather than
+  // reshaping every branch to read compact keys. `keyMoments` below does the
+  // same at its own, single, `state.publicLedger` read site.
+  for (const artifact of decodeLedger(state.publicLedger)) {
     // [Issue #645] Switched exhaustively on all four artifact kinds. An
     // `else` here would silently relabel a future fifth kind as whatever the
     // last branch happened to be, which is exactly how ciphertexts and
@@ -353,11 +359,12 @@ export function keyMoments(replay: readonly ReplayEvent[], state: CryptoBattleSt
     }
   }
 
+  const decodedLedger = decodeLedger(state.publicLedger);
   for (const event of replay) {
     if (event.kind !== "rotate") continue;
     const priorGeneration = event.detail.generation - 1;
     const invalidated = new Set(
-      state.publicLedger
+      decodedLedger
         .filter((a) => a.kind === "share" && a.teamId === event.teamId && a.generation === priorGeneration)
         .map((a) => (a.kind === "share" ? a.shareIndex : -1)),
     );
