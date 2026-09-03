@@ -193,26 +193,45 @@ describe("dev harness does not widen what a team can see", () => {
    * that reach the browser are still only `projectForTeam`'s, so an author
    * cannot accidentally build UI against data a participant will never have.
    */
+  /**
+   * [Issue #696] Asserted as an IDENTITY, not as a substring sweep.
+   *
+   * This used to serialize the projection and search it for the opponent's
+   * secret and un-leaked share values. That method reads as the stronger one --
+   * it catches a leak through a field nobody thought of -- but it is only sound
+   * while the forbidden values are long enough to be unique. A match now runs in
+   * a field a participant can interpolate by hand (`HAND_PRIME`, 251), and at
+   * three digits the sweep cannot tell a leak from a coincidence: it fires
+   * because bravo's own share happens to equal alpha's secret, which is not a
+   * leak and not a bug.
+   *
+   * What this file is uniquely placed to check is not `projectForTeam` -- that
+   * has its own trust-boundary tests in `game/src`, run in a big field where a
+   * value sweep still discriminates. It is the HOST: whether the harness's read
+   * path hands the browser anything beyond what `projectForTeam` returned. So
+   * that is the assertion, and it is exact rather than probabilistic. Anything
+   * the host added, dropped or rewrote fails here, at any modulus.
+   */
   it.each([...SCENARIO_IDS])(
-    "should keep the opponent's secret and un-leaked shares out of %s's payload",
+    "should hand bravo exactly projectForTeam's bytes and nothing else (%s)",
     (id) => {
       const scenario = buildScenario(id);
       const outcome = readProjection(scenario.host, "bravo", scenario.nowMs);
       if (outcome.kind !== "ok") throw new Error("read path did not return a projection");
-      const serialized = JSON.stringify(outcome.projection);
+      // `SubmitOutcome.projection` is deliberately `unknown` -- the host hands
+      // the browser bytes, not a type. Narrowing it here is this test's own job.
+      const projection = outcome.projection as CryptoBattleProjection;
 
-      const alpha = scenario.host.state.teams.alpha;
-      if (!alpha) throw new Error("scenario has no alpha team");
-      expect(serialized).not.toContain(alpha.secret);
+      // `readProjection` ticks before projecting, so the comparison is taken
+      // against the state it actually projected from.
+      expect(projection).toEqual(projectForTeam(scenario.host.state, "bravo"));
 
-      const publicIndices = new Set(
-        scenario.host.state.publicLedger
-          .filter((artifact) => artifact.k === "share" && artifact.tm === "alpha")
-          .map((artifact) => (artifact.k === "share" ? artifact.v : "")),
-      );
-      for (const share of alpha.shares) {
-        if (publicIndices.has(share.value)) continue;
-        expect(serialized).not.toContain(share.value);
+      // And the shape that identity is worth having: the reader's own vault,
+      // and team summaries that are summaries.
+      expect(projection.vault.teamId).toBe("bravo");
+      for (const summary of Object.values(projection.teams)) {
+        expect(Object.keys(summary)).not.toContain("secret");
+        expect(Object.keys(summary)).not.toContain("shares");
       }
     },
   );
@@ -246,11 +265,21 @@ describe("Issue #645 scenarios reach the position they advertise", () => {
     );
     expect(projected).toBeDefined();
     if (projected?.task.kind !== "masked-total") throw new Error("unreachable");
-    expect(projected.task.myInput.length).toBeGreaterThan(4);
+    // [Issue #696] A field element, not a long number. This asserted
+    // `.length > 4` when the field was 2^61 - 1; a match now runs in
+    // `HAND_PRIME` so an office's number is at most three digits, which is the
+    // point -- a participant adds these by hand.
+    expect(BigInt(projected.task.myInput)).toBeLessThan(BigInt(host.state.config.prime));
 
-    // The other team's view of the same match carries none of it.
-    const otherView = JSON.stringify(projectForTeam(host.state, "bravo"));
-    expect(otherView).not.toContain(projected.task.myInput);
+    // [Issue #696] The other team's view carries none of it -- asserted
+    // structurally rather than by searching a serialized projection for the
+    // value. At three digits that search cannot tell a leak from a coincidence
+    // (bravo's own number may simply equal alpha's). What "visible only to its
+    // owner" MEANS is that the Order is not in the other team's belt at all,
+    // and that holds at any modulus.
+    const other = projectForTeam(host.state, "bravo");
+    expect(other.myContracts.some((c) => c.id === projected.id)).toBe(false);
+    expect(other.myContracts.every((c) => c.id.startsWith("bravo"))).toBe(true);
   });
 
   it("should produce two alpha transcripts sharing one commitment, and a recoverable witness", () => {
