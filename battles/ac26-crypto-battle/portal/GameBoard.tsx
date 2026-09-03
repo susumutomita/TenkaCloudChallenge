@@ -72,7 +72,7 @@ const COPY = {
     score: "スコア",
     scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
     nextUp: "締切が最短",
-    vaultOpen: "share を見る",
+    vaultOpen: "かけらを見る",
     phase: "フェーズ",
   },
 } as const;

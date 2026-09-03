@@ -24,7 +24,7 @@ export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
     title: "最初にやること",
     summary:
       "「試合を始める」を押します。すぐに ORDER が届くので、青い ORDER カードを1枚選び、その下にある大きなボタンを1つ選びます。",
-    choice: "LEAK = すぐ得点する代わりに秘密の破片を公開。PROVE = 計算して破片を守る。",
+    choice: "LEAK = すぐ得点する代わりに秘密のかけらを 1 個公開。PROVE = 計算してかけらを守る。",
   },
 };
 
