@@ -217,6 +217,11 @@ export function initialState(
     const { secret, shares } = deriveTeamGeneration(seed, teamId, 1, fieldConfig);
     teams[teamId] = {
       teamId,
+      // [Issue #3172] Captured at materialisation: the only hook that receives
+      // `ctx` is this one, so a rename after the match starts keeps the old
+      // name. Absent when the platform could not resolve one, and the
+      // projection falls back to the id.
+      ...(ctx.teamNames?.[teamId] ? { teamName: ctx.teamNames[teamId] } : {}),
       score: 0,
       generation: 1,
       secret: secret.toString(),
@@ -2051,6 +2056,7 @@ export function projectForTeam(
   for (const other of Object.values(state.teams)) {
     teams[other.teamId] = {
       teamId: other.teamId,
+      teamName: other.teamName ?? other.teamId,
       score: other.score,
       generation: other.generation,
       huntedGenerationCount: other.huntedGenerations.length,

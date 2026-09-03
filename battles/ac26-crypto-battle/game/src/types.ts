@@ -52,6 +52,11 @@ export interface CoordinationContext {
   readonly eventId: string;
   readonly teamIds: readonly string[];
   /**
+   * [Issue #3172] teamId → 参加者に見せる表示名 (platform が roster から解決)。
+   * 無い teamId は id へ fallback する。
+   */
+  readonly teamNames?: Readonly<Record<string, string>>;
+  /**
    * [Issue #652] The platform's server-only secret for THIS match
    * (TenkaCloud#3133). High-entropy, never projected, never sent to a browser.
    *
@@ -558,6 +563,8 @@ export interface StoredShare {
  */
 export interface TeamState {
   readonly teamId: string;
+  /** [Issue #3172] 表示名 (initialState 時点の roster 由来)。 未解決なら省略。 */
+  readonly teamName?: string;
   readonly score: number;
   /** Increments on every successful ROTATE; shares/secret below are for THIS generation. */
   readonly generation: number;
@@ -931,6 +938,11 @@ export interface ContractProjection {
 
 export interface TeamSummaryProjection {
   readonly teamId: string;
+  /**
+   * [Issue #3172] 表示名。 未解決なら teamId のまま (= 従来と同じ見え方)。
+   * 試合開始後の改名は反映されない — ctx を受け取る hook が `initialState` だけのため。
+   */
+  readonly teamName: string;
   readonly score: number;
   readonly generation: number;
   readonly huntedGenerationCount: number;

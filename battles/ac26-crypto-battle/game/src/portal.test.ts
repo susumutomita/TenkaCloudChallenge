@@ -198,8 +198,8 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
       },
     ],
     teams: {
-      blue: { teamId: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
-      red: { teamId: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
+      blue: { teamId: "blue", teamName: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
+      red: { teamId: "red", teamName: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
     },
     publicCommitments: { blue: "1010101010", red: "2020202020" },
     ...overrides,
@@ -750,8 +750,14 @@ describe("the nonce-HUNT card offers candidates without judging exploitability [
     fixtureProjection({
       publicLedger: ledger,
       teams: {
-        blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
-        red: { teamId: "red", score: 0, generation: redGeneration, huntedGenerationCount: 0 },
+        blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+        red: {
+          teamId: "red",
+          teamName: "red",
+          score: 0,
+          generation: redGeneration,
+          huntedGenerationCount: 0,
+        },
       },
     });
 
@@ -849,6 +855,32 @@ describe("advanced tactics use progressive disclosure", () => {
       postedAtMs: 1,
     });
 
+    /**
+     * [Issue #3172] The lane names its rows. `teamId` is a ULID, so before this
+     * an opponent showed as `01M1J5VK3N6KX5G3MYW190S9Q8` — a danger meter whose
+     * rows were 26 random characters.
+     */
+    it("shows each team's display name, falling back to the id", () => {
+      const named = exposureRows(
+        fixtureProjection({
+          publicLedger: [],
+          teams: {
+            blue: {
+              teamId: "blue",
+              teamName: "かけら隊",
+              score: 0,
+              generation: 1,
+              huntedGenerationCount: 0,
+            },
+            // A platform that could not resolve a name leaves the id, and the
+            // lane shows that rather than an empty cell.
+            red: { teamId: "red", teamName: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
+          },
+        }),
+      );
+      expect(named.map((r) => r.teamName)).toEqual(["かけら隊", "red"]);
+    });
+
     it("lists every team on a board where nothing has been published", () => {
       const rows = exposureRows(fixtureProjection({ publicLedger: [] }));
       expect(rows.map((r) => [r.teamId, r.exposed, r.huntable])).toEqual([
@@ -890,8 +922,8 @@ describe("advanced tactics use progressive disclosure", () => {
         fixtureProjection({
           publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2), shareAt("red", 1, 3)],
           teams: {
-            blue: { teamId: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
-            red: { teamId: "red", score: 20, generation: 2, huntedGenerationCount: 1 },
+            blue: { teamId: "blue", teamName: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
+            red: { teamId: "red", teamName: "red", score: 20, generation: 2, huntedGenerationCount: 1 },
           },
         }),
       );
@@ -903,9 +935,9 @@ describe("advanced tactics use progressive disclosure", () => {
         fixtureProjection({
           publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2)],
           teams: {
-            blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
-            green: { teamId: "green", score: 0, generation: 1, huntedGenerationCount: 0 },
-            red: { teamId: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
+            blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+            green: { teamId: "green", teamName: "green", score: 0, generation: 1, huntedGenerationCount: 0 },
+            red: { teamId: "red", teamName: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
           },
         }),
       );
