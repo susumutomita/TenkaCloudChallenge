@@ -53,7 +53,8 @@
 import { describe, expect, it, mock } from "bun:test";
 import { decodeLedger, migrateStateV1 } from "./ledger-codec.ts";
 import { LOCAL_PLAY_SEED_PREFIX } from "./reducer.ts";
-import { createProof } from "./schnorr-prover.ts";
+import { proveCommitment, proveResponse } from "./schnorr-prover.ts";
+import { HAND_GROUP as PROVE_GROUP } from "./group.ts";
 import { reconstruct } from "./shamir.ts";
 import { startedMatch } from "./playtest.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState, StoredShare } from "./types.ts";
@@ -224,13 +225,39 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     if (!redTeamBeforeProve) throw new Error("test setup: expected a red team");
     const redContract = state.contracts.find((c) => c.teamId === "red" && c.status === "open");
     if (!redContract) throw new Error("test setup: expected an open contract for red after tick(0)");
-    const proof = createProof(
+    // [Issue #701] PROVE is an exchange, and this test's subject is the SDK's
+    // validate->apply composition -- so both moves go through `dispatchOp`,
+    // not through the reducer directly. The challenge is read back off the
+    // dispatched state exactly as a portal would read it off the projection.
+    const commitment = proveCommitment(
       BigInt(redTeamBeforeProve.secret),
       redTeamBeforeProve.generation,
       "red",
       redContract.id,
+      PROVE_GROUP,
     );
-    const proveOp: CryptoBattleOp = { kind: "prove", contractId: redContract.id, proof };
+    state = expectDispatched(
+      dispatchOp(plugin, state, "red", {
+        kind: "prove-commit",
+        contractId: redContract.id,
+        commitment: commitment.toString(),
+      }),
+    );
+    const challenge = state.contracts.find((c) => c.id === redContract.id)?.proveChallenge;
+    if (!challenge) throw new Error("test setup: expected a challenge after the commitment");
+    const response = proveResponse(
+      BigInt(redTeamBeforeProve.secret),
+      redTeamBeforeProve.generation,
+      "red",
+      redContract.id,
+      BigInt(challenge),
+      PROVE_GROUP,
+    );
+    const proveOp: CryptoBattleOp = {
+      kind: "prove-respond",
+      contractId: redContract.id,
+      response: response.toString(),
+    };
     state = expectDispatched(dispatchOp(plugin, state, "red", proveOp));
     const redAfterProve = state.teams.red;
     if (!redAfterProve) throw new Error("test setup: expected a red team");

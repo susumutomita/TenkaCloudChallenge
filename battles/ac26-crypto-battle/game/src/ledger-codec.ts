@@ -42,6 +42,7 @@
  * | `plaintext`     | `p`    | cipher-pair               |
  * | `ciphertext`    | `x`    | cipher-pair               |
  * | `commitment`    | `o`    | proof                     |
+ * | `challenge`     | `e`    | proof (Schnorr's own "e")  |
  * | `response`      | `z`    | proof (Schnorr's own "z = k + e*w") |
  * | `r`             | `r`    | ciphertext (ElGamal-style r, unrelated to cipher-pair's `r`=rung -- safe, the two never share a `k`) |
  * | `y`             | `y`    | ciphertext                |
@@ -123,6 +124,8 @@ export interface StoredCipherPairArtifact extends StoredArtifactBase {
 export interface StoredProofArtifact extends StoredArtifactBase {
   readonly k: "proof";
   readonly o: string;
+  /** [Issue #701] The challenge `e`. Absent on a row written before #701. */
+  readonly e?: string;
   readonly z: string;
 }
 
@@ -226,7 +229,13 @@ export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
       };
       break;
     case "proof":
-      withoutId = { ...base, k: "proof", o: artifact.commitment, z: artifact.response };
+      withoutId = {
+        ...base,
+        k: "proof",
+        o: artifact.commitment,
+        ...(artifact.challenge === undefined ? {} : { e: artifact.challenge }),
+        z: artifact.response,
+      };
       break;
     case "ciphertext":
       withoutId = { ...base, k: "ciphertext", r: artifact.r, y: artifact.y };
@@ -284,6 +293,7 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
         method,
         postedAtMs,
         commitment: stored.o,
+        ...(stored.e === undefined ? {} : { challenge: stored.e }),
         response: stored.z,
       } satisfies ProofArtifact;
     case "ciphertext":

@@ -60,31 +60,47 @@ const laneStyle = { margin: "0 0 6px 0", fontSize: "13px" } as const;
  * `../game/src/types.ts`'s `matchRemainingMs` / `remainingMs` unit
  * mismatch -- see that file's doc comments).
  */
-export const PYTHON_SNIPPET = String.raw`# PROVE -- everything below is public; only 'secret' is yours.
+export const PYTHON_SNIPPET = String.raw`# PROVE -- two moves. Everything here is public except 'secret'.
+#
+# [Issue #701] The numbers are small on purpose: this is a teaching group, and
+# the point is that you can do every line of it on paper. p = 227 has no
+# security -- the real thing is the same arithmetic with a 617-digit p.
+p, q, g = 227, 113, 4          # p = 2q + 1, g generates the order-q subgroup
 import hashlib
-p = 0xffffffffffffffffc90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b139b22514a08798e3404ddef9519b3cd3a431b302b0a6df25f14374fe1356d6d51c245e485b576625e7ec6f44c42e9a637ed6b0bff5cb6f406b7edee386bfb5a899fa5ae9f24117c4b1fe649286651ece45b3dc2007cb8a163bf0598da48361c55d39a69163fa8fd24cf5f83655d23dca3ad961c62f356208552bb9ed529077096966d670c354e4abc9804f1746c08ca18217c32905e462e36ce3be39e772c180e86039b2783a2ec07a28fb5c55df06f4c52c9de2bcbf6955817183995497cea956ae515d2261898fa051015728e5a8aacaa68ffffffffffffffff  # RFC 3526 Group 14, 2048-bit
-q, g = (p - 1) // 2, 4               # prime-order subgroup, generator
-n = (p.bit_length() + 7) // 8
 
-def derive(seed, label, counter, m):                      # the only hash rule used
-    h = hashlib.sha256(f"{seed}|{label}|{counter}".encode()).digest()
-    return int.from_bytes(h, "big") % m
-
-lp = lambda t: len(t.encode()).to_bytes(4, "big") + t.encode()   # length-prefixed utf8
-fw = lambda v: v.to_bytes(n, "big")                              # fixed width, left 0-pad
-
-w = derive(str(secret), f"schnorr-witness:{team}", generation, q)
+# --- Move 1: commit ---------------------------------------------------------
+# w is your witness, derived from your secret. Y = g^w is already published.
+w = int.from_bytes(hashlib.sha256(
+        f"{secret}|schnorr-witness:{team}|{generation}".encode()).digest(),
+        "big") % q
 Y = pow(g, w, p)
-r = derive(str(w), f"schnorr-nonce:{team}:{contract}", generation, q)
-R = pow(g, r, p)
-e = int.from_bytes(hashlib.sha256(
-        lp("ac26-crypto-battle/prove/v1") + lp(team) + lp(contract)
-        + lp(str(generation)) + fw(R) + fw(Y)).digest(), "big") % q
-s = (r + e * w) % q
-# submit {"commitment": str(R), "response": str(s)}
+r = int.from_bytes(hashlib.sha256(
+        f"{w}|schnorr-nonce:{team}:{contract}|{generation}".encode()).digest(),
+        "big") % q
+R = pow(g, r, p)               # <- submit this as the commitment
+#
+# By hand: r < 113, so pow(g, r, p) is at most 7 squarings. Square, take the
+# remainder mod 227, square again. The largest number you ever write down is
+# 226 * 226 = 51076.
 
-# HUNT -- Lagrange interpolation at x = 0 over P = 2**61 - 1
-P = 2**61 - 1
+# --- Move 2: respond --------------------------------------------------------
+# The game answers your commitment with a challenge e. READ IT OFF THE ORDER.
+# You cannot compute it: it is bound to the match seed, which only the judge
+# holds. That is exactly what lets this group be small enough to work in.
+e = ...                        # <- the number the Order now shows
+s = (r + e * w) % q            # <- submit this as the response
+#
+# The judge checks g^s == R * Y^e (mod p). You can check it yourself from the
+# Public Ledger, which publishes R / e / s for every proof.
+
+# --- Never reuse r ----------------------------------------------------------
+# Two proofs under one R carry two different e. Subtract the two equations:
+#     w = (s1 - s2) / (e1 - e2)  mod q
+# ...and your witness is gone. That is what HUNT-by-nonce-reuse does, and the
+# Ledger shows every value it needs.
+
+# HUNT -- Lagrange interpolation at x = 0
+P = 251                        # the match's field, from the Order's "p"
 def reconstruct(shares):             # shares: [(index, value), ...], threshold-many
     total = 0
     for xi, yi in shares:
@@ -178,15 +194,15 @@ const COPY = {
     ],
     prereqTitle: "Before you start",
     prereq: [
-      "PROVE is the same non-interactive Schnorr proof as the ac26-w3-schnorr challenge -- same challenge preimage, same framing. Do that one first and PROVE here is the same six lines.",
+      "PROVE is the Schnorr proof ac26-w3-schnorr builds, run INTERACTIVELY and in a group small enough to work in on paper: you post a commitment, the game answers with a challenge you could not have predicted, and you respond. Do that one first and the arithmetic here is the same, at three digits instead of six hundred.",
       "HUNT is Shamir reconstruction, the same one ac26-w2-secret-sharing builds. Do that one first and HUNT here is one Lagrange evaluation.",
     ],
     computeTitle: "Computing PROVE and HUNT yourself",
     computeIntro:
-      "This portal never computes a proof or a reconstruction for you -- doing it yourself is the real cost of each move. Everything you need is below: the group is a published standard (RFC 3526 Group 14) and the derivation is one hash rule applied four times. Any language works; this is Python for concreteness.",
+      "This portal never computes a proof or a reconstruction for you -- doing it yourself is the real cost of each move. The group is p = 227, chosen so that every exponentiation is at most seven squarings of three-digit numbers: this is a teaching size with no security, and the real thing is the same arithmetic with a 617-digit modulus (group.ts still carries it). Any language works, and so does paper; this is Python for concreteness.",
     computeCode: PYTHON_SNIPPET,
     computeNote:
-      "The 2048-bit modulus is not an obstacle -- pow(g, w, p) is one call at any size. What matters is the exact framing: every variable-length field is length-prefixed so that no two different statements can hash to the same challenge.",
+      "The challenge is the one number you cannot compute: it is bound to the match seed, which only the judge holds, so you read it off your Order after committing. That is what makes a group this small sound -- a prover who could evaluate the challenge would simply try challenges until one suited them.",
     scoringTitle: "Scoring, in short",
     scoring: [
       "Every method pays what the Order states -- LEAK, PROVE, FHE and MPC alike. No technique is worth extra just for being the harder path.",
@@ -292,15 +308,15 @@ const COPY = {
     ],
     prereqTitle: "始める前に",
     prereq: [
-      "PROVE は ac26-w3-schnorr と同じ非対話型 Schnorr 証明です。challenge の preimage も framing も同一なので、あちらを先にやれば PROVE はここでも同じ 6 行です。",
+      "PROVE は ac26-w3-schnorr と同じ Schnorr 証明を、対話型で、紙で回せる大きさの群で行います。コミットを出す → ゲームが予測不能なチャレンジを返す → 答える、の 3 手です。あちらを先にやれば計算は同じで、桁が 617 桁から 3 桁になるだけです。",
       "HUNT は ac26-w2-secret-sharing が組み立てるのと同じ Shamir 復元です。あちらを先にやれば HUNT は Lagrange の 1 回評価です。",
     ],
     computeTitle: "PROVE と HUNT を自分で計算する",
     computeIntro:
-      "このポータルが代わりに proof や復元を計算することはありません — 自分で計算すること自体が各操作の本来のコストだからです。必要なものは下に全部あります。群は公開標準 (RFC 3526 Group 14) で、導出は 1 つのハッシュ規則を 4 回使うだけです。言語は問いません。具体性のため Python で書いています。",
+      "このポータルが代わりに proof や復元を計算することはありません — 自分で計算すること自体が各操作の本来のコストだからです。群は p = 227 です。べき乗は 3 桁の数の 2 乗を最大 7 回するだけになるよう選んであります。これは教材用の大きさで安全性はありません。本物は同じ計算を 617 桁の法で行うもので、group.ts に今も置いてあります。言語は問いませんし、紙でも解けます。具体性のため Python で書いています。",
     computeCode: PYTHON_SNIPPET,
     computeNote:
-      "2048 bit は障害になりません — pow(g, w, p) は桁数に関係なく 1 呼び出しです。効いてくるのは framing の厳密さで、可変長の項はすべて長さ前置されており、異なる主張が同じ challenge にハッシュされないようになっています。",
+      "チャレンジだけは自分で計算できません。試合の seed に紐づいていて、それを持っているのは審判だけだからです。コミットを出したあと、自分の Order に表示された数を読んでください。群をここまで小さくしても成立するのはこの一点のおかげで、チャレンジを自分で計算できる相手なら、都合のよいチャレンジが出るまで試すだけで通せてしまいます。",
     scoringTitle: "スコアリング、要点だけ",
     scoring: [
       "どの方法でも、その依頼に書かれた得点がそのまま入ります — LEAK / PROVE / FHE / MPC のいずれも同じです。難しい方法だからといって多く得点することはありません。",

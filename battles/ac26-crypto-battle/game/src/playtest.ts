@@ -26,13 +26,13 @@
  * that function's own doc comment.
  */
 
-import { applyOp, initialState, tick, validateOp } from "./reducer.ts";
-import { createProof } from "./schnorr-prover.ts";
+import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { proveCommitment, proveResponse } from "./schnorr-prover.ts";
 import { reconstruct, type Share } from "./shamir.ts";
 import { addCiphertexts } from "./fhe.ts";
 import { encryptWithRung, toSymbols } from "./ladder.ts";
 import { inv, mod, P } from "./field.ts";
-import { groupPow, RFC3526_GROUP14 } from "./group.ts";
+import { groupPow, HAND_GROUP as PROVE_GROUP } from "./group.ts";
 import { computeChallenge } from "./schnorr-transcript.ts";
 import { computePartial } from "./mpc.ts";
 import type {
@@ -326,9 +326,76 @@ export function buildRotateOp(): CryptoBattleOp {
  * `CryptoBattleState` or `TeamState` -- there is nothing about another
  * team reachable from this function's input at all.
  */
-export function buildProveOp(vault: VaultProjection, contractId: string): CryptoBattleOp {
-  const proof = createProof(BigInt(vault.secret), vault.generation, vault.teamId, contractId);
-  return { kind: "prove", contractId, proof };
+export function buildProveCommitOp(vault: VaultProjection, contractId: string): CryptoBattleOp {
+  const commitment = proveCommitment(
+    BigInt(vault.secret),
+    vault.generation,
+    vault.teamId,
+    contractId,
+    PROVE_GROUP,
+  );
+  return { kind: "prove-commit", contractId, commitment: commitment.toString() };
+}
+
+/**
+ * [Issue #701] The whole PROVE exchange, applied.
+ *
+ * Commit, read the challenge the trusted side wrote back, respond. Exists
+ * because a test asserting something ABOUT a completed PROVE should not have to
+ * re-spell the protocol each time -- and because spelling it once, here, is
+ * also the executable statement of what the protocol IS.
+ *
+ * Returns the transcript alongside the state so a caller can assert on the
+ * values that ended up on the Public Ledger.
+ */
+export function proveThroughExchange(
+  state: CryptoBattleState,
+  teamId: string,
+  contractId: string,
+  apply: (state: CryptoBattleState, teamId: string, op: CryptoBattleOp) => CryptoBattleState = applyOp,
+): { state: CryptoBattleState; commitment: string; challenge: string; response: string } {
+  const vaultOf = (s: CryptoBattleState) => projectForTeam(s, teamId).vault;
+  const committed = apply(state, teamId, buildProveCommitOp(vaultOf(state), contractId));
+  const order = projectForTeam(committed, teamId).myContracts.find((c) => c.id === contractId);
+  if (!order?.proveCommitment || !order.proveChallenge) {
+    throw new Error(`proveThroughExchange: no challenge on ${contractId} after committing`);
+  }
+  const respond = buildProveRespondOp(vaultOf(committed), order);
+  if (respond.kind !== "prove-respond") throw new Error("unreachable");
+  return {
+    state: apply(committed, teamId, respond),
+    commitment: order.proveCommitment,
+    challenge: order.proveChallenge,
+    response: respond.response,
+  };
+}
+
+/**
+ * [Issue #701] Step two, from the challenge the Order now carries.
+ *
+ * The challenge is read off `ContractProjection.proveChallenge` -- what the
+ * participant reads off their own screen -- and never recomputed here. It
+ * cannot be recomputed on this side: it is bound to the match seed, which is
+ * exactly what makes the small group sound (see schnorr-transcript.ts). A
+ * builder that could derive it would be demonstrating the opposite of the
+ * property this protocol rests on.
+ */
+export function buildProveRespondOp(
+  vault: VaultProjection,
+  contract: ContractProjection,
+): CryptoBattleOp {
+  if (contract.proveChallenge === undefined) {
+    throw new Error(`buildProveRespondOp: Order ${contract.id} has no open challenge`);
+  }
+  const response = proveResponse(
+    BigInt(vault.secret),
+    vault.generation,
+    vault.teamId,
+    contract.id,
+    BigInt(contract.proveChallenge),
+    PROVE_GROUP,
+  );
+  return { kind: "prove-respond", contractId: contract.id, response: response.toString() };
 }
 
 /**
@@ -427,9 +494,15 @@ export function buildClearingOp(
     case "reveal-share":
       // A share Order may forbid raw disclosure, in which case PROVE is the
       // only way to clear it. Ask the Order rather than assuming LEAK.
-      return contract.allowedMethods.includes("leak")
-        ? buildLeakOp(contract.id)
-        : buildProveOp(vault, contract.id);
+      if (contract.allowedMethods.includes("leak")) return buildLeakOp(contract.id);
+      // [Issue #701] PROVE takes two moves now, so "the op that clears this"
+      // depends on where the Order is in the exchange: commit if no challenge
+      // has been answered yet, respond once one has. A caller that clears in a
+      // loop therefore takes two passes over a PROVE-only Order -- which is
+      // what an interactive protocol costs, not a defect in the caller.
+      return contract.proveChallenge === undefined
+        ? buildProveCommitOp(vault, contract.id)
+        : buildProveRespondOp(vault, contract);
     case "caesar-shift":
       return buildCipherOp(contract);
     case "homomorphic-sum":
@@ -482,31 +555,20 @@ export function buildNonceReuseHuntOp(
     byCommitment.set(artifact.commitment, bucket);
   }
 
-  const group = RFC3526_GROUP14;
+  const group = PROVE_GROUP;
   for (const [commitment, artifacts] of byCommitment) {
     const [first, second] = artifacts;
     if (!first || !second) continue;
 
-    const e1 = computeChallenge(
-      {
-        teamId: targetTeamId,
-        contractId: first.contractId,
-        generation: first.generation,
-        commitmentR: BigInt(commitment),
-        publicY: BigInt(publicY),
-      },
-      group,
-    );
-    const e2 = computeChallenge(
-      {
-        teamId: targetTeamId,
-        contractId: second.contractId,
-        generation: second.generation,
-        commitmentR: BigInt(commitment),
-        publicY: BigInt(publicY),
-      },
-      group,
-    );
+    // [Issue #701] Read off the transcripts, never recomputed. The challenge is
+    // bound to the match seed now, which a participant does not hold -- that is
+    // the whole reason the group can be small enough to work in by hand. So the
+    // pair of challenges this attack needs comes from where a participant gets
+    // it: the Public Ledger rows themselves. A row written before #701 has no
+    // challenge, and this attack simply is not available against it.
+    if (first.challenge === undefined || second.challenge === undefined) continue;
+    const e1 = BigInt(first.challenge);
+    const e2 = BigInt(second.challenge);
     const challengeGap = mod(e1 - e2, group.order);
     if (challengeGap === 0n) continue;
     const witness = mod(

@@ -23,7 +23,8 @@ import {
   buildHuntOp,
   buildLeakOp,
   buildMpcOp,
-  buildProveOp,
+  buildProveCommitOp,
+  buildProveRespondOp,
   buildRotateOp,
   startedMatch,
   SUBSTRING_SAFE_FIELD,
@@ -118,7 +119,7 @@ export interface BuiltVerticalScript {
  * "fixture composition", not part of playtest.ts's own contract -- this
  * function is allowed to look at the full trusted-side `state` to decide
  * WHAT to do next (e.g. "which contract is open for alpha right now"), but
- * every op it hands to `buildProveOp` / `buildHuntOp` is still built from
+ * every op it hands to `buildProveCommitOp` / `buildHuntOp` is still built from
  * exactly the projection/vault those helpers accept -- see playtest.ts's
  * doc comments on why that is the load-bearing part, not merely a style
  * choice.
@@ -268,10 +269,25 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
         ? proveable.find((contract) => contract.kind === "standard")
         : undefined) ?? proveable[0];
     if (bravoOpen) {
+      // [Issue #701] PROVE is an exchange now, and the fixture walks both
+      // halves of it: commit, read back the challenge the trusted side wrote
+      // onto the Order, respond. Reading the challenge off the PROJECTION and
+      // not recomputing it is the point -- a participant cannot recompute it,
+      // because it is bound to the match seed.
       const bravoVault = projectForTeam(state, ATTACKER).vault;
       recordOp(
         ATTACKER,
-        buildProveOp(bravoVault, bravoOpen.id),
+        buildProveCommitOp(bravoVault, bravoOpen.id),
+        "ok",
+        `Team ${ATTACKER} commits R for ${bravoOpen.id} (${bravoOpen.kind})`,
+      );
+      const challenged = projectForTeam(state, ATTACKER).myContracts.find((c) => c.id === bravoOpen.id);
+      if (!challenged) {
+        throw new Error(`buildVerticalPlaytestScript: ${bravoOpen.id} vanished after its commitment`);
+      }
+      recordOp(
+        ATTACKER,
+        buildProveRespondOp(bravoVault, challenged),
         "ok",
         `Team ${ATTACKER} PROVE ${bravoOpen.id} (${bravoOpen.kind}) -- no share revealed`,
       );
@@ -445,7 +461,7 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
   );
   recordOp(
     ATTACKER,
-    { kind: "prove", contractId: alphaOpenBeforeRotate.id, proof: { commitment: "2", response: "2" } },
+    { kind: "prove-commit", contractId: alphaOpenBeforeRotate.id, commitment: "2" },
     "rejected",
     `Team ${ATTACKER} PROVE after match end -> rejected`,
   );

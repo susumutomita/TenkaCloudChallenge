@@ -281,7 +281,8 @@ describe("Issue #643 hand-calculable tutorial HUNT", () => {
       expect(html).toContain(tutorialTitle);
       expect(html).toContain("<details");
       expect(html.indexOf(tutorialTitle)).toBeLessThan(html.indexOf(fullReference));
-      expect(html).toContain("p = 0xffffffffffffffff");
+      // [Issue #701] The snippet's group is the hand-sized one now.
+      expect(html).toContain("p, q, g = 227, 113, 4");
     });
   }
 });

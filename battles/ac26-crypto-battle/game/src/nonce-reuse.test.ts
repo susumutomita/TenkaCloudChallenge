@@ -18,8 +18,8 @@
 
 import { describe, expect, test } from "bun:test";
 import { inv, mod } from "./field.ts";
-import { groupPow, RFC3526_GROUP14 } from "./group.ts";
-import { buildNonceReuseHuntOp, buildProveOp, startedMatch } from "./playtest.ts";
+import { groupPow, HAND_GROUP as PROVE_GROUP } from "./group.ts";
+import { buildNonceReuseHuntOp, proveThroughExchange, startedMatch } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { computeChallenge } from "./schnorr-transcript.ts";
 import { deriveWitness } from "./schnorr-witness.ts";
@@ -36,25 +36,37 @@ const ATTACKER = "attacker";
  * footgun, and `schnorr-prover.ts` already documents why its own nonce is bound
  * to the contract id.
  */
-function carelessProof(
-  secret: bigint,
-  generation: number,
+function carelessExchange(
+  state: CryptoBattleState,
   teamId: string,
   contractId: string,
   fixedNonce: bigint,
-): SchnorrProof {
-  const group = RFC3526_GROUP14;
-  const witness = deriveWitness(secret, generation, teamId, group);
-  const publicY = groupPow(group.generator, witness, group);
+): CryptoBattleState {
+  const group = PROVE_GROUP;
+  const vault = projectForTeam(state, teamId).vault;
+  const witness = deriveWitness(BigInt(vault.secret), vault.generation, teamId, group);
   const commitmentR = groupPow(group.generator, fixedNonce, group);
-  const e = computeChallenge(
-    { teamId, contractId, generation, commitmentR, publicY },
-    group,
-  );
-  return {
+
+  const committed = applyOp(state, teamId, {
+    kind: "prove-commit",
+    contractId,
     commitment: commitmentR.toString(),
-    response: mod(fixedNonce + e * witness, group.order).toString(),
-  };
+  });
+  // [Issue #701] The challenge is READ, not computed: it is bound to the match
+  // seed, which no participant holds. That is the whole reason nonce reuse is
+  // still exploitable here -- the two challenges this careless prover collects
+  // are genuinely different values it did not choose.
+  const order = projectForTeam(committed, teamId).myContracts.find((c) => c.id === contractId);
+  if (!order?.proveChallenge) throw new Error(`no challenge on ${contractId}`);
+  const response = mod(fixedNonce + BigInt(order.proveChallenge) * witness, group.order);
+
+  const op = { kind: "prove-respond" as const, contractId, response: response.toString() };
+  // The proofs are individually VALID -- that is the point. Nonce reuse does
+  // not make a proof fail verification; it makes the pair leak the witness.
+  expect(validateOp(committed, teamId, op)).toEqual({ ok: true });
+  const next = applyOp(committed, teamId, op);
+  expect(next.contracts.find((c) => c.id === contractId)?.resolution).toBe("prove");
+  return next;
 }
 
 /** Advance until the victim has `count` open share Orders it may PROVE. */
@@ -86,21 +98,11 @@ function stateAfterCarelessProofs(): CryptoBattleState {
   const { state: withOrders, orders } = shareOrdersFor(state, VICTIM, 2);
   state = withOrders;
 
-  const vault = projectForTeam(state, VICTIM).vault;
-  const FIXED_NONCE = 123_456_789n;
+  // A nonce below the group order, reused for every statement -- the ac26-w3
+  // mistake, made where a participant would make it.
+  const FIXED_NONCE = 57n;
   for (const order of orders) {
-    const proof = carelessProof(
-      BigInt(vault.secret),
-      vault.generation,
-      VICTIM,
-      order.id,
-      FIXED_NONCE,
-    );
-    const op = { kind: "prove" as const, contractId: order.id, proof };
-    // The proofs are individually VALID -- that is the point. Nonce reuse does
-    // not make a proof fail verification; it makes the pair leak the witness.
-    expect(validateOp(state, VICTIM, op)).toEqual({ ok: true });
-    state = applyOp(state, VICTIM, op);
+    state = carelessExchange(state, VICTIM, order.id, FIXED_NONCE);
   }
   return state;
 }
@@ -136,7 +138,7 @@ describe("nonce reuse is a real, and really exploitable, mistake", () => {
     const op = buildNonceReuseHuntOp(projectForTeam(state, ATTACKER), VICTIM);
     if (!op || op.kind !== "hunt-nonce") throw new Error("expected a hunt-nonce op");
 
-    const group = RFC3526_GROUP14;
+    const group = PROVE_GROUP;
     const publicY = state.publicCommitments[VICTIM];
     if (publicY === undefined) throw new Error("expected a public commitment for the victim");
     expect(groupPow(group.generator, BigInt(op.recoveredWitness), group).toString()).toBe(publicY);
@@ -149,8 +151,7 @@ describe("a team that used the shipped prover cannot be hunted this way", () => 
     const { state: withOrders, orders } = shareOrdersFor(state, VICTIM, 2);
     state = withOrders;
     for (const order of orders) {
-      const vault = projectForTeam(state, VICTIM).vault;
-      state = applyOp(state, VICTIM, buildProveOp(vault, order.id));
+      state = proveThroughExchange(state, VICTIM, order.id).state;
     }
 
     const proofs = state.publicLedger.filter((a) => a.k === "proof" && a.tm === VICTIM);
@@ -174,13 +175,13 @@ describe("a team that used the shipped prover cannot be hunted this way", () => 
     const order = orders[0];
     if (!order) throw new Error("expected an order");
     const vault = projectForTeam(state, VICTIM).vault;
-    state = applyOp(state, VICTIM, buildProveOp(vault, order.id));
+    state = proveThroughExchange(state, VICTIM, order.id).state;
 
     const witness = deriveWitness(
       BigInt(vault.secret),
       vault.generation,
       VICTIM,
-      RFC3526_GROUP14,
+      PROVE_GROUP,
     );
     const verdict = validateOp(state, ATTACKER, {
       kind: "hunt-nonce",
@@ -261,8 +262,12 @@ describe("the nonce-reuse HUNT obeys the same rules as every other hunt", () => 
 
 describe("the recovery arithmetic itself", () => {
   test("two responses under one nonce solve for the witness", () => {
-    const group = RFC3526_GROUP14;
-    const witness = 987_654_321n;
+    const group = PROVE_GROUP;
+    // [Issue #701] Scalars live mod `group.order` (113), so the witness this
+    // arithmetic recovers has to be one -- a value above the order comes back
+    // reduced, which would fail here for a reason that has nothing to do with
+    // the recovery.
+    const witness = 89n;
     const nonce = 42n;
     const e1 = 7n;
     const e2 = 19n;

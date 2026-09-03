@@ -80,6 +80,54 @@ export const RFC3526_GROUP14: Group = {
   generator: MODP_2048_GENERATOR,
 };
 
+/**
+ * [Issue #701] The group a MATCH runs PROVE in: p = 227, q = 113, g = 4.
+ *
+ * Kept beside the 2048-bit group on purpose. That one is what a real Schnorr
+ * proof is built in and this file's header explains why every constant in it
+ * had to be verified rather than trusted; this one is what a participant can
+ * hold in their hand. A player who finishes a PROVE here and then scrolls up to
+ * `MODP_2048_P` has learned the actual shape of the thing -- the arithmetic is
+ * identical and only the size differs, which is a lesson the 617-digit constant
+ * alone cannot teach because nobody can do anything with it.
+ *
+ * **This group has no security.** 113 candidates is a second of brute force, so
+ * a participant can recover the witness behind any published Y. That costs them
+ * nothing here: `w` is derived through SHA-256 from a team's secret and reduced
+ * mod 113, so it carries none of the secret back, and an op is authenticated by
+ * the submitting team, so holding someone else's witness does not let anyone
+ * prove as them. What the small group buys is that the exponentiation is SEVEN
+ * squarings of three-digit numbers -- see `HAND_GROUP_MAX_SQUARE`. The
+ * participant-facing copy says outright that this is a teaching size.
+ *
+ * Soundness against a player who guesses instead of computing does NOT come
+ * from the group. It comes from the challenge being unpredictable (derived on
+ * the trusted side from the match seed, which no participant holds -- see
+ * `schnorr-transcript.ts`) plus a penalty for a wrong response: one blind
+ * attempt succeeds with probability 1/113.
+ *
+ * `p = 2q + 1` with both prime, and g = 4 = 2^2 is a quadratic residue, so its
+ * order divides the prime q and (being != 1) is exactly q. That argument is the
+ * same one the 2048-bit group rests on -- and, exactly as this file's header
+ * warns, an argument is not a check: `schnorr.test.ts` computes the order.
+ */
+export const HAND_GROUP_P = 227n;
+export const HAND_GROUP_ORDER = (HAND_GROUP_P - 1n) / 2n;
+export const HAND_GROUP_GENERATOR = 4n;
+
+export const HAND_GROUP: Group = {
+  p: HAND_GROUP_P,
+  order: HAND_GROUP_ORDER,
+  generator: HAND_GROUP_GENERATOR,
+};
+
+/**
+ * The largest number a participant multiplies out while exponentiating in
+ * {@link HAND_GROUP}: `(p - 1)^2`. Five digits, which is the same bar the field
+ * shrink in #696 was measured against.
+ */
+export const HAND_GROUP_MAX_SQUARE = (HAND_GROUP_P - 1n) ** 2n;
+
 /** `base^exp mod group.p` -- delegates to field.ts's modular exponentiation. */
 export function groupPow(base: bigint, exp: bigint, group: Group = RFC3526_GROUP14): bigint {
   return pow(base, exp, group.p);

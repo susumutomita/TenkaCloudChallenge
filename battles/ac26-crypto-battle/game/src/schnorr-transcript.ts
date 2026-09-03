@@ -31,6 +31,26 @@ import { groupByteLength, RFC3526_GROUP14, type Group } from "./group.ts";
 export const PROVE_DOMAIN = "ac26-crypto-battle/prove/v1";
 
 export interface ChallengeInput {
+  /**
+   * [Issue #701] The match seed -- what turns this from Fiat-Shamir into the
+   * verifier's own coin.
+   *
+   * PROVE is interactive now: the participant commits R, and only then is the
+   * challenge revealed. That ordering is worth nothing if the participant can
+   * COMPUTE the challenge from R themselves, because then they can grind: pick
+   * a response s, guess e, set R = g^s * Y^-e, hash it, and keep going until
+   * the hash agrees with the guess. Over a 113-element challenge space that is
+   * a hundred hashes, offline, where no penalty can reach it -- which is
+   * precisely why the group could not simply be made small while the challenge
+   * stayed a hash of public values.
+   *
+   * The seed is held only by the trusted dispatcher (`CryptoBattleState.seed`,
+   * never projected -- see reducer.ts's projection), so the challenge is
+   * unpredictable to the prover and fixed to their commitment once it lands.
+   * That is the verifier's random challenge, in a system with no live verifier
+   * to send one.
+   */
+  readonly matchSeed: string;
   readonly teamId: string;
   readonly contractId: string;
   readonly generation: number;
@@ -70,6 +90,9 @@ export function challengePreimage(input: ChallengeInput, group: Group = RFC3526_
   const byteLen = groupByteLength(group);
   return Buffer.concat([
     lengthPrefixed(PROVE_DOMAIN),
+    // [Issue #701] First, and length-prefixed like every other string here, so
+    // no seed can be confused with the teamId that follows it.
+    lengthPrefixed(input.matchSeed),
     lengthPrefixed(input.teamId),
     lengthPrefixed(input.contractId),
     lengthPrefixed(String(input.generation)),
@@ -79,8 +102,13 @@ export function challengePreimage(input: ChallengeInput, group: Group = RFC3526_
 }
 
 /**
- * The Fiat-Shamir challenge:
- * `e = H(domain, teamId, contractId, generation, R, Y) mod group.order`.
+ * The challenge:
+ * `e = H(domain, matchSeed, teamId, contractId, generation, R, Y) mod group.order`.
+ *
+ * [Issue #701] With `matchSeed` in the preimage this is no longer Fiat-Shamir
+ * in the usual sense -- the prover cannot evaluate it, because they do not hold
+ * the seed. It is the trusted side's unpredictable-but-deterministic challenge,
+ * which is what lets the group be small enough to exponentiate by hand.
  */
 export function computeChallenge(input: ChallengeInput, group: Group = RFC3526_GROUP14): bigint {
   const digest = createHash("sha256").update(challengePreimage(input, group)).digest();

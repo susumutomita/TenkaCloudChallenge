@@ -18,8 +18,24 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
+
+/**
+ * [Issue #701] The match seed the challenge is bound to. A fixed value here for
+ * the same reason `CTX.matchSecret` is fixed elsewhere: the transcript is a
+ * pure function of its inputs and a test that changes one silently is not
+ * testing determinism.
+ */
+const SEED = "schnorr-tests-match-seed";
 import { inv, mod, mul, sub } from "./field.ts";
-import { RFC3526_GROUP14, groupPow } from "./group.ts";
+import {
+  groupPow,
+  HAND_GROUP,
+  HAND_GROUP_GENERATOR,
+  HAND_GROUP_MAX_SQUARE,
+  HAND_GROUP_ORDER,
+  HAND_GROUP_P,
+  RFC3526_GROUP14,
+} from "./group.ts";
 import { deriveWitness, derivePublicCommitment } from "./schnorr-witness.ts";
 import { challengePreimage, computeChallenge, type ChallengeInput } from "./schnorr-transcript.ts";
 import { createProof } from "./schnorr-prover.ts";
@@ -124,17 +140,17 @@ describe("createProof / verifyProof round trip", () => {
       { secret: 333n, generation: 4, teamId: "teamA", contractId: "teamA-c7" },
     ];
     for (const c of cases) {
-      const proof = createProof(c.secret, c.generation, c.teamId, c.contractId, G);
+      const proof = createProof(c.secret, c.generation, c.teamId, c.contractId, SEED, G);
       const y = derivePublicCommitment(c.secret, c.generation, c.teamId, G);
       expect(
-        verifyProof(y, proof, { teamId: c.teamId, contractId: c.contractId, generation: c.generation }, G),
+        verifyProof(y, proof, { matchSeed: SEED, teamId: c.teamId, contractId: c.contractId, generation: c.generation }, G),
       ).toBe(true);
     }
   });
 
   test("createProof is deterministic: same inputs always produce the exact same proof (no Date.now()/Math.random())", () => {
-    const a = createProof(555n, 2, "teamA", "teamA-c3", G);
-    const b = createProof(555n, 2, "teamA", "teamA-c3", G);
+    const a = createProof(555n, 2, "teamA", "teamA-c3", SEED, G);
+    const b = createProof(555n, 2, "teamA", "teamA-c3", SEED, G);
     expect(a).toEqual(b);
   });
 
@@ -146,9 +162,9 @@ describe("createProof / verifyProof round trip", () => {
     // teamB's proof tool, asked (adversarially, or by a bug) to prove
     // teamA's statement using teamB's own secret -- the witness underneath
     // is for teamB, so it must not check out against teamA's Y.
-    const wrongProof = createProof(teamBSecret, generation, "teamA", contractId, G);
+    const wrongProof = createProof(teamBSecret, generation, "teamA", contractId, SEED, G);
     const teamAY = derivePublicCommitment(teamASecret, generation, "teamA", G);
-    expect(verifyProof(teamAY, wrongProof, { teamId: "teamA", contractId, generation }, G)).toBe(false);
+    expect(verifyProof(teamAY, wrongProof, { matchSeed: SEED, teamId: "teamA", contractId, generation }, G)).toBe(false);
   });
 });
 
@@ -158,8 +174,8 @@ describe("invalid proof is rejected, never thrown", () => {
   const teamId = "teamA";
   const contractId = "teamA-c0";
   const y = derivePublicCommitment(secret, generation, teamId, G);
-  const statement = { teamId, contractId, generation };
-  const validProof = createProof(secret, generation, teamId, contractId, G);
+  const statement = { matchSeed: SEED, teamId, contractId, generation };
+  const validProof = createProof(secret, generation, teamId, contractId, SEED, G);
 
   test("response off by one is rejected", () => {
     const tampered = { ...validProof, response: (BigInt(validProof.response) + 1n).toString() };
@@ -212,19 +228,19 @@ describe("identity-element (unit) forgery is rejected [independent review, mediu
     // verifyProof's own arithmetic accept this forgery -- the assertion
     // below is what actually rejects it, not luck in picking z.
     const e = computeChallenge(
-      { teamId, contractId, generation, commitmentR: forgedCommitment, publicY: forgedY },
+      { matchSeed: SEED, teamId, contractId, generation, commitmentR: forgedCommitment, publicY: forgedY },
       G,
     );
     const left = groupPow(G.generator, z, G);
     const right = (forgedCommitment * groupPow(forgedY, e, G)) % G.p;
     expect(left).toBe(right);
 
-    expect(verifyProof(forgedY, forgedProof, { teamId, contractId, generation }, G)).toBe(false);
+    expect(verifyProof(forgedY, forgedProof, { matchSeed: SEED, teamId, contractId, generation }, G)).toBe(false);
   });
 
   test("Y=0 is also rejected (never a valid group element)", () => {
     const forgedProof = { commitment: "2", response: "0" };
-    expect(verifyProof(0n, forgedProof, { teamId: "teamA", contractId: "teamA-c0", generation: 1 }, G)).toBe(
+    expect(verifyProof(0n, forgedProof, { matchSeed: SEED, teamId: "teamA", contractId: "teamA-c0", generation: 1 }, G)).toBe(
       false,
     );
   });
@@ -236,7 +252,7 @@ describe("identity-element (unit) forgery is rejected [independent review, mediu
     const contractId = "teamA-c0";
     const y = derivePublicCommitment(secret, generation, teamId, G);
     const tampered = { commitment: "1", response: "0" };
-    expect(verifyProof(y, tampered, { teamId, contractId, generation }, G)).toBe(false);
+    expect(verifyProof(y, tampered, { matchSeed: SEED, teamId, contractId, generation }, G)).toBe(false);
   });
 });
 
@@ -246,8 +262,8 @@ describe("input format/size validation before BigInt parsing [independent review
   const teamId = "teamA";
   const contractId = "teamA-c0";
   const y = derivePublicCommitment(secret, generation, teamId, G);
-  const statement = { teamId, contractId, generation };
-  const validProof = createProof(secret, generation, teamId, contractId, G);
+  const statement = { matchSeed: SEED, teamId, contractId, generation };
+  const validProof = createProof(secret, generation, teamId, contractId, SEED, G);
 
   test('a "0x10" hex-literal-style string is rejected, never parsed as hex', () => {
     const tampered = { ...validProof, response: "0x10" };
@@ -299,8 +315,8 @@ describe("Fiat-Shamir binding: length-prefixing prevents adjacent-field re-split
     const commitmentR = 999n;
     const publicY = 12345n;
     const generation = 1;
-    const inputA: ChallengeInput = { teamId: "ab", contractId: "cd", generation, commitmentR, publicY };
-    const inputB: ChallengeInput = { teamId: "a", contractId: "bcd", generation, commitmentR, publicY };
+    const inputA: ChallengeInput = { matchSeed: SEED, teamId: "ab", contractId: "cd", generation, commitmentR, publicY };
+    const inputB: ChallengeInput = { matchSeed: SEED, teamId: "a", contractId: "bcd", generation, commitmentR, publicY };
 
     expect(challengePreimage(inputA, G).equals(challengePreimage(inputB, G))).toBe(false);
     expect(computeChallenge(inputA, G)).not.toBe(computeChallenge(inputB, G));
@@ -387,5 +403,49 @@ describe("module separation: schnorr-verifier.ts never imports secret-side mater
     const [stmt] = statements;
     if (!stmt) throw new Error("expected exactly one statement");
     expect(stmt.specifier).toBe("./field.ts");
+  });
+});
+
+/**
+ * [Issue #701] The check this file's own subject warns cannot be skipped.
+ *
+ * `group.ts`'s header says a mistyped constant turns "prime" into "composite"
+ * and no test catches it just by USING the group -- Schnorr verification
+ * degrades into "still computes a number", it does not throw. The 2048-bit
+ * group was verified out of band before it landed. The hand-sized group is
+ * small enough to verify here, so it is verified here.
+ */
+describe("Issue #701: the hand-sized group is a group, and is hand-sized", () => {
+  const isPrime = (n: bigint): boolean => {
+    if (n < 2n) return false;
+    for (let i = 2n; i * i <= n; i += 1n) if (n % i === 0n) return false;
+    return true;
+  };
+
+  test("p is a safe prime: p = 2q + 1 with q prime", () => {
+    expect(isPrime(HAND_GROUP_P)).toBe(true);
+    expect(isPrime(HAND_GROUP_ORDER)).toBe(true);
+    expect(2n * HAND_GROUP_ORDER + 1n).toBe(HAND_GROUP_P);
+  });
+
+  test("g generates the order-q subgroup, exactly", () => {
+    expect(groupPow(HAND_GROUP_GENERATOR, HAND_GROUP_ORDER, HAND_GROUP)).toBe(1n);
+    // Order q is prime, so "not 1 at exponent 1" is the whole remaining
+    // obligation: the only divisors of q are 1 and q.
+    expect(groupPow(HAND_GROUP_GENERATOR, 1n, HAND_GROUP)).not.toBe(1n);
+    // And it really does reach every element of the subgroup.
+    const reached = new Set<bigint>();
+    for (let k = 0n; k < HAND_GROUP_ORDER; k += 1n) {
+      reached.add(groupPow(HAND_GROUP_GENERATOR, k, HAND_GROUP));
+    }
+    expect(reached.size).toBe(Number(HAND_GROUP_ORDER));
+  });
+
+  test("exponentiating in it stays inside what a person can multiply out", () => {
+    // Seven squarings (113 < 2^7) of numbers below 227, so the largest product
+    // anyone writes down is five digits -- the same bar #696 measured the field
+    // shrink against.
+    expect(HAND_GROUP_ORDER.toString(2).length).toBeLessThanOrEqual(7);
+    expect(HAND_GROUP_MAX_SQUARE.toString().length).toBeLessThanOrEqual(5);
   });
 });

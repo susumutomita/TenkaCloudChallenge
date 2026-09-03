@@ -12,24 +12,25 @@
  * So this file imports NO transcript, prover or hunt helper. It:
  *
  *  1. renders the participant's own Status panel to HTML;
- *  2. scrapes the five challenge inputs out of that HTML, and nothing else;
- *  3. recomputes both challenges from the rule the Help Drawer publishes,
- *     re-implemented here from that published text rather than imported;
- *  4. solves `w = (z1 - z2) / (e1 - e2)` exactly as the statement says;
- *  5. submits it and expects the judge to accept.
+ *  2. scrapes the transcripts out of that HTML, and nothing else;
+ *  3. solves `w = (s1 - s2) / (e1 - e2)` exactly as the statement says;
+ *  4. submits it and expects the judge to accept.
  *
- * If any of those values stops being rendered, or the shipped hash rule drifts
- * from the documented one, this fails — which the internals-based test cannot
- * notice.
+ * [Issue #701] Step 3 used to be "recompute both challenges from the rule the
+ * Help Drawer publishes". It cannot be, any more, and that is the point of the
+ * rebuild: the challenge is bound to the match seed, so a participant CANNOT
+ * derive it -- they read it, off the transcript on the Public Ledger. Which
+ * makes this test's own premise stricter rather than looser: if the challenge
+ * ever stops being rendered, this attack stops being available to a human at
+ * all, and this file is what notices.
  */
 
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { inv, mod } from "./field.ts";
-import { groupPow, RFC3526_GROUP14 } from "./group.ts";
+import { groupPow, HAND_GROUP as PROVE_GROUP } from "./group.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { deriveWitness } from "./schnorr-witness.ts";
 import { startedMatch } from "./playtest.ts";
@@ -40,85 +41,30 @@ const VICTIM = "victim";
 const ATTACKER = "attacker";
 const FIXED_NONCE = 123_456_789n;
 
-/* ------------------------------------------------------------------ *
- * The documented rule, re-implemented from the Help Drawer's Python.
- *
- *   lp = lambda t: len(t.encode()).to_bytes(4, "big") + t.encode()
- *   fw = lambda v: v.to_bytes(n, "big")
- *   e  = int.from_bytes(sha256(lp("ac26-crypto-battle/prove/v1") + lp(team)
- *          + lp(contract) + lp(str(generation)) + fw(R) + fw(Y)).digest(),
- *          "big") % q
- *
- * Deliberately NOT imported from schnorr-transcript.ts: importing it would
- * make this test agree with the implementation by construction, and what needs
- * checking is that the implementation agrees with the DOCUMENTATION.
- * ------------------------------------------------------------------ */
-
-function lengthPrefixed(text: string): Buffer {
-  const bytes = Buffer.from(text, "utf8");
-  const prefix = Buffer.alloc(4);
-  prefix.writeUInt32BE(bytes.length, 0);
-  return Buffer.concat([prefix, bytes]);
-}
-
-function fixedWidth(value: bigint, byteLength: number): Buffer {
-  let hex = value.toString(16);
-  if (hex.length % 2 !== 0) hex = `0${hex}`;
-  const raw = Buffer.from(hex, "hex");
-  return Buffer.concat([Buffer.alloc(byteLength - raw.length), raw]);
-}
-
-function challengeFromPublishedRule(row: {
-  teamId: string;
-  contractId: string;
-  generation: string;
-  commitment: bigint;
-  publicY: bigint;
-}): bigint {
-  const group = RFC3526_GROUP14;
-  const byteLength = (group.p.toString(2).length + 7) >> 3;
-  const digest = createHash("sha256")
-    .update(
-      Buffer.concat([
-        lengthPrefixed("ac26-crypto-battle/prove/v1"),
-        lengthPrefixed(row.teamId),
-        lengthPrefixed(row.contractId),
-        lengthPrefixed(row.generation),
-        fixedWidth(row.commitment, byteLength),
-        fixedWidth(row.publicY, byteLength),
-      ]),
-    )
-    .digest();
-  let value = 0n;
-  for (const byte of digest) value = (value << 8n) | BigInt(byte);
-  return mod(value, group.order);
-}
-
-/* ------------------------------------------------------------------ *
- * A victim who reused one nonce. This is the mistake, not shipped code.
- * ------------------------------------------------------------------ */
-
-function carelessProof(
-  secret: bigint,
-  generation: number,
-  teamId: string,
+function carelessExchange(
+  state: CryptoBattleState,
   contractId: string,
-): SchnorrProof {
-  const group = RFC3526_GROUP14;
-  const witness = deriveWitness(secret, generation, teamId, group);
-  const publicY = groupPow(group.generator, witness, group);
+): CryptoBattleState {
+  const group = PROVE_GROUP;
+  const vault = projectForTeam(state, VICTIM).vault;
+  const witness = deriveWitness(BigInt(vault.secret), vault.generation, VICTIM, group);
   const commitmentR = groupPow(group.generator, FIXED_NONCE, group);
-  const e = challengeFromPublishedRule({
-    teamId,
+  const committed = applyOp(state, VICTIM, {
+    kind: "prove-commit",
     contractId,
-    generation: String(generation),
-    commitment: commitmentR,
-    publicY,
-  });
-  return {
     commitment: commitmentR.toString(),
-    response: mod(FIXED_NONCE + e * witness, group.order).toString(),
+  });
+  const order = projectForTeam(committed, VICTIM).myContracts.find((c) => c.id === contractId);
+  if (!order?.proveChallenge) throw new Error(`no challenge on ${contractId}`);
+  const op = {
+    kind: "prove-respond" as const,
+    contractId,
+    response: mod(FIXED_NONCE + BigInt(order.proveChallenge) * witness, group.order).toString(),
   };
+  // The proofs VERIFY. Reuse does not make a proof invalid -- it makes the
+  // pair leak.
+  expect(validateOp(committed, VICTIM, op)).toEqual({ ok: true });
+  return applyOp(committed, VICTIM, op);
 }
 
 function stateAfterCarelessProofs(): CryptoBattleState {
@@ -136,17 +82,7 @@ function stateAfterCarelessProofs(): CryptoBattleState {
   expect(open.length).toBeGreaterThanOrEqual(2);
 
   for (const order of open.slice(0, 2)) {
-    const vault = projectForTeam(state, VICTIM).vault;
-    const op = {
-      kind: "prove" as const,
-      contractId: order.id,
-      proof: carelessProof(BigInt(vault.secret), vault.generation, VICTIM, order.id),
-    };
-    // The proofs VERIFY. Reuse does not make a proof invalid -- it makes the
-    // pair leak. (This also confirms the re-implemented challenge rule above
-    // matches the shipped verifier: a mismatch would be rejected here.)
-    expect(validateOp(state, VICTIM, op)).toEqual({ ok: true });
-    state = applyOp(state, VICTIM, op);
+    state = carelessExchange(state, order.id);
   }
   return state;
 }
@@ -160,6 +96,8 @@ interface ScreenProofRow {
   readonly generation: string;
   readonly contractId: string;
   readonly commitment: string;
+  /** [Issue #701] Read, never derived -- see this file's header. */
+  readonly challenge: string;
   readonly response: string;
 }
 
@@ -183,9 +121,9 @@ function proofRowsOnScreen(html: string): ScreenProofRow[] {
     if (cells.length < 5) continue;
     const [teamId, generation, kind, contractId, detail] = cells;
     if (!kind?.includes("proof") || !teamId || !generation || !contractId || !detail) continue;
-    const [commitment, response] = detail.split("/").map((part) => part.trim());
-    if (!commitment || !response) continue;
-    rows.push({ teamId, generation, contractId, commitment, response });
+    const [commitment, challenge, response] = detail.split("/").map((part) => part.trim());
+    if (!commitment || !challenge || !response) continue;
+    rows.push({ teamId, generation, contractId, commitment, challenge, response });
   }
   return rows;
 }
@@ -202,7 +140,7 @@ function publicYOnScreen(html: string, teamId: string): string | undefined {
 }
 
 describe("the nonce-reuse HUNT is computable from the screen alone", () => {
-  test("every value a challenge binds is rendered", () => {
+  test("the whole transcript -- R, e and s -- is on the screen", () => {
     const html = renderParticipantScreen(stateAfterCarelessProofs());
     const rows = proofRowsOnScreen(html);
 
@@ -212,7 +150,10 @@ describe("the nonce-reuse HUNT is computable from the screen alone", () => {
       expect(row.contractId.length).toBeGreaterThan(0);
       expect(row.generation).toBe("1");
       expect(BigInt(row.commitment)).toBeGreaterThan(0n);
-      expect(BigInt(row.response)).toBeGreaterThan(0n);
+      // [Issue #701] The value a participant cannot compute, and therefore the
+      // one that has to be rendered.
+      expect(BigInt(row.challenge)).toBeGreaterThanOrEqual(0n);
+      expect(BigInt(row.response)).toBeGreaterThanOrEqual(0n);
     }
     // The reuse is visible as the statement describes it: same team, same
     // generation, same commitment.
@@ -220,7 +161,7 @@ describe("the nonce-reuse HUNT is computable from the screen alone", () => {
     expect(publicYOnScreen(html, VICTIM)).toBeDefined();
   });
 
-  test("a reader with only the screen and the published Python recovers the key, and the judge accepts it", () => {
+  test("a reader with only the screen recovers the key, and the judge accepts it", () => {
     const state = stateAfterCarelessProofs();
     const html = renderParticipantScreen(state);
 
@@ -230,18 +171,10 @@ describe("the nonce-reuse HUNT is computable from the screen alone", () => {
     const publicY = publicYOnScreen(html, VICTIM);
     if (!publicY) throw new Error("expected the victim's Y on screen");
 
-    const group = RFC3526_GROUP14;
-    const challengeOf = (row: ScreenProofRow) =>
-      challengeFromPublishedRule({
-        teamId: row.teamId,
-        contractId: row.contractId,
-        generation: row.generation,
-        commitment: BigInt(row.commitment),
-        publicY: BigInt(publicY),
-      });
-
-    // key = (z1 - z2) / (e1 - e2), exactly as the statement gives it.
-    const gap = mod(challengeOf(first) - challengeOf(second), group.order);
+    const group = PROVE_GROUP;
+    // key = (s1 - s2) / (e1 - e2), exactly as the statement gives it, from the
+    // two challenges the screen showed.
+    const gap = mod(BigInt(first.challenge) - BigInt(second.challenge), group.order);
     expect(gap).not.toBe(0n);
     const recovered = mod(
       mod(BigInt(first.response) - BigInt(second.response), group.order) * inv(gap, group.order),
