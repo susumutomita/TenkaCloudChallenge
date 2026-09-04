@@ -241,7 +241,7 @@ export interface CryptoBattleConfig {
    * generation, successful or not.
    *
    * This is what makes a hand-sized `prime` sound. Interpolating three shares
-   * has to stay the cheapest way to a target's secret: with `prime` = 251 and
+   * has to stay the cheapest way to a target's secret: with `prime` = 97 and
    * unlimited retries, submitting every field element costs a script two
    * seconds, so the cap -- not the modulus -- is what forces the arithmetic to
    * actually be done. Set it at or below `threshold` so a team can never buy
