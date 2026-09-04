@@ -16,7 +16,7 @@
 export const P = 2n ** 61n - 1n;
 
 /**
- * [Issue #696] The field an actual MATCH runs in: the prime 251.
+ * [Issue #696, #707] The field an actual MATCH runs in: the prime 97.
  *
  * Not a security parameter -- a legibility one. Every Order in this Battle is
  * arithmetic the participant performs themselves, and at 2^61 - 1 that meant
@@ -25,11 +25,15 @@ export const P = 2n ** 61n - 1n;
  * the fourteenth digit, and a REJECTED banner that taught nothing. Homomorphic
  * addition, masked subtotals and Lagrange interpolation are structurally
  * identical at any modulus, so the modulus should be the size a person can
- * actually work in. At 251 the largest quantity anyone divides is five digits.
+ * actually work in. At 97 every number on an Order is two digits, an FHE or MPC
+ * answer is one two-digit addition and one subtraction, and a HUNT over three
+ * consecutive shares is `3*y1 - 3*y2 + y3` -- three-digit intermediates at most.
+ * 251 was the first cut (#696) and the live run still called it too much; the
+ * owner's bar is 「2 桁程度」, and 97 is the largest prime under it.
  *
  * Shrinking the field costs the secret its unguessability, so it is sound ONLY
  * alongside `CryptoBattleConfig.maxHuntAttemptsPerTarget`: three tries against
- * a 251-element space, at `scores.wrongHunt` apiece, keeps interpolating the
+ * a 97-element space, at `scores.wrongHunt` apiece, keeps interpolating the
  * shares strictly cheaper than guessing. Changing one of the two without the
  * other reopens the hole -- see that field's doc comment.
  *
@@ -37,7 +41,7 @@ export const P = 2n ** 61n - 1n;
  * library and its own tests exercise a large modulus; nothing in a match
  * reaches these functions without an explicit `p` from `config.prime`.
  */
-export const HAND_PRIME = 251n;
+export const HAND_PRIME = 97n;
 
 /** Reduce `a` into the canonical representative range [0, p). */
 export function mod(a: bigint, p: bigint = P): bigint {

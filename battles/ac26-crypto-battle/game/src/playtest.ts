@@ -216,7 +216,7 @@ function summarizeStep(
  * rather than the property. Those tests ask "does this serialized projection
  * contain a value it must not?" and answer it with a substring search, which is
  * sound only while the forbidden values are long enough to be unique. A match
- * now runs in `HAND_PRIME` (251) so a participant can do the arithmetic, and at
+ * now runs in `HAND_PRIME` (97) so a participant can do the arithmetic, and at
  * three digits the search reports a hit on any coincidence -- "124" occurs
  * inside an unrelated 2048-bit commitment.
  *

@@ -100,7 +100,7 @@ s = (r + e * w) % q            # <- submit this as the response
 # Ledger shows every value it needs.
 
 # HUNT -- Lagrange interpolation at x = 0
-P = 251                        # the match's field, from the Order's "p"
+P = 97                         # the match's field, from the Order's "p"
 def reconstruct(shares):             # shares: [(index, value), ...], threshold-many
     total = 0
     for xi, yi in shares:

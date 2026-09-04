@@ -80,7 +80,7 @@ export const VERTICAL_CONFIG: Partial<CryptoBattleConfig> = {
   contractIntervalMs: 60_000,
   contractsPerIssue: 2,
   // [Issue #696] The big field, like the other trust-boundary fixtures. A real
-  // match runs in `HAND_PRIME` (251) so a participant can do the arithmetic by
+  // match runs in `HAND_PRIME` (97) so a participant can do the arithmetic by
   // hand, but this fixture's leak assertions -- and `replay.test.ts`'s against
   // its final state -- are substring searches, which cannot tell a leak from a
   // three-digit coincidence. See `SUBSTRING_SAFE_FIELD` in playtest.ts; the
