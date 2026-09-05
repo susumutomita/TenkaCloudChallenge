@@ -14,7 +14,7 @@
  * cannot either — {@link buildScenario} throws rather than fake it.
  *
  * Ops are built through `../game/src/playtest.ts`'s `buildLeakOp` /
- * `buildProveOp` / `buildHuntOp`, the same builders the committed vertical
+ * `buildProveSudokuOp` / `buildHuntOp`, the same builders the committed vertical
  * playtest fixture uses. `buildHuntOp` in particular takes only a
  * `CryptoBattleProjection`, so even the HUNT that seeds the "after a successful
  * hunt" position is built from public information — the harness cannot
@@ -25,18 +25,14 @@
  * byte-identical state.
  */
 
-import { mod } from "../game/src/field.ts";
-import { groupPow, RFC3526_GROUP14 } from "../game/src/group.ts";
 import {
   buildFheOp,
   buildHuntOp,
   buildLeakOp,
   buildMpcOp,
-  buildProveOp,
+  buildProveSudokuOp,
   buildRotateOp,
 } from "../game/src/playtest.ts";
-import { computeChallenge } from "../game/src/schnorr-transcript.ts";
-import { deriveWitness } from "../game/src/schnorr-witness.ts";
 import { initialState, projectForTeam, tick } from "../game/src/reducer.ts";
 import type {
   CryptoBattleConfig,
@@ -76,8 +72,10 @@ export const SCENARIO_IDS = [
   "ledger-filling",
   "fhe-order",
   "mpc-order",
+  "rps-order",
+  "rps-reuse",
   "hunt-reachable",
-  "nonce-reuse",
+  "pi-reuse",
   "after-rotate",
   "ended",
 ] as const;
@@ -105,6 +103,8 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "暗号文のまま足す Order が開いている状態",
     en: "An encrypted-addition Order is open",
   },
+  "rps-reuse": { ja: "じゃんけんの使い回し — bravo の次の手を予測", en: "RPS reuse — predict bravo’s next hand" },
+  "rps-order": { ja: "相手とじゃんけん — まだ両者とも封じていない", en: "Rock-paper-scissors — neither team has sealed" },
   "mpc-order": {
     ja: "覆面つき小計の Order が開いている状態",
     en: "A masked-subtotal Order is open",
@@ -113,9 +113,9 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "alpha の share が threshold 枚そろった状態",
     en: "alpha has leaked threshold-many shares",
   },
-  "nonce-reuse": {
-    ja: "alpha が同じ nonce で2回証明した — witness が復元できる",
-    en: "alpha proved twice with one nonce — the witness is recoverable",
+  "pi-reuse": {
+    ja: "alpha が同じ付け替えで3回証明した — 解が復元できる",
+    en: "alpha proved three times with one relabelling — the solution is recoverable",
   },
   "after-rotate": {
     ja: "alpha が ROTATE した直後 — 世代が変わる",
@@ -235,57 +235,40 @@ function serveComputationOrders(driver: Driver, teamId: string): number {
 }
 
 /**
- * [Issue #645 Phase 5] Make `teamId` prove twice with ONE nonce.
+ * [Issue #709] Make `teamId` PROVE three times with ONE relabelling.
  *
- * The careless prover is written out here rather than imported, for the same
- * reason `nonce-reuse.test.ts` keeps its own: the package must not ship a
- * prover that reuses nonces. This is a dev-harness fixture whose whole purpose
- * is to let an author see the consequence on screen.
+ * The careless prover is one argument to the shipped builder: `pi` is normally
+ * chosen fresh from the vault's used list, and passing a fixed one is the
+ * mistake written out. This is a dev-harness fixture whose whole purpose is
+ * to let an author see the consequence on screen -- three opened groups
+ * sharing a tag, and the sudoku HUNT card lighting up for bravo.
  */
-function proveTwiceWithOneNonce(driver: Driver, teamId: string): boolean {
-  const group = RFC3526_GROUP14;
-  const FIXED_NONCE = 424_242n;
+function proveThriceWithOneRelabelling(driver: Driver, teamId: string): boolean {
+  const FIXED_PI = [2, 3, 4, 1] as const;
   let proved = 0;
-  for (let round = 0; round < 12 && proved < 2; round += 1) {
-    const vault = projectForTeam(driver.host.state, teamId).vault;
+  for (let round = 0; round < 12 && proved < 3; round += 1) {
     for (const order of projectForTeam(driver.host.state, teamId).myContracts) {
-      if (proved >= 2) break;
-      if (order.status !== "open" || order.task.kind !== "reveal-share") continue;
-      if (!order.allowedMethods.includes("prove")) continue;
-      const witness = deriveWitness(BigInt(vault.secret), vault.generation, teamId, group);
-      const publicY = groupPow(group.generator, witness, group);
-      const commitmentR = groupPow(group.generator, FIXED_NONCE, group);
-      const e = computeChallenge(
-        {
-          teamId,
-          contractId: order.id,
-          generation: vault.generation,
-          commitmentR,
-          publicY,
-        },
-        group,
-      );
-      const op: CryptoBattleOp = {
-        kind: "prove",
-        contractId: order.id,
-        proof: {
-          commitment: commitmentR.toString(),
-          response: mod(FIXED_NONCE + e * witness, group.order).toString(),
-        },
-      };
-      if (driver.play(teamId, op)) proved += 1;
+      if (proved >= 3) break;
+      if (order.status !== "open" || !order.allowedMethods.includes("prove")) continue;
+      const vault = projectForTeam(driver.host.state, teamId).vault;
+      if (driver.play(teamId, buildProveSudokuOp(vault, order.id, FIXED_PI))) proved += 1;
     }
-    if (proved < 2) driver.advance(60_000);
+    if (proved < 3) driver.advance(60_000);
   }
-  return proved >= 2;
+  return proved >= 3;
 }
 
-/** PROVE the oldest open contract for `teamId`, building a real Schnorr proof. */
+/** PROVE the oldest open contract for `teamId` that accepts PROVE, with a fresh relabelling. */
 function proveOldestContract(driver: Driver, teamId: string): boolean {
-  const [contractId] = openContractIds(driver.host.state, teamId);
-  if (!contractId) return false;
-  const vault = projectForTeam(driver.host.state, teamId).vault;
-  return driver.play(teamId, buildProveOp(vault, contractId));
+  const projection = projectForTeam(driver.host.state, teamId);
+  const order = projection.myContracts.find(
+    (c) => c.status === "open" && c.allowedMethods.includes("prove"),
+  );
+  if (!order) return false;
+  // [Issue #709] `buildProveSudokuOp` reads the vault's used list and picks a
+  // relabelling not yet spent, so a scenario that reaches a "PROVE happened"
+  // position reached it the way a careful participant would.
+  return driver.play(teamId, buildProveSudokuOp(projection.vault, order.id));
 }
 
 /**
@@ -362,7 +345,7 @@ export function buildScenario(id: ScenarioId): Scenario {
           driver,
           (state) =>
             state.publicLedger.some((a) => a.k === "share") &&
-            state.publicLedger.some((a) => a.k === "proof"),
+            state.publicLedger.some((a) => a.k === "sudoku-reveal"),
           10,
         )
       ) {
@@ -389,6 +372,28 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
     }
 
+    case "rps-reuse": {
+      for (let round = 0; round < 3; round++) {
+        if (!playUntilRaw(driver, state => state.contracts.some(c => c.teamId === "bravo" && c.status === "open" && c.task.kind === "rps-duel"), 10)) throw new Error("rps-reuse scenario did not reach a duel");
+        const a = driver.host.state.contracts.find(c => c.teamId === "alpha" && c.status === "open" && c.task.kind === "rps-duel")!;
+        const b = driver.host.state.contracts.find(c => c.teamId === "bravo" && c.status === "open" && c.task.kind === "rps-duel")!;
+        // Fixed teaching choices, driven through the real commitment gates.
+        const bHand = round === 0 ? 1 : round === 1 ? 3 : 2;
+        mustPlay(driver, "bravo", {kind:"rps-commit",contractId:b.id,commitment:round===0?2:round===1?9:8}, "seal bravo");
+        if (round === 2) break;
+        mustPlay(driver, "alpha", {kind:"rps-commit",contractId:a.id,commitment:13}, "seal alpha");
+        mustPlay(driver, "bravo", {kind:"rps-open",contractId:b.id,hand:bHand,randomness:2}, "open bravo");
+        mustPlay(driver, "alpha", {kind:"rps-open",contractId:a.id,hand:1,randomness:1}, "open alpha");
+        driver.advance(DEV_CONFIG.contractIntervalMs!);
+      }
+      break;
+    }
+    case "rps-order": {
+      if (!playUntilRaw(driver, state => state.contracts.some(c => c.teamId === "alpha" && c.status === "open" && c.task.kind === "rps-duel"), 10)) {
+        throw new Error("scenario 'rps-order' never saw a paired duel");
+      }
+      break;
+    }
     case "mpc-order": {
       if (
         !playUntilRaw(
@@ -405,9 +410,9 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
     }
 
-    case "nonce-reuse": {
-      if (!proveTwiceWithOneNonce(driver, "alpha")) {
-        throw new Error("scenario 'nonce-reuse' could not get two proofs under one nonce");
+    case "pi-reuse": {
+      if (!proveThriceWithOneRelabelling(driver, "alpha")) {
+        throw new Error("scenario 'pi-reuse' could not get three proofs under one relabelling");
       }
       break;
     }

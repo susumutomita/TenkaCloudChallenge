@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { HINT_LADDER, HINT_LEVELS, hintsFor } from "./hints.ts";
+import { type HintContext, HINT_LADDER, HINT_LEVELS, hintsFor } from "./hints.ts";
+import { SUBSTRING_SAFE_FIELD } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import type { ContractProjection, CryptoBattleState, OrderTaskKind } from "./types.ts";
+import type { ContractProjection, CryptoBattleProjection, CryptoBattleState, OrderTaskKind } from "./types.ts";
 
 /**
  * [Issue #659 §9] The hint ladder: what it may contain, what it costs, and what
@@ -38,6 +39,34 @@ function withScore(state: CryptoBattleState, teamId: string, score: number): Cry
   return { ...state, teams: { ...state.teams, [teamId]: { ...team, score } } };
 }
 
+/**
+ * [Issue #712] The context a rung is rendered against: this Order and this
+ * reader's vault, exactly as `projectHints` builds it.
+ */
+function ctxFor(projection: CryptoBattleProjection, order: ContractProjection): HintContext {
+  return {
+    allowedMethods: order.allowedMethods, exposedShareIndices: [], task: order.task,
+    vault: projection.vault,
+    prime: projection.prime,
+    threshold: projection.threshold,
+    shareCount: projection.vault.shares.length,
+  };
+}
+
+/** Every Order kind, each rendered against a real Order of that kind. */
+function oneOrderPerKind(): { projection: CryptoBattleProjection; order: ContractProjection }[] {
+  let state = startedMatch();
+  const seen = new Map<OrderTaskKind, { projection: CryptoBattleProjection; order: ContractProjection }>();
+  for (let round = 0; round < 12 && seen.size < Object.keys(HINT_LADDER).length; round += 1) {
+    const projection = projectForTeam(state, "teamA");
+    for (const order of projection.myContracts) {
+      if (!seen.has(order.task.kind)) seen.set(order.task.kind, { projection, order });
+    }
+    state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+  }
+  return [...seen.values()];
+}
+
 function orderById(state: CryptoBattleState, teamId: string, id: string): ContractProjection {
   const order = projectForTeam(state, teamId).myContracts.find((c) => c.id === id);
   if (!order) throw new Error(`test setup: Order ${id} is not on ${teamId}'s belt`);
@@ -66,11 +95,14 @@ describe("the ladder itself", () => {
     }
   });
 
-  test("every rung ships both locales", () => {
-    for (const kind of kinds) {
-      for (const spec of hintsFor(kind)) {
-        expect(spec.text.ja.length).toBeGreaterThan(0);
-        expect(spec.text.en.length).toBeGreaterThan(0);
+  test("every rung ships both locales, rendered against a real Order of its kind", () => {
+    const samples = oneOrderPerKind();
+    expect(samples.map((s) => s.order.task.kind).sort()).toEqual([...kinds].sort());
+    for (const { projection, order } of samples) {
+      for (const spec of hintsFor(order.task.kind)) {
+        const text = spec.text(ctxFor(projection, order));
+        expect(text.ja.length).toBeGreaterThan(0);
+        expect(text.en.length).toBeGreaterThan(0);
       }
     }
   });
@@ -125,11 +157,13 @@ describe("a hint is withheld until it is paid for", () => {
     // state side precisely so a browser cannot read it for free, which is only
     // true if it is genuinely absent from the payload.
     const state = startedMatch();
+    const projection = projectForTeam(state, "teamA");
     const order = firstOpenOrder(state, "teamA");
-    const serialized = JSON.stringify(projectForTeam(state, "teamA"));
+    const serialized = JSON.stringify(projection);
     for (const spec of hintsFor(order.task.kind)) {
-      expect(serialized).not.toContain(spec.text.ja);
-      expect(serialized).not.toContain(spec.text.en);
+      const text = spec.text(ctxFor(projection, order));
+      expect(serialized).not.toContain(text.ja);
+      expect(serialized).not.toContain(text.en);
     }
   });
 
@@ -144,8 +178,9 @@ describe("a hint is withheld until it is paid for", () => {
     expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
     state = applyOp(state, "teamA", op);
 
+    const afterProjection = projectForTeam(state, "teamA");
     const after = orderById(state, "teamA", order.id);
-    expect(after.hints[0]?.text).toEqual(hintsFor(order.task.kind)[0]?.text);
+    expect(after.hints[0]?.text).toEqual(hintsFor(order.task.kind)[0]?.text(ctxFor(afterProjection, after)));
     expect(after.hints[1]?.text).toBeUndefined();
     expect(after.hints[2]?.text).toBeUndefined();
     expect(projectForTeam(state, "teamA").teams["teamA"]?.score).toBe(
@@ -230,28 +265,52 @@ describe("who may buy a hint, and on what", () => {
   });
 });
 
-describe("a hint carries nothing that belongs to the match", () => {
-  test("the same rung reads identically under a different seed and a different team", () => {
-    // Executes the rule the module header states: hint text is a constant of
-    // the task kind. Anything seed-derived -- a key, a plaintext, a private
-    // input, an expected answer -- could not survive this comparison, because
-    // every such value differs between these two matches.
-    const buyAll = (state: CryptoBattleState, teamId: string) => {
-      let next = state;
-      const order = firstOpenOrder(next, teamId);
-      for (let i = 0; i < HINT_LEVELS; i += 1) {
-        next = applyOp(next, teamId, { kind: "reveal-hint", contractId: order.id });
-      }
-      return orderById(next, teamId, order.id);
-    };
+describe("a hint carries nothing that belongs to another team [#712]", () => {
+  /**
+   * The rule changed shape in #712 and this test changed with it. A rung used
+   * to be a constant of the task kind, pinned by rendering it under two seeds
+   * and requiring byte-identical text. It is now rendered against the reader's
+   * OWN Order and vault so the last rung can walk THEIR numbers -- so the
+   * property to pin is no longer "carries nothing", it is "carries nothing of
+   * anyone else's". Rendered in the big field, where a substring search over
+   * two-digit values would report coincidences rather than leaks.
+   */
+  const buyAll = (state: CryptoBattleState, teamId: string) => {
+    let next = state;
+    const order = firstOpenOrder(next, teamId);
+    for (let i = 0; i < HINT_LEVELS; i += 1) {
+      next = applyOp(next, teamId, { kind: "reveal-hint", contractId: order.id });
+    }
+    return { state: next, order: orderById(next, teamId, order.id) };
+  };
 
-    const left = buyAll(startedMatch("a".repeat(64)), "teamA");
-    const right = buyAll(startedMatch("b".repeat(64)), "teamB");
-    // Same batch position in both matches, so the same task kind -- if that
-    // ever stops holding, this test should fail loudly rather than compare
-    // two different ladders and pass for the wrong reason.
-    expect(right.task.kind).toBe(left.task.kind);
-    expect(right.hints.map((h) => h.text)).toEqual(left.hints.map((h) => h.text));
+  test("rendering the same rung twice from the same state is identical", () => {
+    const state = startedMatch();
+    const a = buyAll(state, "teamA");
+    const b = buyAll(state, "teamA");
+    expect(a.order.hints.map((h) => h.text)).toEqual(b.order.hints.map((h) => h.text));
+  });
+
+  test("no rung ever quotes another team's secret or un-leaked shares", () => {
+    let state = applyOp(
+      initialState({ ...CTX, matchSecret: "n".repeat(64) }, SUBSTRING_SAFE_FIELD),
+      "teamA",
+      { kind: "start" },
+    );
+    const other = state.teams["teamB"];
+    if (!other) throw new Error("test setup: expected teamB");
+    for (let round = 0; round < 6; round += 1) {
+      for (const order of projectForTeam(state, "teamA").myContracts.filter((c) => c.status === "open")) {
+        let bought = state;
+        for (let i = 0; i < HINT_LEVELS; i += 1) {
+          bought = applyOp(bought, "teamA", { kind: "reveal-hint", contractId: order.id });
+        }
+        const texts = orderById(bought, "teamA", order.id).hints.map((h) => `${h.text?.ja}\n${h.text?.en}`).join("\n");
+        expect(texts).not.toContain(other.secret);
+        for (const share of other.shares) expect(texts).not.toContain(share.value);
+      }
+      state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+    }
   });
 });
 

@@ -2,27 +2,24 @@
  * Issue #641 wrapper: teach the decision loop and let a player rehearse it
  * before exposing the complete cryptographic reference.
  *
- * The unchanged reference implementation is copied to HelpDrawerCore.tsx in
- * the same commit. Re-exporting it preserves PYTHON_SNIPPET and any existing
- * imports while progressive disclosure keeps the 2048-bit constant out of
- * the initial reading path.
+ * Re-export HelpDrawerCore.tsx to preserve the computation reference imports.
+ * Progressive disclosure keeps the full HUNT reference behind the rules and
+ * the hand-worked sudoku rehearsal.
  */
 
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import CoreHelpDrawer from "./HelpDrawerCore.tsx";
-import QuickRules from "./QuickRules.tsx";
-import TutorialWalkthrough from "./TutorialWalkthrough.tsx";
 
 export * from "./HelpDrawerCore.tsx";
 
 const COPY = {
   en: {
-    title: "Practice and help",
-    fullReference: "Open the complete rules, prerequisites, and PROVE / HUNT computation",
+    title: "Rules reference",
+    fullReference: "Open the complete rules and optional calculation reference",
   },
   ja: {
-    title: "練習とヘルプ",
-    fullReference: "完全なルール、前提問題、PROVE / HUNT の計算方法を開く",
+    title: "ルールの参照",
+    fullReference: "完全なルールと計算の補足を開く",
   },
 } as const;
 
@@ -31,6 +28,7 @@ const panelStyle = {
   borderRadius: "8px",
   padding: "16px",
   background: "#fafafa",
+  color: "#16212e",
 } as const;
 
 export default function HelpDrawer(props: PortalSlotProps) {
@@ -39,8 +37,6 @@ export default function HelpDrawer(props: PortalSlotProps) {
   return (
     <section style={panelStyle}>
       <h3 style={{ margin: "0 0 8px", fontSize: "16px" }}>{copy.title}</h3>
-      <QuickRules locale={locale} />
-      <TutorialWalkthrough locale={locale} />
       <details>
         <summary style={{ cursor: "pointer", fontSize: "13px", fontWeight: 600 }}>{copy.fullReference}</summary>
         <div style={{ marginTop: "10px" }}>

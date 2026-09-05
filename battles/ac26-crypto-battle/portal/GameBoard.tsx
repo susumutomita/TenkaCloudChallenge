@@ -2,18 +2,21 @@ import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
 import { DIE_CSS, DieRow } from "./DieFace.tsx";
+import { describeRevealGroup, SudokuBoard, SUDOKU_CSS } from "./SudokuGrid.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
   CryptoBattleProjection,
   PublicArtifact,
   ShareArtifact,
+  SudokuRevealArtifact,
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
 
 const COPY = {
   en: {
+    duel: "DUEL",
     title: "LIVE MATCH",
     orderBelt: "ORDER BELT",
     noOrders: "Waiting for the next Order…",
@@ -33,6 +36,7 @@ const COPY = {
     vault: "MY VAULT",
     generation: "GEN",
     ledger: "PUBLIC LEDGER",
+    ledgerSelf: "you",
     emptyLedger: "Nothing public yet.",
     raw: "raw",
     loading: "Loading match…",
@@ -42,8 +46,14 @@ const COPY = {
     nextUp: "DUE FIRST",
     vaultOpen: "show shares",
     phase: "PHASE",
+    solution: "MY SOLUTION",
+    solutionHint: "Only you see this. PROVE relabels it; never send it as it is.",
+    puzzle: "PUZZLE",
+    puzzleRetired: "retired generation — its puzzle is no longer shown",
+    tag: "relabelling",
   },
   ja: {
+    duel: "じゃんけん",
     title: "LIVE MATCH",
     orderBelt: "ORDER BELT",
     noOrders: "次の Order を待っています…",
@@ -63,6 +73,7 @@ const COPY = {
     vault: "MY VAULT",
     generation: "世代",
     ledger: "PUBLIC LEDGER",
+    ledgerSelf: "あなた",
     emptyLedger: "まだ公開情報はありません。",
     raw: "生データ",
     loading: "試合状態を読み込み中…",
@@ -70,8 +81,13 @@ const COPY = {
     score: "スコア",
     scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
     nextUp: "締切が最短",
-    vaultOpen: "share を見る",
+    vaultOpen: "かけらを見る",
     phase: "フェーズ",
+    solution: "自分の解",
+    solutionHint: "自分だけに見えます。PROVE は数字を付け替えて出すもので、このまま出してはいけません。",
+    puzzle: "問題",
+    puzzleRetired: "退役した世代 — 問題はもう表示しません",
+    tag: "付け替え",
   },
 } as const;
 
@@ -105,6 +121,14 @@ interface LedgerGroup {
    */
   pairs: CipherPairArtifact[];
   /**
+   * [Issue #709] Opened sudoku groups. Neither exposure nor mere protection:
+   * a single reveal gives nothing away, and two under one tag give a
+   * relabelling away. They are shown in full -- group, digits, tag -- because
+   * spotting the matching tags is the reading the HUNT asks for.
+   */
+  reveals: SudokuRevealArtifact[];
+  duels: Extract<PublicArtifact, { kind: "rps-commit" | "rps-open" }>[];
+  /**
    * [Issue #645] Counted per artifact kind, not lumped into one "proof" bucket.
    * Before FHE and MPC existed, everything that was not a leaked share WAS a
    * proof, and this counter said so — which made the board announce "PROOF ×1"
@@ -113,6 +137,31 @@ interface LedgerGroup {
    * has to keep them apart.
    */
   protected: Map<PublicArtifact["kind"], number>;
+}
+
+/**
+ * [Issue #698] What to print for a team on the Public Ledger.
+ *
+ * Mirrors `exposureRows` in FastMovePanel.tsx deliberately: the two surfaces
+ * name the same teams on the same screen, and naming them differently is worse
+ * than naming them badly. The vault is authoritative for "is this me" for the
+ * same reason it is there -- it is the projection's own statement of who is
+ * reading it.
+ */
+function ledgerTeamLabel(
+  projection: CryptoBattleProjection,
+  teamId: string,
+  selfLabel: string,
+): string {
+  if (teamId === projection.vault.teamId) return selfLabel;
+  const name = projection.teams[teamId]?.teamName;
+  return name && name.trim() ? name : teamId;
+}
+
+/** The generation a team is on now: its own vault for the reader, the roster for everyone else. */
+function currentGenerationOf(projection: CryptoBattleProjection, teamId: string): number | undefined {
+  if (teamId === projection.vault.teamId) return projection.vault.generation;
+  return projection.teams[teamId]?.generation;
 }
 
 function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
@@ -125,10 +174,14 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
         generation: entry.generation,
         shares: [],
         pairs: [],
+        reveals: [],
+        duels: [],
         protected: new Map(),
       };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
     else if (entry.kind === "cipher-pair") current.pairs.push(entry);
+    else if (entry.kind === "sudoku-reveal") current.reveals.push(entry);
+    else if (entry.kind === "rps-commit" || entry.kind === "rps-open") current.duels.push(entry);
     else current.protected.set(entry.kind, (current.protected.get(entry.kind) ?? 0) + 1);
     groups.set(key, current);
   }
@@ -138,6 +191,8 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
 /** The chip label for one non-share artifact kind. */
 function protectedLabel(kind: PublicArtifact["kind"]): string {
   switch (kind) {
+    case "rps-commit": return "COMMIT";
+    case "rps-open": return "OPEN";
     case "proof":
       return "PROOF";
     case "ciphertext":
@@ -154,6 +209,9 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
       // A share reaches this grouping only when a method other than LEAK posted
       // one, which no method does today.
       return "SHARE";
+    case "sudoku-reveal":
+      // Unreachable: reveals are grouped and drawn in full above.
+      return "SUDOKU";
     default: {
       const exhaustive: never = kind;
       throw new Error(`protectedLabel: unknown kind ${JSON.stringify(exhaustive)}`);
@@ -298,10 +356,9 @@ export function Vault({ projection, locale }: { readonly projection: CryptoBattl
     /*
       [Issue #659] Collapsed by default.
       
-      Five 19-digit numbers took a third of the board while being the thing a
-      player looks at least — they matter when building a PROVE, and not
-      otherwise. The generation stays visible, because ROTATE changes it and
-      that IS worth noticing; the share values are one click away.
+      Keep the private share list one click away so it does not crowd out
+      the selected Order. The generation stays visible because ROTATE changes
+      it. Matches default to two-digit shares; the configured field may differ.
     */
     <section className="tc-game-card">
       <details className="tc-vault-details">
@@ -319,6 +376,16 @@ export function Vault({ projection, locale }: { readonly projection: CryptoBattl
               <code>{share.value}</code>
             </details>
           ))}
+        </div>
+        {/*
+          [Issue #709] The sudoku solution, beside the shares. It is the thing
+          PROVE relabels, and it is private in exactly the way the shares are:
+          this team's projection carries it, nobody else's does.
+        */}
+        <div className="tc-vault-solution">
+          <div className="tc-section-label">{copy.solution}</div>
+          <SudokuBoard cells={projection.vault.sudokuSolution} label="my-solution" />
+          <div className="tc-scoreline-hint">{copy.solutionHint}</div>
         </div>
       </details>
     </section>
@@ -338,8 +405,17 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
         <div className="tc-ledger-grid">
           {groups.map((group) => (
             <article className="tc-ledger-team" key={`${group.teamId}:${group.generation}`}>
+              {/*
+                [Issue #698] A team is named, not identified by its ULID. The
+                board printed `group.teamId` -- a 26-character opaque string
+                that told a reader nothing about WHO had exposed a share, which
+                is the one question the Public Ledger exists to answer. The
+                reader's own row says so outright; everyone else gets the
+                display name the platform resolved (#3172), falling back to the
+                id only when it could not.
+              */}
               <div className="tc-ledger-title">
-                <strong>{group.teamId}</strong>
+                <strong>{ledgerTeamLabel(projection, group.teamId, copy.ledgerSelf)}</strong>
                 <span>{copy.generation} {group.generation}</span>
               </div>
               <div className="tc-share-grid">
@@ -371,10 +447,48 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                     </div>
                   </details>
                 ))}
+                {/*
+                  [Issue #709] An opened group, in full: which group, its
+                  four digits, and the tag naming the relabelling. Two rows
+                  from one team with one tag are the reuse a hunter looks
+                  for, so the tags have to be readable side by side -- and a
+                  board that summarised these as "PROOF ×2" would hide the
+                  one thing about them that matters.
+                */}
+                {group.reveals.map((reveal) => (
+                  <div className={`tc-proof-card tc-reveal-card${reveal.id === lastId ? " tc-new-public" : ""}`} key={reveal.id}>
+                    {describeRevealGroup(reveal.group, locale)} <code>{reveal.cells.join(" ")}</code>{" "}
+                    <span className="tc-reveal-tag" title={copy.tag}>{reveal.tag}</span>
+                  </div>
+                ))}
+                {group.duels.map(entry => <div className="tc-proof-card" key={entry.id}>
+                  {entry.kind === "rps-commit" ? "COMMIT" : "OPEN"} · c={entry.commitment}
+                  {entry.kind === "rps-open" && <> · {locale === "ja" ? "手" : "hand"} m={entry.hand} · {locale === "ja" ? "隠す数" : "hiding number"} r={entry.randomness}</>}
+                </div>)}
                 {[...group.protected.entries()].map(([kind, count]) => (
                   <div className="tc-proof-card" key={kind}>{protectedLabel(kind)} ×{count}</div>
                 ))}
               </div>
+              {/*
+                [Issue #709] Every team's public puzzle, on its ledger card:
+                the eight cells a hunter lines a reused relabelling up
+                against. Public by construction, and shown for every team
+                including the reader's own, so no team is singled out.
+              */}
+              {/*
+                Only on the card of the generation the puzzle belongs to.
+                `publicPuzzles` holds each team's CURRENT puzzle; a reveal from
+                a retired generation lined up against it would be an
+                impossible reconstruction, so that card says so instead.
+              */}
+              {group.generation === currentGenerationOf(projection, group.teamId) && projection.publicPuzzles[group.teamId] ? (
+                <div className="tc-ledger-puzzle">
+                  <span className="tc-sudoku-caption">{copy.puzzle}</span>
+                  <SudokuBoard cells={projection.publicPuzzles[group.teamId] ?? []} size={18} label={`puzzle-${group.teamId}`} />
+                </div>
+              ) : group.reveals.length > 0 ? (
+                <div className="tc-ledger-puzzle"><span className="tc-sudoku-caption">{copy.puzzleRetired}</span></div>
+              ) : null}
             </article>
           ))}
         </div>
@@ -385,6 +499,11 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
 
 export const BOARD_CSS = `
 ${DIE_CSS}
+${SUDOKU_CSS}
+.tc-vault-solution{margin-top:10px;display:grid;gap:4px;justify-items:start}
+.tc-reveal-card{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tc-reveal-tag{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;border:1px solid #cfd8e3;border-radius:6px;padding:1px 5px;background:#fff;font-weight:600}
+.tc-ledger-puzzle{margin-top:8px;display:grid;gap:3px;justify-items:start}
 
 /* [Issue #659] The board paints its own light surfaces, so it has to state its
    own text colour too. Without this it inherits the text colour from whatever
@@ -461,6 +580,11 @@ ${DIE_CSS}
 .tc-ledger-grid{display:grid;gap:9px}
 .tc-ledger-team{border:1px solid #eaeded;border-radius:9px;padding:9px}
 .tc-ledger-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px;font-size:12px}
+/* [Issue #698] A flex item will not shrink below its content by default, so an
+   unbreakable 26-character id pushed the generation chip down to one character
+   per line. The name half truncates; the generation half never wraps. */
+.tc-ledger-title strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-ledger-title span{flex:none;white-space:nowrap}
 .tc-empty{padding:12px;border:1px dashed #cfd8e3;border-radius:8px;text-align:center;color:#687078;font-size:12px}
 @keyframes tc-order-in{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
 @keyframes tc-urgent{50%{box-shadow:0 0 0 3px rgba(209,50,18,.15)}}

@@ -13,9 +13,17 @@
  */
 
 import { type CipherRung, rungSpec } from "./ladder.ts";
-import { deriveBigInt, deriveStream } from "./prng.ts";
+import { deriveBigInt, deriveBytes, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
 import type { PrivacyConstraint } from "./methods.ts";
+import {
+  ALL_SOLUTIONS,
+  CONSTRAINT_GROUP_COUNT,
+  type Permutation,
+  SUDOKU_CELLS,
+  SUDOKU_GIVEN_COUNT,
+  type SudokuGrid,
+} from "./sudoku.ts";
 import type { ContractKind, OrderTaskKind } from "./types.ts";
 
 /** The bigint-space subset of `CryptoBattleConfig` this module's derivations need. */
@@ -110,6 +118,109 @@ export function derivePlaintext(
   return values;
 }
 
+/**
+ * [Issue #709] The 4x4 sudoku solution a team PROVEs with, at one generation.
+ *
+ * Picked by index into `ALL_SOLUTIONS` so the choice is a pure function of the
+ * seed, and scoped to the generation for the reason every other per-team
+ * secret is: ROTATE has to retire it. A team whose relabellings have all been
+ * spent, or whose puzzle has been unmasked by a HUNT, rotates into a fresh
+ * solution the same way it rotates into fresh shares.
+ */
+export function deriveSudokuSolution(seed: string, teamId: string, generation: number): SudokuGrid {
+  const index = Number(
+    deriveBigInt(seed, `sudoku:${teamId}:${generation}`, 0, BigInt(ALL_SOLUTIONS.length)),
+  );
+  const solution = ALL_SOLUTIONS[index];
+  if (!solution) throw new Error(`deriveSudokuSolution: no solution at index ${index}`);
+  return solution;
+}
+
+/**
+ * [Issue #709] The eight cells of a team's solution that are PUBLISHED as its
+ * puzzle -- `CryptoBattleState.publicPuzzles[teamId]`. Zero marks a hidden cell.
+ *
+ * Eight givens pin a unique solution about four times in five
+ * (`sudoku.test.ts` records the measured rate). That a puzzle can sometimes be
+ * SOLVED is not a weakness of the Order: ZK sudoku is about showing you hold a
+ * solution without showing it, not about the puzzle being hard -- and the HUNT
+ * this Order carries is gated on a MISUSE (a reused relabelling), never on
+ * having solved the puzzle.
+ */
+export function deriveSudokuPuzzle(
+  seed: string,
+  teamId: string,
+  generation: number,
+  solution: SudokuGrid = deriveSudokuSolution(seed, teamId, generation),
+): SudokuGrid {
+  // A seed-driven shuffle of the cell indices; the first eight are shown.
+  const order = Array.from({ length: SUDOKU_CELLS }, (_, i) => i);
+  for (let i = order.length - 1; i > 0; i -= 1) {
+    const j = Number(deriveBigInt(seed, `sudoku-givens:${teamId}:${generation}`, i, BigInt(i + 1)));
+    [order[i], order[j]] = [order[j] as number, order[i] as number];
+  }
+  const shown = new Set(order.slice(0, SUDOKU_GIVEN_COUNT));
+  return solution.map((v, i) => (shown.has(i) ? v : 0));
+}
+
+/**
+ * [Issue #709] Which constraint group (0..11: rows, columns, boxes) the judge
+ * opens after a successful PROVE on this Order. Bound to the Order id so a
+ * team cannot learn it before submitting, and so a replay opens the same one.
+ *
+ * `avoid` is a list of exclusion sets, strongest preference first: the pick
+ * comes from the first set that still leaves a group. The reducer passes
+ * `[groups opened on this generation, groups opened under THIS relabelling's
+ * tag]`: two reveals of the SAME group under one relabelling are identical
+ * rows and teach a hunter nothing, so a reuse that landed on a repeated group
+ * would be a mistake the record could not punish -- and the statement
+ * promises that it can. Preferring a group the generation has never opened
+ * makes every reuse informative for the first twelve PROVEs; past that, the
+ * second tier still keeps the groups under one tag distinct until a single
+ * table has been reused twelve times. Only then does the pick fall back to
+ * the whole set.
+ */
+export function deriveRevealGroup(
+  seed: string,
+  contractId: string,
+  avoid: readonly ReadonlySet<number>[] = [],
+): number {
+  const every = Array.from({ length: CONSTRAINT_GROUP_COUNT }, (_, i) => i);
+  let pool = every;
+  for (const excluded of avoid) {
+    const candidates = every.filter((group) => !excluded.has(group));
+    if (candidates.length > 0) {
+      pool = candidates;
+      break;
+    }
+  }
+  const index = Number(deriveBigInt(seed, `sudoku-reveal:${contractId}`, 0, BigInt(pool.length)));
+  return pool[index] ?? 0;
+}
+
+/**
+ * [Issue #709] The tag a published reveal carries, naming WHICH relabelling
+ * produced it without saying what that relabelling is.
+ *
+ * Two reveals from one team in one generation carry the same tag if and only
+ * if they used the same π -- that equality is public, so a reader of the ledger
+ * can see that a team reused a relabelling, the same way two Schnorr
+ * transcripts sharing a commitment used to be visible. What is NOT public is π
+ * itself: there are only 24, so a bare hash of π would be a lookup table, and
+ * the seed in the preimage is what stops that. The judge, which holds the
+ * seed, can run the 24 candidates and recover π from a tag; nobody else can.
+ */
+export function derivePermutationTag(
+  seed: string,
+  teamId: string,
+  generation: number,
+  pi: Permutation,
+): string {
+  return deriveBytes(seed, `sudoku-tag:${teamId}:${generation}:${pi.join("")}`, 0)
+    .subarray(0, 6)
+    .toString("hex");
+}
+
 export interface ContractPlan {
   readonly kind: ContractKind;
   /**
@@ -118,25 +229,22 @@ export interface ContractPlan {
    * `reducer.ts` derives at issuance from the match seed and the Order id, so
    * nothing about them has to live in this plan.
    */
-  readonly taskKind: OrderTaskKind;
+  readonly taskKind: Exclude<OrderTaskKind, "rps-duel">;
   /** Only meaningful for a `reveal-share` task. */
   readonly requestedShareIndices: readonly number[];
   /**
    * [Issue #645] The rule this Order's client imposes on what may be published.
    *
-   * For a `reveal-share` Order this is a real roll: roughly 1-in-4 are
-   * `"no-raw-disclosure"` — #645's Level-1 "technique-specified" Order, which
-   * PROVE alone satisfies — and the rest leave the choice open, which is the
-   * Level-3 trade-off Order (LEAK is quick and feeds the Public Ledger; PROVE
-   * costs computation and feeds it nothing).
+   * A `reveal-share` Order leaves the choice open -- #645's Level-3 trade-off
+   * Order (LEAK is quick and feeds the Public Ledger; PROVE costs work and
+   * feeds it nothing). [Issue #709] It used to roll 1-in-4 for
+   * `"no-raw-disclosure"`, the Level-1 "technique-specified" Order that PROVE
+   * alone satisfies; that Order is now `zk-sudoku`, with its own slot.
    *
-   * For FHE and MPC Orders it is always `"no-raw-disclosure"`, and not as a
-   * policy choice: neither method has any way to publish the underlying value,
-   * so stating anything weaker would describe an Order that does not exist.
-   *
-   * Rolled from its own derivation label so it is independent of the rush and
-   * task rolls: a rush Order that also forbids disclosure is a real (and
-   * interesting) combination, not an artefact of two rolls sharing a stream.
+   * For FHE, MPC and sudoku Orders it is always `"no-raw-disclosure"`, and not
+   * as a policy choice: none of those methods has any way to publish the
+   * underlying value, so stating anything weaker would describe an Order that
+   * does not exist.
    */
   readonly privacyConstraint: PrivacyConstraint;
   /**
@@ -158,9 +266,9 @@ export interface ContractPlan {
  * meets an FHE Order and an MPC Order, and a probabilistic schedule can leave a
  * short match with neither. Deterministic rotation also keeps a replay honest.
  *
- * `reveal-share` gets two of every four Orders because it is the one with a
- * genuine method choice (LEAK or PROVE), which is what #645's Level-3 Orders
- * are for; FHE and MPC take one each.
+ * Every task kind takes one slot of five: the share Order (the one with a
+ * genuine LEAK / PROVE choice, #645's Level-3 Order), the cipher ladder, FHE,
+ * the ZK sudoku proof, and MPC.
  */
 export function deriveContractPlan(
   seed: string,
@@ -169,17 +277,21 @@ export function deriveContractPlan(
   config: Pick<FieldConfig, "prime" | "shareCount">,
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
-  const CONSTRAINED_MODULUS = 4n;
   // [Issue #659 §13] The ladder Order takes a slot in the rotation rather than
   // replacing anything: #645's three tasks each teach something the ladder does
   // not, and the ladder teaches the thing none of them do -- how much you can
   // publish before your key is gone. A team meets all four in the first five
   // Orders, which is what makes the comparison between them available at all.
-  const TASK_ROTATION: readonly OrderTaskKind[] = [
+  // [Issue #709] The share Order held two of the five slots -- one open to
+  // LEAK or PROVE, one PROVE-only -- and the live run measured it at 45% of
+  // the belt. The PROVE-only slot is now the ZK sudoku Order outright: same
+  // proof, stated as its own job, so a team meets the relabelling once per
+  // rotation rather than only when a share Order happens to forbid LEAK.
+  const TASK_ROTATION: readonly Exclude<OrderTaskKind, "rps-duel">[] = [
     "reveal-share",
     "caesar-shift",
     "homomorphic-sum",
-    "reveal-share",
+    "zk-sudoku",
     "masked-total",
   ];
   // [Issue #689] The very first Order is fixed, for every team and every seed.
@@ -208,24 +320,17 @@ export function deriveContractPlan(
   const indexRoll = deriveBigInt(seed, `contract-index:${teamId}`, sequenceIndex, config.prime);
   const shareIndex = Number(indexRoll % BigInt(config.shareCount)) + 1;
   const taskKind = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? "reveal-share";
-  const constraintRoll = deriveBigInt(
-    seed,
-    `contract-privacy:${teamId}`,
-    sequenceIndex,
-    config.prime,
-  );
-  // FHE and MPC publish nothing reconstructable by construction, so their
-  // Orders state that rule rather than rolling for it.
+  // FHE, MPC and the sudoku proof publish nothing reconstructable by
+  // construction, so their Orders state that rule rather than rolling for it.
   // [Issue #659] A ladder Order never forbids disclosure. The decision it puts
   // in front of a team -- compute it, or publish the pair and hope your rung
   // survives -- only exists while LEAK is genuinely on the table, and an Order
   // that removed it would be a hand calculation with no choice attached.
+  // [Issue #709] The share Order is always the open one now: its PROVE-only
+  // variant became the `zk-sudoku` slot in the rotation above, so the privacy
+  // roll it used to make has nothing left to decide.
   const privacyConstraint: PrivacyConstraint =
-    taskKind === "caesar-shift"
-      ? "none"
-      : taskKind !== "reveal-share" || constraintRoll % CONSTRAINED_MODULUS === 0n
-        ? "no-raw-disclosure"
-        : "none";
+    taskKind === "caesar-shift" || taskKind === "reveal-share" ? "none" : "no-raw-disclosure";
   return {
     kind,
     taskKind,

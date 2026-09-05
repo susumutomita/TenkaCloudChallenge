@@ -36,9 +36,11 @@ import HelpDrawer, { PYTHON_SNIPPET } from "../../portal/HelpDrawer.tsx";
 import RegistrationPanel, {
   COPY as REGISTRATION_COPY,
   describeOutcome,
+  describeProveOutcome,
   submitHunt,
+  submitHuntSudoku,
   submitLeak,
-  submitProve,
+  submitProveSudoku,
   submitRotate,
 } from "../../portal/RegistrationPanel.tsx";
 import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
@@ -47,19 +49,25 @@ import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
 import {
   FAST_MOVE_COPY,
+  FeedbackBanner,
   cipherHuntCandidates,
+  huntBudgetFor,
+  huntFeedback,
   nextHintFor,
-  nonceHuntCandidates,
   primaryActionsFor,
+  proveFeedback,
   rotateVoidCount,
   ageProjection,
   exposureRows,
+  sudokuHuntCandidates,
+  sudokuRotatePressure,
   tacticAvailability,
 } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
-import { MODP_2048_P } from "./group.ts";
 import { rungSpec } from "./ladder.ts";
+import { reconstruct } from "./shamir.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
+import { ALL_PERMUTATIONS, IDENTITY_PERMUTATION, samePermutation } from "./sudoku.ts";
 import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
 
 const FIXED_NOW = 1_700_000_000_000;
@@ -123,6 +131,10 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
       rotateCooldownRemainingMs: 0,
       completedContractIds: [],
       huntedGenerations: [],
+      // [Issue #709] The PROVE panel draws this and lists these.
+      sudokuSolution: [1, 2, 3, 4, 3, 4, 1, 2, 2, 1, 4, 3, 4, 3, 2, 1],
+      usedPermutations: [[2, 3, 4, 1]],
+      sudokuHuntedGenerations: [],
     },
     myContracts: [
       {
@@ -186,22 +198,34 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
         postedAtMs: ELAPSED_AT_TICK_MS - 3000,
       },
       {
-        id: "blue-c-old-proof",
+        // [Issue #709] What a PROVE publishes: one opened group of a
+        // RELABELLED grid, with the tag naming the relabelling.
+        id: "blue-c-old-sudoku",
         teamId: "blue",
         generation: 1,
-        kind: "proof",
+        kind: "sudoku-reveal",
         method: "prove" as const,
         contractId: "blue-c-old",
-        commitment: "112233",
-        response: "445566",
+        group: 1,
+        cells: [4, 2, 3, 1],
+        tag: "a1b2c3d4e5f6",
         postedAtMs: ELAPSED_AT_TICK_MS - 1000,
       },
     ],
     teams: {
-      blue: { teamId: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
-      red: { teamId: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
+      blue: { teamId: "blue", teamName: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
+      red: { teamId: "red", teamName: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
     },
-    publicCommitments: { blue: "1010101010", red: "2020202020" },
+    // [Issue #709] Eight cells of each team's solution; 0 is hidden.
+    publicPuzzles: {
+      blue: [1, 0, 0, 4, 0, 4, 1, 0, 2, 0, 0, 3, 0, 3, 2, 0],
+      red: [0, 3, 1, 0, 1, 0, 0, 3, 0, 2, 4, 0, 4, 0, 0, 2],
+    },
+    // [Issue #696] The HUNT card reads the budget and the miss price from here.
+    huntAttempts: { red: { generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    sudokuHuntAttempts: { red: { generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    wrongHuntCost: DEFAULT_CONFIG.scores.wrongHunt,
+    wrongProveCost: DEFAULT_CONFIG.scores.wrongProve,
     ...overrides,
   };
 }
@@ -347,41 +371,40 @@ describe("StatusPanelBody -- populated 3-lane render", () => {
       expect(html).toContain(locale === "ja" ? "スコア" : "Score");
       expect(html).toContain(locale === "ja" ? "フェーズ" : "Phase");
       expect(html).toContain(locale === "ja" ? "自チームにのみ表示されます" : "Only your team can see this");
-      // My Vault shows the team's own teamId -- the only on-screen source
-      // for PROVE's Python `team` variable.
-      // (React HTML-escapes the English copy's apostrophe to `&#x27;`, so
-      // this checks the apostrophe-free tail of that string instead.)
-      expect(html).toContain(locale === "ja" ? "PROVE の `team` 変数" : "`team` variable");
+      // [Issue #709] My Vault shows the team's own sudoku solution, as rows,
+      // and the relabellings it has already spent.
+      expect(html).toContain("1 2 3 4");
+      expect(html).toContain("1→2");
       // Raw ledger data (participant-facing, allowed) is present.
       expect(html).toContain("998877");
       expect(html).toContain("554433");
     });
 
     /**
-     * [Issue #645 Phase 5] A proof's challenge binds five values -- domain,
-     * team, contract, generation, R, Y -- and the nonce-reuse HUNT needs two
-     * challenges recomputed from ledger rows. Two of those inputs reached no
-     * participant surface at all: `ledgerPayload` dropped the Order id, and Y
-     * was rendered nowhere. A reader who understood the maths perfectly still
-     * could not compute a single challenge, so the HUNT was unplayable by hand
-     * no matter what the statement said.
+     * [Issue #709] The sudoku HUNT needs four things off the screen: which
+     * group was opened, its four digits, the tag naming the relabelling, and
+     * the target's public puzzle. The nonce-reuse HUNT this replaces once
+     * shipped with two of its inputs rendered nowhere, so the same class of
+     * gap is pinned here for the new one.
      */
-    it(`renders every value a proof's challenge binds (${locale})`, () => {
+    it(`renders every value a sudoku HUNT reads (${locale})`, () => {
       const projection = fixtureProjection();
       const html = renderToStaticMarkup(
         createElement(StatusPanelBody, { projection, locale, elapsedSincePollMs: 0 }),
       );
-      const proof = projection.publicLedger.find((a) => a.kind === "proof");
-      if (proof?.kind !== "proof") throw new Error("expected a proof row in the fixture");
+      const reveal = projection.publicLedger.find((a) => a.kind === "sudoku-reveal");
+      if (reveal?.kind !== "sudoku-reveal") throw new Error("expected a sudoku reveal in the fixture");
 
-      expect(html).toContain(proof.teamId);
-      expect(html).toContain(proof.contractId);
-      expect(html).toContain(proof.commitment);
-      expect(html).toContain(String(proof.generation));
-      // Every team's Y, not only the target's -- it is public for all of them,
-      // and rendering only one would be the platform choosing a target.
-      for (const y of Object.values(projection.publicCommitments)) {
-        expect(html).toContain(y);
+      expect(html).toContain(reveal.teamId);
+      expect(html).toContain(reveal.contractId);
+      expect(html).toContain(reveal.cells.join(" "));
+      expect(html).toContain(reveal.tag);
+      expect(html).toContain(String(reveal.generation));
+      // Every team's puzzle, not only the target's -- it is public for all of
+      // them, and rendering only one would be the platform choosing a target.
+      for (const puzzle of Object.values(projection.publicPuzzles)) {
+        const firstRow = puzzle.slice(0, 4).map((v) => (v === 0 ? "." : String(v))).join(" ");
+        expect(html).toContain(firstRow);
       }
     });
 
@@ -535,60 +558,78 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
     });
   }
 
-  it("PROVE Python snippet's prime is byte-for-byte the real RFC 3526 Group 14 constant", () => {
-    // An earlier version of this snippet shipped `p = <RFC 3526 Group 14
-    // prime>` -- a syntactically invalid placeholder, despite the
-    // surrounding copy promising "そのまま動く Python" / "runnable
-    // Python". This test is the machine-checkable half of fixing that: it
-    // fails if a future edit ever reintroduces a placeholder, drifts from
-    // `group.ts`'s real constant, or mistypes even one of its 512 hex
-    // digits (see `group.ts`'s own header on why that specific failure
-    // mode is otherwise silent -- Schnorr verification "still computes a
-    // number", it does not throw on a wrong prime).
-    const match = PYTHON_SNIPPET.match(/^p = 0x([0-9a-f]+)/m);
-    if (!match?.[1]) throw new Error("PYTHON_SNIPPET: expected a `p = 0x<hex>` line");
-    expect(BigInt(`0x${match[1]}`)).toBe(MODP_2048_P);
+  /**
+   * [Issue #709] The snippet's PROVE half is the relabelling written for a
+   * machine; its HUNT half is Lagrange interpolation. Both are executed here
+   * from the constants the snippet prints, so a participant who checks their
+   * hand work against it is checking against the rule the judge applies.
+   */
+  it("the PROVE snippet's relabelling, executed, is a relabelling the judge would accept", async () => {
+    const { applyPermutation, isValidSolution, permutationBetween } = await import("./sudoku.ts");
+    // The constants the snippet opens with, read from the snippet itself so
+    // a change to one that is not made in the other fails here.
+    expect(PYTHON_SNIPPET).toContain("table = {1: 3, 2: 1, 3: 4, 4: 2}");
+    const solution = [1, 2, 3, 4, 3, 4, 1, 2, 2, 1, 4, 3, 4, 3, 2, 1];
+    expect(PYTHON_SNIPPET).toContain("solution = [1, 2, 3, 4,");
+    const table = [3, 1, 4, 2];
+    const grid = applyPermutation(solution, table);
+    expect(isValidSolution(solution)).toBe(true);
+    expect(isValidSolution(grid)).toBe(true);
+    expect(permutationBetween(solution, grid)).toEqual(table);
+    // And it says the thing the HUNT rests on.
+    expect(PYTHON_SNIPPET).toContain("Never the same one twice");
   });
 
-  it("PROVE Python snippet, run for real, matches createProof()'s real output and verifies", async () => {
-    // The other half of "runnable Python" is actually running it. This
-    // repo's Python isn't itself under `bun test`, so this asserts the
-    // TRANSCRIPTION is exact (every hash label, the length-prefix framing,
-    // the operation order) by re-deriving the same proof in TypeScript
-    // using the identical primitives the snippet calls out to
-    // (`prng.ts`'s `deriveBigInt` == the snippet's `derive`,
-    // `schnorr-transcript.ts`'s length-prefix + fixed-width framing == the
-    // snippet's `lp` / `fw`) -- one-time manual verification against a real
-    // `python3` run of this exact snippet (same secret/team/generation/
-    // contract) additionally confirmed identical `commitment` / `response`
-    // decimal strings, which this test cannot itself shell out to `python3`
-    // to re-check on every run without adding that as a test-time
-    // dependency this repo does not otherwise have.
-    const { createProof } = await import("./schnorr-prover.ts");
-    const { verifyProof } = await import("./schnorr-verifier.ts");
-    const { derivePublicCommitment } = await import("./schnorr-witness.ts");
+  it("the HUNT snippet's field is the match's, and its interpolation agrees with shamir.ts", () => {
+    const match = PYTHON_SNIPPET.match(/^P = (\d+)/m);
+    if (!match) throw new Error("PYTHON_SNIPPET: expected a `P = ...` line");
+    expect(match[1]).toBe(DEFAULT_CONFIG.prime);
+    // The snippet's reconstruct, transcribed: three shares of f(x) = 7 + 2x + 5x^2 mod 97.
+    const P = BigInt(DEFAULT_CONFIG.prime);
+    const f = (x: bigint) => (7n + 2n * x + 5n * x * x) % P;
+    const shares = [1n, 2n, 3n].map((x) => ({ index: Number(x), value: f(x) }));
+    const modP = (v: bigint) => ((v % P) + P) % P;
+    let total = 0n;
+    for (const { index: xi, value: yi } of shares) {
+      let num = 1n;
+      let den = 1n;
+      for (const { index: xj } of shares) {
+        if (xj !== xi) {
+          num = modP(num * -BigInt(xj));
+          den = modP(den * BigInt(xi - xj));
+        }
+      }
+      // pow(den, P - 2, P)
+      let inv = 1n;
+      let base = modP(den);
+      let e = P - 2n;
+      while (e > 0n) {
+        if (e & 1n) inv = modP(inv * base);
+        base = modP(base * base);
+        e >>= 1n;
+      }
+      total = modP(total + yi * num * inv);
+    }
+    expect(total).toBe(7n);
+    expect(reconstruct(shares, P)).toBe(7n);
+  });
 
-    const secret = 123456789012345678n;
-    const team = "blue";
-    const generation = 1;
-    const contract = "blue-c0";
+  it("does not contradict four-hole work, distinct-share counting or the teaching-model boundary", () => {
+    for (const locale of ["ja", "en"] as const) {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      for (const stale of ["これがゲームの全部", "3 回やったら殺される", "nothing is simulated", "applied to sixteen cells", "4 つの対応表を 16 マス"])
+        expect(html).not.toContain(stale);
+      expect(html).toContain(locale === "ja" ? "#1・#2・#1 は 2 個分" : "#1, #2, #1 count as two");
+      expect(html).toContain(locale === "ja" ? "4 マス" : "four sudoku holes");
+      expect(html).toContain(locale === "ja" ? "じゃんけんのお題は続きます" : "Rock-paper-scissors Orders continue");
+    }
+  });
 
-    const proof = createProof(secret, generation, team, contract);
-    // These exact decimal strings were also produced by running
-    // PYTHON_SNIPPET's real Python (with the same inputs) by hand before
-    // this fix shipped -- pinning them here means a future accidental
-    // change to the framing (this snippet's OR schnorr-prover.ts's) that
-    // still "verifies" but silently diverges from what a participant
-    // copy-pasting this exact Python would compute gets caught too.
-    expect(proof.commitment).toBe(
-      "12491904079717215833289811861220956048131206574919718145925209972398991206550006999619986512335299316987035579151265564160905430804756070893245491304906574426512819514797618407919681861453404509081259916574473758059436583306737429056168559213105116239617298111422348935851536075343460252578596791285162186249960968769354288041789857921094185762502840065986960829626732425410297434567412792768095341828845359892161906091162086495027395998743458945660683858268942938522993404146830635328411484578493755418282595586209950518050109052386659393336806948058372378342971254888277990456825964420607659201042108347562933100138",
-    );
-    expect(proof.response).toBe(
-      "8240697219374735644623142365545472691120352149005885012557939550420978958098898382175055561578100915092772978845894423099683761252258163195079737990667",
-    );
-
-    const publicY = derivePublicCommitment(secret, generation, team);
-    expect(verifyProof(publicY, proof, { teamId: team, contractId: contract, generation })).toBe(true);
+  it("the snippet no longer asks for code the move does not need", () => {
+    // [Issue #713 completion check, taken early] The participant path must
+    // not say a program is required for PROVE.
+    expect(PYTHON_SNIPPET).toContain("No code needed");
+    expect(PYTHON_SNIPPET).not.toContain("pow(g, r, p)");
   });
 });
 
@@ -625,12 +666,20 @@ describe("RegistrationPanel.tsx submit* helpers build the correct CryptoBattleOp
     expect(calls).toEqual([{ kind: "leak", contractId: "blue-c0" }]);
   });
 
-  it("submitProve sends { kind: 'prove', contractId, proof }", async () => {
+  it("submitProveSudoku sends { kind: 'prove-sudoku', contractId, grid }", async () => {
+    // [Issue #709] One op: the judge holds the solution and checks the whole
+    // grid, so there is no challenge to wait for.
     const { client, calls } = capturingClient();
-    await submitProve(client, "blue-c1", { commitment: "111", response: "222" });
-    expect(calls).toEqual([
-      { kind: "prove", contractId: "blue-c1", proof: { commitment: "111", response: "222" } },
-    ]);
+    const grid = [3, 1, 4, 2, 4, 2, 3, 1, 1, 3, 2, 4, 2, 4, 1, 3];
+    await submitProveSudoku(client, "blue-c1", grid);
+    expect(calls).toEqual([{ kind: "prove-sudoku", contractId: "blue-c1", grid }]);
+  });
+
+  it("submitHuntSudoku sends { kind: 'hunt-sudoku', targetTeamId, generation, solution }", async () => {
+    const { client, calls } = capturingClient();
+    const solution = [1, 2, 3, 4, 3, 4, 1, 2, 2, 1, 4, 3, 4, 3, 2, 1];
+    await submitHuntSudoku(client, "red", 2, solution);
+    expect(calls).toEqual([{ kind: "hunt-sudoku", targetTeamId: "red", generation: 2, solution }]);
   });
 
   it("submitHunt sends { kind: 'hunt', targetTeamId, generation, recoveredSecret }", async () => {
@@ -736,11 +785,11 @@ describe("the advanced forms only offer Orders their own method can fulfil [Issu
   });
 });
 
-describe("the nonce-HUNT card offers candidates without judging exploitability [Issue #645]", () => {
-  const proof = (teamId: string, generation: number, contractId: string, commitment: string) =>
+describe("the sudoku-HUNT card offers candidates without judging exploitability [Issue #709]", () => {
+  const reveal = (teamId: string, generation: number, contractId: string, tag: string, group = 0) =>
     ({
-      id: `${contractId}-proof`, teamId, generation, kind: "proof" as const,
-      method: "prove" as const, contractId, commitment, response: "9", postedAtMs: 1,
+      id: `${contractId}-sudoku`, teamId, generation, kind: "sudoku-reveal" as const,
+      method: "prove" as const, contractId, group, cells: [1, 2, 3, 4], tag, postedAtMs: 1,
     });
 
   const projectionWith = (
@@ -750,57 +799,67 @@ describe("the nonce-HUNT card offers candidates without judging exploitability [
     fixtureProjection({
       publicLedger: ledger,
       teams: {
-        blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
-        red: { teamId: "red", score: 0, generation: redGeneration, huntedGenerationCount: 0 },
+        blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+        red: {
+          teamId: "red",
+          teamName: "red",
+          score: 0,
+          generation: redGeneration,
+          huntedGenerationCount: 0,
+        },
       },
     });
 
   /**
-   * The load-bearing pair. An earlier version listed a team only once it had
-   * found two proof rows sharing a commitment — so the card changed the moment
-   * the reuse appeared, and the Portal was announcing the pattern the
+   * The load-bearing pair. The nonce-reuse card this replaces once listed a
+   * team only once two rows shared a commitment — so the card changed the
+   * moment the reuse appeared, and the Portal was announcing the pattern the
    * participant is supposed to spot. These two assert the card looks the SAME
-   * either way: the reading stays the participant's.
+   * either way: the tags are shown, the reading stays the participant's.
    */
-  it("offers a team that has posted proofs, whether or not a commitment repeats", () => {
-    const reused = nonceHuntCandidates(
-      projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 1),
+  it("offers a team that has PROVEd, whether or not a tag repeats", () => {
+    const reused = sudokuHuntCandidates(
+      projectionWith([reveal("red", 1, "red-c0", "aa", 0), reveal("red", 1, "red-c1", "aa", 5)], 1),
     );
-    const distinct = nonceHuntCandidates(
-      projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "88")], 1),
+    const distinct = sudokuHuntCandidates(
+      projectionWith([reveal("red", 1, "red-c0", "aa", 0), reveal("red", 1, "red-c1", "bb", 5)], 1),
     );
-    expect(reused).toEqual([{ teamId: "red", generation: 1 }]);
-    expect(distinct).toEqual(reused);
+    expect(reused.map((c) => [c.teamId, c.generation, c.reveals.length])).toEqual([["red", 1, 2]]);
+    expect(distinct.map((c) => [c.teamId, c.generation, c.reveals.length])).toEqual([["red", 1, 2]]);
+    // Every reveal is carried, tag and all: the match is the reader's to spot.
+    expect(reused[0]?.reveals.map((r) => r.tag)).toEqual(["aa", "aa"]);
+    expect(distinct[0]?.reveals.map((r) => r.tag)).toEqual(["aa", "bb"]);
+    // And the public puzzle rides along, because that is what the reveals
+    // are lined up against.
+    expect(reused[0]?.puzzle).toEqual(fixtureProjection().publicPuzzles.red ?? []);
   });
 
-  it("offers a team with a single proof row, which cannot be hunted at all", () => {
+  it("offers a team with a single reveal, which cannot be hunted at all", () => {
     // Precisely the case an exploitability-computing list would hide, and
     // hiding it is what would leak the verdict.
-    expect(nonceHuntCandidates(projectionWith([proof("red", 1, "red-c0", "77")], 1))).toEqual([
-      { teamId: "red", generation: 1 },
-    ]);
+    expect(sudokuHuntCandidates(projectionWith([reveal("red", 1, "red-c0", "aa")], 1)).map((c) => c.teamId)).toEqual(["red"]);
   });
 
   it("names each team's current generation, so a stale target cannot be offered", () => {
-    // The victim rotated after those rows were written. The candidate carries
-    // generation 2 — what `validateOp` will accept — not the ledger's 1.
+    // The victim rotated after those rows were written: nothing to offer at
+    // generation 2, and nothing stale offered either.
     expect(
-      nonceHuntCandidates(
-        projectionWith([proof("red", 1, "red-c0", "77"), proof("red", 1, "red-c1", "77")], 2),
+      sudokuHuntCandidates(
+        projectionWith([reveal("red", 1, "red-c0", "aa"), reveal("red", 1, "red-c1", "aa")], 2),
       ),
     ).toEqual([]);
   });
 
   it("never offers your own team", () => {
     expect(
-      nonceHuntCandidates(
-        projectionWith([proof("blue", 1, "blue-c0", "77"), proof("blue", 1, "blue-c1", "77")], 1),
+      sudokuHuntCandidates(
+        projectionWith([reveal("blue", 1, "blue-c0", "aa"), reveal("blue", 1, "blue-c1", "aa")], 1),
       ),
     ).toEqual([]);
   });
 
-  it("offers nothing when no other team has posted a proof", () => {
-    expect(nonceHuntCandidates(projectionWith([], 1))).toEqual([]);
+  it("offers nothing when no other team has PROVEd", () => {
+    expect(sudokuHuntCandidates(projectionWith([], 1))).toEqual([]);
   });
 });
 
@@ -817,14 +876,15 @@ describe("advanced tactics use progressive disclosure", () => {
     postedAtMs: 1,
   });
   const proof = (teamId: string, generation: number): PublicArtifact => ({
-    id: `${teamId}-${generation}-proof`,
+    id: `${teamId}-${generation}-sudoku`,
     teamId,
     generation,
-    kind: "proof",
+    kind: "sudoku-reveal",
     method: "prove",
     contractId: `${teamId}-c2`,
-    commitment: "11",
-    response: "13",
+    group: 0,
+    cells: [1, 2, 3, 4],
+    tag: "ff00ff00ff00",
     postedAtMs: 2,
   });
 
@@ -847,6 +907,71 @@ describe("advanced tactics use progressive disclosure", () => {
       value: "7",
       contractId: `${teamId}-c1`,
       postedAtMs: 1,
+    });
+
+    /**
+     * [Issue #3172] The lane names its rows. `teamId` is a ULID, so before this
+     * an opponent showed as `01M1J5VK3N6KX5G3MYW190S9Q8` — a danger meter whose
+     * rows were 26 random characters.
+     */
+    it("shows each team's display name, falling back to the id", () => {
+      const named = exposureRows(
+        fixtureProjection({
+          publicLedger: [],
+          teams: {
+            blue: {
+              teamId: "blue",
+              teamName: "かけら隊",
+              score: 0,
+              generation: 1,
+              huntedGenerationCount: 0,
+            },
+            // A platform that could not resolve a name leaves the id, and the
+            // lane shows that rather than an empty cell.
+            red: { teamId: "red", teamName: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
+          },
+        }),
+      );
+      expect(named.map((r) => r.teamName)).toEqual(["かけら隊", "red"]);
+    });
+
+    /**
+     * [Issue #698] The same complaint as the exposure lane's, one panel over.
+     * The Public Ledger exists to answer "who exposed this", and it answered
+     * with a 26-character ULID -- for the reader's OWN team as well, which is
+     * what the live run screenshotted. The two surfaces sit on one screen, so
+     * they name a team the same way.
+     */
+    it("names each team on the Public Ledger, and calls the reader's own row 'you'", () => {
+      const ledger = (teamId: string, shareIndex: number): PublicArtifact => ({
+        id: `${teamId}-a${shareIndex}`,
+        kind: "share",
+        teamId,
+        contractId: `${teamId}-c0`,
+        generation: 1,
+        method: "leak",
+        postedAtMs: 0,
+        shareIndex,
+        value: "7",
+      });
+      const html = renderToStaticMarkup(
+        createElement(GameBoardBody, {
+          projection: fixtureProjection({
+            publicLedger: [ledger("blue", 1), ledger("red", 2)],
+            teams: {
+              blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+              red: { teamId: "red", teamName: "かけら隊", score: 0, generation: 1, huntedGenerationCount: 0 },
+            },
+          }),
+          locale: "ja",
+        }),
+      );
+      const titles = [...html.matchAll(/<strong>([^<]*)<\/strong>/g)].map(([, name]) => name);
+      // `blue` is the vault owner in `fixtureProjection`, so its row is the
+      // reader's own and says so rather than repeating a name back at them.
+      expect(titles).toContain("あなた");
+      expect(titles).toContain("かけら隊");
+      expect(html).not.toContain(">blue<");
     });
 
     it("lists every team on a board where nothing has been published", () => {
@@ -890,8 +1015,8 @@ describe("advanced tactics use progressive disclosure", () => {
         fixtureProjection({
           publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2), shareAt("red", 1, 3)],
           teams: {
-            blue: { teamId: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
-            red: { teamId: "red", score: 20, generation: 2, huntedGenerationCount: 1 },
+            blue: { teamId: "blue", teamName: "blue", score: 30, generation: 1, huntedGenerationCount: 0 },
+            red: { teamId: "red", teamName: "red", score: 20, generation: 2, huntedGenerationCount: 1 },
           },
         }),
       );
@@ -903,9 +1028,9 @@ describe("advanced tactics use progressive disclosure", () => {
         fixtureProjection({
           publicLedger: [shareAt("red", 1, 1), shareAt("red", 1, 2)],
           teams: {
-            blue: { teamId: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
-            green: { teamId: "green", score: 0, generation: 1, huntedGenerationCount: 0 },
-            red: { teamId: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
+            blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
+            green: { teamId: "green", teamName: "green", score: 0, generation: 1, huntedGenerationCount: 0 },
+            red: { teamId: "red", teamName: "red", score: 0, generation: 1, huntedGenerationCount: 0 },
           },
         }),
       );
@@ -965,8 +1090,9 @@ describe("advanced tactics use progressive disclosure", () => {
   it("keeps every advanced control off a fresh first screen", () => {
     expect(tacticAvailability(fixtureProjection({ publicLedger: [] }))).toEqual({
       hunt: false,
-      nonceHunt: false,
+      sudokuHunt: false,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: false,
     });
   });
@@ -974,20 +1100,23 @@ describe("advanced tactics use progressive disclosure", () => {
   it("reveals only tactics backed by the current projection", () => {
     expect(tacticAvailability(fixtureProjection({ publicLedger: [share("red", 1)] }))).toEqual({
       hunt: true,
-      nonceHunt: false,
+      sudokuHunt: false,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: false,
     });
     expect(tacticAvailability(fixtureProjection({ publicLedger: [proof("red", 1)] }))).toEqual({
       hunt: false,
-      nonceHunt: true,
+      sudokuHunt: true,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: false,
     });
     expect(tacticAvailability(fixtureProjection({ publicLedger: [share("blue", 1)] }))).toEqual({
       hunt: false,
-      nonceHunt: false,
+      sudokuHunt: false,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: true,
     });
   });
@@ -1398,11 +1527,12 @@ describe("the help drawer names what the player is learning", () => {
       for (const term of expected) expect(html).toContain(term);
     });
 
-    it(`says where they are used, rather than only that they exist (${locale})`, () => {
-      // The motivation the operator gave: these matter because blockchains are
-      // made of them. Without it the three names are trivia.
+    it(`explains the use case and the trusted-judge boundary (${locale})`, () => {
+      // Teach concrete uses and the model boundary without claiming that
+      // every mechanism here is a full production cryptographic protocol.
       const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
-      expect(html).toContain(locale === "ja" ? "ブロックチェーン" : "blockchain");
+      expect(html).toContain(locale === "ja" ? "合計を求めたい" : "company total");
+      expect(html).toContain(locale === "ja" ? "審判を信頼するモデル" : "trusted-judge teaching model");
     });
 
     it(`frames the historical cipher as the way in, not the destination (${locale})`, () => {
@@ -1423,18 +1553,24 @@ describe("the help drawer names what the player is learning", () => {
  * is supposed to work, let alone why.
  */
 describe("each Order carries its use, its mechanism, and its procedure", () => {
-  it("gives the FHE Order all three, with the identity that makes it work", () => {
+  it("explains the FHE input-specific hiding totals instead of a shared-key identity", () => {
     const copy = FAST_MOVE_COPY.ja;
     expect(copy.fheUse).toContain("つかいみち");
-    // The mechanism is one line and it is the actual identity, not a paraphrase.
-    expect(copy.fheWhy).toContain("Enc(a) + Enc(b) = Enc(a+b)");
+    // Each input has a different key; the old Enc(a+b) wording taught a
+    // shared-key identity that this scheme does not implement.
+    expect(copy.fheWhy).toContain("中身の合計 + 隠す数の合計");
+    expect(copy.fheWhy).toContain("各入力の鍵");
+    expect(copy.fheWhy).not.toContain("Enc(a+b)");
+    expect(FAST_MOVE_COPY.en.fheWhy).toContain("separate input keys");
     expect(copy.fheHelp).toContain("やること");
   });
 
   it("gives the MPC Order the cancellation that makes it work", () => {
     const copy = FAST_MOVE_COPY.ja;
     expect(copy.mpcUse).toContain("つかいみち");
-    expect(copy.mpcWhy).toContain("a+b+c");
+    expect(copy.mpcWhy).toContain("覆面");
+    expect(copy.mpcWhy).toContain("小計");
+    expect(copy.mpcWhy).toContain("打ち消し合");
     expect(copy.mpcHelp).toContain("やること");
   });
 
@@ -1521,5 +1657,342 @@ describe("the hint control offers the next unopened rung, at its stated price", 
       expect(FAST_MOVE_COPY[locale].hintsHint.length).toBeGreaterThan(0);
       expect(FAST_MOVE_COPY[locale].hintsExhausted.length).toBeGreaterThan(0);
     }
+  });
+});
+
+/**
+ * [Issue #709] PROVE is a hand relabelling, and the panel has to say so in
+ * the three-line shape every other Order uses (use / mechanism / procedure),
+ * and report a wrong grid as a miss rather than a success.
+ */
+describe("Issue #709: the PROVE panel teaches the relabelling and reports a miss as a miss", () => {
+  it("carries use, mechanism and procedure, and names the one rule that matters", () => {
+    for (const locale of ["ja", "en"] as const) {
+      const copy = FAST_MOVE_COPY[locale];
+      expect(copy.proveUse.length).toBeGreaterThan(0);
+      expect(copy.proveWhy.length).toBeGreaterThan(0);
+      expect(copy.proveHelp).toMatch(locale === "ja" ? /同じ表は 2 度使わない/ : /Never the same table twice/);
+      // The identity relabelling is named as the one that is NOT fresh.
+      expect(copy.proveNoneUsed).toContain("1→1");
+    }
+  });
+
+  const hit = (contractId: string) =>
+    fixtureProjection({
+      lastProve: { contractId, outcome: "hit" },
+      publicLedger: [
+        {
+          id: `${contractId}-sudoku`, teamId: "blue", generation: 1, kind: "sudoku-reveal",
+          method: "prove", contractId, group: 6, cells: [2, 4, 1, 3], tag: "0123456789ab", postedAtMs: 5,
+        },
+      ],
+    });
+  const miss = (contractId: string) => fixtureProjection({ lastProve: { contractId, outcome: "miss" } });
+
+  for (const locale of ["ja", "en"] as const) {
+    it(`a hit names the group that was opened and carries the zero-knowledge lesson (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      const draft = proveFeedback(hit("blue-c0"), "blue-c0", 30, locale);
+      expect(draft.kind).toBe("prove");
+      expect(draft.title).toBe(copy.proveSuccess);
+      expect(draft.body).toContain("30");
+      expect(draft.body).toContain(locale === "ja" ? "3 列目" : "column 3");
+      expect(draft.lesson).toBe(copy.proveLesson);
+    });
+
+    it(`a miss shows PROVE MISS with the price, never the success copy (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      const html = renderToStaticMarkup(
+        createElement(FeedbackBanner, { feedback: { ...proveFeedback(miss("blue-c0"), "blue-c0", 30, locale), attempt: 1 }, locale }),
+      );
+      expect(html).toContain(copy.proveMiss);
+      expect(html).toContain(`-${DEFAULT_CONFIG.scores.wrongProve}`);
+      expect(html).not.toContain(copy.proveSuccess);
+      expect(html).toContain("tc-feedback-error");
+    });
+
+    it(`an outcome for a different Order, or none, is never rounded up to SUCCESS (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      expect(proveFeedback(hit("blue-c9"), "blue-c0", 30, locale).title).toBe(copy.proveUnread);
+      expect(proveFeedback(undefined, "blue-c0", 30, locale).title).toBe(copy.proveUnread);
+      const { lastProve, ...none } = fixtureProjection();
+      expect(proveFeedback(none, "blue-c0", 30, locale).title).toBe(copy.proveUnread);
+    });
+  }
+
+  it("the price on the miss banner is the projection's, not a literal", () => {
+    const pricey = fixtureProjection({ lastProve: { contractId: "blue-c0", outcome: "miss" }, wrongProveCost: 11 });
+    expect(proveFeedback(pricey, "blue-c0", 30, "en").body).toContain("-11");
+  });
+});
+
+/**
+ * [Issue #709] A sudoku HUNT reports on its own channel: a Shamir hit must not
+ * read as a recovered solution, and a sudoku miss must read its budget off the
+ * sudoku counter.
+ */
+describe("Issue #709: sudoku HUNT feedback reads the sudoku channel", () => {
+  it("a sudoku hit is reported as a recovered solution, a Shamir hit is not", () => {
+    const sudokuHit = fixtureProjection({ lastHunt: { targetTeamId: "red", generation: 1, outcome: "hit", via: "sudoku" } });
+    expect(huntFeedback(sudokuHit, "red", "en", "sudoku").body).toBe(FAST_MOVE_COPY.en.huntSudokuBody);
+    // The same projection read on the Shamir channel is not a Shamir hit.
+    expect(huntFeedback(sudokuHit, "red", "en").title).toBe(FAST_MOVE_COPY.en.huntUnread);
+    const shamirHit = fixtureProjection({ lastHunt: { targetTeamId: "red", generation: 1, outcome: "hit" } });
+    expect(huntFeedback(shamirHit, "red", "en", "sudoku").title).toBe(FAST_MOVE_COPY.en.huntUnread);
+  });
+
+  it("a sudoku miss counts attempts off the sudoku budget", () => {
+    const sudokuMiss = fixtureProjection({
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss", via: "sudoku" },
+      sudokuHuntAttempts: { red: { generation: 1, spent: 2, max: 3 } },
+      huntAttempts: { red: { generation: 1, spent: 0, max: 3 } },
+    });
+    expect(huntFeedback(sudokuMiss, "red", "en", "sudoku").body).toContain("1 attempt left");
+  });
+});
+
+/**
+ * [Issue #696] A HUNT miss is reported as a miss.
+ *
+ * Since #696 a wrong secret is a move that lands: `validateOp` no longer
+ * refuses it, `applyHunt` charges `wrongHunt` and spends one of
+ * `maxHuntAttemptsPerTarget`. The plugin SDK answers that op with the same
+ * `{ ok: true }` it answers a hit with, and the panel keyed the SUCCESS banner
+ * on ok alone -- so a player who guessed wrong lost 8 points, burned an
+ * attempt, and read 「復元した secret が受理されました」. The panel has no
+ * projection under `renderToStaticMarkup` (see this file's header), so what
+ * is rendered here is the banner the panel would show, built from the
+ * projection the op came back with.
+ */
+describe("Issue #696: a HUNT miss renders the miss banner, never the success banner", () => {
+  const missProjection = (spent: number) =>
+    fixtureProjection({
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" },
+      huntAttempts: { red: { generation: 1, spent, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    });
+  const hitProjection = () =>
+    fixtureProjection({
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "hit" },
+      huntAttempts: { red: { generation: 1, spent: 1, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    });
+  const render = (projection: CryptoBattleProjection | undefined, locale: "ja" | "en") =>
+    renderToStaticMarkup(
+      createElement(FeedbackBanner, { feedback: { ...huntFeedback(projection, "red", locale), attempt: 1 }, locale }),
+    );
+
+  for (const locale of ["ja", "en"] as const) {
+    it(`a miss shows HUNT MISS with the price and the attempts left, and no success copy (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      const html = render(missProjection(1), locale);
+      expect(html).toContain(copy.huntMiss);
+      expect(html).toContain(copy.huntMissBody(DEFAULT_CONFIG.scores.wrongHunt, DEFAULT_CONFIG.maxHuntAttemptsPerTarget - 1));
+      // The numbers are real: -8 and "2 left" at the shipped config.
+      expect(html).toContain(`-${DEFAULT_CONFIG.scores.wrongHunt}`);
+      expect(html).toContain(String(DEFAULT_CONFIG.maxHuntAttemptsPerTarget - 1));
+      expect(html).not.toContain(copy.huntSuccess);
+      expect(html).not.toContain(copy.huntBody);
+      // Styled as an error, not as a landed hunt.
+      expect(html).toContain("tc-feedback-error");
+      expect(html).not.toContain("tc-feedback-hunt");
+    });
+
+    it(`a hit still shows HUNT SUCCESS (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      const html = render(hitProjection(), locale);
+      expect(html).toContain(copy.huntSuccess);
+      expect(html).toContain(copy.huntBody);
+      expect(html).not.toContain(copy.huntMiss);
+    });
+
+    it(`an accepted op whose outcome cannot be read is never rounded up to SUCCESS (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      // No projection at all (the response failed the guard) ...
+      expect(render(undefined, locale)).not.toContain(copy.huntSuccess);
+      // ... and a projection with no recorded HUNT: neither is a hit.
+      const { lastHunt, ...noOutcome } = fixtureProjection();
+      expect(render(noOutcome, locale)).not.toContain(copy.huntSuccess);
+      expect(render(noOutcome, locale)).toContain(copy.huntUnread);
+    });
+  }
+
+  it("the last attempt reports 0 left, in the singular/plural the locale needs", () => {
+    const max = DEFAULT_CONFIG.maxHuntAttemptsPerTarget;
+    expect(huntFeedback(missProjection(max), "red", "en").body).toContain("0 attempts left");
+    expect(huntFeedback(missProjection(max - 1), "red", "en").body).toContain("1 attempt left");
+    expect(huntFeedback(missProjection(max), "red", "ja").body).toContain("あと 0 回");
+  });
+
+  it("the price on the banner is the projection's, not a literal", () => {
+    const pricey = fixtureProjection({
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" },
+      wrongHuntCost: 13,
+    });
+    expect(huntFeedback(pricey, "red", "en").body).toContain("-13");
+    expect(huntFeedback(pricey, "red", "ja").body).toContain("-13");
+  });
+});
+
+/**
+ * [Issue #696] The cap is visible BEFORE the attempt is spent. A budget the
+ * player only discovers when the judge refuses the fourth try is a wall they
+ * walked into, not a rule they played around.
+ */
+describe("Issue #696: the HUNT budget is shown on the target before it is spent", () => {
+  it("names the attempts left on a target at its current generation, in both locales", () => {
+    const budget = huntBudgetFor(fixtureProjection(), { teamId: "red", generation: 1 });
+    expect(budget).toEqual({ generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget });
+    for (const locale of ["ja", "en"] as const) {
+      const label = FAST_MOVE_COPY[locale].huntAttemptsLeft(2, 3);
+      expect(label).toContain("2");
+      expect(label).toContain("3");
+    }
+  });
+
+  it("shows no budget on a generation the target has already rotated away from", () => {
+    // `ledgerTargets` still lists old generations (their shares are on the
+    // record), but `validateOp` refuses a HUNT at any but the current one, so
+    // advertising attempts there would advertise a budget that cannot be spent.
+    const rotated = fixtureProjection({
+      huntAttempts: { red: { generation: 2, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    });
+    expect(huntBudgetFor(rotated, { teamId: "red", generation: 1 })).toBeUndefined();
+    expect(huntBudgetFor(rotated, { teamId: "red", generation: 2 })).toBeDefined();
+  });
+
+  it("the card's own hint states the price of a miss from the projection", () => {
+    for (const locale of ["ja", "en"] as const) {
+      expect(FAST_MOVE_COPY[locale].huntHint(8)).toContain("8");
+      expect(FAST_MOVE_COPY[locale].huntExhausted.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("the guard fails closed on a projection that predates the budget", () => {
+    const { huntAttempts, ...noBudget } = fixtureProjection();
+    expect(isCryptoBattleProjection(noBudget)).toBe(false);
+    const { wrongHuntCost, ...noPrice } = fixtureProjection();
+    expect(isCryptoBattleProjection(noPrice)).toBe(false);
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), lastHunt: { outcome: "maybe" } })).toBe(false);
+    expect(isCryptoBattleProjection(fixtureProjection({ lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" } }))).toBe(true);
+  });
+});
+
+/**
+ * [Issue #696] The Help Drawer must not promise a wrong HUNT is free. It said
+ * 「何も起こりません」 / "does nothing" while the reducer charged 8 points.
+ */
+describe("Issue #696: the Help Drawer says what a wrong HUNT costs", () => {
+  for (const locale of ["ja", "en"] as const) {
+    it(`no longer claims a wrong guess does nothing (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).not.toContain("does nothing");
+      expect(html).not.toContain("何も起こりません");
+      expect(html).not.toContain("guessing never scores");
+      expect(html).not.toContain("当て推量は得点になりません");
+    });
+  }
+  it("says, in words, that a miss costs points and attempts", () => {
+    const en = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale: "en" })));
+    expect(en).toContain("A wrong guess is not free");
+    expect(en).toMatch(/attempts/);
+    const ja = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale: "ja" })));
+    expect(ja).toContain("外した HUNT はタダではありません");
+    expect(ja).toContain("減点");
+  });
+});
+
+describe("the sudoku side of the vault reaches the participant [Issue #709 review]", () => {
+  const vaultWith = (overrides: Partial<CryptoBattleProjection["vault"]>): CryptoBattleProjection =>
+    fixtureProjection({ vault: { ...fixtureProjection().vault, ...overrides } });
+
+  it("the Vault lane names the generations whose sudoku solution was recovered, separately from Shamir HUNTs", () => {
+    for (const locale of ["ja", "en"] as const) {
+      const projection = vaultWith({ sudokuHuntedGenerations: [1] });
+      const html = renderToStaticMarkup(
+        createElement(StatusPanelBody, { projection, locale, elapsedSincePollMs: 0 }),
+      );
+      const label = locale === "en" ? "sudoku solution was recovered" : "数独の解を割り出された世代";
+      expect(html).toContain(label);
+      // The line reads "label: 1" -- the generation is printed after this label,
+      // not folded into the Shamir line, which still reads "none".
+      const at = html.indexOf(label);
+      expect(html.slice(at, at + 200)).toMatch(/:\s*(<!-- -->)?1\b/);
+    }
+  });
+
+  it("ROTATE opens when this generation's solution was recovered, with no share exposed", () => {
+    const hunted = vaultWith({ sudokuHuntedGenerations: [1] });
+    expect(sudokuRotatePressure(hunted)).toBe("hunted");
+    expect(tacticAvailability(hunted).rotate).toBe(true);
+    // An OLDER generation's recovery is history, not pressure.
+    expect(sudokuRotatePressure(vaultWith({ generation: 2, sudokuHuntedGenerations: [1] }))).toBeUndefined();
+  });
+
+  it("ROTATE opens when every usable relabelling on this generation is spent", () => {
+    const allButIdentity = ALL_PERMUTATIONS.filter((pi) => !samePermutation(pi, IDENTITY_PERMUTATION));
+    expect(allButIdentity).toHaveLength(23);
+    const exhausted = vaultWith({ usedPermutations: allButIdentity });
+    expect(sudokuRotatePressure(exhausted)).toBe("exhausted");
+    expect(tacticAvailability(exhausted).rotate).toBe(true);
+    expect(sudokuRotatePressure(vaultWith({ usedPermutations: allButIdentity.slice(0, 22) }))).toBeUndefined();
+    // The fixture's own vault (one table used, nothing hunted) still does not open it.
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [] })).rotate).toBe(false);
+  });
+});
+
+describe("the manual PROVE form reports a landed miss, not a generic 'submitted' [Issue #709 review]", () => {
+  for (const locale of ["ja", "en"] as const) {
+    const copy = REGISTRATION_COPY[locale];
+    it(`a miss on the submitted Order names the cost; a hit says so; anything else falls through (${locale})`, () => {
+      const miss = fixtureProjection({ lastProve: { contractId: "blue-c0", outcome: "miss" } });
+      const text = describeProveOutcome({ kind: "ok", projection: miss }, "blue-c0", copy);
+      expect(text).toBe(copy.proveMissResult(miss.wrongProveCost));
+      expect(text).toContain(String(miss.wrongProveCost));
+      expect(text).not.toBe(copy.submitted);
+
+      const hit = fixtureProjection({ lastProve: { contractId: "blue-c0", outcome: "hit" } });
+      expect(describeProveOutcome({ kind: "ok", projection: hit }, "blue-c0", copy)).toBe(copy.proveHitResult);
+
+      // A stale lastProve from another Order is not this submission's verdict.
+      expect(describeProveOutcome({ kind: "ok", projection: miss }, "blue-c9", copy)).toBe(copy.submitted);
+      // A projection the guard rejects, or a rejection, reads as before.
+      expect(describeProveOutcome({ kind: "ok", projection: {} }, "blue-c0", copy)).toBe(copy.submitted);
+      expect(describeProveOutcome({ kind: "rejected", error: "boom" }, "blue-c0", copy)).toBe(`${copy.rejectedPrefix}boom`);
+    });
+  }
+});
+
+describe("the Ledger pairs a puzzle only with the generation it belongs to [Issue #709 review]", () => {
+  const revealFor = (teamId: string, generation: number): PublicArtifact => ({
+    id: `${teamId}-g${generation}-sudoku`, teamId, generation, kind: "sudoku-reveal", method: "prove",
+    contractId: `${teamId}-c-g${generation}`, group: 2, cells: [4, 1, 2, 3], tag: "0a0a0a0a0a0a", postedAtMs: 7,
+  });
+  const boardWith = (ledger: readonly PublicArtifact[], redGeneration: number) => {
+    const base = fixtureProjection();
+    const projection = fixtureProjection({
+      publicLedger: ledger,
+      teams: { ...base.teams, red: { ...base.teams.red, generation: redGeneration } as (typeof base.teams)["red"] },
+    });
+    return renderToStaticMarkup(createElement(GameBoardBody, { projection, locale: "en" }));
+  };
+
+  it("shows the current puzzle on the current generation's card", () => {
+    const html = boardWith([revealFor("red", 1)], 1);
+    expect(html).toContain('aria-label="puzzle-red"');
+    expect(html).not.toContain("retired generation");
+  });
+
+  it("does not show the current puzzle beside a retired generation's reveals", () => {
+    // red has ROTATEd to generation 2; its generation-1 reveal is still on the
+    // ledger. Pairing it with the generation-2 puzzle would invite an
+    // impossible reconstruction.
+    const html = boardWith([revealFor("red", 1)], 2);
+    expect(html).not.toContain('aria-label="puzzle-red"');
+    expect(html).toContain("retired generation");
+  });
+
+  it("with reveals on both generations, only the current card carries the puzzle", () => {
+    const html = boardWith([revealFor("red", 1), revealFor("red", 2)], 2);
+    expect(html.split('aria-label="puzzle-red"')).toHaveLength(2);
+    expect(html).toContain("retired generation");
   });
 });

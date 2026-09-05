@@ -2,9 +2,8 @@
 
 Everything the learner types is decided here from FLAG_SEED: the field modulus, the
 two-wire witness, the per-wire share randomness, the two public coefficient vectors, and
-a Beaver triple's two factors with their own share randomness. The learner never sees the
-expected values -- they see the assignment statements (``show.py``) and produce every
-value with their own Python, one line at a time.
+a Beaver triple's two factors with their own share randomness. The learner sees
+assignment statements (``show.py``) and produces every value with their own Python, one line at a time.
 
 The procedure is the Week 6 lecture's co-SNARK prover (README: "SNARK 証明者の主計算
 （MSM・FFT）は体 F 上の線形演算であり、線形演算は秘密分散された値の上で各 party がローカルに、
@@ -12,7 +11,7 @@ The procedure is the Week 6 lecture's co-SNARK prover (README: "SNARK 証明者�
 `co-snark-prove`'s toy shape: A = coeffs_a . w, B = coeffs_b . w (both share-local, no
 communication), C = A * B (one Beaver-multiplication round). The numbers are this
 deployment's own (the independent-reimplementation rule): the assignment's own worked
-example and every (modulus, witness) / Beaver (a, b) pair appearing in its README or
+example and every modulus appearing in its README or
 `tests/public.py` is excluded below, so no deployment can be solved by copying the course
 material.
 
@@ -29,7 +28,7 @@ import hashlib
 PRIMES = (83, 103, 107, 109, 113, 127)
 
 #: The assignment `co-snark-prove`'s own moduli (README worked example: modulus 97; the
-#: `python/tests/public.py` suite: 97, 101, 89, 101). None of these six is drawable from
+#: `python/tests/public.py` suite: 97, 101, 89, 101). None of these three is drawable from
 #: PRIMES above -- listed anyway, so the exclusion is a fact checked in code, not a claim
 #: living only in a comment.
 EXCLUDED_PRIMES = (97, 101, 89)
@@ -45,10 +44,11 @@ EXCLUDED_WITNESS = (
     (101, (2, 9, 1)),  # tests/public.py: test_mpc_prove_three_parties
 )
 
-#: Every Beaver triple (a, b) the assignment's README or tests draw a * b from, verbatim
+#: The full (p,a,b) tuples used by the assignment. Individual factors may repeat;
+#: excluding them alone would bias the privacy masks.
 #: (a=5,b=9,c=45 in the README and test_mpc_prove_matches_single_prover; a=4,b=20,c=80 in
 #: test_mpc_prove_three_parties; a=3,b=6,c=18 in test_mpc_prove_with_zero_linear_form).
-EXCLUDED_BEAVER_AB = ((5, 9), (4, 20), (3, 6))
+EXCLUDED_BEAVER = ((97, 5, 9), (101, 4, 20), (89, 3, 6))
 
 #: The fourteen lines, in drill order. Six have no answer field: `witness` and
 #: `reconstruct` only look at values already on screen, `noleak` and `nolink` are
@@ -103,126 +103,96 @@ SHAPES: dict[str, str | tuple[str, int]] = {
 
 
 def _draw(seed: str, label: str, low: int, high: int) -> int:
-    digest = hashlib.sha256(f"{seed}:{label}".encode("utf-8")).digest()
-    return low + int.from_bytes(digest[:8], "big") % (high - low + 1)
+    span = high - low + 1
+    limit = (1 << 64) - (1 << 64) % span
+    for retry in range(128):
+        suffix = "" if retry == 0 else f":draw-retry:{retry}"
+        digest = hashlib.sha256(f"{seed}:{label}{suffix}".encode("utf-8")).digest()
+        value = int.from_bytes(digest[:8], "big")
+        if value < limit:
+            return low + value % span
+    raise RuntimeError("could not draw an unbiased residue")
 
 
 def setting(seed: str) -> dict:
-    """Everything public (shown by show.py) and everything expected (kept by server.py).
+    """Observer exercise, sampled without conditioning the privacy masks on secrets.
 
-    Draws are re-rolled as a whole (under a `#retry<k>` suffix on every label) whenever
-    a structural constraint fails (w0 == w1, r_i == w_i, a == b), whenever the draw lands
-    on an excluded course value, or whenever a graded value would equal one of this
-    deployment's own public numbers or land on None / an empty sequence / -1 -- the
-    answer-on-screen guard every drill in this group applies.
+    Every secret and mask may be any residue, including zero. Never reroll to
+    avoid a displayed answer matching an input or to force the two products to
+    differ: that would bias the masks and invalidate the model being taught.
+    The modulus differs from every pinned course example, so an entire fixture
+    cannot be copied from that course even when individual small numbers match.
     """
-    attempt = 0
-    while True:
-        eff = seed if attempt == 0 else f"{seed}#retry{attempt}"
+    p = PRIMES[_draw(seed, "prime", 0, len(PRIMES) - 1)]
+    w0 = _draw(seed, "w0", 0, p - 1)
+    w1 = _draw(seed, "w1", 0, p - 1)
+    w = (w0, w1)
 
-        p = PRIMES[_draw(eff, "prime", 0, len(PRIMES) - 1)]
-        w0 = _draw(eff, "w0", 2, p - 2)
-        w1 = _draw(eff, "w1", 2, p - 2)
-        if w1 == w0:
-            attempt += 1
-            continue
-        w = (w0, w1)
+    r0 = _draw(seed, "r0", 0, p - 1)
+    r1 = _draw(seed, "r1", 0, p - 1)
 
-        r0 = _draw(eff, "r0", 1, p - 1)
-        r1 = _draw(eff, "r1", 1, p - 1)
-        if r0 == w0 or r1 == w1:
-            attempt += 1
-            continue
+    ca0 = _draw(seed, "ca0", 0, p - 1)
+    ca1 = _draw(seed, "ca1", 0, p - 1)
+    cb0 = _draw(seed, "cb0", 0, p - 1)
+    cb1 = _draw(seed, "cb1", 0, p - 1)
+    ca = (ca0, ca1)
+    cb = (cb0, cb1)
 
-        ca0 = _draw(eff, "ca0", 1, p - 1)
-        ca1 = _draw(eff, "ca1", 1, p - 1)
-        cb0 = _draw(eff, "cb0", 1, p - 1)
-        cb1 = _draw(eff, "cb1", 1, p - 1)
-        ca = (ca0, ca1)
-        cb = (cb0, cb1)
+    beaver_a = _draw(seed, "beaver-a", 0, p - 1)
+    beaver_b = _draw(seed, "beaver-b", 0, p - 1)
 
-        beaver_a = _draw(eff, "beaver-a", 2, p - 2)
-        beaver_b = _draw(eff, "beaver-b", 2, p - 2)
-        if beaver_a == beaver_b:
-            attempt += 1
-            continue
-        if (p, w) in EXCLUDED_WITNESS or p in EXCLUDED_PRIMES:
-            attempt += 1
-            continue
-        if (beaver_a, beaver_b) in EXCLUDED_BEAVER_AB:
-            attempt += 1
-            continue
+    ra = _draw(seed, "ra", 0, p - 1)
+    rb = _draw(seed, "rb", 0, p - 1)
+    rc = _draw(seed, "rc", 0, p - 1)
 
-        ra = _draw(eff, "ra", 1, p - 1)
-        rb = _draw(eff, "rb", 1, p - 1)
-        rc = _draw(eff, "rc", 1, p - 1)
+    # Line 2: each wire's two-party share. w0_sh[0] is just r0, already on screen;
+    # only the second entry is new information, so only it is graded.
+    w0_sh = [r0, (w[0] - r0) % p]
+    w1_sh = [r1, (w[1] - r1) % p]
 
-        # Line 2: each wire's two-party share. w0_sh[0] is just r0, already on screen;
-        # only the second entry is new information, so only it is graded.
-        w0_sh = [r0, (w[0] - r0) % p]
-        w1_sh = [r1, (w[1] - r1) % p]
+    # Lines 5-6: A is a public linear form of the witness, computed on shares alone.
+    a_sh = [(ca[0] * x + ca[1] * y) % p for x, y in zip(w0_sh, w1_sh)]
+    A = sum(a_sh) % p
+    a_direct = (ca[0] * w[0] + ca[1] * w[1]) % p
 
-        # Lines 5-6: A is a public linear form of the witness, computed on shares alone.
-        a_sh = [(ca[0] * x + ca[1] * y) % p for x, y in zip(w0_sh, w1_sh)]
-        A = sum(a_sh) % p
-        a_direct = (ca[0] * w[0] + ca[1] * w[1]) % p
+    # Line 7: same for B.
+    b_sh = [(cb[0] * x + cb[1] * y) % p for x, y in zip(w0_sh, w1_sh)]
+    B = sum(b_sh) % p
 
-        # Line 7: same for B.
-        b_sh = [(cb[0] * x + cb[1] * y) % p for x, y in zip(w0_sh, w1_sh)]
-        B = sum(b_sh) % p
+    # Line 8: the share-wise product misses cross terms; accidental equality is possible.
+    naive_product = sum(x * y for x, y in zip(a_sh, b_sh)) % p
+    correct_product = (A * B) % p
 
-        # Line 8: the share-wise product is NOT A * B -- the cross terms are missing.
-        naive_product = sum(x * y for x, y in zip(a_sh, b_sh)) % p
-        correct_product = (A * B) % p
+    # Line 9 (ungraded): the Beaver triple itself, c = a * b, shared like any wire.
+    triple_a_sh = [ra, (beaver_a - ra) % p]
+    triple_b_sh = [rb, (beaver_b - rb) % p]
+    beaver_c = (beaver_a * beaver_b) % p
+    triple_c_sh = [rc, (beaver_c - rc) % p]
 
-        # Line 9 (ungraded): the Beaver triple itself, c = a * b, shared like any wire.
-        triple_a_sh = [ra, (beaver_a - ra) % p]
-        triple_b_sh = [rb, (beaver_b - rb) % p]
-        beaver_c = (beaver_a * beaver_b) % p
-        triple_c_sh = [rc, (beaver_c - rc) % p]
+    # Line 10: the only communication round -- open d = A - a, e = B - b.
+    d = (A - sum(triple_a_sh)) % p
+    e = (B - sum(triple_b_sh)) % p
 
-        # Line 10: the only communication round -- open d = A - a, e = B - b.
-        d = (A - sum(triple_a_sh)) % p
-        e = (B - sum(triple_b_sh)) % p
+    # Line 11: each party's share of C, from d, e and their own triple shares.
+    z = [(triple_c_sh[i] + d * triple_b_sh[i] + e * triple_a_sh[i]) % p for i in range(2)]
+    z[0] = (z[0] + d * e) % p
 
-        # Line 11: each party's share of C, from d, e and their own triple shares.
-        z = [(triple_c_sh[i] + d * triple_b_sh[i] + e * triple_a_sh[i]) % p for i in range(2)]
-        z[0] = (z[0] + d * e) % p
+    # Line 12: reconstruct C.
+    C = sum(z) % p
 
-        # Line 12: reconstruct C.
-        C = sum(z) % p
+    graded_expected = {
+        "shares": (w0_sh[1], w1_sh[1]),
+        "ashares": tuple(a_sh),
+        "aopen": (A, a_direct),
+        "bshares": (b_sh[0], b_sh[1], B),
+        "crossmul": (naive_product, correct_product),
+        "beaveropen": (d, e),
+        "cshares": tuple(z),
+        "csum": C,
+    }
 
-        graded_expected = {
-            "shares": (w0_sh[1], w1_sh[1]),
-            "ashares": tuple(a_sh),
-            "aopen": (A, a_direct),
-            "bshares": (b_sh[0], b_sh[1], B),
-            "crossmul": (naive_product, correct_product),
-            "beaveropen": (d, e),
-            "cshares": tuple(z),
-            "csum": C,
-        }
-
-        public_scalars = {p, w0, w1, r0, r1, ca0, ca1, cb0, cb1, beaver_a, beaver_b, ra, rb, rc}
-        graded_scalars: list[object] = []
-        for value in graded_expected.values():
-            if isinstance(value, tuple):
-                graded_scalars.extend(value)
-            else:
-                graded_scalars.append(value)
-        bad = any(v is None for v in graded_scalars)
-        bad = bad or any(isinstance(v, (list, tuple)) and len(v) == 0 for v in graded_scalars)
-        bad = bad or any(v == -1 for v in graded_scalars if isinstance(v, int))
-        bad = bad or any(v in public_scalars for v in graded_scalars if isinstance(v, int))
-        if bad:
-            attempt += 1
-            if attempt > 200:  # unreachable in practice; keeps the loop total
-                break
-            continue
-        break
-
-    # The six ungraded lines' values. Never checked against the answer-on-screen guard
-    # above -- `reconstruct` is SUPPOSED to equal the public `w`, and `noleak` / `nolink`
+    # The six ungraded lines: `reconstruct` intentionally equals public `w`;
+    # `noleak` / `nolink`
     # are demonstrations over a handful of candidate values, not a single secret answer.
     ungraded_expected = {
         "witness": (p, tuple(w)),
@@ -255,6 +225,16 @@ def setting(seed: str) -> dict:
         "rc": rc,
     }
     return {"public": public, "expected": expected}
+
+
+def submission_binding(seed: str) -> str:
+    """Public deployment binding; it neither reveals the fixture seed nor authorizes answers.
+
+    A learner may prepare any answer. The verifier alone judges it. This one-way,
+    domain-separated tag only prevents a prepared answer from another deployment
+    being accepted as this deployment's submission envelope.
+    """
+    return hashlib.sha256(("ac26-w6-cosnark-drill:submission:v1\0" + seed).encode()).hexdigest()
 
 
 def assignments(seed: str) -> str:

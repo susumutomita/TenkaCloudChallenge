@@ -1,415 +1,261 @@
 /**
- * Reducer-level integration tests for the PROVE op (Issue #486 PR2):
- * validateOp / applyOp wiring, invalid-proof / wrong-contract / replay /
- * wrong-generation rejection, secret non-leakage, and the Scoring MUST that
- * PROVE and LEAK pay identical points for an equal-value Contract. Unit
- * tests for the Schnorr primitives themselves (group, witness, transcript,
- * prover, verifier) live in schnorr.test.ts.
- *
- * Every `createProof` / `applyOp(prove)` call here costs a real 2048-bit
- * modular exponentiation (~13ms measured on this machine) -- this file
- * keeps its total op count modest for that reason (see schnorr.test.ts's
- * header for the same note).
+ * Reducer-level integration tests for PROVE (Issue #486 PR2, rebuilt as ZK
+ * sudoku in #709): validateOp / applyOp wiring, wrong-grid / unrelabelled /
+ * wrong-Order / wrong-generation handling, what a reveal publishes and what
+ * it must not, and the Scoring MUST that PROVE pays more than LEAK for an
+ * equal-value Order. The sudoku primitives themselves are covered in
+ * sudoku.test.ts.
  */
 
 import { describe, expect, test } from "bun:test";
-import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { createProof } from "./schnorr-prover.ts";
-import { startedMatch } from "./playtest.ts";
+import { deriveSudokuSolution } from "./fixtures.ts";
+import { applyOp, DEFAULT_CONFIG, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { buildProveSudokuOp, freshPermutation, startedMatch, SUBSTRING_SAFE_FIELD } from "./playtest.ts";
+import { ALL_PERMUTATIONS, applyPermutation, CONSTRAINT_GROUPS, IDENTITY_PERMUTATION } from "./sudoku.ts";
 import type { CryptoBattleState, CryptoBattleOp } from "./types.ts";
 
 const CTX = { eventId: "prove-basic", teamIds: ["teamA", "teamB"] } as const;
 
-describe("prove: happy path", () => {
-  test("a valid proof completes the contract, pays the contract's points, and posts a proof (not a share) artifact", () => {
+/** The first Order on teamA's belt that PROVE can answer. */
+function proveableOrder(state: CryptoBattleState) {
+  const contract = state.contracts.find(
+    (c) => c.teamId === "teamA" && c.status === "open" && c.allowedMethods.includes("prove"),
+  );
+  if (!contract) throw new Error("expected a PROVE-able contract for teamA");
+  const team = state.teams.teamA;
+  if (!team) throw new Error("expected teamA");
+  return { contract, team };
+}
+
+describe("prove: a relabelled solution", () => {
+  test("the vault shows the solution and the puzzle shows eight of its cells", () => {
     const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
+    const mine = projectForTeam(state, "teamA");
+    expect(mine.vault.sudokuSolution).toHaveLength(16);
+    expect(mine.vault.usedPermutations).toEqual([]);
+    const puzzle = mine.publicPuzzles.teamA;
+    if (!puzzle) throw new Error("expected teamA's puzzle to be public");
+    expect(puzzle.filter((v) => v !== 0)).toHaveLength(8);
+    puzzle.forEach((v, i) => {
+      if (v !== 0) expect(mine.vault.sudokuSolution[i]).toBe(v);
+    });
+    // The other team sees the puzzle and NOT the solution.
+    const theirs = projectForTeam(state, "teamB");
+    expect(theirs.publicPuzzles.teamA).toEqual(puzzle);
+    expect(theirs.vault.sudokuSolution).not.toEqual(mine.vault.sudokuSolution);
+  });
 
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const op: CryptoBattleOp = { kind: "prove", contractId: contract.id, proof };
-
+  test("a correctly relabelled grid completes the Order, pays the full rate, and opens one group", () => {
+    const state = tick(startedMatch(CTX), 0);
+    const { contract } = proveableOrder(state);
+    const vault = projectForTeam(state, "teamA").vault;
+    const pi = [2, 3, 4, 1] as const;
+    const op = buildProveSudokuOp(vault, contract.id, pi);
     expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
-    const next = applyOp(state, "teamA", op);
 
-    expect(next.teams.teamA?.score).toBe(contract.points);
+    const next = applyOp(state, "teamA", op);
     expect(next.contracts.find((c) => c.id === contract.id)?.status).toBe("completed");
     expect(next.contracts.find((c) => c.id === contract.id)?.resolution).toBe("prove");
-    expect(next.teams.teamA?.completedContractIds).toContain(contract.id);
+    expect(next.teams.teamA?.score).toBe(contract.points);
+    expect(next.teams.teamA?.lastProve).toEqual({ contractId: contract.id, outcome: "hit" });
 
-    expect(next.publicLedger).toHaveLength(1);
-    const posted = next.publicLedger[0];
-    if (!posted) throw new Error("expected a posted artifact");
-    // `next.publicLedger` holds the compact persisted form (`StoredArtifact`,
-    // see ledger-codec.ts): `k`/`tm`/`c`/`g`/`o`/`z` below are that form's own
-    // field names.
-    expect(posted.k).toBe("proof");
-    if (posted.k !== "proof") throw new Error("expected a proof artifact");
-    expect(posted.tm).toBe("teamA");
-    expect(posted.c).toBe(contract.id);
-    expect(posted.g).toBe(1);
-    expect(posted.o).toBe(proof.commitment);
-    expect(posted.z).toBe(proof.response);
+    const [reveal] = projectForTeam(next, "teamB").publicLedger;
+    if (reveal?.kind !== "sudoku-reveal") throw new Error("expected a sudoku reveal on the ledger");
+    expect(reveal.method).toBe("prove");
+    expect(reveal.cells).toHaveLength(4);
+    // The opened group is a group OF THE SUBMITTED GRID: its four cells are
+    // the relabelled digits at that group's positions, and a permutation of
+    // 1..4 -- which is why one reveal says nothing about the solution.
+    const submitted = op.kind === "prove-sudoku" ? op.grid : [];
+    const cells = CONSTRAINT_GROUPS[reveal.group] ?? [];
+    expect(reveal.cells).toEqual(cells.map((i) => submitted[i] ?? -1));
+    expect([...reveal.cells].sort()).toEqual([1, 2, 3, 4]);
+    // And the vault now lists the relabelling as spent.
+    expect(projectForTeam(next, "teamA").vault.usedPermutations).toEqual([[...pi]]);
   });
 
-  test("PROVE never adds a ShareArtifact to the public ledger, unlike LEAK", () => {
+  test("a wrong grid lands, costs wrongProve, publishes nothing, and leaves the Order open", () => {
     const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
+    const { contract } = proveableOrder(state);
+    // A different, valid sudoku that is not a relabelling of teamA's solution.
+    const solution = projectForTeam(state, "teamA").vault.sudokuSolution;
+    const orbit = new Set(ALL_PERMUTATIONS.map((pi) => applyPermutation(solution, pi).join("")));
+    const other = projectForTeam(state, "teamB").vault.sudokuSolution;
+    const wrong = orbit.has(other.join("")) ? undefined : other;
+    if (!wrong) throw new Error("test setup: teamB's solution happens to be a relabelling of teamA's");
+    const funded = { ...state, teams: { ...state.teams, teamA: { ...(state.teams.teamA as never as object), score: 50 } as never } } as CryptoBattleState;
 
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
-
-    expect(next.publicLedger.some((a) => a.k === "share")).toBe(false);
+    const op: CryptoBattleOp = { kind: "prove-sudoku", contractId: contract.id, grid: [...wrong] };
+    expect(validateOp(funded, "teamA", op)).toEqual({ ok: true });
+    const next = applyOp(funded, "teamA", op);
+    expect(next.teams.teamA?.score).toBe(50 - DEFAULT_CONFIG.scores.wrongProve);
+    expect(next.teams.teamA?.lastProve).toEqual({ contractId: contract.id, outcome: "miss" });
+    expect(next.publicLedger).toHaveLength(0);
+    expect(next.contracts.find((c) => c.id === contract.id)?.status).toBe("open");
+    // The projection tells the team it was a miss, with the price.
+    const projected = projectForTeam(next, "teamA");
+    expect(projected.lastProve?.outcome).toBe("miss");
+    expect(projected.wrongProveCost).toBe(DEFAULT_CONFIG.scores.wrongProve);
   });
-});
 
-describe("prove: ProofArtifact normalization [independent review, low #4]", () => {
-  test("a proof submitted with a leading zero (still /^\\d{1,700}$/-canonical and still numerically valid) is stored in the Public Ledger in normalized decimal form, not verbatim", () => {
+  test("the solution itself, unrelabelled, is refused before it can cost anything", () => {
     const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    // A leading zero doesn't violate schnorr-verifier.ts's `/^\d{1,700}$/`
-    // format check, and BigInt("0" + x) === BigInt(x), so this still
-    // verifies correctly -- it is exactly the kind of "not wrong, but not
-    // the canonical form either" input applyProve's BigInt(...).toString()
-    // round-trip guards against landing in the ledger unnormalized.
-    const paddedProof = { commitment: `0${proof.commitment}`, response: `0${proof.response}` };
-    expect(
-      validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: paddedProof }),
-    ).toEqual({ ok: true });
-
-    const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: paddedProof });
-    const posted = next.publicLedger[0];
-    if (!posted) throw new Error("expected a posted artifact");
-    if (posted.k !== "proof") throw new Error("expected a proof artifact");
-    expect(posted.o).toBe(proof.commitment);
-    expect(posted.z).toBe(proof.response);
-    expect(posted.o.startsWith("0")).toBe(false);
-    expect(posted.z.startsWith("0")).toBe(false);
+    const { contract } = proveableOrder(state);
+    const vault = projectForTeam(state, "teamA").vault;
+    const op = buildProveSudokuOp(vault, contract.id, IDENTITY_PERMUTATION);
+    const verdict = validateOp(state, "teamA", op);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.error).toMatch(/relabel/);
   });
-});
 
-describe("prove: invalid proof is rejected", () => {
-  test("a tampered response is rejected by validateOp and the contract stays open", () => {
+  test("a malformed grid is refused by shape, not charged", () => {
     const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const tampered = { ...proof, response: (BigInt(proof.response) + 1n).toString() };
-    const result = validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: tampered });
-    expect(result.ok).toBe(false);
-    expect(state.contracts.find((c) => c.id === contract.id)?.status).toBe("open");
+    const { contract } = proveableOrder(state);
+    for (const grid of [[], new Array(16).fill(0), new Array(15).fill(1), [...new Array(15).fill(1), 9]]) {
+      const verdict = validateOp(state, "teamA", { kind: "prove-sudoku", contractId: contract.id, grid });
+      expect(verdict.ok).toBe(false);
+      if (!verdict.ok) expect(verdict.error).toContain("16 cells");
+    }
   });
 
-  test("a tampered commitment is rejected", () => {
-    const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const tampered = { ...proof, commitment: (BigInt(proof.commitment) + 1n).toString() };
-    expect(validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: tampered }).ok).toBe(false);
-  });
-
-  test("a proof built from another team's secret against this team's contract is rejected", () => {
-    const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const teamB = state.teams.teamB;
-    if (!teamB) throw new Error("expected teamB");
-
-    // teamB's own valid witness, submitted as if it proved teamA's contract.
-    const wrongProof = createProof(BigInt(teamB.secret), teamB.generation, "teamA", contract.id);
-    expect(validateOp(state, "teamA", { kind: "prove", contractId: contract.id, proof: wrongProof }).ok).toBe(
-      false,
-    );
-  });
-});
-
-describe("prove: wrong-contract binding", () => {
-  test("a proof created for contract A is rejected when submitted against contract B (Fiat-Shamir contractId binding)", () => {
+  test("the same relabelling submitted twice is accepted twice -- reuse is a mistake the judge lets you make", () => {
+    // The judge does not refuse reuse; the HUNT punishes it. Refusing it here
+    // would delete the lesson (see pi-reuse.test.ts).
     let state = tick(startedMatch(CTX), 0);
-    const contractA = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contractA) throw new Error("expected a contract for teamA");
-    // Advance to get a second, distinct open contract for teamA.
-    state = tick(state, state.config.contractIntervalMs);
-    const contractB = state.contracts.find((c) => c.teamId === "teamA" && c.id !== contractA.id);
-    if (!contractB) throw new Error("expected a second contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
+    const pi = [3, 4, 1, 2] as const;
+    let proved = 0;
+    for (let round = 0; round < 8 && proved < 2; round += 1) {
+      const order = state.contracts.find(
+        (c) => c.teamId === "teamA" && c.status === "open" && c.allowedMethods.includes("prove"),
+      );
+      if (order) {
+        const op = buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id, pi);
+        expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
+        state = applyOp(state, "teamA", op);
+        proved += 1;
+      } else {
+        state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+      }
+    }
+    expect(proved).toBe(2);
+    const tags = projectForTeam(state, "teamB").publicLedger
+      .filter((a) => a.kind === "sudoku-reveal")
+      .map((a) => (a.kind === "sudoku-reveal" ? a.tag : ""));
+    expect(tags).toHaveLength(2);
+    expect(tags[0]).toBe(tags[1]);
+    expect(projectForTeam(state, "teamA").vault.usedPermutations).toEqual([[...pi]]);
+  });
 
-    const proofForA = createProof(BigInt(team.secret), team.generation, "teamA", contractA.id);
-    const result = validateOp(state, "teamA", {
-      kind: "prove",
-      contractId: contractB.id,
-      proof: proofForA,
-    });
-    expect(result.ok).toBe(false);
+  test("freshPermutation never returns the identity or a spent relabelling", () => {
+    let state = tick(startedMatch(CTX), 0);
+    const used: string[] = [];
+    for (let round = 0; round < 12; round += 1) {
+      for (const order of state.contracts.filter(
+        (c) => c.teamId === "teamA" && c.status === "open" && c.allowedMethods.includes("prove"),
+      )) {
+        const vault = projectForTeam(state, "teamA").vault;
+        const pi = freshPermutation(vault);
+        if (!pi) break;
+        expect(pi.join("")).not.toBe("1234");
+        expect(used).not.toContain(pi.join(""));
+        used.push(pi.join(""));
+        state = applyOp(state, "teamA", buildProveSudokuOp(vault, order.id, pi));
+      }
+      state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+    }
+    expect(used.length).toBeGreaterThan(3);
   });
 });
 
-describe("prove: replay", () => {
-  test("submitting the same successful proof to the same contract a second time is rejected (contract already completed)", () => {
+describe("prove: the Order gate", () => {
+  test("another team's Order is refused", () => {
     const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
+    const theirs = state.contracts.find(
+      (c) => c.teamId === "teamB" && c.status === "open" && c.allowedMethods.includes("prove"),
+    );
+    if (!theirs) throw new Error("expected a PROVE-able Order for teamB");
+    const verdict = validateOp(state, "teamA", buildProveSudokuOp(projectForTeam(state, "teamA").vault, theirs.id));
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.error).toContain("belongs to another team");
+  });
 
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const op: CryptoBattleOp = { kind: "prove", contractId: contract.id, proof };
+  test("an Order PROVE cannot serve is refused as incapability, not as a bad grid", () => {
+    let state = tick(startedMatch(CTX), 0);
+    let fhe = state.contracts.find((c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "homomorphic-sum");
+    for (let round = 0; round < 5 && !fhe; round += 1) {
+      state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+      fhe = state.contracts.find((c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "homomorphic-sum");
+    }
+    if (!fhe) throw new Error("expected an FHE Order");
+    const verdict = validateOp(state, "teamA", buildProveSudokuOp(projectForTeam(state, "teamA").vault, fhe.id));
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.error).toContain("cannot perform");
+  });
+
+  test("a proof built for the old generation fails after ROTATE", () => {
+    let state = tick(startedMatch(CTX), 0);
+    const { contract } = proveableOrder(state);
+    const oldVault = projectForTeam(state, "teamA").vault;
+    const stale = buildProveSudokuOp(oldVault, contract.id, [2, 1, 4, 3]);
+    state = tick(state, DEFAULT_CONFIG.rotateCooldownMs);
+    state = applyOp(state, "teamA", { kind: "rotate" });
+    // The Order was voided by the rotate; take a fresh one and submit the
+    // OLD grid against it.
+    state = tick(state, state.nextContractAtMs ?? DEFAULT_CONFIG.contractIntervalMs);
+    const fresh = proveableOrder(state).contract;
+    const op: CryptoBattleOp = { ...stale, contractId: fresh.id } as CryptoBattleOp;
     expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
     const next = applyOp(state, "teamA", op);
-
-    // Exact same op, same proof, replayed against the now-completed contract.
-    const replay = validateOp(next, "teamA", op);
-    expect(replay.ok).toBe(false);
-    if (!replay.ok) {
-      expect(replay.error).toMatch(/completed/);
-    }
+    expect(next.teams.teamA?.lastProve?.outcome).toBe("miss");
+    // The new generation's solution really is different.
+    expect(projectForTeam(state, "teamA").vault.sudokuSolution).not.toEqual(oldVault.sudokuSolution);
+    expect(deriveSudokuSolution(state.seed, "teamA", 2)).toEqual(projectForTeam(state, "teamA").vault.sudokuSolution);
   });
 });
 
-describe("prove: cross-resolution double-completion is rejected [independent review, low #6]", () => {
-  // LEAK and PROVE share the exact same "status !== 'open'" guard in
-  // validateOp -- these two tests pin the cross-resolution case directly
-  // (a Contract completed by ONE method cannot then be completed by the
-  // OTHER), rather than relying on it as an untested side effect of the
-  // same-method replay tests above.
+describe("prove: what stays hidden", () => {
+  test("no team's solution reaches another team's projection, and a reveal carries the relabelled digits only", () => {
+    // Big field so the share-material substring checks stay meaningful; the
+    // sudoku checks are structural and hold at any modulus.
+    let state = tick(startedMatch({ ...CTX, matchSecret: "prove-hidden-secret" }, SUBSTRING_SAFE_FIELD), 0);
+    const { contract } = proveableOrder(state);
+    const vault = projectForTeam(state, "teamA").vault;
+    const pi = [4, 3, 2, 1] as const;
+    state = applyOp(state, "teamA", buildProveSudokuOp(vault, contract.id, pi));
 
-  test("a Contract already completed via PROVE cannot then be LEAKed", () => {
-    const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const provedState = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
-    expect(provedState.contracts.find((c) => c.id === contract.id)?.resolution).toBe("prove");
-
-    const leakResult = validateOp(provedState, "teamA", { kind: "leak", contractId: contract.id });
-    expect(leakResult.ok).toBe(false);
-    if (!leakResult.ok) {
-      expect(leakResult.error).toMatch(/completed/);
-    }
-    // No share ever gets published as a side effect of the rejected LEAK attempt.
-    expect(provedState.publicLedger.some((a) => a.k === "share")).toBe(false);
-  });
-
-  test("a Contract already completed via LEAK cannot then be PROVEn", () => {
-    const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-
-    const leakedState = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
-    expect(leakedState.contracts.find((c) => c.id === contract.id)?.resolution).toBe("leak");
-
-    // A proof built against the now-leaked contract would verify on its own
-    // cryptographic merits (the witness/statement binding is unaffected by
-    // LEAK) -- it is the shared "contract must be open" guard, not proof
-    // validity, that must reject this.
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const proveResult = validateOp(leakedState, "teamA", { kind: "prove", contractId: contract.id, proof });
-    expect(proveResult.ok).toBe(false);
-    if (!proveResult.ok) {
-      expect(proveResult.error).toMatch(/completed/);
-    }
-  });
-});
-
-describe("prove: wrong generation", () => {
-  test("a proof bound to the pre-rotate generation fails post-rotate; a freshly-built post-rotate proof for the same contract succeeds", () => {
-    let state = tick(startedMatch(CTX), 0);
-    const preRotateTeam = state.teams.teamA;
-    if (!preRotateTeam) throw new Error("expected teamA");
-    const preRotateGeneration = preRotateTeam.generation;
-    const preRotateSecret = preRotateTeam.secret;
-
-    state = applyOp(state, "teamA", { kind: "rotate" });
-    expect(state.teams.teamA?.generation).toBe(preRotateGeneration + 1);
-
-    // Rotate voids every pre-rotate open contract for this team (see
-    // reducer.ts's applyRotate) -- advance the clock to get a fresh open
-    // contract under the NEW generation to submit the stale proof against.
-    // [Issue #645] PROVE only answers a share Order, and the belt now also
-    // carries FHE and MPC Orders -- so advance until a share Order appears
-    // rather than assuming the next one is.
-    const findShareOrder = (from: CryptoBattleState) =>
-      from.contracts.find(
-        (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share",
-      );
-    for (let round = 0; round < 8 && !findShareOrder(state); round += 1) {
-      state = tick(state, (state.nowMs ?? 0) + state.config.contractIntervalMs);
-    }
-    const postRotateContract = findShareOrder(state);
-    if (!postRotateContract) throw new Error("expected a fresh open contract for teamA after rotate");
-
-    // Attacker who captured the pre-rotate secret, still trying to prove
-    // against the NEW contract with the OLD generation's witness.
-    const staleProof = createProof(BigInt(preRotateSecret), preRotateGeneration, "teamA", postRotateContract.id);
-    const staleResult = validateOp(state, "teamA", {
-      kind: "prove",
-      contractId: postRotateContract.id,
-      proof: staleProof,
+    const theirs = projectForTeam(state, "teamB");
+    expect(theirs.vault.teamId).toBe("teamB");
+    expect(theirs.vault.sudokuSolution).not.toEqual(vault.sudokuSolution);
+    const reveal = theirs.publicLedger.find((a) => a.kind === "sudoku-reveal");
+    if (reveal?.kind !== "sudoku-reveal") throw new Error("expected a reveal");
+    const cells = CONSTRAINT_GROUPS[reveal.group] ?? [];
+    // Each published digit is π applied to the solution's digit -- never the
+    // solution's digit itself, unless π happens to fix it, which [4,3,2,1]
+    // never does.
+    cells.forEach((cell, at) => {
+      expect(reveal.cells[at]).toBe(pi[(vault.sudokuSolution[cell] ?? 1) - 1]);
+      expect(reveal.cells[at]).not.toBe(vault.sudokuSolution[cell]);
     });
-    expect(staleResult.ok).toBe(false);
+    // The serialized projection of the other team holds no 16-digit run equal
+    // to teamA's solution.
+    expect(JSON.stringify(theirs)).not.toContain(JSON.stringify(vault.sudokuSolution));
+    // The match seed never leaves the trusted side.
+    expect(JSON.stringify(theirs)).not.toContain(state.seed);
+  });
+});
 
-    // The SAME contract, proven honestly with the post-rotate secret/generation, succeeds.
-    const postRotateTeam = state.teams.teamA;
-    if (!postRotateTeam) throw new Error("expected teamA");
-    const freshProof = createProof(
-      BigInt(postRotateTeam.secret),
-      postRotateTeam.generation,
-      "teamA",
-      postRotateContract.id,
+describe("prove: the scoring MUST", () => {
+  test("PROVE pays the Order's full rate, which is above what LEAK pays for the same Order", () => {
+    const state = tick(startedMatch(CTX), 0);
+    const order = state.contracts.find(
+      (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share",
     );
-    const freshResult = validateOp(state, "teamA", {
-      kind: "prove",
-      contractId: postRotateContract.id,
-      proof: freshProof,
-    });
-    expect(freshResult).toEqual({ ok: true });
-  });
-});
-
-describe("prove: secret non-leakage", () => {
-  test("the ledger artifact and another team's projection never contain the secret, witness, or any share value after a PROVE", () => {
-    const state = tick(startedMatch(CTX), 0);
-    const contract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!contract) throw new Error("expected a contract for teamA");
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-
-    const secretDecimal = team.secret;
-    const shareValues = team.shares.map((s) => s.value);
-
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", contract.id);
-    const next = applyOp(state, "teamA", { kind: "prove", contractId: contract.id, proof });
-
-    const ledgerJson = JSON.stringify(next.publicLedger);
-    expect(ledgerJson).not.toContain(secretDecimal);
-    for (const shareValue of shareValues) {
-      expect(ledgerJson).not.toContain(shareValue);
-    }
-    // The proof transcript IS allowed to appear -- it is public by design.
-    expect(ledgerJson).toContain(proof.commitment);
-    expect(ledgerJson).toContain(proof.response);
-
-    const observerProjection = projectForTeam(next, "teamB");
-    const projectionJson = JSON.stringify(observerProjection);
-    expect(projectionJson).not.toContain(secretDecimal);
-    for (const shareValue of shareValues) {
-      expect(projectionJson).not.toContain(shareValue);
-    }
-    // teamA's public commitment Y is allowed (and expected) to appear.
-    const teamAPublicCommitment = next.publicCommitments.teamA;
-    if (!teamAPublicCommitment) throw new Error("expected a public commitment for teamA");
-    expect(projectionJson).toContain(teamAPublicCommitment);
-  });
-});
-
-/**
- * [Issue #659] PROVE must pay MORE than LEAK. This suite used to assert the
- * opposite ("equal pay"), which made LEAK strictly dominant: it costs no
- * computation, so an identical payout meant there was never a reason to work.
- * With equal pay a rational team leaks every Order, nothing is ever computed,
- * and the whole "compute or expose yourself" tension the Battle is built on
- * does not exist.
- */
-describe("prove: Scoring MUST -- PROVE pays MORE than LEAK for the same Order", () => {
-  test("completing one contract via LEAK and an equal-points contract via PROVE yields DIFFERENT score deltas", () => {
-    let state = tick(startedMatch(CTX), 0);
-    const leakContract = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!leakContract) throw new Error("expected a contract for teamA");
-
-    // A second, equal-value synthetic contract for teamA to complete via
-    // PROVE instead -- same points as the real issued contract, so any
-    // score-delta difference can only come from the resolution method.
-    const proveContract = {
-      id: "synthetic-prove-teamA",
-      teamId: "teamA",
-      kind: "standard" as const,
-      points: leakContract.points,
-      leakPoints: 10,
-      task: leakContract.task,
-      issuedAtMs: state.nowMs ?? 0,
-      expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
-      status: "open" as const,
-      privacyConstraint: "none" as const,
-      allowedMethods: ["leak", "prove"] as const,
-    };
-    state = { ...state, contracts: [...state.contracts, proveContract] };
-
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-    const scoreBefore = team.score;
-
-    const afterLeak = applyOp(state, "teamA", { kind: "leak", contractId: leakContract.id });
-    const leakDelta = (afterLeak.teams.teamA?.score ?? 0) - scoreBefore;
-
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", proveContract.id);
-    const afterProve = applyOp(state, "teamA", { kind: "prove", contractId: proveContract.id, proof });
-    const proveDelta = (afterProve.teams.teamA?.score ?? 0) - scoreBefore;
-
-    // The ordering the design rests on: doing the work pays more than not doing it.
-    expect(proveDelta).toBeGreaterThan(leakDelta);
-    expect(proveDelta).toBe(leakContract.points);
-    expect(leakDelta).toBe(leakContract.leakPoints);
-  });
-
-  test("an Order carries both rates, so the trade is visible before it is made", () => {
-    const state = tick(startedMatch(CTX), 0);
-    const order = state.contracts.find((c) => c.teamId === "teamA" && c.allowedMethods.includes("prove"));
-    if (!order) throw new Error("expected a contract for teamA");
-    // A participant choosing LEAK is giving up points, not just accepting risk.
-    // Carrying both numbers on the Order is what makes that choice informed.
-    expect(order.leakPoints).toBeLessThan(order.points);
-    expect(order.leakPoints).toBe(state.config.scores.contractLeak);
-  });
-});
-
-describe("prove: match end", () => {
-  test("is rejected once the match has ended, even for a contract that is still open by its own TTL", () => {
-    let state = tick(startedMatch(CTX), 0);
-    const team = state.teams.teamA;
-    if (!team) throw new Error("expected teamA");
-    const stillOpenContract = {
-      id: "synthetic-prove-still-open",
-      teamId: "teamA",
-      kind: "standard" as const,
-      points: state.config.scores.contract,
-      leakPoints: 10,
-      task: { kind: "reveal-share" as const, shareIndices: [1] },
-      issuedAtMs: state.nowMs ?? 0,
-      expiresAtMs: (state.nowMs ?? 0) + state.config.contractTtlMs,
-      status: "open" as const,
-      privacyConstraint: "none" as const,
-      allowedMethods: ["leak", "prove"] as const,
-    };
-    const proof = createProof(BigInt(team.secret), team.generation, "teamA", stillOpenContract.id);
-    state = { ...state, contracts: [...state.contracts, stillOpenContract] };
-    state = tick(state, state.config.matchDurationMs);
-    expect(state.phase).toBe("ended");
-
-    expect(
-      validateOp(state, "teamA", { kind: "prove", contractId: stillOpenContract.id, proof }).ok,
-    ).toBe(false);
+    if (!order) throw new Error("expected a share Order");
+    expect(order.allowedMethods).toEqual(["leak", "prove"]);
+    const proved = applyOp(state, "teamA", buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id));
+    const leaked = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
+    expect(proved.teams.teamA?.score).toBe(order.points);
+    expect(leaked.teams.teamA?.score).toBe(order.leakPoints);
+    expect(order.points).toBeGreaterThan(order.leakPoints);
   });
 });

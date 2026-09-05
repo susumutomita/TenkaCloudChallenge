@@ -7,8 +7,10 @@
  *
  *   LEAK  — publish the raw share the Order asks for. Fast, and it puts secret
  *           material on the Public Ledger where anyone can use it.
- *   PROVE — publish a Schnorr transcript instead. Costs local computation and
- *           publishes nothing an attacker can rebuild the secret from.
+ *   PROVE — hand the judge a relabelled copy of your sudoku solution instead
+ *           (#709). Costs a hand relabelling and publishes one row, column or
+ *           box of the RELABELLED grid -- nothing an attacker can rebuild the
+ *           solution from, unless the relabelling is reused.
  *
  * #645's later phases add FHE and MPC. This module is the seam that makes that
  * additive: a new method is a new entry here, a new arm on `CryptoBattleOp`,
@@ -22,7 +24,7 @@
  * ## Why the trusted check does not live here
  *
  * Each method's validation stays in `reducer.ts`'s `validateOp` switch, next to
- * the state it needs (`publicCommitments` for PROVE, the team's own shares for
+ * the state it needs (the team's own sudoku solution for PROVE, its shares for
  * LEAK) and inside the same exhaustive `never` check that makes a forgotten
  * method a compile error. Moving the checks into function values on the records
  * below would buy uniformity and cost that exhaustiveness, plus it would let a
@@ -39,7 +41,7 @@ import type { OrderTaskKind } from "./types.ts";
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher";
+export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel";
 
 /**
  * What an Order forbids being made public.
@@ -67,14 +69,16 @@ export interface SubmissionMethodSpec {
    * that someone could rebuild the secret from.
    *
    * This is the single fact that decides which Orders a method may serve, and
-   * it is a property of the CRYPTOGRAPHY, not a policy knob: a Schnorr
-   * transcript carries no witness (see `schnorr.test.ts`'s non-leakage test),
-   * while a Shamir share is a point on the secret's polynomial.
+   * it is a property of the CRYPTOGRAPHY, not a policy knob: one opened group
+   * of a relabelled sudoku grid is a permutation of 1..4 whatever the solution
+   * was (see `sudoku.test.ts`), while a Shamir share is a point on the
+   * secret's polynomial.
    */
   readonly publishesRawSecretMaterial: boolean;
 }
 
 export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMethodSpec>> = {
+  duel: { method: "duel", publishesRawSecretMaterial: true },
   leak: { method: "leak", publishesRawSecretMaterial: true },
   prove: { method: "prove", publishesRawSecretMaterial: false },
   // [Phase 2] An FHE submission publishes a ciphertext under a key only the
@@ -97,13 +101,14 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
   "fhe",
   "mpc",
   "cipher",
+  "duel",
 ];
 
 /**
  * [Issue #645] Which methods could serve each kind of task, before the Order's
  * privacy rule is applied.
  *
- * This is the half of the answer that is about CAPABILITY: a Schnorr proof
+ * This is the half of the answer that is about CAPABILITY: a sudoku proof
  * cannot answer 「この2つの暗号文を足せ」, and a ciphertext cannot answer
  * 「share #3 を出せ」, whatever either Order's privacy rule says. Keeping it
  * separate from {@link methodSatisfiesConstraint} is what lets an Order say
@@ -112,9 +117,14 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
  * whole point is that participants learn which is which.
  */
 const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[]>> = {
+  "rps-duel": ["duel"],
   "reveal-share": ["leak", "prove"],
   "homomorphic-sum": ["fhe"],
   "masked-total": ["mpc"],
+  // [Issue #709] The ZK sudoku Order is PROVE stated as its own job. It took
+  // over the slot the PROVE-only share Order used to hold, so a team meets the
+  // relabelling once per rotation rather than when a privacy roll says so.
+  "zk-sudoku": ["prove"],
   // [Issue #659] The ladder Order is the second one with a genuine method
   // choice, and it is a sharper one than the share Order's. LEAK is instant and
   // publishes the pair that recovers your key; CIPHER is the hand calculation

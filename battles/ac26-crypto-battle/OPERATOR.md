@@ -49,7 +49,7 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 ## Match lifecycle
 
 1. TenkaCloud mints the match secret before first state creation.
-2. `initialState` creates team secrets, shares, commitments, and the Order plan.
+2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
 4. `validateOp` rejects malformed, stale, unauthorized, or incorrect moves.
 5. `applyOp` changes state only after validation.
@@ -60,17 +60,56 @@ All state and operations must remain JSON-safe. Large field and group values
 cross the state/op boundary as decimal strings, never JavaScript numbers or
 raw `bigint`.
 
+### Upgrading across a schema version
+
+The plugin declares `stateSchemaVersion` (4 for compact budgets and Order IDs) and a
+`migrateState` that lifts older rows on first touch. One case is refused on
+purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
+Schnorr transcripts sharing a commitment on a team's current generation, and
+an attacker that has not collected on it). v3 has no move that attack maps
+onto, and dropping it silently would change the match's scoring mid-run. The
+platform leaves such a row untouched, so finish that match on the plugin that
+made it, or reset it, before deploying the upgrade. Upgrade between events,
+not during one.
+
 ## Participant surface
 
 The default surface is deliberately staged:
 
-1. pick one ORDER;
-2. choose the action that Order accepts;
-3. open tactics only after public material makes HUNT or ROTATE relevant;
-4. open the tutorial or full computation reference only when needed.
+1. read the always-visible problem explanation above the board; the compact
+   “Read the guided explanation (optional)” control opens a walkthrough only on request;
+2. pick one ORDER and choose the action it accepts;
+3. for sudoku PROVE, select a relabelling table and fill four holes beside
+   twelve worked cells; all four digit substitutions are exercised once;
+4. open tactics or the full reference when needed.
 
-The Portal must not compute a participant's PROVE or HUNT answer, announce that
-a target is exploitable, or show another team's private material.
+The tutorial starts collapsed on every visit, including the waiting room. It
+never gates or automatically interrupts play, and can be closed in place. It
+uses only fixed practice data; changing team or deployment resets practice.
+
+The optional explanation has ten scenes: remainder, additive sharing, indexed
+sharing, reconstruction, exposure, MPC, ZK, FHE, Caesar, commit-reveal. Each
+scene can be read without answering; Next is never gated by correctness. An
+optional one-digit field checks understanding, and a separate control shows
+the fixed answer with a one-sentence takeaway. Calculation steps and full reasons
+remain in the free collapsed explanation. There is no practice score, fake Contract, or
+fake Ledger. The numbered sharing example explains the candidate secrets and
+why the private-number terms cancel without requiring a second disclosure.
+
+Free concept explanations are separate from practice. They start as compact
+controls in the top topic disclosure and beside each calculation form, use fixed one-digit
+examples, and show unsolved expressions from only the current team's projected
+Order operands. No hint purchase or tutorial completion is needed. FHE is
+labelled an addition model with separate per-input keys; the ZK explanation
+states that this game trusts a judge holding the solution.
+
+The sudoku scaffold is an explicit participant aid: it applies the selected
+table to twelve cells of the owning team's solution. Four answers remain empty,
+and the trusted judge still checks the complete submitted grid. Tables used in
+the same generation remain selectable with a reuse warning, preserving the
+misuse that sudoku HUNT teaches. The Portal must not fill these four answers,
+compute a HUNT answer, announce that a target is exploitable, or show another
+team's private material.
 
 ## Local UI harness
 
@@ -96,8 +135,8 @@ bun run typecheck
 ```
 
 The suite covers reducer behavior, JSON round-trips, method/order compatibility,
-Schnorr verification, Shamir reconstruction, FHE/MPC behavior, nonce-reuse
-HUNT, team projections, deterministic replay, and the vertical playtest.
+sudoku-relabelling verification, Shamir reconstruction, FHE/MPC behavior,
+reused-relabelling HUNT, team projections, deterministic replay, and the vertical playtest.
 
 From the TenkaCloudChallenge root, also run:
 
@@ -111,6 +150,36 @@ make agent-gate
 `DEFAULT_CONFIG` in `game/src/reducer.ts` owns match duration, phase boundaries,
 Order cadence, batch size and TTLs, ROTATE cooldown, threshold/share count, and
 the score values that apply to every Order.
+
+### Field size and HUNT attempt limits
+
+Treat `config.prime`, `config.maxHuntAttemptsPerTarget`, and
+`config.scores.wrongHunt` as coupled settings. The match defaults are `97`,
+`3`, and `8`; `scores.huntBonus` is `25`. This is a teaching field, not a
+cryptographic security parameter. Smaller numbers make hand calculation easier
+and blind guessing easier too. Never lower the prime or raise the attempt cap
+without checking the scoring tradeoff at the same time.
+
+For each override, check that the prime exceeds `shareCount`, the attempt cap
+is smaller than the prime and no larger than `threshold`, and
+`huntBonus / prime < wrongHunt`. The default-only assertion in
+`game/src/reducer.test.ts` does not validate operator overrides. For the default
+field, one uniform blind guess has an unclamped expected score change of
+`25/97 - 8*96/97`, which is negative; the score floor at zero still applies, so
+the attempt cap is necessary even when a team has no points to lose.
+
+The budget is per attacker, target, and generation; a hit spends an attempt
+and prevents another reward on that pairing. A well-formed wrong answer costs
+`wrongHunt` and spends one attempt. Malformed or unreduced inputs are refused
+without either cost. Shamir HUNT, FHE, and MPC inputs must already be in
+`0..prime-1`: adding the prime to a correct answer is a format error.
+
+Use a replay or fixture with the proposed config to check correct recovery,
+wrong-answer cost, exhausted attempts, and ROTATE before using an override.
+`field.ts`'s library default `P = 2^61 - 1` is for arithmetic tests; the match
+passes `config.prime` explicitly, with `HAND_PRIME = 97` as its default.
+
+### Order economics
 
 Per-rung economics live in `game/src/ladder.ts`'s `CIPHER_RUNGS`, not in
 `DEFAULT_CONFIG`: how many published pairs break a rung, how long its plaintext
@@ -140,23 +209,77 @@ Issue #659 sizes it as "team size + 1 to 2" for the standard three-person team.
 The plugin is handed team ids and never headcount, so a different team size has
 to be re-tuned by hand.
 
-**Match size depends on the backend, and nothing enforces it.** The whole match
-is one persisted row, read and rewritten on every participant action. Measured
-worst case for a 90-minute match — every team buys every hint and then leaks
-everything it is allowed to leak: **16.7 KB per team**, linear.
+**Match size depends on the backend and is checked by the platform's capacity preflight.**
+The full-play fixture completes every mechanism, buys every hint and uses
+26-character team IDs and epoch times. It spends RPS attempts against all eligible
+opponents, then rotates near match end to exercise pending predictions beside the
+nearly full ledger. At 99 teams the measured peak is **2,968,946 UTF-8 bytes**,
+with **9,604 simultaneous predictions**; the terminal row is **2,887,478 bytes**
+(2026-09-05). These are measurements of this deterministic route, not a universal
+bound over every operation sequence. Duration/batch changes require remeasurement.
 
-| Backend | Limit | Teams this Battle supports |
+Schema 4 replaces repeated IDs in private budget/prediction keys with positions in
+the fixed sorted roster, and stores a ledger Order number only when the original
+ID can be reconstructed exactly. Public projections, successful-HUNT history and
+ledger contents stay identical. Retired-generation counters are discarded only
+when no pending prediction needs them for a refund. Upgrade migrates v1/v2/v3 rows;
+unknown IDs/counts fail migration without rewriting the row. A rollback to schema 3
+must not read schema-4 rows. Finish running matches on their compatible plugin.
+The existing v2 unspent-Schnorr-exposure upgrade restriction still applies.
+
+`metadata.json` reserves **30 KiB per team + 1,536 bytes**. The platform owns the
+limits below; this problem does not raise them. The local capacity tests retain
+25% headroom and check both the peak and the final state.
+
+| Backend | Platform policy | Default-match capacity |
 | --- | --- | --- |
-| Turso / libSQL | no per-row cap | **99** (the platform maximum) — a full match is ~1.7 MB |
-| DynamoDB | 400 KB per item, no partial write | **17** with headroom; the match stops mid-play past 24 |
+| Turso / libSQL | 4 MiB, environment-overridable | 99 teams with at least 25% headroom in the tested route |
+| DynamoDB | 400 KiB item; platform reserves 16 KiB | 11 teams with 25% headroom in the tested route; declaration preflight limit 12 |
 
-The DynamoDB ceiling is a property of the game, not something left unoptimised.
-The public ledger is permanent by design — its permanence is what gives LEAK its
-weight — and it grows with every team that plays; at 99 teams it is about two
-thirds of the row. Pruning it would delete the thing the game is about.
+## Rock-paper-scissors lifecycle
 
-**So a full-size event has to run on the Turso backend** (`CONTROL_DATA_BACKEND`).
-`game/src/state-size.test.ts` measures both ceilings and fails if either moves.
+After the opening, one of every six Order slots is a paired duel. The default
+six-Order batch therefore has one of each mechanism. Teams rotate through a
+circle schedule; an odd roster rotates one bye, which receives an individual
+Order instead. Small batches still receive the other five mechanisms. Late
+unseen slots are consumed but not issued or charged. All deadlines stop at match end.
+
+`rps-commit` accepts only the nonzero order-11 subgroup modulo 23. A second
+commitment is refused. `rps-open` requires both commitments and a matching hand
+and hiding number; a mismatch is rejected without a penalty. The first accepted
+opening stays judge-private; the second atomically settles both Orders and
+publishes both openings. Win 30, draw 10, loss 0, configurable through `scores`.
+ROTATE changes long-lived secrets and does not cancel a duel. At timeout, a team
+that finished its current stage gets `duelWin`; the team with a required action
+outstanding receives ordinary `expiredOrder`. No opening is published on timeout.
+
+`Contract.rps` and `TeamState.issuedDuelCount` are optional on old rows; missing
+counters mean zero. Old score configs backfill `duelWin` and `duelDraw` through
+existing config migration. Persisted openings must never be spread into another
+team's projection. Tests cover all 33 first openings and all nine hand pairs.
+The toy has no computational binding security; fairness relies on the judge
+keeping openings private until both arrive. It is commit-reveal, not a full ZK protocol.
+
+## RPS reuse prediction HUNT
+
+`hunt-rps { targetTeamId, duelId, predictedHand }` accepts a hand 1–3 only when the
+target's current duel is sealed and not yet privately opened, and two distinct
+past public duels show equal randomness. Evidence may cross generations; ROTATE
+does not erase it. Any other team may predict, not only the paired opponent.
+Acceptance does not test the hidden answer or assume the current r was reused.
+
+The same `huntAttempts` budget as Shamir HUNT is reserved immediately against the
+target's acceptance generation. A hunter gets one immutable prediction per duel,
+even if the target rotates. Only the hunter sees the pending receipt. Both public
+openings trigger hit `huntBonus` / miss `wrongHunt` once, with score floor zero;
+first opening alone never produces a grade or answer oracle. Forfeit/expiry cancels
+all predictions, shows no hand, and refunds the exact reserved generation.
+
+Browser rehearsal: select `rps-reuse` in the local harness, alpha seat. Use only
+the public rows and free tables to predict bravo, submit, then finish both sides
+of the duel using the controls. Confirm no early grade, the public outcome and
+separate HUNT points. Automated tests cover misses, expiry, rotation, shared budgets,
+malformed inputs, third-team privacy and old projection compatibility.
 
 ## Release checks
 
@@ -168,6 +291,12 @@ thirds of the row. Pruning it would delete the thing the game is about.
 A real-AWS walkthrough and an independent third-party playtest are optional
 pre-event rehearsals. Record them when useful, but do not block development or
 merge when they have not run.
+
+The [participant walkthrough](dev/PLAYTHROUGH.ja.md) lists the nine checks
+for the next event, local scenario setup, and a result template. The explanation
+is optional and opens above the board; automatic display is not required.
+Record the Portal Score/Rank refresh and team-name initialization separately
+from local harness evidence.
 
 ## Source map
 

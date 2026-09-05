@@ -58,7 +58,7 @@ describe("the Order belt a participant actually sees", () => {
   test("every task kind appears", () => {
     const kinds = new Set<OrderTaskKind>(orders.map((o) => o.task.kind));
     expect(kinds).toEqual(
-      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "masked-total"]),
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total", "rps-duel"]),
     );
   });
 
@@ -73,7 +73,7 @@ describe("the Order belt a participant actually sees", () => {
     // cycle or this would assert that a rotation is shorter than it is.
     const firstFive = orders.slice(0, 5).map((o) => o.task.kind);
     expect(new Set(firstFive)).toEqual(
-      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "masked-total"]),
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total"]),
     );
   });
 
@@ -125,12 +125,16 @@ describe("the Order belt a participant actually sees", () => {
    * anything.
    */
   test("constrained Orders exist: the rule leaves exactly one method", () => {
-    const constrained = orders.filter(
-      (o) => o.task.kind === "reveal-share" && o.privacyConstraint === "no-raw-disclosure",
-    );
+    // [Issue #709] The PROVE-only Order is the ZK sudoku Order now, with its
+    // own slot; a share Order always leaves the choice open.
+    const constrained = orders.filter((o) => o.task.kind === "zk-sudoku");
     expect(constrained.length).toBeGreaterThan(0);
     for (const order of constrained) {
+      expect(order.privacyConstraint).toBe("no-raw-disclosure");
       expect(order.allowedMethods).toEqual(["prove"]);
+    }
+    for (const share of orders.filter((o) => o.task.kind === "reveal-share")) {
+      expect(share.privacyConstraint).toBe("none");
     }
   });
 
@@ -141,12 +145,16 @@ describe("the Order belt a participant actually sees", () => {
     }
   });
 
-  test("the mix is identical for every team on the same seed, and differs between teams", () => {
+  test("the schedule replays exactly, with rotating byes and different per-team share values", () => {
     // Determinism is what makes a replay honest; per-team variation is what
     // stops two teams sharing one answer.
     expect(ordersAcrossMatch("teamA").map((o) => o.id)).toEqual(orders.map((o) => o.id));
     const teamB = ordersAcrossMatch("teamB");
-    expect(teamB.map((o) => o.task.kind)).toEqual(orders.map((o) => o.task.kind));
+    expect(ordersAcrossMatch("teamB")).toEqual(teamB);
+    // An odd roster rotates the bye; those slots become individual Orders.
+    // Both teams still meet every mechanism, with at most one duel difference.
+    expect(new Set(teamB.map(o => o.task.kind))).toEqual(new Set(orders.map(o => o.task.kind)));
+    expect(Math.abs(teamB.filter(o => o.task.kind === "rps-duel").length - orders.filter(o => o.task.kind === "rps-duel").length)).toBeLessThanOrEqual(1);
     const shareIndicesA = orders
       .filter((o) => o.task.kind === "reveal-share")
       .map((o) => (o.task.kind === "reveal-share" ? o.task.shareIndices.join(",") : ""));

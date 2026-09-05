@@ -27,10 +27,13 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.evidence import public_evidence
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w6-cosnark-drill"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+DEPLOYMENT_BINDING = public_evidence()["submissionBinding"]
+if not isinstance(DEPLOYMENT_BINDING, str) or not DEPLOYMENT_BINDING:
+    raise RuntimeError("verifier did not provide a deployment binding")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18163"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -67,14 +70,14 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    deployment_binding=DEPLOYMENT_BINDING,
     problem_id='ac26-w6-cosnark-drill',
-    problem_name='分けたまま、証明を組む',
-    problem_name_en='Build the proof without ever putting the witness back together',
-    description='手元の Python で 1 行打って、出た値を貼る。14 行で、witness を一度も戻さずに co-SNARK の証明 (A, B, C) を組む — 線形結合はシェアのまま各自ローカルに、掛け算だけ Beaver triple で 1 往復だけ通信する。シェア 1 枚は秘密を語らないこと、シェアごとの掛け算では交差項が消えて正解にならないこと、開いた d, e からは元の値が絞れないことまで — 自分の手で出した数だけで。',
-    description_en='Type one line in your own Python, paste the value it prints. Fourteen lines: build a co-SNARK proof (A, B, C) without ever putting the witness back together — the linear forms stay on shares, computed locally by each party, and only the one multiplication needs a single round of communication through a Beaver triple. Along the way: a single share reveals nothing about the secret, the share-wise product misses the cross terms and is not the right answer, and the opened d and e never narrow down the values they came from — on numbers you produced yourself.',
-    checkpoint_labels={'shares': '2 人へのシェア — w0 と w1 の 2 番目', 'ashares': '線形結合 A — シェアのまま各自で', 'aopen': 'A を戻す — シェアの和と直接計算', 'bshares': '線形結合 B — シェアと戻した値', 'crossmul': 'シェアごとの積 vs 正しい積', 'beaveropen': '唯一の通信 — d と e', 'cshares': 'C のシェア — Beaver 補正込み', 'csum': 'C を戻す'},
-    checkpoint_labels_en={'shares': 'Shares for two parties — the 2nd entry of w0 and w1', 'ashares': 'Linear form A — computed on shares alone', 'aopen': 'Opening A — the summed shares against the direct value', 'bshares': 'Linear form B — the shares and the opened value', 'crossmul': 'The share-wise product vs. the correct product', 'beaveropen': 'The one round of communication — d and e', 'cshares': "C's shares — with the Beaver correction", 'csum': 'Opening C'},
+    problem_name='二人で分担して、秘密の数を掛ける',
+    problem_name_en='Multiply shared secrets together',
+    description='二人のかけらを使って、足し算と掛け算を分担します。「証拠を確認」で自分の数を読み、短い式を順に試して8個の回答欄を埋めます。',
+    description_en='Split addition and multiplication across two people’s shares. Read your numbers in Inspect evidence, try the short expressions, and complete eight answer fields.',
+    checkpoint_labels={'shares': '秘密の数を二人に分ける', 'ashares': '掛けて足す計算Aを分担する', 'aopen': '二つの方法でAを確かめる', 'bshares': '別の掛け方でBも作る', 'crossmul': 'そのまま掛けると何が抜けるか', 'beaveropen': '差のかけらだけを送り合う', 'cshares': '積Cのかけらを組み立てる', 'csum': '積Cを受け取る'},
+    checkpoint_labels_en={'shares': 'Split the numbers between two people', 'ashares': 'Compute A on each person’s shares', 'aopen': 'Check A in two ways', 'bshares': 'Compute B using the other coefficients', 'crossmul': 'Find what a share-wise product misses', 'beaveropen': 'Exchange only shares of the differences', 'cshares': 'Build the shares of the product C', 'csum': 'Recover the product C'},
     submitted_files=('co_snark_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,

@@ -1,707 +1,311 @@
-/**
- * Issue #641: browser-local, non-scoring walkthrough for the Crypto Battle.
- *
- * This component never receives a coordination client, never reads the real
- * Vault, and never submits a move. Fixed tutorial-only values demonstrate the
- * observable consequences of LEAK / PROVE / HUNT / ROTATE in order.
- *
- * Issue #643: the HUNT step is now a HAND CALCULATION the participant performs
- * and types in — the Portal checks it and never fills it in.
- *
- * What #641 shipped let a reader press "HUNT with the 3 tutorial shares" and
- * watch a number appear. They saw THAT three shares reconstruct a secret; they
- * never did the reconstruction, so they had no reason to believe it, and
- * nothing carried over to the live match where they must actually compute one.
- * Playtest feedback was blunt about it: 小さい数字なら手計算でも作れるようにした方が
- * 原理を理解しやすい.
- *
- * Three deliberate choices make that hand calculation reachable for this
- * catalog's stated reader (AGENTS.md §12b: junior-high mathematics, one
- * beginner Python book):
- *
- *   1. A tiny field, p = 17, so every intermediate value is two digits.
- *   2. Share indices x = 1, 2, 3 — chosen, not incidental. At those three
- *      points the Lagrange coefficients at x = 0 come out as the WHOLE NUMBERS
- *      3, -3, 1, so the participant never needs a modular inverse. The general
- *      formula does; this instance does not, and that is the whole reason a
- *      pencil suffices.
- *   3. The recipe and a worked one-digit example are given up front. §12b:
- *      problems test applying a given procedure, never deriving it.
- *
- * The checker uses general Lagrange interpolation ({@link
- * reconstructTutorialSecret}), NOT the three whole numbers, so the shortcut we
- * teach is verified against the real math rather than against itself —
- * `onboarding.test.ts` pins that the two agree. The expected value therefore
- * exists in this bundle, as it must for any browser-local checker; what #643
- * requires, and what this file does, is never to DISPLAY or PRE-FILL it.
- */
-
+/** Optional local practice. Fixed examples only; no match client or real secrets. */
 import { useState } from "react";
+import ConceptExplanation from "./ConceptExplanation.tsx";
 
 type Locale = "ja" | "en";
-export type TutorialStage = "ready" | "leaked" | "proved" | "hunted" | "rotated";
-
-/** Why the last HUNT attempt did not advance. `null` = no attempt yet. */
-export type TutorialAttempt = "wrong" | "malformed" | null;
-
-export interface TutorialLedgerEntry {
-  readonly id: string;
-  readonly kind: "share" | "proof";
-  readonly generation: number;
-  readonly contractId: string;
-  readonly shareIndex?: number;
-  readonly value?: string;
-}
-
-export interface TutorialState {
-  readonly stage: TutorialStage;
-  readonly score: number;
-  readonly generation: number;
-  readonly exposedShareIndices: readonly number[];
-  readonly ledger: readonly TutorialLedgerEntry[];
-  /** Set only once the participant's OWN typed answer has been checked. */
-  readonly recoveredSecret?: string;
-  readonly attempt: TutorialAttempt;
-}
-
-/**
- * The tutorial's field. 17 is small enough that `3 x 8 - 3 x 13 + 3` is a
- * pencil-and-paper subtraction, and prime, so the mathematics is the same
- * mathematics the live match runs over its 61-bit prime.
- */
-export const TUTORIAL_PRIME = 17;
-export const DOCUMENTED_THRESHOLD = 3;
-
-/**
- * The opponent's three public shares, from f(x) = 5 + 2x + x^2 (mod 17):
- * f(1) = 8, f(2) = 13, f(3) = 3. The secret is f(0) — deliberately not named
- * anywhere in this file's participant-visible copy.
- */
-export const TUTORIAL_OPPONENT_SHARES = [
-  { index: 1, value: 8 },
-  { index: 2, value: 13 },
-  { index: 3, value: 3 },
-] as const;
-
-/**
- * The Lagrange coefficients at x = 0 for the indices 1, 2, 3 — the whole
- * numbers the participant is handed instead of a formula with a division in
- * it.
- *
- * They are not magic: L_i(0) = product over j != i of (0 - x_j) / (x_i - x_j),
- * which for (1, 2, 3) gives 6/2, 3/-1, 2/2. Every denominator divides its
- * numerator exactly, which is why no modular inverse appears. Change the
- * indices and that stops being true — `onboarding.test.ts` checks these
- * coefficients still reproduce {@link reconstructTutorialSecret}'s answer, so
- * a future edit to the share set cannot quietly leave the taught recipe wrong.
- */
-export const TUTORIAL_LAGRANGE_COEFFICIENTS = [3, -3, 1] as const;
-
-/**
- * The worked example the statement shows before asking for the real one, in
- * one-digit numbers (§12b). From f(x) = 1 + x^2 (mod 17): f(1) = 2, f(2) = 5,
- * f(3) = 10, and 3x2 - 3x5 + 10 = 1. A DIFFERENT answer from the tutorial's
- * own, so working the example through does not hand over the exercise.
- */
-export const TUTORIAL_WORKED_EXAMPLE = {
-  shares: [
-    { index: 1, value: 2 },
-    { index: 2, value: 5 },
-    { index: 3, value: 10 },
-  ],
-  answer: 1,
-} as const;
-
-/**
- * The participant's own tutorial share, published by the LEAK step. From a
- * different polynomial than the opponent's, so nothing here is a step toward
- * the HUNT answer.
- */
-const TUTORIAL_OWN_SHARE = { index: 1, value: 14 } as const;
-
-/**
- * Issue #643: a Schnorr proof small enough to check on paper.
- *
- * Production PROVE runs over RFC 3526 Group 14 (2048-bit p) with a SHA-256
- * Fiat-Shamir challenge — correctly, and unusable by hand. Rather than pretend
- * otherwise, this is a separate toy instance with the SAME SHAPE: commit,
- * challenge, respond, verify one equation. p = 23, q = 11, g = 2 (whose order
- * really is 11, since 2^11 = 2048 = 1 mod 23), witness w = 4, nonce r = 3,
- * challenge e = 5 fixed rather than hashed.
- *
- * `onboarding.test.ts` verifies the identity actually holds, so the teaching
- * numbers cannot rot into a worked example that does not work.
- */
-export const TUTORIAL_TOY_SCHNORR = {
-  p: 23,
-  q: 11,
-  g: 2,
-  w: 4,
-  r: 3,
-  e: 5,
-  /** Y = g^w mod p */
-  publicValue: 16,
-  /** R = g^r mod p */
-  commitment: 8,
-  /** s = r + e*w mod q */
-  response: 1,
-  /** Both sides of g^s == R * Y^e (mod p). */
-  verifies: 2,
-} as const;
-
-function mod(value: number, prime: number): number {
-  const reduced = value % prime;
-  return reduced < 0 ? reduced + prime : reduced;
-}
-
-function modPow(base: number, exponent: number, prime: number): number {
-  let result = 1;
-  let factor = mod(base, prime);
-  let remaining = exponent;
-  while (remaining > 0) {
-    if (remaining % 2 === 1) result = mod(result * factor, prime);
-    factor = mod(factor * factor, prime);
-    remaining = Math.floor(remaining / 2);
-  }
-  return result;
-}
-
-/**
- * General Lagrange interpolation at x=0 for the small tutorial field.
- *
- * Deliberately general — with a modular inverse — even though the tutorial's
- * own indices make one unnecessary. This is the CHECKER: verifying the
- * participant against the same procedure `shamir.ts` runs (rather than against
- * the three whole numbers we hand them) is what makes the shortcut trustworthy
- * instead of circular.
- */
-export function reconstructTutorialSecret(
-  shares: readonly { readonly index: number; readonly value: number }[],
-): number {
-  if (shares.length === 0) throw new RangeError("tutorial reconstruction needs at least one share");
-  if (new Set(shares.map((share) => share.index)).size !== shares.length) {
-    throw new RangeError("tutorial reconstruction requires distinct share indices");
-  }
-
-  let total = 0;
-  for (const current of shares) {
-    let numerator = 1;
-    let denominator = 1;
-    for (const other of shares) {
-      if (other.index === current.index) continue;
-      numerator = mod(numerator * -other.index, TUTORIAL_PRIME);
-      denominator = mod(denominator * (current.index - other.index), TUTORIAL_PRIME);
-    }
-    const inverse = modPow(denominator, TUTORIAL_PRIME - 2, TUTORIAL_PRIME);
-    total = mod(total + current.value * numerator * inverse, TUTORIAL_PRIME);
-  }
-  return total;
-}
-
-/**
- * Issue #643: whether a typed answer is the reconstructed secret.
- *
- * Accepts only a plain non-negative integer already reduced into the field.
- * `-12` — the honest intermediate result before taking the remainder — is
- * rejected as `malformed` rather than silently normalised, because "reduce it
- * into 0..16" is precisely the step being taught, and quietly doing it for the
- * participant would remove it.
- */
-export function checkTutorialHunt(answer: string): "correct" | "wrong" | "malformed" {
-  const trimmed = answer.trim();
-  if (!/^\d{1,3}$/.test(trimmed)) return "malformed";
-  const parsed = Number(trimmed);
-  if (parsed >= TUTORIAL_PRIME) return "malformed";
-  return parsed === reconstructTutorialSecret(TUTORIAL_OPPONENT_SHARES) ? "correct" : "wrong";
-}
-
-export function createTutorialState(): TutorialState {
-  return {
-    stage: "ready",
-    score: 0,
-    generation: 1,
-    exposedShareIndices: [],
-    ledger: [],
-    attempt: null,
-  };
-}
-
-/** What the participant did. HUNT is the only step that carries a value. */
-export type TutorialAction = { readonly kind: "advance" } | { readonly kind: "hunt"; readonly answer: string };
-
-/**
- * Pure teaching-state reducer, exported for tests.
- *
- * Issue #643: the `proved` -> `hunted` transition now requires a CORRECT typed
- * answer. A wrong or malformed one records the attempt and leaves the stage
- * where it was, so the participant retries rather than being walked past the
- * one step that carries the idea.
- */
-export function advanceTutorial(
-  state: TutorialState,
-  action: TutorialAction = { kind: "advance" },
-): TutorialState {
-  switch (state.stage) {
-    case "ready":
-      return {
-        ...state,
-        stage: "leaked",
-        score: 10,
-        exposedShareIndices: [TUTORIAL_OWN_SHARE.index],
-        ledger: [
-          {
-            id: "tutorial-contract-a-share-1",
-            kind: "share",
-            generation: 1,
-            contractId: "tutorial-contract-a",
-            shareIndex: TUTORIAL_OWN_SHARE.index,
-            value: String(TUTORIAL_OWN_SHARE.value),
-          },
-        ],
-      };
-    case "leaked":
-      return {
-        ...state,
-        stage: "proved",
-        score: 20,
-        ledger: [
-          ...state.ledger,
-          {
-            id: "tutorial-contract-b-proof",
-            kind: "proof",
-            generation: 1,
-            contractId: "tutorial-contract-b",
-          },
-        ],
-      };
-    case "proved": {
-      // Only a checked answer moves this step. A bare "advance" — which is what
-      // a button press with an empty box is — counts as an unfinished attempt.
-      const verdict = action.kind === "hunt" ? checkTutorialHunt(action.answer) : "malformed";
-      if (verdict !== "correct") return { ...state, attempt: verdict };
-      return {
-        ...state,
-        stage: "hunted",
-        score: 40,
-        attempt: null,
-        // The participant's own value, echoed back — not a number this
-        // component computed for them.
-        recoveredSecret: action.kind === "hunt" ? action.answer.trim() : undefined,
-      };
-    }
-    case "hunted":
-      return {
-        ...state,
-        stage: "rotated",
-        generation: 2,
-        exposedShareIndices: [],
-      };
-    case "rotated":
-      return createTutorialState();
-    default: {
-      const exhaustive: never = state.stage;
-      return exhaustive;
-    }
-  }
-}
-
-interface TutorialCopy {
+type Topic = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "commit";
+interface PracticeCopy {
   readonly title: string;
-  readonly intro: string;
-  readonly skip: string;
-  readonly show: string;
-  readonly reset: string;
-  readonly score: string;
-  readonly generation: string;
-  readonly exposure: string;
-  readonly none: string;
-  readonly ledger: string;
-  readonly ledgerEmpty: string;
-  readonly opponent: string;
-  readonly recovered: string;
-  readonly huntRecipe: string;
-  readonly huntFormula: string;
-  readonly huntNegative: string;
-  readonly huntExample: string;
-  readonly huntInputLabel: string;
-  readonly huntWrong: string;
-  readonly huntMalformed: string;
-  readonly toyTitle: string;
-  readonly toyIntro: string;
-  readonly toySteps: readonly string[];
-  readonly toyRealDifference: string;
-  readonly toyNotSubmittable: string;
-  readonly stages: Readonly<
-    Record<TutorialStage, { readonly title: string; readonly body: string; readonly action: string }>
-  >;
+  readonly purpose: string;
+  readonly prompt: string;
+  readonly calculation: string;
+  readonly takeaway: string;
+  readonly steps: readonly string[];
+  readonly question: string;
+  readonly result: string;
+  readonly retry: string;
+}
+interface PracticeStep {
+  readonly topic: Topic;
+  readonly answer: string;
+  readonly ja: PracticeCopy;
+  readonly en: PracticeCopy;
 }
 
-const EXAMPLE_SHARES = TUTORIAL_WORKED_EXAMPLE.shares
-  .map((share) => `(${share.index}, ${share.value})`)
-  .join(" ");
+export const PRACTICE_STEPS: readonly PracticeStep[] = [
+  {
+    topic: "remainder", answer: "1",
+    ja: {
+      prompt: "8 から 7 を引いて、0〜6 に収めよう。",
+      calculation: "8 − 7 = □",
+      takeaway: "7 で割った余りは 1。",
 
-const COPY: Record<Locale, TutorialCopy> = {
-  en: {
-    title: "Guided rules walkthrough (no score, no match changes)",
-    intro:
-      "Fixed tutorial values run only in this browser. Your live secret, Contracts, ledger, and score are untouched.",
-    skip: "Skip for now",
-    show: "Show the walkthrough",
-    reset: "Start over",
-    score: "Tutorial score",
-    generation: "Current generation",
-    exposure: "Current-generation exposed indices",
-    none: "none",
-    ledger: "Tutorial ledger",
-    ledgerEmpty: "No tutorial entries yet.",
-    opponent: "Tutorial opponent, generation 1",
-    recovered: "The secret you recovered",
-    huntRecipe: `Work it out yourself. Every number below is small enough for paper — no code needed. "Remainder after dividing by ${TUTORIAL_PRIME}" is written mod ${TUTORIAL_PRIME} from here on.`,
-    huntFormula: `secret = (3 x first share - 3 x second share + 1 x third share), then the remainder after dividing by ${TUTORIAL_PRIME}`,
-    huntNegative: `If the subtraction goes below zero, add ${TUTORIAL_PRIME} until the result sits between 0 and ${TUTORIAL_PRIME - 1}.`,
-    huntExample: `Worked example — shares ${EXAMPLE_SHARES}: 3x${TUTORIAL_WORKED_EXAMPLE.shares[0].value} - 3x${TUTORIAL_WORKED_EXAMPLE.shares[1].value} + ${TUTORIAL_WORKED_EXAMPLE.shares[2].value} = ${TUTORIAL_WORKED_EXAMPLE.answer}. (Different shares from the ones above, so this is not the answer.)`,
-    huntInputLabel: `Recovered secret (0 to ${TUTORIAL_PRIME - 1})`,
-    huntWrong: "Not that value. Check the subtraction, then try again.",
-    huntMalformed: `Enter one whole number between 0 and ${TUTORIAL_PRIME - 1}. A negative intermediate result still needs its remainder taken.`,
-    toyTitle: "Optional: PROVE on paper",
-    toyIntro:
-      "The live PROVE runs over a 2048-bit group, so it needs code. The same four steps in tiny numbers, which you can check by hand:",
-    toySteps: [
-      `Setup: p = ${TUTORIAL_TOY_SCHNORR.p}, g = ${TUTORIAL_TOY_SCHNORR.g}, secret w = ${TUTORIAL_TOY_SCHNORR.w}. Public value Y = g^w = ${TUTORIAL_TOY_SCHNORR.publicValue} (mod ${TUTORIAL_TOY_SCHNORR.p}).`,
-      `Commit: pick r = ${TUTORIAL_TOY_SCHNORR.r}, publish R = g^r = ${TUTORIAL_TOY_SCHNORR.commitment} (mod ${TUTORIAL_TOY_SCHNORR.p}).`,
-      `Challenge: e = ${TUTORIAL_TOY_SCHNORR.e}.`,
-      `Respond: s = r + e x w = ${TUTORIAL_TOY_SCHNORR.r} + ${TUTORIAL_TOY_SCHNORR.e} x ${TUTORIAL_TOY_SCHNORR.w} = ${TUTORIAL_TOY_SCHNORR.r + TUTORIAL_TOY_SCHNORR.e * TUTORIAL_TOY_SCHNORR.w}, remainder after dividing by ${TUTORIAL_TOY_SCHNORR.q} = ${TUTORIAL_TOY_SCHNORR.response}.`,
-      `Verify: g^s = ${TUTORIAL_TOY_SCHNORR.verifies} and R x Y^e = ${TUTORIAL_TOY_SCHNORR.verifies} (mod ${TUTORIAL_TOY_SCHNORR.p}). They match, and w was never published.`,
-    ],
-    toyRealDifference: `In the live match the challenge is not a fixed ${TUTORIAL_TOY_SCHNORR.e}: it is a SHA-256 hash of the transcript, and p is 2048 bits rather than ${TUTORIAL_TOY_SCHNORR.p}. Same five lines, numbers too large for paper — which is what the runnable Python below is for.`,
-    toyNotSubmittable:
-      "These toy values cannot be submitted to a real Contract. The live verifier checks the real group, and will reject them.",
-    stages: {
-      ready: {
-        title: "Step 1 of 4 — LEAK Contract A",
-        body: `Publish share index ${TUTORIAL_OWN_SHARE.index}. You gain 10 tutorial points, and that share remains public.`,
-        action: "LEAK tutorial Contract A",
-      },
-      leaked: {
-        title: "Step 2 of 4 — PROVE a different Contract B",
-        body: "Publish a proof transcript instead. The score rises, but the exposed share-index count stays at one.",
-        action: "PROVE tutorial Contract B",
-      },
-      proved: {
-        title: "Step 3 of 4 — HUNT the tutorial opponent",
-        body: `The opponent has published ${DOCUMENTED_THRESHOLD} shares of one generation. That is enough to rebuild their secret — do it, and type what you get.`,
-        action: "Submit my answer",
-      },
-      hunted: {
-        title: "Step 4 of 4 — ROTATE",
-        body: "Move to generation 2. The old share remains visible for audit but is not a share of the new secret.",
-        action: "ROTATE to generation 2",
-      },
-      rotated: {
-        title: "Walkthrough complete",
-        body: "You saw the core loop: choose LEAK or PROVE, inspect public artifacts, HUNT a generation, then ROTATE. Some Orders take neither LEAK nor PROVE — they hand you numbers you are not allowed to read and ask you to compute on them anyway (FHE and MPC). The card names the method each Order accepts, and \"How this Battle works\" describes both.",
-        action: "Run it again",
-      },
+      title: "まず、答えを 0〜6 の数字に収める",
+      purpose: "この練習の計算では、7 以上になったら 7 を引きます。数が大きくなり続けないようにするためです。暗号のお題でも、この計算を使います。",
+      steps: ["3 + 5 = 8 です。", "8 は 7 以上なので、7 を 1 回引きます。", "8 − 7 = □。空欄に入る数字を下に書いてください。"],
+      question: "8 − 7 の答え", result: "8 − 7 = 1。これが『8 を 7 で割った余り』です。mod 7 と書くこともあります。まだ 7 以上なら、もう一度 7 を引きます。", retry: "8 から 7 を引いてみてください。",
+    },
+    en: {
+      prompt: "Subtract 7 from 8 to stay between 0 and 6.",
+      calculation: "8 − 7 = □",
+      takeaway: "The remainder after division by 7 is 1.",
+
+      title: "First, keep the result between 0 and 6",
+      purpose: "In this practice, subtract 7 when a result reaches 7. This keeps the numbers small. The cryptography tasks use the same operation.",
+      steps: ["3 + 5 = 8.", "8 is at least 7, so subtract 7 once.", "8 − 7 = □. Enter the missing number below."],
+      question: "The result of 8 − 7", result: "8 − 7 = 1: the remainder when 8 is divided by 7. This is also written mod 7. Subtract 7 again if the result is still at least 7.", retry: "Subtract 7 from 8.",
     },
   },
-  ja: {
-    title: "ルールを順番に体験する（無得点・本番に影響なし）",
-    intro:
-      "固定された練習用データだけをブラウザ内で動かします。本物の secret、Contract、Ledger、得点には触れません。",
-    skip: "今はスキップ",
-    show: "チュートリアルを表示",
-    reset: "最初からやり直す",
-    score: "練習スコア",
-    generation: "現在の世代",
-    exposure: "現行世代で公開済みの index",
-    none: "なし",
-    ledger: "練習用 Ledger",
-    ledgerEmpty: "まだ練習用の記録はありません。",
-    opponent: "練習相手、世代1",
-    recovered: "あなたが復元した secret",
-    huntRecipe: `自分で計算します。下の数はすべて紙で足りる大きさで、プログラムは要りません。以降、「${TUTORIAL_PRIME} で割った余り」を mod ${TUTORIAL_PRIME} と書きます。`,
-    huntFormula: `secret = (3 × 1枚目 − 3 × 2枚目 + 1 × 3枚目) を ${TUTORIAL_PRIME} で割った余り`,
-    huntNegative: `引き算の結果がマイナスになったら、0 以上 ${TUTORIAL_PRIME - 1} 以下になるまで ${TUTORIAL_PRIME} を足します。`,
-    huntExample: `例題 — share が ${EXAMPLE_SHARES} のとき: 3×${TUTORIAL_WORKED_EXAMPLE.shares[0].value} − 3×${TUTORIAL_WORKED_EXAMPLE.shares[1].value} + ${TUTORIAL_WORKED_EXAMPLE.shares[2].value} = ${TUTORIAL_WORKED_EXAMPLE.answer}。（上の share とは別の数なので、これは答えではありません。）`,
-    huntInputLabel: `復元した secret（0 〜 ${TUTORIAL_PRIME - 1}）`,
-    huntWrong: "その値ではありません。引き算を見直してもう一度どうぞ。",
-    huntMalformed: `0 〜 ${TUTORIAL_PRIME - 1} の整数を1つ入力してください。途中がマイナスになった場合も、余りを取ってから入力します。`,
-    toyTitle: "任意: PROVE を紙で追う",
-    toyIntro:
-      "本番の PROVE は 2048 bit の群で動くためプログラムが必要です。同じ4手順を、手で確かめられる小さい数で置き換えたものが次です。",
-    toySteps: [
-      `準備: p = ${TUTORIAL_TOY_SCHNORR.p}、g = ${TUTORIAL_TOY_SCHNORR.g}、秘密 w = ${TUTORIAL_TOY_SCHNORR.w}。公開値 Y = g^w = ${TUTORIAL_TOY_SCHNORR.publicValue}（mod ${TUTORIAL_TOY_SCHNORR.p}）。`,
-      `コミット: r = ${TUTORIAL_TOY_SCHNORR.r} を選び、R = g^r = ${TUTORIAL_TOY_SCHNORR.commitment}（mod ${TUTORIAL_TOY_SCHNORR.p}）を公開します。`,
-      `チャレンジ: e = ${TUTORIAL_TOY_SCHNORR.e}。`,
-      `応答: s = r + e × w = ${TUTORIAL_TOY_SCHNORR.r} + ${TUTORIAL_TOY_SCHNORR.e} × ${TUTORIAL_TOY_SCHNORR.w} = ${TUTORIAL_TOY_SCHNORR.r + TUTORIAL_TOY_SCHNORR.e * TUTORIAL_TOY_SCHNORR.w}、これを ${TUTORIAL_TOY_SCHNORR.q} で割った余りは ${TUTORIAL_TOY_SCHNORR.response}。`,
-      `検証: g^s = ${TUTORIAL_TOY_SCHNORR.verifies}、R × Y^e = ${TUTORIAL_TOY_SCHNORR.verifies}（mod ${TUTORIAL_TOY_SCHNORR.p}）。一致し、しかも w は一度も公開されていません。`,
-    ],
-    toyRealDifference: `本番ではチャレンジが固定の ${TUTORIAL_TOY_SCHNORR.e} ではなく、transcript の SHA-256 ハッシュになり、p も ${TUTORIAL_TOY_SCHNORR.p} ではなく 2048 bit になります。手順は同じ5行のまま、数だけが紙で扱えない大きさになります。そこから先が下の Python の担当です。`,
-    toyNotSubmittable:
-      "この練習用の値は実際の Contract には提出できません。本番の検証は本物の群で行われ、これらは拒否されます。",
-    stages: {
-      ready: {
-        title: "1 / 4 — Contract A を LEAK",
-        body: `share index ${TUTORIAL_OWN_SHARE.index} を公開します。練習スコアは10点増え、その share は公開記録に残ります。`,
-        action: "練習用 Contract A を LEAK",
-      },
-      leaked: {
-        title: "2 / 4 — 別の Contract B を PROVE",
-        body: "代わりに proof transcript を公開します。得点は増えますが、公開済み share index は1種類のままです。",
-        action: "練習用 Contract B を PROVE",
-      },
-      proved: {
-        title: "3 / 4 — 練習相手を HUNT",
-        body: `相手は同じ世代の share を${DOCUMENTED_THRESHOLD}枚公開しています。これで secret を組み立て直せます。実際に計算して、出た数を入力してください。`,
-        action: "答えを送る",
-      },
-      hunted: {
-        title: "4 / 4 — ROTATE",
-        body: "世代2へ切り替えます。古い share は監査用に残りますが、新しい secret の share ではありません。",
-        action: "世代2へ ROTATE",
-      },
-      rotated: {
-        title: "チュートリアル完了",
-        body: "LEAK / PROVE の二択、公開情報の確認、相手への HUNT、自分の ROTATE という基本の一周を確認しました。依頼にはこの二択のどちらでもないものもあります — 読んではいけない数字を渡され、そのまま計算することを求められる依頼です（FHE と MPC）。使える方法は各カードに書いてあり、「この Battle の遊び方」で両方を説明しています。",
-        action: "もう一度実行",
-      },
+  {
+    topic: "sharing", answer: "2",
+    ja: {
+      prompt: "秘密は「かけら3個の合計を7で割った余り」です。",
+      calculation: "1 + 2 + 6 = 9 → 9 − 7 = □",
+      takeaway: "同じ2個のかけらでも、残り次第で秘密が変わります。",
+
+      title: "2 個見えても、秘密が決まらないようにする",
+      purpose: "あなたは秘密の数字を仲間に分けて持たせたい。でも、2 人分が相手に見えても秘密は守りたい。まず、3 個を全部足して 7 で割った余りを秘密にする例を見ます。別々に持つ数を『かけら』と呼びます。",
+      steps: ["見えているかけらは 1 と 2。3 個目はまだ見えません。", "3 個目が 3 なら、秘密は 1+2+3=6。3 個目が 6 なら、1+2+6=9、7 を引いて □。", "3 個目は 0〜6 のどれでもありえます。秘密の候補も 3・4・5・6・0・1・2 と、全部残ります。"],
+      question: "3 個目が 6 の場合の秘密", result: "秘密は 2 です。同じ 1 と 2 が見えていても、秘密が 6 の場合と 2 の場合がありました。足りないかけら次第で秘密が変わるので、2 個だけでは決められません。次は、5 個のうちどの 3 個からでも戻せる分け方へ進みます。", retry: "1+2+6=9。9 から 7 を引いてください。",
+    },
+    en: {
+      prompt: "The secret is the sum of three shares, then the remainder after division by 7.",
+      calculation: "1 + 2 + 6 = 9 → 9 − 7 = □",
+      takeaway: "The hidden third share changes the secret.",
+
+      title: "Keep the secret undetermined when two pieces are visible",
+      purpose: "Share a secret number with teammates while keeping it hidden if two pieces become visible. First try a rule that adds all three pieces and keeps the remainder after division by 7. Each separately held number is a share.",
+      steps: ["The visible shares are 1 and 2. The third is hidden.", "If the third is 3, the secret is 1+2+3=6. If it is 6, the sum is 9. Subtract 7 to get □.", "The third share can be any of 0–6, leaving secrets 3,4,5,6,0,1,2: every candidate remains."],
+      question: "The secret when the third share is 6", result: "The secret is 2. The same visible shares 1 and 2 fit both secret 6 and secret 2, depending on the hidden share. Two pieces do not determine it. Next, a different construction lets any three of five pieces work.", retry: "1+2+6=9. Subtract 7.",
     },
   },
-};
+  {
+    topic: "sharing", answer: "2",
+    ja: {
+      prompt: "かけら = 秘密 + A×番号 + B×番号×番号。A・B は内緒に選ぶ数字。最後に7で割った余りにします。",
+      calculation: "秘密2・A=2・B=5・番号1 → 2+2+5=9 → 9−7=□",
+      takeaway: "違う秘密からも、同じかけらを作れました。",
 
-const cardStyle = {
-  border: "1px solid #b6d7f2",
-  borderRadius: "8px",
-  padding: "12px",
-  marginBottom: "12px",
-  background: "#fff",
-} as const;
-const actionStyle = { padding: "6px 10px", fontSize: "12px", cursor: "pointer" } as const;
-const statsStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-  gap: "8px",
-  marginTop: "10px",
-} as const;
-const statStyle = {
-  border: "1px solid #eaeded",
-  borderRadius: "6px",
-  padding: "8px",
-  fontSize: "12px",
-} as const;
-const cellStyle = { padding: "4px 6px", borderBottom: "1px solid #eaeded", textAlign: "left" as const };
-const formulaStyle = {
-  fontFamily: "monospace",
-  fontSize: "12px",
-  background: "#fffdf3",
-  border: "1px solid #f0e3b8",
-  borderRadius: "4px",
-  padding: "6px 8px",
-  margin: "6px 0",
-} as const;
-const errorStyle = { margin: "6px 0 0", fontSize: "12px", color: "#8a2b2b" } as const;
+      title: "どの 3 個でも戻せるよう、番号でかけらを作る",
+      purpose: "先ほどは 3 個全部が必要でした。5 人に配り、どの 3 人が集まっても戻せるようにするには、番号も使ってかけらを作ります。秘密を 1、内緒で選ぶ数を A=0、B=1 とした見本です。A と B は、毎回 0〜6 からそれぞれ同じ確率で選びます。",
+      steps: ["かけら = 秘密 + A×番号 + B×番号×番号 を計算し、7 で割った余りにします。#1 は番号 1、#2 は番号 2 という意味です。", "#1 は 1+0×1+1×1×1=2。#2 は 1+0×2+1×2×2=5。#3 は 1+0×3+1×3×3=10、7 を引いて 3。", "別の秘密でも同じかけらになるか確かめます。秘密 2、A=2、B=5 なら、#1 は 2+2+5=9。7 を引くと □。#2 も 2+4+20=26、7 を 3 回引いて 5 です。"],
+      question: "別の秘密 2 から作った #1 の値", result: "また 2 になりました。見えている #1=2、#2=5 は、秘密 1 にも 2 にも合います。\n実際には秘密 0〜6 のどれも可能です。条件に合う (秘密,A,B) は (0,5,4)、(1,0,1)、(2,2,5)、(3,4,2)、(4,6,6)、(5,1,3)、(6,3,0)。どれも上の式に入れると #1=2、#2=5 です。\nどの秘密にも A と B が 1 組ずつあるので、2 個では秘密を絞れません。次は 3 個目を加えて、秘密だけを取り出します。", retry: "9 から 7 を引いてください。同じ #1=2 が作れます。",
+    },
+    en: {
+      prompt: "Share = secret + A×index + B×index×index, then remainder after division by 7. A and B are privately chosen numbers.",
+      calculation: "Secret 2, A=2, B=5, index 1 → 2+2+5=9 → 9−7=□",
+      takeaway: "Different secrets can give the same visible share.",
 
-/**
- * Issue #643: the HUNT step's worksheet — recipe, worked example, input box.
- *
- * Everything a participant needs to compute the answer is on screen; the answer
- * itself is not, and the box starts empty. §12b: the needed procedure is given,
- * and the difficulty lives in doing the work rather than in guessing what the
- * work is.
- */
-function HuntWorksheet(props: {
-  readonly copy: TutorialCopy;
-  readonly attempt: TutorialAttempt;
-  readonly onSubmit: (answer: string) => void;
-  readonly actionLabel: string;
-}) {
-  const { copy, attempt } = props;
-  const [answer, setAnswer] = useState("");
+      title: "Use indices so any three pieces can recover the secret",
+      purpose: "The addition example needed all three pieces. To distribute five pieces and let any three work, include each piece’s index. Example: secret 1 and private numbers A=0, B=1. Draw A and B independently and uniformly from 0–6 each time.",
+      steps: ["Share = secret + A×index + B×index×index, then remainder after division by 7. #1 has index 1, #2 index 2.", "#1: 1+0+1=2. #2: 1+0+4=5. #3: 1+0+9=10, minus 7 gives 3.", "Try another secret: secret 2, A=2, B=5. #1: 2+2+5=9, minus 7 gives □. #2: 2+4+20=26, minus 7 three times gives 5."],
+      question: "Share #1 made from the other secret 2", result: "Again 2. Visible shares #1=2, #2=5 fit both secrets 1 and 2. Every secret 0–6 is possible: matching (secret,A,B) triples are (0,5,4), (1,0,1), (2,2,5), (3,4,2), (4,6,6), (5,1,3), (6,3,0). Substituting any triple gives the same two shares. Each secret has one matching pair of private numbers, so two shares do not narrow the secret. Next, add the third piece and isolate the secret.", retry: "Subtract 7 from 9 to get #1=2 again.",
+    },
+  },
+  {
+    topic: "sharing", answer: "1",
+    ja: {
+      prompt: "番号 #1=2、#2=5、#3=3。この3個では「3×#1−3×#2+#3」を7で割った余りが秘密です。",
+      calculation: "3×2 − 3×5 + 3 = −6 → −6 + 7 = □",
+      takeaway: "3個がそろうと、元の秘密1に戻せます。",
 
-  return (
-    <div style={{ marginTop: "8px" }}>
-      <p style={{ margin: "0 0 4px", fontSize: "12px" }}>{copy.huntRecipe}</p>
-      <p style={formulaStyle}>{copy.huntFormula}</p>
-      <p style={{ margin: "0 0 4px", fontSize: "12px" }}>{copy.huntNegative}</p>
-      <p style={{ margin: "0 0 8px", fontSize: "12px", color: "#5f6b7a" }}>{copy.huntExample}</p>
-      <label style={{ display: "block", fontSize: "12px", marginBottom: "4px" }}>
-        {copy.huntInputLabel}
-        <input
-          type="text"
-          inputMode="numeric"
-          value={answer}
-          onChange={(event) => setAnswer(event.target.value)}
-          style={{ marginLeft: "6px", width: "5em", fontSize: "12px", padding: "3px 6px" }}
-        />
-      </label>
-      <button type="button" style={actionStyle} onClick={() => props.onSubmit(answer)}>
-        {props.actionLabel}
-      </button>
-      {attempt !== null && (
-        <p style={errorStyle} role="alert">
-          {attempt === "wrong" ? copy.huntWrong : copy.huntMalformed}
-        </p>
-      )}
-    </div>
-  );
+      title: "3 個のかけらから、秘密の数字を戻す",
+      purpose: "前の見本で作った #1=2、#2=5、#3=3 を使い、隠していた秘密を戻します。この番号の組なら『#1 を 3 倍、#2 を 3 倍して引き、#3 を足す』と、内緒で選んだ A と B が消えます。",
+      steps: ["秘密 = 3×#1 − 3×#2 + #3。数字を入れると 3×2 − 3×5 + 3 = 6−15+3 = −6。", "なぜ戻る？ 各かけらに入っている秘密は 3−3+1=1 個分残ります。A の倍数は 3×1−3×2+3=0。B の倍数も 3×1−3×4+9=0。内緒の数に掛かる数が 0 なので消え、秘密だけが残ります。", "計算結果の −6 は負なので、7 を足して 0〜6 に戻します。−6+7=□。"],
+      question: "復元した秘密の数字", result: "元の秘密 1 に戻りました。これが復元です。3 倍・−3 倍・1 倍という組は #1・#2・#3 専用です。別の番号から戻すときは、その番号に合う式を使います。次は、この計算が相手にもできると何が起きるかを見ます。", retry: "−6 に 7 を足すと、0 を 1 つ超えます。",
+    },
+    en: {
+      prompt: "For #1=2, #2=5, #3=3, recover 3×#1−3×#2+#3, then take the remainder after division by 7.",
+      calculation: "3×2 − 3×5 + 3 = −6 → −6 + 7 = □",
+      takeaway: "Three shares recover the original secret 1.",
+
+      title: "Recover a secret number from three shares",
+      purpose: "Use #1=2, #2=5, #3=3 from the previous example to recover the secret. For these indices, three times #1 minus three times #2 plus #3 cancels the private A and B.",
+      steps: ["Secret = 3×#1 − 3×#2 + #3 = 3×2 − 3×5 + 3 = 6−15+3 = −6.", "Why? The secret remains 3−3+1=1 time. A’s multiplier is 3×1−3×2+3=0; B’s is 3×1−3×4+9=0. The private-number terms vanish and only the secret remains.", "Add 7 to the negative result: −6+7=□."],
+      question: "The recovered secret", result: "The original secret 1 is back. The multipliers 3, −3, 1 belong to indices #1, #2, #3; other indices need their own formula. Next, see what happens when an opponent can do this calculation too.", retry: "Add 7 to −6: you pass zero by one.",
+    },
+  },
+  {
+    topic: "sharing", answer: "2",
+    ja: {
+      prompt: "同じ秘密のかけらを #1、#2、#1 の順に公開しました。",
+      calculation: "違う番号は □ 個",
+      takeaway: "同じ番号をもう一度出しても、材料は増えません。",
+
+      title: "公開すると、相手に材料を渡すことになる",
+      purpose: "かけらを公開してすぐ得点する操作が LEAK です。公開した数は、みんなが読める公開記録（PUBLIC LEDGER）へ残ります。相手は前の場面の式を使えるので、公開する個数が大事になります。",
+      steps: ["『同じ秘密から作った一組』を世代と呼びます。この例は同じ世代の異なる番号が 3 個で秘密を戻せる設定です。", "#1、#2、もう一度 #1 を公開しました。違う番号は何個ありますか。", "危険度の丸は公開操作の回数ではなく、同じ世代の異なる番号の個数を表します。"],
+      question: "公開済みの異なる番号の個数", result: "2 個です。#1 を再び出しても増えません。#3 も出すと 3 個になり、相手が秘密を戻して得点する HUNT（秘密を読み解く攻撃）に使えます。ROTATE（秘密を作り直す操作）をすると新しい世代になります。古いかけらと新しいかけらは混ぜて使えません。", retry: "番号は #1 と #2 です。重複した #1 をもう一度数えないでください。",
+    },
+    en: {
+      prompt: "You published shares #1, #2, then #1 again from the same secret.",
+      calculation: "Number of different indices: □",
+      takeaway: "Repeating an index adds no new share.",
+
+      title: "Publishing gives an opponent evidence",
+      purpose: "LEAK publishes a share to score immediately. Everyone can read it in the PUBLIC LEDGER. An opponent can use the reconstruction formula from the previous scene, so the number of exposed shares matters.",
+      steps: ["A generation is a set made from the same secret. This example requires three distinct indices in one generation.", "Publish #1, #2, then #1 again. How many different indices are visible?", "Exposure circles count distinct indices in one generation, not how many times you clicked publish."],
+      question: "The number of distinct public indices", result: "Two. Repeating #1 adds no new index. Publishing #3 would allow recovery and HUNT, an attack that scores by recovering the secret. ROTATE makes a new secret and generation; old and new shares cannot be mixed.", retry: "The distinct indices are #1 and #2. Count #1 only once.",
+    },
+  },
+  {
+    topic: "mpc", answer: "6",
+    ja: {
+      prompt: "自分の2に、隠すために受け取った1を足し、送った4を引こう。負なら7を足します。",
+      calculation: "2 + 1 − 4 = −1 → −1 + 7 = □",
+      takeaway: "6を提出すれば、自分の2を直接見せずに合計へ参加できます。",
+
+      title: "自分の数字を隠して、合計に参加する",
+      purpose: "あなた・B・C の 3 人が、それぞれの数字を直接見せずに合計を出したい場面です。あなたの数字は 2。まず、他の人と内緒で共有した数を足し引きしてから提出します。この内緒の数を『覆面』と呼びます。",
+      steps: ["あなたは C から受け取った覆面 1 を足し、B へ送った覆面 4 を引きます。", "あなたが出す小計は 2 + 1 − 4 = −1。小計は、あなたの側から提出する数のことです。", "−1 に 7 を足して、0〜6 に収めます。−1 + 7 = □。"],
+      question: "あなたが提出する小計", result: "提出する小計は 6。ここからは答え合わせのため B と C の内緒の数も見せます。B の数は 3、C の数は 1、B→C の覆面は 2 とします。\nB は 3+4−2=5、C は 1+2−1=2 を出します。\n全部足すと 6+5+2=13、7 を引いて 6。元の合計 2+3+1=6 と同じです。\n覆面は一度足され、一度引かれて消えました。これが MPC（複数人で秘密を保って計算する方法）の例です。実際には各人は自分の数と関係する覆面だけを知ります。得られるのは合計を 7 で割った余りなので、例えば合計が 9 なら 2 になります。", retry: "−1 に 7 を足し、0〜6 に入る数を答えてください。",
+    },
+    en: {
+      prompt: "Start with your input 2. Add the hiding number 1 you received; subtract 4 you sent. Add 7 if negative.",
+      calculation: "2 + 1 − 4 = −1 → −1 + 7 = □",
+      takeaway: "Submit 6 to join the total without showing your input 2 directly.",
+
+      title: "Contribute to a total while hiding your input",
+      purpose: "You, B and C want a total without directly showing your own inputs. Your input is 2. Add and subtract privately shared numbers, called masks, before submitting.",
+      steps: ["Add the mask 1 received from C; subtract the mask 4 sent to B.", "Your subtotal, the number you submit, is 2 + 1 − 4 = −1.", "Add 7 to keep it between 0 and 6: −1 + 7 = □."],
+      question: "Your submitted subtotal", result: "Submit 6. Let B's input be 3, C's be 1, and the B→C mask be 2. B submits 3+4−2=5 and C submits 1+2−1=2. Total: 6+5+2=13, then subtract 7 to get 6, matching 2+3+1=6. Each mask was added and subtracted once. This illustrates MPC, computing together while preserving privacy. Each person normally knows only their own input and related masks; all inputs are shown here for explanation. The result is the remainder of the total after division by 7: a total of 9 would give 2.", retry: "Add 7 to −1 and enter a number between 0 and 6.",
+    },
+  },
+  {
+    topic: "zk", answer: "2",
+    ja: {
+      prompt: "矢印の先の数字に読み替えよう。1→3、2→1、3→4、4→2。",
+      calculation: "2・1・3・4 → 1・3・4・□",
+      takeaway: "数字を替えても、1〜4が1回ずつ並びます。",
+
+      title: "答えを別の数字に付け替えて見せる",
+      purpose: "本番では数独の答えを使います。この練習では、その一行として 1〜4 が一度ずつ並んだ列を使います。『正しい解を持っている』と審判に確かめてもらいながら、元の解全体を相手チームへ直接渡したくありません。そこで、どのマスでも同じ表を使い、数字の呼び名を替えます。",
+      steps: ["表は 1→3、2→1、3→4、4→2。矢印の先の数字へ読み替えます。", "元の行 2・1・3・4 は、1・3・4・□ になります。", "最後の元の数字は 4。表の 4→2 を見て、空欄を埋めてください。"],
+      question: "付け替えた行の最後の数字", result: "1・3・4・2 になりました。元の行と同じく、1〜4 が一度ずつ現れます。本番は表を選び、4 マスを埋めます。ゲームの審判は元の解を知って照合し、相手へは付け替えた一行などの一部分を公開します。ZK（ゼロ知識証明）は答えを明かさず正しさを示す技術で、本来は検証する人にも答えを隠します。このゲームはその考え方を体験するモデルです。同じ表は再使用しないでください。同じ表で別の部分も見せると、相手が公開された部分をつなげられるからです。", retry: "4→2 は、4 を 2 に読み替える意味です。",
+    },
+    en: {
+      prompt: "Replace each digit with the one after its arrow: 1→3, 2→1, 3→4, 4→2.",
+      calculation: "2,1,3,4 → 1,3,4,□",
+      takeaway: "The renamed row still contains 1–4 once each.",
+
+      title: "Show a solution with its digits renamed",
+      purpose: "The match uses sudoku solutions; here we practise one row containing each of 1–4 once. Have the judge check that you hold a solution without directly handing the full original to another team. Use the same digit-renaming table in every cell.",
+      steps: ["Table: 1→3, 2→1, 3→4, 4→2. Replace each digit with the digit after its arrow.", "Original row 2,1,3,4 becomes 1,3,4,□.", "The last original digit is 4. Use 4→2 to fill the hole."],
+      question: "The last digit of the renamed row", result: "The result is 1,3,4,2, still containing 1–4 once each. In the match, choose a table and fill four cells. The trusted game judge knows the original and publishes one renamed group to others. ZK (zero-knowledge proof) demonstrates correctness without disclosing an answer, including to its verifier. This game teaches that idea with a simplified judge. Do not reuse a table: showing other parts with the same table lets an opponent connect the published pieces.", retry: "4→2 means replace 4 with 2.",
+    },
+  },
+  {
+    topic: "fhe", answer: "4",
+    ja: {
+      prompt: "中身を隠した数字の組 (2,5) と (3,6) を足そう。左同士・右同士を足し、7以上なら7を引きます。",
+      calculation: "(2+3, 5+6) = (5,11) → (5,□)",
+      takeaway: "中身を開けずに、暗号のまま足せました。",
+
+      title: "中身を開けずに、暗号のまま足す",
+      purpose: "中身を隠した数の組を『暗号文』と呼びます。ここでは (2,5) と (3,6) を受け取りました。中身を隠すために使う秘密の数が『鍵』です。鍵がなくても、左どうしと右どうしを足す計算はできます。",
+      steps: ["左どうし：2 + 3 = 5。", "右どうし：5 + 6 = 11。7 以上なので、7 を引きます。", "答えは (5, □)。右の 11 − 7 を計算してください。"],
+      question: "答えの暗号文の右の数字", result: "答えは (5,4)。ここからは答え合わせのため、見本の中身と鍵を見せます。中身は 1 と 3、別々の鍵は 2 と 1 です。\n隠す数は『鍵 × 元の暗号文の左』。1 個目は鍵 2 × 左 2 = 4、2 個目は鍵 1 × 左 3 = 3。中身に足すと右は 1+4=5、3+3=6 でした。\n足し合わせた右から隠す数を引くと 4−4−3=−3、7 を足して 4。中身の合計 1+3=4 が戻ります。ゲームでは判定側がこれを確かめます。得られるのは合計を 7 で割った余りなので、合計が 9 なら 2 です。\nこれが準同型暗号の足し算の考え方です。FHE（完全準同型暗号）は掛け算なども扱いますが、この教材は足し算のモデルです。", retry: "11 から 7 を引いてください。左の 5 はそのままです。",
+    },
+    en: {
+      prompt: "Add the encrypted pairs (2,5) and (3,6): lefts together, rights together. Subtract 7 at 7 or above.",
+      calculation: "(2+3, 5+6) = (5,11) → (5,□)",
+      takeaway: "You added encrypted values without opening them.",
+
+      title: "Add encrypted numbers without opening them",
+      purpose: "An encrypted pair hiding a number is a ciphertext. You receive (2,5) and (3,6). A key is a secret number used to hide the content. You can add the lefts and rights separately without the keys.",
+      steps: ["Lefts: 2 + 3 = 5.", "Rights: 5 + 6 = 11. Subtract 7 because it is at least 7.", "Answer: (5,□). Calculate 11 − 7 for the right value."],
+      question: "The right value of your answer", result: "The answer is (5,4). For explanation we now reveal the contents 1 and 3, with separate keys 2 and 1. A hiding number is key times the original ciphertext’s left: key 2 × left 2 = 4; key 1 × left 3 = 3. Adding to the contents gave rights 1+4=5 and 3+3=6. Subtract them from the right sum: 4−4−3=−3; add 7 to get 4, matching 1+3. The game judge performs this check. The result is the total’s remainder after division by 7; a total of 9 would give 2. This is homomorphic addition. FHE (fully homomorphic encryption) also handles multiplication; this is a teaching model of addition.", retry: "Subtract 7 from 11. The left value remains 5.",
+    },
+  },
+  {
+    topic: "caesar", answer: "1",
+    ja: {
+      prompt: "0〜5を使う暗号。4を3だけ先へずらそう。6になったら先頭へ戻ります。",
+      calculation: "4 + 3 = 7 → 7 − 6 = □",
+      takeaway: "ずらす数3が、この暗号の鍵です。",
+
+      title: "数字をずらして、暗号を作る",
+      purpose: "次は、暗号を作る操作です。0〜5 の数字を輪のように並べ、決めた数だけ先へずらします。このずらす数が『鍵』です。",
+      steps: ["鍵は 3、元の数字は 4。まず 4 + 3 = 7。", "使う数字は 0〜5 なので、6 に達したら先頭へ戻ります。", "7 − 6 = □。これが暗号にした数字です。"],
+      question: "4 を鍵 3 で暗号にした数字", result: "暗号にした数字は 1。これをシーザー暗号と呼びます。逆に 1−4=−3、6 を足すと鍵の 3 を求められます。元と暗号の組を公開すると、相手に鍵を復元される理由です。本番では『計算して答える』と『公開してすぐ答える（LEAK）』の得点・公開リスクを見て選びます。", retry: "7 から 6 を引いてください。",
+    },
+    en: {
+      prompt: "Use digits 0–5. Shift 4 forward by 3, wrapping to the start at 6.",
+      calculation: "4 + 3 = 7 → 7 − 6 = □",
+      takeaway: "The shift 3 is this cipher’s key.",
+
+      title: "Make a cipher by shifting digits",
+      purpose: "Arrange digits 0–5 in a circle and move forward by a fixed amount. That shift amount is the key.",
+      steps: ["Key 3, original digit 4: first calculate 4 + 3 = 7.", "The digits are 0–5. Wrap back to the start at 6.", "7 − 6 = □. This is the encrypted digit."],
+      question: "Digit 4 encrypted with key 3", result: "The encrypted digit is 1. This is a Caesar cipher. An opponent can calculate 1−4=−3, then add 6 to recover key 3. That is why publishing an original/encrypted pair exposes the key. In the match, compare the score and disclosure cost of calculating an answer and publishing to answer immediately (LEAK).", retry: "Subtract 6 from 7.",
+    },
+  },
+  {
+    topic: "commit", answer: "2",
+    ja: {
+      prompt: "グーを1、隠す数を2とした見本。4×(9×9)を23で割った余りを出そう。81の余りは12です。",
+      calculation: "4×12 = 48 → 48 − 23 − 23 = □",
+      takeaway: "先に2を出し、あとで手と隠す数を開きます。",
+
+      title: "手を先に数字へ隠し、あとで開く",
+      purpose: "じゃんけんの手を先に見せると、相手が勝つ手を選べます。そこで、グーを表す m=1 に隠す数 r=2 を混ぜ、先に数字だけを出します。この数字がコミットメントです。",
+      steps: ["式は 4^m × 9^r を 23 で割った余り。4^1 は 4、9^2 は 9×9=81。81−23−23−23=12。", "4×12=48。23 を 2 回引くと、48−23−23=□。", "この余りが、手より先に相手へ見せる数字です。"],
+      question: "先に封じる数字", result: "先に 2 を出します。両者の数字がそろったあとで、手 m=1 と隠す数 r=2 を審判へ渡すと、同じ計算で 2 になるか確かめてもらえます。審判は両者の開封をそろえて同時公開します。この順番を commit-reveal と呼びます。この小さな数では別の手への開け方も探せるので、後出しを防ぐには審判の同時公開が必要です。r は次回 0〜10 のくじから引き直します。", retry: "48−23=25。もう一度 23 を引いてください。",
+    },
+    en: {
+      prompt: "Example: rock is 1, hiding number is 2. Take the remainder of 4×(9×9) after division by 23. 81 has remainder 12.",
+      calculation: "4×12 = 48 → 48 − 23 − 23 = □",
+      takeaway: "Send 2 first; reveal the hand and hiding number later.",
+
+      title: "Seal a hand in a number, then open it",
+      purpose: "Showing your hand first lets an opponent counter it. Combine rock m=1 with hiding number r=2 and first send only a number: a commitment.",
+      steps: ["Take the remainder of 4^m × 9^r after division by 23. 4^1=4; 9^2=81; 81−23−23−23=12.", "4×12=48. Subtract 23 twice: 48−23−23=□.", "This remainder is the number you show before your hand."],
+      question: "The number to seal first", result: "Send 2 first. After both commitments arrive, give the judge m=1 and r=2. The same calculation must reproduce 2. The judge publishes both openings together. This order is commit-reveal. Tiny numbers permit alternative openings, so the judge's simultaneous publication is needed to prevent adapting after seeing the other hand. Next time, draw r again from 0–10.", retry: "48−23=25. Subtract 23 once more.",
+    },
+  },
+];
+
+export function checkPracticeAnswer(index: number, value: string): boolean {
+  return /^[0-9]$/.test(value.trim()) && PRACTICE_STEPS[index]?.answer === value.trim();
 }
 
-/**
- * Issue #643: the paper-sized Schnorr, kept behind a closed `<details>`.
- *
- * Progressive disclosure on purpose — it is the "why does PROVE work" detour,
- * not part of the four-step loop, and the playtest complaint that started #643
- * was about how much text sits between a reader and their first move.
- */
-function ToySchnorr({ copy }: { readonly copy: TutorialCopy }) {
-  return (
-    <details style={{ marginTop: "10px", fontSize: "12px" }}>
-      <summary style={{ cursor: "pointer" }}>{copy.toyTitle}</summary>
-      <p style={{ margin: "6px 0" }}>{copy.toyIntro}</p>
-      <ol style={{ margin: "0 0 6px", paddingLeft: "1.2em" }}>
-        {copy.toySteps.map((step) => (
-          <li key={step} style={{ marginBottom: "3px" }}>
-            {step}
-          </li>
-        ))}
-      </ol>
-      <p style={{ margin: "6px 0" }}>{copy.toyRealDifference}</p>
-      <p style={{ margin: 0, color: "#8a2b2b" }}>{copy.toyNotSubmittable}</p>
-    </details>
-  );
-}
+const buttonStyle = { cursor: "pointer", padding: "8px 12px", border: "1px solid #b4c5da", borderRadius: 7, background: "#fff", color: "#315f91", fontSize: 13 } as const;
 
 export default function TutorialWalkthrough({ locale }: { readonly locale: Locale }) {
-  const copy = COPY[locale];
-  const [state, setState] = useState<TutorialState>(() => createTutorialState());
   const [visible, setVisible] = useState(false);
-  const stage = copy.stages[state.stage];
-  const showOpponent = state.stage === "proved" || state.stage === "hunted" || state.stage === "rotated";
-  const isHuntStep = state.stage === "proved";
-
-  if (!visible) {
-    return (
-      <div style={cardStyle}>
-        <strong>{copy.title}</strong>
-        <p style={{ margin: "4px 0 8px", fontSize: "12px", color: "#5f6b7a" }}>{copy.intro}</p>
-        <button type="button" style={actionStyle} onClick={() => setVisible(true)}>
-          {copy.show}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <section style={cardStyle} aria-label="crypto-battle-tutorial">
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
-        <div>
-          <strong>{copy.title}</strong>
-          <p style={{ margin: "4px 0", fontSize: "12px", color: "#5f6b7a" }}>{copy.intro}</p>
-        </div>
-        <button type="button" style={actionStyle} onClick={() => setVisible(false)}>
-          {copy.skip}
-        </button>
-      </div>
-
-      <div style={{ border: "1px solid #b6d7f2", borderRadius: "6px", padding: "10px", background: "#f1f8ff" }}>
-        <strong>{stage.title}</strong>
-        <p style={{ margin: "4px 0 8px", fontSize: "13px" }}>{stage.body}</p>
-
-        {/*
-          The opponent's shares sit ABOVE the worksheet at the HUNT step, so the
-          numbers and the recipe that consumes them read in one pass.
-        */}
-        {isHuntStep && (
-          <p style={{ margin: "0 0 4px", fontFamily: "monospace", fontSize: "12px" }}>
-            {TUTORIAL_OPPONENT_SHARES.map((share) => `share[${share.index}]=${share.value}`).join(" / ")}
-          </p>
-        )}
-
-        {isHuntStep ? (
-          <HuntWorksheet
-            copy={copy}
-            attempt={state.attempt}
-            actionLabel={stage.action}
-            onSubmit={(answer) =>
-              setState((current) => advanceTutorial(current, { kind: "hunt", answer }))
-            }
-          />
-        ) : (
-          <button type="button" style={actionStyle} onClick={() => setState((current) => advanceTutorial(current))}>
-            {stage.action}
-          </button>
-        )}
-
-        {state.stage !== "ready" && state.stage !== "rotated" && (
-          <button
-            type="button"
-            style={{ ...actionStyle, marginLeft: isHuntStep ? 0 : "6px", marginTop: isHuntStep ? "6px" : 0 }}
-            onClick={() => setState(createTutorialState())}
-          >
-            {copy.reset}
-          </button>
-        )}
-      </div>
-
-      <div style={statsStyle}>
-        <div style={statStyle}>
-          <strong>{copy.score}</strong>
-          <div>{state.score} pt</div>
-        </div>
-        <div style={statStyle}>
-          <strong>{copy.generation}</strong>
-          <div>{state.generation}</div>
-        </div>
-        <div style={statStyle}>
-          <strong>{copy.exposure}</strong>
-          <div>{state.exposedShareIndices.length > 0 ? state.exposedShareIndices.join(", ") : copy.none}</div>
-        </div>
-        {state.recoveredSecret && (
-          <div style={statStyle}>
-            <strong>{copy.recovered}</strong>
-            <div>{state.recoveredSecret}</div>
-          </div>
-        )}
-      </div>
-
-      {showOpponent && !isHuntStep && (
-        <p style={{ margin: "10px 0 0", fontFamily: "monospace", fontSize: "12px" }}>
-          <strong>{copy.opponent}:</strong>{" "}
-          {TUTORIAL_OPPONENT_SHARES.map((share) => `share[${share.index}]=${share.value}`).join(" / ")}
-        </p>
-      )}
-
-      <ToySchnorr copy={copy} />
-
-      <div style={{ marginTop: "10px" }}>
-        <strong style={{ fontSize: "12px" }}>{copy.ledger}</strong>
-        {state.ledger.length === 0 ? (
-          <p style={{ margin: "4px 0 0", fontSize: "12px" }}>{copy.ledgerEmpty}</p>
-        ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
-            <thead>
-              <tr>
-                <th style={cellStyle}>move</th>
-                <th style={cellStyle}>contract</th>
-                <th style={cellStyle}>generation</th>
-                <th style={cellStyle}>public detail</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.ledger.map((entry) => (
-                <tr key={entry.id}>
-                  <td style={cellStyle}>{entry.kind === "share" ? "LEAK" : "PROVE"}</td>
-                  <td style={cellStyle}>{entry.contractId}</td>
-                  <td style={cellStyle}>{entry.generation}</td>
-                  <td style={{ ...cellStyle, fontFamily: "monospace" }}>
-                    {entry.kind === "share" ? `share[${entry.shareIndex}]=${entry.value}` : "{ commitment, response }"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </section>
-  );
+  const [index, setIndex] = useState(0);
+  const [answer, setAnswer] = useState("");
+  const [verdict, setVerdict] = useState<"correct" | "wrong" | null>(null);
+  const step = PRACTICE_STEPS[index]!;
+  const copy = step[locale];
+  const move = (next: number) => { setIndex(next); setAnswer(""); setVerdict(null); };
+  if (!visible) return <div aria-label="crypto-battle-tutorial-collapsed">
+    <button type="button" aria-expanded={false} style={buttonStyle} onClick={() => setVisible(true)}>{locale === "ja" ? "順番に解説を読む（任意）" : "Read the guided explanation (optional)"}</button>
+  </div>;
+  return <section aria-label="crypto-battle-tutorial" style={{ border: "1px solid #b4c5da", borderRadius: 10, padding: 18, color: "#16212e", background: "#fff", marginTop: 10 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <strong>{locale === "ja" ? "暗号のしくみを、一つずつ追う" : "Follow the cryptography, one scene at a time"}</strong>
+      <button type="button" style={buttonStyle} aria-expanded={true} onClick={() => setVisible(false)}>{locale === "ja" ? "解説を閉じる" : "Close explanation"}</button>
+    </div>
+    <p style={{ fontSize: 12, color: "#526277" }}>{locale === "ja" ? "一桁の穴埋め。読むだけでもOK・得点への影響なし。" : "One-digit practice. Reading only is fine. No score impact."}</p>
+    <p style={{ fontSize: 12, color: "#315f91" }}>{index + 1} / {PRACTICE_STEPS.length}</p>
+    <h3 style={{ fontSize: 19, margin: "8px 0" }}>{copy.title}</h3>
+    <p style={{ fontSize: 14, lineHeight: 1.6 }}>{copy.prompt}</p>
+    <p style={{ fontSize: 21, fontWeight: 600, margin: "12px 0" }}>{copy.calculation}</p>
+    <form onSubmit={(event) => { event.preventDefault(); setVerdict(checkPracticeAnswer(index, answer) ? "correct" : "wrong"); }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 14 }}>
+        □ =
+        <input aria-label={copy.question} inputMode="numeric" maxLength={1} value={answer} onChange={(event) => { setAnswer(event.target.value); setVerdict(null); }} style={{ width: 64, padding: 9, fontSize: 18, background: "#fff", color: "#16212e", border: "1px solid #8298b3", borderRadius: 7 }} />
+        <button type="submit" disabled={!answer.trim()} style={{ ...buttonStyle, background: "#315f91", color: "#fff" }}>{locale === "ja" ? "確かめる" : "Check"}</button>
+      </label>
+    </form>
+    <div aria-live="polite" style={{ fontSize: 14, lineHeight: 1.8 }}>
+      {verdict === "wrong" && <p style={{ color: "#a33223" }}>{copy.retry}</p>}
+      <button type="button" style={{ ...buttonStyle, marginTop: 10 }} onClick={() => setVerdict("correct")}>{locale === "ja" ? "答えを見る" : "Show answer"}</button>
+      {verdict === "correct" && <p style={{ padding: 10, background: "#edf7f0", borderRadius: 8 }}><strong>{locale === "ja" ? `答え ${step.answer}。` : `Answer: ${step.answer}. `}</strong>{copy.takeaway}</p>}
+    </div>
+    <div style={{ display: "flex", gap: 8, margin: "14px 0", flexWrap: "wrap" }}>
+      {index > 0 && <button type="button" style={buttonStyle} onClick={() => move(index - 1)}>{locale === "ja" ? "前の場面へ" : "Previous scene"}</button>}
+      {index + 1 < PRACTICE_STEPS.length
+        ? <button type="button" style={buttonStyle} onClick={() => move(index + 1)}>{locale === "ja" ? "次の場面へ" : "Next scene"}</button>
+        : <button type="button" style={buttonStyle} onClick={() => { setVisible(false); move(0); }}>{locale === "ja" ? "解説を閉じて、お題へ戻る" : "Close the explanation and return to the Order"}</button>}
+    </div>
+    <details key={index} style={{ fontSize: 13, lineHeight: 1.7 }}>
+      <summary style={{ cursor: "pointer" }}>{locale === "ja" ? "計算の手順と、そうなる理由" : "Calculation steps and why this works"}</summary>
+      <p>{copy.purpose}</p>
+      <ol style={{ paddingLeft: 22 }}>{copy.steps.map(line => <li key={line}>{line}</li>)}</ol>
+      <p style={{ whiteSpace: "pre-line" }}>{copy.result}</p>
+      <ConceptExplanation key={step.topic} topic={step.topic} locale={locale} />
+    </details>
+  </section>;
 }

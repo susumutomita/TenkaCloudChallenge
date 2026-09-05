@@ -29,10 +29,11 @@
  * `CryptoBattleOp` / `CryptoBattleState`'s "JSON-SAFETY INVARIANT" in
  * types.ts). Concretely: `CryptoBattleOp`'s hunt variant carries
  * `recoveredSecret` as a string, and `validateOp`'s "hunt" branch parses it
- * with `schnorr-verifier.ts`'s `parseCanonicalDecimal` -- the same
- * untrusted-decimal gate PROVE's proof fields already went through -- and
- * rejects a malformed value with `{ ok: false }` instead of a `mod()` call
- * throwing on a non-bigint value it was never guaranteed to receive.
+ * with `decimal.ts`'s `parseCanonicalDecimal` -- the one untrusted-decimal
+ * gate -- and rejects a malformed value with `{ ok: false }` instead of a
+ * `mod()` call throwing on a non-bigint value it was never guaranteed to
+ * receive. A sudoku grid on the wire is checked the same way, by shape
+ * (`isFullGridShape`) before anything reads a cell.
  *
  * Purity contract (see adversarial tests #7 / #8):
  *   - `applyOp` and `tick` never mutate the `state` they are given; they return
@@ -44,24 +45,30 @@
  *   - Given the same seed and the same ordered sequence of tick/op calls, two
  *     independent replays produce deeply-equal state, always.
  *
- * PROVE (PR2) validates a submitted proof via schnorr-verifier.ts's
- * `verifyProof` -- a trusted verifier that never imports a secret, a witness,
- * or the prover module (see that file's header for why). `applyOp`'s "prove"
- * branch never re-derives or reasons about the underlying secret: it only
- * ever sees `state.publicCommitments[teamId]` (public) and the submitted
- * `SchnorrProof` (public once submitted).
+ * PROVE (PR2, rebuilt in #709) is the ZK sudoku proof: `applyProveSudoku`
+ * derives the team's own solution from the seed, checks the submitted grid is
+ * a relabelling of it, and publishes one row, column or box of the SUBMITTED
+ * grid -- never of the solution. See sudoku.ts for the scheme.
  */
 
 import {
   type ContractPlan,
   deriveCipherKey,
   deriveContractPlan,
+  derivePermutationTag,
   derivePlaintext,
+  deriveRevealGroup,
+  deriveSudokuPuzzle,
+  deriveSudokuSolution,
   deriveTeamGeneration,
   type FieldConfig,
 } from "./fixtures.ts";
+import { applyRpsHunt, projectRpsHunt, validateRpsHunt } from "./rps-hunt.ts";
+import { huntKey, storedHuntKey, compactHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
+import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
+import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
-import { hintCostAt, hintsFor } from "./hints.ts";
+import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
   encryptWithRung,
@@ -83,11 +90,21 @@ import {
   type PrivacyConstraint,
   type SubmissionMethod,
 } from "./methods.ts";
-import { mod, P } from "./field.ts";
-import { groupPow, RFC3526_GROUP14 } from "./group.ts";
-import { decodeLedger, encodeArtifact, encodeLedger } from "./ledger-codec.ts";
-import { derivePublicCommitment } from "./schnorr-witness.ts";
-import { parseCanonicalDecimal, verifyProof } from "./schnorr-verifier.ts";
+import { HAND_PRIME, mod } from "./field.ts";
+import { decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
+import {
+  ALL_PERMUTATIONS,
+  CONSTRAINT_GROUPS,
+  IDENTITY_PERMUTATION,
+  isFullGridShape,
+  isValidSolution,
+  type OpenedGroup,
+  type Permutation,
+  permutationBetween,
+  recoverableSolutions,
+  samePermutation,
+  type SudokuGrid,
+} from "./sudoku.ts";
 import type {
   CipherPairArtifact,
   CiphertextArtifact,
@@ -98,27 +115,28 @@ import type {
   CryptoBattleProjection,
   CryptoBattleState,
   HintProjection,
+  HuntBudgetProjection,
   OrderTask,
   OrderTaskProjection,
   PartialArtifact,
   Phase,
-  ProofArtifact,
   PublicArtifact,
   StoredCiphertext,
   StoredShare,
+  SudokuRevealArtifact,
   TeamState,
   TeamSummaryProjection,
   ValidateResult,
+  VaultProjection,
 } from "./types.ts";
 
 /**
  * Issue #486 playtest seed values. Not a locked-in balance spec -- see
- * `CryptoBattleConfig`'s doc comment in types.ts. `prime` is `P.toString()`,
- * not `P`, because `CryptoBattleConfig.prime` is a stringified bigint (see
- * types.ts's "JSON-SAFETY INVARIANT").
+ * `CryptoBattleConfig`'s doc comment in types.ts. `prime` is stringified, not
+ * a bigint, per types.ts's "JSON-SAFETY INVARIANT".
  */
 export const DEFAULT_CONFIG: CryptoBattleConfig = {
-  prime: P.toString(),
+  prime: HAND_PRIME.toString(),
   threshold: 3,
   shareCount: 5,
   matchDurationMs: 90 * 60_000,
@@ -135,17 +153,33 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
   // which is what finally makes hunting worth its five minutes.
   contractIntervalMs: 5 * 60_000,
   contractsPerIssue: 6,
+  // [Issue #695] The batch after the ONE-Order opening comes in a minute, not
+  // five: clearing that single Order and then watching an empty belt for a full
+  // interval is what the live run reported as 「次のオーダーがこない」.
+  onboardingFollowUpMs: 60_000,
+  // [Issue #696] At or below `threshold` (3) -- see the field's doc comment.
+  maxHuntAttemptsPerTarget: 3,
   contractTtlMs: 5 * 60_000,
   rushContractTtlMs: 2.5 * 60_000,
   rotateCooldownMs: 3 * 60_000,
   scores: {
     // [Issue #659] 失効 -15 < LEAK して狩られる -2 < LEAK 無事 +10 < PROVE +30
     contract: 30,
+    duelWin: 30,
+    duelDraw: 10,
     contractLeak: 10,
     expiredOrder: -15,
     rushContract: 45,
     huntBonus: 25,
     huntPenalty: 12,
+    // [Issue #696] A wrong HUNT costs the attacker. Below `huntBonus` (25) so a
+    // team that interpolates correctly still profits after an earlier miss, and
+    // above zero so scanning the (now small) field is never free.
+    wrongHunt: 8,
+    // [Issue #701, #709] What a wrong grid costs. Below `huntBonus` so a team
+    // that slips once and then relabels correctly still comes out ahead; above
+    // zero so the judge is not a free sudoku checker.
+    wrongProve: 6,
     // [Issue #659 §9] Escalating, and bounded by the ordering above: buying all
     // three costs 14, so an Order computed after every hint still pays 16 —
     // above LEAK's 10. Hints that could drag a solved Order below what leaking
@@ -208,7 +242,7 @@ export function initialState(
   const mergedConfig = mergeConfig(config);
   const fieldConfig = fieldConfigOf(mergedConfig);
   const teams: Record<string, TeamState> = {};
-  const publicCommitments: Record<string, string> = {};
+  const publicPuzzles: Record<string, SudokuGrid> = {};
   // Derive from the match seed, never from `ctx.eventId` — everything below
   // (and every later ROTATE, Order belt, FHE and MPC derivation, all of which
   // already read `state.seed`) hangs off this one value.
@@ -217,6 +251,11 @@ export function initialState(
     const { secret, shares } = deriveTeamGeneration(seed, teamId, 1, fieldConfig);
     teams[teamId] = {
       teamId,
+      // [Issue #3172] Captured at materialisation: the only hook that receives
+      // `ctx` is this one, so a rename after the match starts keeps the old
+      // name. Absent when the platform could not resolve one, and the
+      // projection falls back to the id.
+      ...(ctx.teamNames?.[teamId] ? { teamName: ctx.teamNames[teamId] } : {}),
       score: 0,
       generation: 1,
       secret: secret.toString(),
@@ -226,8 +265,9 @@ export function initialState(
       completedContractIds: [],
       huntedGenerations: [],
       cipherHuntedGenerations: {},
+      sudokuHuntedGenerations: [],
     };
-    publicCommitments[teamId] = derivePublicCommitment(secret, 1, teamId, RFC3526_GROUP14).toString();
+    publicPuzzles[teamId] = deriveSudokuPuzzle(seed, teamId, 1);
   }
   return {
     config: mergedConfig,
@@ -241,8 +281,9 @@ export function initialState(
     contracts: [],
     publicLedger: [],
     teams,
-    publicCommitments,
+    publicPuzzles,
     successfulHunts: [],
+    huntAttempts: {},
     huntLog: [],
   };
 }
@@ -299,6 +340,11 @@ function buildOrderTask(
       const rung: CipherRung = plan.rung ?? "caesar";
       return { kind: "caesar-shift", rung, plaintext: derivePlaintext(seed, contractId, rung) };
     }
+    case "zk-sudoku":
+      // [Issue #709] No payload: the puzzle is already public and the solution
+      // is in the team's vault. Which group the judge opens is derived from the
+      // Order id at judgement time, not stated here.
+      return { kind: "zk-sudoku" };
     default: {
       const exhaustive: never = plan.taskKind;
       throw new Error(`buildOrderTask: unknown task kind ${JSON.stringify(exhaustive)}`);
@@ -430,7 +476,25 @@ function needsConfigMigration(config: CryptoBattleConfig): boolean {
     // written before hints existed has no price list, and `hintCostAt` reads
     // `.length`/`[level]` off it -- so without this backfill the first HINT in
     // an upgraded match throws inside `validateOp` instead of being refused.
-    config.scores?.hintCosts === undefined
+    config.scores?.hintCosts === undefined ||
+    // [Issue #695] Undefined makes `nextContractAtMs += undefined` produce NaN
+    // on the opening batch, and `nextContractAtMs <= eventNowMs` is false for
+    // NaN forever after -- the belt would stop issuing for the rest of the
+    // match, which is the same silent wind-down `contractsPerIssue` describes.
+    config.onboardingFollowUpMs === undefined ||
+    // [Issue #696] Undefined makes `spent >= undefined` false for every value,
+    // so the budget never binds and a wrong HUNT is free again -- which is
+    // exactly the hole the cap exists to close. Fail towards the cap, not past
+    // it.
+    config.maxHuntAttemptsPerTarget === undefined ||
+    config.scores?.wrongHunt === undefined ||
+    // [Issue #709] `projectForTeam` exposes `wrongProveCost` unconditionally,
+    // and the Portal's projection guard requires it to be a number -- so a row
+    // written before the sudoku PROVE existed would project `undefined` and
+    // the whole Battle surface would read as unavailable for that match.
+    config.scores?.duelWin === undefined ||
+    config.scores?.duelDraw === undefined ||
+    config.scores?.wrongProve === undefined
   );
 }
 
@@ -462,6 +526,9 @@ function migrateTeams(
     next[teamId] = {
       ...team,
       cipherHuntedGenerations: team.cipherHuntedGenerations ?? {},
+      // [Issue #709] Same class: a row written before the sudoku HUNT existed
+      // has had no solution recovered, because there was none to recover.
+      sudokuHuntedGenerations: team.sudokuHuntedGenerations ?? [],
       // [Issue #659] An older row counted issued Orders by the length of the
       // Order list, so the list IS the count for that row -- but read the
       // highest sequence rather than the length, because a delayed tick could
@@ -487,8 +554,136 @@ function highestSequenceFor(contracts: readonly Contract[], teamId: string): num
 
 function needsTeamMigration(teams: Readonly<Record<string, TeamState>>): boolean {
   return Object.values(teams).some(
-    (team) => !team.cipherHuntedGenerations || team.issuedOrderCount === undefined,
+    (team) =>
+      !team.cipherHuntedGenerations ||
+      team.issuedOrderCount === undefined ||
+      team.sudokuHuntedGenerations === undefined,
   );
+}
+
+/**
+ * [Issue #709] Every team's current puzzle, for a row that predates the sudoku
+ * PROVE. Derived from what the row already holds (seed, generation), so the
+ * backfill is exactly what `initialState` / `applyRotate` would have written.
+ * A row that has the field keeps it untouched.
+ */
+function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string, SudokuGrid>> {
+  if (state.publicPuzzles !== undefined) return state.publicPuzzles;
+  const puzzles: Record<string, SudokuGrid> = {};
+  for (const team of Object.values(state.teams)) {
+    puzzles[team.teamId] = deriveSudokuPuzzle(state.seed, team.teamId, team.generation);
+  }
+  return puzzles;
+}
+
+/**
+ * [Issue #709] The schema version this package reads and writes. Declared on
+ * the plugin (`coordination/crypto-battle.ts`), compared by the platform
+ * against the version stamped on a persisted row.
+ *
+ *   1  `publicLedger` as full `PublicArtifact[]`
+ *   2  `publicLedger` as compact `StoredArtifact[]` (TenkaCloud#3150)
+ *   3  the sudoku PROVE: `publicPuzzles` replaces `publicCommitments`, the
+ *      ledger gains the `sudoku-reveal` kind, teams gain
+ *      `sudokuHuntedGenerations` / `lastProve`, Orders lose
+ *      `proveCommitment` / `proveChallenge`
+ *   4  roster-indexed HUNT budget keys and lossless numeric ledger Order IDs
+ *
+ * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
+ * decoder throws on a kind it does not know, so a v3 row it was told was v2
+ * would take the match down the first time it decoded a `sudoku-reveal`.
+ * With the version declared, the platform refuses the row instead.
+ */
+export const STATE_SCHEMA_VERSION = 4;
+
+/**
+ * [Issue #709] The plugin's `migrateState`: lifts a row written under an
+ * earlier schema version to `STATE_SCHEMA_VERSION`. Pure in `(state,
+ * fromVersion)` -- no `ctx`, so no secret material can reach a migration --
+ * and it THROWS on anything it does not recognise, which the platform treats
+ * as "leave the row alone" (no `initialState`, no write, no reset).
+ *
+ * v1 -> v2 is `ledger-codec.ts`'s `migrateStateV1`, unchanged. v2 -> v3 is
+ * the same repair `withMigratedContracts` already performs on every read --
+ * puzzles derived from the seed, hunted-generation lists backfilled, the
+ * wrong-PROVE price merged in -- plus dropping the fields v3 no longer has.
+ * A legacy `proof` ledger entry is kept: it still decodes and renders.
+ */
+export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3) {
+    throw new Error(
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2 and v3 -> v${STATE_SCHEMA_VERSION} are defined)`,
+    );
+  }
+  const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
+  if (typeof v2 !== "object" || v2 === null) {
+    throw new Error("reducer: migrateState received a non-object state");
+  }
+  const row = v2 as Partial<CryptoBattleState> & { readonly publicCommitments?: unknown };
+  if (typeof row.seed !== "string" || !Array.isArray(row.contracts) || typeof row.teams !== "object" || row.teams === null) {
+    throw new Error("reducer: migrateState: v2 state is missing seed, contracts or teams");
+  }
+  const { publicCommitments: _legacyCommitments, ...rest } = row;
+  // v3 has no nonce-reuse HUNT. A v2 row whose ledger still holds an UNSPENT
+  // one -- two Schnorr transcripts sharing a commitment on a team's current
+  // generation, and some other team that has not yet hunted that generation
+  // -- carries an attack the visible record had already earned. Dropping it
+  // silently would change the match's scoring mid-run, and there is no v3
+  // move it maps onto (a sudoku HUNT needs reveals the row does not have).
+  // So the migration refuses, which the platform treats as "leave the row
+  // alone": the match finishes on the plugin that made it, or the operator
+  // resets it. See OPERATOR.md, "Upgrading across a schema version".
+  // An ENDED match has nothing left to spend: `validateOp` refuses every op
+  // after the end, so the exposure is history and the row migrates for its
+  // scores, ledger and replay.
+  const exposure = fromVersion === 3 || rest.phase === "ended" ? undefined : unspentNonceExposure(rest as CryptoBattleState);
+  if (exposure) {
+    throw new Error(
+      `reducer: migrateState: team "${exposure.teamId}" generation ${exposure.generation} carries an unspent nonce-reuse HUNT from the retired Schnorr PROVE; finish or reset this match before upgrading`,
+    );
+  }
+  const lifted = withMigratedContracts(rest as CryptoBattleState);
+  return {
+    ...lifted,
+    publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a))),
+    huntAttempts: compactHuntAttempts(lifted),
+    contracts: lifted.contracts.map((contract) => {
+      const { proveCommitment: _c, proveChallenge: _e, ...kept } = contract as Contract & {
+        readonly proveCommitment?: unknown;
+        readonly proveChallenge?: unknown;
+      };
+      return kept as Contract;
+    }),
+  };
+}
+
+/**
+ * [Issue #709] A team whose CURRENT generation has two legacy `proof` rows
+ * sharing a commitment, and some other team that has not yet spent a HUNT on
+ * that generation. Under v2 the nonce HUNT and the Shamir HUNT shared one
+ * `successfulHunts` key, so a key from any attacker on (team, generation)
+ * means that attacker has already collected.
+ */
+function unspentNonceExposure(
+  state: CryptoBattleState,
+): { readonly teamId: string; readonly generation: number } | undefined {
+  const teamIds = Object.keys(state.teams);
+  for (const team of Object.values(state.teams)) {
+    const commitments = new Set<string>();
+    let reused = false;
+    for (const artifact of state.publicLedger) {
+      if (artifact.k !== "proof" || artifact.tm !== team.teamId || artifact.g !== team.generation) continue;
+      if (commitments.has(artifact.o)) reused = true;
+      commitments.add(artifact.o);
+    }
+    if (!reused) continue;
+    const spent = state.successfulHunts ?? [];
+    const attackerLeft = teamIds.some(
+      (attacker) => attacker !== team.teamId && !spent.includes(huntKey(attacker, team.teamId, team.generation)),
+    );
+    if (attackerLeft) return { teamId: team.teamId, generation: team.generation };
+  }
+  return undefined;
 }
 
 function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
@@ -496,14 +691,31 @@ function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
   const teams = needsTeamMigration(state.teams)
     ? migrateTeams(state.teams, state.contracts)
     : state.teams;
+  // [Issue #696] A row written before the budget existed starts with a full
+  // one. `applyHunt` writes through this map and `validateOp` reads it, so
+  // leaving it undefined would make the spread in `applyHunt` throw.
+  const huntAttempts = state.huntAttempts ?? {};
+  const publicPuzzles = migratePublicPuzzles(state);
+  const unchanged =
+    config === state.config &&
+    teams === state.teams &&
+    huntAttempts === state.huntAttempts &&
+    publicPuzzles === state.publicPuzzles;
   if (!state.contracts.some(needsMigration)) {
-    return config === state.config && teams === state.teams ? state : { ...state, config, teams };
+    return unchanged ? state : { ...state, config, teams, huntAttempts, publicPuzzles };
   }
-  return { ...state, config, teams, contracts: state.contracts.map(migrateContract) };
+  return {
+    ...state,
+    config,
+    teams,
+    huntAttempts,
+    publicPuzzles,
+    contracts: state.contracts.map(migrateContract),
+  };
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
-  const state = withMigratedContracts(persistedState);
+  const state = expireRps(withMigratedContracts(persistedState), eventNowMs);
   // [Issue #677] An unstarted match is not a match in progress at minute zero.
   //
   // The belt used to begin the moment the platform first ticked, which is one
@@ -544,11 +756,18 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
     Object.entries(state.teams).map(([teamId, team]) => [teamId, team.issuedOrderCount]),
   );
 
+  const duelCountByTeam = new Map(Object.entries(state.teams).map(([id, team]) => [id, team.issuedDuelCount ?? 0]));
   const issued: Contract[] = [];
   const fieldConfig = fieldConfigOf(state.config);
   let nextContractAtMs = state.nextContractAtMs ?? startedAtMs;
   while (nextContractAtMs <= eventNowMs && nextContractAtMs < matchEndAtMs) {
-    for (const teamId of Object.keys(state.teams)) {
+    // [Issue #695] Read BEFORE the loop below advances the counters: this asks
+    // whether the batch about to be issued is the opening one, and every team
+    // in a synchronised start is at 0 here.
+    const teamIds = Object.keys(state.teams);
+    const isOpeningBatch =
+      teamIds.length > 0 && teamIds.every((id) => (issuedCountByTeam.get(id) ?? 0) === 0);
+    for (const teamId of teamIds) {
       // [Issue #659] A whole batch lands at once. This is what makes the match
       // a contest rather than a queue: the batch is sized so a fast team clears
       // it and a slow team cannot, and everything downstream -- LEAK being a
@@ -563,7 +782,25 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
         (issuedCountByTeam.get(teamId) ?? 0) === 0 ? 1 : state.config.contractsPerIssue;
       for (let inBatch = 0; inBatch < batchSize; inBatch += 1) {
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
-      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, fieldConfig);
+      // One of six slots, even with a smaller configured batch. A one-Order
+      // batch must still progress through the other five mechanisms.
+      const pairs = !isOpeningBatch && sequenceIndex % 6 === 0
+        ? pairTeams(teamIds, Math.floor(sequenceIndex / 6) - 1) : [];
+      const pair = pairs.find(pair => pair.includes(teamId));
+      const opponentTeamId = pair?.find(id => id !== teamId);
+      if (opponentTeamId !== undefined) {
+        const duelId = `${nextContractAtMs}:${sequenceIndex}:${pairs.indexOf(pair!)}`;
+        const expiresAtMs = Math.min(nextContractAtMs + state.config.contractTtlMs, matchEndAtMs);
+        if (expiresAtMs > eventNowMs) issued.push({
+          id: `${teamId}-c${sequenceIndex}`, teamId, kind: "standard", points: state.config.scores.duelWin, leakPoints: 0,
+          task: { kind: "rps-duel", duelId, opponentTeamId }, issuedAtMs: nextContractAtMs, expiresAtMs,
+          status: "open", privacyConstraint: "none", allowedMethods: ["duel"],
+        });
+        issuedCountByTeam.set(teamId, sequenceIndex + 1);
+        duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
+        continue;
+      }
+      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
       //
@@ -581,7 +818,8 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
       // index is frozen on one, the belt never issues anything again. A rush
       // slot (2.5 min) going stale would take the five standard slots behind
       // it, which would still have been live, down with it.
-      if (nextContractAtMs + ttlMs <= eventNowMs) {
+      const expiresAtMs = Math.min(nextContractAtMs + ttlMs, matchEndAtMs);
+      if (expiresAtMs <= eventNowMs) {
         issuedCountByTeam.set(teamId, sequenceIndex + 1);
         continue;
       }
@@ -597,7 +835,7 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
         leakPoints: state.config.scores.contractLeak,
         task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
         issuedAtMs: nextContractAtMs,
-        expiresAtMs: nextContractAtMs + ttlMs,
+        expiresAtMs,
         status: "open",
         // [Issue #645] The Order states its rule, and the method list follows
         // from it and the task -- never the other way round, so a method added
@@ -609,7 +847,14 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
       }
     }
-    nextContractAtMs += state.config.contractIntervalMs;
+    // [Issue #695] Only the gap AFTER the one-Order opening is shortened; every
+    // batch from the second onward keeps the standard interval, so the
+    // no-prefetch rule the LEAK/PROVE economy rests on is untouched for the
+    // rest of the match. See `onboardingFollowUpMs` in types.ts for the one
+    // bounded overlap this accepts.
+    nextContractAtMs += isOpeningBatch
+      ? state.config.onboardingFollowUpMs
+      : state.config.contractIntervalMs;
   }
 
   // [Issue #659] Charge the expiry penalty to whoever let the Order lapse.
@@ -620,7 +865,7 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
   const teams: Record<string, TeamState> = {};
   for (const [teamId, team] of Object.entries(charged)) {
     const issued = issuedCountByTeam.get(teamId) ?? team.issuedOrderCount;
-    teams[teamId] = issued === team.issuedOrderCount ? team : { ...team, issuedOrderCount: issued };
+    teams[teamId] = { ...team, issuedOrderCount: issued, issuedDuelCount: duelCountByTeam.get(teamId) ?? 0 };
   }
 
   return {
@@ -726,15 +971,11 @@ function hintsRevealedOn(contract: Contract): number {
   return contract.hintsRevealed ?? 0;
 }
 
-function huntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
-  return JSON.stringify([attackerTeamId, targetTeamId, generation]);
-}
-
 /**
  * [Issue #645 Phase 2] Parse a participant-submitted ciphertext.
  *
  * Both components go through the same canonical-decimal gate as every other
- * untrusted number on the wire (see schnorr-verifier.ts's
+ * untrusted number on the wire (see decimal.ts's
  * `parseCanonicalDecimal`), so a malformed value is a rejection here rather
  * than a throw out of `BigInt()` somewhere downstream.
  */
@@ -747,42 +988,127 @@ function parseStoredCiphertext(ciphertext: StoredCiphertext): { r: bigint; y: bi
 }
 
 /**
- * [Issue #645 Phase 5] Whether the target actually reused a proof commitment
- * within one generation — the misuse a nonce-reuse HUNT exploits.
+ * [Issue #709] Whether the target actually reused a relabelling within one
+ * generation — the misuse a sudoku HUNT exploits.
  *
  * Reads only the Public Ledger, deliberately: the attacker's evidence has to be
  * derivable from what they can see, and checking the same source the attacker
- * used is what makes that true rather than merely intended. Two transcripts
- * from one team in one generation sharing a commitment R mean two challenges
- * against one nonce, which solves for the witness:
+ * used is what makes that true rather than merely intended. Two reveals from
+ * one team in one generation carrying the same tag were produced by one
+ * relabelling π, so their cells are cells of ONE `π(S)`; lined up against the
+ * team's public puzzle, they give π away, and π applied backwards gives S.
  *
- * ```text
- * z1 = k + e1*w,  z2 = k + e2*w   ->   w = (z1 - z2) / (e1 - e2)   mod q
- * ```
- *
- * The prover this Battle ships cannot produce that (`schnorr-prover.ts` binds
- * the nonce to the contract id), so a team using the provided tooling is never
- * exposed. A team that rolls its own prover with a fixed nonce is — which is
- * precisely the lesson `ac26-w3-nonce-reuse` teaches, now with consequences.
+ * The vault lists every relabelling a team has already spent
+ * (`usedPermutations`), so a team that reads its own screen is never exposed.
+ * A team that does not is — which is the lesson `ac26-w3-nonce-reuse` teaches
+ * with an exponent, taught here with a permutation.
  */
-function hasNonceReuse(
+function hasPermutationReuse(
   state: CryptoBattleState,
   targetTeamId: string,
   generation: number,
 ): boolean {
-  // Reads `state.publicLedger`'s STORED (compact) shape directly rather than
-  // decoding the whole ledger first -- `k`/`tm`/`g`/`o` are all readable off
-  // `StoredArtifact` without expanding back to `PublicArtifact`, and this
-  // scan runs on every PROVE (see ledger-codec.ts's header on why the hot
-  // path avoids a full-array decode it does not need).
-  const commitments = new Set<string>();
+  return [...revealsByTag(state, targetTeamId, generation).values()].some((opened) => opened.length >= 2);
+}
+
+/**
+ * [Issue #709] The opened groups of one team's generation, keyed by tag.
+ *
+ * Reads `state.publicLedger`'s STORED (compact) shape directly rather than
+ * decoding the whole ledger first -- `k`/`tm`/`g`/`tg`/`gr`/`cl` are all
+ * readable off `StoredArtifact` without expanding back to `PublicArtifact`
+ * (see ledger-codec.ts's header on why the hot path avoids a decode it does
+ * not need).
+ */
+function revealsByTag(
+  state: CryptoBattleState,
+  teamId: string,
+  generation: number,
+): ReadonlyMap<string, readonly OpenedGroup[]> {
+  const byTag = new Map<string, OpenedGroup[]>();
   for (const artifact of state.publicLedger) {
-    if (artifact.k !== "proof") continue;
-    if (artifact.tm !== targetTeamId || artifact.g !== generation) continue;
-    if (commitments.has(artifact.o)) return true;
-    commitments.add(artifact.o);
+    if (artifact.k !== "sudoku-reveal") continue;
+    if (artifact.tm !== teamId || artifact.g !== generation) continue;
+    const bucket = byTag.get(artifact.tg) ?? [];
+    bucket.push({ group: artifact.gr, cells: artifact.cl });
+    byTag.set(artifact.tg, bucket);
+  }
+  return byTag;
+}
+
+/**
+ * The groups this team's generation has had opened: every one under any tag,
+ * and the ones under `tag` alone. Both feed `deriveRevealGroup`, in that
+ * order of preference -- see its doc comment.
+ */
+function openedGroupsFor(
+  state: CryptoBattleState,
+  teamId: string,
+  generation: number,
+  tag: string,
+): { readonly any: ReadonlySet<number>; readonly underTag: ReadonlySet<number> } {
+  const any = new Set<number>();
+  const underTag = new Set<number>();
+  for (const [seen, reveals] of revealsByTag(state, teamId, generation)) {
+    for (const reveal of reveals) {
+      any.add(reveal.group);
+      if (seen === tag) underTag.add(reveal.group);
+    }
+  }
+  return { any, underTag };
+}
+
+/**
+ * [Issue #709] Whether the public record has actually given a team's solution
+ * away: some reused relabelling whose opened groups, held against the team's
+ * public puzzle, leave exactly one solution standing.
+ *
+ * A repeated tag is the MISUSE; this is the EVIDENCE, and the HUNT opens only
+ * on both. Without the second half a reuse whose reveals happened not to pin
+ * the grid -- the puzzle allows several solutions and the opened cells do not
+ * separate them -- would let an attacker in to guess, spending the limited
+ * attempts on a record the statement had promised was enough. The attacker's
+ * side of this is `recoverableSolutions`, the same function, run on the same
+ * public inputs.
+ */
+function isSolutionRecoverable(
+  state: CryptoBattleState,
+  targetTeamId: string,
+  generation: number,
+): boolean {
+  const puzzle = state.publicPuzzles?.[targetTeamId] ?? deriveSudokuPuzzle(state.seed, targetTeamId, generation);
+  for (const opened of revealsByTag(state, targetTeamId, generation).values()) {
+    if (opened.length < 2) continue;
+    if (recoverableSolutions(puzzle, opened).length === 1) return true;
   }
   return false;
+}
+
+/**
+ * [Issue #709] The relabellings a team has spent on its current generation,
+ * oldest first, recovered from the tags on its own reveals.
+ *
+ * The trusted side holds the seed, so it can run the 24 candidates against a
+ * tag and find the one that made it; nobody without the seed can. This is what
+ * lets the vault SAY which relabellings are used up, instead of leaving a team
+ * to remember, and it is also why the tag is safe to publish: the lookup that
+ * turns it back into π is this function, and this function runs only here.
+ */
+function usedPermutationsFor(
+  state: CryptoBattleState,
+  teamId: string,
+  generation: number,
+): readonly Permutation[] {
+  const used: Permutation[] = [];
+  for (const artifact of state.publicLedger) {
+    if (artifact.k !== "sudoku-reveal") continue;
+    if (artifact.tm !== teamId || artifact.g !== generation) continue;
+    const pi = ALL_PERMUTATIONS.find(
+      (candidate) => derivePermutationTag(state.seed, teamId, generation, candidate) === artifact.tg,
+    );
+    if (pi && !used.some((seen) => samePermutation(seen, pi))) used.push(pi);
+  }
+  return used;
 }
 
 /**
@@ -874,6 +1200,12 @@ export function validateOp(
   }
 
   switch (op.kind) {
+    case "hunt-rps": return validateRpsHunt(state, teamId, op);
+    case "rps-commit":
+    case "rps-open": {
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "duel");
+      return gate.ok ? validateRps(state, teamId, op) : gate;
+    }
     case "leak":
       // [Issue #645] LEAK's trusted check is exactly the Order gate: the team
       // owns the Order, it is still open, and it permits publishing the raw
@@ -912,19 +1244,40 @@ export function validateOp(
       if (state.successfulHunts.includes(huntKey(teamId, op.targetTeamId, op.generation))) {
         return { ok: false, error: "this generation was already hunted successfully by this team" };
       }
+      // [Issue #696] The attempt budget, and the reason a wrong secret is NOT
+      // refused here any more. Refusing it made a miss free -- no state moved,
+      // so nothing counted it -- which was harmless only while the field was
+      // 2^61 - 1. In a field a participant can interpolate by hand, free
+      // retries are a faster path to the secret than the interpolation, so a
+      // miss has to land, cost `scores.wrongHunt`, and spend one of these.
+      // `applyHunt` does the comparison and reports which happened.
+      const spent = state.huntAttempts[storedHuntKey(state, huntKey(teamId, op.targetTeamId, op.generation))] ?? 0;
+      if (spent >= state.config.maxHuntAttemptsPerTarget) {
+        return {
+          ok: false,
+          error: `no HUNT attempts left against this team's generation ${op.generation} (${state.config.maxHuntAttemptsPerTarget} used)`,
+        };
+      }
       // `op.recoveredSecret` is untrusted wire input (a participant-submitted
       // string -- see this file's header "WIRE BOUNDARY"), never a `bigint`
       // this reducer can assume it already has. Parse it through the same
       // gate PROVE's proof fields use before doing any bigint arithmetic on
       // it -- a malformed value (wrong JS type after JSON round-trip, a
       // non-canonical literal, an absurdly long string) is rejected here,
-      // not left to throw out of `mod()` / `BigInt()` uncaught.
+      // not left to throw out of `mod()` / `BigInt()` uncaught. A value that
+      // does not parse is not an attempt: nothing was guessed, so nothing is
+      // charged and no budget is spent.
       const recoveredSecret = parseCanonicalDecimal(op.recoveredSecret);
       if (recoveredSecret === undefined) {
         return { ok: false, error: "recoveredSecret must be a canonical, length-bounded decimal integer" };
       }
-      if (mod(recoveredSecret, BigInt(state.config.prime)) !== BigInt(target.secret)) {
-        return { ok: false, error: "recovered secret does not match the target's actual secret" };
+      // Match FHE/MPC's remainder rule. An unreduced value is a format error,
+      // not a wrong guess: refuse it before applyHunt can charge an attempt.
+      if (recoveredSecret >= BigInt(state.config.prime)) {
+        return {
+          ok: false,
+          error: "recoveredSecret must already be reduced -- take the remainder after dividing by the modulus",
+        };
       }
       return { ok: true };
     }
@@ -1020,9 +1373,9 @@ export function validateOp(
       }
       return { ok: true };
     }
-    case "hunt-nonce": {
-      // [Issue #645 Phase 5] Same preconditions as a Shamir HUNT -- see that
-      // branch for why each exists -- and a different piece of evidence.
+    case "hunt-sudoku": {
+      // [Issue #709] Same preconditions as a Shamir HUNT -- see that branch for
+      // why each exists -- and a different piece of evidence.
       if (state.nowMs === undefined) {
         return { ok: false, error: "match has not started yet (no tick() has run)" };
       }
@@ -1037,42 +1390,46 @@ export function validateOp(
           error: `target team is on generation ${target.generation}, not ${op.generation}`,
         };
       }
-      if (state.successfulHunts.includes(huntKey(teamId, op.targetTeamId, op.generation))) {
-        return { ok: false, error: "this generation was already hunted successfully by this team" };
+      if (state.successfulHunts.includes(sudokuHuntKey(teamId, op.targetTeamId, op.generation))) {
+        return { ok: false, error: "this generation's solution was already recovered by this team" };
       }
       // The exploit has to be real, not merely claimed: the target must
-      // actually have published two transcripts sharing a commitment. Without
-      // this check a lucky guess at the witness would pass, and -- far worse --
-      // a team that used the shipped prover correctly could be hunted by
-      // someone who obtained their witness any other way. #645's rule is that
-      // HUNT punishes misuse, so the misuse has to be on the record.
-      if (!hasNonceReuse(state, op.targetTeamId, op.generation)) {
+      // actually have published two reveals under one relabelling. Without
+      // this check a team could simply SOLVE the target's public puzzle (eight
+      // givens pin a unique solution most of the time) and call it a hunt --
+      // and #645's rule is that HUNT punishes misuse, so the misuse has to be
+      // on the record.
+      if (!hasPermutationReuse(state, op.targetTeamId, op.generation)) {
         return {
           ok: false,
-          error: `team "${op.targetTeamId}" has not reused a proof commitment in generation ${op.generation}`,
+          error: `team "${op.targetTeamId}" has not reused a relabelling in generation ${op.generation}`,
         };
       }
-      const recoveredWitness = parseCanonicalDecimal(op.recoveredWitness);
-      if (recoveredWitness === undefined) {
+      // ...and the reuse has to have actually given the solution away. Two
+      // reveals of one group under one tag are the same four digits twice;
+      // a HUNT on that would be a guess, not a recovery.
+      if (!isSolutionRecoverable(state, op.targetTeamId, op.generation)) {
         return {
           ok: false,
-          error: "recoveredWitness must be a canonical, length-bounded decimal integer",
+          error: `team "${op.targetTeamId}" reused a relabelling in generation ${op.generation}, but its opened groups do not yet pin one solution against its public puzzle`,
         };
       }
-      const publicY = state.publicCommitments[op.targetTeamId];
-      if (publicY === undefined) {
-        return { ok: false, error: `no public commitment on record for team "${op.targetTeamId}"` };
+      // [Issue #696] Same budget logic as the Shamir HUNT, on its own counter.
+      // There are only 288 solutions and a public puzzle rules most of them
+      // out, so free retries would be cheaper than lining the reveals up.
+      const spent = state.huntAttempts[storedHuntKey(state, sudokuHuntKey(teamId, op.targetTeamId, op.generation))] ?? 0;
+      if (spent >= state.config.maxHuntAttemptsPerTarget) {
+        return {
+          ok: false,
+          error: `no sudoku HUNT attempts left against this team's generation ${op.generation} (${state.config.maxHuntAttemptsPerTarget} used)`,
+        };
       }
-      // The witness is checked against the target's PUBLIC commitment, which is
-      // the honest statement of "you recovered their key": g^w = Y is exactly
-      // what the witness is defined by. Nothing here reads the target's private
-      // state, so the check cannot accidentally accept a value the attacker
-      // could not have derived from public material.
-      if (
-        groupPow(RFC3526_GROUP14.generator, mod(recoveredWitness, RFC3526_GROUP14.order), RFC3526_GROUP14) !==
-        BigInt(publicY)
-      ) {
-        return { ok: false, error: "recovered witness does not match the target's public commitment" };
+      // Untrusted wire input: checked by SHAPE before any cell is read. A grid
+      // that is not 16 digits in 1..4 is not an attempt -- nothing was guessed,
+      // so nothing is charged. Whether the digits are RIGHT is decided in
+      // `applyHuntSudoku`, so that a wrong answer is a move that landed.
+      if (!isFullGridShape(op.solution)) {
+        return { ok: false, error: "solution must be 16 cells, row-major, each 1..4" };
       }
       return { ok: true };
     }
@@ -1126,30 +1483,30 @@ export function validateOp(
       }
       return { ok: true };
     }
-    case "prove": {
+    case "prove-sudoku": {
       // [Issue #645] Same Order gate as every other method -- PROVE is a second
-      // way to fulfil an Order, not a different queue of things to fulfil --
-      // followed by PROVE's own trusted check. The gate runs FIRST: an Order
-      // that is expired or belongs to another team must be rejected as such,
-      // not after spending a 2048-bit verification on it.
+      // way to fulfil an Order, not a different queue of things to fulfil.
       const gate = validateOrderSubmission(state, teamId, op.contractId, "prove");
       if (!gate.ok) return gate;
-      const publicCommitmentY = state.publicCommitments[teamId];
-      if (publicCommitmentY === undefined) {
-        // Cannot happen for a known team -- initialState/applyRotate always
-        // set this alongside TeamState. Fail loudly rather than silently
-        // treating a missing commitment as "nothing to check against".
-        return { ok: false, error: `no public commitment on record for team "${teamId}"` };
+      // Untrusted wire input: shape first, before any cell is compared.
+      if (!isFullGridShape(op.grid)) {
+        return { ok: false, error: "grid must be 16 cells, row-major, each 1..4" };
       }
-      const verified = verifyProof(
-        BigInt(publicCommitmentY),
-        op.proof,
-        { teamId, contractId: op.contractId, generation: team.generation },
-        RFC3526_GROUP14,
-      );
-      if (!verified) {
-        return { ok: false, error: "proof failed verification" };
+      // [Issue #709] The one submission refused before it can cost anything:
+      // the solution itself, unrelabelled. It would VERIFY -- the identity is
+      // a bijection -- and the judge would then publish four real cells of the
+      // team's solution for no reason. A team that has not relabelled has not
+      // done the Order, and telling them so is cheaper than charging them.
+      const solution = deriveSudokuSolution(state.seed, teamId, team.generation);
+      if (solution.every((v, i) => v === op.grid[i])) {
+        return {
+          ok: false,
+          error: "that is your solution as it is -- relabel the digits before submitting, or the reveal publishes real cells",
+        };
       }
+      // Whether the grid IS a relabelling of the solution is decided in
+      // `applyProveSudoku`, for the same reason a wrong HUNT moved there in
+      // #696: a wrong answer has to be a move that happened and was charged.
       return { ok: true };
     }
     case "cipher": {
@@ -1267,6 +1624,16 @@ function cipherHuntKey(
   rung: CipherRung,
 ): string {
   return JSON.stringify(["cipher", attackerTeamId, targetTeamId, generation, rung]);
+}
+
+/**
+ * [Issue #709] Distinct from {@link huntKey} for the reason {@link
+ * cipherHuntKey} is: recovering a team's sudoku solution and reconstructing
+ * its Shamir secret are different breaks of different secrets, each once-only
+ * on its own and each with its own attempt budget.
+ */
+function sudokuHuntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
+  return JSON.stringify(["sudoku", attackerTeamId, targetTeamId, generation]);
 }
 
 function applyLeak(
@@ -1658,6 +2025,11 @@ function projectTask(
   contractId: string,
 ): OrderTaskProjection {
   switch (task.kind) {
+    case "rps-duel": {
+      const order = state.contracts.find(c => c.id === contractId);
+      if (!order || order.teamId !== teamId) throw new Error("projectTask: missing owned duel");
+      return projectRps(state, order);
+    }
     case "reveal-share":
       return task;
     case "homomorphic-sum":
@@ -1698,6 +2070,8 @@ function projectTask(
         myKey: deriveCipherKey(state.seed, teamId, generation, task.rung),
       };
     }
+    case "zk-sudoku":
+      return task;
     default: {
       const exhaustive: never = task;
       throw new Error(`projectTask: unknown task ${JSON.stringify(exhaustive)}`);
@@ -1721,13 +2095,32 @@ function projectTask(
  * refuses to SELL a level with no configured price, so this branch only ever
  * renders one, and rendering it as `NaN` would put that straight on a card.
  */
-function projectHints(state: CryptoBattleState, contract: Contract): readonly HintProjection[] {
+function projectHints(
+  state: CryptoBattleState,
+  contract: Contract,
+  task: OrderTaskProjection,
+  vault: VaultProjection,
+  exposedShareIndices: readonly number[],
+): readonly HintProjection[] {
   const revealed = hintsRevealedOn(contract);
+  // [Issue #712] Rendered against THIS Order and THIS reader's vault -- both of
+  // which are already on the projection this hint ships with. Rendered only for
+  // the rungs that were bought, so an unbought rung never has its text computed,
+  // let alone shipped.
+  const ctx: HintContext = {
+    task,
+    vault,
+    prime: state.config.prime,
+    threshold: state.config.threshold,
+    shareCount: state.config.shareCount,
+    allowedMethods: contract.allowedMethods,
+    exposedShareIndices,
+  };
   return hintsFor(contract.task.kind).map((spec, level) => ({
     level,
     id: spec.id,
     cost: hintCostAt(state.config.scores.hintCosts, level) ?? 0,
-    ...(level < revealed ? { text: spec.text } : {}),
+    ...(level < revealed ? { text: spec.text(ctx) } : {}),
   }));
 }
 
@@ -1754,9 +2147,39 @@ function applyHunt(
   }
   const nowMs = state.nowMs;
 
+  const key = huntKey(teamId, op.targetTeamId, op.generation);
+  const budgetKey = storedHuntKey(state, key);
+  const huntAttempts = { ...state.huntAttempts, [budgetKey]: (state.huntAttempts[budgetKey] ?? 0) + 1 };
+
+  // [Issue #696] The comparison moved here from `validateOp` so a miss is a
+  // move that happened rather than a request that never existed. `validateOp`
+  // has already parsed the value and confirmed the budget, so the only question
+  // left is whether it is right.
+  const recoveredSecret = parseCanonicalDecimal(op.recoveredSecret);
+  if (recoveredSecret === undefined || mod(recoveredSecret, BigInt(state.config.prime)) !== BigInt(target.secret)) {
+    return {
+      ...state,
+      teams: {
+        ...state.teams,
+        [teamId]: {
+          ...attacker,
+          score: Math.max(0, attacker.score - state.config.scores.wrongHunt),
+          // [Issue #696] The miss is written down, not just charged. The SDK
+          // answers a landed op with `{ ok: true }` whether it hit or missed,
+          // and `projectForTeam` is a pure function of state -- so if the
+          // state does not say "that was a miss", nothing downstream can, and
+          // the Portal is left calling a -8 a SUCCESS.
+          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss" },
+        },
+      },
+      huntAttempts,
+    };
+  }
+
   const updatedAttacker: TeamState = {
     ...attacker,
     score: attacker.score + state.config.scores.huntBonus,
+    lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit" },
   };
   const updatedTarget: TeamState = {
     ...target,
@@ -1769,7 +2192,8 @@ function applyHunt(
   return {
     ...state,
     teams: { ...state.teams, [teamId]: updatedAttacker, [op.targetTeamId]: updatedTarget },
-    successfulHunts: [...state.successfulHunts, huntKey(teamId, op.targetTeamId, op.generation)],
+    huntAttempts,
+    successfulHunts: [...state.successfulHunts, key],
     // Additive audit trail for replay.ts -- see HuntLogEntry's doc comment
     // in types.ts for why this exists alongside (not instead of)
     // successfulHunts above.
@@ -1820,17 +2244,19 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   // the decision, rather than whether to rotate instead of playing.
   const voided: string[] = [];
   const contracts = state.contracts.map((c) => {
-    if (c.teamId !== teamId || c.status !== "open") return c;
+    if (c.teamId !== teamId || c.status !== "open" || c.task.kind === "rps-duel") return c;
     voided.push(c.teamId);
     return { ...c, status: "expired" as const, expiryCause: "rotate" as const };
   });
-  // The Schnorr public commitment is generation-scoped (see
-  // schnorr-witness.ts's derivePublicCommitment): rederiving it here is what
-  // makes a pre-rotate PROVE proof fail verification post-rotate, the same
-  // way rotate already invalidates pre-rotate LEAK shares for HUNT above.
-  const publicCommitments = {
-    ...state.publicCommitments,
-    [teamId]: derivePublicCommitment(secret, generation, teamId, RFC3526_GROUP14).toString(),
+  // [Issue #709] The sudoku solution and its public puzzle are generation-
+  // scoped (see fixtures.ts's `deriveSudokuSolution`): re-deriving the puzzle
+  // here is what retires every reveal published under the old generation, the
+  // same way rotate already invalidates pre-rotate LEAK shares for HUNT above.
+  // A team whose relabellings are used up, or whose solution was recovered,
+  // rotates into a fresh grid.
+  const publicPuzzles = {
+    ...(state.publicPuzzles ?? {}),
+    [teamId]: deriveSudokuPuzzle(state.seed, teamId, generation),
   };
   // Charged through the same helper the deadline path uses, so the two causes
   // cannot drift apart into different prices for the same unanswered Order.
@@ -1839,73 +2265,157 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     voided,
     state.config.scores.expiredOrder,
   );
-  return { ...state, contracts, teams, publicCommitments };
+  return pruneRetiredHuntAttempts({ ...state, contracts, teams, publicPuzzles });
 }
 
-function applyProve(
+/**
+ * [Issue #709] PROVE: check the grid is a relabelling of the team's solution,
+ * and publish one group of it.
+ *
+ * The judge derives the solution itself and asks one question: is there a
+ * bijection π on 1..4 with `grid = π(S)`? That question has a definite answer
+ * -- no challenge, no probability, no round structure -- because the judge
+ * sees every cell. A wrong grid is a move that landed: it charges
+ * `scores.wrongProve`, is written down as the team's `lastProve`, and
+ * publishes nothing.
+ *
+ * A right grid publishes exactly one row, column or box OF THE SUBMITTED GRID
+ * -- never of `S` -- chosen by the Order id (`deriveRevealGroup`). That is the
+ * zero-knowledge half, and it holds against every other team: four cells of a
+ * relabelled grid are some ordering of 1..4 whatever the solution was. The
+ * tag alongside them is what makes a REUSED relabelling visible, and only that
+ * (`derivePermutationTag`).
+ */
+function applyProveSudoku(
   state: CryptoBattleState,
   teamId: string,
-  op: Extract<CryptoBattleOp, { kind: "prove" }>,
+  op: Extract<CryptoBattleOp, { kind: "prove-sudoku" }>,
 ): CryptoBattleState {
   const contract = state.contracts.find((c) => c.id === op.contractId);
   const team = state.teams[teamId];
-  if (!contract || !team) {
-    throw new Error("applyOp(prove): invalid op reached apply -- call validateOp() first");
+  if (!contract || !team || !isFullGridShape(op.grid)) {
+    throw new Error("applyOp(prove-sudoku): invalid op reached apply -- call validateOp() first");
   }
-
+  const solution = deriveSudokuSolution(state.seed, teamId, team.generation);
+  const pi = permutationBetween(solution, op.grid);
+  // `permutationBetween` already implies validity (a relabelled solution is a
+  // solution), but the check is stated so a reader sees both halves of what
+  // the judge asserts: a real sudoku, and THIS team's sudoku.
+  if (pi === undefined || !isValidSolution(op.grid) || samePermutation(pi, IDENTITY_PERMUTATION)) {
+    return {
+      ...state,
+      teams: {
+        ...state.teams,
+        [teamId]: {
+          ...team,
+          score: Math.max(0, team.score - state.config.scores.wrongProve),
+          lastProve: { contractId: contract.id, outcome: "miss" },
+        },
+      },
+    };
+  }
   const nowMs = state.nowMs ?? contract.issuedAtMs;
-  // Audit-only transcript: commitment/response only, NEVER a share value or
-  // the secret/witness they were derived from -- see types.ts's
-  // ProofArtifact doc comment and schnorr.test.ts's secret-non-leakage test.
-  //
-  // Re-serialized via BigInt(...).toString() rather than storing op.proof's
-  // raw strings verbatim: validateOp()'s verifyProof() call already forces
-  // both fields to match `/^\d{1,700}$/` before this is ever reached (see
-  // schnorr-verifier.ts's parseCanonicalDecimal), so this round-trip is
-  // defense-in-depth, not a correctness fix -- it guarantees the Public
-  // Ledger only ever holds the canonical decimal form of a value, never
-  // whatever incidental (but still-canonical) formatting a submitted string
-  // happened to carry, should that guarantee ever change upstream.
-  const artifact: ProofArtifact = {
-    id: `${contract.id}-proof`,
+  const tag = derivePermutationTag(state.seed, teamId, team.generation, pi);
+  // A group this generation has not had opened yet while any remain, and
+  // failing that one this TABLE has not had opened: a repeated group under a
+  // reused table would be the same row twice, and the reuse HUNT the
+  // statement promises needs distinct cells to line up.
+  const opened = openedGroupsFor(state, teamId, team.generation, tag);
+  const group = deriveRevealGroup(state.seed, contract.id, [opened.any, opened.underTag]);
+  const cells = CONSTRAINT_GROUPS[group];
+  if (!cells) throw new Error(`applyOp(prove-sudoku): no constraint group ${group}`);
+  const artifact: SudokuRevealArtifact = {
+    id: `${contract.id}-sudoku`,
     teamId,
     generation: team.generation,
-    kind: "proof",
+    kind: "sudoku-reveal",
     method: "prove",
     contractId: contract.id,
-    commitment: BigInt(op.proof.commitment).toString(),
-    response: BigInt(op.proof.response).toString(),
+    group,
+    cells: cells.map((i) => op.grid[i] ?? 0),
+    tag,
     postedAtMs: nowMs,
   };
-
-  const contracts = state.contracts.map((c) =>
-    c.id === contract.id ? { ...c, status: "completed" as const, resolution: "prove" as const } : c,
-  );
-  const updatedTeam: TeamState = {
-    ...team,
-    // Same points as LEAK for the same Contract -- PROVE is a second way to
-    // complete a Contract honestly, not a differently-scored one (Issue #486
-    // Scoring MUST: no separate "PROVE bonus" for the educational value of
-    // proving instead of leaking).
-    score: team.score + contract.points,
-    completedContractIds: [...team.completedContractIds, contract.id],
-  };
-
+  const completed = completeOrder(state, teamId, contract, artifact, "prove");
+  const provingTeam = completed.teams[teamId];
+  if (!provingTeam) throw new Error("applyOp(prove-sudoku): team vanished while completing the Order");
   return {
-    ...state,
-    contracts,
-    publicLedger: [...state.publicLedger, encodeArtifact(artifact)],
-    teams: { ...state.teams, [teamId]: updatedTeam },
+    ...completed,
+    teams: {
+      ...completed.teams,
+      [teamId]: { ...provingTeam, lastProve: { contractId: contract.id, outcome: "hit" } },
+    },
   };
 }
 
 /**
- * Apply `op` for `teamId` and return the resulting state. Callers MUST call
- * `validateOp` first and only call `applyOp` when it returned `{ ok: true }`
- * -- this function does not re-validate (that would duplicate the crypto
- * comparison in `validateOp`'s "hunt" branch) and throws rather than silently
- * no-op-ing if it is handed something `validateOp` would have rejected.
+ * [Issue #709] A sudoku HUNT: the target reused a relabelling, the attacker
+ * lined the reveals up against the public puzzle, and here is the solution.
+ *
+ * Scores like a Shamir HUNT (`huntBonus` / `huntPenalty`), because it is the
+ * same size of achievement -- a whole secret recovered from public material --
+ * and unlike the ladder break it is not one subtraction. A miss lands, costs
+ * `wrongHunt`, and spends one of the attacker's attempts, on the sudoku
+ * counter rather than the Shamir one (`sudokuHuntKey`).
  */
+function applyHuntSudoku(
+  state: CryptoBattleState,
+  teamId: string,
+  op: Extract<CryptoBattleOp, { kind: "hunt-sudoku" }>,
+): CryptoBattleState {
+  const attacker = state.teams[teamId];
+  const target = state.teams[op.targetTeamId];
+  if (!attacker || !target || !isFullGridShape(op.solution)) {
+    throw new Error("applyOp(hunt-sudoku): invalid op reached apply -- call validateOp() first");
+  }
+  if (state.nowMs === undefined) {
+    throw new Error("applyOp(hunt-sudoku): invalid op reached apply -- call validateOp() first (match has not started)");
+  }
+  const nowMs = state.nowMs;
+  const key = sudokuHuntKey(teamId, op.targetTeamId, op.generation);
+  const budgetKey = storedHuntKey(state, key);
+  const huntAttempts = { ...state.huntAttempts, [budgetKey]: (state.huntAttempts[budgetKey] ?? 0) + 1 };
+  const solution = deriveSudokuSolution(state.seed, op.targetTeamId, op.generation);
+  const hit = solution.every((v, i) => v === op.solution[i]);
+  if (!hit) {
+    return {
+      ...state,
+      teams: {
+        ...state.teams,
+        [teamId]: {
+          ...attacker,
+          score: Math.max(0, attacker.score - state.config.scores.wrongHunt),
+          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", via: "sudoku" },
+        },
+      },
+      huntAttempts,
+    };
+  }
+  const recovered = target.sudokuHuntedGenerations ?? [];
+  return {
+    ...state,
+    teams: {
+      ...state.teams,
+      [teamId]: {
+        ...attacker,
+        score: attacker.score + state.config.scores.huntBonus,
+        lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", via: "sudoku" },
+      },
+      [op.targetTeamId]: {
+        ...target,
+        score: Math.max(0, target.score - state.config.scores.huntPenalty),
+        sudokuHuntedGenerations: recovered.includes(op.generation) ? recovered : [...recovered, op.generation],
+      },
+    },
+    huntAttempts,
+    successfulHunts: [...state.successfulHunts, key],
+    huntLog: [
+      ...state.huntLog,
+      { attackerTeamId: teamId, targetTeamId: op.targetTeamId, generation: op.generation, atMs: nowMs, via: "sudoku" },
+    ],
+  };
+}
+
 /**
  * [Issue #677] Starts the match: fixes the clock's origin at now and hands the
  * first batch of Orders over immediately.
@@ -1949,6 +2459,10 @@ export function applyOp(
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "hunt-rps": return applyRpsHunt(state, teamId, op);
+    case "rps-commit":
+    case "rps-open":
+      return applyRps(state, teamId, op);
     case "ready":
       return applyReady(state, teamId);
     case "start":
@@ -1961,24 +2475,12 @@ export function applyOp(
       return applyMpc(state, teamId, op);
     case "hunt":
       return applyHunt(state, teamId, op);
-    case "hunt-nonce":
-      // [Issue #645 Phase 5] Both hunt kinds score identically, guard against
-      // replay identically, and land in the same `huntLog` -- only the evidence
-      // differs, and `validateOp` has already checked the evidence this one
-      // needs (g^w = Y against the target's PUBLIC commitment). Reusing
-      // `applyHunt` keeps one scoring path rather than a near-duplicate that
-      // could drift; `applyHunt` re-reads the target's secret itself, so the
-      // value passed here is only the shape it expects.
-      return applyHunt(state, teamId, {
-        kind: "hunt",
-        targetTeamId: op.targetTeamId,
-        generation: op.generation,
-        recoveredSecret: state.teams[op.targetTeamId]?.secret ?? "0",
-      });
+    case "hunt-sudoku":
+      return applyHuntSudoku(state, teamId, op);
     case "rotate":
       return applyRotate(state, teamId);
-    case "prove":
-      return applyProve(state, teamId, op);
+    case "prove-sudoku":
+      return applyProveSudoku(state, teamId, op);
     case "cipher":
       return applyCipher(state, teamId, op);
     case "hunt-cipher":
@@ -1997,11 +2499,10 @@ export function applyOp(
  * state down to what `teamId` is allowed to see: their own vault in full,
  * every team's public score/generation, the full Public Ledger (public by
  * construction -- every entry got there via a LEAK's revealed share or a
- * PROVE's proof transcript), and every team's Schnorr public commitment
- * (also public by construction). No other team's `secret` or un-leaked
- * `shares` -- and no team's witness -- ever appear here (adversarial test #5
- * / prove.test.ts's secret-non-leakage test assert this by scanning the
- * serialized JSON).
+ * PROVE's opened group), and every team's sudoku puzzle (also public by
+ * construction). No other team's `secret`, un-leaked `shares` or sudoku
+ * solution ever appears here (adversarial test #5 / prove.test.ts's
+ * non-leakage tests assert this).
  */
 export function projectForTeam(
   persistedState: CryptoBattleState,
@@ -2018,42 +2519,86 @@ export function projectForTeam(
       ? 0
       : Math.max(0, state.config.rotateCooldownMs - (state.nowMs - team.lastRotateAtMs));
 
+  const vault: VaultProjection = {
+    teamId,
+    // team.secret / team.shares are already stringified bigints
+    // (TeamState / StoredShare, see types.ts) -- VaultProjection uses the
+    // exact same wire shape, so no conversion is needed here.
+    secret: team.secret,
+    shares: team.shares,
+    generation: team.generation,
+    lastRotateAtMs: team.lastRotateAtMs,
+    rotateCooldownRemainingMs,
+    completedContractIds: team.completedContractIds,
+    huntedGenerations: team.huntedGenerations,
+    sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
+    usedPermutations: usedPermutationsFor(state, teamId, team.generation),
+    sudokuHuntedGenerations: team.sudokuHuntedGenerations ?? [],
+  };
+
+  const publicLedger = decodeLedger(state.publicLedger);
+  const exposedShareIndices = [...new Set(publicLedger.flatMap((entry) =>
+    entry.kind === "share" && entry.teamId === teamId && entry.generation === team.generation
+      ? [entry.shareIndex] : [],
+  ))];
   const myContracts = state.contracts
     .filter((c) => c.teamId === teamId)
-    .map((c) => ({
-      id: c.id,
-      kind: c.kind,
-      points: c.points,
-      leakPoints: c.leakPoints,
-      task: projectTask(state, teamId, c.task, c.id),
-      status: c.status,
-      // [Issue #645] The Order's rule and the methods that satisfy it are
-      // participant-visible by design: an Order the participant cannot LEAK
-      // must say so BEFORE they choose, not by rejecting their submission.
-      // Both are public properties of the job, not of anyone's secret.
-      privacyConstraint: c.privacyConstraint,
-      allowedMethods: c.allowedMethods,
-      // `state.nowMs` is only ever undefined before the first `tick()`, and
-      // `state.contracts` is only ever non-empty AFTER at least one `tick()`
-      // (`initialState` sets `contracts: []`; only `tick()` ever pushes to
-      // it) -- so the `?? c.expiresAtMs` fallback (remainingMs 0) is
-      // unreachable in practice. It exists only to keep this arithmetic
-      // total without an unsafe assertion.
-      remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
-      hints: projectHints(state, c),
-    }));
+    .map((c) => {
+      const task = projectTask(state, teamId, c.task, c.id);
+      return {
+        id: c.id,
+        kind: c.kind,
+        points: c.points,
+        leakPoints: c.leakPoints,
+        task,
+        status: c.status,
+        // [Issue #645] The Order's rule and the methods that satisfy it are
+        // participant-visible by design: an Order the participant cannot LEAK
+        // must say so BEFORE they choose, not by rejecting their submission.
+        // Both are public properties of the job, not of anyone's secret.
+        privacyConstraint: c.privacyConstraint,
+        allowedMethods: c.allowedMethods,
+        // `state.nowMs` is only ever undefined before the first `tick()`, and
+        // `state.contracts` is only ever non-empty AFTER at least one `tick()`
+        // (`initialState` sets `contracts: []`; only `tick()` ever pushes to
+        // it) -- so the `?? c.expiresAtMs` fallback (remainingMs 0) is
+        // unreachable in practice. It exists only to keep this arithmetic
+        // total without an unsafe assertion.
+        remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
+        hints: projectHints(state, c, task, vault, exposedShareIndices),
+      };
+    });
 
   const otherOpenContractCount = state.contracts.filter(
     (c) => c.teamId !== teamId && c.status === "open",
   ).length;
 
   const teams: Record<string, TeamSummaryProjection> = {};
+  // [Issue #696] MY attempts against each OTHER team's current generation.
+  // Read through the same `huntKey` `validateOp` charges against, so the
+  // number the Portal shows is the number the judge will enforce -- and only
+  // the reader's own row of it: `state.huntAttempts` also holds what every
+  // other pairing has spent, and none of that is this team's to see.
+  const huntAttempts: Record<string, HuntBudgetProjection> = {};
+  const sudokuHuntAttempts: Record<string, HuntBudgetProjection> = {};
   for (const other of Object.values(state.teams)) {
     teams[other.teamId] = {
       teamId: other.teamId,
+      teamName: other.teamName ?? other.teamId,
       score: other.score,
       generation: other.generation,
       huntedGenerationCount: other.huntedGenerations.length,
+    };
+    if (other.teamId === teamId) continue;
+    huntAttempts[other.teamId] = {
+      generation: other.generation,
+      spent: state.huntAttempts[storedHuntKey(state, huntKey(teamId, other.teamId, other.generation))] ?? 0,
+      max: state.config.maxHuntAttemptsPerTarget,
+    };
+    sudokuHuntAttempts[other.teamId] = {
+      generation: other.generation,
+      spent: state.huntAttempts[storedHuntKey(state, sudokuHuntKey(teamId, other.teamId, other.generation))] ?? 0,
+      max: state.config.maxHuntAttemptsPerTarget,
     };
   }
 
@@ -2077,19 +2622,7 @@ export function projectForTeam(
       me: (state.readyTeamIds ?? []).includes(teamId),
     },
     matchRemainingMs,
-    vault: {
-      teamId,
-      // team.secret / team.shares are already stringified bigints
-      // (TeamState / StoredShare, see types.ts) -- VaultProjection uses the
-      // exact same wire shape, so no conversion is needed here.
-      secret: team.secret,
-      shares: team.shares,
-      generation: team.generation,
-      lastRotateAtMs: team.lastRotateAtMs,
-      rotateCooldownRemainingMs,
-      completedContractIds: team.completedContractIds,
-      huntedGenerations: team.huntedGenerations,
-    },
+    vault,
     myContracts,
     otherOpenContractCount,
     // [Issue #679] `state.publicLedger` is the compact persisted form
@@ -2100,11 +2633,23 @@ export function projectForTeam(
     // side used to be a zero-cost passthrough (5377 entries at 99 teams,
     // worst case) -- an intentional trade against the ~430 KB this shaves off
     // every write's HTTP body (state-size.test.ts), not a free lunch.
-    publicLedger: decodeLedger(state.publicLedger),
+    publicLedger,
     teams,
-    // Public by construction (see CryptoBattleState.publicCommitments) --
-    // passed through unredacted, unlike `teams` above it does not need a
-    // per-team summary shape.
-    publicCommitments: state.publicCommitments,
+    // Public by construction (see CryptoBattleState.publicPuzzles) -- passed
+    // through unredacted, unlike `teams` above it does not need a per-team
+    // summary shape. `withMigratedContracts` guarantees it is present.
+    publicPuzzles: state.publicPuzzles ?? {},
+    rpsHunt: projectRpsHunt(state, teamId),
+    huntAttempts,
+    sudokuHuntAttempts,
+    wrongHuntCost: state.config.scores.wrongHunt,
+    wrongProveCost: state.config.scores.wrongProve,
+    // [Issue #696] The reader's OWN last HUNT only -- `team` is the row
+    // `teamId` resolved to above, never another team's. Spread conditionally
+    // so a team that has never HUNTed projects no key at all, which keeps the
+    // JSON round trip byte-identical to the object (dev/harness.test.ts
+    // compares the two).
+    ...(team.lastHunt === undefined ? {} : { lastHunt: team.lastHunt }),
+    ...(team.lastProve === undefined ? {} : { lastProve: team.lastProve }),
   };
 }

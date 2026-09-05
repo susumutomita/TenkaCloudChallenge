@@ -106,7 +106,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     // failing for a reason that has nothing to do with the property.
     expect(bravoLedgerEntries.some((a) => a.k === "share")).toBe(false);
     expect(new Set(bravoLedgerEntries.map((a) => a.k))).toEqual(
-      new Set(["proof", "ciphertext", "partial"]),
+      new Set(["sudoku-reveal", "ciphertext", "partial"]),
     );
   });
 
@@ -150,7 +150,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     // the hunt buildable at all) and alpha's `secret` / un-leaked shares
     // must still not appear anywhere in it.
     const bravoProjection = built.bravoProjectionBeforeHunt;
-    expect(bravoProjection.publicCommitments[DEFENDER]).toBeDefined();
+    expect(bravoProjection.publicPuzzles[DEFENDER]).toBeDefined();
     const alphaLeakedShareCount = bravoProjection.publicLedger.filter(
       (a) => a.kind === "share" && a.teamId === DEFENDER,
     ).length;
@@ -208,7 +208,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     expect(postEndSteps.length).toBeGreaterThanOrEqual(4);
     expect(postEndSteps.every((s) => s.expect === "rejected")).toBe(true);
     const kinds = new Set(postEndSteps.map((s) => s.op.kind));
-    expect(kinds).toEqual(new Set(["leak", "prove", "rotate", "hunt"]));
+    expect(kinds).toEqual(new Set(["leak", "prove-sudoku", "rotate", "hunt"]));
   });
 
   test("MUST 10 (UI-level 'advance / hunt / defend' tension) is NOT claimed here -- a scripted fixture has no UI or human decision point; see OPERATOR.md's Tuning notes", () => {
@@ -241,15 +241,28 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
       if (step.op.kind === "leak") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).leakPoints;
       } else if (
-        step.op.kind === "prove" ||
+        step.op.kind === "prove-sudoku" ||
         step.op.kind === "cipher" ||
         step.op.kind === "fhe" ||
         step.op.kind === "mpc"
       ) {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).points;
       } else if (step.op.kind === "hunt") {
-        expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
-        expected[step.op.targetTeamId] = (expected[step.op.targetTeamId] ?? 0) - result.finalState.config.scores.huntPenalty;
+        // [Issue #696] A HUNT that lands is not necessarily a HUNT that HITS.
+        // A wrong value is now an accepted move that costs the attacker
+        // `wrongHunt` and moves nobody else -- the script exercises exactly one
+        // (MUST 9's stale reconstruction), and reconciling every hunt as a hit
+        // would silently absorb a regression that paid the bonus for a miss.
+        const hit = result.finalState.successfulHunts.includes(
+          JSON.stringify([step.teamId, step.op.targetTeamId, step.op.generation]),
+        );
+        if (hit) {
+          expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
+          expected[step.op.targetTeamId] =
+            (expected[step.op.targetTeamId] ?? 0) - result.finalState.config.scores.huntPenalty;
+        } else {
+          expected[step.teamId] = (expected[step.teamId] ?? 0) - result.finalState.config.scores.wrongHunt;
+        }
       }
     }
 
@@ -278,7 +291,9 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     const opSteps = built.script.steps.filter((s): s is PlaytestOpStep => !isTickStep(s));
     expect(opSteps.length).toBeGreaterThan(0);
     const kinds = new Set(opSteps.map((s) => s.op.kind));
-    expect(kinds).toEqual(new Set(["leak", "prove", "cipher", "fhe", "mpc", "hunt", "rotate"]));
+    expect(kinds).toEqual(
+      new Set(["leak", "prove-sudoku", "cipher", "fhe", "mpc", "hunt", "rotate"]),
+    );
     expect(opSteps.some((s) => s.expect === "rejected")).toBe(true);
     expect(opSteps.some((s) => s.expect === "ok")).toBe(true);
 

@@ -86,7 +86,8 @@ def part1() -> bool:
     ok &= _check(
         "noleak: r0 stays put across three secrets",
         drill.noleak(p, w, r0),
-        [(1, 2), (1, 49), (1, 96)],
+        # Candidates are w[0]=3, p//2=48, p-1=96; subtract the fixed r0=1.
+        [(1, 2), (1, 47), (1, 95)],
     )
     ok &= _check("ashares: A's shares", drill.ashares(p, w, r0, r1, ca), [5, 8])
     ok &= _check("aopen: A opened vs computed directly", drill.aopen(p, w, r0, r1, ca), (13, 13))

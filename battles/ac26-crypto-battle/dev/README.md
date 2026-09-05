@@ -41,7 +41,7 @@ Read this before quoting anything you see here.
 | Real (unmodified) | Faked (this directory) |
 | --- | --- |
 | `../game/src/reducer.ts` — every rule, score, and verdict | the HTTP dispatcher |
-| `../game/src/shamir.ts`, `schnorr-*.ts`, `field.ts`, `group.ts` | in-memory state, no DynamoDB / Turso |
+| `../game/src/shamir.ts`, `sudoku.ts`, `field.ts` | in-memory state, no DynamoDB / Turso |
 | `../game/src/playtest.ts`'s op builders (scenario setup) | `PortalSlotProps` — team, endpoints, phases |
 | `../portal/*.tsx` — all three declared slots, plus their imports | authentication and tenant isolation |
 | the optimistic-lock version and tick-before-op ordering | the tick cadence (the clock is yours to drive) |
@@ -82,6 +82,7 @@ faking it.
 | --- | --- |
 | `fresh` | Match just started, first Orders issued, empty Ledger. |
 | `ledger-filling` | A LEAKed share and a PROVE transcript side by side. |
+| `rps-reuse` | Two public bravo openings reuse r; the next sealed hand can be predicted through the real participant controls. |
 | `hunt-reachable` | `alpha` has leaked threshold-many distinct shares of its current generation. |
 | `after-rotate` | `bravo` landed a HUNT, then `alpha` re-keyed — generation 2, penalty applied. |
 | `ended` | Match over; every op is rejected and the surface is read-only. |
@@ -90,6 +91,12 @@ faking it.
 announce "you can hunt now" — that rule (Issue #486, restated in #646's
 non-goals) is unchanged, and the check that builds this scenario lives in
 `scenarios.ts`, never in a panel.
+
+## Participant walkthrough
+
+[次のイベントでの参加者画面確認](PLAYTHROUGH.ja.md) maps the nine
+pre-event checks to the real scenario names, visible controls, and expected
+feedback. It separates local UI evidence from optional live Portal checks.
 
 ## Checks
 

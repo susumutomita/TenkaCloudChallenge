@@ -9,7 +9,7 @@
 import { describe, expect, test } from "bun:test";
 import { deriveFheInputKeys, deriveFhePlaintexts } from "./fhe.ts";
 import { deriveMpcPrivateInputs } from "./mpc.ts";
-import { buildFheOp, buildLeakOp, buildMpcOp, buildProveOp, startedMatch } from "./playtest.ts";
+import { SUBSTRING_SAFE_FIELD, buildFheOp, buildLeakOp, buildMpcOp, buildProveSudokuOp, startedMatch } from "./playtest.ts";
 import { completeShares, reconstruct, type Share } from "./shamir.ts";
 import { decodeLedger } from "./ledger-codec.ts";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
@@ -184,13 +184,19 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
   if (!currentTeam) throw new Error("expected target team");
   expect(mixedReconstruction).not.toBe(BigInt(currentTeam.secret));
 
+  // [Issue #696] A wrong value is no longer refused by `validateOp` -- it is a
+  // move that lands and is charged. The claim this test makes is unchanged and
+  // is now read off the RESULT: the mixed reconstruction does not unlock the
+  // rotated generation, so no successful hunt is recorded and the attacker pays.
   const huntWithMixedGuess: CryptoBattleOp = {
     kind: "hunt",
     targetTeamId: target,
     generation: 2,
     recoveredSecret: mixedReconstruction.toString(),
   };
-  expect(validateOp(state, attacker, huntWithMixedGuess).ok).toBe(false);
+  const afterMixed = applyOp(state, attacker, huntWithMixedGuess);
+  expect(afterMixed.successfulHunts).toEqual([]);
+  expect(afterMixed.teams[target]?.huntedGenerations ?? []).toEqual([]);
 
   // Explicitly naming the stale generation is rejected regardless of value.
   const huntStaleGeneration: CryptoBattleOp = {
@@ -247,7 +253,8 @@ test("adversarial 4: a successful HUNT cannot be replayed for the same (attacker
 });
 
 test("adversarial 5: projectForTeam never leaks another team's secret or shares", () => {
-  let state = tick(startedMatch(ctx("adv-5")), 0);
+  // [Issue #696] Big field -- see SUBSTRING_SAFE_FIELD.
+  let state = tick(startedMatch(ctx("adv-5"), SUBSTRING_SAFE_FIELD), 0);
   const target = "teamA";
   const observer = "teamB";
   // Leak a couple of teamA shares onto the PUBLIC ledger -- those are fine to
@@ -376,8 +383,9 @@ test("adversarial 8: same seed + same event sequence replays to a deeply-equal s
  */
 test("adversarial 9: no trusted material reaches any participant-visible surface, for any method", () => {
   const matchSecret = "adversarial-9-server-only-match-secret";
+  // [Issue #696] Big field -- see SUBSTRING_SAFE_FIELD.
   let state = tick(
-    startedMatch({ eventId: "adv-9", teamIds: ["teamA", "teamB"], matchSecret }),
+    startedMatch({ eventId: "adv-9", teamIds: ["teamA", "teamB"], matchSecret }, SUBSTRING_SAFE_FIELD),
     0,
   );
   const prime = BigInt(state.config.prime);
@@ -390,7 +398,11 @@ test("adversarial 9: no trusted material reaches any participant-visible surface
       if (order.task.kind === "reveal-share") {
         op = order.allowedMethods.includes("leak")
           ? buildLeakOp(order.id)
-          : buildProveOp(projectForTeam(state, "teamA").vault, order.id);
+          : buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id);
+      } else if (order.task.kind === "zk-sudoku") {
+        // [Issue #709] PROVE-only, built from the team's OWN vault -- the
+        // relabelled grid is what leaves the browser, the solution never does.
+        op = buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id);
       } else if (order.task.kind === "homomorphic-sum") {
         op = buildFheOp(order, state.config.prime);
       } else {
@@ -408,6 +420,10 @@ test("adversarial 9: no trusted material reaches any participant-visible surface
   const teamA = state.teams.teamA;
   if (!teamA) throw new Error("expected teamA");
   const secrets: string[] = [teamA.secret];
+  // [Issue #709] The sudoku solution, as the 16-digit run the vault shows.
+  // Structural rather than substring elsewhere (prove.test.ts); here it joins
+  // the sweep as one more thing the other team's view must not contain.
+  secrets.push(JSON.stringify(projectForTeam(state, "teamA").vault.sudokuSolution));
   for (const order of state.contracts.filter((c) => c.teamId === "teamA")) {
     if (order.task.kind === "homomorphic-sum") {
       for (const key of deriveFheInputKeys(state.seed, order.id, prime)) {

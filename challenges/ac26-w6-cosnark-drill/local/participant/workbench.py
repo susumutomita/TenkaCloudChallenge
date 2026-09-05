@@ -3,7 +3,7 @@
 This module never decides whether a checkpoint is correct. The existing ``evaluate``
 function remains the only grading seam. It serves authored evidence, runs the public
 suite against Portal-edited files in a throwaway copy, formats Portal submissions, and
-binds direct-answer submissions to this deployment's seed.
+binds direct-answer submissions to this deployment's public binding tag.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ class PortalEditorSupport:
         self,
         *,
         root: Path,
-        seed: str,
+        deployment_binding: str,
         problem_id: str,
         problem_name: str,
         description: str,
@@ -43,7 +43,7 @@ class PortalEditorSupport:
         checkpoint_labels_en: dict[str, str] | None = None,
     ) -> None:
         self.root = root
-        self.seed = seed
+        self.deployment_binding = deployment_binding
         self.problem_id = problem_id
         self.problem_name = problem_name
         self.description = description
@@ -115,7 +115,6 @@ class PortalEditorSupport:
         """
         env = {
             "PATH": "/usr/local/bin:/usr/bin:/bin",
-            "FLAG_SEED": self.seed,
             "PYTHONDONTWRITEBYTECODE": "1",
             **extra,
         }
@@ -302,7 +301,7 @@ class PortalEditorSupport:
             sort_keys=True,
         ).encode("utf-8")
         key = hashlib.sha256(
-            (self.problem_id + "\0" + self.seed).encode("utf-8")
+            (self.problem_id + "\0" + self.deployment_binding).encode("utf-8")
         ).digest()
         signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
         return f"tcw1.{self._b64encode(payload)}.{self._b64encode(signature)}"
@@ -320,7 +319,7 @@ class PortalEditorSupport:
             payload = self._b64decode(encoded_payload)
             signature = self._b64decode(encoded_signature)
             key = hashlib.sha256(
-                (self.problem_id + "\0" + self.seed).encode("utf-8")
+                (self.problem_id + "\0" + self.deployment_binding).encode("utf-8")
             ).digest()
             expected = hmac.new(key, payload, hashlib.sha256).digest()[:16]
             if not hmac.compare_digest(signature, expected):

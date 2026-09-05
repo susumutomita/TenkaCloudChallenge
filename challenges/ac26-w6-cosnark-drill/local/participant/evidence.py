@@ -57,7 +57,7 @@ def public_evidence() -> dict:
     # checkout, or the verifier/author Docker stage — and never inside a built
     # `participant` image, so this branch does not reopen the leak above. Only the
     # public half is taken; the expected values `setting` also returns stay behind.
-    from fixtures.generate import assignments, setting
+    from fixtures.generate import assignments, setting, submission_binding
 
     seed = os.environ.get("FLAG_SEED", "local-dev-seed")
-    return {"assignments": assignments(seed), "public": setting(seed)["public"]}
+    return {"assignments": assignments(seed), "public": setting(seed)["public"], "submissionBinding": submission_binding(seed)}

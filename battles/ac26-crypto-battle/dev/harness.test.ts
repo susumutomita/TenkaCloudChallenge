@@ -21,7 +21,7 @@ import { DEFAULT_CONFIG, projectForTeam } from "../game/src/reducer.ts";
 import type { CryptoBattleProjection } from "../game/src/types.ts";
 import { createMatch, dispatch, projectSafely, readProjection, submitOp } from "./host.ts";
 import { buildScenario, DEV_CONFIG, DEV_TEAMS, SCENARIO_IDS, SCENARIO_LABELS } from "./scenarios.ts";
-import { buildNonceReuseHuntOp } from "../game/src/playtest.ts";
+import { buildSudokuHuntOp } from "../game/src/playtest.ts";
 
 describe("dev host is the real reducer", () => {
   /**
@@ -58,6 +58,31 @@ describe("dev host is the real reducer", () => {
     expect(outcome.kind).toBe("rejected");
     expect(JSON.stringify(scenario.host.state)).toBe(before);
     expect(scenario.host.version).toBe(0);
+  });
+
+  it("should reject an unreduced HUNT without changing scores, attempts or version", () => {
+    const scenario = buildScenario("hunt-reachable");
+    const { host, nowMs } = scenario;
+    const view = projectForTeam(host.state, "bravo");
+    const hunt = buildHuntOp(view, "alpha", {
+      prime: host.state.config.prime, threshold: host.state.config.threshold,
+    });
+    if (!hunt || hunt.kind !== "hunt") throw new Error("expected a reachable Shamir HUNT");
+    const before = JSON.stringify(host.state);
+    const version = host.version;
+    const outcome = submitOp(host, "bravo", {
+      ...hunt,
+      recoveredSecret: (BigInt(hunt.recoveredSecret) + BigInt(host.state.config.prime)).toString(),
+    }, nowMs);
+    expect(outcome).toEqual({
+      kind: "rejected",
+      error: "recoveredSecret must already be reduced -- take the remainder after dividing by the modulus",
+    });
+    expect(JSON.stringify(host.state)).toBe(before);
+    expect(host.version).toBe(version);
+    expect(submitOp(host, "bravo", hunt, nowMs).kind).toBe("ok");
+    expect(host.version).toBe(version + 1);
+    expect(projectForTeam(host.state, "bravo").huntAttempts.alpha?.spent).toBe(1);
   });
 
   it("should refuse a team that is not in the match", () => {
@@ -133,7 +158,7 @@ describe("dev scenarios are reachable and deterministic", () => {
     // `PublicArtifact.kind`.
     const { publicLedger } = buildScenario("ledger-filling").host.state;
     expect(publicLedger.some((artifact) => artifact.k === "share")).toBe(true);
-    expect(publicLedger.some((artifact) => artifact.k === "proof")).toBe(true);
+    expect(publicLedger.some((artifact) => artifact.k === "sudoku-reveal")).toBe(true);
   });
 
   /**
@@ -193,26 +218,45 @@ describe("dev harness does not widen what a team can see", () => {
    * that reach the browser are still only `projectForTeam`'s, so an author
    * cannot accidentally build UI against data a participant will never have.
    */
+  /**
+   * [Issue #696] Asserted as an IDENTITY, not as a substring sweep.
+   *
+   * This used to serialize the projection and search it for the opponent's
+   * secret and un-leaked share values. That method reads as the stronger one --
+   * it catches a leak through a field nobody thought of -- but it is only sound
+   * while the forbidden values are long enough to be unique. A match now runs in
+   * a field a participant can interpolate by hand (`HAND_PRIME`, 251), and at
+   * three digits the sweep cannot tell a leak from a coincidence: it fires
+   * because bravo's own share happens to equal alpha's secret, which is not a
+   * leak and not a bug.
+   *
+   * What this file is uniquely placed to check is not `projectForTeam` -- that
+   * has its own trust-boundary tests in `game/src`, run in a big field where a
+   * value sweep still discriminates. It is the HOST: whether the harness's read
+   * path hands the browser anything beyond what `projectForTeam` returned. So
+   * that is the assertion, and it is exact rather than probabilistic. Anything
+   * the host added, dropped or rewrote fails here, at any modulus.
+   */
   it.each([...SCENARIO_IDS])(
-    "should keep the opponent's secret and un-leaked shares out of %s's payload",
+    "should hand bravo exactly projectForTeam's bytes and nothing else (%s)",
     (id) => {
       const scenario = buildScenario(id);
       const outcome = readProjection(scenario.host, "bravo", scenario.nowMs);
       if (outcome.kind !== "ok") throw new Error("read path did not return a projection");
-      const serialized = JSON.stringify(outcome.projection);
+      // `SubmitOutcome.projection` is deliberately `unknown` -- the host hands
+      // the browser bytes, not a type. Narrowing it here is this test's own job.
+      const projection = outcome.projection as CryptoBattleProjection;
 
-      const alpha = scenario.host.state.teams.alpha;
-      if (!alpha) throw new Error("scenario has no alpha team");
-      expect(serialized).not.toContain(alpha.secret);
+      // `readProjection` ticks before projecting, so the comparison is taken
+      // against the state it actually projected from.
+      expect(projection).toEqual(projectForTeam(scenario.host.state, "bravo"));
 
-      const publicIndices = new Set(
-        scenario.host.state.publicLedger
-          .filter((artifact) => artifact.k === "share" && artifact.tm === "alpha")
-          .map((artifact) => (artifact.k === "share" ? artifact.v : "")),
-      );
-      for (const share of alpha.shares) {
-        if (publicIndices.has(share.value)) continue;
-        expect(serialized).not.toContain(share.value);
+      // And the shape that identity is worth having: the reader's own vault,
+      // and team summaries that are summaries.
+      expect(projection.vault.teamId).toBe("bravo");
+      for (const summary of Object.values(projection.teams)) {
+        expect(Object.keys(summary)).not.toContain("secret");
+        expect(Object.keys(summary)).not.toContain("shares");
       }
     },
   );
@@ -246,24 +290,34 @@ describe("Issue #645 scenarios reach the position they advertise", () => {
     );
     expect(projected).toBeDefined();
     if (projected?.task.kind !== "masked-total") throw new Error("unreachable");
-    expect(projected.task.myInput.length).toBeGreaterThan(4);
+    // [Issue #696] A field element, not a long number. This asserted
+    // `.length > 4` when the field was 2^61 - 1; a match now runs in
+    // `HAND_PRIME` so an office's number is at most three digits, which is the
+    // point -- a participant adds these by hand.
+    expect(BigInt(projected.task.myInput)).toBeLessThan(BigInt(host.state.config.prime));
 
-    // The other team's view of the same match carries none of it.
-    const otherView = JSON.stringify(projectForTeam(host.state, "bravo"));
-    expect(otherView).not.toContain(projected.task.myInput);
+    // [Issue #696] The other team's view carries none of it -- asserted
+    // structurally rather than by searching a serialized projection for the
+    // value. At three digits that search cannot tell a leak from a coincidence
+    // (bravo's own number may simply equal alpha's). What "visible only to its
+    // owner" MEANS is that the Order is not in the other team's belt at all,
+    // and that holds at any modulus.
+    const other = projectForTeam(host.state, "bravo");
+    expect(other.myContracts.some((c) => c.id === projected.id)).toBe(false);
+    expect(other.myContracts.every((c) => c.id.startsWith("bravo"))).toBe(true);
   });
 
-  it("should produce two alpha transcripts sharing one commitment, and a recoverable witness", () => {
-    const { host } = buildScenario("nonce-reuse");
-    const proofs = host.state.publicLedger.filter(
-      (a) => a.k === "proof" && a.tm === "alpha",
+  it("should produce three alpha reveals sharing one tag, and a recoverable solution", () => {
+    const { host } = buildScenario("pi-reuse");
+    const reveals = host.state.publicLedger.filter(
+      (a) => a.k === "sudoku-reveal" && a.tm === "alpha",
     );
-    expect(proofs).toHaveLength(2);
-    const commitments = new Set(proofs.map((a) => (a.k === "proof" ? a.o : "")));
-    expect(commitments.size).toBe(1);
+    expect(reveals).toHaveLength(3);
+    const tags = new Set(reveals.map((a) => (a.k === "sudoku-reveal" ? a.tg : "")));
+    expect(tags.size).toBe(1);
 
     // And the position is genuinely exploitable from bravo's public view.
-    const op = buildNonceReuseHuntOp(projectForTeam(host.state, "bravo"), "alpha");
+    const op = buildSudokuHuntOp(projectForTeam(host.state, "bravo"), "alpha");
     expect(op).toBeDefined();
   });
 });

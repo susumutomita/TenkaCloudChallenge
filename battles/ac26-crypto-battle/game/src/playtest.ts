@@ -17,7 +17,7 @@
  * This module also exports the op-construction helpers a script author (or,
  * in production, a participant's own tooling) uses to build ops in the
  * FIRST place: `buildLeakOp` / `buildRotateOp` are trivial, but
- * `buildProveOp` and `buildHuntOp` matter -- they build a move from exactly
+ * `buildProveSudokuOp` and `buildHuntOp` matter -- they build a move from exactly
  * the information a participant is allowed to see (`projectForTeam`'s
  * output, i.e. a `CryptoBattleProjection`, plus -- for `buildHuntOp` --
  * public game-rule constants), never from `CryptoBattleState` directly.
@@ -26,20 +26,25 @@
  * that function's own doc comment.
  */
 
-import { applyOp, initialState, tick, validateOp } from "./reducer.ts";
-import { createProof } from "./schnorr-prover.ts";
+import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { reconstruct, type Share } from "./shamir.ts";
 import { addCiphertexts } from "./fhe.ts";
 import { encryptWithRung, toSymbols } from "./ladder.ts";
-import { inv, mod } from "./field.ts";
-import { groupPow, RFC3526_GROUP14 } from "./group.ts";
-import { computeChallenge } from "./schnorr-transcript.ts";
+import { P } from "./field.ts";
 import { computePartial } from "./mpc.ts";
+import {
+  ALL_PERMUTATIONS,
+  applyPermutation,
+  IDENTITY_PERMUTATION,
+  type Permutation,
+  recoverableSolutions,
+  samePermutation,
+} from "./sudoku.ts";
 import type {
   CoordinationContext,
   Contract,
   ContractProjection,
-  ProofArtifact,
+  SudokuRevealArtifact,
   CryptoBattleConfig,
   CryptoBattleOp,
   CryptoBattleProjection,
@@ -209,6 +214,24 @@ function summarizeStep(
  * under way, so they build state through here; the tests that are specifically
  * about `waiting` call `initialState` directly.
  */
+/**
+ * [Issue #696] A config override whose field is the big one (2^61 - 1).
+ *
+ * For the trust-boundary tests ONLY, and for a reason about the test method
+ * rather than the property. Those tests ask "does this serialized projection
+ * contain a value it must not?" and answer it with a substring search, which is
+ * sound only while the forbidden values are long enough to be unique. A match
+ * now runs in `HAND_PRIME` (97) so a participant can do the arithmetic, and at
+ * three digits the search reports a hit on any coincidence -- "124" occurs
+ * inside an unrelated 2048-bit commitment.
+ *
+ * The boundary itself is structural: `projectForTeam` either copies a field or
+ * it does not, and which modulus the numbers came from has no bearing on that.
+ * Running those assertions in the big field is therefore the same test, made
+ * able to tell a leak from a coincidence -- not a weakened one.
+ */
+export const SUBSTRING_SAFE_FIELD: Partial<CryptoBattleConfig> = { prime: P.toString() };
+
 export function startedMatch(
   ctx: CoordinationContext,
   config?: Partial<CryptoBattleConfig>,
@@ -300,17 +323,42 @@ export function buildRotateOp(): CryptoBattleOp {
 }
 
 /**
- * Build a PROVE op from a team's own vault -- exactly what a participant's
- * own script would call: `schnorr-prover.ts`'s `createProof` against
- * `projectForTeam(state, teamId).vault.secret`, the secret a participant
- * already legitimately sees for their own team every match (see
- * schnorr-prover.ts's header). Takes a `VaultProjection`, not a
- * `CryptoBattleState` or `TeamState` -- there is nothing about another
- * team reachable from this function's input at all.
+ * [Issue #709] A relabelling this team has NOT yet used on its current
+ * generation -- what a careful participant picks by reading MY VAULT's list.
+ *
+ * Walks `ALL_PERMUTATIONS` in a fixed order skipping the identity and every
+ * entry in `vault.usedPermutations`, so the choice is deterministic (the
+ * reducer's purity contract extends to the fixtures that drive it) and never
+ * a reuse. Returns `undefined` once all 23 are spent, which is the signal to
+ * ROTATE.
  */
-export function buildProveOp(vault: VaultProjection, contractId: string): CryptoBattleOp {
-  const proof = createProof(BigInt(vault.secret), vault.generation, vault.teamId, contractId);
-  return { kind: "prove", contractId, proof };
+export function freshPermutation(vault: VaultProjection): Permutation | undefined {
+  return ALL_PERMUTATIONS.find(
+    (pi) =>
+      !samePermutation(pi, IDENTITY_PERMUTATION) &&
+      !vault.usedPermutations.some((used) => samePermutation(used, pi)),
+  );
+}
+
+/**
+ * Build a PROVE op from a team's own vault -- exactly what a participant does
+ * by hand: take the solution off MY VAULT, pick a relabelling, rewrite the 16
+ * cells. Takes a `VaultProjection`, not a `CryptoBattleState` or `TeamState`
+ * -- there is nothing about another team reachable from this function's input
+ * at all.
+ *
+ * `pi` defaults to {@link freshPermutation}, i.e. the careful choice. A test
+ * that wants the MISTAKE (the same relabelling twice) passes one explicitly.
+ */
+export function buildProveSudokuOp(
+  vault: VaultProjection,
+  contractId: string,
+  pi: Permutation | undefined = freshPermutation(vault),
+): CryptoBattleOp {
+  if (pi === undefined) {
+    throw new Error(`buildProveSudokuOp: every relabelling is spent on generation ${vault.generation} -- ROTATE`);
+  }
+  return { kind: "prove-sudoku", contractId, grid: applyPermutation(vault.sudokuSolution, pi) };
 }
 
 /**
@@ -406,12 +454,22 @@ export function buildClearingOp(
   prime: string,
 ): CryptoBattleOp | undefined {
   switch (contract.task.kind) {
+    case "rps-duel":
+      if (contract.task.myCommitment === undefined) return { kind: "rps-commit", contractId: contract.id, commitment: 13 };
+      if (contract.task.opponentCommitment !== undefined && contract.task.myOpening === undefined) return { kind: "rps-open", contractId: contract.id, hand: 1, randomness: 1 };
+      return undefined; // Waiting for the opponent is not a cleared Order.
+
     case "reveal-share":
       // A share Order may forbid raw disclosure, in which case PROVE is the
       // only way to clear it. Ask the Order rather than assuming LEAK.
-      return contract.allowedMethods.includes("leak")
-        ? buildLeakOp(contract.id)
-        : buildProveOp(vault, contract.id);
+      if (contract.allowedMethods.includes("leak")) return buildLeakOp(contract.id);
+      return buildProveSudokuOp(vault, contract.id);
+    case "zk-sudoku":
+      // [Issue #709] PROVE-only by construction. `freshPermutation` reads the
+      // vault's used list, so a loop that clears every Order never reuses one
+      // -- until all 23 are spent, at which point this throws and the caller
+      // has to ROTATE, exactly as a participant would.
+      return buildProveSudokuOp(vault, contract.id);
     case "caesar-shift":
       return buildCipherOp(contract);
     case "homomorphic-sum":
@@ -426,85 +484,55 @@ export function buildClearingOp(
 }
 
 /**
- * [Issue #645 Phase 5] Recover a Schnorr witness from two transcripts that
- * share a commitment, and build the HUNT that spends it.
+ * [Issue #709] Recover a team's sudoku solution from reveals that share a
+ * relabelling, and build the HUNT that spends it.
  *
- * Reads the PUBLIC LEDGER only — the same material any participant can see —
- * which is the property that makes this a legitimate attack rather than a
- * privileged shortcut, exactly as `buildHuntOp` does for the Shamir route.
+ * Reads the PUBLIC LEDGER and the PUBLIC PUZZLE only — the same material any
+ * participant can see — which is the property that makes this a legitimate
+ * attack rather than a privileged shortcut, exactly as `buildHuntOp` does for
+ * the Shamir route. The reasoning is the one a person does on paper:
  *
- * Two proofs from one team in one generation with the same commitment R mean
- * one nonce k answered two different challenges:
+ *  1. Two reveals from one team, one generation, SAME TAG were made with one
+ *     relabelling π. Their cells are cells of one grid, `π(S)`.
+ *  2. Where the target's puzzle shows a given `S[i]` at a cell the reveals
+ *     also cover, `π(S[i])` is now known: one row of the relabelling table.
+ *  3. Every candidate solution consistent with the puzzle (288 at most, usually
+ *     one) is tried: the candidate whose relabelling by the recovered rows
+ *     agrees with EVERY revealed cell is `S`.
  *
- * ```text
- * z1 = k + e1*w    z2 = k + e2*w        (mod q)
- * z1 - z2 = (e1 - e2) * w
- * w = (z1 - z2) * (e1 - e2)^-1          (mod q)
- * ```
- *
- * Returns `undefined` when the target never reused a commitment — which is the
- * normal case, because `schnorr-prover.ts` binds the nonce to the contract id.
- * This attack exists for the team that rolled their own prover and got that
- * wrong.
+ * Returns `undefined` when the target never reused a relabelling — the normal
+ * case for a team that reads its own vault — or when the material does not
+ * yet pin a single solution. Never a fabricated guess.
  */
-export function buildNonceReuseHuntOp(
+export function buildSudokuHuntOp(
   projection: CryptoBattleProjection,
   targetTeamId: string,
 ): CryptoBattleOp | undefined {
   const target = projection.teams[targetTeamId];
-  const publicY = projection.publicCommitments[targetTeamId];
-  if (!target || publicY === undefined) return undefined;
+  const puzzle = projection.publicPuzzles[targetTeamId];
+  if (!target || puzzle === undefined) return undefined;
 
-  const byCommitment = new Map<string, ProofArtifact[]>();
+  const byTag = new Map<string, SudokuRevealArtifact[]>();
   for (const artifact of projection.publicLedger) {
-    if (artifact.kind !== "proof") continue;
+    if (artifact.kind !== "sudoku-reveal") continue;
     if (artifact.teamId !== targetTeamId || artifact.generation !== target.generation) continue;
-    const bucket = byCommitment.get(artifact.commitment) ?? [];
+    const bucket = byTag.get(artifact.tag) ?? [];
     bucket.push(artifact);
-    byCommitment.set(artifact.commitment, bucket);
+    byTag.set(artifact.tag, bucket);
   }
 
-  const group = RFC3526_GROUP14;
-  for (const [commitment, artifacts] of byCommitment) {
-    const [first, second] = artifacts;
-    if (!first || !second) continue;
-
-    const e1 = computeChallenge(
-      {
-        teamId: targetTeamId,
-        contractId: first.contractId,
-        generation: first.generation,
-        commitmentR: BigInt(commitment),
-        publicY: BigInt(publicY),
-      },
-      group,
-    );
-    const e2 = computeChallenge(
-      {
-        teamId: targetTeamId,
-        contractId: second.contractId,
-        generation: second.generation,
-        commitmentR: BigInt(commitment),
-        publicY: BigInt(publicY),
-      },
-      group,
-    );
-    const challengeGap = mod(e1 - e2, group.order);
-    if (challengeGap === 0n) continue;
-    const witness = mod(
-      mod(BigInt(first.response) - BigInt(second.response), group.order) * inv(challengeGap, group.order),
-      group.order,
-    );
-    // Only offer the op if the recovered value really is the witness. A
-    // participant would check this before spending their attempt, and so does
-    // the trusted side.
-    if (groupPow(group.generator, witness, group) !== BigInt(publicY)) continue;
-    return {
-      kind: "hunt-nonce",
-      targetTeamId,
-      generation: target.generation,
-      recoveredWitness: witness.toString(),
-    };
+  for (const reveals of byTag.values()) {
+    if (reveals.length < 2) continue;
+    // Every solution the public puzzle allows, tested against what was seen:
+    // the true S relabels onto the revealed cells consistently; a wrong
+    // candidate does not. `recoverableSolutions` is the one statement of that
+    // reasoning -- the judge gates the HUNT on it too, so what this builder
+    // finds is exactly what the judge will accept.
+    const matching = recoverableSolutions(puzzle, reveals);
+    const [only] = matching;
+    if (only && matching.length === 1) {
+      return { kind: "hunt-sudoku", targetTeamId, generation: target.generation, solution: [...only] };
+    }
   }
   return undefined;
 }

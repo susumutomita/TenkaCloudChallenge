@@ -14,6 +14,7 @@
 
 import { rungSpec } from "../game/src/ladder.ts";
 import type { OrderTaskProjection, PublicArtifact } from "../game/src/types.ts";
+import { describeRevealGroup } from "./SudokuGrid.tsx";
 
 export type Locale = "ja" | "en";
 
@@ -27,6 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "rps-duel": return `rps vs ${task.opponentTeamId}`;
     case "reveal-share":
       return `shares[${task.shareIndices.join(",")}]`;
     case "homomorphic-sum":
@@ -35,6 +37,8 @@ export function describeTaskShort(task: OrderTaskProjection): string {
       return `mpc-partial/${task.partyCount}`;
     case "caesar-shift":
       return `${task.rung}×${task.plaintext.length}/mod${task.symbols.length}`;
+    case "zk-sudoku":
+      return "zk-sudoku";
     default: {
       const exhaustive: never = task;
       throw new Error(`describeTaskShort: unknown task ${JSON.stringify(exhaustive)}`);
@@ -44,7 +48,8 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
-    "reveal-share": "share を出す",
+    "rps-duel": "手を隠して、相手とじゃんけん",
+    "reveal-share": "かけらを公開するか、秘密を守って証明する",
     "homomorphic-sum": "暗号文のまま足す",
     "masked-total": "覆面をかけた小計を出す",
     // [Issue #659] 「シーザー暗号で」ではなく「自分の鍵で暗号にする」。
@@ -52,12 +57,17 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     // *何をするか* を言う。方式名を見出しにすると、方式を知らない人には
     // ただの呪文になり、知っている人には作業の説明にならない。
     "caesar-shift": "自分の鍵で暗号にする",
+    // [Issue #709] 「解を見せずに示す」。方式名 (ゼロ知識証明) は成功した瞬間に
+    // 出す (FastMovePanel の lesson)。ラベルは *何をするか* を言う。
+    "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "rps-duel": "Seal your hand, then play rock-paper-scissors",
     "reveal-share": "account for a share",
     "homomorphic-sum": "add without decrypting",
     "masked-total": "publish a masked subtotal",
     "caesar-shift": "encrypt it with your key",
+    "zk-sudoku": "show it without showing it",
   },
 };
 
@@ -73,8 +83,9 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "rps-duel": return locale === "ja" ? "① 数字を封じる → ② 両者が開く" : "1. Seal a number → 2. Both open";
     case "reveal-share":
-      return `share [${task.shareIndices.join(", ")}]`;
+      return `${locale === "ja" ? "かけら" : "share"} [${task.shareIndices.join(", ")}]`;
     case "homomorphic-sum":
       return locale === "ja" ? `暗号文 ${task.inputs.length} 個` : `${task.inputs.length} ciphertexts`;
     case "masked-total":
@@ -86,6 +97,8 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
       return locale === "ja"
         ? `${task.plaintext.length} 個 · ${task.symbols.length} 種類`
         : `${task.plaintext.length} symbols · mod ${task.symbols.length}`;
+    case "zk-sudoku":
+      return locale === "ja" ? "4×4 の数独 · 数字を付け替える" : "4x4 sudoku · relabel the digits";
     default: {
       const exhaustive: never = task;
       throw new Error(`taskDetail: unknown task ${JSON.stringify(exhaustive)}`);
@@ -104,6 +117,8 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
  */
 export function ledgerKindLabel(artifact: PublicArtifact): string {
   switch (artifact.kind) {
+    case "rps-commit": return "RPS / COMMIT";
+    case "rps-open": return "RPS / OPEN";
     case "share":
       return "share (LEAK)";
     case "proof":
@@ -114,6 +129,8 @@ export function ledgerKindLabel(artifact: PublicArtifact): string {
       return "partial (MPC)";
     case "cipher-pair":
       return "pair (LEAK)";
+    case "sudoku-reveal":
+      return "sudoku (PROVE)";
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerKindLabel: unknown artifact ${JSON.stringify(exhaustive)}`);
@@ -123,17 +140,29 @@ export function ledgerKindLabel(artifact: PublicArtifact): string {
 
 /** The public value a ledger row carries, rendered for a single table cell. */
 const LEDGER_COPY = {
-  ja: { remainderOf: "を割る数で割った余り", breaksAt: "組で鍵が割れる" },
-  en: { remainderOf: "remainder the modulus", breaksAt: "pair(s) recover the key" },
+  ja: { remainderOf: "を割る数で割った余り", breaksAt: "組で鍵が割れる", tag: "付け替え" },
+  en: { remainderOf: "remainder the modulus", breaksAt: "pair(s) recover the key", tag: "relabelling" },
 } as const;
 
 export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string {
   const copy = LEDGER_COPY[locale];
   switch (artifact.kind) {
+    case "rps-commit": return `c = ${artifact.commitment}`;
+    case "rps-open": return `c = ${artifact.commitment} · ${locale === "ja" ? "手 m" : "hand m"} = ${artifact.hand} · ${locale === "ja" ? "隠す数 r" : "hiding number r"} = ${artifact.randomness}`;
     case "share":
       return `#${artifact.shareIndex} = ${artifact.value}`;
     case "proof":
-      return `${artifact.commitment} / ${artifact.response}`;
+      // [Issue #701] R / e / s -- the whole transcript, in the order the
+      // verification equation reads it. The challenge belongs on this row for
+      // two reasons: `g^s == R * Y^e` is only checkable by a reader who has
+      // `e`, and two transcripts that reuse a commitment carry two DIFFERENT
+      // challenges, which is the pair of equations the nonce-reuse HUNT solves.
+      // Since #701 bound the challenge to the match seed, this row is the only
+      // place a participant can get it. A row written before #701 has no
+      // challenge and renders the two values it does have.
+      return artifact.challenge === undefined
+        ? `${artifact.commitment} / ${artifact.response}`
+        : `${artifact.commitment} / ${artifact.challenge} / ${artifact.response}`;
     case "ciphertext":
       return `(${artifact.r}, ${artifact.y})`;
     case "partial":
@@ -157,6 +186,13 @@ export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string 
       // row (a table cell, an operator's log); the board draws the same pair as
       // symbols. Numbers read the same in every language and cannot go tofu.
       return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
+    case "sudoku-reveal":
+      // [Issue #709] Which group was opened, its four digits, and the tag that
+      // names the relabelling. The tag is on the row on purpose: two rows
+      // from one team with one tag are the reuse a hunter is looking for, and
+      // a reader has to be able to SEE that they match. What the tag does not
+      // carry is the relabelling itself -- see fixtures.ts.
+      return `${describeRevealGroup(artifact.group, locale)}: ${artifact.cells.join(" ")} · ${copy.tag} ${artifact.tag}`;
     default: {
       const exhaustive: never = artifact;
       throw new Error(`ledgerPayload: unknown artifact ${JSON.stringify(exhaustive)}`);

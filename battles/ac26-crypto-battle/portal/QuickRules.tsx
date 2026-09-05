@@ -6,25 +6,28 @@ type Locale = "ja" | "en";
 
 interface QuickRulesCopy {
   readonly title: string;
+  readonly explanation: string;
   readonly summary: string;
   readonly choice: string;
 }
 
 export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
   en: {
-    title: "Your first move",
+    title: "How this problem works",
+    explanation: "Answer each task (ORDER) to earn points. Protect your secret numbers: other teams can score by recovering them from what you publish. The highest score at the end wins.",
     // [Issue #677] Press START first. Nothing arrives until someone does, and a
     // player told to pick an Order from an empty belt has been sent to a screen
     // that cannot answer them.
     summary:
-      "Press START THE MATCH. Orders arrive at once; pick one blue ORDER card, then choose one of the two large buttons below it.",
-    choice: "LEAK = score now, but publish a secret fragment. PROVE = do a calculation and keep the fragment protected.",
+      "Start the match. Read the current Order, then use the answer area directly below it. Choose another Order from the list whenever you like.",
+    choice: "For the first Order, “Publish to answer” earns points immediately and shows one secret share. “Prove while protecting the secret” uses your separate sudoku solution. Choose a digit table and fill four cells so the judge can check that you hold that solution, earning points without publishing the share.",
   },
   ja: {
-    title: "最初にやること",
+    title: "この問題の解説",
+    explanation: "お題に答えて得点を競い、終了時にいちばん点が高いチームが勝ちます。自分の秘密の数字は守ります。公開した情報から相手に秘密を読み解かれると、相手も得点するからです。",
     summary:
-      "「試合を始める」を押します。すぐに ORDER が届くので、青い ORDER カードを1枚選び、その下にある大きなボタンを1つ選びます。",
-    choice: "LEAK = すぐ得点する代わりに秘密の破片を公開。PROVE = 計算して破片を守る。",
+      "試合を始めたら「いまのお題」を読み、その直下で答えます。別のお題には「ほかのお題を選ぶ」から切り替えられます。",
+    choice: "最初のお題は「公開して答える」ならすぐ得点し、秘密から作った数（かけら）を1個公開します。「秘密を守って証明する」なら、別に持っている数独の正しい解を使います。表を選んで4マスを埋め、審判に「その解を持っている」と確かめてもらうことで、かけらを公開せずに得点します。",
   },
 };
 
@@ -33,11 +36,11 @@ export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
 // a dark host is white -- white on a pale blue card. The same omission has now
 // been fixed three times in this problem's portal; see BOARD_CSS's header.
 const panelStyle = {
-  border: "2px solid #0972d3",
+  border: "1px solid #dce3ec",
   borderRadius: "8px",
-  padding: "12px",
-  marginBottom: "12px",
-  background: "#f1f8ff",
+  padding: "10px",
+  marginBottom: "8px",
+  background: "#fff",
   color: "#16212e",
 } as const;
 
@@ -46,10 +49,9 @@ export default function QuickRules({ locale }: Pick<PortalSlotProps, "locale">) 
   return (
     <section style={panelStyle} aria-label="crypto-battle-quick-rules">
       <strong>{copy.title}</strong>
+      <p style={{ margin: "4px 0", fontSize: "13px" }}>{copy.explanation}</p>
       <p style={{ margin: "4px 0", fontSize: "13px" }}>{copy.summary}</p>
-      <p style={{ margin: "4px 0 0", fontSize: "13px" }}>
-        <strong>{copy.choice}</strong>
-      </p>
+      <details style={{ fontSize: 13 }}><summary style={{ cursor: "pointer", color: "#315f91" }}>{locale === "ja" ? "最初のお題の選び方" : "Your first Order’s two options"}</summary><p>{copy.choice}</p></details>
     </section>
   );
 }

@@ -21,11 +21,11 @@
  *
  * This module never imports anything from `../game/src/` beyond `types.ts`
  * (types only, erased on emit). In particular it never imports
- * `schnorr-prover.ts` / `shamir.ts` -- PROVE's proof and HUNT's
- * `recoveredSecret` are participant-computed *outside* the portal on
- * purpose (see `RegistrationPanel.tsx`'s header): that local computation is
- * this Battle's actual "compute cost" for those two moves, and the portal
- * would defeat that design if it did the math for you.
+ * `sudoku.ts`'s relabelling helpers or `shamir.ts` -- PROVE's relabelled grid
+ * and HUNT's `recoveredSecret` are participant-computed *outside* the portal
+ * on purpose (see `RegistrationPanel.tsx`'s header): that hand work is this
+ * Battle's actual "compute cost" for those two moves, and the portal would
+ * defeat that design if it did it for you.
  */
 import { useEffect, useState } from "react";
 import type { PortalCoordinationClient, PortalCoordinationOutcome } from "@tenkacloud/portal-plugin-sdk";
@@ -94,6 +94,12 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof vaultRecord.rotateCooldownRemainingMs !== "number") return false;
   if (!Array.isArray(vaultRecord.completedContractIds)) return false;
   if (!Array.isArray(vaultRecord.huntedGenerations)) return false;
+  // [Issue #709] The PROVE panel draws the solution and lists the spent
+  // relabellings from these; a payload from a pre-#709 dispatcher would
+  // otherwise render an empty grid as if it were the team's solution.
+  if (!Array.isArray(vaultRecord.sudokuSolution) || vaultRecord.sudokuSolution.length !== 16) return false;
+  if (!Array.isArray(vaultRecord.usedPermutations)) return false;
+  if (!Array.isArray(vaultRecord.sudokuHuntedGenerations)) return false;
 
   if (!Array.isArray(v.myContracts)) return false;
   // Deep-checked (unlike the shallow "just Array.isArray" style elsewhere in
@@ -106,7 +112,46 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (!Array.isArray(v.publicLedger)) return false;
 
   if (typeof v.teams !== "object" || v.teams === null) return false;
-  if (typeof v.publicCommitments !== "object" || v.publicCommitments === null) return false;
+  // [Issue #709] Every team's puzzle -- what the sudoku HUNT card draws.
+  if (typeof v.publicPuzzles !== "object" || v.publicPuzzles === null) return false;
+
+  // [Issue #696] Same fail-closed rule as `prime` / `threshold`: the HUNT card
+  // prints "N of M attempts left" and the miss banner prints the price from
+  // these, and a payload from a dispatcher that predates them would otherwise
+  // render `undefined` where the cost of a move belongs.
+  if (typeof v.huntAttempts !== "object" || v.huntAttempts === null) return false;
+  if (typeof v.sudokuHuntAttempts !== "object" || v.sudokuHuntAttempts === null) return false;
+  if (typeof v.wrongHuntCost !== "number" || !Number.isFinite(v.wrongHuntCost)) return false;
+  if (typeof v.wrongProveCost !== "number" || !Number.isFinite(v.wrongProveCost)) return false;
+  if (v.rpsHunt !== undefined) {
+    const h = v.rpsHunt as Record<string, unknown> | null;
+    if (!h || typeof h !== "object" || !Array.isArray(h.targets) || !Array.isArray(h.pending) || typeof h.winPoints !== "number") return false;
+    const hand = (x: unknown) => x === 1 || x === 2 || x === 3;
+    const identified = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null
+      && typeof (x as Record<string, unknown>).targetTeamId === "string"
+      && typeof (x as Record<string, unknown>).duelId === "string"
+      && typeof (x as Record<string, unknown>).generation === "number";
+    for (const t of h.targets) {
+      if (!identified(t) || typeof t.commitment !== "number" || typeof t.remainingMs !== "number" || !Array.isArray(t.evidence)) return false;
+      for (const a of t.evidence) if (!a || a.kind !== "rps-open" || typeof a.contractId !== "string" || typeof a.id !== "string" || !hand(a.hand) || typeof a.randomness !== "number" || typeof a.commitment !== "number") return false;
+    }
+    for (const p of h.pending) if (!identified(p) || !hand(p.predictedHand)) return false;
+    if (h.lastResult !== undefined) {
+      const r = h.lastResult;
+      if (!identified(r) || !hand(r.predictedHand) || (r.actualHand !== undefined && !hand(r.actualHand)) || typeof r.points !== "number" || !["hit", "miss", "cancelled"].includes(String(r.outcome))) return false;
+    }
+  }
+  if (v.lastHunt !== undefined) {
+    const last = v.lastHunt as Record<string, unknown> | null;
+    if (typeof last !== "object" || last === null) return false;
+    if (last.outcome !== "hit" && last.outcome !== "miss") return false;
+  }
+  // [Issue #709] Same shape, same reason: the PROVE banner keys on it.
+  if (v.lastProve !== undefined) {
+    const last = v.lastProve as Record<string, unknown> | null;
+    if (typeof last !== "object" || last === null) return false;
+    if (last.outcome !== "hit" && last.outcome !== "miss") return false;
+  }
 
   return true;
 }

@@ -13,7 +13,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { decodeLedger } from "./ledger-codec.ts";
+import { applyOp, DEFAULT_CONFIG, initialState, migrateState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import { startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState } from "./types.ts";
 
@@ -156,6 +158,93 @@ describe("a config persisted before this version still drives a playable match",
     expect(after.config.contractsPerIssue).toBe(DEFAULT_CONFIG.contractsPerIssue);
   });
 
+  /**
+   * [Issue #695] The pacing shortcut must not reach a match already in progress.
+   *
+   * `isOpeningBatch` asks whether EVERY team is still at zero issued Orders, so
+   * a row mid-match cannot satisfy it -- but that is an argument, and the
+   * argument is what a migration test exists to replace. An upgraded row whose
+   * teams are seven Orders in has to keep the five-minute cadence the whole
+   * scoring model rests on; shortening it there would hand every team a batch
+   * every minute for the remainder of the match.
+   */
+  test("an upgraded row mid-match keeps the full interval, not the onboarding one", () => {
+    const before = legacyConfigState();
+    const config = before.config as unknown as Record<string, unknown>;
+    delete config.onboardingFollowUpMs;
+    const teams = Object.fromEntries(
+      Object.entries(before.teams).map(([id, team]) => [id, { ...team, issuedOrderCount: 7 }]),
+    );
+    const mid: CryptoBattleState = { ...before, teams, nextContractAtMs: 0 };
+
+    const after = tick(mid, 1);
+    expect(after.config.onboardingFollowUpMs).toBe(DEFAULT_CONFIG.onboardingFollowUpMs);
+    // One batch was issued at 0, and the next is a full interval out -- not the
+    // 60s an opening would get.
+    expect(after.nextContractAtMs).toBe(DEFAULT_CONFIG.contractIntervalMs);
+  });
+
+  /**
+   * [Issue #696] The reverse direction of the same question. An old row keeps
+   * its own `prime` (2^61 - 1) because its shares were generated in that field
+   * and rewriting the modulus under a running match would invalidate every one
+   * of them -- but it GAINS the hunt budget, which is harmless there (guessing
+   * was already hopeless) and correct the moment the row is a new match.
+   */
+  test("an upgraded row keeps its own field but gains the hunt budget", () => {
+    const before = legacyConfigState();
+    const config = before.config as unknown as Record<string, unknown>;
+    config.prime = (2n ** 61n - 1n).toString();
+    delete config.maxHuntAttemptsPerTarget;
+    delete (config.scores as Record<string, unknown>).wrongHunt;
+
+    const after = tick(before, 1);
+    expect(after.config.prime).toBe((2n ** 61n - 1n).toString());
+    expect(after.config.maxHuntAttemptsPerTarget).toBe(DEFAULT_CONFIG.maxHuntAttemptsPerTarget);
+    expect(after.config.scores.wrongHunt).toBe(DEFAULT_CONFIG.scores.wrongHunt);
+    expect(after.huntAttempts).toEqual({});
+  });
+
+  /**
+   * [Issue #696] `TeamState.lastHunt` is optional and additive: a row written
+   * before it existed has no such field, and that means the same thing as a
+   * team that has never HUNTed. The projection must not throw on it, and must
+   * not invent an outcome.
+   */
+  test("a team row without lastHunt projects a full budget and no outcome", () => {
+    const before = legacyConfigState();
+    const teams = before.teams as unknown as Record<string, Record<string, unknown>>;
+    for (const row of Object.values(teams)) delete row.lastHunt;
+    const stripped = { ...before, huntAttempts: undefined } as unknown as CryptoBattleState;
+
+    const view = projectForTeam(stripped, "teamA");
+    expect("lastHunt" in view).toBe(false);
+    expect(view.huntAttempts.teamB).toEqual({
+      generation: 1,
+      spent: 0,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    expect(view.wrongHuntCost).toBe(DEFAULT_CONFIG.scores.wrongHunt);
+  });
+
+  /**
+   * [Issue #709] `wrongProveCost` is projected unconditionally and the Portal's
+   * projection guard requires it to be a number. A row from before the sudoku
+   * PROVE has every OTHER config field, so nothing else would trigger the
+   * backfill -- without this entry that match's whole Battle surface reads
+   * as unavailable.
+   */
+  test("a row from before the sudoku PROVE gains its wrong-PROVE price and still projects", () => {
+    const before = legacyConfigState();
+    delete ((before.config as unknown as Record<string, unknown>).scores as Record<string, unknown>).wrongProve;
+
+    const after = tick(before, 1);
+    expect(after.config.scores.wrongProve).toBe(DEFAULT_CONFIG.scores.wrongProve);
+    const view = projectForTeam(before, "teamA");
+    expect(view.wrongProveCost).toBe(DEFAULT_CONFIG.scores.wrongProve);
+    expect(isCryptoBattleProjection(view)).toBe(true);
+  });
+
   test("an expiry charges a real penalty rather than turning the score into NaN", () => {
     // `score + undefined` is NaN, and NaN survives every later addition: the
     // team's total is unrecoverable for the rest of the match.
@@ -271,5 +360,151 @@ describe("an Order from between #645 and #659 still gets its leak rate", () => {
     const score = after.teams.teamA?.score;
     expect(Number.isNaN(score)).toBe(false);
     expect(score).toBe(DEFAULT_CONFIG.scores.contractLeak);
+  });
+});
+
+/**
+ * [Issue #709] A row written while PROVE was still a Schnorr exchange.
+ *
+ * Such a row has `publicCommitments` and no `publicPuzzles`, may carry a
+ * `proof` entry on its ledger, and its Orders may still hold a
+ * `proveCommitment` / `proveChallenge` pair. None of that may take the match
+ * down: the puzzle is derivable from what the row already holds, the legacy
+ * ledger entry decodes and renders, and the stale Order fields are simply
+ * ignored.
+ */
+describe("a match persisted before the sudoku PROVE still loads", () => {
+  function preSudokuState(): CryptoBattleState {
+    let state = tick(startedMatch(CTX), 0);
+    state = tick(state, DEFAULT_CONFIG.contractIntervalMs);
+    const { publicPuzzles: _dropped, ...rest } = state;
+    const legacy = {
+      ...rest,
+      publicCommitments: { teamA: "123", teamB: "456" },
+      teams: Object.fromEntries(
+        Object.entries(state.teams).map(([id, team]) => {
+          const { sudokuHuntedGenerations: _gone, ...older } = team;
+          return [id, older];
+        }),
+      ),
+      contracts: state.contracts.map((c) => ({ ...c, proveCommitment: "9", proveChallenge: "11" })),
+      publicLedger: [
+        ...state.publicLedger,
+        { k: "proof", tm: "teamB", c: "teamB-c1", g: 1, m: "prove", t: 1, o: "9", e: "11", z: "13" },
+      ],
+    } as unknown as CryptoBattleState;
+    return legacy;
+  }
+
+  /**
+   * The platform-facing half of the same guarantee. `stateSchemaVersion` is 3
+   * for this row's sake: a v2 worker would throw on the first `sudoku-reveal`
+   * it decoded, so the version has to say the shape changed, and the
+   * migration has to lift a v2 row to the shape v3 reads.
+   */
+  test("migrateState(row, 2) lifts it to v3: puzzles present, legacy fields gone, legacy ledger kept", () => {
+    const lifted = migrateState(preSudokuState(), 2);
+    expect("publicCommitments" in lifted).toBe(false);
+    for (const teamId of CTX.teamIds) {
+      expect(lifted.publicPuzzles?.[teamId]).toHaveLength(16);
+      expect(lifted.teams[teamId]?.sudokuHuntedGenerations).toEqual([]);
+    }
+    for (const contract of lifted.contracts) {
+      expect("proveCommitment" in contract).toBe(false);
+      expect("proveChallenge" in contract).toBe(false);
+    }
+    expect(lifted.config.scores.wrongProve).toBe(DEFAULT_CONFIG.scores.wrongProve);
+    expect(lifted.publicLedger.some((a) => a.k === "proof")).toBe(true);
+    // What it produced is what the reducer reads: a tick and a projection run.
+    const view = projectForTeam(tick(lifted, (lifted.nowMs ?? 0) + 1), "teamA");
+    expect(view.publicPuzzles.teamB).toHaveLength(16);
+  });
+
+  /**
+   * A v2 row can hold a nonce-reuse HUNT the visible ledger had already
+   * earned. v3 cannot serve it, so the migration refuses that row rather than
+   * silently retiring the attack mid-match; a row where every other team has
+   * already collected on it carries nothing v3 loses, and migrates.
+   */
+  test("migrateState refuses a v2 row with an UNSPENT nonce-reuse HUNT, and accepts a spent one", () => {
+    const base = preSudokuState();
+    const reused = {
+      ...base,
+      publicLedger: [
+        ...base.publicLedger,
+        { k: "proof", tm: "teamB", c: "teamB-c2", g: 1, m: "prove", t: 2, o: "9", e: "17", z: "21" },
+      ],
+    } as unknown as CryptoBattleState;
+    expect(base.teams.teamB?.generation).toBe(1);
+    expect(() => migrateState(reused, 2)).toThrow(/unspent nonce-reuse HUNT/);
+
+    const spent = {
+      ...reused,
+      successfulHunts: [...(reused.successfulHunts ?? []), JSON.stringify(["teamA", "teamB", 1])],
+    } as unknown as CryptoBattleState;
+    expect(migrateState(spent, 2).publicPuzzles?.teamB).toHaveLength(16);
+
+    // An ENDED match cannot spend anything: it migrates for its record.
+    const ended = { ...reused, phase: "ended" } as unknown as CryptoBattleState;
+    expect(migrateState(ended, 2).phase).toBe("ended");
+
+    // A reuse on a RETIRED generation is history, not exposure.
+    const rotated = {
+      ...reused,
+      teams: { ...reused.teams, teamB: { ...reused.teams.teamB, generation: 2 } },
+    } as unknown as CryptoBattleState;
+    expect(migrateState(rotated, 2).teams.teamB?.generation).toBe(2);
+  });
+
+  test("migrateState chains v1 through v2, and refuses a version it does not know", () => {
+    const v2 = preSudokuState();
+    const v1 = { ...v2, publicLedger: decodeLedger(v2.publicLedger) };
+    const lifted = migrateState(v1, 1);
+    expect(lifted.publicLedger).toEqual(migrateState(v2, 2).publicLedger);
+    expect(lifted.publicPuzzles?.teamA).toHaveLength(16);
+    expect(() => migrateState(v2, 4)).toThrow();
+    expect(() => migrateState(v2, 0)).toThrow();
+    expect(() => migrateState(null, 2)).toThrow();
+    expect(() => migrateState({ seed: "x" }, 2)).toThrow();
+  });
+
+  test("every team's puzzle is backfilled from the seed, and matches its vault", () => {
+    const state = preSudokuState();
+    for (const teamId of CTX.teamIds) {
+      const view = projectForTeam(state, teamId);
+      const puzzle = view.publicPuzzles[teamId];
+      if (!puzzle) throw new Error(`expected a puzzle for ${teamId}`);
+      expect(puzzle.filter((v) => v !== 0)).toHaveLength(8);
+      puzzle.forEach((v, i) => {
+        if (v !== 0) expect(view.vault.sudokuSolution[i]).toBe(v);
+      });
+      expect(view.vault.sudokuHuntedGenerations).toEqual([]);
+    }
+  });
+
+  test("a legacy proof row still decodes, and the new PROVE works beside it", () => {
+    const state = preSudokuState();
+    const view = projectForTeam(state, "teamA");
+    expect(view.publicLedger.some((a) => a.kind === "proof")).toBe(true);
+    const order = state.contracts.find(
+      (c) => c.teamId === "teamA" && c.status === "open" && c.allowedMethods.includes("prove"),
+    );
+    if (!order) throw new Error("expected a PROVE-able order");
+    const op = {
+      kind: "prove-sudoku" as const,
+      contractId: order.id,
+      grid: view.vault.sudokuSolution.map((v) => [2, 3, 4, 1][v - 1] ?? 0),
+    };
+    expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
+    const next = applyOp(state, "teamA", op);
+    expect(next.contracts.find((c) => c.id === order.id)?.resolution).toBe("prove");
+    expect(next.publicLedger.at(-1)?.k).toBe("sudoku-reveal");
+  });
+
+  test("the backfilled puzzle is written back, so the migration is not redone forever", () => {
+    const state = preSudokuState();
+    const next = tick(state, 2 * DEFAULT_CONFIG.contractIntervalMs);
+    expect(next.publicPuzzles).toBeDefined();
+    expect(Object.keys(next.publicPuzzles ?? {}).sort()).toEqual([...CTX.teamIds].sort());
   });
 });

@@ -1,62 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import { applyOp, DEFAULT_CONFIG, initialState, tick, validateOp } from "./reducer.ts";
-import { buildLeakOp, startedMatch } from "./playtest.ts";
+import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { buildClearingOp, buildLeakOp } from "./playtest.ts";
+import { huntKey, storedHuntKey } from "./hunt-key.ts";
 import { HINT_LEVELS } from "./hints.ts";
 import { TERMINAL_ORDER_RETENTION_BATCHES } from "./reducer.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /**
- * [Issue #659] How big one match's persisted state gets, and where that stops
- * fitting.
+ * Full 90-minute participant route: one opening Order, then every batch at its
+ * actual arrival. All hints are purchased; leakable Orders disclose; the other
+ * individual Orders are computed; both stages of every duel finish. Every team
+ * also spends its RPS budget against every eligible opponent. Near match end,
+ * ROTATE reopens budgets so pending predictions coexist with the full ledger.
+ * Measure before opening and after settlement; the terminal row is not the peak.
  *
- * The whole match -- every team, every Order, the entire public record -- is
- * ONE row, keyed `tenant x event x problem x run` and rewritten on every op
- * (see the platform's `coordination-store`). On the DynamoDB backend a single
- * item is capped at 400 KB, and there is no partial write: the tick that
- * crosses the line fails, and the match stops mid-play with no obvious cause.
+ * Use 26-character team IDs, epoch timestamps and UTF-8 byte length. The old
+ * LEAK-only fixture omitted FHE/MPC/PROVE and RPS records, used short IDs and
+ * missed rush Orders when advancing on five-minute boundaries after onboarding.
+ * That path understated the row; it was not a worst-case capacity check.
  *
- * `contractsPerIssue` is what makes this worth pinning. Before #659 a team got
- * one Order per issue; it now gets a batch, and since Orders are retained after
- * they resolve (scoring and the debrief both read them back), the row grows
- * with `teams x batch x issues`. That is a real, measured limit on how large a
- * match can be, so it is measured here rather than reasoned about -- the
- * numbers below come from running the real reducer over a full 90-minute match
- * with every team buying every hint and then leaking everything it is allowed
- * to leak, which is the worst case for the Order list, the per-Order fields and
- * the public record at once.
- *
- * The Turso/libSQL backend has no comparable per-row cap, so this ceiling is
- * specifically the DynamoDB one.
- *
- * [Issue #679] `publicLedger`'s PERSISTED form changed (`ledger-codec.ts`) --
- * shorter keys, same content, same `PublicArtifact` shape everywhere else.
- * Both columns below were measured with `playWorstCase(99)` on the SAME base
- * (post-#688-#692 `startedMatch`), the `before` column by running this file's
- * own worst case against `origin/main` -- not carried over from an earlier
- * measurement and not read off the declared budget.
- *
- *   |               | before      | after       | change |
- *   |---------------|-------------|-------------|--------|
- *   | whole row     | 1,682,142 B | 1,252,008 B | -25.6% |
- *   | publicLedger  | 1,108,286 B |   678,152 B | -38.8% |
- *   | per team      |    16,976 B |    12,636 B | -25.6% |
- *   | ledger / row  |       65.9% |       54.2% |        |
- *
- * `contracts` is unchanged at 395,826 B -- this module never touches
- * `Contract`, only `publicLedger`'s persisted shape -- so it is now the larger
- * single field's nearest rival and, at 386.5 KB, is itself above DynamoDB's
- * 384 KB usable ceiling. `ddbMaxTeams` moved from 17 to 24 as a direct result
- * of the ledger shrinking.
- *
- * The design doc estimated 450-550 KB for the ledger. The measured 662.3 KB is
- * ABOVE that -- the estimate was wrong, not the implementation: it forgot that
- * `teamId` and `kind` stay (the first because retention deletes the Contract a
- * ledger entry points at, so its owner cannot be re-derived -- 4,782 of 5,381
- * entries at 99 teams). Adding both back to the estimate lands at ~600 KB.
- * The remaining bytes are the VALUES (bigint-as-decimal-string share/proof/pair
- * fields), which a key rename cannot touch and which the design doc's
- * §"やらないこと" deliberately rules out shrinking.
+ * This scenario measures 2,968,946 peak bytes at 99 teams (2026-09-05), about 30.0 KB
+ * per team. The declaration reserves 30 KiB per team. SQL's platform policy is
+ * 4 MiB; its guard is checked here with 25% headroom. DDB fits 11 teams with that
+ * same headroom. Runtime-specific overrides remain the platform's decision.
  */
 
 /**
@@ -95,7 +62,9 @@ const REQUIRED_HEADROOM = 0.75;
  * request body (`@libsql/client/http`). This is a budget for that round trip,
  * not a hard limit — it exists so the row cannot quietly grow back.
  */
-const TURSO_BUDGET_BYTES = 2 * 1024 * 1024;
+// Matches TenkaCloud infrastructure/lib/problem-deploy/control-data/domain/
+// coordination-budget.ts SQL_STATE_LIMIT_BYTES (4 MiB), with 25% headroom.
+const TURSO_BUDGET_BYTES = 4 * 1024 * 1024 * REQUIRED_HEADROOM;
 
 /**
  * Memoised because `playFullMatch` is deterministic and slow: the worst case
@@ -104,15 +73,16 @@ const TURSO_BUDGET_BYTES = 2 * 1024 * 1024;
  * the per-team figure, then the ceiling itself, then one team past it). Without
  * this the 99-team run alone is played twice and the file times out.
  */
-const worstCaseCache = new Map<number, number>();
-
-function playWorstCase(teamCount: number): number {
+const worstCaseCache = new Map<number, ReturnType<typeof playMeasuredMatch>>();
+function measured(teamCount: number) {
   const cached = worstCaseCache.get(teamCount);
-  if (cached !== undefined) return cached;
-  const size = JSON.stringify(playFullMatch(teamCount)).length;
-  worstCaseCache.set(teamCount, size);
-  return size;
+  if (cached) return cached;
+  const result = playMeasuredMatch(teamCount);
+  worstCaseCache.set(teamCount, result);
+  return result;
 }
+
+function playWorstCase(teamCount: number): number { return measured(teamCount).peak; }
 
 /**
  * Per-test timeout. A full 90-minute match at the platform maximum is a real
@@ -121,11 +91,11 @@ function playWorstCase(teamCount: number): number {
  * measurements, not unit tests, and the alternative is asserting against a
  * number nobody re-derives.
  */
-const HEAVY_TEST_TIMEOUT_MS = 60_000;
+const HEAVY_TEST_TIMEOUT_MS = 120_000;
 
 /**
- * A whole match with every team leaking everything it is allowed to leak, and
- * buying every hint on every Order first.
+ * A whole match with every team finishing every mechanism and duel, choosing
+ * disclosure when offered, and buying every hint on every Order first.
  *
  * [Issue #659 §9] The hints are in the worst case rather than left out of it
  * because that is what a worst case is: `Contract.hintsRevealed` is written on
@@ -134,11 +104,14 @@ const HEAVY_TEST_TIMEOUT_MS = 60_000;
  * about 216 bytes per team over the whole match — real, small, and now pinned
  * rather than discovered at 24 teams in play.
  */
-function playFullMatch(teamCount: number) {
-  const teamIds = Array.from({ length: teamCount }, (_, i) => `team-${i}`);
-  let state = startedMatch({ eventId: "state-size", teamIds, matchSecret: "s".repeat(64) });
-  for (let atMs = 0; atMs <= DEFAULT_CONFIG.matchDurationMs; atMs += DEFAULT_CONFIG.contractIntervalMs) {
-    state = tick(state, atMs);
+function playMeasuredMatch(teamCount: number) {
+  const teamIds = Array.from({ length: teamCount }, (_, i) => String(i).padStart(26, "0"));
+  const startMs = 1_788_595_200_000;
+  const idle = tick(initialState({ eventId: "state-size", teamIds, matchSecret: "s".repeat(64) }), startMs);
+  let state = applyOp(idle, teamIds[0]!, { kind: "start" });
+  let peak=0, pendingPeak=0;
+  for (let atMs = 0; atMs <= DEFAULT_CONFIG.matchDurationMs; atMs = atMs === 0 ? DEFAULT_CONFIG.onboardingFollowUpMs : atMs + DEFAULT_CONFIG.contractIntervalMs) {
+    state = tick(state, startMs + atMs);
     for (const teamId of teamIds) {
       const open = state.contracts.filter((c) => c.teamId === teamId && c.status === "open");
       for (const contract of open) {
@@ -154,10 +127,49 @@ function playFullMatch(teamCount: number) {
         const op = buildLeakOp(contract.id);
         if (validateOp(state, teamId, op).ok) state = applyOp(state, teamId, op);
       }
+      const projection = projectForTeam(state, teamId);
+      for (const c of projection.myContracts.filter(c => c.status === "open" && c.task.kind !== "rps-duel")) {
+        const op = buildClearingOp(c, projectForTeam(state, teamId).vault, projection.prime);
+        if (!op) throw new Error("state footprint: unhandled individual Order");
+        expect(validateOp(state, teamId, op)).toEqual({ ok: true });
+        state = applyOp(state, teamId, op);
+      }
+    }
+    // RPS writes two public artifacts per team. A budget that lets these
+    // Orders expire measures an idle duel, not its maximum record footprint.
+    for (const kind of ["rps-commit", "rps-open"] as const) {
+      if (kind === "rps-open") {
+        // The last active batch reserves predictions beside the nearly full ledger.
+        if (atMs > DEFAULT_CONFIG.matchDurationMs - DEFAULT_CONFIG.contractIntervalMs * 2 && state.phase !== "ended") {
+          for (const teamId of teamIds) {
+            const op={kind:"rotate" as const};
+            if(validateOp(state,teamId,op).ok) state=applyOp(state,teamId,op);
+          }
+        }
+        for (const c of state.contracts.filter(c=>c.status==="open"&&c.task.kind==="rps-duel")) {
+          for (const hunter of teamIds) {
+            if(hunter===c.teamId || (state.huntAttempts[storedHuntKey(state,huntKey(hunter,c.teamId,state.teams[c.teamId]!.generation))]??0)>=state.config.maxHuntAttemptsPerTarget) continue;
+            const op={kind:"hunt-rps" as const,targetTeamId:c.teamId,duelId:(c.task as {duelId:string}).duelId,predictedHand:1};
+            if(validateOp(state,hunter,op).ok) state=applyOp(state,hunter,op);
+          }
+        }
+      }
+      peak=Math.max(peak,Buffer.byteLength(JSON.stringify(state)));
+      pendingPeak=Math.max(pendingPeak,state.contracts.reduce((n,c)=>n+Object.keys(c.rps?.predictions??{}).length,0));
+      for (const teamId of teamIds) {
+      for (const c of state.contracts.filter(c => c.teamId === teamId && c.status === "open" && c.task.kind === "rps-duel")) {
+        const op = kind === "rps-commit" ? { kind, contractId: c.id, commitment: 13 } : { kind, contractId: c.id, hand: 1, randomness: 1 };
+        expect(validateOp(state, teamId, op)).toEqual({ ok: true });
+        state = applyOp(state, teamId, op);
+      }
+    }
     }
   }
-  return state;
+  peak = Math.max(peak, Buffer.byteLength(JSON.stringify(state), "utf8"));
+  return { state, peak, pendingPeak };
 }
+
+function playFullMatch(teamCount: number) { return measured(teamCount).state; }
 
 describe("a full match's persisted state fits the backend that has to hold it", () => {
   test(`a ${PLATFORM_MAX_TEAMS}-team match — the platform's maximum — stays well inside a Turso row`, () => {
@@ -167,9 +179,10 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     // any backend, and it put the supported maximum at six teams against a
     // platform that sells ninety-nine.
     expect(playWorstCase(PLATFORM_MAX_TEAMS)).toBeLessThan(TURSO_BUDGET_BYTES);
+    expect(measured(PLATFORM_MAX_TEAMS).pendingPeak).toBe((PLATFORM_MAX_TEAMS - 1) ** 2);
   }, HEAVY_TEST_TIMEOUT_MS);
 
-  test("the cost per team is linear, so the ceiling can be computed rather than guessed", () => {
+  test("the supported range stays near the per-team budget despite pairwise predictions", () => {
     // A super-linear term — anything cross-team, like a per-pair record — would
     // pass at small sizes and blow up at the top of the range, which no
     // single-size check would catch.
@@ -209,14 +222,11 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     // of it.
     let ddbMaxTeams = Math.floor(budget / (playWorstCase(8) / 8));
     while (ddbMaxTeams > 1 && playWorstCase(ddbMaxTeams) >= budget) ddbMaxTeams -= 1;
+    while (ddbMaxTeams < PLATFORM_MAX_TEAMS && playWorstCase(ddbMaxTeams + 1) < budget) ddbMaxTeams += 1;
 
-    // [Issue #679] Measured at 24 after `ledger-codec.ts` shrank the ledger's
-    // persisted keys (was 17 before that change) -- the floor below is kept a
-    // few teams under the measured value, not raised to it exactly, so an
-    // unrelated few-byte-per-team change to some OTHER field doesn't flake
-    // this test; the exact edge is still pinned precisely by the two
-    // `playWorstCase(ddbMaxTeams [+ 1])` assertions right below.
-    expect(ddbMaxTeams).toBeGreaterThanOrEqual(20);
+    // Pin both sides of the measured boundary. Lossless schema-4 storage
+    // recovers capacity while the fixture now includes pairwise HUNT moves.
+    expect(ddbMaxTeams).toBe(11);
     expect(ddbMaxTeams).toBeLessThan(PLATFORM_MAX_TEAMS);
     // A match at that size really does fit, with the headroom claimed --
     // and one team more does not, so this is the edge and not an understatement
@@ -230,7 +240,8 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     // short retention window. Without that it grew to `issues x batch` per team
     // and dominated everything else.
     const state = playFullMatch(2);
-    const perTeam = state.contracts.filter((c) => c.teamId === "team-0").length;
+    const perTeam = state.contracts.filter((c) => c.teamId === "0".repeat(26)).length;
+    expect(perTeam).toBeGreaterThan(0);
     expect(perTeam).toBeLessThanOrEqual(
       DEFAULT_CONFIG.contractsPerIssue * (TERMINAL_ORDER_RETENTION_BATCHES + 2),
     );
@@ -268,13 +279,11 @@ describe("the state budget this Battle declares to the platform", () => {
   });
 
   test("still matches a re-measured worst case", () => {
-    // Two points and a straight line, which is legitimate only because the
-    // linearity test above holds. Measured at the ends of the supported range
-    // so the fit is not anchored on one size.
-    const small = playWorstCase(4);
+    // RPS predictions are pairwise. Declare from the measured peak at the
+    // maximum roster, then check supported small sizes independently below.
     const large = playWorstCase(PLATFORM_MAX_TEAMS);
-    const perTeam = (large - small) / (PLATFORM_MAX_TEAMS - 4);
-    const base = small - perTeam * 4;
+    const perTeam = large / PLATFORM_MAX_TEAMS;
+    const base = playWorstCase(4) - perTeam * 4;
 
     expect(declared).toBeDefined();
     if (!declared) return;
@@ -295,5 +304,6 @@ describe("the state budget this Battle declares to the platform", () => {
     if (!declared) return;
     const forecast = declared.baseBytes + declared.bytesPerTeam * PLATFORM_MAX_TEAMS;
     expect(forecast).toBeGreaterThanOrEqual(playWorstCase(PLATFORM_MAX_TEAMS));
+    for (const n of [2,4,8,9,10,11]) expect(declared.baseBytes + declared.bytesPerTeam * n).toBeGreaterThanOrEqual(playWorstCase(n));
   }, HEAVY_TEST_TIMEOUT_MS);
 });

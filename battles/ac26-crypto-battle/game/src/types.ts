@@ -10,10 +10,10 @@
  * (TenkaCloudChallenge owns problem content, not platform packages -- see
  * this repo's AGENTS.md "Repository boundary") and MUST NOT be imported here.
  *
- * PROVE (Issue #486 PR2) is a `CryptoBattleOp` discriminant backed by a real
- * Fiat-Shamir Schnorr verifier (schnorr-verifier.ts) -- see that module and
- * schnorr-prover.ts / schnorr-witness.ts / schnorr-transcript.ts / group.ts
- * for the scheme.
+ * PROVE (Issue #486 PR2, rebuilt as ZK sudoku in #709) is the `prove-sudoku`
+ * op: a team hands the judge a relabelled copy of its 4x4 sudoku solution and
+ * the judge publishes one row, column or box of it -- see `sudoku.ts` for the
+ * scheme and why it replaced the Schnorr exchange.
  *
  * JSON-SAFETY INVARIANT (Issue #486 PR3 review fix): `CryptoBattleState` and
  * `CryptoBattleOp` MUST both round-trip cleanly through `JSON.stringify` /
@@ -24,23 +24,24 @@
  * happens before it reaches this package's `validateOp`) and persists `state`
  * through backends that cannot carry a `bigint` either (Turso:
  * `JSON.stringify` throws on one outright; DynamoDB: round-tripping through
- * `Number` silently loses precision above 2^53-1, well under this package's
- * 2048-bit Schnorr group elements and even under `field.ts`'s own 61-bit
- * `P`). So every bigint that used to live in `CryptoBattleState` /
+ * `Number` silently loses precision above 2^53-1, well under `field.ts`'s
+ * own 61-bit `P`). So every bigint that used to live in `CryptoBattleState` /
  * `CryptoBattleOp` (`TeamState.secret`, `TeamState.shares[].value`,
  * `CryptoBattleConfig.prime`, the hunt op's `recoveredSecret`) is a
- * stringified decimal here instead -- the same convention `SchnorrProof` /
- * `ShareArtifact` / `ProofArtifact` / `publicCommitments` already used from
- * PR1/PR2. `game/src`'s pure crypto modules (`field.ts`, `shamir.ts`,
- * `group.ts`, `schnorr-*.ts`, `prng.ts`, `fixtures.ts`) are unaffected and
- * keep working in `bigint` internally -- only the shapes that cross the
- * state/op boundary changed; `reducer.ts` converts at that boundary
- * (`BigInt(...)` on the way in, `.toString()` on the way out).
+ * stringified decimal here instead -- the same convention `ShareArtifact`
+ * already used from PR1. `game/src`'s pure crypto modules (`field.ts`,
+ * `shamir.ts`, `prng.ts`, `fixtures.ts`) are unaffected and keep working in
+ * `bigint` internally -- only the shapes that cross the state/op boundary
+ * changed; `reducer.ts` converts at that boundary (`BigInt(...)` on the way
+ * in, `.toString()` on the way out). Sudoku grids are small integers (1..4)
+ * and travel as plain JSON numbers.
  */
 
+import type { Hand } from "./commitment.ts";
 import type { CipherRung } from "./ladder.ts";
 import type { StoredArtifact } from "./ledger-codec.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
+import type { Permutation, SudokuGrid } from "./sudoku.ts";
 
 // Re-exported so every consumer that already imports this module's shapes gets
 // the Order vocabulary from the same place, rather than having to know that
@@ -51,6 +52,11 @@ export type { PrivacyConstraint, SubmissionMethod };
 export interface CoordinationContext {
   readonly eventId: string;
   readonly teamIds: readonly string[];
+  /**
+   * [Issue #3172] teamId → 参加者に見せる表示名 (platform が roster から解決)。
+   * 無い teamId は id へ fallback する。
+   */
+  readonly teamNames?: Readonly<Record<string, string>>;
   /**
    * [Issue #652] The platform's server-only secret for THIS match
    * (TenkaCloud#3133). High-entropy, never projected, never sent to a browser.
@@ -99,6 +105,8 @@ export interface ScoreRules {
    * not exist.
    */
   readonly contract: number;
+  readonly duelWin: number;
+  readonly duelDraw: number;
   /**
    * [Issue #659] Points for a standard Order fulfilled WITHOUT computing —
    * the participant let the system answer, publishing a plaintext/ciphertext
@@ -118,6 +126,29 @@ export interface ScoreRules {
   readonly huntBonus: number;
   /** Points a target loses when successfully HUNTed (floored at 0, never negative). */
   readonly huntPenalty: number;
+  /**
+   * [Issue #696] What a WRONG HUNT costs the attacker.
+   *
+   * A wrong HUNT used to cost nothing at all: `validateOp` refused it and the
+   * op never reached `applyOp`, so no state moved. That was survivable only
+   * because the field was 2^61 - 1 and guessing was hopeless. Once the field is
+   * small enough to interpolate by hand (`prime`), free retries turn HUNT into
+   * a guessing game and break the problem's own North Star -- "cryptographic
+   * correctness is never left to luck". A wrong HUNT is now an op that lands,
+   * charges this, and burns one of `maxHuntAttemptsPerTarget`.
+   */
+  readonly wrongHunt: number;
+  /**
+   * [Issue #701, #709] What a wrong PROVE costs.
+   *
+   * Under the Schnorr exchange this was what made a 113-value challenge space
+   * sound. The sudoku judge holds the whole solution, so a wrong grid never
+   * verifies by luck -- the charge now exists so a team cannot use the judge as
+   * a free checker for a grid it is not sure of, and so a submitted grid is a
+   * move that happened rather than a request that was refused (see
+   * `TeamState.lastProve`).
+   */
+  readonly wrongProve: number;
   /**
    * [Issue #659 §9] What each successive hint on an Order costs, by level —
    * `hintCosts[0]` for the first hint opened, `[1]` for the second, and so on.
@@ -187,6 +218,40 @@ export interface CryptoBattleConfig {
    * `state-size.test.ts` measures both ceilings and OPERATOR.md records them.
    */
   readonly contractsPerIssue: number;
+  /**
+   * [Issue #695] How long (ms) after the ONE-Order opening batch the first full
+   * batch arrives.
+   *
+   * The opening batch is a single Order on purpose (see `batchSize` in
+   * `tick`): six at once, in five different methods, is a menu rather than a
+   * first move. But pacing the batch AFTER it at the full `contractIntervalMs`
+   * meant a player who answered that single Order watched an empty belt for
+   * five minutes, which reads as a broken game rather than a slow one -- the
+   * live two-team run reported exactly that ("次のオーダーがこない").
+   *
+   * Only the opening is shortened. Every batch from the second onward keeps
+   * `contractIntervalMs`, so the no-prefetch rule that the LEAK/PROVE economy
+   * rests on is untouched for the whole match. The one bounded exception is
+   * that the opening Order (TTL `contractTtlMs`) is still open when the first
+   * full batch lands, so a team holds `contractsPerIssue + 1` Orders for the
+   * remainder of that TTL. One extra Order in the opening minutes does not
+   * give LEAK the backlog it would need to dominate PROVE, and the opening
+   * Order keeps the full TTL because charging a beginner `expiredOrder` for
+   * missing a 60-second first move is the opposite of an onboarding.
+   */
+  readonly onboardingFollowUpMs: number;
+  /**
+   * [Issue #696] How many HUNT attempts one team gets against one target's one
+   * generation, successful or not.
+   *
+   * This is what makes a hand-sized `prime` sound. Interpolating three shares
+   * has to stay the cheapest way to a target's secret: with `prime` = 97 and
+   * unlimited retries, submitting every field element costs a script two
+   * seconds, so the cap -- not the modulus -- is what forces the arithmetic to
+   * actually be done. Set it at or below `threshold` so a team can never buy
+   * more attempts than the shares it would have needed anyway.
+   */
+  readonly maxHuntAttemptsPerTarget: number;
   /**
    * How long (ms) an issued Order stays "open" before it expires unclaimed.
    *
@@ -291,7 +356,19 @@ export type OrderTask =
        * rather than stored.
        */
       readonly plaintext: readonly number[];
-    };
+    }
+  /**
+   * [Issue #709] Show that you hold your sudoku solution, without showing it.
+   *
+   * Carries no payload: the team's puzzle is already public
+   * (`CryptoBattleState.publicPuzzles`) and its solution is in its own vault.
+   * The one thing the Order adds -- which row, column or box the judge will
+   * open -- is derived from the Order id at judgement time and deliberately not
+   * stated here, so a team relabels the whole grid rather than the four cells
+   * it knows will be read.
+   */
+  | { readonly kind: "zk-sudoku" }
+  | { readonly kind: "rps-duel"; readonly duelId: string; readonly opponentTeamId: string };
 
 export type OrderTaskKind = OrderTask["kind"];
 
@@ -306,7 +383,44 @@ export type ContractStatus = "open" | "completed" | "expired";
  * unchanged on purpose (#646 non-goals), so a rename does not churn every
  * reducer test at the same time as the model grows.
  */
+export interface RpsOpening { readonly hand: Hand; readonly randomness: number }
+export type DuelOutcome = "win" | "loss" | "draw" | "forfeit-win";
+/** Judge-held data: never spread this into a participant projection. */
+export interface RpsHuntResult {
+  readonly targetTeamId: string;
+  readonly duelId: string;
+  readonly generation: number;
+  readonly predictedHand: Hand;
+  readonly actualHand?: Hand;
+  readonly outcome: "hit" | "miss" | "cancelled";
+  readonly points: number;
+  readonly atMs: number;
+}
+export interface RpsHuntTarget {
+  readonly targetTeamId: string;
+  readonly duelId: string;
+  readonly generation: number;
+  readonly commitment: number;
+  readonly remainingMs: number;
+  readonly evidence: readonly RpsOpenArtifact[];
+}
+export interface RpsHuntProjection {
+  readonly targets: readonly RpsHuntTarget[];
+  readonly pending: readonly { readonly targetTeamId: string; readonly duelId: string; readonly generation: number; readonly predictedHand: Hand }[];
+  readonly lastResult?: RpsHuntResult;
+  readonly winPoints: number;
+}
+export interface RpsSubmission {
+  /** Private: attacker -> [prediction, budget generation at acceptance]. */
+  /** Keys are fixed sorted-roster positions, never participant-visible IDs. */
+  readonly predictions?: Readonly<Record<string, readonly [Hand, number]>>;
+  readonly commitment?: number;
+  readonly opening?: RpsOpening;
+  readonly outcome?: DuelOutcome;
+}
+
 export interface Contract {
+  readonly rps?: RpsSubmission;
   readonly id: string;
   /** The team this Order was issued to (only that team may submit against it). */
   readonly teamId: string;
@@ -370,20 +484,6 @@ export interface Contract {
   readonly hintsRevealed?: number;
 }
 
-/**
- * A non-interactive Fiat-Shamir Schnorr proof, as PROVE submits it and as
- * the Public Ledger's `ProofArtifact` records it -- see schnorr-prover.ts /
- * schnorr-verifier.ts. Both fields are stringified bigints (same convention
- * as `ShareArtifact.value` below): a decimal `Contract.id`-sized JSON payload
- * stays JSON-safe without a bigint-aware serializer.
- */
-export interface SchnorrProof {
-  /** The Schnorr commitment R = g^k mod p. */
-  readonly commitment: string;
-  /** The response z = k + e*w mod group.order. */
-  readonly response: string;
-}
-
 /** One entry in the Public Ledger: a share value a team chose to reveal via LEAK. */
 export interface ShareArtifact {
   readonly id: string;
@@ -408,15 +508,12 @@ export interface ShareArtifact {
 }
 
 /**
- * One entry in the Public Ledger: an audit-only record that a team completed
- * a Contract via PROVE. Deliberately holds ONLY the proof transcript
- * (`commitment` / `response`) -- never a share value and never the secret or
- * witness those were derived from. Recording the transcript at all (rather
- * than nothing) is what makes a PROVE completion independently replay-
- * verifiable after the fact (Issue #486's trusted-verification minimum bar),
- * while the transcript itself carries no cryptographic material a viewer
- * could use to reconstruct anything (see schnorr.test.ts's secret-non-
- * leakage test).
+ * LEGACY -- one entry in the Public Ledger from a Schnorr PROVE, which #709
+ * retired. Nothing writes this shape any more; it stays so a match persisted
+ * before #709 (rows live up to seven days) still decodes and still renders,
+ * and so `ledger-codec.ts` never has to guess at an entry it does not know.
+ * The transcript (`commitment` / `challenge` / `response`) carries no
+ * cryptographic material a viewer could use to reconstruct anything.
  */
 export interface ProofArtifact {
   readonly id: string;
@@ -428,6 +525,23 @@ export interface ProofArtifact {
   readonly method: SubmissionMethod;
   readonly contractId: string;
   readonly commitment: string;
+  /**
+   * [Issue #701] The challenge this transcript answered.
+   *
+   * Public by the time it is here -- the participant read it off their own
+   * Order to compute the response. Publishing it is what makes the row a
+   * TRANSCRIPT rather than two thirds of one: a reader can now check
+   * `g^s == R * Y^e` themselves, and, more to the point, two transcripts that
+   * reuse a commitment carry two different challenges, which is the pair of
+   * linear equations `hunt-nonce` solves for the witness. With the challenge
+   * bound to the match seed (#701) that pair is no longer derivable from public
+   * material any other way, so without this field the nonce-reuse HUNT would
+   * have quietly stopped being reachable by a participant.
+   *
+   * Optional so a row written before this version still decodes; the ledger
+   * codec leaves it absent rather than inventing one.
+   */
+  readonly challenge?: string;
   readonly response: string;
   readonly postedAtMs: number;
 }
@@ -531,12 +645,53 @@ export interface CipherPairArtifact {
   readonly postedAtMs: number;
 }
 
+/**
+ * [Issue #709] One entry in the Public Ledger: the row, column or box the
+ * judge opened after a successful PROVE.
+ *
+ * What is public here is exactly what ZK sudoku makes public: four cells of a
+ * RELABELLED grid, plus which group they are. The digits are `π(S)`'s, not
+ * `S`'s, and one group of a relabelled grid is a permutation of 1..4 whatever
+ * the solution was -- so a single reveal says nothing about `S`. Two reveals
+ * under the SAME relabelling start to say something, and `tag` is what makes
+ * that reuse visible: equal tags, same π. See `fixtures.ts`'s
+ * `derivePermutationTag` on why the tag reveals equality and nothing else.
+ */
+export interface SudokuRevealArtifact {
+  readonly id: string;
+  readonly teamId: string;
+  readonly generation: number;
+  readonly kind: "sudoku-reveal";
+  readonly method: SubmissionMethod;
+  readonly contractId: string;
+  /** Which constraint group was opened: 0-3 rows, 4-7 columns, 8-11 boxes. */
+  readonly group: number;
+  /** The four digits of the RELABELLED grid in that group, in cell order. */
+  readonly cells: readonly number[];
+  /** Names the relabelling without revealing it -- equal tags, same π. */
+  readonly tag: string;
+  readonly postedAtMs: number;
+}
+
+export interface RpsCommitArtifact {
+  readonly id: string; readonly teamId: string; readonly generation: number;
+  readonly kind: "rps-commit"; readonly method: SubmissionMethod;
+  readonly contractId: string; readonly duelId: string; readonly postedAtMs: number;
+  readonly commitment: number;
+}
+export interface RpsOpenArtifact extends Omit<RpsCommitArtifact, "kind">, RpsOpening {
+  readonly kind: "rps-open";
+}
+
 export type PublicArtifact =
+  | RpsCommitArtifact
+  | RpsOpenArtifact
   | ShareArtifact
   | ProofArtifact
   | CiphertextArtifact
   | PartialArtifact
-  | CipherPairArtifact;
+  | CipherPairArtifact
+  | SudokuRevealArtifact;
 
 /**
  * A Shamir share as it lives in `CryptoBattleState` / `CryptoBattleProjection`
@@ -558,6 +713,8 @@ export interface StoredShare {
  */
 export interface TeamState {
   readonly teamId: string;
+  /** [Issue #3172] 表示名 (initialState 時点の roster 由来)。 未解決なら省略。 */
+  readonly teamName?: string;
   readonly score: number;
   /** Increments on every successful ROTATE; shares/secret below are for THIS generation. */
   readonly generation: number;
@@ -579,6 +736,8 @@ export interface TeamState {
    * live Order as "already completed".
    */
   readonly issuedOrderCount: number;
+  /** Includes skipped stale duel slots; absent on pre-duel rows means zero. */
+  readonly issuedDuelCount?: number;
   readonly completedContractIds: readonly string[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
   readonly huntedGenerations: readonly number[];
@@ -595,6 +754,53 @@ export interface TeamState {
    * mine is broken" is the question they need answered, not "am I broken".
    */
   readonly cipherHuntedGenerations: Readonly<Record<string, readonly number[]>>;
+  /**
+   * [Issue #709] This team's OWN generations whose sudoku solution an attacker
+   * has recovered through a reused relabelling. Kept apart from
+   * `huntedGenerations` for the same reason `cipherHuntedGenerations` is: a
+   * different secret, broken a different way, and a participant has to be
+   * able to tell which of theirs gave way. Absent on a row written before
+   * #709; `migrateTeams` fills it in.
+   */
+  readonly sudokuHuntedGenerations?: readonly number[];
+  /**
+   * [Issue #709] This team's most recent PROVE, and whether the judge accepted
+   * it. Same reason `lastHunt` exists: a wrong grid is a move that lands and is
+   * charged, the SDK answers it `{ ok: true }` like a hit, and the projection
+   * can only report what the state remembers.
+   */
+  readonly lastProve?: LastProve;
+  /**
+   * [Issue #696] This team's most recent Shamir HUNT, and whether it landed.
+   *
+   * Since #696 a wrong HUNT is a move that lands (charged, budget spent) rather
+   * than a request `validateOp` refuses, so the plugin SDK answers it with the
+   * same `{ ok: true }` it answers a hit with. The projection is a pure
+   * function of state, so the only way the Portal can tell the two apart is
+   * for the state to remember which one just happened. Absent on a row written
+   * before this existed, and on a team that has never HUNTed -- both mean the
+   * same thing: nothing to report.
+   */
+  readonly lastHunt?: LastHunt;
+  readonly lastRpsHunt?: RpsHuntResult;
+}
+
+/** [Issue #696] What a Shamir HUNT came to -- see `TeamState.lastHunt`. */
+export type HuntOutcome = "hit" | "miss";
+
+/** [Issue #696] One HUNT, as the attacker's own record of it. */
+export interface LastHunt {
+  readonly targetTeamId: string;
+  readonly generation: number;
+  readonly outcome: HuntOutcome;
+  /** [Issue #709] Which secret was hunted. Absent means the Shamir secret. */
+  readonly via?: "sudoku";
+}
+
+/** [Issue #709] One PROVE, as the proving team's own record of it. */
+export interface LastProve {
+  readonly contractId: string;
+  readonly outcome: "hit" | "miss";
 }
 
 export interface CryptoBattleState {
@@ -630,24 +836,40 @@ export interface CryptoBattleState {
   readonly publicLedger: readonly StoredArtifact[];
   readonly teams: Readonly<Record<string, TeamState>>;
   /**
-   * Every team's current-generation Schnorr public commitment
-   * `Y = g^w mod p` (stringified bigint), keyed by teamId -- PROVE's
-   * verifier checks a submitted proof against this. Public by construction
-   * (unlike `TeamState.secret` / `.shares`): derived once per team at
-   * `initialState` and re-derived on every ROTATE (see reducer.ts's
-   * `applyRotate`), so it always reflects the team's *current* generation
-   * the same way `TeamState.generation` does. Lives at the state's top
-   * level, not inside `TeamState`, specifically so it is unambiguous that
+   * [Issue #709] Every team's current-generation sudoku PUZZLE -- the eight
+   * given cells of its solution, 0 for a hidden cell -- keyed by teamId.
+   * Public by construction (unlike `TeamState.secret` / `.shares`): derived
+   * once per team at `initialState` and re-derived on every ROTATE (see
+   * reducer.ts's `applyRotate`), so it always reflects the team's *current*
+   * generation the same way `TeamState.generation` does. Lives at the state's
+   * top level, not inside `TeamState`, specifically so it is unambiguous that
    * this field -- unlike everything else `TeamState` holds -- is always safe
    * to hand to every team via `projectForTeam`.
+   *
+   * Optional on the type only because a row written before #709 has none;
+   * `withMigratedContracts` derives it on first read, so every reducer path
+   * below sees it present.
    */
-  readonly publicCommitments: Readonly<Record<string, string>>;
+  readonly publicPuzzles?: Readonly<Record<string, SudokuGrid>>;
   /**
    * Replay guard: `JSON.stringify([attackerTeamId, targetTeamId, generation])`
    * for every successful HUNT. JSON-encoded (not `|`-joined) so a team id
    * that happens to contain `|` can never collide with a different triple.
    */
   readonly successfulHunts: readonly string[];
+  /**
+   * Schema 4 uses sorted-roster numeric positions in these private JSON keys.
+   * Shamir and RPS share a key; sudoku has its own prefixed key.
+   * [Issue #696] Attempts spent per `attacker:target:generation`, successful or
+   * not, against `config.maxHuntAttemptsPerTarget`.
+   *
+   * Separate from `successfulHunts` because they answer different questions:
+   * that one says "this pairing is finished", this one says "this pairing has
+   * spent N of its tries". A row written before this field existed migrates to
+   * `{}` -- an older match played in a 2^61 - 1 field where retries were
+   * pointless, so crediting it a full budget takes nothing away from anyone.
+   */
+  readonly huntAttempts: Readonly<Record<string, number>>;
   /**
    * Ordered log of successful HUNTs, WITH a timestamp (Issue #486 PR5,
    * `replay.ts`). `successfulHunts` above deliberately carries only the
@@ -670,9 +892,14 @@ export interface HuntLogEntry {
   readonly targetTeamId: string;
   readonly generation: number;
   readonly atMs: number;
+  /** [Issue #709] Which secret fell. Absent means the Shamir secret. */
+  readonly via?: "sudoku";
 }
 
 export type CryptoBattleOp =
+  | { readonly kind: "hunt-rps"; readonly targetTeamId: string; readonly duelId: string; readonly predictedHand: number }
+  | { readonly kind: "rps-commit"; readonly contractId: string; readonly commitment: number }
+  | { readonly kind: "rps-open"; readonly contractId: string; readonly hand: number; readonly randomness: number }
   | { readonly kind: "leak"; readonly contractId: string }
   /**
    * [Issue #645 Phase 2] The ciphertext this team computed for an FHE Order.
@@ -692,19 +919,20 @@ export type CryptoBattleOp =
    */
   | { readonly kind: "mpc"; readonly contractId: string; readonly partial: string }
   /**
-   * [Issue #645 Phase 5] A HUNT that exploits nonce reuse rather than collected
-   * shares: two of the target's proof transcripts on the Public Ledger share a
-   * commitment, which solves for the witness behind their public commitment Y.
-   * A separate op kind rather than a variant of "hunt" so each carries exactly
+   * [Issue #709] A HUNT that exploits a REUSED RELABELLING rather than
+   * collected shares: two of the target's sudoku reveals in one generation
+   * carry the same tag, so their cells belong to one `π(S)`, and lining those
+   * cells up against the target's public puzzle recovers π and then `S`. A
+   * separate op kind rather than a variant of "hunt" so each carries exactly
    * the evidence its own check needs, and so neither branch has to ask which
-   * kind of hunt it is looking at.
+   * kind of hunt it is looking at. The successor of the nonce-reuse HUNT.
    */
   | {
-      readonly kind: "hunt-nonce";
+      readonly kind: "hunt-sudoku";
       readonly targetTeamId: string;
       readonly generation: number;
-      /** The recovered Schnorr witness w, satisfying g^w = Y. Stringified decimal. */
-      readonly recoveredWitness: string;
+      /** The target's recovered solution: 16 cells, row-major, each 1..4. */
+      readonly solution: readonly number[];
     }
   | {
       readonly kind: "hunt";
@@ -712,23 +940,23 @@ export type CryptoBattleOp =
       readonly generation: number;
       /**
        * Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT".
-       * `validateOp`'s "hunt" branch parses this with `schnorr-verifier.ts`'s
-       * `parseCanonicalDecimal` (the same untrusted-decimal-parsing gate
-       * PROVE's proof fields already go through) and rejects a malformed
-       * value with `{ ok: false }` rather than throwing.
+       * `validateOp`'s "hunt" branch parses this with `decimal.ts`'s
+       * `parseCanonicalDecimal` (the untrusted-decimal-parsing gate every
+       * submitted number goes through) and rejects a malformed value with
+       * `{ ok: false }` rather than throwing.
        */
       readonly recoveredSecret: string;
     }
   /**
    * [Issue #659] The ciphertext this team computed for a ladder Order.
    *
-   * A separate op from `prove` because it carries different evidence: PROVE
-   * hands over a Schnorr transcript that proves knowledge of the Shamir secret
+   * A separate op from `prove-sudoku` because it carries different evidence:
+   * PROVE hands over a relabelled grid that shows knowledge of the solution
    * without revealing it, while this hands over the ANSWER and relies on the
    * judge already holding the key to check it. Both publish nothing an attacker
    * can use, and that shared property is what makes them both "do the work
    * yourself" methods -- but merging them would mean one branch asking which
-   * kind of evidence it was looking at, which is what `hunt-nonce`'s comment
+   * kind of evidence it was looking at, which is what `hunt-sudoku`'s comment
    * above already argues against.
    *
    * Accepts pictures or their numeric values (see `parseAnswer`): a keyboard
@@ -792,7 +1020,20 @@ export type CryptoBattleOp =
    */
   | { readonly kind: "reveal-hint"; readonly contractId: string }
   | { readonly kind: "rotate" }
-  | { readonly kind: "prove"; readonly contractId: string; readonly proof: SchnorrProof };
+  /**
+   * [Issue #709] PROVE: the team's sudoku solution with every digit relabelled
+   * by a permutation the team chose itself.
+   *
+   * One op, because the protocol is no longer interactive: the judge holds the
+   * solution and checks the whole grid, so there is no challenge to wait for
+   * and nothing a prover could grind. What the judge then PUBLISHES -- one row,
+   * column or box of this grid -- is chosen by the Order id, which the team
+   * could not steer. A grid that is not a relabelling of the team's solution
+   * lands, charges `scores.wrongProve`, and publishes nothing; a grid that IS
+   * the solution, unrelabelled, is refused before it can cost anything,
+   * because submitting it would publish four real cells for no reason.
+   */
+  | { readonly kind: "prove-sudoku"; readonly contractId: string; readonly grid: readonly number[] };
 
 /**
  * [Issue #659 §9] One rung of an Order's hint ladder, as its owner sees it.
@@ -822,6 +1063,21 @@ export interface VaultProjection {
   readonly rotateCooldownRemainingMs: number;
   readonly completedContractIds: readonly string[];
   readonly huntedGenerations: readonly number[];
+  /**
+   * [Issue #709] This team's own 4x4 sudoku solution for the current
+   * generation -- 16 cells, row-major, each 1..4. The thing PROVE relabels.
+   */
+  readonly sudokuSolution: SudokuGrid;
+  /**
+   * [Issue #709] The relabellings this team has ALREADY used on reveals of
+   * the current generation, oldest first, so it can avoid reusing one. There
+   * are only 24, so a team that does not keep track will collide by accident;
+   * this is the judge keeping track for them. Recovered by the trusted side
+   * from the tags on the ledger (it holds the seed; nobody else can do this).
+   */
+  readonly usedPermutations: readonly Permutation[];
+  /** [Issue #709] Generations whose solution an attacker recovered. */
+  readonly sudokuHuntedGenerations: readonly number[];
 }
 
 /**
@@ -878,7 +1134,16 @@ export type OrderTaskProjection =
       readonly pairsToBreak: number;
       /** THIS team's key for the rung, at its current generation. */
       readonly myKey: number;
-    };
+    }
+  /**
+   * [Issue #709] Nothing to add: the solution is on the vault and the puzzle
+   * is public. Kept as its own arm so a card can name the job.
+   */
+  | { readonly kind: "zk-sudoku" }
+  | { readonly kind: "rps-duel"; readonly duelId: string; readonly opponentTeamId: string;
+      readonly myCommitment?: number; readonly opponentCommitment?: number;
+      readonly myOpening?: RpsOpening; readonly opponentOpened: boolean;
+      readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
   readonly id: string;
@@ -929,8 +1194,26 @@ export interface ContractProjection {
   readonly hints: readonly HintProjection[];
 }
 
+/**
+ * [Issue #696] The reader's own HUNT budget against ONE other team's CURRENT
+ * generation -- see `CryptoBattleProjection.huntAttempts`.
+ */
+export interface HuntBudgetProjection {
+  /** The generation these attempts count against; a ROTATE starts a fresh one. */
+  readonly generation: number;
+  /** Attempts already spent, hit or miss. */
+  readonly spent: number;
+  /** `config.maxHuntAttemptsPerTarget`. */
+  readonly max: number;
+}
+
 export interface TeamSummaryProjection {
   readonly teamId: string;
+  /**
+   * [Issue #3172] 表示名。 未解決なら teamId のまま (= 従来と同じ見え方)。
+   * 試合開始後の改名は反映されない — ctx を受け取る hook が `initialState` だけのため。
+   */
+  readonly teamName: string;
   readonly score: number;
   readonly generation: number;
   readonly huntedGenerationCount: number;
@@ -942,6 +1225,8 @@ export interface TeamSummaryProjection {
  * place that has to get the redaction right.
  */
 export interface CryptoBattleProjection {
+  /** Public evidence plus only this reader’s private predictions/results. */
+  readonly rpsHunt?: RpsHuntProjection;
   readonly phase: Phase;
   /**
    * [Issue #645] The modulus every calculation in this Battle runs over,
@@ -990,6 +1275,46 @@ export interface CryptoBattleProjection {
   readonly otherOpenContractCount: number;
   readonly publicLedger: readonly PublicArtifact[];
   readonly teams: Readonly<Record<string, TeamSummaryProjection>>;
-  /** Every team's current-generation Schnorr public commitment -- see CryptoBattleState's field of the same name. Public by construction, safe for every team to see. */
-  readonly publicCommitments: Readonly<Record<string, string>>;
+  /**
+   * [Issue #709] Every team's current-generation sudoku puzzle -- see
+   * `CryptoBattleState.publicPuzzles`. Public by construction, safe for every
+   * team to see, and the thing a hunter lines a reused relabelling up against.
+   */
+  readonly publicPuzzles: Readonly<Record<string, SudokuGrid>>;
+  /**
+   * [Issue #696] MY HUNT attempts against every OTHER team, keyed by that
+   * team's id, for its current generation.
+   *
+   * The cap (`config.maxHuntAttemptsPerTarget`) is what makes a hand-sized
+   * field sound, and a cap the player cannot see is a wall they walk into: the
+   * Portal has to show "2 of 3 left" BEFORE the attempt is spent, and "-8, 1
+   * left" after a miss. Deliberately only the reader's own attempts -- what
+   * some third team has tried against a target is not on this record, the same
+   * way `teams` carries scores and generations but not `huntAttempts`.
+   */
+  readonly huntAttempts: Readonly<Record<string, HuntBudgetProjection>>;
+  /**
+   * [Issue #709] MY sudoku-HUNT attempts against every other team, same shape
+   * and same reason as `huntAttempts`. A separate budget: it is a different
+   * secret, and spending three Shamir guesses must not lock out a legitimate
+   * relabelling recovery (or the other way round).
+   */
+  readonly sudokuHuntAttempts: Readonly<Record<string, HuntBudgetProjection>>;
+  /**
+   * [Issue #696] What a wrong HUNT costs -- `config.scores.wrongHunt`. On the
+   * projection for the same reason `threshold` is: the miss banner has to
+   * print the real number, not one the Portal was told out-of-band.
+   */
+  readonly wrongHuntCost: number;
+  /** [Issue #709] What a wrong PROVE costs -- `config.scores.wrongProve`. */
+  readonly wrongProveCost: number;
+  /**
+   * [Issue #696] The reader's most recent Shamir HUNT, if any -- see
+   * `TeamState.lastHunt`. This is the field that lets the Portal tell a hit
+   * from a miss after an op the SDK answered `{ ok: true }` either way.
+   * Never another team's: `projectForTeam` reads it off the reader's own row.
+   */
+  readonly lastHunt?: LastHunt;
+  /** [Issue #709] The reader's most recent PROVE, if any -- see `TeamState.lastProve`. */
+  readonly lastProve?: LastProve;
 }

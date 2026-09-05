@@ -1,97 +1,104 @@
-"""Scratchpad for the fourteen lines — optional, for when you cannot open Python.
+"""Optional scratchpad: complete the numbered rows in order.
 
-The drill is meant to be typed into your own `python3`, one line at a time, after pasting
-the numbers from "Inspect evidence". If you cannot open Python, fill in these functions in the
-Portal editor instead and press "Run public tests": the test prints what YOUR
-functions return on THIS deployment's numbers — exactly what the REPL would have printed.
-Paste those values into the answer fields. Each answer field is a single-line input.
+Paste that row's whole code block over `return None`, then put `return` before
+its final expression. Each function supplies names from previous rows. Press
+Run public tests to see your own values and paste them into the answer fields.
 
-Each function is one drill line, with the line's names replaced by parameters. p is the
-field modulus, w = (w0, w1) the two-wire witness, r0/r1 each wire's own share randomness,
-ca/cb the public coefficient vectors of the two linear forms A = ca . w and B = cb . w,
-a/b the Beaver triple's two random factors, and ra/rb/rc the triple's own share
-randomness (one per factor: a, b, and c = a * b).
+p is the divisor; % p takes a remainder. w is the two original numbers; r0/r1
+hide them. ca/cb are the multipliers for A/B. The prepared numbers a,b,a*b are
+split using ra/rb/rc. This is an observer's view of both people, not their
+individual private view. See the statement for each person's column.
 """
-
 from __future__ import annotations
 
 
 def w_shares(p: int, w, r0: int, r1: int):
-    """Helper for lines 2-14 — each wire's two-party share vector: [r_i, (w[i] - r_i) % p]."""
-    return None
+    """Given setup: w0/w1 each contain one share for person 0 and person 1."""
+    return [r0, (w[0]-r0)%p], [r1, (w[1]-r1)%p]
 
 
 def witness(p: int, w) -> tuple:
-    """Line 1 — (p, w): the field and the secret about to be split. Nobody keeps it whole."""
+    """Row 1: observer's original numbers."""
     return None
 
 
 def shares(p: int, w, r0: int, r1: int) -> tuple:
-    """Line 2 — (w0[1], w1[1]): the second, newly-revealed entry of each wire's share."""
+    """Row 2: split, then return the two second shares."""
     return None
 
 
 def reconstruct(p: int, w, r0: int, r1: int) -> tuple:
-    """Line 3 — add every party's shares back: this must equal the witness on screen."""
+    """Row 3: observer check, reconstruct both original numbers."""
+    w0, w1 = w_shares(p, w, r0, r1)
     return None
 
 
 def noleak(p: int, w, r0: int) -> list:
-    """Line 4 — hold r0 fixed, vary the secret: the first party's share never moves."""
+    """Row 4: hold one share fixed while changing the original number."""
     return None
 
 
 def ashares(p: int, w, r0: int, r1: int, ca) -> list:
-    """Line 5 — A's shares: ca[0]*w0[i] + ca[1]*w1[i] for each party i. No communication."""
+    """Row 5: each person's local calculation, then return A_sh."""
+    w0, w1 = w_shares(p, w, r0, r1)
     return None
 
 
 def aopen(p: int, w, r0: int, r1: int, ca) -> tuple:
-    """Line 6 — (A opened, A computed directly from w): the two must agree."""
+    """Row 6: observer check of the shared and direct results."""
+    A_sh = ashares(p, w, r0, r1, ca)
     return None
 
 
 def bshares(p: int, w, r0: int, r1: int, cb) -> tuple:
-    """Line 7 — (B_sh[0], B_sh[1], B): B's shares and B opened, same recipe as lines 5-6."""
+    """Row 7: use cb, then return both shares followed by B."""
+    w0, w1 = w_shares(p, w, r0, r1)
     return None
 
 
 def crossmul(p: int, w, r0: int, r1: int, ca, cb) -> tuple:
-    """Line 8 — (share-wise product, the correct A*B): these do NOT agree."""
+    """Row 8: compare the incomplete and complete products; they may coincide."""
+    A_sh = ashares(p, w, r0, r1, ca)
+    B_sh = ashares(p, w, r0, r1, cb)
+    A, B = sum(A_sh)%p, sum(B_sh)%p
     return None
 
 
 def triple(p: int, a: int, b: int, ra: int, rb: int, rc: int) -> tuple:
-    """Line 9 — (a opened, b opened, c opened, a*b): confirms the triple satisfies c = a*b."""
+    """Row 9: observer checks the separately prepared multiplication material."""
     return None
 
 
-def beaveropen(
-    p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int
-) -> tuple:
-    """Line 10 — (d, e) = (A - a, B - b) opened: the only round of communication."""
+def beaveropen(p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int) -> tuple:
+    """Row 10: exchange each person's difference shares, then return (d,e)."""
+    A_sh = ashares(p, w, r0, r1, ca)
+    B_sh = ashares(p, w, r0, r1, cb)
+    a_sh, b_sh = [ra, (a-ra)%p], [rb, (b-rb)%p]
     return None
 
 
-def cshares(
-    p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int, rc: int
-) -> list:
-    """Line 11 — each party's share of C, built from d, e and their own triple shares."""
+def cshares(p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int, rc: int) -> list:
+    """Row 11: build z, add d*e only for person 0, reduce again, then return z."""
+    d, e = beaveropen(p, w, r0, r1, ca, cb, a, b, ra, rb)
+    a_sh, b_sh = [ra, (a-ra)%p], [rb, (b-rb)%p]
+    c_sh = [rc, (a*b-rc)%p]
     return None
 
 
-def csum(
-    p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int, rc: int
-) -> int:
-    """Line 12 — C = the sum of the shares from line 11, opened."""
+def csum(p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int, rc: int) -> int:
+    """Row 12: add the completed shares and reduce to get C."""
+    z = cshares(p, w, r0, r1, ca, cb, a, b, ra, rb, rc)
     return None
 
 
 def expand(p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int) -> int:
-    """Line 13 — the textbook identity d*e + d*b + e*a + a*b, which must also equal C."""
+    """Row 13: verify the four-term identity."""
+    d, e = beaveropen(p, w, r0, r1, ca, cb, a, b, ra, rb)
     return None
 
 
 def nolink(p: int, w, r0: int, r1: int, ca, cb, a: int, b: int, ra: int, rb: int) -> list:
-    """Line 14 — for three candidate values of A, the 'a' that would make d match."""
+    """Row 14: candidate A and required a, for someone who only knows d."""
+    A = sum(ashares(p, w, r0, r1, ca))%p
+    d, e = beaveropen(p, w, r0, r1, ca, cb, a, b, ra, rb)
     return None

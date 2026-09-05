@@ -5,15 +5,13 @@
  * Deliberately does NOT compute anything cryptographic on the participant's
  * behalf:
  * - LEAK only needs a contract selection -- no computation at all.
- * - PROVE needs a `SchnorrProof { commitment, response }`. The proof is
- *   built locally by the participant's own tooling
- *   (`game/src/schnorr-prover.ts`'s `createProof`, or an equivalent script
- *   they write against the same construction -- see README.md's "How PROVE
- *   works"), never inside this form. This is not a missing feature: Issue
- *   #486 frames PROVE's local proof construction as the move's actual
- *   compute cost, the same way HUNT's local Lagrange reconstruction is
- *   HUNT's compute cost (see `coordination.ts`'s header). A portal button
- *   that ran `createProof` for you would erase that cost entirely.
+ * - PROVE needs the team's sudoku solution with every digit relabelled by a
+ *   table the team chose (#709). The relabelling is done by the participant,
+ *   on paper, never inside this form. This is not a missing feature: Issue
+ *   #486 frames PROVE's local work as the move's actual compute cost, the
+ *   same way HUNT's local Lagrange reconstruction is HUNT's compute cost (see
+ *   `coordination.ts`'s header). A portal button that relabelled the grid
+ *   for you would erase that cost entirely.
  * - HUNT needs `recoveredSecret`, reconstructed locally from
  *   `threshold`-many Public Ledger shares (via `game/src/shamir.ts`'s
  *   `reconstruct`, or the participant's own Lagrange interpolation) --
@@ -46,11 +44,11 @@
  * microservice-migration-battle precedent for why. Plain HTML + inline style.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CipherRung } from "../game/src/ladder.ts";
 import { describeTaskShort } from "./orderTask.ts";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
-import { usePolledProjection } from "./coordination.ts";
+import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
 import type {
   ContractProjection,
   CryptoBattleOp,
@@ -82,12 +80,11 @@ interface Copy {
   readonly leakSubmit: string;
   readonly proveTitle: string;
   readonly proveLocalNote: string;
-  readonly commitmentLabel: string;
-  readonly responseLabel: string;
-  readonly provePasteJsonLabel: string;
-  readonly proveFillFromJson: string;
-  readonly proveJsonError: string;
+  readonly gridLabel: string;
+  readonly gridError: string;
   readonly proveSubmit: string;
+  readonly proveHitResult: string;
+  readonly proveMissResult: (cost: number) => string;
   readonly huntTitle: string;
   readonly huntLocalNote: string;
   readonly huntNoTargets: string;
@@ -123,13 +120,12 @@ export const COPY: Record<Locale, Copy> = {
     leakSubmit: "LEAK the selected shares",
     proveTitle: "PROVE",
     proveLocalNote:
-      "Build the proof locally first. The full construction -- group constants, hash rule, length-prefix framing, and runnable Python -- is under \"Computing PROVE and HUNT yourself\" further down this page. This form never computes a proof for you.",
-    commitmentLabel: "commitment",
-    responseLabel: "response",
-    provePasteJsonLabel: "Paste { commitment, response } JSON instead",
-    proveFillFromJson: "Fill fields from JSON",
-    proveJsonError: "That is not valid JSON with string commitment/response fields.",
+      "Relabel your solution on paper first: pick a table like 1->3, 2->1, 3->4, 4->2 -- each of 1-4 exactly once on the right, a swap and never a merge -- and rewrite all 16 cells of MY VAULT's grid through it. Never the same table twice on one generation. This form never computes a proof for you.",
+    gridLabel: "relabelled grid: 16 digits, row by row (e.g. 2341 4123 1432 3214)",
+    gridError: "Enter exactly 16 digits, each 1-4, in row order.",
     proveSubmit: "PROVE this contract",
+    proveHitResult: "PROVE accepted -- one group of your relabelled copy is on the Public Ledger; your solution is not.",
+    proveMissResult: (cost: number) => `PROVE missed -- that grid is not a relabelling of your solution (-${cost}). The Order is still open. Check that the table uses each of 1-4 once, then check it against every cell.`,
     huntTitle: "HUNT",
     huntLocalNote:
       "Reconstruct the secret locally first, from threshold-many of the target's Public Ledger shares. The Lagrange evaluation is further down this page under \"Computing PROVE and HUNT yourself\". Guessing does not score.",
@@ -158,13 +154,12 @@ export const COPY: Record<Locale, Copy> = {
     leakSubmit: "選択した share を LEAK する",
     proveTitle: "PROVE",
     proveLocalNote:
-      "proof は先にローカルで作成してください。群の定数・ハッシュ規則・length-prefix の framing・そのまま動く Python まで、必要な構成はこのページ下部の「PROVE と HUNT を自分で計算する」に全部あります。この form が代わりに proof を計算することはありません。",
-    commitmentLabel: "commitment",
-    responseLabel: "response",
-    provePasteJsonLabel: "代わりに { commitment, response } の JSON を貼り付ける",
-    proveFillFromJson: "JSON からフィールドに反映",
-    proveJsonError: "commitment / response が文字列で入った有効な JSON ではありません。",
+      "先に紙で付け替えてください。「1→3、2→1、3→4、4→2」のような表を 1 つ決め (右側は 1〜4 を 1 回ずつ。入れ替えであって、まとめではありません)、MY VAULT のマス目 16 個をその表で書き換えます。同じ世代で同じ表は 2 度使いません。この form が代わりに proof を計算することはありません。",
+    gridLabel: "付け替えたマス目: 1 行ずつ 16 桁 (例 2341 4123 1432 3214)",
+    gridError: "1〜4 の数字を、行の順に 16 個入力してください。",
     proveSubmit: "この contract を PROVE する",
+    proveHitResult: "PROVE 成功 — 付け替えた写しの 1 グループが Public Ledger に載りました。解は載っていません。",
+    proveMissResult: (cost: number) => `PROVE 失敗 — そのマス目は自分の解の付け替えになっていません (-${cost})。Order は開いたままです。表が 1〜4 を 1 回ずつ使っているか確かめてから、全マスに当て直してください。`,
     huntTitle: "HUNT",
     huntLocalNote:
       "先に相手の Public Ledger の share を threshold 分集めてローカルで secret を復元してください。Lagrange の評価式はこのページ下部の「PROVE と HUNT を自分で計算する」にあります。当て推量では得点になりません。",
@@ -233,13 +228,17 @@ export function submitLeak(client: PortalCoordinationClient, contractId: string)
   return client.submitOp(op);
 }
 
-/** Builds and submits a PROVE op. Exported for direct testing -- see this file's header. */
-export function submitProve(
+/**
+ * [Issue #709] PROVE: the relabelled grid, sixteen digits row by row. One op,
+ * because the judge holds the solution and checks the whole grid -- there is
+ * no challenge to wait for.
+ */
+export function submitProveSudoku(
   client: PortalCoordinationClient,
   contractId: string,
-  proof: { readonly commitment: string; readonly response: string },
+  grid: readonly number[],
 ): Promise<PortalCoordinationOutcome> {
-  const op: CryptoBattleOp = { kind: "prove", contractId, proof };
+  const op: CryptoBattleOp = { kind: "prove-sudoku", contractId, grid };
   return client.submitOp(op);
 }
 
@@ -314,17 +313,17 @@ export function submitHuntCipher(
 }
 
 /**
- * [Issue #645 Phase 5] Builds and submits a nonce-reuse HUNT — the Schnorr
- * witness recovered from two of the target's transcripts that share a
- * commitment.
+ * [Issue #709] Builds and submits a sudoku HUNT — the target's solution,
+ * recovered from reveals that share a relabelling tag, lined up against the
+ * target's public puzzle.
  */
-export function submitHuntNonce(
+export function submitHuntSudoku(
   client: PortalCoordinationClient,
   targetTeamId: string,
   generation: number,
-  recoveredWitness: string,
+  solution: readonly number[],
 ): Promise<PortalCoordinationOutcome> {
-  const op: CryptoBattleOp = { kind: "hunt-nonce", targetTeamId, generation, recoveredWitness };
+  const op: CryptoBattleOp = { kind: "hunt-sudoku", targetTeamId, generation, solution };
   return client.submitOp(op);
 }
 
@@ -397,6 +396,36 @@ export function describeOutcome(outcome: PortalCoordinationOutcome, copy: Copy):
   }
 }
 
+/**
+ * [Issue #709 review] The PROVE form's own outcome text. A wrong grid LANDS:
+ * the judge returns ok, charges `wrongProve`, leaves the Order open and writes
+ * `lastProve.outcome: "miss"` -- so "Submitted" would be true and useless.
+ * Read off the projection the op came back with, the way the primary form's
+ * `proveFeedback` does; anything that is not a landed PROVE on this Order
+ * falls through to the shared three-way text.
+ */
+export function describeProveOutcome(
+  outcome: PortalCoordinationOutcome,
+  contractId: string,
+  copy: Copy,
+): string {
+  const verdict = proveVerdict(outcome, contractId);
+  if (verdict?.outcome === "miss") return copy.proveMissResult(verdict.cost);
+  if (verdict?.outcome === "hit") return copy.proveHitResult;
+  return describeOutcome(outcome, copy);
+}
+
+/** The landed PROVE verdict on `contractId` in an ok outcome, if there is one. */
+function proveVerdict(
+  outcome: PortalCoordinationOutcome,
+  contractId: string,
+): { readonly outcome: "hit" | "miss"; readonly cost: number } | undefined {
+  if (outcome.kind !== "ok" || !isCryptoBattleProjection(outcome.projection)) return undefined;
+  const last = outcome.projection.lastProve;
+  if (last?.contractId !== contractId) return undefined;
+  return { outcome: last.outcome, cost: outcome.projection.wrongProveCost };
+}
+
 function LeakForm({
   client,
   contracts,
@@ -448,51 +477,46 @@ function LeakForm({
 function ProveForm({
   client,
   contracts,
+  generation,
   copy,
 }: {
   readonly client: PortalCoordinationClient;
   readonly contracts: readonly ContractProjection[];
+  readonly generation: number | undefined;
   readonly copy: Copy;
 }) {
   const [contractId, setContractId] = useState("");
-  const [commitment, setCommitment] = useState("");
-  const [response, setResponse] = useState("");
-  const [pasteJson, setPasteJson] = useState("");
+  const [gridText, setGridText] = useState("");
   const [parseError, setParseError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const selected = contractId || contracts[0]?.id || "";
-
-  const fillFromJson = () => {
-    try {
-      const parsed = JSON.parse(pasteJson) as { commitment?: unknown; response?: unknown };
-      if (typeof parsed.commitment !== "string" || typeof parsed.response !== "string") {
-        throw new Error("missing commitment/response");
-      }
-      // Trimmed on the way in (same as the manual-entry path below) so the
-      // field always shows exactly what will be submitted.
-      setCommitment(parsed.commitment.trim());
-      setResponse(parsed.response.trim());
-      setParseError(null);
-    } catch {
-      setParseError(copy.proveJsonError);
-    }
-  };
+  // [Issue #709 review] A typed grid belongs to the Order and generation it
+  // was typed for. When the default Order completes, `selected` falls through
+  // to the next open one, and a grid left behind would be one click from a
+  // second PROVE under the same table; after a ROTATE it would be a charged
+  // miss against the new solution. Same rule as the fast panel's grids.
+  useEffect(() => {
+    setGridText("");
+    setParseError(null);
+  }, [selected, generation]);
 
   const onSubmit = () => {
-    // Trimmed here, not on every keystroke (which would fight the cursor
-    // while typing): a copy-pasted commitment/response with a trailing
-    // newline or leading space is otherwise well-formed, and untrimmed
-    // would fail Schnorr verification exactly like a genuinely wrong proof
-    // -- indistinguishable from a real cryptographic error (Issue #486 PR4
-    // review, low #3; HUNT's recoveredSecret gets the same treatment below).
-    const trimmedCommitment = commitment.trim();
-    const trimmedResponse = response.trim();
-    if (!selected || !trimmedCommitment || !trimmedResponse || submitting) return;
+    // [Issue #709] Sixteen digits, whitespace ignored -- a participant who
+    // copies four rows off paper types them with spaces between the rows.
+    const digits = gridText.replace(/\s+/g, "");
+    if (!/^[1-4]{16}$/.test(digits)) {
+      setParseError(copy.gridError);
+      return;
+    }
+    if (!selected || submitting) return;
+    setParseError(null);
     setSubmitting(true);
     setResult(null);
-    void submitProve(client, selected, { commitment: trimmedCommitment, response: trimmedResponse }).then((outcome) => {
-      setResult(describeOutcome(outcome, copy));
+    void submitProveSudoku(client, selected, [...digits].map(Number)).then((outcome) => {
+      setResult(describeProveOutcome(outcome, selected, copy));
+      // A hit spends that table; the box empties so it cannot be sent twice.
+      if (proveVerdict(outcome, selected)?.outcome === "hit") setGridText("");
       setSubmitting(false);
     });
   };
@@ -513,38 +537,18 @@ function ProveForm({
             ))}
           </select>
           <input
-            aria-label="commitment"
+            aria-label="prove-grid"
             style={fieldStyle}
-            placeholder={copy.commitmentLabel}
-            value={commitment}
-            onChange={(e) => setCommitment(e.target.value)}
+            placeholder={copy.gridLabel}
+            value={gridText}
+            onChange={(e) => setGridText(e.target.value)}
           />
-          <input
-            aria-label="response"
-            style={fieldStyle}
-            placeholder={copy.responseLabel}
-            value={response}
-            onChange={(e) => setResponse(e.target.value)}
-          />
-          <details>
-            <summary style={{ fontSize: "12px", cursor: "pointer" }}>{copy.provePasteJsonLabel}</summary>
-            <textarea
-              aria-label="prove-json"
-              style={{ ...fieldStyle, width: "100%", marginTop: "4px" }}
-              value={pasteJson}
-              onChange={(e) => setPasteJson(e.target.value)}
-              placeholder='{"commitment":"...","response":"..."}'
-            />
-            <button type="button" style={fieldStyle} onClick={fillFromJson}>
-              {copy.proveFillFromJson}
-            </button>
-            {parseError && <p style={errStyle}>{parseError}</p>}
-          </details>
+          {parseError && <p style={errStyle}>{parseError}</p>}
           <button
             type="button"
             style={fieldStyle}
             onClick={onSubmit}
-            disabled={submitting || !commitment.trim() || !response.trim()}
+            disabled={submitting || !gridText.trim()}
           >
             {submitting ? copy.submitting : copy.proveSubmit}
           </button>
@@ -694,7 +698,7 @@ export default function RegistrationPanel(props: PortalSlotProps) {
       {!projection && <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.loadingContracts}</p>}
       <div style={formsGridStyle}>
         <LeakForm client={coordinationClient} contracts={leakContracts} copy={copy} />
-        <ProveForm client={coordinationClient} contracts={proveContracts} copy={copy} />
+        <ProveForm client={coordinationClient} contracts={proveContracts} generation={projection?.vault.generation} copy={copy} />
         <HuntForm client={coordinationClient} teamIds={teamIds} myTeamId={myTeamId} teams={teams} copy={copy} />
         <RotateForm client={coordinationClient} copy={copy} />
       </div>

@@ -51,11 +51,10 @@
  * code -- including the `mock.module` call -- has a chance to run).
  */
 import { describe, expect, it, mock } from "bun:test";
-import { decodeLedger, migrateStateV1 } from "./ledger-codec.ts";
-import { LOCAL_PLAY_SEED_PREFIX } from "./reducer.ts";
-import { createProof } from "./schnorr-prover.ts";
+import { decodeLedger } from "./ledger-codec.ts";
+import { LOCAL_PLAY_SEED_PREFIX, migrateState, STATE_SCHEMA_VERSION } from "./reducer.ts";
 import { reconstruct } from "./shamir.ts";
-import { startedMatch } from "./playtest.ts";
+import { buildProveSudokuOp, startedMatch } from "./playtest.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState, StoredShare } from "./types.ts";
 // Type-only: resolved via ../../coordination/coordination-plugin-sdk.d.ts's
 // ambient declaration (see that file), not a real installed dependency.
@@ -149,14 +148,17 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
    * [Issue #679 / TenkaCloud#3150] The platform rejects a plugin at LOAD time
    * if it declares `stateSchemaVersion` without `migrateState` -- so both have
    * to be wired together, and `migrateState` has to be the SAME function
-   * `ledger-codec.ts` exports (not a re-implementation crypto-battle.ts wrote
-   * itself), or this file's own migration tests (below, and
-   * `ledger-codec.test.ts`) would be proving something crypto-battle.ts does
-   * not actually run in production.
+   * `reducer.ts` exports (not a re-implementation crypto-battle.ts wrote
+   * itself), or `migration.test.ts`'s and `ledger-codec.test.ts`'s migration
+   * tests would be proving something crypto-battle.ts does not actually run
+   * in production. [Issue #709] The version is 3: the sudoku PROVE changed the
+   * state shape, and an undeclared bump is exactly what the SDK says the
+   * platform cannot detect.
    */
-  it("declares stateSchemaVersion 2 with migrateStateV1 wired as its migrateState [Issue #679]", () => {
-    expect(plugin.stateSchemaVersion).toBe(2);
-    expect(plugin.migrateState).toBe(migrateStateV1);
+  it("declares the current stateSchemaVersion with reducer.ts's migrateState wired [Issue #679, #709]", () => {
+    expect(plugin.stateSchemaVersion).toBe(STATE_SCHEMA_VERSION);
+    expect(STATE_SCHEMA_VERSION).toBe(4);
+    expect(plugin.migrateState).toBe(migrateState);
   });
 
   /**
@@ -215,28 +217,26 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     const rejected = dispatchOp(plugin, state, "blue", leakOp);
     expect(rejected.ok).toBe(false);
 
-    // -- PROVE: red completes its own open contract via a Schnorr proof,
-    // built from red's own secret exactly as a participant's own tooling
-    // (schnorr-prover.ts's createProof) would from their own
-    // projectForTeam(...).vault.secret -- read straight from state.teams
-    // here since this test runs on the trusted side.
+    // -- PROVE [Issue #709]: red completes its own open contract with a
+    // relabelled sudoku, built from red's own projection exactly as a
+    // participant does from MY VAULT. The op goes through `dispatchOp`, this
+    // test's subject being the SDK's validate->apply composition.
     const redTeamBeforeProve = state.teams.red;
     if (!redTeamBeforeProve) throw new Error("test setup: expected a red team");
-    const redContract = state.contracts.find((c) => c.teamId === "red" && c.status === "open");
+    const redContract = state.contracts.find(
+      (c) => c.teamId === "red" && c.status === "open" && c.allowedMethods.includes("prove"),
+    );
     if (!redContract) throw new Error("test setup: expected an open contract for red after tick(0)");
-    const proof = createProof(
-      BigInt(redTeamBeforeProve.secret),
-      redTeamBeforeProve.generation,
-      "red",
+    const proveOp: CryptoBattleOp = buildProveSudokuOp(
+      plugin.projectForTeam(state, "red").vault,
       redContract.id,
     );
-    const proveOp: CryptoBattleOp = { kind: "prove", contractId: redContract.id, proof };
     state = expectDispatched(dispatchOp(plugin, state, "red", proveOp));
     const redAfterProve = state.teams.red;
     if (!redAfterProve) throw new Error("test setup: expected a red team");
     expect(redAfterProve.score).toBe(redContract.points);
     expect(state.publicLedger).toHaveLength(2);
-    expect(decodeLedger(state.publicLedger)[1]?.kind).toBe("proof");
+    expect(decodeLedger(state.publicLedger)[1]?.kind).toBe("sudoku-reveal");
 
     // -- HUNT: blue reconstructs red's secret from `threshold` of red's
     // shares (see this file's header on why this reads state.teams directly
@@ -264,7 +264,19 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     // participants -- it shows blue's own vault, never red's secret.
     const blueProjection = plugin.projectForTeam(state, "blue");
     expect(blueProjection.vault.teamId).toBe("blue");
-    expect(JSON.stringify(blueProjection)).not.toContain(redAfterHunt.secret);
+    // [Issue #696] Asserted STRUCTURALLY, not as a substring. A match now runs
+    // in a field a participant can compute in (`HAND_PRIME`), so red's secret
+    // is three digits and a substring search over this blob reports a hit on
+    // any coincidence -- it stopped being able to tell a leak from a collision.
+    // What the boundary actually says is that the projection carries exactly
+    // one vault, the reader's own, and that a team summary is a summary: no
+    // secret, no shares. That holds at any modulus and is the stronger claim.
+    expect(blueProjection.vault.secret).toBe(blueAfterHunt.secret);
+    for (const summary of Object.values(blueProjection.teams)) {
+      expect(Object.keys(summary)).not.toContain("secret");
+      expect(Object.keys(summary)).not.toContain("shares");
+    }
+    expect(Object.keys(blueProjection).filter((k) => k === "vault")).toHaveLength(1);
   });
 
   it("state survives a JSON round-trip (simulating Turso/DynamoDB persistence between calls) and stays usable afterward [PR3 review High #1/#2]", () => {
@@ -285,8 +297,8 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     // and read it back. No bigint may survive that -- Turso's
     // `JSON.stringify` throws on one outright, and DynamoDB round-trips
     // numbers through `Number`, silently losing precision above 2^53-1 (well
-    // under field.ts's 61-bit `P` and this package's 2048-bit Schnorr group
-    // elements).
+    // under field.ts's 61-bit `P`, which is why secrets and shares cross the
+    // wire as decimal strings).
     const roundTripped = JSON.parse(JSON.stringify(state)) as CryptoBattleState;
     expect(roundTripped).toEqual(state);
 
@@ -397,7 +409,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
 
     // Non-canonical decimal strings -- a hex literal, an empty string, and an
     // absurdly long one -- are rejected too (same gate PROVE's proof fields
-    // already went through; see schnorr-verifier.ts's parseCanonicalDecimal).
+    // already went through; see decimal.ts's parseCanonicalDecimal).
     for (const bad of ["0x10", "", "9".repeat(701)]) {
       const badOp: CryptoBattleOp = { kind: "hunt", targetTeamId: "red", generation: 1, recoveredSecret: bad };
       expect(plugin.validateOp(state, "blue", badOp).ok).toBe(false);
