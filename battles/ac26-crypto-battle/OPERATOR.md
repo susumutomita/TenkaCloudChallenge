@@ -292,6 +292,12 @@ A real-AWS walkthrough and an independent third-party playtest are optional
 pre-event rehearsals. Record them when useful, but do not block development or
 merge when they have not run.
 
+The [participant walkthrough](dev/PLAYTHROUGH.ja.md) lists the nine checks
+for the next event, local scenario setup, and a result template. The explanation
+is optional and opens above the board; automatic display is not required.
+Record the Portal Score/Rank refresh and team-name initialization separately
+from local harness evidence.
+
 ## Source map
 
 - `game/src/reducer.ts` — state transitions, validation, projection
