@@ -1,119 +1,90 @@
-# Type one line, paste the value — the negacyclic flip as the accident, then as the mechanism
+# Compute with sign flips, then tolerate more noise
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> Independent, unofficial companion to Advanced Cryptography Program 2026.
+> Not affiliated with or endorsed by its organizers. Contact TenkaCloud with questions.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 565 · **Chapter:** Week 5 / Drill:
-Negacyclic flip and HomNAND · **Role:** `mechanism` · **Time:** 40–60 minutes · **Points:** 200
-· **Status:** draft — new companions need human play evidence (#465) before leaving draft
+Week 5 / order 565 / difficulty 3 / 200 points / draft / about 40–60 minutes.
 
-## What this is
+You check a tiny NAND device: it returns zero only when both input bits are one.
+Follow the signed table reads, then construct a noise failure and new arithmetic
+that remains correct across all inputs and all stated displacements.
 
-Not a write-a-function problem. You open your own `python3`, paste the numbers the Portal's
-"Inspect evidence" shows you, and then **type one line, paste the value it prints**, twelve times. The
-first five lines produce the negacyclic sign flip (`x^n = -1`) as an **accident** — the spot
-lecture slide 35 leaves as an open question. The last seven produce the same flip as the
-**mechanism** that makes HomNAND work (slides 43–45).
+## Participant route
 
+1. Start the problem and Inspect evidence. In `negacyclic_drill.py`, replace the first
+   `return None` with `return (p,2*n,n,(2*n)//p)`. Run public tests and submit `params ->`.
+2. Fill the next five functions using the matching free blocks. Tests check a worked
+   example and print the learner's own values for the deployment. Unfilled rows do
+   not prevent submitting another row.
+3. Construct `[bit_a,bit_b,total_noise]` for `constants`, showing failure beyond the
+   original total-noise bound. Then construct `[bias,weight_a,weight_b]` for `margin`
+   that preserves NAND across all four inputs and every total noise from zero through
+   `repair_noise`. Any satisfying construction is accepted.
+
+| Field | What it checks | Points |
+| --- | --- | ---: |
+| params | Full signed cycle and message spacing | 20 |
+| wrap | Remaining exponent and sign after wrapping | 15 |
+| signs | Signed reads at six positions | 15 |
+| boundary | First negative read position | 20 |
+| hazard | One table lap too far | 15 |
+| rotations | Read positions for the four input pairs | 15 |
+| constants | Construct a larger-noise NAND failure | 50 |
+| margin | Construct arithmetic tolerating all stated noise | 50 |
+
+All required rules and small examples are free. Each row has three optional hints:
+mechanism → example → on-screen procedure. Hints cost 2 points each, 48 total;
+a wrong answer costs 10. Construction rows supply no completed code. Their final hints describe finite
+searches with explicit candidate ranges, checks and termination.
+
+## Model and boundaries
+
+The device is a visible arithmetic model, not encrypted TFHE or ciphertext refresh.
+It reads an all-ones table, reversing sign after n positions. Bits 0/1 encode as
+p-1/1. The original phase is `(1-m1-m2)%p`; multiply by D and subtract total noise
+before taking the cycle remainder. Only the two-one input reads a negative value
+under the original bound. This is NAND when signs +1/-1 decode as bits 1/0.
+
+Parameters are p=16,n=8,q=16,D=1. Individual input displacements sum to at most one;
+probes vary and include negative or wrapped positions. The repair must tolerate total
+noise up to two or three. Unlike the old n−3D distance claim, the actual first failure
+is a mixed input wrapping below zero when total noise reaches two. The repair changes
+three coefficients and is checked against all inputs and all allowed noise values.
+The final model supplies displacement after the weighted calculation; it does not
+claim to model how weights amplify noise from separate real input ciphertexts.
+
+The participant image contains starter, public tests, helpers and Portal API. The
+seed, generator, hidden checks and reference answers exist only in verifier/author
+images. The Workbench prefetches public evidence and gives learner code only that
+snapshot. A deployment tag binds prepared answers to a run; it is not authentication.
+The unpublished verifier grades answers without executing learner code and returns
+no reason for a failed direct answer.
+
+Linux seccomp restricts learner networking and access to supervisor memory, signals,
+and resource limits. Children inherit restrictions and remaining descendants are
+terminated after execution. CLI uses the same launcher protections and fails closed.
+Both services are non-root, read-only and resource-limited; Workbench port 18136 is
+published only on 127.0.0.1. Docker owners can inspect their own images.
+
+## Local verification and teardown
+
+Run in this problem directory:
+
+```bash
+make inspect
+make test                  # expected failure for the unfilled starter
+make test-one ID=params
+make verifier-down
 ```
-1  (p, q, n, D)                the ring's constants, q = 2n            params
-2  E = lo + hi; ...            fold the overflowing exponent           wrap
-3  c = lambda i: ...; probes   the constant term at six probes         signs
-4  min(i ... if c(i) < 0)      the flip boundary — exactly n           boundary
-5  (lo + n, c(lo + n))         the read that overshoots by n           hazard
-6  (p - 1, 1)                  the bit encoding, effectively ±1       (no answer field)
-7  r = 1 - m1 - m2 mod p       the four phases                        (no answer field)
-8  D*r - noise mod q           the four rotation amounts               rotations
-9  tuple(c(i) for i in rots)   the constant terms — a truth table      constants
-10 NAND(a, b), four pairs      the cross-check                        (no answer field)
-11 sweep every noise 0..dmax   the table stays closed                 (no answer field)
-12 n - 3*D                     the room left before the boundary       margin
-```
 
-Every line comes with "what this line means"; every matching value unlocks "read after it
-matches". Eight of the twelve lines have an answer field — the platform's per-problem maximum;
-the other four are construction constants, a cross-check, or feed the line after them.
+Edited source is streamed over stdin into Docker; no host Python or shared mount
+path is required. Inspect/test leave the verifier running. Stop it with
+`make verifier-down`. No cloud resources are created; local CPU and memory remain
+in use until stopped. There is no AWS Region or cloud session cost for this runtime.
 
-## Why the numbers are small and seed-derived
+Authors run `make reference-test`, then root `make install` and `make agent-gate`.
+Participant-only reading and runtime evidence are recorded in
+`local/tests/hidden/READER.md`. A real AWS event and human event rehearsal are unrun.
 
-The ring degree is 16–64 and the plaintext modulus 8–32, so every line is a one-screen
-computation and the noise sweep is one `all(...)`. The procedure is the lecture's; the ring,
-the noise, and every probe index come from this deployment's `FLAG_SEED`. The assignment's own
-toy parameters (p=8, n=16) are excluded from generation, so no deployment can be solved by
-copying the course material. There is one right value per line per seed; only the value your
-own Python printed passes.
-
-One correction the drill carries on purpose: slide 44 states the HomNAND condition as
-"3 < n < p−1", which fails on the lecture's own example. The generator enumerates exactly the
-(n, p, dmax) satisfying the condition that actually governs — 3D < n and dmax ≤ D — and the
-`margin` line has the learner measure that room.
-
-## Participant Portal
-
-1. Start the problem in the Participant Portal. The problem editor appears on the same page.
-2. Press **Inspect evidence**: the numbers are printed as Python assignment statements. Paste them into
-   `python3` first.
-3. Type line 1, paste the value into the first answer field, submit. Read the sentence for
-   that value. Continue to line 12. **Each answer field is a single-line input.**
-4. If you cannot open Python: fill in the functions of `negacyclic_drill.py` in the editor
-   and press **Run public tests** — it prints your functions' values on this deployment's
-   numbers, which is exactly what the REPL would print.
-
-Direct answers are bound to the current deployment seed, so values copied from another
-deployment are rejected.
-
-## Scoring
-
-Eight checkpoints, graded independently. A wrong answer costs 10 points.
-
-| Checkpoint | Points | Evidence kind | What it checks |
-|---|---:|---|---|
-| `params` | 20 | construct | (p, q, n, D) with q = 2n and D = q/p |
-| `wrap` | 25 | construct | x^(lo+hi) reduced: remainder, sign, original exponent |
-| `signs` | 25 | predict | the constant term of x^(−i)·v(x) at six probes |
-| `boundary` | 20 | trace | the first i whose constant term is negated — exactly n |
-| `hazard` | 30 | counterexample | the read n past lo: same coefficient, opposite sign |
-| `rotations` | 30 | construct | D·r − noise mod q for all four input pairs |
-| `constants` | 30 | predict | the constant terms after rotating — the NAND column as ±1 |
-| `margin` | 20 | trace | n − 3D, the room the real condition leaves |
-
-One hint per checkpoint (penalty 6), naming the usual slip on that line.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
-and every image in the compose stack cannot be prevented from inspecting hidden material.
-The boundary here is misdelivery, not confidentiality against that person: the participant
-Workbench image contains the Portal editor API, the starter and the public tests only.
-Unlike the Week 4 drills, this problem's `fixtures/generate.py` derives the expected values
-in the same function as the public numbers, so the module ships only in the separate,
-unpublished verifier image (Issue 537/543 option B2); the Workbench fetches this deployment's
-public half from the verifier's `GET /public` over the Compose-internal network. `reference/`
-and `mutation.py` are added only to the `author` stage.
-
-Only the Workbench is published, at host `127.0.0.1:18136`; the verifier has no host port.
-Both services run non-root with a read-only root filesystem, no capabilities, `no-new-
-privileges`, and bounded memory/PIDs. A checkpoint can only credit the id it echoes, results
-do not leak expected values, and the fixtures come from this deployment's seed so a memorized
-answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer at all, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: thirteen broken references (the sign counted
-with the wrong parity, the constant term read without the flip, the boundary searched only
-below n, the noise added instead of subtracted, slide 44's condition taken literally, …) that
-the hidden suite must kill, plus twelve verifier-level near-misses — a shown fixture value,
-another line's value, the NAND column where the constant terms belong, a truncated tuple, a
-boolean, another deployment's answer — that the value grader must refuse. `make test` and
-`make inspect` run through Compose because the participant image has no `fixtures/`: the
-public numbers come from the verifier's `GET /public`.
+[Course context](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/c088f8e6f301dedcd80b6dd9c321a1cd83410637/week5/README.md).
+[Real TFHE bootstrapping](https://www.zama.org/post/tfhe-deep-dive-part-4).

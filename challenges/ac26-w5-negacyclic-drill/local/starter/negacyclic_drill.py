@@ -1,80 +1,60 @@
-"""Scratchpad for the twelve lines — optional, for when you cannot open Python.
+"""Six teaching functions followed by two constructions.
 
-The drill is meant to be typed into your own `python3`, one line at a time, after pasting
-the numbers from "Inspect evidence". If you cannot open Python, fill in these functions in the
-Portal editor instead and press "Run public tests": the test prints what YOUR
-functions return on THIS deployment's numbers — exactly what the REPL would have printed.
-Paste those values into the answer fields. Each answer field is a single-line input.
-
-Each function is one drill line, with the line's names replaced by parameters. p is the
-plaintext modulus, n the ring degree (so q = 2n and D = q/p), v the all-ones test
-polynomial, lo and hi the two probe exponents, noise_a and noise_b the two input
-ciphertexts' noise, dmax the largest noise either may carry.
+Replace return None with the corresponding free code block in rows 1-6;
+return the last expression. read and rotate are provided helpers. Rows 7-8
+supply rules but no completed construction. Public tests print your own results.
 """
+from participant.model import read, rotations as rotate
 
-from __future__ import annotations
 
-
-def params(p: int, n: int) -> tuple:
-    """Line 1 — (p, q, n, D): the ring's four constants, q = 2n and D = q/p."""
+def params(p,n):
+    """Return p,2*n,n,(2*n)//p: message slots, cycle length, table length, spacing."""
     return None
 
 
-def wrap(lo: int, hi: int, n: int) -> tuple:
-    """Line 2 — x^(lo+hi) mod x^n + 1 as (reduced exponent, sign, exponent before)."""
+def wrap(lo,hi,n):
+    """Return (remaining exponent, sign, original exponent) for E=lo+hi.
+    Each removal of n flips the sign. An even count restores the positive sign.
+    """
     return None
 
 
-def constant_at(v: list, i: int) -> int:
-    """Line 3 (part 1) — the constant term of x^(-i) * v(x) mod x^n + 1."""
+def signs(n,probes):
+    """Read the all-ones table at the six given positions, in the given order."""
     return None
 
 
-def signs(v: list, probes) -> tuple:
-    """Line 3 (part 2) — the constant term at each of the six probe indices."""
+def boundary(n):
+    """Find the first nonnegative position whose table read is -1."""
     return None
 
 
-def boundary(v: list) -> int:
-    """Line 4 — the smallest i whose constant term comes out negated."""
+def hazard(n,lo):
+    """Return (lo+n,read(n,lo+n)): same table entry, one sign flip later."""
     return None
 
 
-def hazard(v: list, lo: int) -> tuple:
-    """Line 5 — the read that overshoots by n: (lo + n, the constant term there)."""
+def rotations(p,n,noise_a,noise_b):
+    """Return rotate(p,n,noise_a+noise_b) in order (0,0),(0,1),(1,0),(1,1)."""
     return None
 
 
-def encoding(p: int) -> tuple:
-    """Line 6 — the bit encoding (bit 0, bit 1) = (p - 1, 1)."""
+def constants(p,n,dmax,repair_noise):
+    """Construct [bit_a,bit_b,total_noise] that makes the original NAND rule fail.
+    Both bits are 0 or 1; noise is an integer from dmax+1 through repair_noise.
+    Original phase=(1-enc[bit_a]-enc[bit_b])%p, with enc={0:p-1,1:1}.
+    Position=((2*n//p)*phase-noise)%(2*n). read(n,position) must differ
+    from -1 for inputs (1,1), +1 otherwise. Any satisfying triple is accepted.
+    """
     return None
 
 
-def phases(p: int) -> tuple:
-    """Line 7 — r = 1 - m1 - m2 mod p for the four input pairs (0,0), (0,1), (1,0), (1,1)."""
-    return None
-
-
-def rotations(p: int, n: int, noise_a: int, noise_b: int) -> tuple:
-    """Line 8 — the four rotation amounts D*r - (noise_a + noise_b) mod q."""
-    return None
-
-
-def constants(p: int, n: int, noise_a: int, noise_b: int) -> tuple:
-    """Line 9 — the constant term after each of the four rotations."""
-    return None
-
-
-def nand_table() -> tuple:
-    """Line 10 — the NAND truth table for the four input pairs."""
-    return None
-
-
-def noise_sweep(p: int, n: int, dmax: int) -> bool:
-    """Line 11 — does the table close for EVERY noise total 0..dmax, not just this one."""
-    return None
-
-
-def margin(p: int, n: int) -> int:
-    """Line 12 — the room between the largest rotation 3D and the boundary n."""
+def margin(p,n,repair_noise):
+    """Construct [bias,weight_a,weight_b], integers from 0 through p-1.
+    Use phase=(bias-weight_a*enc[a]-weight_b*enc[b])%p, enc={0:p-1,1:1}.
+    For every input pair and every total noise 0..repair_noise, the signed table
+    read at ((2*n//p)*phase-noise)%(2*n) must implement NAND:
+    +1,+1,+1,-1 in order (0,0),(0,1),(1,0),(1,1).
+    Any triple satisfying all conditions is accepted; checking one noise is insufficient.
+    """
     return None
