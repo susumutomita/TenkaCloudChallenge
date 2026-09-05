@@ -61,7 +61,7 @@ import {
   type FieldConfig,
 } from "./fixtures.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
-import { hintCostAt, hintsFor } from "./hints.ts";
+import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
   encryptWithRung,
@@ -117,6 +117,7 @@ import type {
   TeamState,
   TeamSummaryProjection,
   ValidateResult,
+  VaultProjection,
 } from "./types.ts";
 
 /**
@@ -1824,13 +1825,29 @@ function projectTask(
  * refuses to SELL a level with no configured price, so this branch only ever
  * renders one, and rendering it as `NaN` would put that straight on a card.
  */
-function projectHints(state: CryptoBattleState, contract: Contract): readonly HintProjection[] {
+function projectHints(
+  state: CryptoBattleState,
+  contract: Contract,
+  task: OrderTaskProjection,
+  vault: VaultProjection,
+): readonly HintProjection[] {
   const revealed = hintsRevealedOn(contract);
+  // [Issue #712] Rendered against THIS Order and THIS reader's vault -- both of
+  // which are already on the projection this hint ships with. Rendered only for
+  // the rungs that were bought, so an unbought rung never has its text computed,
+  // let alone shipped.
+  const ctx: HintContext = {
+    task,
+    vault,
+    prime: state.config.prime,
+    threshold: state.config.threshold,
+    shareCount: state.config.shareCount,
+  };
   return hintsFor(contract.task.kind).map((spec, level) => ({
     level,
     id: spec.id,
     cost: hintCostAt(state.config.scores.hintCosts, level) ?? 0,
-    ...(level < revealed ? { text: spec.text } : {}),
+    ...(level < revealed ? { text: spec.text(ctx) } : {}),
   }));
 }
 
@@ -2246,14 +2263,30 @@ export function projectForTeam(
       ? 0
       : Math.max(0, state.config.rotateCooldownMs - (state.nowMs - team.lastRotateAtMs));
 
+  const vault: VaultProjection = {
+    teamId,
+    // team.secret / team.shares are already stringified bigints
+    // (TeamState / StoredShare, see types.ts) -- VaultProjection uses the
+    // exact same wire shape, so no conversion is needed here.
+    secret: team.secret,
+    shares: team.shares,
+    generation: team.generation,
+    lastRotateAtMs: team.lastRotateAtMs,
+    rotateCooldownRemainingMs,
+    completedContractIds: team.completedContractIds,
+    huntedGenerations: team.huntedGenerations,
+  };
+
   const myContracts = state.contracts
     .filter((c) => c.teamId === teamId)
-    .map((c) => ({
+    .map((c) => {
+      const task = projectTask(state, teamId, c.task, c.id);
+      return {
       id: c.id,
       kind: c.kind,
       points: c.points,
       leakPoints: c.leakPoints,
-      task: projectTask(state, teamId, c.task, c.id),
+      task,
       status: c.status,
       // [Issue #645] The Order's rule and the methods that satisfy it are
       // participant-visible by design: an Order the participant cannot LEAK
@@ -2268,13 +2301,14 @@ export function projectForTeam(
       // unreachable in practice. It exists only to keep this arithmetic
       // total without an unsafe assertion.
       remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
-      hints: projectHints(state, c),
+      hints: projectHints(state, c, task, vault),
       // [Issue #701] Only ever this team's OWN Orders reach here (the filter
       // above is `c.teamId === teamId`), so a commitment and its challenge are
       // being handed back to the team that made it.
       ...(c.proveCommitment === undefined ? {} : { proveCommitment: c.proveCommitment }),
       ...(c.proveChallenge === undefined ? {} : { proveChallenge: c.proveChallenge }),
-    }));
+      };
+    });
 
   const otherOpenContractCount = state.contracts.filter(
     (c) => c.teamId !== teamId && c.status === "open",
@@ -2311,19 +2345,7 @@ export function projectForTeam(
       me: (state.readyTeamIds ?? []).includes(teamId),
     },
     matchRemainingMs,
-    vault: {
-      teamId,
-      // team.secret / team.shares are already stringified bigints
-      // (TeamState / StoredShare, see types.ts) -- VaultProjection uses the
-      // exact same wire shape, so no conversion is needed here.
-      secret: team.secret,
-      shares: team.shares,
-      generation: team.generation,
-      lastRotateAtMs: team.lastRotateAtMs,
-      rotateCooldownRemainingMs,
-      completedContractIds: team.completedContractIds,
-      huntedGenerations: team.huntedGenerations,
-    },
+    vault,
     myContracts,
     otherOpenContractCount,
     // [Issue #679] `state.publicLedger` is the compact persisted form

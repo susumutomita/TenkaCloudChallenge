@@ -2,7 +2,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import { FAST_MOVE_COPY } from "../../portal/FastMovePanel.tsx";
-import { HINT_LADDER } from "./hints.ts";
+import { type HintContext, HINT_LADDER } from "./hints.ts";
+import { projectForTeam, tick } from "./reducer.ts";
+import { startedMatch } from "./playtest.ts";
 
 /**
  * [Issue #703] One noun for one thing, in the Japanese copy.
@@ -20,6 +22,15 @@ import { HINT_LADDER } from "./hints.ts";
  * nobody remembered to export.
  */
 const PORTAL_DIR = join(import.meta.dir, "..", "..", "portal");
+
+/** [Issue #712] A rung is rendered against an Order; this is the first share Order of a real match. */
+function shareRungContext(): HintContext {
+  const state = tick(startedMatch({ eventId: "vocabulary", teamIds: ["a", "b"] }), 0);
+  const projection = projectForTeam(state, "a");
+  const order = projection.myContracts.find((c) => c.task.kind === "reveal-share");
+  if (!order) throw new Error("test setup: expected a share Order");
+  return { task: order.task, vault: projection.vault, prime: projection.prime, threshold: projection.threshold, shareCount: 5 };
+}
 
 function portalSources(): { file: string; text: string }[] {
   return readdirSync(PORTAL_DIR)
@@ -49,7 +60,7 @@ describe("Issue #703: the Japanese copy calls a share one thing", () => {
     // Japanese sentence is the drift this catches.
     const glossed = "かけら (share)";
     expect(FAST_MOVE_COPY.ja.shareWhat).toContain(glossed);
-    expect(HINT_LADDER["reveal-share"][0]?.text.ja).toContain(glossed);
+    expect(HINT_LADDER["reveal-share"][0]?.text(shareRungContext()).ja).toContain(glossed);
   });
 
   /**
@@ -59,7 +70,7 @@ describe("Issue #703: the Japanese copy calls a share one thing", () => {
    * for a decision they could not frame.
    */
   test("the first share hint names the thing and names the move", () => {
-    const first = HINT_LADDER["reveal-share"][0]?.text;
+    const first = HINT_LADDER["reveal-share"][0]?.text(shareRungContext());
     expect(first?.ja).toContain("MY VAULT");
     expect(first?.ja).toContain("LEAK");
     expect(first?.en).toContain("MY VAULT");
