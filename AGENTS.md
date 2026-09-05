@@ -82,6 +82,15 @@ Every problem in this catalog, on every track, is designed for both audiences at
 - **Neither a task list nor a cliff**: a statement that walks the reader step-by-step through the answers turns the problem into 作業ゲー and fails; a statement that offers no foothold at all also fails. The statement's job is footholds and feedback loops — what to observe first, what the observation should provoke — while the insight stays the participant's to have.
 - **Participant-fidelity evidence**: a playability claim must use only what a participant can see — the statement, the editor's starter files, Inspect evidence, public-test output, and /verify verdicts with their §15 messages. This evidence may come from a deterministic browser harness or a human run. An independent tester and live AWS are not required for merge. Runs that read repository internals, probe undocumented endpoints, or bypass the participant surface prove nothing about playability and must not be cited as if they did.
 
+### §12d Hints are a staircase
+
+The owner's bar, set on a live run (Issue #712): a reader with junior-high mathematics and no vocabulary must be able to open the hints and complete the checkpoint, and after the last hint must be able to say これは何か / どういう仕組みか / 数式で落とすとどうなるか / 計算はどうやるか. Difficulty is understanding the mechanism, never arithmetic bulk.
+
+- Three rungs, one hint each, in this order: (1) 仕組み — what the quantity is and why it hides, binds, or recovers, in words, no formula yet; (2) 数式 — the formula, run once on one-digit numbers (「割った余り」 before `%`); (3) 手順 — the reader's own numbers one step at a time, ending where the reader writes the answer. Battles render rung 3 against the reader's projection (`hints.ts`); Challenge hints are static text, so rung 3 walks the on-screen names (「画面の w[0] と r0 を見る → w[0] − r0 → 負なら p を足す → …」) and never embeds a sample seed's finished numbers.
+- The statement is rung 0, for free: what the thing is, and the formula or the line to type (§12b — a needed formula never sits behind a paid hint). A hint that opens with strategy (「どちらを選ぶか」) or with typos before the mechanism fails this bar.
+- No leaps: every term a rung uses is defined in the statement or in an earlier rung. Hint penalties stay within §14.
+- Completion check, over participant-visible text only (statement, hints, Inspect evidence, public-test output): a junior-high-role reader, for each graded checkpoint, (a) says in one sentence why the step exists, (b) produces the value by hand from rung 3 without running the given code, (c) flags any term used before it is defined. The author may run this reader on one problem; before a rewrite fans out across problems, an independent run is required and its first pass must have caught at least one real leap — a pass that flags nothing is a prompt that is too soft, not a problem that is done.
+
 ## §13 Local-play containers
 
 - Declare `runtime.provider: "docker"`, `runtime.engine: "compose"`, and a real `runtime.entry`.
