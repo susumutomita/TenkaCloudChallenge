@@ -27,6 +27,7 @@ import type {
   ContractProjection,
   CryptoBattleProjection,
   HintProjection,
+  HuntBudgetProjection,
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
@@ -37,9 +38,9 @@ type FeedbackKind = "leak" | "prove" | "hunt" | "rotate" | "hint" | "error";
  * Every call site describes WHAT happened; `run` decides which attempt it was,
  * so no caller can forget to bump the counter and leave a repeat silent.
  */
-type FeedbackDraft = Omit<Feedback, "attempt">;
+export type FeedbackDraft = Omit<Feedback, "attempt">;
 
-interface Feedback {
+export interface Feedback {
   readonly kind: FeedbackKind;
   readonly title: string;
   readonly body: string;
@@ -119,7 +120,17 @@ export const FAST_MOVE_COPY = {
     commitment: "commitment",
     response: "response",
     hunt: "HUNT FROM LEDGER",
-    huntHint: "Pick a team / generation you inspected in the Public Ledger.",
+    /*
+      [Issue #696] The price of a miss is on the card BEFORE the attempt, in the
+      same sentence that says what to do. A wrong HUNT used to be refused, so it
+      cost nothing and there was nothing to disclose; now it lands, is charged,
+      and spends one of a small budget per target -- a cost the player only
+      learns from the banner after paying it is not a choice they made.
+    */
+    huntHint: (cost: number) =>
+      `Pick a team / generation you inspected in the Public Ledger. A wrong secret costs ${cost} points and one of your attempts against that team -- the count is on each chip.`,
+    huntAttemptsLeft: (left: number, max: number) => `${left}/${max} attempts left`,
+    huntExhausted: "No attempts left against this team's generation.",
     noHuntTarget: "No opponent share is public yet.",
     recovered: "recovered secret",
     rotate: "ROTATE",
@@ -154,6 +165,17 @@ export const FAST_MOVE_COPY = {
       "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "Recovered secret accepted.",
+    /*
+      [Issue #696] A miss is reported as a miss. The SDK answers a landed HUNT
+      with ok whether it hit or missed, and this banner used to key SUCCESS on
+      ok -- so a wrong guess lost 8 points, burned an attempt, and was told it
+      had been accepted. The numbers come from the projection, never a literal.
+    */
+    huntMiss: "HUNT MISS",
+    huntMissBody: (cost: number, left: number | undefined) =>
+      left === undefined ? `-${cost}` : `-${cost} · ${left} attempt${left === 1 ? "" : "s"} left`,
+    huntUnread: "HUNT SUBMITTED",
+    huntUnreadBody: "The result could not be read. Check your score and the attempts left on the target.",
     huntCipherBody: "Recovered key accepted — that rung is broken until they rotate.",
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `GEN ${from} → GEN ${to}`,
@@ -262,7 +284,11 @@ export const FAST_MOVE_COPY = {
     commitment: "commitment",
     response: "response",
     hunt: "LEDGER から HUNT",
-    huntHint: "Public Ledger で見つけた相手チーム / 世代を選びます。",
+    // [Issue #696] 外したときの代償は、提出する前にカードに書く。
+    huntHint: (cost: number) =>
+      `Public Ledger で見つけた相手チーム / 世代を選びます。外すと ${cost} 点減り、その相手・世代への HUNT 回数を 1 回使います。残り回数は各チップに出ています。`,
+    huntAttemptsLeft: (left: number, max: number) => `あと ${left}/${max} 回`,
+    huntExhausted: "この相手・世代への HUNT はもう残っていません。",
     noHuntTarget: "まだ相手のかけらは公開されていません。",
     recovered: "復元した secret",
     rotate: "ROTATE",
@@ -294,6 +320,12 @@ export const FAST_MOVE_COPY = {
       "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "復元した secret が受理されました。",
+    // [Issue #696] 外れは外れと言う。 ok だけを見て SUCCESS を出していたのが不具合。
+    huntMiss: "HUNT MISS",
+    huntMissBody: (cost: number, left: number | undefined) =>
+      left === undefined ? `-${cost}` : `-${cost} · あと ${left} 回`,
+    huntUnread: "HUNT を送信しました",
+    huntUnreadBody: "結果を読み取れませんでした。スコアと、相手チップの残り回数を確認してください。",
     huntCipherBody: "割り出した鍵が受理されました。相手が ROTATE するまで、この段は破れたままです。",
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `世代 ${from} → 世代 ${to}`,
@@ -438,6 +470,63 @@ function ledgerTargets(projection: CryptoBattleProjection | null) {
     }
   }
   return targets;
+}
+
+/**
+ * [Issue #696] The reader's HUNT budget against one target, or nothing if the
+ * target's generation is not the one the budget counts against.
+ *
+ * `ledgerTargets` lists every `team:generation` the ledger has shares for,
+ * including generations a ROTATE has already retired; `validateOp` refuses a
+ * HUNT at any generation but the current one. Showing "3/3 attempts left" on a
+ * chip the judge will refuse would advertise a budget that cannot be spent, so
+ * the count appears only where the two agree.
+ *
+ * Exported for `game/src/portal.test.ts` (see this file's header on why the
+ * panel itself cannot be rendered with a projection under test).
+ */
+export function huntBudgetFor(
+  projection: CryptoBattleProjection | null,
+  target: { readonly teamId: string; readonly generation: number },
+): HuntBudgetProjection | undefined {
+  const budget = projection?.huntAttempts[target.teamId];
+  return budget !== undefined && budget.generation === target.generation ? budget : undefined;
+}
+
+/**
+ * [Issue #696] What to tell the player after a Shamir HUNT the service
+ * accepted.
+ *
+ * Accepted is not the same as hit. Since #696 a wrong secret is a move that
+ * lands -- `validateOp` no longer refuses it, `applyHunt` charges
+ * `wrongHunt` and spends an attempt -- so the plugin SDK answers a miss with
+ * the same `{ ok: true }` it answers a hit with. This panel used to key the
+ * SUCCESS banner on that ok alone, and a player who guessed wrong lost points,
+ * burned an attempt, and read 「復元した secret が受理されました」.
+ *
+ * So SUCCESS requires the projection to SAY hit. A miss is named as a miss,
+ * with the price and the attempts left read off the projection; and an
+ * accepted op whose result cannot be read is reported as exactly that, never
+ * rounded up to a success.
+ *
+ * Exported for `game/src/portal.test.ts`.
+ */
+export function huntFeedback(
+  next: CryptoBattleProjection | undefined,
+  targetTeamId: string,
+  locale: Locale,
+): FeedbackDraft {
+  const copy = FAST_MOVE_COPY[locale];
+  const outcome = next?.lastHunt;
+  if (next !== undefined && outcome?.outcome === "hit") {
+    return { kind: "hunt", title: copy.huntSuccess, body: copy.huntBody };
+  }
+  if (next !== undefined && outcome?.outcome === "miss") {
+    const budget = next.huntAttempts[targetTeamId];
+    const left = budget === undefined ? undefined : Math.max(0, budget.max - budget.spent);
+    return { kind: "error", title: copy.huntMiss, body: copy.huntMissBody(next.wrongHuntCost, left) };
+  }
+  return { kind: "error", title: copy.huntUnread, body: copy.huntUnreadBody };
 }
 
 function ownExposedShareCount(projection: CryptoBattleProjection | null): number {
@@ -921,6 +1010,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const nextHint = nextHintFor(selectedOrder);
   const targets = useMemo(() => ledgerTargets(projection), [projection]);
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
+  // [Issue #696] The cap is visible BEFORE the attempt is spent: a chip with no
+  // attempts left says so, and the SUBMIT under it is disabled rather than
+  // left to be refused by the judge.
+  const selectedBudget = selectedTarget === undefined ? undefined : huntBudgetFor(projection, selectedTarget);
+  const huntExhausted = selectedBudget !== undefined && selectedBudget.spent >= selectedBudget.max;
   const nonceTargets = useMemo(() => nonceHuntCandidates(projection), [projection]);
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
   const exposure = useMemo(() => exposureRows(projection), [projection]);
@@ -931,17 +1025,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
     cipherTargets.find((t) => `${t.teamId}:${t.generation}:${t.rung}` === cipherTargetKey) ??
     cipherTargets[0];
 
-  const applyOutcome = (outcome: PortalCoordinationOutcome, attempt: number) => {
-    const next = liveProjection(outcome);
-    if (next) setProjection(next);
-    if (outcome.kind !== "ok") {
-      setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
-      return false;
-    }
-    return true;
-  };
-
-  const run = async (task: () => Promise<PortalCoordinationOutcome>, success: () => FeedbackDraft) => {
+  // [Issue #696] `success` receives the projection the op came back with.
+  // An accepted op is not always a success -- a HUNT miss lands and returns
+  // ok -- and the projection is the only thing that can say which it was.
+  const run = async (
+    task: () => Promise<PortalCoordinationOutcome>,
+    success: (next: CryptoBattleProjection | undefined) => FeedbackDraft,
+  ) => {
     if (submitting) return;
     setSubmitting(true);
     setFeedback(null);
@@ -953,7 +1043,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
     const attempt = attemptRef.current;
     try {
       const outcome = await task();
-      if (applyOutcome(outcome, attempt)) setFeedback({ ...success(), attempt });
+      const next = liveProjection(outcome);
+      if (next) setProjection(next);
+      if (outcome.kind !== "ok") {
+        setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
+      } else {
+        setFeedback({ ...success(next), attempt });
+      }
     } catch {
       setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable, attempt });
     } finally {
@@ -1449,23 +1545,30 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {tactics.hunt && <div className="tc-secondary-grid">
         <div className="tc-hunt-card">
           <div className="tc-card-title">{copy.hunt}</div>
-          <div className="tc-card-hint">{copy.huntHint}</div>
+          <div className="tc-card-hint">{copy.huntHint(projection.wrongHuntCost)}</div>
           <>
               <div className="tc-target-row">
                 {targets.map((target) => {
                   const key = `${target.teamId}:${target.generation}`;
-                  return <button key={key} type="button" className="tc-target-chip" aria-pressed={selectedTarget ? `${selectedTarget.teamId}:${selectedTarget.generation}` === key : false} onClick={() => setHuntTargetKey(key)}>{target.teamId} · gen {target.generation} · [{target.shareIndices.join(",")}]</button>;
+                  const budget = huntBudgetFor(projection, target);
+                  return <button key={key} type="button" className="tc-target-chip" aria-pressed={selectedTarget ? `${selectedTarget.teamId}:${selectedTarget.generation}` === key : false} onClick={() => setHuntTargetKey(key)}>{target.teamId} · gen {target.generation} · [{target.shareIndices.join(",")}]{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>;
                 })}
               </div>
+              {huntExhausted ? <div className="tc-card-warn">{copy.huntExhausted}</div> : null}
               <div className="tc-input-panel">
                 <input aria-label="fast-hunt-secret" value={recoveredSecret} onChange={(event) => setRecoveredSecret(event.target.value)} placeholder={copy.recovered} />
                 <button
                   type="button"
                   className="tc-submit-small"
-                  disabled={submitting || !selectedTarget || !recoveredSecret.trim()}
+                  disabled={submitting || !selectedTarget || !recoveredSecret.trim() || huntExhausted}
                   onClick={() => selectedTarget && void run(
                     () => submitHunt(client, selectedTarget.teamId, selectedTarget.generation, recoveredSecret.trim()),
-                    () => ({ kind: "hunt", title: copy.huntSuccess, body: copy.huntBody }),
+                    // [Issue #696] Hit or miss is read off the projection the
+                    // op came back with -- see `huntFeedback`. The other HUNT
+                    // kinds (nonce, cipher) keep their plain success draft
+                    // because `validateOp` still refuses a wrong answer there,
+                    // so for them ok really does mean hit.
+                    (next) => huntFeedback(next, selectedTarget.teamId, locale),
                   )}
                 >{submitting ? copy.running : copy.send}</button>
               </div>
@@ -1612,16 +1715,30 @@ export default function FastMovePanel(props: PortalSlotProps) {
         <Vault projection={projection} locale={locale} />
       </div>
 
-      {feedback && (
-        <div key={feedback.attempt} className={`tc-feedback tc-feedback-${feedback.kind}`}>
-          <strong>
-            {feedback.title}
-            {feedback.attempt > 1 ? <em className="tc-feedback-attempt">{copy.attemptLabel(feedback.attempt)}</em> : null}
-          </strong>
-          <span>{feedback.body}</span>
-          {feedback.lesson ? <span className="tc-feedback-lesson">{feedback.lesson}</span> : null}
-        </div>
-      )}
+      {feedback && <FeedbackBanner key={feedback.attempt} feedback={feedback} locale={locale} />}
     </section>
+  );
+}
+
+/**
+ * The banner a submission leaves behind. Keyed by `attempt` at the call site
+ * so a repeat remounts and the pop replays (Issue #697).
+ *
+ * Its own component, exported, so `game/src/portal.test.ts` can render what a
+ * HUNT miss actually puts on the screen: the panel itself has no projection
+ * under `renderToStaticMarkup` (see this file's header), so the banner is the
+ * seam the miss-versus-success check has to go through.
+ */
+export function FeedbackBanner({ feedback, locale }: { readonly feedback: Feedback; readonly locale: Locale }) {
+  const copy = FAST_MOVE_COPY[locale];
+  return (
+    <div className={`tc-feedback tc-feedback-${feedback.kind}`}>
+      <strong>
+        {feedback.title}
+        {feedback.attempt > 1 ? <em className="tc-feedback-attempt">{copy.attemptLabel(feedback.attempt)}</em> : null}
+      </strong>
+      <span>{feedback.body}</span>
+      {feedback.lesson ? <span className="tc-feedback-lesson">{feedback.lesson}</span> : null}
+    </div>
   );
 }

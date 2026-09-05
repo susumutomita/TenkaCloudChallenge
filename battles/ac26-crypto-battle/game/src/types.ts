@@ -692,6 +692,28 @@ export interface TeamState {
    * mine is broken" is the question they need answered, not "am I broken".
    */
   readonly cipherHuntedGenerations: Readonly<Record<string, readonly number[]>>;
+  /**
+   * [Issue #696] This team's most recent Shamir HUNT, and whether it landed.
+   *
+   * Since #696 a wrong HUNT is a move that lands (charged, budget spent) rather
+   * than a request `validateOp` refuses, so the plugin SDK answers it with the
+   * same `{ ok: true }` it answers a hit with. The projection is a pure
+   * function of state, so the only way the Portal can tell the two apart is
+   * for the state to remember which one just happened. Absent on a row written
+   * before this existed, and on a team that has never HUNTed -- both mean the
+   * same thing: nothing to report.
+   */
+  readonly lastHunt?: LastHunt;
+}
+
+/** [Issue #696] What a Shamir HUNT came to -- see `TeamState.lastHunt`. */
+export type HuntOutcome = "hit" | "miss";
+
+/** [Issue #696] One HUNT, as the attacker's own record of it. */
+export interface LastHunt {
+  readonly targetTeamId: string;
+  readonly generation: number;
+  readonly outcome: HuntOutcome;
 }
 
 export interface CryptoBattleState {
@@ -1068,6 +1090,19 @@ export interface ContractProjection {
   readonly proveChallenge?: string;
 }
 
+/**
+ * [Issue #696] The reader's own HUNT budget against ONE other team's CURRENT
+ * generation -- see `CryptoBattleProjection.huntAttempts`.
+ */
+export interface HuntBudgetProjection {
+  /** The generation these attempts count against; a ROTATE starts a fresh one. */
+  readonly generation: number;
+  /** Attempts already spent, hit or miss. */
+  readonly spent: number;
+  /** `config.maxHuntAttemptsPerTarget`. */
+  readonly max: number;
+}
+
 export interface TeamSummaryProjection {
   readonly teamId: string;
   /**
@@ -1136,4 +1171,29 @@ export interface CryptoBattleProjection {
   readonly teams: Readonly<Record<string, TeamSummaryProjection>>;
   /** Every team's current-generation Schnorr public commitment -- see CryptoBattleState's field of the same name. Public by construction, safe for every team to see. */
   readonly publicCommitments: Readonly<Record<string, string>>;
+  /**
+   * [Issue #696] MY HUNT attempts against every OTHER team, keyed by that
+   * team's id, for its current generation.
+   *
+   * The cap (`config.maxHuntAttemptsPerTarget`) is what makes a hand-sized
+   * field sound, and a cap the player cannot see is a wall they walk into: the
+   * Portal has to show "2 of 3 left" BEFORE the attempt is spent, and "-8, 1
+   * left" after a miss. Deliberately only the reader's own attempts -- what
+   * some third team has tried against a target is not on this record, the same
+   * way `teams` carries scores and generations but not `huntAttempts`.
+   */
+  readonly huntAttempts: Readonly<Record<string, HuntBudgetProjection>>;
+  /**
+   * [Issue #696] What a wrong HUNT costs -- `config.scores.wrongHunt`. On the
+   * projection for the same reason `threshold` is: the miss banner has to
+   * print the real number, not one the Portal was told out-of-band.
+   */
+  readonly wrongHuntCost: number;
+  /**
+   * [Issue #696] The reader's most recent Shamir HUNT, if any -- see
+   * `TeamState.lastHunt`. This is the field that lets the Portal tell a hit
+   * from a miss after an op the SDK answered `{ ok: true }` either way.
+   * Never another team's: `projectForTeam` reads it off the reader's own row.
+   */
+  readonly lastHunt?: LastHunt;
 }

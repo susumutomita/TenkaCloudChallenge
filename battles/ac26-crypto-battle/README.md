@@ -18,7 +18,7 @@ That is the whole bet.
 | --- | --- | --- |
 | **LEAK** | Hand over one piece and answer instantly | Fast — but the piece never comes back |
 | **PROVE** | Compute, and answer without handing anything over | The piece stays safe — but it costs a calculation |
-| **HUNT** | When someone has three pieces exposed, take their points | — |
+| **HUNT** | When someone has three pieces exposed, take their points | A wrong secret costs points and one of a few attempts per team and generation |
 | **ROTATE** | Remake your pieces. Everything published stops counting | — |
 | **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
 

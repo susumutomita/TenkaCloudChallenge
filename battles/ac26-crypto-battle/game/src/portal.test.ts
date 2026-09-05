@@ -48,7 +48,10 @@ import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
 import {
   FAST_MOVE_COPY,
+  FeedbackBanner,
   cipherHuntCandidates,
+  huntBudgetFor,
+  huntFeedback,
   nextHintFor,
   nonceHuntCandidates,
   primaryActionsFor,
@@ -203,6 +206,9 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
       red: { teamId: "red", teamName: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
     },
     publicCommitments: { blue: "1010101010", red: "2020202020" },
+    // [Issue #696] The HUNT card reads the budget and the miss price from here.
+    huntAttempts: { red: { generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    wrongHuntCost: DEFAULT_CONFIG.scores.wrongHunt,
     ...overrides,
   };
 }
@@ -1661,5 +1667,154 @@ describe("Issue #701: the PROVE instructions name the group a match actually use
     expect(FAST_MOVE_COPY.ja.challengeLabel).toContain("チャレンジ");
     expect(FAST_MOVE_COPY.en.proveStep1).toContain("no challenge yet");
     expect(FAST_MOVE_COPY.en.challengeLabel).toContain("challenge");
+  });
+});
+
+/**
+ * [Issue #696] A HUNT miss is reported as a miss.
+ *
+ * Since #696 a wrong secret is a move that lands: `validateOp` no longer
+ * refuses it, `applyHunt` charges `wrongHunt` and spends one of
+ * `maxHuntAttemptsPerTarget`. The plugin SDK answers that op with the same
+ * `{ ok: true }` it answers a hit with, and the panel keyed the SUCCESS banner
+ * on ok alone -- so a player who guessed wrong lost 8 points, burned an
+ * attempt, and read 「復元した secret が受理されました」. The panel has no
+ * projection under `renderToStaticMarkup` (see this file's header), so what
+ * is rendered here is the banner the panel would show, built from the
+ * projection the op came back with.
+ */
+describe("Issue #696: a HUNT miss renders the miss banner, never the success banner", () => {
+  const missProjection = (spent: number) =>
+    fixtureProjection({
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" },
+      huntAttempts: { red: { generation: 1, spent, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    });
+  const hitProjection = () =>
+    fixtureProjection({
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "hit" },
+      huntAttempts: { red: { generation: 1, spent: 1, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    });
+  const render = (projection: CryptoBattleProjection | undefined, locale: "ja" | "en") =>
+    renderToStaticMarkup(
+      createElement(FeedbackBanner, { feedback: { ...huntFeedback(projection, "red", locale), attempt: 1 }, locale }),
+    );
+
+  for (const locale of ["ja", "en"] as const) {
+    it(`a miss shows HUNT MISS with the price and the attempts left, and no success copy (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      const html = render(missProjection(1), locale);
+      expect(html).toContain(copy.huntMiss);
+      expect(html).toContain(copy.huntMissBody(DEFAULT_CONFIG.scores.wrongHunt, DEFAULT_CONFIG.maxHuntAttemptsPerTarget - 1));
+      // The numbers are real: -8 and "2 left" at the shipped config.
+      expect(html).toContain(`-${DEFAULT_CONFIG.scores.wrongHunt}`);
+      expect(html).toContain(String(DEFAULT_CONFIG.maxHuntAttemptsPerTarget - 1));
+      expect(html).not.toContain(copy.huntSuccess);
+      expect(html).not.toContain(copy.huntBody);
+      // Styled as an error, not as a landed hunt.
+      expect(html).toContain("tc-feedback-error");
+      expect(html).not.toContain("tc-feedback-hunt");
+    });
+
+    it(`a hit still shows HUNT SUCCESS (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      const html = render(hitProjection(), locale);
+      expect(html).toContain(copy.huntSuccess);
+      expect(html).toContain(copy.huntBody);
+      expect(html).not.toContain(copy.huntMiss);
+    });
+
+    it(`an accepted op whose outcome cannot be read is never rounded up to SUCCESS (${locale})`, () => {
+      const copy = FAST_MOVE_COPY[locale];
+      // No projection at all (the response failed the guard) ...
+      expect(render(undefined, locale)).not.toContain(copy.huntSuccess);
+      // ... and a projection with no recorded HUNT: neither is a hit.
+      const { lastHunt, ...noOutcome } = fixtureProjection();
+      expect(render(noOutcome, locale)).not.toContain(copy.huntSuccess);
+      expect(render(noOutcome, locale)).toContain(copy.huntUnread);
+    });
+  }
+
+  it("the last attempt reports 0 left, in the singular/plural the locale needs", () => {
+    const max = DEFAULT_CONFIG.maxHuntAttemptsPerTarget;
+    expect(huntFeedback(missProjection(max), "red", "en").body).toContain("0 attempts left");
+    expect(huntFeedback(missProjection(max - 1), "red", "en").body).toContain("1 attempt left");
+    expect(huntFeedback(missProjection(max), "red", "ja").body).toContain("あと 0 回");
+  });
+
+  it("the price on the banner is the projection's, not a literal", () => {
+    const pricey = fixtureProjection({
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" },
+      wrongHuntCost: 13,
+    });
+    expect(huntFeedback(pricey, "red", "en").body).toContain("-13");
+    expect(huntFeedback(pricey, "red", "ja").body).toContain("-13");
+  });
+});
+
+/**
+ * [Issue #696] The cap is visible BEFORE the attempt is spent. A budget the
+ * player only discovers when the judge refuses the fourth try is a wall they
+ * walked into, not a rule they played around.
+ */
+describe("Issue #696: the HUNT budget is shown on the target before it is spent", () => {
+  it("names the attempts left on a target at its current generation, in both locales", () => {
+    const budget = huntBudgetFor(fixtureProjection(), { teamId: "red", generation: 1 });
+    expect(budget).toEqual({ generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget });
+    for (const locale of ["ja", "en"] as const) {
+      const label = FAST_MOVE_COPY[locale].huntAttemptsLeft(2, 3);
+      expect(label).toContain("2");
+      expect(label).toContain("3");
+    }
+  });
+
+  it("shows no budget on a generation the target has already rotated away from", () => {
+    // `ledgerTargets` still lists old generations (their shares are on the
+    // record), but `validateOp` refuses a HUNT at any but the current one, so
+    // advertising attempts there would advertise a budget that cannot be spent.
+    const rotated = fixtureProjection({
+      huntAttempts: { red: { generation: 2, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    });
+    expect(huntBudgetFor(rotated, { teamId: "red", generation: 1 })).toBeUndefined();
+    expect(huntBudgetFor(rotated, { teamId: "red", generation: 2 })).toBeDefined();
+  });
+
+  it("the card's own hint states the price of a miss from the projection", () => {
+    for (const locale of ["ja", "en"] as const) {
+      expect(FAST_MOVE_COPY[locale].huntHint(8)).toContain("8");
+      expect(FAST_MOVE_COPY[locale].huntExhausted.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("the guard fails closed on a projection that predates the budget", () => {
+    const { huntAttempts, ...noBudget } = fixtureProjection();
+    expect(isCryptoBattleProjection(noBudget)).toBe(false);
+    const { wrongHuntCost, ...noPrice } = fixtureProjection();
+    expect(isCryptoBattleProjection(noPrice)).toBe(false);
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), lastHunt: { outcome: "maybe" } })).toBe(false);
+    expect(isCryptoBattleProjection(fixtureProjection({ lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" } }))).toBe(true);
+  });
+});
+
+/**
+ * [Issue #696] The Help Drawer must not promise a wrong HUNT is free. It said
+ * 「何も起こりません」 / "does nothing" while the reducer charged 8 points.
+ */
+describe("Issue #696: the Help Drawer says what a wrong HUNT costs", () => {
+  for (const locale of ["ja", "en"] as const) {
+    it(`no longer claims a wrong guess does nothing (${locale})`, () => {
+      const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
+      expect(html).not.toContain("does nothing");
+      expect(html).not.toContain("何も起こりません");
+      expect(html).not.toContain("guessing never scores");
+      expect(html).not.toContain("当て推量は得点になりません");
+    });
+  }
+  it("says, in words, that a miss costs points and attempts", () => {
+    const en = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale: "en" })));
+    expect(en).toContain("A wrong guess is not free");
+    expect(en).toMatch(/attempts/);
+    const ja = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale: "ja" })));
+    expect(ja).toContain("外した HUNT はタダではありません");
+    expect(ja).toContain("減点");
   });
 });

@@ -108,6 +108,18 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof v.teams !== "object" || v.teams === null) return false;
   if (typeof v.publicCommitments !== "object" || v.publicCommitments === null) return false;
 
+  // [Issue #696] Same fail-closed rule as `prime` / `threshold`: the HUNT card
+  // prints "N of M attempts left" and the miss banner prints the price from
+  // these, and a payload from a dispatcher that predates them would otherwise
+  // render `undefined` where the cost of a move belongs.
+  if (typeof v.huntAttempts !== "object" || v.huntAttempts === null) return false;
+  if (typeof v.wrongHuntCost !== "number" || !Number.isFinite(v.wrongHuntCost)) return false;
+  if (v.lastHunt !== undefined) {
+    const last = v.lastHunt as Record<string, unknown> | null;
+    if (typeof last !== "object" || last === null) return false;
+    if (last.outcome !== "hit" && last.outcome !== "miss") return false;
+  }
+
   return true;
 }
 
