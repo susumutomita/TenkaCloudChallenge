@@ -2,10 +2,9 @@
  * Issue #641 wrapper: teach the decision loop and let a player rehearse it
  * before exposing the complete cryptographic reference.
  *
- * The unchanged reference implementation is copied to HelpDrawerCore.tsx in
- * the same commit. Re-exporting it preserves PYTHON_SNIPPET and any existing
- * imports while progressive disclosure keeps the 2048-bit constant out of
- * the initial reading path.
+ * Re-export HelpDrawerCore.tsx to preserve the computation reference imports.
+ * Progressive disclosure keeps the full HUNT reference behind the rules and
+ * the hand-worked sudoku rehearsal.
  */
 
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";

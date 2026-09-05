@@ -60,6 +60,31 @@ describe("dev host is the real reducer", () => {
     expect(scenario.host.version).toBe(0);
   });
 
+  it("should reject an unreduced HUNT without changing scores, attempts or version", () => {
+    const scenario = buildScenario("hunt-reachable");
+    const { host, nowMs } = scenario;
+    const view = projectForTeam(host.state, "bravo");
+    const hunt = buildHuntOp(view, "alpha", {
+      prime: host.state.config.prime, threshold: host.state.config.threshold,
+    });
+    if (!hunt || hunt.kind !== "hunt") throw new Error("expected a reachable Shamir HUNT");
+    const before = JSON.stringify(host.state);
+    const version = host.version;
+    const outcome = submitOp(host, "bravo", {
+      ...hunt,
+      recoveredSecret: (BigInt(hunt.recoveredSecret) + BigInt(host.state.config.prime)).toString(),
+    }, nowMs);
+    expect(outcome).toEqual({
+      kind: "rejected",
+      error: "recoveredSecret must already be reduced -- take the remainder after dividing by the modulus",
+    });
+    expect(JSON.stringify(host.state)).toBe(before);
+    expect(host.version).toBe(version);
+    expect(submitOp(host, "bravo", hunt, nowMs).kind).toBe("ok");
+    expect(host.version).toBe(version + 1);
+    expect(projectForTeam(host.state, "bravo").huntAttempts.alpha?.spent).toBe(1);
+  });
+
   it("should refuse a team that is not in the match", () => {
     const host = createMatch({ eventId: "e1", teamIds: DEV_TEAMS }, DEV_CONFIG);
     const result = dispatch(host.state, "intruder", { kind: "rotate" });

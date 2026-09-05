@@ -124,6 +124,36 @@ make agent-gate
 Order cadence, batch size and TTLs, ROTATE cooldown, threshold/share count, and
 the score values that apply to every Order.
 
+### Field size and HUNT attempt limits
+
+Treat `config.prime`, `config.maxHuntAttemptsPerTarget`, and
+`config.scores.wrongHunt` as coupled settings. The match defaults are `97`,
+`3`, and `8`; `scores.huntBonus` is `25`. This is a teaching field, not a
+cryptographic security parameter. Smaller numbers make hand calculation easier
+and blind guessing easier too. Never lower the prime or raise the attempt cap
+without checking the scoring tradeoff at the same time.
+
+For each override, check that the prime exceeds `shareCount`, the attempt cap
+is smaller than the prime and no larger than `threshold`, and
+`huntBonus / prime < wrongHunt`. The default-only assertion in
+`game/src/reducer.test.ts` does not validate operator overrides. For the default
+field, one uniform blind guess has an unclamped expected score change of
+`25/97 - 8*96/97`, which is negative; the score floor at zero still applies, so
+the attempt cap is necessary even when a team has no points to lose.
+
+The budget is per attacker, target, and generation; a hit spends an attempt
+and prevents another reward on that pairing. A well-formed wrong answer costs
+`wrongHunt` and spends one attempt. Malformed or unreduced inputs are refused
+without either cost. Shamir HUNT, FHE, and MPC inputs must already be in
+`0..prime-1`: adding the prime to a correct answer is a format error.
+
+Use a replay or fixture with the proposed config to check correct recovery,
+wrong-answer cost, exhausted attempts, and ROTATE before using an override.
+`field.ts`'s library default `P = 2^61 - 1` is for arithmetic tests; the match
+passes `config.prime` explicitly, with `HAND_PRIME = 97` as its default.
+
+### Order economics
+
 Per-rung economics live in `game/src/ladder.ts`'s `CIPHER_RUNGS`, not in
 `DEFAULT_CONFIG`: how many published pairs break a rung, how long its plaintext
 is, and what breaking it pays. They belong to the rung because that is what the

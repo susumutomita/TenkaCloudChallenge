@@ -399,6 +399,36 @@ describe("hunt", () => {
     expect(() => applyOp(state, "teamA", op)).toThrow();
   });
 
+  test("an unreduced HUNT is a format error without a charge or spent attempt", () => {
+    const state = leakThreshold(tick(startedMatch(CTX), 0), "teamB");
+    const before = JSON.stringify(state);
+    const prime = BigInt(state.config.prime);
+    const secret = state.teams.teamB?.secret;
+    if (secret === undefined) throw new Error("expected teamB");
+    for (const value of [prime, BigInt(secret) + prime]) {
+      const op: CryptoBattleOp = {
+        kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: value.toString(),
+      };
+      expect(validateOp(state, "teamA", op)).toEqual({
+        ok: false,
+        error: "recoveredSecret must already be reduced -- take the remainder after dividing by the modulus",
+      });
+      expect(JSON.stringify(state)).toBe(before);
+    }
+    // Both endpoints of the taught range still count as guesses. Correct
+    // canonical input still scores; leading zeros keep their existing meaning.
+    for (const recoveredSecret of ["0", (prime - 1n).toString()]) {
+      expect(validateOp(state, "teamA", {
+        kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret,
+      }).ok).toBe(true);
+    }
+    const next = applyOp(state, "teamA", {
+      kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: `00${secret}`,
+    });
+    expect(next.teams.teamA?.score).toBe(state.config.scores.huntBonus);
+    expect(projectForTeam(next, "teamA").huntAttempts.teamB?.spent).toBe(1);
+  });
+
   // [Issue #696] The REVERSE of what this pinned before, and deliberately so.
   // It used to require `validateOp` to refuse a wrong guess, which made a miss
   // cost nothing and leave no trace -- survivable only while the field was
