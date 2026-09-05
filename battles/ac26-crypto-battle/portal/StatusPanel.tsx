@@ -21,6 +21,9 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import BattleSurface from "./FastMovePanel.tsx";
 import CoreStatusPanel from "./StatusPanelCore.tsx";
+import ConceptExplanation from "./ConceptExplanation.tsx";
+import QuickRules from "./QuickRules.tsx";
+import TutorialWalkthrough from "./TutorialWalkthrough.tsx";
 
 export * from "./StatusPanelCore.tsx";
 
@@ -31,8 +34,21 @@ const COPY = {
 
 export default function StatusPanel(props: PortalSlotProps) {
   const locale = props.locale === "ja" ? "ja" : "en";
+  const tutorialKey = `crypto-battle-tutorial:${props.team.eventId}:${props.jobId}:${props.team.teamId}`;
   return (
     <>
+      <section style={{ maxWidth: 1080, margin: "0 auto 10px", padding: "14px 18px", background: "#fff", color: "#16212e", border: "1px solid #dce3ec", borderRadius: 12 }}>
+        <h1 style={{ margin: "0 0 6px", fontSize: 20 }}>{locale === "ja" ? "暗号バトル" : "Cryptography Battle"}</h1>
+        <p style={{ margin: "0 0 10px", fontSize: 13 }}>{locale === "ja" ? "暗号のお題に答えて得点。公開情報から相手の秘密を復元すると、追加で得点できます。" : "Score by answering cryptography tasks. Recover an opponent’s secret from public evidence to earn more."}</p>
+        <details>
+          <summary style={{ cursor: "pointer", fontSize: 13, color: "#315f91" }}>{locale === "ja" ? "ルール・暗号のしくみ・練習（無料）" : "Rules, how the cryptography works, and optional practice (free)"}</summary>
+          <div style={{ marginTop: 12 }}>
+            <QuickRules locale={locale} />
+            <ConceptExplanation locale={locale} />
+            <TutorialWalkthrough key={tutorialKey} locale={locale} />
+          </div>
+        </details>
+      </section>
       <BattleSurface {...props} />
       <details style={{ marginTop: "10px" }}>
         <summary style={{ cursor: "pointer", fontSize: "12px", color: "#5f6b7a" }}>{COPY[locale].raw}</summary>

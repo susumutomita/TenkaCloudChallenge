@@ -106,7 +106,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     // failing for a reason that has nothing to do with the property.
     expect(bravoLedgerEntries.some((a) => a.k === "share")).toBe(false);
     expect(new Set(bravoLedgerEntries.map((a) => a.k))).toEqual(
-      new Set(["proof", "ciphertext", "partial"]),
+      new Set(["sudoku-reveal", "ciphertext", "partial"]),
     );
   });
 
@@ -150,7 +150,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     // the hunt buildable at all) and alpha's `secret` / un-leaked shares
     // must still not appear anywhere in it.
     const bravoProjection = built.bravoProjectionBeforeHunt;
-    expect(bravoProjection.publicCommitments[DEFENDER]).toBeDefined();
+    expect(bravoProjection.publicPuzzles[DEFENDER]).toBeDefined();
     const alphaLeakedShareCount = bravoProjection.publicLedger.filter(
       (a) => a.kind === "share" && a.teamId === DEFENDER,
     ).length;
@@ -208,9 +208,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     expect(postEndSteps.length).toBeGreaterThanOrEqual(4);
     expect(postEndSteps.every((s) => s.expect === "rejected")).toBe(true);
     const kinds = new Set(postEndSteps.map((s) => s.op.kind));
-    // [Issue #701] PROVE's first move is what a post-end attempt looks like
-    // now: the gate refuses the commitment, so a response never gets a chance.
-    expect(kinds).toEqual(new Set(["leak", "prove-commit", "rotate", "hunt"]));
+    expect(kinds).toEqual(new Set(["leak", "prove-sudoku", "rotate", "hunt"]));
   });
 
   test("MUST 10 (UI-level 'advance / hunt / defend' tension) is NOT claimed here -- a scripted fixture has no UI or human decision point; see OPERATOR.md's Tuning notes", () => {
@@ -242,11 +240,8 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
       // for a LEAK pass here.
       if (step.op.kind === "leak") {
         expected[step.teamId] = (expected[step.teamId] ?? 0) + contractById(step.op.contractId).leakPoints;
-      } else if (step.op.kind === "prove-commit") {
-        // [Issue #701] Committing scores nothing -- the Order is paid when the
-        // response verifies, one step later.
       } else if (
-        step.op.kind === "prove-respond" ||
+        step.op.kind === "prove-sudoku" ||
         step.op.kind === "cipher" ||
         step.op.kind === "fhe" ||
         step.op.kind === "mpc"
@@ -297,7 +292,7 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     expect(opSteps.length).toBeGreaterThan(0);
     const kinds = new Set(opSteps.map((s) => s.op.kind));
     expect(kinds).toEqual(
-      new Set(["leak", "prove-commit", "prove-respond", "cipher", "fhe", "mpc", "hunt", "rotate"]),
+      new Set(["leak", "prove-sudoku", "cipher", "fhe", "mpc", "hunt", "rotate"]),
     );
     expect(opSteps.some((s) => s.expect === "rejected")).toBe(true);
     expect(opSteps.some((s) => s.expect === "ok")).toBe(true);

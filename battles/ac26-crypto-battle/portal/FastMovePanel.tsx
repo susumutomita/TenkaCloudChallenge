@@ -6,27 +6,41 @@ import {
   submitFhe,
   submitHunt,
   submitHuntCipher,
-  submitHuntNonce,
+  submitHuntSudoku,
   submitLeak,
   submitMpc,
-  submitProveCommit,
-  submitProveRespond,
+  submitProveSudoku,
   submitRevealHint,
   submitReady,
   submitRotate,
   submitStart,
 } from "./RegistrationPanelCore.tsx";
-import { taskDetail, taskLabel } from "./orderTask.ts";
+import ConceptExplanation from "./ConceptExplanation.tsx";
+import MpcWorksheet from "./MpcWorksheet.tsx";
+import { taskDetail } from "./orderTask.ts";
+import { disclosurePreview, orderHeading } from "./OrderFocus.tsx";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
 import { BOARD_CSS, Ledger, OrderBelt, Vault } from "./GameBoard.tsx";
-import QuickRules from "./QuickRules.tsx";
+import {
+  describeRevealGroup,
+  emptyCells,
+  parseCells,
+  PermutationChips,
+  SudokuBoard,
+  SudokuInput,
+  sudokuFillInGivens,
+  SUDOKU_CSS,
+} from "./SudokuGrid.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
+import { ALL_PERMUTATIONS } from "../game/src/sudoku.ts";
 import type { CipherRung } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
   ContractProjection,
   CryptoBattleProjection,
   HintProjection,
+  HuntBudgetProjection,
+  SudokuRevealArtifact,
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
@@ -37,9 +51,9 @@ type FeedbackKind = "leak" | "prove" | "hunt" | "rotate" | "hint" | "error";
  * Every call site describes WHAT happened; `run` decides which attempt it was,
  * so no caller can forget to bump the counter and leave a repeat silent.
  */
-type FeedbackDraft = Omit<Feedback, "attempt">;
+export type FeedbackDraft = Omit<Feedback, "attempt">;
 
-interface Feedback {
+export interface Feedback {
   readonly kind: FeedbackKind;
   readonly title: string;
   readonly body: string;
@@ -83,7 +97,7 @@ export const FAST_MOVE_COPY = {
     title: "MAKE A MOVE",
     selectOrder: "1. PICK AN ORDER",
     noOrder: "No Order is open right now.",
-    choose: "2. CHOOSE ONE",
+    choose: "Choose how to answer",
     /*
       [Issue #702] Free, and on the card rather than behind a hint. The live run
       bought all three hint levels on this Order (-14) and came back with
@@ -96,10 +110,10 @@ export const FAST_MOVE_COPY = {
     shareDo: (indices: readonly number[]) =>
       `This Order asks for ${indices.map((i) => `#${i}`).join(", ")}. LEAK hands it over and completes the Order in one press — no calculation. PROVE answers without handing it over.`,
     leak: "LEAK",
-    leakHint: "FAST / PUBLIC",
+    leakHint: "One press · no calculation",
     prove: "PROVE",
-    proveHint: "COMPUTE / PROTECTED",
-    proveOpen: "Enter proof",
+    proveHint: "Choose a table · fill four cells",
+    proveOpen: "Relabel and submit",
     constraintNone: "any method",
     constraintNoRaw: (methods: readonly string[]) =>
       `${methods.join(" / ").toUpperCase()} only — the raw value must not be published`,
@@ -116,14 +130,24 @@ export const FAST_MOVE_COPY = {
     scoreHint: "Answer an Order to gain. Let one expire and you lose points.",
     leakBlocked: "This Order does not accept LEAK.",
     proveBlocked: "This Order does not accept PROVE.",
-    commitment: "commitment",
-    response: "response",
     hunt: "HUNT FROM LEDGER",
-    huntHint: "Pick a team / generation you inspected in the Public Ledger.",
+    /*
+      [Issue #696] The price of a miss is on the card BEFORE the attempt, in the
+      same sentence that says what to do. A wrong HUNT used to be refused, so it
+      cost nothing and there was nothing to disclose; now it lands, is charged,
+      and spends one of a small budget per target -- a cost the player only
+      learns from the banner after paying it is not a choice they made.
+    */
+    huntHint: (cost: number) =>
+      `Pick a team / generation you inspected in the Public Ledger. A wrong secret costs ${cost} points and one of your attempts against that team -- the count is on each chip.`,
+    huntAttemptsLeft: (left: number, max: number) => `${left}/${max} attempts left`,
+    huntExhausted: "No attempts left against this team's generation.",
     noHuntTarget: "No opponent share is public yet.",
     recovered: "recovered secret",
     rotate: "ROTATE",
     rotateHint: "Switch to a fresh generation.",
+    rotateSudokuHunted: "This generation's sudoku solution has been recovered by another team. A fresh generation gets a fresh solution.",
+    rotateSudokuExhausted: "Every fresh relabelling table on this generation is spent. ROTATE before the next PROVE, or the next table would be a reuse.",
     rotateCost: (orders: number) => `Voids your ${orders} open Order${orders === 1 ? "" : "s"} -- each costs you points, exactly as letting it expire would.`,
     // [Issue #659 §9] The hint ladder. The price is on the button, always,
     // because a cost the player only discovers after paying it is not a choice
@@ -133,7 +157,7 @@ export const FAST_MOVE_COPY = {
     hintBuy: (cost: number) => `OPEN THE NEXT HINT (-${cost})`,
     hintsExhausted: "Every hint on this Order is open.",
     hintOpened: "HINT OPENED",
-    hintOpenedBody: (cost: number) => `-${cost} · read it below`,
+    hintOpenedBody: (cost: number) => `-${cost} · the next step is in this Order’s hints.`,
     send: "SUBMIT",
     running: "SUBMITTING…",
     leakRate: "pass",
@@ -141,19 +165,41 @@ export const FAST_MOVE_COPY = {
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · your row and its answer → PUBLIC LEDGER. ${pairsToBreak} pair${pairsToBreak === 1 ? "" : "s"} recovers your key.`,
-    // [Issue #701] The two moves, named where the participant is standing.
-    proveStep1: "Step 1 of 2. Compute R = g^r mod 227 (at most seven squarings) and submit it. There is no challenge yet -- it is the game's answer to this.",
-    proveStep2: "Step 2 of 2. The game answered your commitment. Compute s = (r + e*w) mod 113 and submit it.",
-    challengeLabel: "the challenge e for this Order: ",
-    commitSend: "SUBMIT COMMITMENT",
-    commitDone: "COMMITMENT POSTED",
-    commitBody: "The challenge is above. Answer it to finish the Order.",
+    // [Issue #709] PROVE is a hand relabelling of the vault's sudoku.
+    proveTitle: "SHOW IT WITHOUT SHOWING IT — a zero-knowledge proof",
+    proveUse: "USED FOR: having the judge check your solution without directly handing the full original to another team",
+    proveWhy: "WHY IT WORKS: relabelling the digits keeps every row, column and box valid — the judge sees a real solution, everyone else sees 1-4 in some order",
+    proveHelp: "Choose a table. Replace each left-hand digit with the digit after its arrow, and fill the four holes on the right. Never the same table twice.",
+    proveTable: "1. Choose a relabelling table",
+    proveChooseTable: "Choose a table…",
+    proveReused: "used in this generation — reuse exposes your solution",
+    proveExample: (from: number, to: number) => `Example: a ${from} on the left becomes ${to} on the right. Use the same table for the four holes.`,
+    proveSolution: "your solution (private)",
+    proveUsed: "tables you already used this generation",
+    proveNoneUsed: "none yet — any table that uses each of 1-4 once, other than 1→1 2→2 3→3 4→4, is fresh",
+    proveGrid: "2. Fill the four holes",
+    proveIncomplete: "Choose a table and fill the four holes with 1–4.",
     proveSuccess: "PROVE SUCCESS",
-    proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
+    proveBody: (points: number, group: string) => `+${points} · ${group} of your RELABELLED grid is on the Public Ledger; your solution is not`,
+    proveMiss: "PROVE MISS",
+    proveMissBody: (cost: number) => `-${cost} · that grid is not a relabelling of your solution. Check that the table sends 1-4 to 1-4 with no digit used twice, then check it against every cell.`,
+    proveUnread: "PROVE SUBMITTED",
+    proveUnreadBody: "The result could not be read. Check your score and the Order.",
     proveLesson:
-      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
+      "You explored the idea behind ZK: the trusted game judge checked your solution, while other teams saw one relabelled group. A full ZK protocol also hides the solution from its verifier.",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "Recovered secret accepted.",
+    /*
+      [Issue #696] A miss is reported as a miss. The SDK answers a landed HUNT
+      with ok whether it hit or missed, and this banner used to key SUCCESS on
+      ok -- so a wrong guess lost 8 points, burned an attempt, and was told it
+      had been accepted. The numbers come from the projection, never a literal.
+    */
+    huntMiss: "HUNT MISS",
+    huntMissBody: (cost: number, left: number | undefined) =>
+      left === undefined ? `-${cost}` : `-${cost} · ${left} attempt${left === 1 ? "" : "s"} left`,
+    huntUnread: "HUNT SUBMITTED",
+    huntUnreadBody: "The result could not be read. Check your score and the attempts left on the target.",
     huntCipherBody: "Recovered key accepted — that rung is broken until they rotate.",
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `GEN ${from} → GEN ${to}`,
@@ -177,8 +223,8 @@ export const FAST_MOVE_COPY = {
     startBody: "The first Orders are on the belt.",
     fheTitle: "ENCRYPTED ADDITION — FHE (homomorphic encryption)",
     fheUse: "USED FOR: verifying a total without seeing anyone's amount",
-    fheWhy: "WHY IT WORKS: Enc(a) + Enc(b) = Enc(a+b) — adding then locking equals locking then adding",
-    fheHelp: "DO THIS: add the two ciphertexts position by position, remainder mod p",
+    fheWhy: "WHY IT WORKS: the sum contains the content total plus the hiding-number total; the judge uses the separate input keys and original left values to subtract the hiding numbers",
+    fheHelp: "DO THIS: add the lefts and the rights separately, then take each remainder after dividing by p",
     fheInputs: "the Order's ciphertexts",
     fheAnswerR: "your answer: left part",
     fheAnswerY: "your answer: right part",
@@ -189,9 +235,9 @@ export const FAST_MOVE_COPY = {
     fheLesson:
       "That was HOMOMORPHIC ENCRYPTION: you computed on numbers you could not read, and the answer came out right. Blockchains use it so a chain can verify a total without anyone publishing the amounts.",
     mpcTitle: "MASKED SUBTOTAL — MPC (secure multi-party computation)",
-    mpcUse: "USED FOR: three companies publishing a combined total, none revealing its own",
-    mpcWhy: "WHY IT WORKS: the masks cancel — (a+r₁−r₂)+(b+r₂−r₃)+(c+r₃−r₁) = a+b+c",
-    mpcHelp: "DO THIS: your number + masks received − masks sent, remainder mod p",
+    mpcUse: "USED FOR: offices finding a total while keeping each input private",
+    mpcWhy: "A mask is a number shared privately by two offices. One adds it and the other subtracts it, so the masks cancel when all subtotals are added.",
+    mpcHelp: "DO THIS: your number + masks received − masks sent, then the remainder after dividing by p",
     mpcMine: "your number (private)",
     mpcIncoming: "masks received",
     mpcOutgoing: "masks sent",
@@ -201,8 +247,8 @@ export const FAST_MOVE_COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · YOUR NUMBER STAYED PRIVATE`,
     mpcLesson:
-      "That was SECURE COMPUTATION (MPC): three parties learned the total and nobody learned anyone else's number. The masks cancelled. Blockchains use it for shared settlement without a trusted middleman.",
-    prime: "p (the modulus)",
+      "You submitted a masked subtotal. Adding every office’s subtotal cancels the masks and gives the remainder of the combined total. This is the secure-computation (MPC) mechanism.",
+    prime: "p (the divisor)",
     cipher: "CIPHER",
     huntCipher: "HUNT · CIPHER KEY",
     huntCipherHint:
@@ -219,14 +265,17 @@ export const FAST_MOVE_COPY = {
       `LEAK instead and this row is published next to its answer. ${pairs} such pair${pairs === 1 ? "" : "s"} recovers your key.`,
     cipherSuccess: "CIPHER SUCCESS",
     cipherBody: (points: number) => `+${points} · NOTHING PUBLISHED`,
-    huntNonce: "NONCE-REUSE HUNT",
-    huntNonceHint: "Find two of one team's proof rows, same generation, same commitment — then the key is recoverable. Enter the key you worked out.",
-    noNonceTarget: "No other team has posted a proof yet.",
+    huntSudoku: "HUNT · REUSED RELABELLING",
+    huntSudokuHint: (cost: number) =>
+      `Find two or more of one team's sudoku rows, same generation, SAME TAG — they came from one relabelled grid. Line those cells up against the team's public puzzle to recover the table, undo it, and fill in the rest. The judge accepts this HUNT only once those same-tag groups pin a single solution; if two still leave a choice, wait for the next one. A wrong grid costs ${cost} points and one attempt.`,
+    huntSudokuPuzzle: "their public puzzle",
+    huntSudokuReveals: "their opened groups",
+    huntSudokuGrid: "their solution, as you recovered it",
+    noSudokuTarget: "No other team has PROVEd yet.",
     recoveredKey: "recovered key",
-    huntNonceSuccess: "HUNT SUCCESS",
-    huntNonceBody: "Recovered key accepted — nonce reuse punished.",
+    huntSudokuBody: "Recovered solution accepted — relabelling reuse punished.",
     tactics: "NEXT TACTIC FROM THE PUBLIC RECORD",
-    tacticsHint: "Open this when a public share, proof, or one of your exposed shares gives you another move.",
+    tacticsHint: "Open this when a public share, an opened sudoku row, or one of your exposed shares gives you another move.",
     exposure: "EXPOSURE",
     exposureHint: (threshold: number) =>
       `${threshold} shares of one generation reconstruct that team's secret. This is how close everyone is.`,
@@ -240,7 +289,7 @@ export const FAST_MOVE_COPY = {
     title: "MAKE A MOVE",
     selectOrder: "1. ORDER を選ぶ",
     noOrder: "現在 open な Order はありません。",
-    choose: "2. どちらかを選ぶ",
+    choose: "答え方を選ぶ",
     // [Issue #702] 無料、 かつヒントの裏ではなくカード上。 ライブ実戦では 3 段すべて
     // (-14 点) 買ったうえで 「Share ってそもそもなに？」 と返ってきた。
     // 用語を知るのに得点を払わせない。
@@ -248,10 +297,10 @@ export const FAST_MOVE_COPY = {
     shareDo: (indices: readonly number[]) =>
       `この Order が要求しているのは ${indices.map((i) => `#${i}`).join("・")} です。LEAK を押すとそれを渡して即完了 — 計算はありません。PROVE は渡さずに答えます。`,
     leak: "LEAK",
-    leakHint: "速い / 公開",
+    leakHint: "押すだけで完了・計算なし",
     prove: "PROVE",
-    proveHint: "計算 / 守る",
-    proveOpen: "proof を入力",
+    proveHint: "表を選んで、4 マスを穴埋め",
+    proveOpen: "付け替えて出す",
     constraintNone: "方法は自由",
     constraintNoRaw: (methods: readonly string[]) =>
       `${methods.join(" / ").toUpperCase()} のみ — 生の値を公開してはいけない`,
@@ -259,14 +308,18 @@ export const FAST_MOVE_COPY = {
     scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
     leakBlocked: "この Order は LEAK を受け付けません。",
     proveBlocked: "この Order は PROVE を受け付けません。",
-    commitment: "commitment",
-    response: "response",
     hunt: "LEDGER から HUNT",
-    huntHint: "Public Ledger で見つけた相手チーム / 世代を選びます。",
+    // [Issue #696] 外したときの代償は、提出する前にカードに書く。
+    huntHint: (cost: number) =>
+      `Public Ledger で見つけた相手チーム / 世代を選びます。外すと ${cost} 点減り、その相手・世代への HUNT 回数を 1 回使います。残り回数は各チップに出ています。`,
+    huntAttemptsLeft: (left: number, max: number) => `あと ${left}/${max} 回`,
+    huntExhausted: "この相手・世代への HUNT はもう残っていません。",
     noHuntTarget: "まだ相手のかけらは公開されていません。",
     recovered: "復元した secret",
     rotate: "ROTATE",
     rotateHint: "新しい世代へ切り替えます。",
+    rotateSudokuHunted: "この世代の数独の解は他チームに割り出されています。新しい世代は新しい解になります。",
+    rotateSudokuExhausted: "この世代で未使用の付け替え表がもうありません。次の PROVE の前に ROTATE しないと、次の表は使い回しになります。",
     rotateCost: (orders: number) => `未処理の ORDER ${orders} 件が無効になります。期限切れと同じだけ減点されます。`,
     hintsTitle: "ヒント",
     hintsHint: "1 段ごとに少しずつ説明します。Order を解けなくても得点は引かれます。",
@@ -281,19 +334,36 @@ export const FAST_MOVE_COPY = {
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · 記号列と答えが対で公開されました。この段は ${pairsToBreak} 組で鍵が割れます。`,
-    // [Issue #701] 2 手ぶんの案内。
-    proveStep1: "1/2。R = g^r mod 227 を計算して出します (2 乗を最大 7 回)。チャレンジはまだありません — これに対するゲームの返事がそれです。",
-    proveStep2: "2/2。ゲームがチャレンジを返しました。s = (r + e*w) mod 113 を計算して出します。",
-    challengeLabel: "この Order のチャレンジ e: ",
-    commitSend: "コミットを出す",
-    commitDone: "コミットを出しました",
-    commitBody: "上に出ているチャレンジに答えると Order が完了します。",
+    // [Issue #709] PROVE は MY VAULT の数独を手で付け替えて出す。
+    proveTitle: "解を見せずに示す ― ゼロ知識証明",
+    proveUse: "つかいみち: 相手チームに元の解全体を直接渡さず、解を持っていることを審判に確認してもらう",
+    proveWhy: "しくみ: 数字を付け替えても行・列・箱の性質は崩れない ── 審判には本物の解、相手には「1〜4 の並び替え」にしか見えない",
+    proveHelp: "表を1つ選び、左の数字を矢印の先の数字に読み替えて、右の空欄4マスに入力します。同じ表は 2 度使わないでください。",
+    proveTable: "1. 付け替え表を選ぶ",
+    proveChooseTable: "表を選んでください",
+    proveReused: "この世代で使用済み — 再利用すると解が漏れる危険あり",
+    proveExample: (from: number, to: number) => `見本: 左の「${from}」は、表の矢印をたどると右の「${to}」になります。同じ表を使って、空欄4マスも読み替えてください。`,
+    proveSolution: "自分の解 (非公開)",
+    proveUsed: "この世代で使った表",
+    proveNoneUsed: "まだなし ── 1〜4 を 1 回ずつ使う表なら、1→1 2→2 3→3 4→4 以外はどれでも新品",
+    proveGrid: "2. 空欄4マスを埋める",
+    proveIncomplete: "表を選び、空欄4マスに1〜4を入れてください。",
     proveSuccess: "PROVE SUCCESS",
-    proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
+    proveBody: (points: number, group: string) => `+${points} · 付け替えたマス目の${group}が公開記録に載りました。解そのものは載っていません`,
+    proveMiss: "PROVE MISS",
+    proveMissBody: (cost: number) => `-${cost} · そのマス目は自分の解の付け替えになっていません。表が 1〜4 を 1〜4 へ、同じ数字を 2 回使わずに送っているか確かめてから、全マスに当て直してください。`,
+    proveUnread: "PROVE を送信しました",
+    proveUnreadBody: "結果を読み取れませんでした。スコアと Order を確認してください。",
     proveLesson:
-      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
+      "いま体験したのは ZK の考え方です。ゲームの審判が解を検査し、相手には付け替えた 1 組だけを見せました。本来の ZK では審判にも解を渡しません。",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "復元した secret が受理されました。",
+    // [Issue #696] 外れは外れと言う。 ok だけを見て SUCCESS を出していたのが不具合。
+    huntMiss: "HUNT MISS",
+    huntMissBody: (cost: number, left: number | undefined) =>
+      left === undefined ? `-${cost}` : `-${cost} · あと ${left} 回`,
+    huntUnread: "HUNT を送信しました",
+    huntUnreadBody: "結果を読み取れませんでした。スコアと、相手チップの残り回数を確認してください。",
     huntCipherBody: "割り出した鍵が受理されました。相手が ROTATE するまで、この段は破れたままです。",
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `世代 ${from} → 世代 ${to}`,
@@ -324,7 +394,7 @@ export const FAST_MOVE_COPY = {
       何のための技術か、なぜ成り立つのか (式 1 本)、手を何回動かすか。
     */
     fheUse: "つかいみち: 誰がいくら持っているか見ずに、合計だけ検証する",
-    fheWhy: "しくみ: Enc(a) + Enc(b) = Enc(a+b) ── 足してから閉じても、閉じてから足しても同じ",
+    fheWhy: "しくみ: 足すと「中身の合計 + 隠す数の合計」になる ── 判定側は各入力の鍵と左の値から隠す数を求めて引ける",
     fheHelp: "やること: 2つの暗号文を左どうし・右どうし足して、p で割った余り",
     fheInputs: "Order の暗号文",
     fheAnswerR: "答え: 左の値",
@@ -336,8 +406,8 @@ export const FAST_MOVE_COPY = {
     fheLesson:
       "いまのが「準同型暗号」です。中身を読めない数のまま計算して、答えは正しく出ました。ブロックチェーンでは、金額を誰も公開せずに合計を検証するのに使われています。",
     mpcTitle: "覆面をかけた小計 ― MPC (秘密計算)",
-    mpcUse: "つかいみち: 3社が売上の合計だけ出す。各社の売上は誰にも見せない",
-    mpcWhy: "しくみ: 覆面は足すと打ち消し合う ── (a+r₁−r₂)+(b+r₂−r₃)+(c+r₃−r₁) = a+b+c",
+    mpcUse: "つかいみち: 各拠点が自分の数を隠し、合計の余りだけを出す",
+    mpcWhy: "覆面は、2つの拠点が内緒で共有する数です。片方が足し、もう片方が引くので、全拠点の小計を足すと覆面は打ち消し合います。",
     mpcHelp: "やること: 自分の数 + 受け取った覆面 − 送った覆面 を、p で割った余り",
     mpcMine: "自分の数 (非公開)",
     mpcIncoming: "受け取った覆面",
@@ -348,7 +418,7 @@ export const FAST_MOVE_COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · 自分の数は公開されていない`,
     mpcLesson:
-      "いまのが「秘密計算 (MPC)」です。3 者が合計だけを知り、誰も他人の数を知りませんでした。覆面が打ち消し合ったからです。ブロックチェーンでは、信頼できる仲介者なしの決済に使われています。",
+      "覆面を足し引きした小計を提出しました。各拠点の小計を足すと覆面が打ち消し合い、合計を割る数で割った余りが得られます。これが秘密計算 (MPC) の仕組みです。",
     prime: "p (割る数)",
     cipher: "CIPHER",
     huntCipher: "HUNT · 暗号鍵",
@@ -366,14 +436,17 @@ export const FAST_MOVE_COPY = {
       `LEAK すると、この列と答えが対で公開されます。この段は ${pairs} 組で鍵が割れます。`,
     cipherSuccess: "CIPHER SUCCESS",
     cipherBody: (points: number) => `+${points} · 何も公開されない`,
-    huntNonce: "nonce 再利用 HUNT",
-    huntNonceHint: "同じチーム・同じ世代で commitment が同じ proof 2 行を Ledger から探してください。見つかれば鍵を計算で求められます。求めた鍵を入力してください。",
-    noNonceTarget: "まだ proof を出した他チームはいません。",
+    huntSudoku: "HUNT · 付け替えの使い回し",
+    huntSudokuHint: (cost: number) =>
+      `同じチーム・同じ世代で「付け替え」のタグが同じ数独の行を 2 つ以上、Ledger から探してください。同じ付け替えの写しから出た行です。そのマスをそのチームの公開問題と突き合わせると表が割れ、表を戻せば解が出ます。審判がこの HUNT を受け付けるのは、同じタグのグループで解が 1 つに絞れたときだけです。2 つでまだ絞れないなら、次の公開を待ってください。外すと ${cost} 点減り、回数を 1 回使います。`,
+    huntSudokuPuzzle: "相手の公開問題",
+    huntSudokuReveals: "相手が公開したグループ",
+    huntSudokuGrid: "割り出した相手の解",
+    noSudokuTarget: "まだ PROVE した他チームはいません。",
     recoveredKey: "復元した鍵",
-    huntNonceSuccess: "HUNT SUCCESS",
-    huntNonceBody: "復元した鍵が受理されました — nonce の使い回しを突きました。",
+    huntSudokuBody: "割り出した解が受理されました — 付け替えの使い回しを突きました。",
     tactics: "公開記録からできる次の作戦",
-    tacticsHint: "公開されたかけら・proof、または自分の公開済みかけらがあるときに開きます。",
+    tacticsHint: "公開されたかけら・数独の行、または自分の公開済みかけらがあるときに開きます。",
     exposure: "危険度",
     exposureHint: (threshold: number) =>
       `同じ世代のかけらが ${threshold} 個そろうと、そのチームの秘密は復元されます。いま全員が何個まで来ているかです。`,
@@ -438,6 +511,100 @@ function ledgerTargets(projection: CryptoBattleProjection | null) {
     }
   }
   return targets;
+}
+
+/**
+ * [Issue #696] The reader's HUNT budget against one target, or nothing if the
+ * target's generation is not the one the budget counts against.
+ *
+ * `ledgerTargets` lists every `team:generation` the ledger has shares for,
+ * including generations a ROTATE has already retired; `validateOp` refuses a
+ * HUNT at any generation but the current one. Showing "3/3 attempts left" on a
+ * chip the judge will refuse would advertise a budget that cannot be spent, so
+ * the count appears only where the two agree.
+ *
+ * Exported for `game/src/portal.test.ts` (see this file's header on why the
+ * panel itself cannot be rendered with a projection under test).
+ */
+export function huntBudgetFor(
+  projection: CryptoBattleProjection | null,
+  target: { readonly teamId: string; readonly generation: number },
+): HuntBudgetProjection | undefined {
+  const budget = projection?.huntAttempts[target.teamId];
+  return budget !== undefined && budget.generation === target.generation ? budget : undefined;
+}
+
+/**
+ * [Issue #696] What to tell the player after a Shamir HUNT the service
+ * accepted.
+ *
+ * Accepted is not the same as hit. Since #696 a wrong secret is a move that
+ * lands -- `validateOp` no longer refuses it, `applyHunt` charges
+ * `wrongHunt` and spends an attempt -- so the plugin SDK answers a miss with
+ * the same `{ ok: true }` it answers a hit with. This panel used to key the
+ * SUCCESS banner on that ok alone, and a player who guessed wrong lost points,
+ * burned an attempt, and read 「復元した secret が受理されました」.
+ *
+ * So SUCCESS requires the projection to SAY hit. A miss is named as a miss,
+ * with the price and the attempts left read off the projection; and an
+ * accepted op whose result cannot be read is reported as exactly that, never
+ * rounded up to a success.
+ *
+ * Exported for `game/src/portal.test.ts`.
+ */
+export function huntFeedback(
+  next: CryptoBattleProjection | undefined,
+  targetTeamId: string,
+  locale: Locale,
+  via?: "sudoku",
+): FeedbackDraft {
+  const copy = FAST_MOVE_COPY[locale];
+  const outcome = next?.lastHunt;
+  // [Issue #709] The projection remembers WHICH secret the last HUNT went
+  // after. A sudoku miss must not be read off the Shamir budget, and a Shamir
+  // hit must not be reported as a recovered solution.
+  const matches = outcome !== undefined && (outcome.via ?? undefined) === via;
+  if (next !== undefined && matches && outcome?.outcome === "hit") {
+    return { kind: "hunt", title: copy.huntSuccess, body: via === "sudoku" ? copy.huntSudokuBody : copy.huntBody };
+  }
+  if (next !== undefined && matches && outcome?.outcome === "miss") {
+    const budget = (via === "sudoku" ? next.sudokuHuntAttempts : next.huntAttempts)[targetTeamId];
+    const left = budget === undefined ? undefined : Math.max(0, budget.max - budget.spent);
+    return { kind: "error", title: copy.huntMiss, body: copy.huntMissBody(next.wrongHuntCost, left) };
+  }
+  return { kind: "error", title: copy.huntUnread, body: copy.huntUnreadBody };
+}
+
+/**
+ * [Issue #709] What to tell the player after a PROVE the service accepted.
+ *
+ * Accepted is not the same as verified: a wrong grid is a move that lands,
+ * charges `wrongProve`, and comes back `{ ok: true }` like a hit. Only the
+ * projection's `lastProve` can say which it was, so SUCCESS requires it to say
+ * hit, for THIS Order; a miss is named as a miss with the price; and an
+ * accepted op whose result cannot be read is reported as exactly that.
+ *
+ * Exported for `game/src/portal.test.ts`.
+ */
+export function proveFeedback(
+  next: CryptoBattleProjection | undefined,
+  contractId: string,
+  points: number,
+  locale: Locale,
+): FeedbackDraft {
+  const copy = FAST_MOVE_COPY[locale];
+  const outcome = next?.lastProve;
+  if (next !== undefined && outcome?.contractId === contractId && outcome.outcome === "hit") {
+    const reveal = next.publicLedger.find(
+      (a): a is SudokuRevealArtifact => a.kind === "sudoku-reveal" && a.contractId === contractId,
+    );
+    const group = reveal ? describeRevealGroup(reveal.group, locale) : locale === "ja" ? "1 グループ" : "one group";
+    return { kind: "prove", title: copy.proveSuccess, body: copy.proveBody(points, group), lesson: copy.proveLesson };
+  }
+  if (next !== undefined && outcome?.contractId === contractId && outcome.outcome === "miss") {
+    return { kind: "error", title: copy.proveMiss, body: copy.proveMissBody(next.wrongProveCost) };
+  }
+  return { kind: "error", title: copy.proveUnread, body: copy.proveUnreadBody };
 }
 
 function ownExposedShareCount(projection: CryptoBattleProjection | null): number {
@@ -636,37 +803,51 @@ export function primaryActionsFor(order: ContractProjection | undefined): {
 /** The advanced controls that have relevant public material right now. */
 export function tacticAvailability(projection: CryptoBattleProjection | null): {
   readonly hunt: boolean;
-  readonly nonceHunt: boolean;
+  readonly sudokuHunt: boolean;
   readonly cipherHunt: boolean;
   readonly rotate: boolean;
 } {
   return {
     hunt: ledgerTargets(projection).length > 0,
-    nonceHunt: nonceHuntCandidates(projection).length > 0,
+    sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
-    rotate: ownExposedShareCount(projection) > 0,
+    rotate: ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined,
   };
 }
 
 /**
- * [Issue #645 Phase 5] Teams a nonce HUNT can be aimed at: every OTHER team
- * that has posted a proof, with the generation a hunt would have to name.
+ * [Issue #709] Why the sudoku side of the vault wants a ROTATE, if it does.
+ *
+ * Shares are not the only material a generation can run out of. There are 23
+ * usable relabellings, the belt keeps serving PROVE-capable Orders, and a team
+ * that has spent every table can only reuse one (and become huntable) or LEAK
+ * to reach the ROTATE card -- unless the card opens on this too. And a
+ * generation whose solution was recovered is exposed the same way a hunted
+ * Shamir generation is; ROTATE is the answer to both.
+ */
+export function sudokuRotatePressure(
+  projection: CryptoBattleProjection | null,
+): "hunted" | "exhausted" | undefined {
+  if (!projection) return undefined;
+  const { vault } = projection;
+  if (vault.sudokuHuntedGenerations.includes(vault.generation)) return "hunted";
+  if (vault.usedPermutations.length >= ALL_PERMUTATIONS.length - 1) return "exhausted";
+  return undefined;
+}
+
+/**
+ * [Issue #709] Teams a sudoku HUNT can be aimed at: every OTHER team that has
+ * PROVEd on its current generation, with its public puzzle and every group it
+ * has had opened.
  *
  * What this deliberately does NOT do is decide whether any of them is
- * exploitable. An earlier version scanned for two proof rows sharing a
- * commitment and listed only the teams where it found one — so the card went
- * from "no team has reused a commitment" to naming a target at the exact
- * moment the reuse appeared, which is the Portal announcing the ledger pattern
- * the participant is supposed to notice. #486's rule (restated in #646's
- * non-goals) forbids exactly that, and the old code said so in its own
- * docstring while doing the opposite.
- *
- * `ledgerTargets` above is the precedent: it lists every team that has leaked
- * anything and shows WHICH indices, and leaves "is that enough to reconstruct"
- * to the participant. This is the same shape — the ledger table already shows
- * every proof's team, generation, Order and commitment, so spotting a
- * duplicate is a reading the participant does, not a verdict the UI hands
- * them. All this saves is retyping a team id.
+ * exploitable. The nonce-reuse card this replaces once scanned for two proof
+ * rows sharing a commitment and listed only the teams where it found one -- so
+ * the card went from "nobody" to naming a target at the exact moment the reuse
+ * appeared, which is the Portal announcing the ledger pattern the participant
+ * is supposed to notice. #486's rule (restated in #646's non-goals) forbids
+ * exactly that. So every reveal is shown, tag and all, and whether two tags
+ * match is a reading the participant does.
  *
  * Using each team's CURRENT generation is also what makes a stale target
  * impossible: `validateOp` refuses any other generation, so there is nothing
@@ -675,24 +856,45 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
  * Exported for `game/src/portal.test.ts`: `renderToStaticMarkup` never runs
  * the effect that would populate the panel.
  */
-export function nonceHuntCandidates(
+export interface SudokuHuntCandidate {
+  readonly teamId: string;
+  readonly teamName: string;
+  readonly generation: number;
+  readonly puzzle: readonly number[];
+  readonly reveals: readonly SudokuRevealArtifact[];
+}
+
+export function sudokuHuntCandidates(
   projection: CryptoBattleProjection | null,
-): { teamId: string; generation: number }[] {
-  const found: { teamId: string; generation: number }[] = [];
-  if (!projection) return found;
+): readonly SudokuHuntCandidate[] {
+  if (!projection) return [];
+  const byTeam = new Map<string, SudokuHuntCandidate>();
   for (const entry of projection.publicLedger) {
-    if (entry.kind !== "proof" || entry.teamId === projection.vault.teamId) continue;
-    const generation = projection.teams[entry.teamId]?.generation;
-    if (generation === undefined || generation !== entry.generation) continue;
-    if (found.some((t) => t.teamId === entry.teamId)) continue;
-    found.push({ teamId: entry.teamId, generation });
+    if (entry.kind !== "sudoku-reveal" || entry.teamId === projection.vault.teamId) continue;
+    const team = projection.teams[entry.teamId];
+    const puzzle = projection.publicPuzzles[entry.teamId];
+    if (team === undefined || puzzle === undefined || team.generation !== entry.generation) continue;
+    const current = byTeam.get(entry.teamId) ?? {
+      teamId: entry.teamId,
+      teamName: team.teamName || entry.teamId,
+      generation: team.generation,
+      puzzle,
+      reveals: [],
+    };
+    byTeam.set(entry.teamId, { ...current, reveals: [...current.reveals, entry] });
   }
-  return found;
+  return [...byTeam.values()];
 }
 
 const CSS = `
 ${BOARD_CSS}
 ${DIE_CSS}
+${SUDOKU_CSS}
+.tc-sudoku-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.tc-sudoku-block{display:grid;gap:3px;justify-items:start}
+.tc-reveal-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:12px}
+.tc-reveal-list li{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tc-reveal-tag{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;border:1px solid #cfd8e3;border-radius:6px;padding:1px 6px;background:#fff}
 .tc-die-legend{display:inline-flex;gap:8px;flex-wrap:wrap;margin-left:6px;vertical-align:middle}
 .tc-die-legend-item{display:inline-flex;flex-direction:column;align-items:center;gap:1px}
 .tc-die-legend-item small{font-size:9px;color:#5f6b7a;font-weight:700}
@@ -748,7 +950,7 @@ ${DIE_CSS}
 .tc-share-primer strong{display:block;margin-bottom:3px}
 .tc-share-primer span{display:block;color:#3f4b57}
 .tc-primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.tc-action{border:0;border-radius:12px;padding:16px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:900;font-size:18px}
+.tc-action{color:#16212e;border:0;border-radius:12px;padding:16px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:900;font-size:18px}
 .tc-action small{font-size:10px;font-weight:800;letter-spacing:.06em}
 .tc-action:disabled{cursor:not-allowed;opacity:.45}
 .tc-leak-button{background:#ffefd1;box-shadow:inset 0 0 0 2px #d8a657}
@@ -757,7 +959,7 @@ ${DIE_CSS}
 .tc-prove-challenge{margin:0 0 6px;font-size:13px}
 .tc-prove-challenge strong{font-size:18px;letter-spacing:.02em}
 .tc-input-panel{border:1px solid #cfd8e3;border-radius:9px;padding:9px;background:#fff;display:grid;gap:6px}
-.tc-input-panel input,.tc-input-panel select{padding:8px;border:1px solid #aab7c4;border-radius:6px;font-size:12px;min-width:0}
+.tc-input-panel input,.tc-input-panel select{background:#fff;color:#16212e;padding:8px;border:1px solid #aab7c4;border-radius:6px;font-size:12px;min-width:0}
 .tc-secondary-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
 .tc-tactics{border:1px solid #cfd8e3;border-radius:10px;background:#eef3f8}.tc-tactics>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:900}.tc-tactics>summary span{display:block;margin-top:3px;color:#5f6b7a;font-size:11px;font-weight:500}.tc-tactics-body{display:grid;gap:10px;padding:0 10px 10px}
 .tc-hunt-card,.tc-rotate-card{border:1px solid #cfd8e3;border-radius:10px;padding:10px;background:#fff}
@@ -821,6 +1023,41 @@ ${DIE_CSS}
 /* [Issue #688] The escape, deliberately quieter than READY. */
 .tc-start-anyway{font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #cfd8e3;background:#fff;color:#5f6b7a;cursor:pointer}
 .tc-start-anyway:hover{border-color:#8c9bab;color:#16212e}
+
+.tc-calculation-guide>p{font-size:13px;line-height:1.7;margin:0 0 12px}.tc-calculation-steps{list-style:none;margin:0;padding:0;display:grid;gap:10px}.tc-calculation-steps li{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#f7f9fc;border:1px solid #e0e7ef;border-radius:8px;font-size:13px}.tc-calculation-number{flex:none;background:#315f91;color:white;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px}.tc-calculation-steps code{display:block;margin-top:4px;font:650 17px/1.6 system-ui;overflow-wrap:anywhere}.tc-calculation-steps p{font-size:12px;margin:2px 0 0;color:#526277;line-height:1.6}.tc-answer-label{display:grid;gap:6px;font-size:13px;font-weight:650}.tc-answer-label>input{max-width:220px;font-size:17px}
+.tc-chosen-method{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:#315f91}
+.tc-chosen-method button{border:1px solid #b9cbe0;border-radius:6px;color:#42536a;background:#fff;font-size:12px;padding:6px 10px;cursor:pointer}
+.tc-why{font-size:12px;color:#42536a}.tc-why>summary{cursor:pointer}.tc-why[open]>summary{margin-bottom:8px}
+.tc-move-shell{max-width:1080px;margin:0 auto;padding:20px;gap:12px;border:1px solid #dce3ec;background:#f6f8fb}
+.tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
+.tc-order-picker,.tc-records{font-size:13px;color:#42536a}
+.tc-order-picker>summary,.tc-records>summary{padding:8px 0;cursor:pointer}
+.tc-order-picker .tc-order-belt{margin:8px 0;border:1px solid #cfd8e3;background:#fff}
+.tc-result-anchor:empty{display:none}.tc-result-anchor:focus{outline:2px solid #2563a6;outline-offset:3px;border-radius:10px}
+.tc-workspace{display:grid;gap:16px;background:#fff;border:1px solid #b9cbe0;border-top:4px solid #315f91;border-radius:12px;padding:22px;box-shadow:0 3px 10px #1e3a5f08}
+.tc-ticket{border:0;border-radius:0;padding:0;margin:0;background:transparent}
+.tc-ticket-head{align-items:center}.tc-ticket-head>span{font-size:12px;color:#556579}
+.tc-ticket-head .tc-ticket-clock{font-size:14px}.tc-order-heading{margin:8px 0 12px;font-size:24px;line-height:1.45;font-weight:800;letter-spacing:0}
+.tc-ticket-track{height:3px;margin-top:0}.tc-ticket-fill{background:#7995b4}
+.tc-ticket-urgent .tc-ticket-clock{color:#b52815}.tc-ticket-urgent{background:transparent}
+.tc-card-title{font-size:13px;letter-spacing:0}.tc-share-primer{padding:0;border:0;background:transparent;margin:6px 0 8px;font-size:13px;line-height:1.65}
+.tc-primary-actions{margin-top:12px;gap:14px}.tc-action{align-items:stretch;text-align:left;padding:17px;font-size:16px;font-weight:750;gap:8px;border:1px solid #b6c8dc;border-radius:10px;box-shadow:none;line-height:1.5}
+.tc-action-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px}.tc-action-heading b{white-space:nowrap;font-size:18px}
+.tc-action small{font-size:12px;font-weight:500;letter-spacing:0}.tc-action-risk{font-size:12px;font-weight:500;line-height:1.65}
+.tc-leak-button{background:#fffbf3;border-color:#decba7}.tc-prove-button{background:#edf5ff;border-color:#8badd3}
+.tc-prove-button[aria-expanded="true"]{border-color:#315f91;box-shadow:0 0 0 1px #315f91}
+.tc-action:not(:disabled):hover{border-color:#315f91;box-shadow:0 2px 6px #20395815}
+.tc-action:focus-visible,.tc-submit-small:focus-visible,summary:focus-visible{outline:3px solid #3372b5;outline-offset:3px}
+.tc-input-panel{border:0;border-top:1px solid #e2e8f0;border-radius:0;padding:16px 0 0;gap:10px}
+.tc-input-panel>.tc-submit-small{justify-self:start;min-width:180px;padding:11px 18px;background:#315f91;font-size:14px}
+.tc-input-panel>strong{font-size:16px!important}.tc-card-hint,.tc-lesson-use,.tc-lesson-why{font-size:12px;line-height:1.65}
+.tc-hints{border-top:1px solid #e2e8f0;margin:0;padding-top:12px}.tc-hints>summary{font-size:13px;color:#42536a;cursor:pointer}.tc-hints[open]>summary{margin-bottom:10px}
+.tc-hint-text{white-space:pre-line;line-height:1.85}.tc-hint-button{width:auto;font-size:12px;font-weight:600;border:1px solid #a1b5cf;letter-spacing:0;padding:8px 12px}
+.tc-exposure{margin:0;padding:12px;border-color:#dce3ec;background:transparent;font-size:12px}.tc-exposure>summary{cursor:pointer;font-weight:650}.tc-exposure>summary>span{margin-left:16px;color:#556579;font-weight:500}
+.tc-tactics{background:transparent;border-color:#dce3ec}.tc-tactics>summary{font-weight:650}.tc-tactics>summary span{display:none}.tc-tactics[open]>summary span{display:block}
+.tc-records>.tc-board-grid{margin-top:8px}
+@media(max-width:720px){.tc-move-shell{padding:10px}.tc-workspace{padding:15px;gap:12px}.tc-order-heading{font-size:20px}.tc-primary-actions{grid-template-columns:1fr}.tc-action{padding:14px}.tc-exposure>summary>span{display:block;margin:5px 0 0}.tc-scoreline{gap:6px}}
+
 @media(prefers-reduced-motion:reduce){.tc-feedback{animation:none!important}}
 `;
 
@@ -871,25 +1108,36 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [projectionAtMs, setProjectionAtMs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedOrderId, setSelectedOrderId] = useState("");
-  const [commitment, setCommitment] = useState("");
-  const [response, setResponse] = useState("");
+  // [Issue #709] Sixteen typed cells for the relabelled grid, and sixteen for
+  // a recovered solution. Strings until submit: a half-typed grid is a normal
+  // state, and Number("") would silently be 0.
+  const [proveTableKey, setProveTableKey] = useState("");
+  const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
+  const [huntCells, setHuntCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
+  const orderPickerRef = useRef<HTMLDetailsElement>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
   // [Issue #645] One box per component of an FHE answer, one for an MPC
-  // subtotal. Kept as strings all the way to the op: these are 19-digit field
-  // elements, and Number() would silently round them.
+  // subtotal. Keep decimal strings through the wire boundary: the default
+  // field is 97, but a configured larger field must not be rounded by Number().
   const [fheR, setFheR] = useState("");
   const [fheY, setFheY] = useState("");
   const [mpcPartial, setMpcPartial] = useState("");
   const [cipherAnswer, setCipherAnswer] = useState("");
   const [huntTargetKey, setHuntTargetKey] = useState("");
-  const [nonceTargetKey, setNonceTargetKey] = useState("");
+  const [sudokuTargetKey, setSudokuTargetKey] = useState("");
   const [cipherTargetKey, setCipherTargetKey] = useState("");
   const [recoveredCipherKey, setRecoveredCipherKey] = useState("");
-  const [recoveredKey, setRecoveredKey] = useState("");
   const [recoveredSecret, setRecoveredSecret] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const attemptRef = useRef(0);
+  useEffect(() => {
+    if (feedback && feedback.kind !== "hint") {
+      feedbackRef.current?.focus({ preventScroll: true });
+      feedbackRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [feedback?.attempt]);
 
   const setProjection = (next: CryptoBattleProjection) => {
     setPolledProjection(next);
@@ -921,27 +1169,62 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const nextHint = nextHintFor(selectedOrder);
   const targets = useMemo(() => ledgerTargets(projection), [projection]);
   const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
-  const nonceTargets = useMemo(() => nonceHuntCandidates(projection), [projection]);
+  // [Issue #696] The cap is visible BEFORE the attempt is spent: a chip with no
+  // attempts left says so, and the SUBMIT under it is disabled rather than
+  // left to be refused by the judge.
+  const selectedBudget = selectedTarget === undefined ? undefined : huntBudgetFor(projection, selectedTarget);
+  const huntExhausted = selectedBudget !== undefined && selectedBudget.spent >= selectedBudget.max;
+  const sudokuTargets = useMemo(() => sudokuHuntCandidates(projection), [projection]);
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
+  const sudokuPressure = useMemo(() => sudokuRotatePressure(projection), [projection]);
   const exposure = useMemo(() => exposureRows(projection), [projection]);
-  const selectedNonceTarget =
-    nonceTargets.find((t) => `${t.teamId}:${t.generation}` === nonceTargetKey) ?? nonceTargets[0];
+  const selectedSudokuTarget =
+    sudokuTargets.find((t) => `${t.teamId}:${t.generation}` === sudokuTargetKey) ?? sudokuTargets[0];
+  const selectedSudokuBudget =
+    selectedSudokuTarget === undefined ? undefined : projection?.sudokuHuntAttempts[selectedSudokuTarget.teamId];
+  const sudokuHuntExhausted =
+    selectedSudokuBudget !== undefined && selectedSudokuBudget.spent >= selectedSudokuBudget.max;
+  const proveTable = ALL_PERMUTATIONS.find((table) => table.join("") === proveTableKey);
+  const proveGivens = proveTable && projection
+    ? sudokuFillInGivens(projection.vault.sudokuSolution, proveTable) : undefined;
+  const proveGrid = proveGivens
+    ? parseCells(proveCells.map((value, index) => proveGivens[index] || value)) : undefined;
+  const huntGrid = parseCells(huntCells);
+  // [Issue #709 review] A typed grid belongs to the Order (and generation) it
+  // was typed for, and a recovered solution to the target it was recovered
+  // from. Left in place, a grid that just PROVEd would be one click from being
+  // submitted again on the next Order -- the same table twice, which is the
+  // exact reuse the HUNT punishes -- and a solution recovered from one team
+  // would be one click from being charged as a miss against another. So the
+  // buffers empty whenever their context moves.
+  const selectedOrderIdForProve = selectedOrder?.id;
+  const ownGeneration = projection?.vault.generation;
+  useEffect(() => {
+    setProveCells(emptyCells());
+    setProveTableKey("");
+    setProveOpen(false);
+    setFheR("");
+    setFheY("");
+    setMpcPartial("");
+    setCipherAnswer("");
+  }, [selectedOrderIdForProve, ownGeneration]);
+  const sudokuTargetTeam = selectedSudokuTarget?.teamId;
+  const sudokuTargetGeneration = selectedSudokuTarget?.generation;
+  useEffect(() => {
+    setHuntCells(emptyCells());
+  }, [sudokuTargetTeam, sudokuTargetGeneration]);
   const cipherTargets = useMemo(() => cipherHuntCandidates(projection), [projection]);
   const selectedCipherTarget =
     cipherTargets.find((t) => `${t.teamId}:${t.generation}:${t.rung}` === cipherTargetKey) ??
     cipherTargets[0];
 
-  const applyOutcome = (outcome: PortalCoordinationOutcome, attempt: number) => {
-    const next = liveProjection(outcome);
-    if (next) setProjection(next);
-    if (outcome.kind !== "ok") {
-      setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
-      return false;
-    }
-    return true;
-  };
-
-  const run = async (task: () => Promise<PortalCoordinationOutcome>, success: () => FeedbackDraft) => {
+  // [Issue #696] `success` receives the projection the op came back with.
+  // An accepted op is not always a success -- a HUNT miss lands and returns
+  // ok -- and the projection is the only thing that can say which it was.
+  const run = async (
+    task: () => Promise<PortalCoordinationOutcome>,
+    success: (next: CryptoBattleProjection | undefined) => FeedbackDraft,
+  ) => {
     if (submitting) return;
     setSubmitting(true);
     setFeedback(null);
@@ -953,7 +1236,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
     const attempt = attemptRef.current;
     try {
       const outcome = await task();
-      if (applyOutcome(outcome, attempt)) setFeedback({ ...success(), attempt });
+      const next = liveProjection(outcome);
+      if (next) setProjection(next);
+      if (outcome.kind !== "ok") {
+        setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
+      } else {
+        setFeedback({ ...success(next), attempt });
+      }
     } catch {
       setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable, attempt });
     } finally {
@@ -1032,14 +1321,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
     <section className="tc-move-shell" aria-label="crypto-battle-fast-moves">
       <style>{CSS}</style>
       {/*
-        [Issue #690] 「最初にやること」 is the first thing to read, so it is the
-        first thing on the surface. It used to live at the bottom of the help
-        drawer, below the board, the exposure lane, the Ledger and the Vault —
-        a first-time player had to scroll past the whole game to find out how to
-        start playing it.
-      */}
-      <QuickRules locale={props.locale} />
-      {/*
         [Issue #659] One surface: score, tickets, the counter you work at, then
         the public record. It used to be two host slots — the board in one, the
         controls in another — so the game read as two unrelated screens.
@@ -1055,111 +1336,44 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </div>
 
 
-      <div>
-        {/*
-          [Issue #659] The belt IS the picker, and the work surface is directly
-          below it. There is no second list: choosing a ticket in one host slot
-          and working on it in another, far apart down the page, is what made
-          the screen unintuitive — "which Order" and "what do I do with it" were
-          never in view together. Now they are.
-        */}
-        <OrderBelt
-          projection={projection}
-          locale={locale}
-          selectedId={selectedOrder?.id}
+      <details className="tc-order-picker" ref={orderPickerRef}>
+        <summary>{locale === "ja" ? `ほかのお題を選ぶ（残り ${orders.length} 件）` : `Choose another Order (${orders.length} open)`}</summary>
+        <OrderBelt projection={projection} locale={locale} selectedId={selectedOrder?.id}
           onSelect={(id) => {
             setSelectedOrderId(id);
             setProveOpen(false);
-          }}
-        />
+            if (orderPickerRef.current) orderPickerRef.current.open = false;
+          }} />
+      </details>
+
+      <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={feedback} locale={locale} />}
       </div>
 
-      {/*
-        [Issue #645] The action area follows the Order's TASK. A share Order
-        offers LEAK / PROVE; an encrypted-addition Order offers only the thing
-        that can answer it. Showing all four buttons and rejecting three of them
-        would teach a participant that the game is arbitrary, when the real rule
-        is that a Schnorr proof cannot add two ciphertexts.
-
-        [Issue #659] Gated on what the Order ACCEPTS, not on which task it is.
-        The two were the same thing while `reveal-share` was the only Order that
-        took LEAK; the ladder Order takes it too, and the task-name test hid the
-        button on the one Order whose entire point is the choice between
-        computing and passing. The card advertised LEAK, the working panel
-        warned what LEAKing would cost, and there was nothing to press.
-      */}
-      {/*
-        [Issue #659] The ticket you are working on, on the surface you work at.
-        
-        The Order lived in one host slot and the controls in another, far apart
-        down the page, so "which Order am I answering, and how long do I have"
-        was never in view while answering it. In Overcooked the ticket and the
-        counter are the same place; the slots cannot merge, so the ticket comes
-        to the counter instead. The bar drains and changes colour, because a
-        deadline you have to read a number to feel is not a deadline.
-      */}
+      <section className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
       {selectedOrder && (
         <div className={`tc-ticket${selectedOrder.remainingMs <= 30_000 ? " tc-ticket-urgent" : ""}`}>
           <div className="tc-ticket-head">
-            <strong>{selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-            <span>{taskLabel(selectedOrder.task, locale)}</span>
+            <span>{locale === "ja" ? "いまのお題" : "Current Order"} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</span>
             <span className="tc-ticket-clock">{Math.ceil(selectedOrder.remainingMs / 1000)}s</span>
           </div>
+          <h2 className="tc-order-heading">{orderHeading(selectedOrder, locale)}</h2>
           <div className="tc-ticket-track" aria-hidden="true">
             <div
               className="tc-ticket-fill"
               style={{ width: `${Math.max(2, Math.min(100, (selectedOrder.remainingMs / 300_000) * 100))}%` }}
             />
           </div>
-          {/*
-            [Issue #659 §9] Help, attached to the ticket it is help WITH.
 
-            It sits inside the ticket rather than in a drawer of its own because
-            the moment a player needs it is the moment they are staring at an
-            Order they cannot start, and a stuck player does not go looking. The
-            price is printed on the button before it is pressed -- the whole
-            mechanism is a trade, and a trade whose cost you learn afterwards is
-            not one you made.
-
-            Only opened rungs have any text to show: `projectForTeam` withholds
-            the rest, so there is nothing here to reveal by reading the bundle.
-          */}
-          <div className="tc-hints">
-            <div className="tc-card-title">{copy.hintsTitle}</div>
-            <div className="tc-card-hint">{copy.hintsHint}</div>
-            {selectedOrder.hints
-              .filter((hint) => hint.text !== undefined)
-              .map((hint) => (
-                <p className="tc-hint-text" key={hint.id}>
-                  <span className="tc-hint-step">{hint.level + 1}</span>
-                  {hint.text?.[locale]}
-                </p>
-              ))}
-            {nextHint ? (
-              <button
-                type="button"
-                className="tc-hint-button"
-                disabled={submitting}
-                onClick={() => void run(
-                  () => submitRevealHint(client, selectedOrder.id),
-                  () => ({
-                    kind: "hint",
-                    title: copy.hintOpened,
-                    body: copy.hintOpenedBody(nextHint.cost),
-                  }),
-                )}
-              >
-                {copy.hintBuy(nextHint.cost)}
-              </button>
-            ) : (
-              <div className="tc-card-hint">{copy.hintsExhausted}</div>
-            )}
-          </div>
         </div>
       )}
 
-      {primaryActionsVisible && (
+      {primaryActionsVisible && selectedOrder?.task.kind !== "zk-sudoku" && (
       <div>
+        {proveOpen ? <div className="tc-chosen-method">
+          <strong>{locale === "ja" ? `秘密を守って証明する · +${selectedOrder?.points} 点` : `PROVE · +${selectedOrder?.points} pt`}</strong>
+          <button type="button" onClick={() => setProveOpen(false)}>{locale === "ja" ? "答え方を選び直す" : "Change answer method"}</button>
+        </div> : <>
         <div className="tc-card-title">{copy.choose}</div>
         {/*
           [Issue #702] The noun, then the move, before the two buttons. Placed
@@ -1169,19 +1383,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
         */}
         {selectedOrder?.task.kind === "reveal-share" && (
           <p className="tc-share-primer">
-            <strong>{copy.shareWhat}</strong>
-            <span>{copy.shareDo(selectedOrder.task.shareIndices)}</span>
+            <span>{locale === "ja"
+              ? `かけら (share) は、秘密の数から作った ${projection.vault.shares.length} 個の数です。公開して答えるか、かけらを渡さずに証明するか選びます。`
+              : `A share is one of ${projection.vault.shares.length} numbers made from your secret. Choose to publish it or prove without handing it over.`}</span>
           </p>
         )}
+        {selectedOrder?.task.kind === "reveal-share" && <ConceptExplanation key={selectedOrder.id} locale={locale} topic="sharing" task={selectedOrder.task} prime={projection.prime} />}
         <div className="tc-primary-actions">
-          {/*
-            [Issue #645] LEAK is disabled, not hidden, on an Order that forbids
-            raw disclosure -- and the reason is spelled out below. Hiding it
-            would leave the participant wondering where the option went; showing
-            it live and rejecting the submission would spend their time to teach
-            them a rule the card already stated.
-          */}
-          <button
+          {leakAllowed && <button
             type="button"
             className="tc-action tc-leak-button"
             disabled={!selectedOrder || submitting || !leakAllowed}
@@ -1206,29 +1415,29 @@ export default function FastMovePanel(props: PortalSlotProps) {
               }),
             )}
           >
-            {copy.leak}<small>{copy.leakHint}</small>
-          </button>
-          {/*
-            [Issue #659] Disabled rather than hidden on an Order that PROVE
-            cannot serve, for the same reason LEAK is: the participant sees the
-            option exists and reads why it is unavailable here, instead of
-            watching a button appear and disappear as they click between cards.
-          */}
-          <button
+            <span className="tc-action-heading"><span>{locale === "ja" ? "公開して答える" : "Publish to answer"}</span><b>+{selectedOrder?.leakPoints} {locale === "ja" ? "点" : "pt"}</b></span>
+            <small>LEAK · {copy.leakHint}</small>
+            <span className="tc-action-risk">{selectedOrder && disclosurePreview(projection, selectedOrder, locale)}</span>
+          </button>}
+          {proveAllowed && <button
             type="button"
             className="tc-action tc-prove-button"
+            aria-expanded={proveOpen}
             disabled={!selectedOrder || submitting || !proveAllowed}
             title={selectedOrder && !proveAllowed ? copy.proveBlocked : undefined}
             onClick={() => setProveOpen((value) => !value)}
           >
-            {copy.prove}<small>{copy.proveHint}</small>
-          </button>
+            <span className="tc-action-heading"><span>{locale === "ja" ? "秘密を守って証明する" : "Prove while protecting your secret"}</span><b>+{selectedOrder?.points} {locale === "ja" ? "点" : "pt"}</b></span>
+            <small>PROVE · {copy.proveHint}</small>
+            <span className="tc-action-risk">{locale === "ja" ? "かけらの公開は増えません。付け替えた数字の一列などを公開します。" : "No extra share is published. One relabelled row, column or box becomes public."}</span>
+          </button>}
         </div>
         {selectedOrder && (!leakAllowed || !proveAllowed) && (
           <div className="tc-card-hint">
             {!leakAllowed ? copy.leakBlocked : copy.proveBlocked}
           </div>
         )}
+        </>}
       </div>
       )}
 
@@ -1246,6 +1455,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <div className="tc-lesson-why">{copy.fheWhy}</div>
           </div>
           <div className="tc-card-hint">{copy.fheHelp}</div>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="fhe" task={selectedOrder.task} prime={projection.prime} />
           <div className="tc-card-hint">{copy.fheInputs}</div>
           <ul className="tc-material-list">
             {selectedOrder.task.inputs.map((input, index) => (
@@ -1263,7 +1473,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
               () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points), lesson: copy.fheLesson }),
             )}
-          >{submitting ? copy.running : copy.fhe}</button>
+          >{submitting ? copy.running : `${copy.fhe} · +${selectedOrder.points}`}</button>
         </div>
       )}
 
@@ -1286,6 +1496,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <div className="tc-lesson-why">{copy.cipherWhy}</div>
           </div>
           <div className="tc-card-hint">{copy.cipherHelp}</div>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="caesar" task={selectedOrder.task} prime={projection.prime} />
           <ul className="tc-material-list">
             <li>
               {copy.cipherAlphabet}:
@@ -1316,7 +1527,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               () => submitCipher(client, selectedOrder.id, cipherAnswer.trim().split(/\s+/)),
               () => ({ kind: "prove", title: copy.cipherSuccess, body: copy.cipherBody(selectedOrder.points) }),
             )}
-          >{submitting ? copy.running : copy.cipher}</button>
+          >{submitting ? copy.running : `${copy.cipher} · +${selectedOrder.points}`}</button>
         </div>
       )}
 
@@ -1328,27 +1539,22 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "masked-total" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.mpcTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          <div className="tc-lesson">
-            <div className="tc-lesson-use">{copy.mpcUse}</div>
-            <div className="tc-lesson-why">{copy.mpcWhy}</div>
-          </div>
-          <div className="tc-card-hint">{copy.mpcHelp}</div>
-          <ul className="tc-material-list">
-            <li>{copy.mpcMine}: <code>{selectedOrder.task.myInput}</code></li>
-            <li>{copy.mpcIncoming}: <code>{selectedOrder.task.incomingMasks.join(", ")}</code></li>
-            <li>{copy.mpcOutgoing}: <code>{selectedOrder.task.outgoingMasks.join(", ")}</code></li>
-          </ul>
-          <div className="tc-card-hint">{copy.prime}: <code>{projection.prime}</code></div>
-          <input aria-label="fast-mpc-partial" value={mpcPartial} onChange={(event) => setMpcPartial(event.target.value)} placeholder={copy.mpcAnswer} />
+          <p className="tc-card-hint">{locale === "ja" ? "自分の数をそのまま相手に見せず、ほかの拠点と合計だけを出す練習です。今回は、自分の数に『覆面』と呼ぶ数を足し引きしてから提出します。" : "Find a combined total without directly showing your own input. Add and subtract the numbers called masks before submitting."}</p>
+          <MpcWorksheet task={selectedOrder.task} prime={projection.prime} locale={locale} />
+          <label className="tc-answer-label">{copy.mpcAnswer} · {locale === "ja" ? `④ の答えを 1 つ入力（0〜${BigInt(projection.prime) - 1n}）` : `Enter the result of step 4 (0–${BigInt(projection.prime) - 1n})`}
+            <input aria-label={copy.mpcAnswer} inputMode="numeric" value={mpcPartial} onChange={(event) => setMpcPartial(event.target.value)} placeholder={locale === "ja" ? "最後に出た数" : "Your final number"} />
+          </label>
           <button
             type="button"
             className="tc-submit-small tc-mpc-button"
             disabled={submitting || !mpcPartial.trim()}
             onClick={() => void run(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
-              () => ({ kind: "prove", title: copy.mpcSuccess, body: copy.mpcBody(selectedOrder.points), lesson: copy.mpcLesson }),
+              () => ({ kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(selectedOrder.points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, lesson: copy.mpcLesson }),
             )}
-          >{submitting ? copy.running : copy.mpc}</button>
+          >{submitting ? copy.running : `${copy.mpc} · +${selectedOrder.points}`}</button>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />
+          <details className="tc-why"><summary>{locale === "ja" ? "なぜ、足し引きすると秘密が隠れる？" : "Why do these additions and subtractions hide my input?"}</summary><p className="tc-card-hint">{copy.mpcWhy}</p></details>
         </div>
       )}
 
@@ -1359,59 +1565,124 @@ export default function FastMovePanel(props: PortalSlotProps) {
         select an FHE Order, and submit a PROVE the new Order cannot accept.
         `setProveOpen(false)` on selection is the other half — a form that
         reappears still bound to a different Order is its own surprise.
+
+        The participant chooses the relabelling and completes four cells;
+        twelve worked cells reduce transcription under the five-minute limit.
+        The judge still receives and checks the complete grid. Used tables stay
+        selectable so reuse remains a real decision, with its risk labelled.
       */}
-      {/*
-        [Issue #701] PROVE is two visible steps, because it is two moves. Until
-        a commitment lands there is no challenge to answer, so showing both
-        fields at once would be asking for the answer to a question nobody has
-        asked yet. Which step is on screen is read off the Order itself
-        (`proveChallenge`), never from local state -- a reload, a poll, or the
-        other browser tab a team is sharing all land on the same step.
-      */}
-      {proveOpen && selectedOrder?.task.kind === "reveal-share" && (
+      {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && proveAllowed && (
         <div className="tc-input-panel">
-          <strong style={{ fontSize: "12px" }}>{copy.proveOpen} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          {selectedOrder.proveChallenge === undefined ? (
-            <>
-              <p className="tc-prove-step">{copy.proveStep1}</p>
-              <input aria-label="fast-prove-commitment" value={commitment} onChange={(event) => setCommitment(event.target.value)} placeholder={copy.commitment} />
-              <button
-                type="button"
-                className="tc-submit-small"
-                disabled={submitting || !commitment.trim()}
-                onClick={() => void run(
-                  () => submitProveCommit(client, selectedOrder.id, commitment.trim()),
-                  () => ({ kind: "prove", title: copy.commitDone, body: copy.commitBody }),
-                )}
-              >{submitting ? copy.running : copy.commitSend}</button>
-            </>
-          ) : (
-            <>
-              <p className="tc-prove-step">{copy.proveStep2}</p>
-              <p className="tc-prove-challenge">
-                {copy.challengeLabel}<strong>{selectedOrder.proveChallenge}</strong>
-              </p>
-              <input aria-label="fast-prove-response" value={response} onChange={(event) => setResponse(event.target.value)} placeholder={copy.response} />
-              <button
-                type="button"
-                className="tc-submit-small"
-                disabled={submitting || !response.trim()}
-                onClick={() => void run(
-                  () => submitProveRespond(client, selectedOrder.id, response.trim()),
-                  () => ({ kind: "prove", title: copy.proveSuccess, body: copy.proveBody(selectedOrder.points), lesson: copy.proveLesson }),
-                )}
-              >{submitting ? copy.running : copy.send}</button>
-            </>
-          )}
+          <strong>{locale === "ja" ? "空欄4マスに、付け替えた数字を入力" : "Fill four holes with the renamed digits"}</strong>
+
+          <div className="tc-card-hint">{copy.proveHelp}</div>
+          <label className="tc-card-hint" style={{ display: "block" }}>
+            {copy.proveTable}
+            <select aria-label={copy.proveTable} value={proveTableKey} style={{ display: "block", maxWidth: "100%", margin: "6px 0", padding: "6px", color: "#16212e", background: "#fff" }}
+              onChange={(event) => { setProveTableKey(event.target.value); setProveCells(emptyCells()); }}>
+              <option value="">{copy.proveChooseTable}</option>
+              {ALL_PERMUTATIONS.filter((table) => table.some((to, from) => to !== from + 1)).map((table) => (
+                <option key={table.join("")} value={table.join("")}>
+                  {table.map((to, from) => `${from + 1}→${to}`).join("  ")}
+                  {projection.vault.usedPermutations.some((used) => used.every((to, i) => to === table[i])) ? ` · ${copy.proveReused}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {proveTable && proveGivens && <>
+          <p className="tc-card-hint">{(() => {
+            const example = proveGivens.findIndex((cell) => cell !== "");
+            return copy.proveExample(projection.vault.sudokuSolution[example]!, Number(proveGivens[example]));
+          })()}</p>
+          <div className="tc-sudoku-row">
+            <div className="tc-sudoku-block">
+              <span className="tc-sudoku-caption">{copy.proveSolution}</span>
+              <SudokuBoard cells={projection.vault.sudokuSolution} size={36} label="my-solution" />
+            </div>
+            <div className="tc-sudoku-block">
+              <span className="tc-sudoku-caption">{copy.proveGrid}</span>
+              <SudokuInput size={36} value={proveCells} givens={proveGivens} onChange={setProveCells} ariaLabel="fast-prove-grid" />
+            </div>
+          </div>
+          </>}
+          {projection.vault.usedPermutations.length > 0 && <div className="tc-card-hint">
+            {copy.proveUsed}:{" "}
+            {projection.vault.usedPermutations.length === 0
+              ? copy.proveNoneUsed
+              : projection.vault.usedPermutations.map((pi) => (
+                  <span key={pi.join("")} style={{ marginRight: 8 }}><PermutationChips pi={pi} /></span>
+                ))}
+          </div>}
+          <button
+            type="button"
+            className="tc-submit-small tc-prove-submit"
+            disabled={submitting || proveGrid === undefined}
+            title={proveGrid === undefined ? copy.proveIncomplete : undefined}
+            onClick={() => proveGrid && void run(
+              () => submitProveSudoku(client, selectedOrder.id, proveGrid),
+              // [Issue #709] Hit or miss is read off the projection the op
+              // came back with -- a wrong grid lands and returns ok. A hit
+              // empties the grid: that relabelling is spent now, and the next
+              // Order needs a different one. A miss keeps it, to be corrected.
+              (next) => {
+                const draft = proveFeedback(next, selectedOrder.id, selectedOrder.points, locale);
+                if (draft.kind === "prove") { setProveCells(emptyCells()); setProveTableKey(""); }
+                return draft;
+              },
+            )}
+          >{submitting ? copy.running : `${copy.send} · +${selectedOrder.points}`}</button>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="zk" task={selectedOrder.task} prime={projection.prime} />
+          <details className="tc-why">
+            <summary>{locale === "ja" ? "何を証明している？" : "What am I proving?"}</summary>
+            <div className="tc-lesson-use">{copy.proveUse}</div>
+            <div className="tc-lesson-why">{copy.proveWhy}</div>
+          </details>
         </div>
       )}
+
+      {selectedOrder ? (
+          <details className="tc-hints" key={selectedOrder.id}>
+            <summary>{locale === "ja" ? `このお題のヒント${nextHint ? `（次は −${nextHint.cost} 点）` : "（購入済み）"}` : `Hints for this Order${nextHint ? ` (next: −${nextHint.cost})` : " (all opened)"}`}</summary>
+            <div className="tc-card-hint">{copy.hintsHint}</div>
+            {selectedOrder.hints
+              .filter((hint) => hint.text !== undefined)
+              .map((hint) => (
+                <p className="tc-hint-text" key={hint.id}>
+                  <span className="tc-hint-step">{hint.level + 1}</span>
+                  <span>{hint.text?.[locale]}</span>
+                </p>
+              ))}
+            {nextHint ? (
+              <button
+                type="button"
+                className="tc-hint-button"
+                disabled={submitting}
+                onClick={() => void run(
+                  () => submitRevealHint(client, selectedOrder.id),
+                  () => ({
+                    kind: "hint",
+                    title: copy.hintOpened,
+                    body: copy.hintOpenedBody(nextHint.cost),
+                  }),
+                )}
+              >
+                {copy.hintBuy(nextHint.cost)}
+              </button>
+            ) : (
+              <div className="tc-card-hint">{copy.hintsExhausted}</div>
+            )}
+          </details>
+      ) : <p className="tc-card-hint">{copy.noOrder}</p>}
+      </section>
 
       {/*
         [Issue #682] The exposure lane, always on screen. See `exposureRows`
         for why it is not gated on anything being actionable yet.
       */}
-      <div className="tc-exposure">
-        <div className="tc-card-title">{copy.exposure}</div>
+      <details className="tc-exposure">
+        <summary>{locale === "ja" ? `秘密の公開状況 · あなた ${ownExposedShareCount(projection)}/${projection.threshold} 個` : `Secret exposure · you ${ownExposedShareCount(projection)}/${projection.threshold}`}
+          <span>{exposure.filter((row) => !row.isSelf).map((row) => `${row.teamName} ${row.exposed}/${projection.threshold}`).join(" · ")}</span>
+        </summary>
         <div className="tc-card-hint">{copy.exposureHint(projection.threshold)}</div>
         <div className="tc-exposure-rows">
           {exposure.map((row) => (
@@ -1440,32 +1711,39 @@ export default function FastMovePanel(props: PortalSlotProps) {
           ))}
         </div>
         {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
-      </div>
+      </details>
 
-      {(tactics.hunt || tactics.nonceHunt || tactics.cipherHunt || tactics.rotate) && (
-      <details className="tc-tactics" open={tactics.hunt || tactics.cipherHunt || tactics.nonceHunt}>
-        <summary>{copy.tactics}<span>{copy.tacticsHint}</span></summary>
+      {(tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rotate) && (
+      <details className="tc-tactics">
+        <summary>{copy.tactics}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
       {tactics.hunt && <div className="tc-secondary-grid">
         <div className="tc-hunt-card">
           <div className="tc-card-title">{copy.hunt}</div>
-          <div className="tc-card-hint">{copy.huntHint}</div>
+          <div className="tc-card-hint">{copy.huntHint(projection.wrongHuntCost)}</div>
           <>
               <div className="tc-target-row">
                 {targets.map((target) => {
                   const key = `${target.teamId}:${target.generation}`;
-                  return <button key={key} type="button" className="tc-target-chip" aria-pressed={selectedTarget ? `${selectedTarget.teamId}:${selectedTarget.generation}` === key : false} onClick={() => setHuntTargetKey(key)}>{target.teamId} · gen {target.generation} · [{target.shareIndices.join(",")}]</button>;
+                  const budget = huntBudgetFor(projection, target);
+                  return <button key={key} type="button" className="tc-target-chip" aria-pressed={selectedTarget ? `${selectedTarget.teamId}:${selectedTarget.generation}` === key : false} onClick={() => setHuntTargetKey(key)}>{target.teamId} · gen {target.generation} · [{target.shareIndices.join(",")}]{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>;
                 })}
               </div>
+              {huntExhausted ? <div className="tc-card-warn">{copy.huntExhausted}</div> : null}
               <div className="tc-input-panel">
                 <input aria-label="fast-hunt-secret" value={recoveredSecret} onChange={(event) => setRecoveredSecret(event.target.value)} placeholder={copy.recovered} />
                 <button
                   type="button"
                   className="tc-submit-small"
-                  disabled={submitting || !selectedTarget || !recoveredSecret.trim()}
+                  disabled={submitting || !selectedTarget || !recoveredSecret.trim() || huntExhausted}
                   onClick={() => selectedTarget && void run(
                     () => submitHunt(client, selectedTarget.teamId, selectedTarget.generation, recoveredSecret.trim()),
-                    () => ({ kind: "hunt", title: copy.huntSuccess, body: copy.huntBody }),
+                    // [Issue #696] Hit or miss is read off the projection the
+                    // op came back with -- see `huntFeedback`. The sudoku HUNT
+                    // (#709) reads its verdict the same way; the cipher HUNT
+                    // keeps its plain success draft because `validateOp` still
+                    // refuses a wrong key there, so for it ok really means hit.
+                    (next) => huntFeedback(next, selectedTarget.teamId, locale),
                   )}
                 >{submitting ? copy.running : copy.send}</button>
               </div>
@@ -1539,46 +1817,80 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>}
 
         {/*
-          [Issue #645 Phase 5] Without this the `hunt-nonce` op had no
-          participant-facing sender at all: the reducer accepted it, the README
-          advertised it, and nothing in the Portal could produce one.
+          [Issue #709] The sudoku HUNT. Every opened group of every other team
+          is shown with its tag, next to that team's public puzzle: the match
+          between two tags is the participant's to spot, the lining-up against
+          the puzzle is theirs to do, and the sixteen boxes are where the
+          recovered solution goes. A control that showed only the "huntable"
+          teams would be the Portal doing the noticing.
         */}
-        {tactics.nonceHunt && <div className="tc-hunt-card">
-          <div className="tc-card-title">{copy.huntNonce}</div>
-          <div className="tc-card-hint">{copy.huntNonceHint}</div>
-          <>
-              <div className="tc-target-row">
-                {nonceTargets.map((target) => {
-                  const key = `${target.teamId}:${target.generation}`;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      className="tc-target-chip"
-                      aria-pressed={selectedNonceTarget ? `${selectedNonceTarget.teamId}:${selectedNonceTarget.generation}` === key : false}
-                      onClick={() => setNonceTargetKey(key)}
-                    >{target.teamId} · gen {target.generation}</button>
-                  );
-                })}
-              </div>
-              <div className="tc-input-panel">
-                <input aria-label="fast-hunt-nonce-witness" value={recoveredKey} onChange={(event) => setRecoveredKey(event.target.value)} placeholder={copy.recoveredKey} />
+        {tactics.sudokuHunt && <div className="tc-hunt-card">
+          <div className="tc-card-title">{copy.huntSudoku}</div>
+          <div className="tc-card-hint">{copy.huntSudokuHint(projection.wrongHuntCost)}</div>
+          <div className="tc-target-row">
+            {sudokuTargets.map((target) => {
+              const key = `${target.teamId}:${target.generation}`;
+              const budget = projection.sudokuHuntAttempts[target.teamId];
+              return (
                 <button
+                  key={key}
                   type="button"
-                  className="tc-submit-small tc-hunt-nonce-button"
-                  disabled={submitting || !selectedNonceTarget || !recoveredKey.trim()}
-                  onClick={() => selectedNonceTarget && void run(
-                    () => submitHuntNonce(client, selectedNonceTarget.teamId, selectedNonceTarget.generation, recoveredKey.trim()),
-                    () => ({ kind: "hunt", title: copy.huntNonceSuccess, body: copy.huntNonceBody }),
-                  )}
-                >{submitting ? copy.running : copy.send}</button>
+                  className="tc-target-chip"
+                  aria-pressed={selectedSudokuTarget ? `${selectedSudokuTarget.teamId}:${selectedSudokuTarget.generation}` === key : false}
+                  onClick={() => setSudokuTargetKey(key)}
+                >{target.teamName} · gen {target.generation} · ×{target.reveals.length}{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>
+              );
+            })}
+          </div>
+          {selectedSudokuTarget && (
+            <div className="tc-sudoku-row">
+              <div className="tc-sudoku-block">
+                <span className="tc-sudoku-caption">{copy.huntSudokuPuzzle}</span>
+                <SudokuBoard cells={selectedSudokuTarget.puzzle} label={`puzzle-${selectedSudokuTarget.teamId}`} />
               </div>
-          </>
+              <div className="tc-sudoku-block">
+                <span className="tc-sudoku-caption">{copy.huntSudokuReveals}</span>
+                <ul className="tc-reveal-list">
+                  {selectedSudokuTarget.reveals.map((reveal) => (
+                    <li key={reveal.id}>
+                      <span>{describeRevealGroup(reveal.group, locale)}</span>
+                      <code>{reveal.cells.join(" ")}</code>
+                      <span className="tc-reveal-tag">{reveal.tag}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="tc-sudoku-block">
+                <span className="tc-sudoku-caption">{copy.huntSudokuGrid}</span>
+                <SudokuInput value={huntCells} onChange={setHuntCells} ariaLabel="fast-hunt-sudoku-grid" />
+              </div>
+            </div>
+          )}
+          {sudokuHuntExhausted ? <div className="tc-card-warn">{copy.huntExhausted}</div> : null}
+          <div className="tc-input-panel">
+            <button
+              type="button"
+              className="tc-submit-small tc-hunt-sudoku-button"
+              disabled={submitting || !selectedSudokuTarget || huntGrid === undefined || sudokuHuntExhausted}
+              onClick={() => selectedSudokuTarget && huntGrid && void run(
+                () => submitHuntSudoku(client, selectedSudokuTarget.teamId, selectedSudokuTarget.generation, huntGrid),
+                // A hit empties the grid: that solution is recovered and
+                // this target's generation is closed to a second HUNT.
+                (next) => {
+                  const draft = huntFeedback(next, selectedSudokuTarget.teamId, locale, "sudoku");
+                  if (draft.kind === "hunt") setHuntCells(emptyCells());
+                  return draft;
+                },
+              )}
+            >{submitting ? copy.running : copy.send}</button>
+          </div>
         </div>}
 
         {tactics.rotate && <div className="tc-rotate-card">
           <div className="tc-card-title">{copy.rotate}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
+          {sudokuPressure === "hunted" && <div className="tc-card-hint">{copy.rotateSudokuHunted}</div>}
+          {sudokuPressure === "exhausted" && <div className="tc-card-hint">{copy.rotateSudokuExhausted}</div>}
           {/*
             [Issue #659] ROTATE voids every Order still open, and each one now
             costs what letting it expire costs -- up to a whole batch. That is a
@@ -1607,21 +1919,36 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </details>
       )}
 
-      <div className="tc-board-grid">
-        <Ledger projection={projection} locale={locale} />
-        <Vault projection={projection} locale={locale} />
-      </div>
-
-      {feedback && (
-        <div key={feedback.attempt} className={`tc-feedback tc-feedback-${feedback.kind}`}>
-          <strong>
-            {feedback.title}
-            {feedback.attempt > 1 ? <em className="tc-feedback-attempt">{copy.attemptLabel(feedback.attempt)}</em> : null}
-          </strong>
-          <span>{feedback.body}</span>
-          {feedback.lesson ? <span className="tc-feedback-lesson">{feedback.lesson}</span> : null}
+      <details className="tc-records">
+        <summary>{locale === "ja" ? `公開記録と自分の保管庫を見る（記録 ${projection.publicLedger.length} 件）` : `Public Ledger and My Vault (${projection.publicLedger.length} records)`}</summary>
+        <div className="tc-board-grid">
+          <Ledger projection={projection} locale={locale} />
+          <Vault projection={projection} locale={locale} />
         </div>
-      )}
+      </details>
     </section>
+  );
+}
+
+/**
+ * The banner a submission leaves behind. Keyed by `attempt` at the call site
+ * so a repeat remounts and the pop replays (Issue #697).
+ *
+ * Its own component, exported, so `game/src/portal.test.ts` can render what a
+ * HUNT miss actually puts on the screen: the panel itself has no projection
+ * under `renderToStaticMarkup` (see this file's header), so the banner is the
+ * seam the miss-versus-success check has to go through.
+ */
+export function FeedbackBanner({ feedback, locale }: { readonly feedback: Feedback; readonly locale: Locale }) {
+  const copy = FAST_MOVE_COPY[locale];
+  return (
+    <div className={`tc-feedback tc-feedback-${feedback.kind}`}>
+      <strong>
+        {feedback.title}
+        {feedback.attempt > 1 ? <em className="tc-feedback-attempt">{copy.attemptLabel(feedback.attempt)}</em> : null}
+      </strong>
+      <span>{feedback.body}</span>
+      {feedback.lesson ? <span className="tc-feedback-lesson">{feedback.lesson}</span> : null}
+    </div>
   );
 }

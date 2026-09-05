@@ -29,7 +29,7 @@ function shareRungContext(): HintContext {
   const projection = projectForTeam(state, "a");
   const order = projection.myContracts.find((c) => c.task.kind === "reveal-share");
   if (!order) throw new Error("test setup: expected a share Order");
-  return { task: order.task, vault: projection.vault, prime: projection.prime, threshold: projection.threshold, shareCount: 5 };
+  return { allowedMethods: order.allowedMethods, exposedShareIndices: [], task: order.task, vault: projection.vault, prime: projection.prime, threshold: projection.threshold, shareCount: 5 };
 }
 
 function portalSources(): { file: string; text: string }[] {

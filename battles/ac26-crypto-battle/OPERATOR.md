@@ -49,7 +49,7 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 ## Match lifecycle
 
 1. TenkaCloud mints the match secret before first state creation.
-2. `initialState` creates team secrets, shares, commitments, and the Order plan.
+2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
 4. `validateOp` rejects malformed, stale, unauthorized, or incorrect moves.
 5. `applyOp` changes state only after validation.
@@ -60,17 +60,51 @@ All state and operations must remain JSON-safe. Large field and group values
 cross the state/op boundary as decimal strings, never JavaScript numbers or
 raw `bigint`.
 
+### Upgrading across a schema version
+
+The plugin declares `stateSchemaVersion` (3 since the sudoku PROVE) and a
+`migrateState` that lifts older rows on first touch. One case is refused on
+purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
+Schnorr transcripts sharing a commitment on a team's current generation, and
+an attacker that has not collected on it). v3 has no move that attack maps
+onto, and dropping it silently would change the match's scoring mid-run. The
+platform leaves such a row untouched, so finish that match on the plugin that
+made it, or reset it, before deploying the upgrade. Upgrade between events,
+not during one.
+
 ## Participant surface
 
 The default surface is deliberately staged:
 
-1. pick one ORDER;
-2. choose the action that Order accepts;
-3. open tactics only after public material makes HUNT or ROTATE relevant;
-4. open the tutorial or full computation reference only when needed.
+1. read the always-visible problem explanation above the board; the compact
+   “Practice (optional)” control opens a walkthrough only on request;
+2. pick one ORDER and choose the action it accepts;
+3. for sudoku PROVE, select a relabelling table and fill four holes beside
+   twelve worked cells; all four digit substitutions are exercised once;
+4. open tactics or the full reference when needed.
 
-The Portal must not compute a participant's PROVE or HUNT answer, announce that
-a target is exploitable, or show another team's private material.
+The tutorial starts collapsed on every visit, including the waiting room. It
+never gates or automatically interrupts play, and can be closed in place. It
+uses only fixed practice data; changing team or deployment resets practice.
+
+Optional practice now uses six one-digit fill-ins: remainder, share recovery,
+MPC, ZK, FHE, Caesar. Each answer is checked locally and followed by the reason
+for the calculation. There is no practice score, fake Contract, or fake Ledger.
+
+Free concept explanations are separate from practice. They start as compact
+controls in the top rules disclosure and beside each calculation form, use fixed one-digit
+examples, and show unsolved expressions from only the current team's projected
+Order operands. No hint purchase or tutorial completion is needed. FHE is
+labelled an addition model with separate per-input keys; the ZK explanation
+states that this game trusts a judge holding the solution.
+
+The sudoku scaffold is an explicit participant aid: it applies the selected
+table to twelve cells of the owning team's solution. Four answers remain empty,
+and the trusted judge still checks the complete submitted grid. Tables used in
+the same generation remain selectable with a reuse warning, preserving the
+misuse that sudoku HUNT teaches. The Portal must not fill these four answers,
+compute a HUNT answer, announce that a target is exploitable, or show another
+team's private material.
 
 ## Local UI harness
 
@@ -96,8 +130,8 @@ bun run typecheck
 ```
 
 The suite covers reducer behavior, JSON round-trips, method/order compatibility,
-Schnorr verification, Shamir reconstruction, FHE/MPC behavior, nonce-reuse
-HUNT, team projections, deterministic replay, and the vertical playtest.
+sudoku-relabelling verification, Shamir reconstruction, FHE/MPC behavior,
+reused-relabelling HUNT, team projections, deterministic replay, and the vertical playtest.
 
 From the TenkaCloudChallenge root, also run:
 
@@ -111,6 +145,36 @@ make agent-gate
 `DEFAULT_CONFIG` in `game/src/reducer.ts` owns match duration, phase boundaries,
 Order cadence, batch size and TTLs, ROTATE cooldown, threshold/share count, and
 the score values that apply to every Order.
+
+### Field size and HUNT attempt limits
+
+Treat `config.prime`, `config.maxHuntAttemptsPerTarget`, and
+`config.scores.wrongHunt` as coupled settings. The match defaults are `97`,
+`3`, and `8`; `scores.huntBonus` is `25`. This is a teaching field, not a
+cryptographic security parameter. Smaller numbers make hand calculation easier
+and blind guessing easier too. Never lower the prime or raise the attempt cap
+without checking the scoring tradeoff at the same time.
+
+For each override, check that the prime exceeds `shareCount`, the attempt cap
+is smaller than the prime and no larger than `threshold`, and
+`huntBonus / prime < wrongHunt`. The default-only assertion in
+`game/src/reducer.test.ts` does not validate operator overrides. For the default
+field, one uniform blind guess has an unclamped expected score change of
+`25/97 - 8*96/97`, which is negative; the score floor at zero still applies, so
+the attempt cap is necessary even when a team has no points to lose.
+
+The budget is per attacker, target, and generation; a hit spends an attempt
+and prevents another reward on that pairing. A well-formed wrong answer costs
+`wrongHunt` and spends one attempt. Malformed or unreduced inputs are refused
+without either cost. Shamir HUNT, FHE, and MPC inputs must already be in
+`0..prime-1`: adding the prime to a correct answer is a format error.
+
+Use a replay or fixture with the proposed config to check correct recovery,
+wrong-answer cost, exhausted attempts, and ROTATE before using an override.
+`field.ts`'s library default `P = 2^61 - 1` is for arithmetic tests; the match
+passes `config.prime` explicitly, with `HAND_PRIME = 97` as its default.
+
+### Order economics
 
 Per-rung economics live in `game/src/ladder.ts`'s `CIPHER_RUNGS`, not in
 `DEFAULT_CONFIG`: how many published pairs break a rung, how long its plaintext

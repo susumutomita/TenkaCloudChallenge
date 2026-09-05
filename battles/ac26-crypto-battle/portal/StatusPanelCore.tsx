@@ -18,7 +18,7 @@
  *
  * UI principle (Issue #486): the Public Ledger lane shows raw published
  * artifacts (teamId / generation / shareIndex / value for a LEAK, or
- * teamId / generation / commitment / response for a PROVE) and nothing
+ * teamId / generation / opened group / digits / tag for a PROVE) and nothing
  * else -- no "threshold reached", no "N of M shares exposed", no computed
  * exploitability verdict of any kind. Reading whether a target is huntable
  * is left entirely to the participant's own cryptographic reasoning over
@@ -38,6 +38,7 @@
 
 import { useEffect, useState } from "react";
 import { ledgerKindLabel, ledgerPayload, taskDetail, taskLabel } from "./orderTask.ts";
+import { PermutationChips } from "./SudokuGrid.tsx";
 import type { CSSProperties } from "react";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { usePolledProjection } from "./coordination.ts";
@@ -89,6 +90,7 @@ interface Copy {
   readonly rotateCooldownLabel: string;
   readonly rotateReady: string;
   readonly huntedGenerationsLabel: string;
+  readonly sudokuHuntedGenerationsLabel: string;
   readonly none: string;
   readonly ledgerTitle: string;
   readonly ledgerBody: string;
@@ -99,8 +101,10 @@ interface Copy {
   readonly colOrder: string;
   readonly colDetail: string;
   readonly colWhen: string;
-  readonly publicKeysTitle: string;
-  readonly publicKeysBody: string;
+  readonly publicPuzzlesTitle: string;
+  readonly publicPuzzlesBody: string;
+  readonly solutionLabel: string;
+  readonly usedPermutationsLabel: string;
   readonly kindShare: string;
   readonly kindProof: string;
   readonly you: string;
@@ -133,12 +137,7 @@ const COPY: Record<Locale, Copy> = {
     kindRush: "rush",
     vaultTitle: "My Vault",
     vaultBody: "Only your team can see this.",
-    // PROVE's Python (HelpDrawer's "Computing PROVE and HUNT yourself")
-    // needs this exact string as its `team` variable -- this is the only
-    // place a fresh team can read it. Shown as monospace so it copy-pastes
-    // cleanly (it feeds a length-prefixed hash preimage; even a
-    // leading/trailing space copied in by accident would change the proof).
-    teamIdLabel: "Team ID (for PROVE's `team` variable)",
+    teamIdLabel: "Team ID",
     generationLabel: "Generation",
     secretLabel: "Secret",
     sharesLabel: "Shares (this generation)",
@@ -147,9 +146,10 @@ const COPY: Record<Locale, Copy> = {
     rotateCooldownLabel: "ROTATE cooldown",
     rotateReady: "ready now",
     huntedGenerationsLabel: "Generations successfully HUNTed against you",
+    sudokuHuntedGenerationsLabel: "Generations whose sudoku solution was recovered from your reused relabelling (ROTATE retires it)",
     none: "none",
     ledgerTitle: "Public Ledger",
-    ledgerBody: "Every share every team has LEAKed, and every proof every team has PROVEn -- forever, in the open.",
+    ledgerBody: "Every share every team has LEAKed, and every sudoku group every team has had opened by PROVE -- forever, in the open.",
     noLedgerEntries: "The ledger is empty so far.",
     colTeam: "Team",
     colGeneration: "Gen",
@@ -157,11 +157,13 @@ const COPY: Record<Locale, Copy> = {
     colOrder: "Order",
     colDetail: "Detail",
     colWhen: "Posted (UTC)",
-    publicKeysTitle: "Public commitments (Y)",
-    publicKeysBody:
-      "Every team's public value Y, published from the start. Anyone can check any proof on the ledger against the team's Y — that is what makes a proof checkable without the secret.",
+    publicPuzzlesTitle: "Public puzzles",
+    publicPuzzlesBody:
+      "Eight cells of every team's sudoku solution, published from the start (a dot is a hidden cell). A PROVE opens one row, column or box of a RELABELLED copy; two opened groups with the same relabelling tag, lined up against this puzzle, give the relabelling away.",
+    solutionLabel: "Sudoku solution (relabel it for PROVE; never submit it as it is)",
+    usedPermutationsLabel: "Relabellings already used this generation",
     kindShare: "share (LEAK)",
-    kindProof: "proof (PROVE)",
+    kindProof: "sudoku (PROVE)",
     you: " (you)",
   },
   ja: {
@@ -189,7 +191,7 @@ const COPY: Record<Locale, Copy> = {
     kindRush: "rush",
     vaultTitle: "My Vault",
     vaultBody: "自チームにのみ表示されます。",
-    teamIdLabel: "Team ID (PROVE の `team` 変数)",
+    teamIdLabel: "Team ID",
     generationLabel: "世代",
     secretLabel: "Secret",
     sharesLabel: "かけら一覧 (現行世代)",
@@ -198,9 +200,10 @@ const COPY: Record<Locale, Copy> = {
     rotateCooldownLabel: "ROTATE クールダウン",
     rotateReady: "今すぐ実行可",
     huntedGenerationsLabel: "自チームが HUNT された世代",
+    sudokuHuntedGenerationsLabel: "付け替えの使い回しから数独の解を割り出された世代 (ROTATE で退役)",
     none: "なし",
     ledgerTitle: "Public Ledger",
-    ledgerBody: "全チームがこれまでに LEAK したかけらと PROVE した proof の全公開履歴です。",
+    ledgerBody: "全チームがこれまでに LEAK したかけらと、PROVE で公開された数独のグループの全公開履歴です。",
     noLedgerEntries: "まだ ledger に記録はありません。",
     colTeam: "チーム",
     colGeneration: "世代",
@@ -208,11 +211,13 @@ const COPY: Record<Locale, Copy> = {
     colOrder: "依頼",
     colDetail: "詳細",
     colWhen: "記録時刻 (UTC)",
-    publicKeysTitle: "公開値 (Y)",
-    publicKeysBody:
-      "各チームの公開値 Y です。最初から公開されています。ledger にある proof は、そのチームの Y と照らし合わせれば誰でも検算できます — secret を知らなくても proof を確かめられるのは、この Y があるからです。",
+    publicPuzzlesTitle: "公開問題",
+    publicPuzzlesBody:
+      "各チームの数独の解のうち 8 マスです。最初から公開されています (・ は伏せたマス)。PROVE は付け替えた写しの 1 行・1 列・1 箱を公開します。同じ「付け替え」タグのグループが 2 つあれば、この問題と突き合わせて付け替えが割れます。",
+    solutionLabel: "数独の解 (PROVE では付け替えて出す。そのまま出さない)",
+    usedPermutationsLabel: "この世代で使った付け替え",
     kindShare: "share (LEAK)",
-    kindProof: "proof (PROVE)",
+    kindProof: "sudoku (PROVE)",
     you: " (自チーム)",
   },
 };
@@ -255,18 +260,22 @@ const laneStyle: CSSProperties = {
 
 const tableStyle: CSSProperties = { width: "100%", borderCollapse: "collapse", fontSize: "12px" };
 const thStyle: CSSProperties = { padding: "4px 6px", textAlign: "left", borderBottom: "1px solid #d5dbdb" };
-/**
- * A public commitment is a 2048-bit number, so it is ~617 decimal digits. It
- * has to be rendered in full -- a truncated Y cannot be fed to the challenge
- * hash, which would leave it as decorative as not showing it at all -- so it
- * wraps anywhere rather than overflowing its lane.
- */
-const publicKeyValueStyle: CSSProperties = {
+/** A puzzle as four monospace rows; a dot is a hidden cell. */
+const puzzleValueStyle: CSSProperties = {
   margin: 0,
   fontFamily: "ui-monospace,SFMono-Regular,Menlo,monospace",
-  overflowWrap: "anywhere",
-  color: "#5f6b7a",
+  whiteSpace: "pre",
+  color: "#16212e",
 };
+
+/** `1 . . 4 / . 4 1 . / ...` -- the text form of a grid, one row per line. */
+function gridRows(cells: readonly number[]): string {
+  const rows: string[] = [];
+  for (let r = 0; r < 4; r += 1) {
+    rows.push(cells.slice(r * 4, r * 4 + 4).map((v) => (v === 0 ? "." : String(v))).join(" "));
+  }
+  return rows.join("\n");
+}
 const tdStyle: CSSProperties = {
   padding: "4px 6px",
   borderBottom: "1px solid #f0f0f0",
@@ -446,6 +455,21 @@ function VaultLane({
           ))}
         </tbody>
       </table>
+      {/*
+        [Issue #709] The solution PROVE relabels, and the relabellings already
+        spent on it. Both are this team's own material: the projection this
+        lane renders is only ever handed to the team it belongs to.
+      */}
+      <p style={{ margin: "8px 0 4px 0", fontSize: "12px", color: "#414d5c" }}>{copy.solutionLabel}</p>
+      <pre style={puzzleValueStyle} aria-label="my-solution-rows">{gridRows(vault.sudokuSolution)}</pre>
+      <p style={{ margin: "6px 0 0 0", fontSize: "12px" }}>
+        {copy.usedPermutationsLabel}:{" "}
+        {vault.usedPermutations.length === 0
+          ? copy.none
+          : vault.usedPermutations.map((pi) => (
+              <span key={pi.join("")} style={{ marginRight: 8 }}><PermutationChips pi={pi} /></span>
+            ))}
+      </p>
       <p style={{ margin: "8px 0 0 0", fontSize: "12px" }}>
         {copy.rotateCooldownLabel}:{" "}
         <strong>{rotateCooldownRemainingMs > 0 ? formatDuration(rotateCooldownRemainingMs) : copy.rotateReady}</strong>
@@ -454,19 +478,29 @@ function VaultLane({
         {copy.huntedGenerationsLabel}:{" "}
         {vault.huntedGenerations.length > 0 ? vault.huntedGenerations.join(", ") : copy.none}
       </p>
+      {/*
+        [Issue #709] The sudoku HUNT charges the victim too, on its own list.
+        Without this line a team would see the score drop and nothing on its
+        own screen saying which generation gave its solution away, or that
+        ROTATE is the answer.
+      */}
+      <p style={{ margin: "4px 0 0 0", fontSize: "12px" }}>
+        {copy.sudokuHuntedGenerationsLabel}:{" "}
+        {vault.sudokuHuntedGenerations.length > 0 ? vault.sudokuHuntedGenerations.join(", ") : copy.none}
+      </p>
     </div>
   );
 }
 
 function LedgerLane({
   ledger,
-  publicCommitments,
+  publicPuzzles,
   myTeamId,
   locale,
   copy,
 }: {
   readonly ledger: readonly PublicArtifact[];
-  readonly publicCommitments: Readonly<Record<string, string>>;
+  readonly publicPuzzles: Readonly<Record<string, readonly number[]>>;
   readonly myTeamId: string;
   readonly locale: Locale;
   readonly copy: Copy;
@@ -508,11 +542,7 @@ function LedgerLane({
                 <td style={tdStyle}>{ledgerKindLabel(entry)}</td>
                 {/*
                   [Issue #645] The Order an artifact was posted against. Public
-                  on every artifact shape, and one of the five values a proof's
-                  challenge is computed over (see the Help Drawer's Python:
-                  domain, team, contract, generation, R, Y) -- so without it on
-                  screen a reader cannot re-derive a challenge from the ledger,
-                  and the nonce-reuse HUNT is unreachable by hand.
+                  on every artifact shape.
                 */}
                 <td style={tdStyle}>{entry.contractId}</td>
                 <td style={tdStyle}>{ledgerPayload(entry, locale)}</td>
@@ -523,25 +553,27 @@ function LedgerLane({
         </table>
       )}
       {/*
-        [Issue #645] Y, the other value a proof's challenge binds. It is public
-        by construction (see reducer.ts's `publicCommitments`) and PROVE is only
-        checkable BECAUSE it is public -- but it reached no participant surface,
-        which left every challenge on the ledger impossible to re-derive and the
-        nonce-reuse HUNT unplayable by hand.
+        [Issue #709] Every team's public puzzle, the thing a reused relabelling
+        is lined up against. Public by construction (see reducer.ts's
+        `publicPuzzles`), and it has to reach a participant surface or the
+        sudoku HUNT is unplayable by hand, as the nonce-reuse HUNT once was
+        when Y reached none.
       */}
       <div style={{ marginTop: "12px" }}>
-        <h5 style={{ margin: "0 0 2px 0", fontSize: "12px" }}>{copy.publicKeysTitle}</h5>
+        <h5 style={{ margin: "0 0 2px 0", fontSize: "12px" }}>{copy.publicPuzzlesTitle}</h5>
         <p style={{ margin: "0 0 6px 0", fontSize: "11px", color: "#5f6b7a" }}>
-          {copy.publicKeysBody}
+          {copy.publicPuzzlesBody}
         </p>
         <dl style={{ margin: 0, fontSize: "11px" }}>
-          {Object.entries(publicCommitments).map(([teamId, y]) => (
+          {Object.entries(publicPuzzles).map(([teamId, puzzle]) => (
             <div key={teamId} style={{ margin: "0 0 6px 0" }}>
               <dt style={{ fontWeight: 700 }}>
                 {teamId}
                 {teamId === myTeamId ? copy.you : ""}
               </dt>
-              <dd style={publicKeyValueStyle}>{y}</dd>
+              <dd style={{ margin: 0 }}>
+                <pre style={puzzleValueStyle} aria-label={`puzzle-${teamId}`}>{gridRows(puzzle)}</pre>
+              </dd>
             </div>
           ))}
         </dl>
@@ -611,7 +643,7 @@ export function StatusPanelBody({
         <VaultLane vault={projection.vault} elapsedSincePollMs={elapsedSincePollMs} copy={copy} />
         <LedgerLane
           ledger={projection.publicLedger}
-          publicCommitments={projection.publicCommitments}
+          publicPuzzles={projection.publicPuzzles}
           myTeamId={myTeamId}
           locale={locale}
           copy={copy}

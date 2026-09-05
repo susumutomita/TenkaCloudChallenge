@@ -206,6 +206,21 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
           detail: { contractId: artifact.contractId, generation: artifact.generation },
         });
         break;
+      case "sudoku-reveal":
+        // [Issue #709] The PROVE of the current game. Narrated under the same
+        // `prove` kind a Schnorr transcript was, because a debrief asks WHAT a
+        // team did (proved without revealing) rather than which scheme did it.
+        events.push({
+          atMs: artifact.postedAtMs,
+          teamId: artifact.teamId,
+          kind: "prove",
+          summary: {
+            en: `Team ${artifact.teamId} PROVE order ${artifact.contractId} (generation ${artifact.generation}) -- relabelled sudoku accepted; one group opened, solution not revealed`,
+            ja: `${artifact.teamId} が PROVE: order ${artifact.contractId} (世代 ${artifact.generation}) -- 付け替えた数独が受理され、1 グループだけ公開。解は非公開のまま`,
+          },
+          detail: { contractId: artifact.contractId, generation: artifact.generation },
+        });
+        break;
       case "cipher-pair":
         events.push({
           atMs: artifact.postedAtMs,
@@ -231,13 +246,17 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
   }
 
   for (const hunt of state.huntLog) {
+    // [Issue #709] A sudoku HUNT recovered the target's solution through a
+    // reused relabelling, not its Shamir secret; the debrief says which.
+    const via = hunt.via === "sudoku" ? " -- sudoku solution recovered from a reused relabelling" : "";
+    const viaJa = hunt.via === "sudoku" ? " -- 数独の解を、使い回された付け替えから復元" : "";
     events.push({
       atMs: hunt.atMs,
       teamId: hunt.attackerTeamId,
       kind: "hunt-success",
       summary: {
-        en: `Team ${hunt.attackerTeamId} HUNT success against ${hunt.targetTeamId} (generation ${hunt.generation})`,
-        ja: `${hunt.attackerTeamId} が HUNT 成功: 対象 ${hunt.targetTeamId} (世代 ${hunt.generation})`,
+        en: `Team ${hunt.attackerTeamId} HUNT success against ${hunt.targetTeamId} (generation ${hunt.generation})${via}`,
+        ja: `${hunt.attackerTeamId} が HUNT 成功: 対象 ${hunt.targetTeamId} (世代 ${hunt.generation})${viaJa}`,
       },
       detail: { targetTeamId: hunt.targetTeamId, generation: hunt.generation },
     });

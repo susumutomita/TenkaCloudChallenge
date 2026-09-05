@@ -48,6 +48,7 @@
  * something and checks no other team's secret or un-leaked share appears.
  */
 
+import type { SubmissionMethod } from "./methods.ts";
 import type { OrderTaskKind, OrderTaskProjection, VaultProjection } from "./types.ts";
 
 /**
@@ -69,6 +70,9 @@ export interface HintContext {
   readonly prime: string;
   readonly threshold: number;
   readonly shareCount: number;
+  readonly allowedMethods: readonly SubmissionMethod[];
+  /** Distinct, already-public indices from only this team and generation. */
+  readonly exposedShareIndices: readonly number[];
 }
 
 /** The two locales this Battle ships copy in (see `portal/orderTask.ts`). */
@@ -117,7 +121,7 @@ export const HINT_LEVELS = 3;
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
   /**
    * The share Order is the one place where the hint is about the GAME rather
-   * than the arithmetic: both methods are one click, and the whole difficulty
+   * than the arithmetic: LEAK is one click while PROVE uses the four-cell sudoku scaffold, and the whole difficulty
    * is knowing what each one costs you later.
    *
    * [Issue #702] Level 1 used to open with the decision -- "hand it over or
@@ -133,40 +137,58 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "reveal-share/1",
       text: (ctx) => ({
-        ja: `Order (= あなたのチームに届いた依頼) が、かけらを求めています。かけら (share) とは、あなたのチームの秘密の数を ${ctx.shareCount} 個に分けたうちの 1 個です。MY VAULT の #1〜#${ctx.shareCount} がそれです。仕組みは「点と曲線」です。秘密を、あるなめらかな曲線の「横 0 のときの高さ」にしておきます。かけら #1〜#${ctx.shareCount} は、同じ曲線の横 1〜${ctx.shareCount} での高さです。直線は 2 点で 1 本に決まります。この試合の曲線は ${ctx.threshold} 点で 1 本に決まる形です。だからかけらが ${ctx.threshold} 個そろうと曲線が 1 本に決まり、横 0 の高さ、つまり秘密が読めます。${ctx.threshold - 1} 個では、その点を通る曲線が無数にあり、横 0 の高さもばらばらなので、秘密は何も分かりません。かけらには世代 (= かけら ${ctx.shareCount} 個をまとめて作り直した回数) があり、ROTATE を押すと新しい世代になって、古い世代のかけらは数えられなくなります。公開されたかけらを同じ世代で ${ctx.threshold} 個集めた相手は、あなたの秘密を復元できます (これを HUNT と呼びます)。この Order は、指定された番号のかけらを求めています。LEAK はそのかけらを公開して即完了、PROVE は公開せずに「秘密を持っている」ことだけを示します。`,
-        en: `An Order (= a request sent to your team) is asking for a share. A share is one of the ${ctx.shareCount} pieces your team's secret number was split into: #1 to #${ctx.shareCount} in MY VAULT. The mechanism is points on a curve. The secret is placed as the height of a smooth curve at position 0. Shares #1 to #${ctx.shareCount} are the heights of that same curve at positions 1 to ${ctx.shareCount}. Two points fix one straight line. The curve in this match is a shape that ${ctx.threshold} points fix. So ${ctx.threshold} shares pin down one curve, and its height at 0, the secret, can be read off. With ${ctx.threshold - 1} shares, endless curves pass through those points, each with a different height at 0, so the secret is not known at all. Shares have a generation (= how many times the set of ${ctx.shareCount} shares has been remade); pressing ROTATE starts a new generation, and shares from an old generation no longer count. An opponent who collects ${ctx.threshold} of your published shares from the same generation can rebuild your secret (this is called HUNT). This Order asks for the share with the number it names. LEAK publishes that share and completes the Order at once; PROVE shows only that you hold the secret, without publishing it.`,
+        ja: `Order (= あなたのチームに届いた依頼) が、かけらを求めています。かけら (share) は秘密の数を ${ctx.shareCount} 個に分けたうちの 1 個。MY VAULT の #1〜#${ctx.shareCount} がそれです。
+作り方は、秘密と内緒で選んだ数を入れた式に、かけらの番号を入れて計算する方法です。番号 0 の値が秘密で、番号 1 以降の値がかけらになります。すべて ${ctx.prime} で割った余りで扱います。
+この試合では、同じ世代 (= 同じ秘密から作った一組) の異なる番号が ${ctx.threshold} 個あれば式が決まり、番号 0 の秘密を戻せます。${ctx.threshold - 1} 個では、0 から ${BigInt(ctx.prime) - 1n} までの秘密がどれも候補に残ります。無限の曲線ではなく、割った余りの範囲にある全 ${ctx.prime} 通りの秘密が残る、という意味です。
+LEAK はかけらを公開記録に載せる操作。必要な個数を集めて秘密を戻す攻撃を HUNT と呼びます。PROVE は別の秘密である数独の解を持つことを示し、このかけらを出さずに Order に答えます。`,
+        en: `An Order (= a request sent to your team) asks for a share. A share is one of ${ctx.shareCount} pieces of your secret number: #1 to #${ctx.shareCount} in MY VAULT.
+A formula combines the secret with privately chosen numbers. Put a share index into that formula: index 0 gives the secret, and later indices give shares. Keep remainders after dividing by ${ctx.prime}.
+Here ${ctx.threshold} distinct indices from one generation (= one set made from the same secret) fix the formula and recover its value at 0. With ${ctx.threshold - 1} shares, every candidate secret from 0 to ${BigInt(ctx.prime) - 1n} remains possible. This is a finite set of ${ctx.prime} possible secrets, not infinitely many ordinary curves.
+LEAK publishes a share. Recovering a secret from enough shares is the HUNT attack. PROVE instead demonstrates that you hold your separate sudoku solution, completing the Order without publishing its requested share.`,
       }),
     },
     {
       id: "reveal-share/2",
-      text: (ctx) => ({
-        ja: `曲線の式を言葉で書くと「高さ = 秘密 + (係数 1 × 横) + (係数 2 × 横 × 横)」です。係数 (= かける数) はチームごとにランダムに決まり、横 0 では秘密だけが残ります。数が大きくなりすぎないよう、計算のたびに「ある数で割った余り」だけを残します。この試合でその数は ${ctx.prime} です。例は「3 個で戻る」設定、割る数 7 で見ます。「7 で割った余り」を、これから mod 7 と書きます。例: 秘密 3、係数 2 と 5。式は 3 + 2×横 + 5×横×横。横 1: 3 + 2 + 5 = 10、mod 7 で 3 → かけら #1 = 3。横 2: 3 + 4 + 20 = 27、mod 7 で 6 → #2 = 6。横 3: 3 + 6 + 45 = 54、mod 7 で 5 → #3 = 5。次に秘密 0、係数 3 と 0 の別の式 0 + 3×横 を試すと、#1 = 3、#2 = 6 と同じになり、#3 だけ 9 mod 7 = 2 と変わります。かけら 2 個では秘密が 3 か 0 か区別できず、3 個目で初めて決まります。これが「${ctx.threshold} 個で戻り、それより少ないと何も分からない」の正体です。`,
-        en: `In words, the curve is: height = secret + (coefficient 1 x position) + (coefficient 2 x position x position). The coefficients (= the numbers you multiply by) are random per team, and at position 0 only the secret remains. To stop the numbers from growing, after each calculation only the remainder of division by a fixed number is kept. In this match that number is ${ctx.prime}. The example uses a 3-share setting and 7. From here on, the remainder of division by 7 is written mod 7. Example: secret 3, coefficients 2 and 5. The curve is 3 + 2 x position + 5 x position x position. Position 1: 3 + 2 + 5 = 10, mod 7 gives 3, so share #1 = 3. Position 2: 3 + 4 + 20 = 27, mod 7 gives 6, so #2 = 6. Position 3: 3 + 6 + 45 = 54, mod 7 gives 5, so #3 = 5. Now try a different curve, secret 0 with coefficients 3 and 0: 0 + 3 x position. It gives the same #1 = 3 and #2 = 6, and only #3 differs: 9 mod 7 = 2. With two shares you cannot tell whether the secret is 3 or 0; the third share settles it. That is why ${ctx.threshold} shares rebuild the secret and fewer tell nothing.`,
-      }),
+      text: (ctx) => {
+        const termsJa = Array.from({ length: ctx.threshold - 1 }, (_, i) => `係数${i + 1} × ${Array(i + 1).fill("番号").join(" × ")}`);
+        const termsEn = Array.from({ length: ctx.threshold - 1 }, (_, i) => `coefficient${i + 1} × ${Array(i + 1).fill("index").join(" × ")}`);
+        return {
+          ja: `この試合の式は「かけら = 秘密${termsJa.length ? " + " + termsJa.join(" + ") : ""}」を ${ctx.prime} で割った余りです。係数は内緒で選ぶ『掛ける数』で、${ctx.threshold - 1} 個使います。番号 0 を入れると、秘密以外の項は全部 0 になります。
+ここからは『3 個で戻る・割る数 7』の小さい例です。本番の設定 (${ctx.threshold} 個・割る数 ${ctx.prime}) とは区別してください。秘密 1、係数 0 と 1 なら、式は 1 + 0 × 番号 + 1 × 番号 × 番号。#1: 1 + 1 = 2、#2: 1 + 4 = 5、#3: 1 + 9 = 10、7 を引いて 3。これを 10 mod 7 = 3 と書き、mod は『割った余り』の意味です。
+例の秘密を戻すと、3 × 2 − 3 × 5 + 3 = −6、7 を足して 1。これは『番号 1・2・3』専用の戻し方です。係数に掛かる数が 3 × 1 − 3 × 2 + 3 = 0 と、3 × 1 − 3 × 4 + 9 = 0 になり、秘密だけ残ります。
+2 個だけではなぜ足りないか。秘密 2、係数 2 と 5 でも、#1 は 2 + 2 + 5 = 9 → 2、#2 は 2 + 4 + 20 = 26 → 5 と同じです。無料の『秘密のかけら』解説には、0〜6 の全候補に対応する係数の表があります。`,
+          en: `This match uses share = secret${termsEn.length ? " + " + termsEn.join(" + ") : ""}, taking the remainder after dividing by ${ctx.prime}. A coefficient is a privately chosen multiplier; this setting uses ${ctx.threshold - 1} of them. At index 0 every term except the secret disappears.
+The following small example uses a THREE-share setting and divisor 7, separate from this match's ${ctx.threshold}-share setting and divisor ${ctx.prime}. Secret 1, coefficients 0 and 1: 1 + 0 × index + 1 × index × index. #1: 1 + 1 = 2; #2: 1 + 4 = 5; #3: 1 + 9 = 10 → 10 − 7 = 3. Write this as 10 mod 7 = 3; mod means remainder.
+Recover the example secret: 3 × 2 − 3 × 5 + 3 = −6 → −6 + 7 = 1. This shortcut is ONLY for indices 1, 2, 3. The coefficient multipliers cancel: 3 × 1 − 3 × 2 + 3 = 0 and 3 × 1 − 3 × 4 + 9 = 0, leaving only the secret.
+Why not two shares? Secret 2 with coefficients 2 and 5 gives #1: 2 + 2 + 5 = 9 → 2 and #2: 2 + 4 + 20 = 26 → 5: the same two shares. The free Secret shares explanation lists the coefficients for every possible secret 0–6.`,
+        };
+      },
     },
     {
       id: "reveal-share/3",
       text: (ctx) => {
-        const indices = ctx.task.kind === "reveal-share" ? ctx.task.shareIndices : [];
-        const listJa = indices.map((i) => "#" + i).join("・");
-        const listEn = indices.map((i) => "#" + i).join(", ");
-        const valueOf = (i: number) => ctx.vault.shares.find((share) => share.index === i)?.value;
-        const cardsJa = indices
-          .map((i) => {
-            const value = valueOf(i);
-            return value === undefined ? "#" + i + " は MY VAULT の「かけらを見る」で開いて確認" : "#" + i + " = " + value;
-          })
-          .join("、");
-        const cardsEn = indices
-          .map((i) => {
-            const value = valueOf(i);
-            return value === undefined ? "#" + i + " (open it under MY VAULT with show shares)" : "#" + i + " = " + value;
-          })
-          .join(", ");
-        const n = indices.length;
+        if (ctx.task.kind !== "reveal-share") throw new Error("reveal-share/3 needs a share Order");
+        const indices = [...new Set(ctx.task.shareIndices)];
+        const cards = indices.map((index) => {
+          const share = ctx.vault.shares.find((piece) => piece.index === index);
+          if (!share) throw new Error(`missing own share #${index}`);
+          return `#${index} = ${share.value}`;
+        }).join(", ");
+        const exposed = new Set(ctx.exposedShareIndices);
+        const added = indices.filter((index) => !exposed.has(index)).length;
+        const after = exposed.size + added;
+        const canLeak = ctx.allowedMethods.includes("leak");
+        const canProve = ctx.allowedMethods.includes("prove");
+        const prove = canProve ? HINT_LADDER["zk-sudoku"][2]!.text(ctx) : undefined;
         return {
-          ja: `この Order が求めているかけらは ${listJa} です。MY VAULT の「かけらを見る」を押し、${listJa} のカードを開くと数が出ます。いま入っている数は ${cardsJa} (世代 ${ctx.vault.generation}) です。計算はありません。LEAK を押すと、Public Ledger (公開記録 = 全チームが見られる記録) のあなたのチーム・世代 ${ctx.vault.generation} の欄に ${cardsJa} がそのまま載り、Order は完了します。押す前に 1 つだけ確認します。画面の「危険度」レーンにあるあなたの行で、色がついた丸の数を数えてください。それが世代 ${ctx.vault.generation} で公開済みのかけらの数です。この LEAK で ${n} 個増えます。「いまの数 + ${n}」が ${ctx.threshold} 以上なら、相手はあなたの秘密を復元 (HUNT) できます。その場合はこの Order を PROVE (公開せずに証明する) で答えます。ROTATE で世代を新しくすると古い世代の公開分は数えられなくなりますが、ROTATE はいま開いている Order をすべて無効にして期限切れと同じ減点になるので、この Order の逃げ道にはなりません。${ctx.threshold} 未満なら LEAK を押して完了です。`,
-          en: `This Order asks for ${listEn}. Press show shares under MY VAULT and open the ${listEn} card to see the number. Right now it holds ${cardsEn} (generation ${ctx.vault.generation}). There is no calculation. Press LEAK and ${cardsEn} appears as it is under your team, generation ${ctx.vault.generation}, on the Public Ledger (the record every team can see), and the Order is complete. Check one thing before pressing. In the EXPOSURE lane, count the coloured circles in your row: that is how many of your generation ${ctx.vault.generation} shares are already public. This LEAK adds ${n}. If that count plus ${n} reaches ${ctx.threshold}, an opponent can rebuild your secret (HUNT). In that case answer this Order with PROVE (prove without publishing). ROTATE does start a new generation whose old published shares no longer count, but it voids every Order you have open, at the same cost as letting them expire, so it is not a way out of this one. If it stays below ${ctx.threshold}, press LEAK and you are done.`,
+          ja: `この Order が求めるのは ${cards} (世代 ${ctx.vault.generation}) です。自分の保管庫 MY VAULT の『かけらを見る』でも確認できます。
+${canLeak ? `LEAK を選ぶと、この値がそのまま公開記録へ載ります。すでに公開した異なる番号は ${exposed.size} 個。今回新しく増えるのは ${added} 個なので、${exposed.size} + ${added} = ${after} 個になります。同じ番号をもう一度出しても増えません。${after >= ctx.threshold ? `必要な ${ctx.threshold} 個に達するため、相手は秘密を復元できます。` : `必要な ${ctx.threshold} 個にはまだ達しません。`} 公開してよければ LEAK を押すだけで完了です。` : "この Order は LEAK を受け付けません。かけらの値を提出する操作は使えません。"}
+${prove ? `公開せずに答える PROVE の手順：${prove.ja}` : "この Order には PROVE はありません。カードに表示された方法で答えます。"}
+ROTATE は新しい世代を作りますが、いまの Order を無効にして期限切れと同じ減点にします。ROTATE してからこの Order に答えることはできません。`,
+          en: `This Order asks for ${cards} (generation ${ctx.vault.generation}). You can also see them in MY VAULT under show shares.
+${canLeak ? `LEAK publishes those values unchanged. ${exposed.size} distinct indices are already public; this Order adds ${added} new ones: ${exposed.size} + ${added} = ${after}. Repeating an already-public index adds nothing. ${after >= ctx.threshold ? `That reaches the ${ctx.threshold} needed to recover your secret.` : `That is still below the required ${ctx.threshold}.`} If you accept publication, pressing LEAK completes the Order with no calculation.` : "This Order does not accept LEAK. You cannot submit the raw share values."}
+${prove ? `To answer without the shares, use PROVE: ${prove.en}` : "This Order does not accept PROVE. Use a method shown on its card."}
+ROTATE creates a fresh generation but voids this Order at the same penalty as expiry. You cannot ROTATE and then answer this same Order.`,
         };
       },
     },
@@ -175,15 +197,15 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "homomorphic-sum/1",
       text: () => ({
-        ja: "Order (= あなたのチームに届いた依頼) です。ある数を、読めない形に閉じたものを「暗号文」といいます。閉じるのに使う秘密の数が「鍵」です。この試合で答え合わせをするのはゲーム側で、これを「判定側」と呼びます。鍵は判定側だけが持ち、暗号文ごとに別の鍵です。その暗号文が 2 つ、あなたに届いています。鍵はあなたには配られていません。閉じられている元の数を「中身」と呼びます。この Order の暗号文は (左, 右) という 2 つの数の組です。左はくじで選んだだけの数、右は中身に「隠す数」(= 鍵と左の数をかけたもの) を足した数です。鍵を知らないと隠す数がわからないので、右を見ても中身はわかりません。なぜ閉じたまま足せるのか。右は「中身 + 隠す数」という足し算だけでできています。だから 2 つの暗号文の右どうしを足すと「中身の合計 + 隠す数の合計」になります。判定側は隠す数の合計を知っているので、それを引けば中身の合計が取り出せます。つまり、閉じたまま足しても「中身の合計」は壊れずに中に残っていて、判定側だけがそれを取り出せます。あなたは開けずに足すだけでよく、開ける必要はありません。",
-        en: "This is an Order (= a request sent to your team). A number closed into an unreadable form is called a \"ciphertext\". The secret number used to close it is the \"key\". In this match the side that checks answers is the game itself; we call it the \"judge\". Only the judge holds keys, and each ciphertext has its own key. Two such ciphertexts have been handed to you. You were never given a key. The original number that is closed away is called the \"content\". Each ciphertext on this Order is a pair of numbers (left, right). The left is just a number drawn by lot; the right is the content plus a \"hiding number\" (= the key times the left number). Without the key you cannot know the hiding number, so seeing the right tells you nothing about the content. Why can you add without opening? The right is built only from addition: content + hiding number. So adding the two rights gives content total + hiding-number total. The judge knows the hiding-number total, subtracts it, and gets the content total. In other words, adding the closed pairs keeps the content total intact inside, and only the judge can take it out. You only add; you never open.",
+        ja: "Order (= あなたのチームに届いた依頼) です。ある数を、読めない形に閉じたものを「暗号文」といいます。閉じるのに使う秘密の数が「鍵」です。この試合で答え合わせをするのはゲーム側で、これを「判定側」と呼びます。鍵は判定側だけが持ち、暗号文ごとに別の鍵です。その暗号文が 2 つ、あなたに届いています。鍵はあなたには配られていません。閉じられている元の数を「中身」と呼びます。この Order の暗号文は (左, 右) という 2 つの数の組です。入力の左は 1〜p−1 からくじで選んだ数です。p は画面の割る数で、0 は選びません。右は中身に「隠す数」(= 鍵と左の数をかけたもの) を足し、p で割った余りです。鍵を知らないと隠す数がわからないので、右を見ても中身はわかりません。なぜ閉じたまま足せるのか。右は「中身 + 隠す数」という足し算だけでできています。だから 2 つの暗号文の右どうしを足すと、余りを取る前の「中身の合計 + 隠す数の合計」と同じ余りになります。判定側は隠す数の合計を知っているので、それを引けば中身の合計が取り出せます。つまり、閉じたまま足しても「中身の合計」は壊れずに中に残っていて、判定側だけがそれを取り出せます。あなたは開けずに足すだけでよく、開ける必要はありません。このように暗号文のまま計算する考え方が準同型暗号です。FHE (= 完全準同型暗号) は掛け算なども扱いますが、この教材は足し算の部分を小さい数で体験するモデルです。",
+        en: "This is an Order (= a request sent to your team). A number closed into an unreadable form is called a \"ciphertext\". The secret number used to close it is the \"key\". In this match the side that checks answers is the game itself; we call it the \"judge\". Only the judge holds keys, and each ciphertext has its own key. Two such ciphertexts have been handed to you. You were never given a key. The original number that is closed away is called the \"content\". Each ciphertext on this Order is a pair of numbers (left, right). Each input’s left is drawn from 1 to p−1, where p is the divisor on screen; never 0. The right is the remainder after dividing content plus a \"hiding number\" (= key times left) by p. Without the key you cannot know the hiding number, so seeing the right tells you nothing about the content. Why can you add without opening? The right is built only from addition: content + hiding number. So adding the two rights gives the same remainder as content total plus hiding-number total. The judge knows the hiding-number total, subtracts it, and gets the content total. In other words, adding the closed pairs keeps the content total intact inside, and only the judge can take it out. You only add; you never open. This is the idea of homomorphic encryption. FHE (fully homomorphic encryption) also supports multiplication; this teaching model demonstrates the addition part with small numbers.",
       }),
     },
     {
       id: "homomorphic-sum/2",
       text: () => ({
-        ja: "言葉で言うと、答えは「左どうしを足して p で割った余り」と「右どうしを足して p で割った余り」の 2 つの数です。数式で書きます。暗号文 1 を (r1, y1)、暗号文 2 を (r2, y2) とします (r が左の値、y が右の値)。答えの暗号文は、左が r1 + r2、右が y1 + y2 です。ただしこの Order の数はすべて 0 から p − 1 の範囲で、p は画面の「p (割る数)」です。足して p 以上になったら「p で割った余り」にします。例: 11 を 7 で割ると 1 あまり 4 なので、余りは 4。これを「11 mod 7 = 4」と書きます。どの数も p より小さいので、2 つ足しても p を引くのは多くても 1 回です。1 桁の例、p = 7: 暗号文 1 = (2, 5)、暗号文 2 = (3, 6)。左: 2 + 3 = 5。7 未満なのでそのまま 5。右: 5 + 6 = 11。7 以上なので 7 を引いて 4 (= 11 mod 7)。答えは (5, 4)。なぜこれでよいか: y1 = 中身1 + 隠す数1、y2 = 中身2 + 隠す数2 なので、y1 + y2 = (中身1 + 中身2) + (隠す数1 + 隠す数2)。余りをとっても足し算の形は崩れません。判定側は隠す数の合計を知っているので、中身の合計を取り出して答え合わせをします。",
-        en: "In words: the answer is two numbers, \"the lefts added, then the remainder after dividing by p\" and \"the rights added, then the remainder after dividing by p\". In symbols: call ciphertext 1 (r1, y1) and ciphertext 2 (r2, y2) (r is the left value, y is the right value). The answer ciphertext has left r1 + r2 and right y1 + y2. But every number on this Order lies between 0 and p − 1, where p is the screen's \"p (the modulus)\" — the number we divide by. If a sum reaches p, replace it with \"the remainder after dividing by p\". Example: 11 divided by 7 is 1 remainder 4, so the remainder is 4. This is written \"11 mod 7 = 4\". Every number is below p, so after adding two you subtract p at most once. One-digit example, p = 7: ciphertext 1 = (2, 5), ciphertext 2 = (3, 6). Left: 2 + 3 = 5. Below 7, so it stays 5. Right: 5 + 6 = 11. That is 7 or more, so subtract 7: 4 (= 11 mod 7). The answer is (5, 4). Why this is right: y1 = content1 + hiding1 and y2 = content2 + hiding2, so y1 + y2 = (content1 + content2) + (hiding1 + hiding2). Taking the remainder keeps that addition shape. The judge knows the hiding total, so it extracts the content total and checks it.",
+        ja: "言葉で言うと、答えは「左どうしを足して p で割った余り」と「右どうしを足して p で割った余り」の 2 つの数です。数式で書きます。暗号文 1 を (r1, y1)、暗号文 2 を (r2, y2) とします (r が左の値、y が右の値)。答えの暗号文は、左が r1 + r2、右が y1 + y2 です。ただしこの Order の数はすべて 0 から p − 1 の範囲で、p は画面の「p (割る数)」です。足して p 以上になったら「p で割った余り」にします。例: 11 を 7 で割ると 1 あまり 4 なので、余りは 4。これを「11 mod 7 = 4」と書きます。どの数も p より小さいので、2 つ足しても p を引くのは多くても 1 回です。1 桁の例、p = 7: 暗号文 1 = (2, 5)、暗号文 2 = (3, 6)。左: 2 + 3 = 5。7 未満なのでそのまま 5。右: 5 + 6 = 11。7 以上なので 7 を引いて 4 (= 11 mod 7)。答えは (5, 4)。なぜこれでよいか: y1 は 1 個目の「中身 + 隠す数」を p で割った余り、y2 は 2 個目の同じ余りです。y1 + y2 を p で割った余りは、「中身の合計 + 隠す数の合計」を p で割った余りと同じです。余りをとっても足し算の形は崩れません。判定側は隠す数の合計を知っているので、中身の合計を取り出して答え合わせをします。",
+        en: "In words: the answer is two numbers, \"the lefts added, then the remainder after dividing by p\" and \"the rights added, then the remainder after dividing by p\". In symbols: call ciphertext 1 (r1, y1) and ciphertext 2 (r2, y2) (r is the left value, y is the right value). The answer ciphertext has left r1 + r2 and right y1 + y2. But every number on this Order lies between 0 and p − 1, where p is the screen's \"p (the divisor)\" — the number we divide by. If a sum reaches p, replace it with \"the remainder after dividing by p\". Example: 11 divided by 7 is 1 remainder 4, so the remainder is 4. This is written \"11 mod 7 = 4\". Every number is below p, so after adding two you subtract p at most once. One-digit example, p = 7: ciphertext 1 = (2, 5), ciphertext 2 = (3, 6). Left: 2 + 3 = 5. Below 7, so it stays 5. Right: 5 + 6 = 11. That is 7 or more, so subtract 7: 4 (= 11 mod 7). The answer is (5, 4). Why this is right: y1 and y2 are each input’s content plus hiding number, reduced to its remainder after division by p. The remainder of y1+y2 equals the remainder of content total plus hiding-number total. Taking the remainder keeps that addition shape. The judge knows the hiding total, so it extracts the content total and checks it.",
       }),
     },
     {
@@ -200,7 +222,7 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
         const ys = inputs.map((c) => c.y).join(" + ");
         return {
           ja: `この Order の数で。${listJa}。p (割る数) = ${p}。① 左の値: ${rs} = ？ 結果が ${p} 以上なら ${p} を引く。その数を「答え: 左の値」の箱に入れる。② 右の値: ${ys} = ？ 結果が ${p} 以上なら ${p} を引く。その数を「答え: 右の値」の箱に入れる。③ どちらの箱も ${p} より小さい数になっていることを確かめて、「暗号文を提出」を押す。暗号文を開ける必要はなく、鍵も使いません。足して余りをとるだけで、判定側が中身の合計を確かめます。`,
-          en: `With this Order's numbers. ${listEn}. p (the modulus) = ${p}. (1) Left value: ${rs} = ? If the result is ${p} or more, subtract ${p}. Type that number into the "your answer: left part" box. (2) Right value: ${ys} = ? If the result is ${p} or more, subtract ${p}. Type that number into the "your answer: right part" box. (3) Check that both boxes hold a number smaller than ${p}, then press SUBMIT CIPHERTEXT. You never open a ciphertext and never use a key. You only add and take the remainder; the judge checks the content total.`,
+          en: `With this Order's numbers. ${listEn}. p (the divisor) = ${p}.\n(1) Left value: ${rs} = ? If the result is ${p} or more, subtract ${p}. Type that number into the "your answer: left part" box.\n(2) Right value: ${ys} = ? If the result is ${p} or more, subtract ${p}. Type that number into the "your answer: right part" box.\n(3) Check that both boxes hold a number smaller than ${p}, then press SUBMIT CIPHERTEXT. You never open a ciphertext and never use a key. You only add and take the remainder; the judge checks the content total.`,
         };
       },
     },
@@ -228,16 +250,48 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
       id: "masked-total/3",
       text: (ctx) => {
         if (ctx.task.kind !== "masked-total") throw new Error("masked-total/3 rendered against a " + ctx.task.kind + " Order");
-        const p = Number(ctx.prime);
-        const received = ctx.task.incomingMasks.map(Number);
-        const sent = ctx.task.outgoingMasks.map(Number);
-        const sum = (xs: readonly number[]) => xs.reduce((acc, x) => acc + x, 0);
+        const p = BigInt(ctx.prime);
+        const received = ctx.task.incomingMasks.map(BigInt);
+        const sent = ctx.task.outgoingMasks.map(BigInt);
+        const sum = (xs: readonly bigint[]) => xs.reduce((acc, x) => acc + x, 0n);
         const R = sum(received);
         const S = sum(sent);
         const my = ctx.task.myInput;
         return {
-          ja: `この Order の数で計算します。割る数 p = ${p}。① 受け取った覆面を全部足します: ${received.join(" + ")} = ${R}。② 送った覆面を全部足します: ${sent.join(" + ")} = ${S}。③ 自分の数 ${my} に ① を足して ② を引きます: ${my} + ${R} − ${S} = ？ ④ 出た数が 0 未満なら ${p} を足します (まだ 0 未満ならもう一度足す)。${p} 以上なら ${p} を引きます (まだ ${p} 以上ならもう一度引く)。0 以上 ${p - 1} 以下に入った数が答えです。⑤ その数を「覆面をかけた小計」の欄に入力して「小計を提出」を押します。自分の数 ${my} そのものは提出しません。`,
-          en: `Now with this Order's numbers. Divisor p = ${p}. (1) Add up every mask you received: ${received.join(" + ")} = ${R}. (2) Add up every mask you sent: ${sent.join(" + ")} = ${S}. (3) Take your own number ${my}, add (1) and subtract (2): ${my} + ${R} − ${S} = ? (4) If the result is below 0, add ${p} (if it is still below 0, add ${p} again). If it is ${p} or more, subtract ${p} (if it is still ${p} or more, subtract ${p} again). The number that lands between 0 and ${p - 1} (both included) is your answer. (5) Type it into the "your masked subtotal" field and press SUBMIT SUBTOTAL. Never submit your own number ${my} itself.`,
+          ja: `この Order の数で計算します。割る数 p = ${p}。① 受け取った覆面を全部足します: ${received.join(" + ")} = ${R}。② 送った覆面を全部足します: ${sent.join(" + ")} = ${S}。③ 自分の数 ${my} に ① を足して ② を引きます: ${my} + ${R} − ${S} = ？ ④ 出た数が 0 未満なら ${p} を足します (まだ 0 未満ならもう一度足す)。${p} 以上なら ${p} を引きます (まだ ${p} 以上ならもう一度引く)。0 以上 ${p - 1n} 以下に入った数が答えです。⑤ その数を「覆面をかけた小計」の欄に入力して「小計を提出」を押します。自分の数をそのまま写すのでなく、計算した小計を提出します。覆面が打ち消し合えば、結果が自分の数と同じになる場合もあります。`,
+          en: `Now with this Order's numbers. Divisor p = ${p}.\n(1) Add up every mask you received: ${received.join(" + ")} = ${R}.\n(2) Add up every mask you sent: ${sent.join(" + ")} = ${S}.\n(3) Take your own number ${my}, add (1) and subtract (2): ${my} + ${R} − ${S} = ? (4) If the result is below 0, add ${p} (if it is still below 0, add ${p} again). If it is ${p} or more, subtract ${p} (if it is still ${p} or more, subtract ${p} again). The number that lands between 0 and ${p - 1n} (both included) is your answer.\n(5) Type it into the "your masked subtotal" field and press SUBMIT SUBTOTAL. Submit the calculated subtotal, not an unworked copy of your input; cancelling masks can legitimately make those two numbers equal.`,
+        };
+      },
+    },
+  ],
+  /**
+   * [Issue #709] The ZK sudoku Order. Same three steps as the others -- what
+   * the pieces are, the rule, the first move -- and it stops short of doing
+   * the relabelling, which is the team's own work.
+   */
+  "zk-sudoku": [
+    {
+      id: "zk-sudoku/1",
+      text: () => ({
+        ja: "ZK（ゼロ知識証明）は、答えそのものを相手に教えず、答えを持っていると示す考え方です。ここでは 4×4 の数独を使います。どの行・列・太枠の 2×2 の箱にも 1〜4 が 1 回ずつ入るのがルールです。\n自分の完成した解を数字の読み替え表で隠し、相手には読み替え後の 1 組だけを見せます。数字の名前を一対一に替えても、同じ数字が重ならない性質は残るからです。ゲームの審判は元の解を持って全体を検査します。本来の ZK は審判にも解を渡しませんが、ここはその考え方を体験する仕組みです。",
+        en: "ZK (zero-knowledge proof) means showing you hold an answer without teaching another person the answer itself. Here a 4×4 sudoku has 1–4 once each in every row, column and outlined 2×2 box.\nHide your completed solution with a digit-renaming table and show others one renamed group. A one-to-one renaming preserves the once-each rule. The trusted game judge knows your original solution and checks the whole grid; a full ZK protocol also hides the solution from its verifier. This is a teaching model of that idea.",
+      }),
+    },
+    {
+      id: "zk-sudoku/2",
+      text: () => ({
+        ja: "一桁の例で見ます。表を 1→3、2→1、3→4、4→2 と選びます。矢印は左の数字を右の数字に読み替える意味です。\n元の行が 2・1・3・4 なら、2→1、1→3、3→4、4→2 と替えて 1・3・4・2 になります。1〜4 を一度ずつ使う性質は同じです。\n表の右側で同じ数字を 2 回使うと、一つの行にも同じ数字が 2 回出てしまいます。だから 1〜4 を右側にちょうど 1 回ずつ使い、全マスに同じ表を使います。",
+        en: "One-digit example: choose 1→3, 2→1, 3→4, 4→2. An arrow means rename its left digit to its right digit.\nOriginal row 2,1,3,4 becomes 1,3,4,2: apply 2→1, 1→3, 3→4, 4→2 in order. It still contains 1–4 once each.\nIf two original digits share a replacement, a row repeats that replacement. That is why the table must use each of 1–4 exactly once on the right and be applied identically to every cell.",
+      }),
+    },
+    {
+      id: "zk-sudoku/3",
+      text: (ctx) => {
+        const rows = Array.from({ length: 4 }, (_, i) => ctx.vault.sudokuSolution.slice(i * 4, i * 4 + 4).join(" "));
+        const used = ctx.vault.usedPermutations.map((table) => table.map((digit, i) => `${i + 1}→${digit}`).join(" ")).join(" / ");
+        return {
+          ja: `① 証明の入力欄を開き（すでに開いていればそのまま）、『1. 付け替え表を選ぶ』で表を一つ選びます。世代は同じ秘密や解を使う一組のことです。この世代で使った表は ${used || "まだありません"}。使用済みの表は避けます。\n② 左の自分の解は、上から ${rows.join(" / ")} です。右は 12 マスが見本、4 マスが空欄です。\n③ 空欄と同じ位置を左で探します。その数字から、選んだ表の矢印の先へ読み替えて右に入力します。例の 2→1 なら、元が 2 の空欄に 1 を入れるということです。残りも同じ表で埋めます。\n④ 4 マスを入れたら SUBMIT を押します。審判は完成した 16 マスを検査し、通れば得点と、公開された 1 行・1 列・1 箱のどれか 1 組が表示されます。\n同じ表を再使用すると公開された組をつなげられます。HUNT は相手が秘密の答えを当てて得点する攻撃です。解が一つに絞られると HUNT されるので、次も新しい表を選びます。`,
+          en: `(1) Open the proof input area if it is not already open, and choose a table under '1. Choose a relabelling table'. A generation is one set using the same secret and solution. Tables already used this generation: ${used || "none"}. Avoid a used table.\n(2) Your solution's rows, top to bottom: ${rows.join(" / ")}. The right grid has twelve worked cells and four holes.\n(3) Find each hole's position on the left. Take that original digit through your chosen table's arrow, then enter its replacement on the right. For example, 2→1 means enter 1 in a hole whose original digit was 2. Use the same table for the remaining holes.\n(4) Fill four holes and press SUBMIT. The judge checks all sixteen cells; success shows the score and one opened row, column or box.\nReusing a table lets others connect opened groups. HUNT is an attack that scores by recovering another team’s secret answer. A uniquely determined solution can be HUNTed. Choose a fresh table next time too.`,
         };
       },
     },
@@ -246,8 +300,8 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "caesar-shift/1",
       text: () => ({
-        ja: "この Order (= あなたのチームに届いた依頼) は暗号を作る依頼です。「暗号」とは、文をほかの人に読めない形に変えることです。もとの文を「平文（ひらぶん）」、変えたあとの文を「暗号文」といいます。この Order の文は、サイコロの目のような「記号」の列です。\n変え方はかんたんです。記号を決まった並び順に置き、どの記号も同じ数だけ後ろへずらします。このずらす数を「鍵（かぎ）」といいます。いちばん後ろの記号の次は、先頭に戻ります。\nなぜ元に戻せるのか。全部の記号を同じ数だけずらしたので、受け取った人は同じ数だけ前に戻せば平文になります。だから鍵を知っている人だけが読めます。\nずらすというやり方（方式）は全チームが知っています。秘密は鍵の数だけです。だから「この記号がこの記号に変わった」という組が 1 つでも外に知られると、平文の記号から並び順を後ろへたどって暗号文の記号まで何個進むか数えるだけで、ずらした数、つまり鍵がわかってしまいます (いちばん後ろまで来たら先頭に戻って数えます)。それがこの暗号の弱点です。",
-        en: "This Order (= a request sent to your team) asks you to make a cipher. A \"cipher\" changes a message into a form other people cannot read. The original message is the \"plaintext\"; the changed one is the \"ciphertext\". The message on this Order is a row of \"symbols\" that look like die faces.\nThe change is simple. Put the symbols in a fixed order, and move every symbol the same number of places forward. That number is the \"key\". After the last symbol you go back to the first.\nWhy can it be undone? Every symbol was moved by the same amount, so the receiver moves each one back by that amount and gets the plaintext. So only someone who knows the key can read it.\nThe method (shifting) is known to every team. The only secret is the key. That is why one leaked pair -- \"this symbol became that symbol\" -- gives the key away: start at the plaintext symbol, count forward along the row until you reach the ciphertext symbol (going back to the first after the last), and the count is the shift, which is the key. That is this cipher's weakness.",
+        ja: "この Order (= あなたのチームに届いた依頼) は暗号を作る依頼です。「暗号」とは、文をほかの人に読めない形に変えることです。もとの文を「平文（ひらぶん）」、変えたあとの文を「暗号文」といいます。この Order の文は、サイコロの目のような「記号」の列です。\n変え方はかんたんです。記号を決まった並び順に置き、どの記号も同じ数だけ後ろへずらします。このずらす数を「鍵（かぎ）」といいます。いちばん後ろの記号の次は、先頭に戻ります。\nなぜ元に戻せるのか。全部の記号を同じ数だけずらしたので、受け取った人は同じ数だけ前に戻せば平文になります。同じ鍵を使えば元に戻せます。ただし、この暗号は鍵を全部試したり、公開情報から鍵を求めたりすることもできます。\nずらすというやり方（方式）は全チームが知っています。秘密は鍵の数だけです。だから「この記号がこの記号に変わった」という組が 1 つでも外に知られると、平文の記号から並び順を後ろへたどって暗号文の記号まで何個進むか数えるだけで、ずらした数、つまり鍵がわかってしまいます (いちばん後ろまで来たら先頭に戻って数えます)。それがこの暗号の弱点です。",
+        en: "This Order (= a request sent to your team) asks you to make a cipher. A \"cipher\" changes a message into a form other people cannot read. The original message is the \"plaintext\"; the changed one is the \"ciphertext\". The message on this Order is a row of \"symbols\" that look like die faces.\nThe change is simple. Put the symbols in a fixed order, and move every symbol the same number of places forward. That number is the \"key\". After the last symbol you go back to the first.\nWhy can it be undone? Every symbol was moved by the same amount, so the receiver moves each one back by that amount and gets the plaintext. Knowing the key lets you undo it, but this cipher also allows trying every possible key or recovering it from public evidence.\nThe method (shifting) is known to every team. The only secret is the key. That is why one leaked pair -- \"this symbol became that symbol\" -- gives the key away: start at the plaintext symbol, count forward along the row until you reach the ciphertext symbol (going back to the first after the last), and the count is the shift, which is the key. That is this cipher's weakness.",
       }),
     },
     {

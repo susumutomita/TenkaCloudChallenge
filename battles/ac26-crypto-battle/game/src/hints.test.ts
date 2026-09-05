@@ -45,7 +45,7 @@ function withScore(state: CryptoBattleState, teamId: string, score: number): Cry
  */
 function ctxFor(projection: CryptoBattleProjection, order: ContractProjection): HintContext {
   return {
-    task: order.task,
+    allowedMethods: order.allowedMethods, exposedShareIndices: [], task: order.task,
     vault: projection.vault,
     prime: projection.prime,
     threshold: projection.threshold,

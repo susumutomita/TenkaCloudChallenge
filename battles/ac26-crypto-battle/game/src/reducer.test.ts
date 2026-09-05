@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { decodeLedger } from "./ledger-codec.ts";
 import { reconstruct } from "./shamir.ts";
+import { allowedMethodsFor } from "./methods.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { startedMatch } from "./playtest.ts";
 import type {
@@ -259,11 +260,24 @@ describe("leak", () => {
    * learns nothing they can carry to the next Order.
    */
   test("validateOp refuses LEAK on an Order that forbids raw disclosure", () => {
-    // The share Order is the one whose only remaining method is PROVE; FHE and
-    // MPC Orders also forbid raw disclosure but were never LEAK-able anyway.
-    const { state, order: constrained } = orderMatching(
-      (c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share",
+    // [Issue #709] The belt no longer issues a PROVE-only SHARE Order (that
+    // slot is the ZK sudoku Order, which LEAK cannot serve at all -- a
+    // different refusal, see fhe.test.ts). The rule itself is still live code
+    // (`allowedMethodsFor` applies it to every Order), so it is exercised here
+    // on a share Order given the rule by hand: LEAK CAN do a share Order, and
+    // this is the one refusal that is about the rule rather than the tool.
+    const { state: open, order: share } = orderMatching(
+      (c) => c.privacyConstraint === "none" && c.task.kind === "reveal-share",
     );
+    const constrained: Contract = {
+      ...share,
+      privacyConstraint: "no-raw-disclosure",
+      allowedMethods: allowedMethodsFor("reveal-share", "no-raw-disclosure"),
+    };
+    const state: CryptoBattleState = {
+      ...open,
+      contracts: open.contracts.map((c) => (c.id === share.id ? constrained : c)),
+    };
 
     expect(constrained.allowedMethods).toEqual(["prove"]);
     const verdict = validateOp(state, "teamA", { kind: "leak", contractId: constrained.id });
@@ -385,6 +399,36 @@ describe("hunt", () => {
     expect(() => applyOp(state, "teamA", op)).toThrow();
   });
 
+  test("an unreduced HUNT is a format error without a charge or spent attempt", () => {
+    const state = leakThreshold(tick(startedMatch(CTX), 0), "teamB");
+    const before = JSON.stringify(state);
+    const prime = BigInt(state.config.prime);
+    const secret = state.teams.teamB?.secret;
+    if (secret === undefined) throw new Error("expected teamB");
+    for (const value of [prime, BigInt(secret) + prime]) {
+      const op: CryptoBattleOp = {
+        kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: value.toString(),
+      };
+      expect(validateOp(state, "teamA", op)).toEqual({
+        ok: false,
+        error: "recoveredSecret must already be reduced -- take the remainder after dividing by the modulus",
+      });
+      expect(JSON.stringify(state)).toBe(before);
+    }
+    // Both endpoints of the taught range still count as guesses. Correct
+    // canonical input still scores; leading zeros keep their existing meaning.
+    for (const recoveredSecret of ["0", (prime - 1n).toString()]) {
+      expect(validateOp(state, "teamA", {
+        kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret,
+      }).ok).toBe(true);
+    }
+    const next = applyOp(state, "teamA", {
+      kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: `00${secret}`,
+    });
+    expect(next.teams.teamA?.score).toBe(state.config.scores.huntBonus);
+    expect(projectForTeam(next, "teamA").huntAttempts.teamB?.spent).toBe(1);
+  });
+
   // [Issue #696] The REVERSE of what this pinned before, and deliberately so.
   // It used to require `validateOp` to refuse a wrong guess, which made a miss
   // cost nothing and leave no trace -- survivable only while the field was
@@ -419,6 +463,85 @@ describe("hunt", () => {
     // the inequality that keeps interpolating the shares the cheaper route, and
     // it is the one that breaks first if `prime` is lowered further.
     expect(DEFAULT_CONFIG.scores.huntBonus / prime).toBeLessThan(DEFAULT_CONFIG.scores.wrongHunt);
+  });
+
+  // [Issue #696] A miss has to be TELLABLE, not just charged. The plugin SDK
+  // answers a landed op with `{ ok: true }` whether it hit or missed, and the
+  // projection is a pure function of state -- so unless the state records the
+  // outcome, the Portal has nothing to read and calls a -8 a SUCCESS (which
+  // is exactly what shipped). These pin the record and the projection of it.
+  test("a miss is written to the attacker's row as a miss, and the projection says so", () => {
+    const state = tick(startedMatch(CTX), 0);
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
+    const next = applyOp(state, "teamA", wrong);
+    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+
+    const view = projectForTeam(next, "teamA");
+    expect(view.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+    expect(view.huntAttempts.teamB).toEqual({
+      generation: 1,
+      spent: 1,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    expect(view.wrongHuntCost).toBe(DEFAULT_CONFIG.scores.wrongHunt);
+  });
+
+  test("a hit is written as a hit, and it spends an attempt too", () => {
+    let state = tick(startedMatch(CTX), 0);
+    state = leakThreshold(state, "teamB");
+    const shares = decodeLedger(state.publicLedger)
+      .filter((a) => a.teamId === "teamB")
+      .filter(isShareArtifact)
+      .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
+    const recoveredSecret = reconstruct(shares, BigInt(state.config.prime));
+    const next = applyOp(state, "teamA", {
+      kind: "hunt",
+      targetTeamId: "teamB",
+      generation: 1,
+      recoveredSecret: recoveredSecret.toString(),
+    });
+    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "hit" });
+    expect(projectForTeam(next, "teamA").lastHunt?.outcome).toBe("hit");
+    expect(projectForTeam(next, "teamA").huntAttempts.teamB?.spent).toBe(1);
+  });
+
+  test("the budget on the projection is MINE against each OTHER team, never anyone else's", () => {
+    const state = tick(startedMatch(CTX), 0);
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
+    const next = applyOp(state, "teamA", wrong);
+
+    // teamA sees its own spend against teamB, and no row for itself.
+    const attacker = projectForTeam(next, "teamA");
+    expect(Object.keys(attacker.huntAttempts)).toEqual(["teamB"]);
+
+    // teamB sees a full budget against teamA -- it has not hunted -- and
+    // nothing about what teamA has tried against it: no lastHunt, and its own
+    // row absent from its own view.
+    const target = projectForTeam(next, "teamB");
+    expect(Object.keys(target.huntAttempts)).toEqual(["teamA"]);
+    expect(target.huntAttempts.teamA).toEqual({
+      generation: 1,
+      spent: 0,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    expect(target.lastHunt).toBeUndefined();
+    expect("lastHunt" in target).toBe(false);
+  });
+
+  test("the projected budget follows the target's CURRENT generation, so a ROTATE starts it fresh", () => {
+    let state = tick(startedMatch(CTX), 0);
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
+    state = applyOp(state, "teamA", wrong);
+    expect(projectForTeam(state, "teamA").huntAttempts.teamB?.spent).toBe(1);
+
+    state = applyOp(state, "teamB", { kind: "rotate" });
+    expect(projectForTeam(state, "teamA").huntAttempts.teamB).toEqual({
+      generation: 2,
+      spent: 0,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    // The record of the last HUNT is not rewritten by the target's move.
+    expect(projectForTeam(state, "teamA").lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
   });
 
   test("the attempt budget runs out, so the field cannot be scanned", () => {

@@ -1,4 +1,10 @@
-# PROVE / LEAK / HUNT — Cryptography Battle
+# Cryptography Battle
+
+The purpose and “Rules, how the cryptography works, and optional practice” sit above the board. Opening either is optional and never gates play. Practice covers remainders, secret sharing, MPC, ZK, FHE, and Caesar shifts with one missing digit per step, followed by an explanation of the result. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
+
+The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers, free of charge. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
+
+Free “How it works” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
 ## What is going on
 
@@ -18,7 +24,7 @@ That is the whole bet.
 | --- | --- | --- |
 | **LEAK** | Hand over one piece and answer instantly | Fast — but the piece never comes back |
 | **PROVE** | Compute, and answer without handing anything over | The piece stays safe — but it costs a calculation |
-| **HUNT** | When someone has three pieces exposed, take their points | — |
+| **HUNT** | When someone has three pieces exposed, take their points | A wrong secret costs points and one of a few attempts per team and generation |
 | **ROTATE** | Remake your pieces. Everything published stops counting | — |
 | **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
 
@@ -62,6 +68,7 @@ and what you do with the time left over -- that is the game.
 | What the card asks for | What you do |
 | --- | --- |
 | reveal a share | choose LEAK or PROVE |
+| show it without showing it | PROVE: relabel your sudoku solution with an unused table and open the line asked for |
 | encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
 | encrypted addition | add both pairs component by component, remainder p |
 | masked subtotal | compute my number + received masks - sent masks, remainder p |
@@ -73,11 +80,11 @@ Every card shows its deadline, points, task, and accepted methods. A method abse
 | Move | Meaning |
 | --- | --- |
 | LEAK | let the system answer the ORDER. What becomes public depends on the ORDER |
-| PROVE | complete it with a Schnorr proof and publish no share |
+| PROVE | rewrite your 4x4 sudoku solution with a fresh digit-relabelling table and open one line; no share is published |
 | CIPHER | encrypt the symbols with your key and submit. Nothing is published |
 | FHE | add ciphertexts without decrypting |
 | MPC | submit one subtotal while each office's input stays private |
-| HUNT | submit a secret, a reused-nonce key, or a cipher key recovered from public records |
+| HUNT | submit a secret, a sudoku solution recovered from a reused relabelling, or a cipher key recovered from public records |
 | ROTATE | replace your secret and shares with a fresh generation |
 | HINT | open the next step of the selected ORDER's hint ladder. Nothing is published |
 
@@ -118,18 +125,17 @@ is something you can read off the board.
 ROTATE moves your key to a new generation too, and every pair published before it
 stops being worth anything.
 
-The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE matches `ac26-w3-schnorr`; share reconstruction matches `ac26-w2-secret-sharing`.
+The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE is the 4x4 sudoku relabelling the drawer walks through by hand; share reconstruction matches `ac26-w2-secret-sharing`.
 
 ## Reading the screen
 
-1. **Order Belt** — requests you can act on now
-2. **MAKE A MOVE** — the action for your selected request
-3. **My Vault** — your generation and shares
-4. **Public Ledger** — records everyone chose to publish
-5. **Next tactic from the public record** — opens only when material exists
-6. **Practice and help** — open only when needed
+1. **Current Order** — the request and its remaining time
+2. **Answer methods and inputs** — compare score and disclosure cost, then answer in the same card
+3. **Result** — score and outcome above the answer area
+4. **Exposure, records and vault** — read the summary and expand what you need
+5. **Rules, explanations and practice** — optional, above the board
 
-HUNT, reused-nonce HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
+HUNT, reused-relabelling HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
 
 ## Data boundary
 

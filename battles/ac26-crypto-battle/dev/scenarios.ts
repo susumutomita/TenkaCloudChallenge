@@ -14,7 +14,7 @@
  * cannot either — {@link buildScenario} throws rather than fake it.
  *
  * Ops are built through `../game/src/playtest.ts`'s `buildLeakOp` /
- * `buildProveCommitOp` / `buildProveRespondOp` / `buildHuntOp`, the same builders the committed vertical
+ * `buildProveSudokuOp` / `buildHuntOp`, the same builders the committed vertical
  * playtest fixture uses. `buildHuntOp` in particular takes only a
  * `CryptoBattleProjection`, so even the HUNT that seeds the "after a successful
  * hunt" position is built from public information — the harness cannot
@@ -25,20 +25,14 @@
  * byte-identical state.
  */
 
-import { mod } from "../game/src/field.ts";
-// [Issue #701] The group a MATCH proves in -- see reducer.ts. A fixture that
-// built proofs in the 2048-bit group would build proofs the judge rejects.
-import { groupPow, HAND_GROUP as PROVE_GROUP } from "../game/src/group.ts";
 import {
   buildFheOp,
   buildHuntOp,
   buildLeakOp,
   buildMpcOp,
-  buildProveCommitOp,
-  buildProveRespondOp,
+  buildProveSudokuOp,
   buildRotateOp,
 } from "../game/src/playtest.ts";
-import { deriveWitness } from "../game/src/schnorr-witness.ts";
 import { initialState, projectForTeam, tick } from "../game/src/reducer.ts";
 import type {
   CryptoBattleConfig,
@@ -79,7 +73,7 @@ export const SCENARIO_IDS = [
   "fhe-order",
   "mpc-order",
   "hunt-reachable",
-  "nonce-reuse",
+  "pi-reuse",
   "after-rotate",
   "ended",
 ] as const;
@@ -115,9 +109,9 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "alpha の share が threshold 枚そろった状態",
     en: "alpha has leaked threshold-many shares",
   },
-  "nonce-reuse": {
-    ja: "alpha が同じ nonce で2回証明した — witness が復元できる",
-    en: "alpha proved twice with one nonce — the witness is recoverable",
+  "pi-reuse": {
+    ja: "alpha が同じ付け替えで3回証明した — 解が復元できる",
+    en: "alpha proved three times with one relabelling — the solution is recoverable",
   },
   "after-rotate": {
     ja: "alpha が ROTATE した直後 — 世代が変わる",
@@ -237,67 +231,40 @@ function serveComputationOrders(driver: Driver, teamId: string): number {
 }
 
 /**
- * [Issue #645 Phase 5] Make `teamId` prove twice with ONE nonce.
+ * [Issue #709] Make `teamId` PROVE three times with ONE relabelling.
  *
- * The careless prover is written out here rather than imported, for the same
- * reason `nonce-reuse.test.ts` keeps its own: the package must not ship a
- * prover that reuses nonces. This is a dev-harness fixture whose whole purpose
- * is to let an author see the consequence on screen.
+ * The careless prover is one argument to the shipped builder: `pi` is normally
+ * chosen fresh from the vault's used list, and passing a fixed one is the
+ * mistake written out. This is a dev-harness fixture whose whole purpose is
+ * to let an author see the consequence on screen -- three opened groups
+ * sharing a tag, and the sudoku HUNT card lighting up for bravo.
  */
-function proveTwiceWithOneNonce(driver: Driver, teamId: string): boolean {
-  const group = PROVE_GROUP;
-  const FIXED_NONCE = 424_242n;
+function proveThriceWithOneRelabelling(driver: Driver, teamId: string): boolean {
+  const FIXED_PI = [2, 3, 4, 1] as const;
   let proved = 0;
-  for (let round = 0; round < 12 && proved < 2; round += 1) {
-    const vault = projectForTeam(driver.host.state, teamId).vault;
+  for (let round = 0; round < 12 && proved < 3; round += 1) {
     for (const order of projectForTeam(driver.host.state, teamId).myContracts) {
-      if (proved >= 2) break;
-      if (order.status !== "open" || order.task.kind !== "reveal-share") continue;
-      if (!order.allowedMethods.includes("prove")) continue;
-      const witness = deriveWitness(BigInt(vault.secret), vault.generation, teamId, group);
-      const publicY = groupPow(group.generator, witness, group);
-      const commitmentR = groupPow(group.generator, FIXED_NONCE, group);
-      // [Issue #701] The challenge is READ, not computed -- it is bound to the
-      // match seed, which no participant holds. That is exactly why reusing the
-      // nonce still leaks: the two challenges this careless prover collects are
-      // values it did not choose and could not have predicted.
-      const committed: CryptoBattleOp = {
-        kind: "prove-commit",
-        contractId: order.id,
-        commitment: commitmentR.toString(),
-      };
-      if (!driver.play(teamId, committed)) continue;
-      const challenged = projectForTeam(driver.host.state, teamId).myContracts.find(
-        (c) => c.id === order.id,
-      );
-      if (!challenged?.proveChallenge) continue;
-      const op: CryptoBattleOp = {
-        kind: "prove-respond",
-        contractId: order.id,
-        response: mod(FIXED_NONCE + BigInt(challenged.proveChallenge) * witness, group.order).toString(),
-      };
-      if (driver.play(teamId, op)) proved += 1;
+      if (proved >= 3) break;
+      if (order.status !== "open" || !order.allowedMethods.includes("prove")) continue;
+      const vault = projectForTeam(driver.host.state, teamId).vault;
+      if (driver.play(teamId, buildProveSudokuOp(vault, order.id, FIXED_PI))) proved += 1;
     }
-    if (proved < 2) driver.advance(60_000);
+    if (proved < 3) driver.advance(60_000);
   }
-  return proved >= 2;
+  return proved >= 3;
 }
 
-/** PROVE the oldest open contract for `teamId`, building a real Schnorr proof. */
+/** PROVE the oldest open contract for `teamId` that accepts PROVE, with a fresh relabelling. */
 function proveOldestContract(driver: Driver, teamId: string): boolean {
-  const [contractId] = openContractIds(driver.host.state, teamId);
-  if (!contractId) return false;
-  // [Issue #701] PROVE is an exchange: commit, read back the challenge the
-  // trusted side answered with, respond. Both moves go through `driver.play`,
-  // so a scenario that reaches a "PROVE happened" position reached it the way a
-  // participant would -- which is the whole contract of this file.
-  const vault = () => projectForTeam(driver.host.state, teamId).vault;
-  if (!driver.play(teamId, buildProveCommitOp(vault(), contractId))) return false;
-  const order = projectForTeam(driver.host.state, teamId).myContracts.find(
-    (c) => c.id === contractId,
+  const projection = projectForTeam(driver.host.state, teamId);
+  const order = projection.myContracts.find(
+    (c) => c.status === "open" && c.allowedMethods.includes("prove"),
   );
-  if (!order?.proveChallenge) return false;
-  return driver.play(teamId, buildProveRespondOp(vault(), order));
+  if (!order) return false;
+  // [Issue #709] `buildProveSudokuOp` reads the vault's used list and picks a
+  // relabelling not yet spent, so a scenario that reaches a "PROVE happened"
+  // position reached it the way a careful participant would.
+  return driver.play(teamId, buildProveSudokuOp(projection.vault, order.id));
 }
 
 /**
@@ -374,7 +341,7 @@ export function buildScenario(id: ScenarioId): Scenario {
           driver,
           (state) =>
             state.publicLedger.some((a) => a.k === "share") &&
-            state.publicLedger.some((a) => a.k === "proof"),
+            state.publicLedger.some((a) => a.k === "sudoku-reveal"),
           10,
         )
       ) {
@@ -417,9 +384,9 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
     }
 
-    case "nonce-reuse": {
-      if (!proveTwiceWithOneNonce(driver, "alpha")) {
-        throw new Error("scenario 'nonce-reuse' could not get two proofs under one nonce");
+    case "pi-reuse": {
+      if (!proveThriceWithOneRelabelling(driver, "alpha")) {
+        throw new Error("scenario 'pi-reuse' could not get three proofs under one relabelling");
       }
       break;
     }
