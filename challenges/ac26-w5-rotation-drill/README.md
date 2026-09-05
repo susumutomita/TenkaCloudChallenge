@@ -1,134 +1,86 @@
-# Type one line, paste the value — the blind rotation readout that makes bootstrapping programmable
+# Rotate an answer table and repair its error tolerance
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> Independent, unofficial companion to Advanced Cryptography Program 2026.
+> Not affiliated with or endorsed by its organizers. Contact TenkaCloud with questions.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 563 · **Chapter:** Week 5 / Drill:
-Blind rotation readout · **Role:** `mechanism` · **Time:** 40–60 minutes · **Points:** 200
-· **Status:** draft — new companions need human play evidence (#465) before leaving draft
+Week 5 / order 563 / difficulty 3 / 200 points / draft / about 40–60 minutes.
 
-## What this is
+You check an answer table used in encrypted computation. Follow small arithmetic,
+find where changing rounding order changes the answer, and repair position tolerance.
 
-Not a write-a-function problem. You open your own `python3`, paste the numbers the Portal's
-"Inspect evidence" shows you, and then **type one line, paste the value it prints**, twelve
-times. The twelve lines produce the core of Programmable Bootstrapping (lecture slides 21–26
-and 42): from a noisy ciphertext, without decrypting, rotate a polynomial whose coefficients
-spell out the answers by the amount the ciphertext points at, and read the constant term.
+## Participant route
 
+1. Start the problem and Inspect evidence. In `rotation_drill.py`, replace the first
+   `return None` with `return (p,q,n,q//p)`. Run public tests and submit `params ->`.
+2. Fill the next five functions using the matching free blocks. Tests check a worked
+   example and print the learner's own values for the deployment. Unfilled rows do
+   not prevent submitting another row.
+3. Construct a pair for `window` and a new table for `edge`. The latter must work
+   across every stated message and offset. Any construction satisfying the conditions
+   is accepted; there is no single required witness.
+
+| Field | What it checks | Points |
+| --- | --- | ---: |
+| params | Message spacing | 20 |
+| phase | Remove key-selected mask entries | 15 |
+| testpoly | Build the entire answer table | 15 |
+| rescale | Round three values onto the position scale | 20 |
+| index | Separately rescale before subtraction | 15 |
+| readout | Read with sign reversal after one table lap | 15 |
+| window | Construct two rounding orders with different answers | 50 |
+| edge | Construct a table correct for all messages and offsets | 50 |
+
+All required rules and small examples are free. Each row has three optional hints:
+mechanism → example → on-screen procedure. Hints cost 2 points each, 48 total;
+a wrong answer costs 10. Construction rows supply no completed code. Deployed tables
+have eight entries, requiring transfer from the four-entry worked example.
+
+## Model and boundaries
+
+The observer sees the key. This models arithmetic positions and signed table reads,
+not blind encrypted rotation or ciphertext refresh. Outputs are ordinary numbers.
+Python `round` uses nearest integer with ties to even; it is not half-up rounding.
+Only the stated lower-half message range is guaranteed. No claim says that every
+upper-half read must be wrong: negating zero still gives zero.
+
+Shapes are `(p,n,q)=(4,8,32)` or `(8,8,32)`. Mask entries stay single-digit. Public
+helpers explain the table and rounding rules; private predicates independently check
+the first six values and the two constructions. The counterexample compares answers,
+not merely positions, and neither rounding order is assumed universally correct.
+
+The participant image contains starter, public tests, helpers and Portal API. The
+seed, generator, hidden checks and reference answers exist only in verifier/author
+images. The Workbench prefetches public evidence and gives learner code only that
+snapshot. A deployment tag binds prepared answers to a run; it is not authentication.
+The unpublished verifier grades answers without executing learner code and returns
+no reason for a failed direct answer.
+
+Linux seccomp restricts learner networking and access to supervisor memory, signals,
+and resource limits. Children inherit restrictions and remaining descendants are
+terminated after execution. CLI uses the same launcher protections and fails closed.
+Both services are non-root, read-only and resource-limited; Workbench port 18138 is
+published only on 127.0.0.1. Docker owners can inspect their own images.
+
+## Local verification and teardown
+
+Run in this problem directory:
+
+```bash
+make inspect
+make test                  # expected failure for the unfilled starter
+make test-one ID=params
+make verifier-down
 ```
-1  (p, q, n, D)                the deployment's four constants         params
-2  ph = (b - a·s) % q          the phase — decryption's halfway point  phase
-3  divmod(ph, D)               plaintext and noise, look-only         (no answer field)
-4  slot = 2n // p              the width one plaintext owns           (no answer field)
-5  v = [f(...)...]; samples    the test polynomial, centred runs       testpoly
-6  round(x * 2n / q)           rescaled by 2n/q: D̂, â[0], b̂           rescale
-7  (b̂ - â·s) % 2n              the rotation amount — mod 2n, never n   index
-8  c(idx)                      rotate and read address zero            readout
-9  f(m)                        the cross-check: readout == f(m)       (no answer field)
-10 count equal around idx      the width where the answer holds        window
-11 first change - 1            positions left before the boundary      edge
-12 sweep every usable m        readout == f(m) for all of them        (no answer field)
-```
 
-Every line comes with "what this line means"; every matching value unlocks "read after it
-matches". Eight of the twelve lines have an answer field — the platform's per-problem maximum;
-the other four are a cross-check, a construction constant, or feed the line after them.
+Edited source is streamed over stdin into Docker; no host Python or shared mount
+path is required. Inspect/test leave the verifier running. Stop it with
+`make verifier-down`. No cloud resources are created; local CPU and memory remain
+in use until stopped. There is no AWS Region or cloud session cost for this runtime.
 
-Three points the statement carries on purpose, each essential to reading the lecture slides:
+Authors run `make reference-test`, then root `make install` and `make agent-gate`.
+Participant-only reading and runtime evidence are recorded in
+`local/tests/hidden/READER.md`. A real AWS event and human event rehearsal are unrun.
 
-- **Only the lower half of the plaintext space is usable.** A rotation past n negates the
-  constant term, which can never equal f(m) ∈ [0, p). Slide 26 writing the plaintext space as
-  Z_8 and adding "actually using 0–3" is this constraint, not a simplification.
-- **The test polynomial lays the same value out in slot-wide runs, centred on each target.**
-  The mask and the body are rounded separately, so the index carries accumulated rounding
-  error — slide 24's heading "the point is to give it width" is about exactly this.
-- **The rotation amount is a residue mod 2n.** Reducing mod n silently deletes the sign story;
-  on a clean deployment the number can even coincide, which is why the author-side suite kills
-  that mutant with overshoot probes rather than deployment values.
-
-## Why the numbers are small and seed-derived
-
-The ring degree is 32–128, the plaintext modulus 8 or 16, and q = 2n·2^k, so every line is a
-one-screen computation and the closing sweep is one `all(...)`. The procedure is the
-lecture's; the moduli, the secret, the ciphertext, and the function f come from this
-deployment's `FLAG_SEED`. The lecture's own example (p=8, n=16, q=64) is excluded from
-generation, so no deployment can be solved by copying the course material. The generator
-redraws the mask until the readout equals f(m) for every usable plaintext, so the rounding
-story stays honest without any deployment being broken by it. There is one right value per
-line per seed; only the value your own Python printed passes.
-
-The secret s is shown on purpose: the learner is inside the bootstrapping machine, retracing
-in the clear what blind rotation performs under encryption. What stays hidden is every
-expected value — the drill is producing them yourself.
-
-## Participant Portal
-
-1. Start the problem in the Participant Portal. The problem editor appears on the same page.
-2. Press **Inspect evidence**: the numbers are printed as Python assignment statements. Paste
-   them into `python3` first.
-3. Type line 1, paste the value into the first answer field, submit. Read the sentence for
-   that value. Continue to line 12. **Each answer field is a single-line input.**
-4. If you cannot open Python: fill in the functions of `rotation_drill.py` in the editor
-   and press **Run public tests** — it prints your functions' values on this deployment's
-   numbers, which is exactly what the REPL would print.
-
-Direct answers are bound to the current deployment seed, so values copied from another
-deployment are rejected.
-
-## Scoring
-
-Eight checkpoints, graded independently. A wrong answer costs 10 points.
-
-| Checkpoint | Points | Evidence kind | What it checks |
-|---|---:|---|---|
-| `params` | 20 | construct | (p, q, n, D) — and q is not 2n here |
-| `phase` | 30 | construct | b − a·s mod q, the mask stripped without decrypting |
-| `testpoly` | 30 | construct | f(m) in centred slot-wide runs, sampled at four boundaries |
-| `rescale` | 25 | construct | round(x·2n/q) on D, a[0], b — three separate roundings |
-| `index` | 30 | construct | b̂ − â·s reduced mod 2n, never mod n |
-| `readout` | 25 | predict | the constant term after rotating — equal to f(m) |
-| `window` | 20 | trace | how many positions around the index return the same value |
-| `edge` | 20 | trace | how many more positions the noise may push before it changes |
-
-One hint per checkpoint (penalty 6), naming the usual slip on that line.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
-and every image in the compose stack cannot be prevented from inspecting hidden material.
-The boundary here is misdelivery, not confidentiality against that person: the participant
-Workbench image contains the Portal editor API, the starter and the public tests only.
-Like its sibling ac26-w5-negacyclic-drill, this problem's `fixtures/generate.py` derives the
-expected values in the same function as the public numbers, so the module ships only in the
-separate, unpublished verifier image (Issue 537/543 option B2); the Workbench fetches this
-deployment's public half from the verifier's `GET /public` over the Compose-internal network.
-`reference/` and `mutation.py` are added only to the `author` stage.
-
-Only the Workbench is published, at host `127.0.0.1:18138`; the verifier has no host port.
-Both services run non-root with a read-only root filesystem, no capabilities, `no-new-
-privileges`, and bounded memory/PIDs. A checkpoint can only credit the id it echoes, results
-do not leak expected values, and the fixtures come from this deployment's seed so a memorized
-answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer at all, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: thirteen broken references (the phase with the
-mask added back, the test polynomial without the half-slot centring, the rescaling floored
-instead of rounded, the index reduced mod n, the constant term read without the flip, the
-sweep run over the whole plaintext space, …) that the hidden suite must kill — the mod-n and
-no-flip mutants via crafted overshoot probes, because a clean deployment's own index never
-crosses n — plus thirteen verifier-level near-misses (a shown fixture value, another line's
-value, the plaintext where f(m) belongs, a truncated tuple, a boolean, another deployment's
-answer) that the value grader must refuse. `make test` and `make inspect` run through Compose
-because the participant image has no `fixtures/`: the public numbers come from the verifier's
-`GET /public`.
+[Course context](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/c088f8e6f301dedcd80b6dd9c321a1cd83410637/week5/README.md).
+[Python rounding rule](https://docs.python.org/3/library/functions.html#round).
+[Real TFHE bootstrapping](https://www.zama.org/post/tfhe-deep-dive-part-4).

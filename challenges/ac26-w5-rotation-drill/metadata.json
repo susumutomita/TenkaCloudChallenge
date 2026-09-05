@@ -1,6 +1,6 @@
 {
   "id": "ac26-w5-rotation-drill",
-  "name": "復号せずに、答えの表を回して引く",
+  "name": "答えの表を回して、ずれに強い計算を作る",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
@@ -32,10 +32,10 @@
   },
   "difficulty": 3,
   "estimatedDuration": "40-60 分",
-  "shortDescription": "ノイズの溜まった暗号文を、復号せずに作り直したい。答えを並べた表を暗号文が指す量だけ回して、定数項を読む — それだけでいい。手元の Python で 1 行打って出た値を貼る 12 行で、その「それだけ」が f(m) を返すところまで、自分の手で出した数だけでなぞる。",
-  "description": "Week 5 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 12 行繰り返して、Programmable Bootstrapping の核 — ノイズの入った暗号文から、復号せずに、答えを並べた多項式を暗号文が指す量だけ回して定数項を読む — を自分の手で出す。道筋: 4 定数 → 位相 b − a·s → (見るだけの divmod: 平文とノイズ) → スロット幅 2n/p → f(m) を幅つきで並べたテスト多項式 → 2n/q 倍の丸め → 回す量（mod 2n）→ 定数項の読み出し → f(m) との一致（スライド 42 の \"Programmable\"）→ 幅の計測 → 境界までの余裕 → 使える全平文での成立。\n\n問題文が説明する肝は 3 つで、いずれも講義スライドの読み方として本質的: (1) 平文は下半分しか使えない — 回転先が n を超えると定数項の符号が裏返り f(m) ∈ [0, p) と一致しようがない。スライド 26 が平文空間を Z_8 と書き「実際に使うのは0~3」と添えるのはこの制約であって簡略化ではない。(2) テスト多項式は同じ値を幅を持たせて並べる — a と b は別々に丸められるので index は誤差を持つ。スライド 24 の見出し「ポイントは幅を持たせること」がこれ。(3) index は 2n で割った余り — n にすると符号の話が丸ごと消える。生成器はこの 3 点が seed 依存で壊れないよう、readout が全 usable 平文で f(m) に一致する mask だけを採る（clean-mask 再抽選）。\n\n形の根拠は ac26-w3-schnorr-drill / ac26-w4 の 3 ドリル / 兄弟の ac26-w5-negacyclic-drill と同じ（自習ノートで「1 行打って、出た値を貼って、その値を指す 1 文を読む」が本人検証で機能した形）。数は seed 由来で、講義の例 (p=8, n=16, q=64) は生成から除外してある — 手順は講義の、数はこの deploy のもの（independent-reimplementation）。このドリルでは秘密鍵 s も画面に出す: 学習者はブートストラップ装置の中の人で、blind rotation が暗号文の中でやる算数を、鍵を見ながら平文でなぞる。\n\n12 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄の無い 4 行（split, slots, programmable, sweep）は答え合わせ・構成の定数・締めの総当たりで、問題文がその場で説明する。fixtures/generate.py は expected を public と同じ関数で導くため participant image には載せず（Issue 537/543 option B2）、公開値は verifier の GET /public から配る。",
-  "instructions": "## 使い込んだ暗号文を、新品に戻したい\n\n暗号のまま足し算・掛け算を続けると、中のノイズが計算のたびに育ち、いつか答えが読めなくなります。捨てて暗号化し直すには鍵が要る — でも鍵を出したら、秘匿計算は終わりです。復号せずに、ノイズだけ新品にしたい。\n\n（このドリル自身は、答え合わせのために 3 行目で 1 度だけ割って平文を見ます。**復号を避けているのは 8 行目の読み出し**で、そこが本物の実装に対応します。）\n\nTFHE の答えは、拍子抜けするほど短い手順です。**答えを並べた表を、暗号文が指す量だけ回して、定数項を読む。それだけ。** 読んだ結果は新品ノイズの暗号文になっていて、しかも表に f の答えを書いておけば、ついでに f(m) の計算まで済んでいます — 講義スライド 42 がこれを \"Programmable\" と呼びます。このドリルでは、その「それだけ」を、装置の中に入って 1 行ずつなぞります。\n\n本物の装置は秘密鍵を知らないまま同じ回転を行いますが、練習台のこの deploy（「起動」で立ち上がる、あなた専用の実行環境）では秘密鍵 s も見えています。鍵を見ながら、手順だけを追う形です。**復号（D で割って丸める）は一度もしません** — 割らずに表を引くのが、この手順の芯だからです。\n\nこれは関数を書く問題ではありません。**1 行打って、出た値を回答欄に貼る**、を 12 回くり返します。12 行のうち 8 行に回答欄（checkpoint = 採点される小問）があり、残り 4 行は答え合わせか、後の行が使う変数を作る行です。**12 行は上から順に、1 行も飛ばさずに打ってください** — 飛ばすと後の行が「そんな名前は無い」と怒ります。数は deploy ごとに変わるので、他人の答えやノートの数値は通りません。\n\n## 前提（要るのは 3 つだけ）\n\n- **商とあまり**: `divmod(11, 8)` は「商 1、あまり 3」を `(1, 3)` で返します。**比例**: q 目盛の値を 2n 目盛の定規へ移すには 2n/q を掛けて四捨五入。**表引き**: 答えを先に並べ、指された位置を読む — 12 行はこの 3 つで全部組めます\n- 記号: p = 平文（隠したい元の数）の法、q = 暗号文の法（この構成では 2n ではありません）、n = 多項式の係数の個数、D = q ÷ p = 平文 1 段の持ち上げ幅、暗号文 = mask `a`（数のリスト）と body `b`（整数 1 つ）の組、s = 0 と 1 の秘密鍵、内積 = 2 つのリストを順に掛けて全部足す（Python では `sum(x*y for x, y in zip(a, s))`）、位相 = b − a·s（中身は「平文の持ち上げ + ノイズ」だけ）、定数項 = 多項式の先頭（0 番地）の係数\n- **x^n + 1 で割る世界**: 番地を n 進むと先頭へ戻りますが、そのとき**値の符号が反転**します（x^n = −1）。だから一周は 2n。この規則を両側から出し切るのは兄弟ドリル `ac26-w5-negacyclic-drill`、mod が初めてなら `ac26-w1-constraint-lab` へ\n\n手順は講義（Week 5 スライド 21〜26、42）のもの、数はあなたの deploy のものです。講義の例（p=8, n=16, q=64）はこの問題では出ません。\n\n## 最初の一手\n\n**1. Python を開く。** Windows なら PowerShell、Mac なら「ターミナル」を開いて `python3` と打ち、Enter。`>>>` が出れば準備完了です（Windows で見つからないときは `py`）。Python の IDLE を入れているなら、その「シェル」ウィンドウの `>>>` でも同じです。使うターミナルはこの 1 つだけで、ファイルを作る必要も、コマンドを覚える必要もありません。\n\n**2. 数を貼る。** Participant Portal（この問題文が表示されているサイト）で **「起動」** を押し、問題エディタの **「証拠を確認」** を押してください。この deploy の数が、**そのまま Python に貼れる代入文**の形で出ます。\n\n```text\np, q, n = …, …, …     ← 平文の法、暗号文の法、環の次数\nD = q // p             ← 貼ると同時に計算されます\ns = (…)                ← 秘密鍵（0 と 1 の並び）\na = (…)                ← 暗号文の mask\nb = …                  ← 暗号文の body\nshift = …              ← 表が評価する関数 f(t) = (t + shift) % (p // 2) の値\n```\n\nこのブロックを丸ごとコピーして `>>>` に貼り、Enter。これで下の 12 行が打てる状態になります。**「証拠を確認」は各行が出す値までは教えません** — 位相も、表の中身も、回す量も、読み出した値も、あなたの Python が出します。\n\n**3. Python が開けないときは。** 問題エディタの `rotation_drill.py` に、下の 12 行と**同じ式が関数の形で穴あきに並んでいます**。式の中の `p`・`q`・`a` などが、そのまま関数の引数になっているだけです。下の「打つ行」の右辺をその関数の中に写して `return` し、**「公開テストを実行」** を押すと、あなたの関数がこの deploy の数で出した値が印字されます。それを回答欄に貼ります。Python を開ける人は、このファイルを触る必要はありません。**「初期状態に戻す」** でいつでも元に戻せます。\n\n## 解き方 — 12 行\n\n各行の形はいつも同じです。**打つ行**（コピーして貼る）→ **この行の意味** → 出た値を **その checkpoint の回答欄に貼る** → 合ったら **「合ったら読む」** を読んで次へ。回答欄は 1 行の入力欄で、組で答える行は `[20, 30, 40]` の形で書きます（丸かっこでも、かっこ無しのカンマ区切りでも通ります）。\n\n**貼る前に、1 行だけ予想してください。**「たぶんこのくらいの数が出る」「たぶん前の行と同じ値になる」程度で構いません。予想と違ったときだけ、その行の意味を読み直す価値があります。予想せずに貼り続けると、12 行打ち終えても何も残りません。\n\n### 1. この deploy の 4 定数 — p, q, n, D  （回答欄 1 / 8）\n\n```python\n(p, q, n, D)\n```\n\n- **この行の意味**: 平文の法 p、暗号文の法 q、環の次数 n（x^n + 1 で割る）、平文 1 段ぶんの持ち上げ幅 D = q ÷ p。\n- **回答欄**: 上から **1 番目**（見出し「この deploy の 4 定数 — p, q, n, D」）に 4 つ組\n- **合ったら読む**: この構成では **q は 2n ではありません**。暗号文は q の世界に住み、回転は 2n 個の位置しかない多項式の世界に住む。q の値を 2n の位置へ持ち込む橋渡し（2n/q 倍して丸める）が 6 行目で、丸め誤差の話はそこから始まります。\n\n### 2. 位相 b − a·s — 復号せずに剥がす  （回答欄 2 / 8）\n\n```python\nph = (b - sum(x*y for x, y in zip(a, s))) % q; ph\n```\n\n- **この行の意味**: body から、mask と秘密鍵の内積を引きます。残るのは D·m + e — 平文の持ち上げとノイズだけです。**予想してみてください**: 出る数は D の何倍くらいでしょうか。\n- **回答欄**: 上から **2 番目**（見出し「位相 b − a·s — 復号せずに剥がす」）に 整数 1 つ\n- **合ったら読む**: ふつうの復号はここで D で割って丸め、ノイズを捨てて平文を取り出します。この手順は割りません — この位相を「回す量」に変えて、答えを並べた表を引きます。**割らずに表を引く**、がこのドリルの主題です。\n\n### 3. 見るだけの割り算 — 平文とノイズ  （回答欄なし）\n\n```python\nm, e = divmod(ph, D); (m, e)\n```\n\n- **この行の意味**: 答え合わせのために一度だけ割ってみます。m が平文、e がノイズ。\n- **回答欄**: なし。ただし **m は 9 行目、e は 12 行目で使う**ので、この行は必ず打ってください\n- **出たら読む**: m は 0 以上 p ÷ 2 未満に収まっているはずです。**平文の上半分は使えません** — 回す量が n を越えると、前提で書いたとおり値の符号が反転してしまい、0 以上 p 未満のはずの f(m) とは一致しようがないからです。講義スライド 26 が平文の集合を Z_8（= 0〜7 の 8 個）と書いておきながら「実際に使うのは 0〜3」と添えているのは、この制約のことで、話を簡単にするための省略ではありません。\n\n### 4. 平文 1 つぶんの幅  （回答欄なし）\n\n```python\nslot = 2*n // p; slot\n```\n\n- **この行の意味**: 回転の空間 2n を平文の個数 p で割った、平文 1 つが占める位置の数。\n- **回答欄**: なし。**次の行以降が使う**ので、この行も必ず打ってください\n- **出たら読む**: 平文 1 つにつき 1 位置ではなく、slot 個の位置が割り当てられます。次の行で、同じ答えをこの幅ぶん並べます。1 点ではなぜだめなのかは、6 行目と 7 行目で分かります。\n\n### 5. テスト多項式 — 答えを並べる  （回答欄 3 / 8）\n\n```python\nhalf = p // 2; f = lambda t: (t + shift) % half; v = [f(min((j + slot//2)//slot, half - 1)) for j in range(n)]; tuple(v[min(j*slot, n - 1)] for j in range(4))\n```\n\n- **この行の意味**: 表 `v` の j 番地に「そこを指されたら返す答え f(m)」を書き込みます。同じ答えを slot 幅で並べ、区切りを半 slot だけ手前にずらして、平文の狙い位置が自分の区画の**真ん中**に来るようにしてあります。回答として印字されるのは、区画の境目 0, slot, 2·slot, 3·slot の 4 点です（`v` の先頭 4 個ではありません）。\n- **回答欄**: 上から **3 番目**（見出し「テスト多項式 — スロット境界の 4 点」）に 4 つ組\n- **合ったら読む**: 係数に書いたのは m そのものではなく f(m) でした。ここが \"Programmable\"（プログラム可能）と呼ばれる理由です（スライド 42）。この後の手順（回して読む）は f が何であっても同じ。**表の中身を書き換えるだけで、同じ機械が別の関数を計算します。**\n\n### 6. 2n/q 倍に丸める  （回答欄 4 / 8）\n\n```python\nrh = lambda x: round(x * 2*n / q); (rh(D), rh(a[0]), rh(b))\n```\n\n- **この行の意味**: q の世界の値を、2n の世界の位置に読み替えます。印字されるのは D̂ = rh(D)、mask の先頭 rh(a[0])、b̂ = rh(b) の 3 点。\n- **回答欄**: 上から **4 番目**（見出し「2n/q 倍に丸める — D̂, â[0], b̂」）に 3 つ組\n- **合ったら読む**: a の係数と b は**別々に**丸められます。1 個あたりのずれは最大でも半位置ですが、次の行の内積でそれが何個も足し合わさる。だから狙った位置にぴったりは着きません。5 行目で表に幅を持たせ、狙いを区画の真ん中に置いたのは、この積み上がった丸め誤差を吸わせるためです（スライド 24 の見出し「ポイントは幅を持たせること」）。\n\n### 7. 回す量 — 2n で割った余り  （回答欄 5 / 8）\n\n```python\nah = [rh(x) for x in a]; idx = (rh(b) - sum(x*y for x, y in zip(ah, s))) % (2*n); idx\n```\n\n- **この行の意味**: 丸めた b̂ から、丸めた â と s の内積を引いた、実際に回す位置の数。**2n で割った余り**で数えます。**予想してみてください**: 2 行目の位相のおよそ 2n/q 倍になるはずです。いくつくらいでしょうか。\n- **回答欄**: 上から **5 番目**（見出し「回す量 — 2n で割った余り」）に 整数 1 つ\n- **合ったら読む**: n で割った余りにしてはいけません。この多項式の世界は x^n = −1 なので、n 進むごとに値の符号が裏返り、一周は 2n です。「n を跨いだかどうか」という符号の情報は、2n の余りだけが運びます。n で割ればその情報ごと消え、3 行目の「下半分しか使えない」の理由も見えなくなります。出た idx は m·slot + slot/2 の近くに、丸め誤差のぶんだけずれて落ちているはずです。\n\n### 8. 回して 0 番地を読む  （回答欄 6 / 8）\n\n```python\nc = lambda i: v[i % (2*n)] if i % (2*n) < n else -v[i % (2*n) - n]; c(idx)\n```\n\n- **この行の意味**: 表 `v` を idx だけ回してから 0 番地を読んだ値です。i が n 以上なら符号を反転して返します（前提の「n で符号が裏返る」がこの 1 行の正体）。この deploy の idx は n 未満に落ちるはずです。\n- **回答欄**: 上から **6 番目**（見出し「回して 0 番地を読む」）に 整数 1 つ\n- **合ったら読む**: 復号していないのに、値が 1 つ出ました。b と a を別々に丸め、引き算し、表を回して 0 番地を読んだ — それだけです。**この値が何なのか**は、次の行で答え合わせします。\n\n### 9. f(m) と突き合わせる  （回答欄なし）\n\n```python\nf(m)\n```\n\n- **この行の意味**: 3 行目で出た平文 m を、5 行目の f に直接通した値です。\n- **回答欄**: なし — 答え合わせ\n- **出たら読む**: 8 行目と同じ値になったはずです。**8 行目は割り算を 1 度も使っていません** — 位相を回す量に変えて表を引いただけです。ここ（9 行目）は答え合わせなので 3 行目の m を使っていますが、本物の実装が持っているのは 8 行目の側だけ。ノイズ入りの暗号文から、割らずに f(m) が出てきた — これが Programmable Bootstrapping の核です。「D で割って丸める」を「2n/q 倍して表を回して読む」に置き換え、しかも表の中身が f だったので、復号のついでに関数の計算まで済んでいます。\n\n### 10. 答えが変わらない幅  （回答欄 7 / 8）\n\n```python\nsum(1 for d in range(-slot, slot + 1) if c(idx + d) == c(idx))\n```\n\n- **この行の意味**: idx の前後 slot 位置ずつを掃いて、8 行目と同じ値が出続ける位置の個数を数えます。\n- **回答欄**: 上から **7 番目**（見出し「答えが変わらない幅」）に 整数 1 つ\n- **合ったら読む**: 5 行目で同じ答えを幅で並べたおかげで、idx が丸め誤差やノイズで多少ずれても、読み出しは変わりません。1 位置に 1 点で置いていたら、6 行目の丸め誤差だけで既に隣の答えを読んでいました。**幅は飾りではなく、丸めとノイズを吸収する装置です。**\n\n### 11. 境界まであと何位置  （回答欄 8 / 8）\n\n```python\nnext(d for d in range(1, 2*n + 1) if c(idx + d) != c(idx)) - 1\n```\n\n- **この行の意味**: idx から上へ 1 位置ずつ進み、読み出しが初めて変わる 1 つ手前までの距離です。\n- **回答欄**: 上から **8 番目**（見出し「境界まであと何位置か」）に 整数 1 つ\n- **合ったら読む**: ノイズがあとこれだけ位置を押しても、答えは変わりません。0 なら、あと 1 位置で隣の答えに化ける瀬戸際です。ノイズは計算のたびに育つので、この余裕は使うほど減ります。尽きる前に暗号文を新品に戻すのがブートストラップで、その装置の中身が、いまなぞったこの 12 行です。\n\n### 12. 使える平文ぜんぶで  （回答欄なし）\n\n```python\nall(c((rh((sum(x*y for x, y in zip(a, s)) + D*t + e) % q) - sum(x*y for x, y in zip(ah, s))) % (2*n)) == f(t) for t in range(half))\n```\n\n- **この行の意味**: 同じ鍵・同じ mask・同じノイズのまま、平文だけを 0 から p ÷ 2 − 1 まで振り、すべてで読み出しが f(t) に一致するかを総当たりします。\n- **回答欄**: なし — 締めの確認\n- **出たら読む**: `True` が出ます。この deploy の数では、使える平文のどれを暗号化しても、同じ機械が f(m) を返します。最後に `range(half)` を `range(p)` に書き換えて、もう一度打ってみてください — 上半分の平文で符号が裏返り、`False` になります。3 行目で読んだ「下半分しか使えない」を、自分の数で反例まで見た形です。\n\n## 提出のしかた\n\n回答欄は checkpoint ごとに独立しています。値を入れて **「提出 (+点数)」** を押すとその欄だけが採点され、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計スコアが 0 未満になることはありません）。正解した欄は「解答済み」になり、それ以上は提出しません。\n\n## 12 行がなぞったもの\n\n8 つの回答欄がすべて通れば、ノイズ入りの暗号文から（3 行目の答え合わせを除けば）割り算なしで f(m) を読み出す手順 — 位相を 2n/q 倍して丸め、答えを幅つきで並べた表を 2n の余りだけ回し、0 番地を読む — を、幅が丸め誤差を吸う理由、平文が下半分に限られる理由、回す量が 2n の余りである理由、そして係数を f(m) にした瞬間に同じ手順が関数の計算になることまで、**自分の手で出した数で 1 回ずつ**確かめたことになります。\n\n本物の装置は、同じ回転を s を知らないまま暗号文の中で行い（`ac26-w5-cmux-blind-rotation`）、読んだ定数項を新品ノイズの暗号文として取り出します（`ac26-w5-extract-key-switch`）。ここで「使えない」と切り捨てた上半分の符号反転を、仕掛けとして使う側から出すのが兄弟ドリル `ac26-w5-negacyclic-drill` です。\n",
-  "writeup": "## この問題の形\n\n12 行を打ち、8 行に回答欄があります。順番は、4 定数（1）→ 位相（2）→ 見るだけの割り算（3）→ スロット幅（4）→ テスト多項式（5）→ 丸め（6）→ 回す量（7）→ 読み出し（8）→ f(m) との一致（9）→ 幅（10）→ 余裕（11）→ 全平文の総当たり（12）。\n\n## 各行が守っているもの\n\n- 1〜2: 暗号文の世界（mod q）と回転の世界（2n 位置）は別で、復号の第一歩（mask を剥がす）までは PBS も普通の復号も同じであること。\n- 3: 平文が下半分に限られること。スライド 26 の「実際に使うのは0~3」は簡略化ではなく negacyclic の制約そのもの。\n- 4〜6: 答えは 1 点ではなく slot 幅で並べ、境界を半 slot ずらして狙いを領域の真ん中に置くこと。a と b が別々に丸められて誤差が内積で足し合わさる（スライド 24「ポイントは幅を持たせること」）から。\n- 7: 回す量は 2n で割った余り。n で割ると符号の情報が消え、下半分制約の理由ごと見えなくなる。\n- 8〜9: 回して定数項を読むだけで f(m) が出ること。係数を f(m) にしたので復号の置き換えと関数評価が同時に済む（スライド 42 の \"Programmable\"）。\n- 10〜12: 幅とその余裕が丸め誤差とノイズを吸っていること。range を p に広げれば上半分で崩れ、3 行目の制約が反例つきで閉じる。\n\n## 間違えるとどう壊れるか\n\nD を q//n で作る／位相で内積を足す／テスト多項式の中央寄せを忘れる／round を // にする／idx を % n にする／c(i) の負側を忘れる／window を片側だけ数える／edge に変わる位置そのものを含める — どれも値が 1 つずれて、その行で止まります。とくに % n は、この deploy の数では 7 行目の値が偶然一致することすらあり得ますが、その先の「なぜ下半分か」が二度と説明できなくなります。止まった行の「この行の意味」を読み直すのがこの形式の学び方です。\n\n## 次への接続\n\nこのドリルの回転と表引きは、課題 tfhe-toy-python の blind rotation と test polynomial そのものです。ここでは s を見ながら平文でなぞりましたが、本物は同じ回転を s を知らずに暗号文の中で行い（CMUX の積み重ね — ac26-w5-cmux-blind-rotation）、読み出した定数項を新品ノイズの暗号文として取り出します（sample extraction — ac26-w5-extract-key-switch）。兄弟ドリル ac26-w5-negacyclic-drill は、ここで「使えない」と切り捨てた上半分の符号反転を、HomNAND の仕掛けとして使う側から出します。",
+  "shortDescription": "小さな数で表の読み方を確かめ、丸め方の反例と、位置のずれに耐える表を作ります。前半は穴埋め、後半は自分で構成する8問です。",
+  "description": "公開された鍵と小さな数で TFHE の回転位置と符号つき表引きを観察する模型。前半6問100点、後半の丸め反例と全メッセージに対する表の構成が100点。後半は公開条件を満たす任意の答えを受理する。暗号化やノイズ更新そのものは実装しない。",
+  "instructions": "あなたは、暗号の計算に使う「答えの表」を点検する担当です。読む位置が少しずれただけで別の答えになる表を、直せるでしょうか。\n\n**まず「起動」→「証拠を確認」。あなたの数が表示されます。** エディタの `rotation_drill.py` を開き、最初の `params` の `return None` を `return (p, q, n, q // p)` に替えて「公開テストを実行」。出力の `params ->` の右側を「数の間隔を調べる」の回答欄へ貼って提出します。\n\n前半6問で計算を追い、後半2問で反例と新しい表を作ります。1問ずつ提出でき、全8問の「解答済み」がゴールです。先を全部読む必要はありません。\n\n## 前提 — この練習で見るもの\n\n暗号文は、元の数を隠したデータです。この模型では、数の列 `a` と数1個 `b` の組で表します。`s` は本来隠す鍵ですが、今回は計算を観察するために見せています。足された小さなずれを**ノイズ**と呼びます。\n\n本物の TFHE（暗号化した数のまま計算する方式）には、答えの表を暗号化した状態で回し、計算結果の暗号文を取り出す仕組みがあります。これを使った**ブートストラップ**は、暗号文のノイズを小さくし直します。**この練習は位置と表引きの模型です。出力は普通の数で、新しい暗号文は作りません。**\n\n## 1問ずつ進める\n\n1〜6のコードは、同じ名前の関数の `return None` と丸ごと入れ替え、**最後の行の前に `return ` を付けます**。関数の中なので各行を4文字分下げてください。`rh`・`table`・`read` は最初から使える補助関数です。数字は自動で渡されます。\n\n実行結果の前半は下の小さな例の答え合わせ、後半の `your values` はあなたの数での出力です。未記入の関数の `FAIL` は、今解いた別の問の提出を妨げません。組の答えは `[1, 2]` または `(1, 2)` と書けます。\n\n\n## 1. 数の間隔を調べる — `params`\n\n`p` は元の数を置ける枠の数、`q` は隠したデータが一周する数、`n` は表の長さです。`D = q // p` が元の数1段の間隔です。`//` は整数の商。例：`8 // 4 = 2` なら、元の数0、1、2は、ノイズを足す前には0、2、4になります。ここでは元の数を0〜`p//2 - 1` に限ります。\n\n`params(p, q, n)` で4個の値を返します。\n\n```python\n(p, q, n, q // p)\n```\n\n## 2. 隠すために足した数を引く — `phase`\n\n同じ位置の `a` と `s` を掛け、全部足した数を `b` から引きます。残る「元の数 × D + ノイズ」を**位相**と呼びます。\n\n**割った余り**は `%` と書きます。例：`7 % 4 = 3`、負の数も `-1 % 4 = 3`。`a=[3,2]`、`s=[1,0]`、`b=8` なら、足す数は `3×1+2×0=3`、位相は `8-3=5`。`D=4` なら `5=4×1+1` で、元の数1、ノイズ1です。\n\n`phase(q, s, a, b)` に入れます。\n\n```python\ntotal = 0\nfor i in range(len(a)):\n    total += a[i] * s[i]\n(b - total) % q\n```\n\n## 3. 答えの表を作る — `testpoly`\n\n表の位置は0から数えます。元の数 `m` に返す答えは `(m + shift) % (p//2)`。`shift` は答えをいくつ進めるかです。元の数1個ぶんの位置の間隔は `slot = 2*n // p`、狙う位置は `m*slot` です。\n\n用意済みの `table(p,n,shift)` は、各位置 `j=0..n-1` に次の規則で答えを置きます。`(j + slot//2) // slot` を計算し、`p//2 - 1` を越えたらその最大値にします。これを `m` として上の答えを入れます。\n\n例：`p=4,n=4,shift=1` なら `slot=2`。位置0,1,2,3での `m` は0,1,1,1、返す答えは1,0,0,0です。**位置0と2が狙いの位置で、境目ではありません。**\n\n`testpoly(p,n,shift)` では表全体を返します。\n\n```python\nvalues = table(p, n, shift)\nvalues\n```\n\n## 4. 表の目盛りに合わせる — `rescale`\n\n隠したデータの `q` 目盛りを、表の `2*n` 目盛りへ移します。用意済みの `rh(q,n,x)` は `round(x * 2*n / q)` です。\n\n`round` は最も近い整数に丸め、**ちょうど中間なら偶数を選びます**。例：`round(1.5)=2`、`round(2.5)=2`、`round(3.5)=4`。`q=16,n=4` なら半分にして丸めます。`D=4,a[0]=3,b=8` は順に2,2,4です。\n\n`rescale(p,q,n,a,b)` に入れます。\n\n```python\nD = q // p\n(rh(q, n, D), rh(q, n, a[0]), rh(q, n, b))\n```\n\n## 5. 読む位置を計算する — `index`\n\n`b` と `a` の各数を**別々に丸めてから**、2問目と同じ引き算をします。差を先に取ってから丸めると、答えが変わることがあります。それを7問目で試します。\n\n例：丸めた `b=4`、丸めた `a=[2,1]`、`s=[1,0]` なら `4-(2×1+1×0)=2`。最後に `2*n` で割った余りを取ります。`n` 進むと符号が反転し、`2*n` で元に戻る表なので、この数で一周を数えます。\n\n`index(q,n,s,a,b)` に入れます。\n\n```python\ntotal = 0\nfor i in range(len(a)):\n    total += rh(q, n, a[i]) * s[i]\n(rh(q, n, b) - total) % (2 * n)\n```\n\n## 6. 表から答えを読む — `readout`\n\n用意済みの `read(values,position)` は、位置を `2*n` で割った余りに直します。0〜`n-1` ならその場所の数、`n`〜`2*n-1` なら位置から `n` を引き、その場所の数の**符号を反転**して返します。\n\n例：表 `[1,0,0,0]` なら位置0は1、位置4は−1、位置8は1。表 `[1,2,3,4]` の位置−1は、8で割った余り7なので−4です。\n\n`readout(p,q,n,s,a,b,shift)` に入れます。直前の `index` 関数も埋めておきます。ここまでの小さな例では位置2を読み、答え0が出ます。元の数1に対する `(1+1)%2=0` と一致します。\n\n```python\nvalues = table(p, n, shift)\nposition = index(q, n, s, a, b)\nread(values, position)\n```\n\n## 7. 丸める順序で答えが変わる例を作る — `window`\n\nこれまでは、用意された数を追いました。今度は**丸める順序で、表から読む答えが変わる**数の組 `[new_a,new_b]` を作り、`window(p,q,n,shift)` から返します。\n\n両方とも0〜`q-1` の整数。新しい `a` は、鍵が1である最初の場所だけを `new_a` にして、他を0にしたものと考えます。掛けて足した合計は `new_a` です。次のすべてを満たします。\n\n- `phase = (new_b-new_a)%q`、`D=q//p` とします。`divmod(phase,D)` は商と余りを返します。例：`divmod(5,4)=(1,1)`。商を元の数、余りをノイズとし、元の数は `p//2` 未満、ノイズは0より大きく `D/2` 未満にします。\n- 別々に丸める位置は `(rh(q,n,new_b)-rh(q,n,new_a))%(2*n)`。\n- 差を先に取る位置は `rh(q,n,phase)%(2*n)`。\n- 3問目の `table(p,n,shift)` を両方の位置で `read` し、**読んだ答えが異なる**こと。位置が違うだけでは不足です。\n\n丸めの小例：`round(2.5)-round(1.5)=0`、`round(2.5-1.5)=1`。ここに表の読み出しを加えて条件を確かめます。どちらか一方が必ず正しいとは決めつけません。満たす組はどれでも正解です。\n\n## 8. 位置がずれても答えが変わらない表を作る — `edge`\n\n読む位置にずれがあっても答えが変わらないよう、**新しい表**を作ります。`edge(p,n,shift,offsets)` から長さ `n` の整数のリストを返します。各数は `-(p//2-1)` 以上、`p//2-1` 以下です。\n\n元の数 `m=0..p//2-1` と、表示されたずれ `offsets` の**すべての組**で、`read(新しい表, m*(2*n//p)+ずれ)` が `(m+shift)%(p//2)` と一致するようにします。元の表の一部を直しても、作り直しても構いません。\n\n例：`n=4` で元の数0の狙い位置は0。ずれ−1でも答え1を返したいなら、`read(表,-1)=-表[3]` なので、位置3には−1が必要です。位置0の確認だけでは不十分です。ほかの元の数とずれにも同じ規則を適用します。\n\n公開テストは小さな例について、すべての条件を満たすか表示します。あなたの数で作った表をこの問に提出し、正解になれば修理完了です。\n",
+  "writeup": "## 何が分かるか\n\n引き算の前後で丸めると結果が変わり、位置の差が表の答えの差につながる。表に同じ答えを広げると位置のずれを許容できるが、負の位置では符号反転も考慮する必要がある。最後の2問は一意の値ではなく、公開した全条件で判定する。\n\nこれは鍵を見せた算術模型。本物の暗号化された回転や新しい暗号文の生成は次の実装課題で扱う。",
   "tags": [
     "advanced-cryptography-2026",
     "week5",
@@ -53,12 +53,11 @@
     }
   ],
   "learningGoals": [
-    "位相 b − a·s が復号の一歩手前（D·m + e）であり、PBS はそこで割らずに回転量へ変えることを言える",
-    "平文の上半分が使えない理由（回転が n を跨ぐと定数項の符号が裏返る）を、スライド 26 の「実際に使うのは0~3」と結び付けて説明できる",
-    "テスト多項式が同じ f(m) を slot 幅で並べ、狙いを区画の真ん中に置く理由（a と b が別々に丸められる）を言える",
-    "2n/q 倍の丸めを 3 点で実演し、回す量が 2n で割った余りであること（n では符号が消える）を確かめられる",
-    "回した表の定数項が f(m) に一致すること — 表を書き換えれば同じ手順が別の関数になること — を自分の数で示せる",
-    "幅と境界までの余裕が丸め誤差とノイズをどれだけ吸うかを測り、使える全平文で成立することを総当たりで確かめられる"
+    "鍵と数の列を使った引き算を小さな例で追う",
+    "偶数への丸めと符号が反転する表引きを計算する",
+    "丸め順序が表の答えを変える例を構成する",
+    "指定された全メッセージとずれで正しい表を構成する",
+    "算術模型と実際の暗号化された計算を区別する"
   ],
   "runtime": {
     "provider": "docker",
@@ -74,105 +73,185 @@
     "checks": [
       {
         "id": "params",
-        "label": "この deploy の 4 定数 — p, q, n, D",
+        "label": "数の間隔を調べる",
         "points": 20,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "params-hint-1",
-            "content": "代入文を貼ってあれば `(p, q, n, D)` を打つだけです。q はこの構成では 2n ではありません。D = q // p。順番は p, q, n, D。",
-            "penalty": 6
+            "content": "数を表の位置へ変える準備です。元の数を1増やすと、隠したデータをどれだけ増やすか調べます。",
+            "penalty": 2
+          },
+          {
+            "id": "params-hint-2",
+            "content": "間隔は q を p で割った商。8を4で割れば2なので、元の数1段が2目盛りです。Pythonは q // p。",
+            "penalty": 2
+          },
+          {
+            "id": "params-hint-3",
+            "content": "「証拠を確認」の p,q,n を読む → q // p を計算 → params の return に4個を並べる → 実行結果の params -> を同名の回答欄へ。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "phase",
-        "label": "位相 b − a·s — 復号せずに剥がす",
-        "points": 30,
+        "label": "隠すために足した数を引く",
+        "points": 15,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "phase-hint-1",
-            "content": "b から a と s の内積を引いて % q。足すのではなく引きます。内積は `sum(x*y for x, y in zip(a, s))`。",
-            "penalty": 6
+            "content": "鍵が1の場所だけ、隠すために足した数を取り除きます。残りには元の数と小さなずれが入っています。",
+            "penalty": 2
+          },
+          {
+            "id": "phase-hint-2",
+            "content": "a=[3,2],s=[1,0],b=8 なら 8-(3×1+2×0)=5。最後は q で割った余りにします。",
+            "penalty": 2
+          },
+          {
+            "id": "phase-hint-3",
+            "content": "phase の total を0にする → 同じ位置の a と s を掛けて足す → b から引く → % q → 実行して phase -> を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "testpoly",
-        "label": "テスト多項式 — スロット境界の 4 点",
-        "points": 30,
+        "label": "答えの表を作る",
+        "points": 15,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "testpoly-hint-1",
-            "content": "v の係数は f(m) を slot 幅で並べ、境界を slot//2 手前にずらした中央寄せ。回答は v[0], v[slot], v[2*slot], v[3*slot] の 4 つ組で、先頭の 4 係数 v[0:4] ではありません。",
-            "penalty": 6
+            "content": "元の数ごとの答えを先に表に置きます。同じ答えが続く場所なら、読む位置が少し動いても答えを保てます。",
+            "penalty": 2
+          },
+          {
+            "id": "testpoly-hint-2",
+            "content": "p=4,n=4,shift=1 なら間隔2。位置0,1,2,3が扱う元の数は0,1,1,1。答え (m+1)%2 は1,0,0,0です。",
+            "penalty": 2
+          },
+          {
+            "id": "testpoly-hint-3",
+            "content": "画面の p,n,shift を見る → testpoly で table(p,n,shift) を呼ぶ → 表全体を返す → testpoly -> のリストを提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "rescale",
-        "label": "2n/q 倍に丸める — D̂, â[0], b̂",
-        "points": 25,
+        "label": "表の目盛りに合わせる",
+        "points": 20,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "rescale-hint-1",
-            "content": "`round(x * 2*n / q)` を D, a[0], b の 3 つに。// や int() の切り捨てではなく round です。",
-            "penalty": 6
+            "content": "隠したデータと表では目盛りが違います。同じ割合の場所へ縮め、整数の位置に丸めます。",
+            "penalty": 2
+          },
+          {
+            "id": "rescale-hint-2",
+            "content": "rh(q,n,x)=round(x*2*n/q)。半分に縮めた1.5は2、2.5も2。真ん中のときは偶数です。",
+            "penalty": 2
+          },
+          {
+            "id": "rescale-hint-3",
+            "content": "D=q//p を計算 → D,a[0],b の順で rh(q,n,値) を計算 → rescale -> の3個を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "index",
-        "label": "回す量 — 2n で割った余り",
-        "points": 30,
+        "label": "読む位置を計算する",
+        "points": 15,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "index-hint-1",
-            "content": "丸めた â·s を丸めた b̂ から引いて **% (2*n)**。% n ではありません。â は a の各係数を rh に通した列です。",
-            "penalty": 6
+            "content": "別々に目盛りを合わせてから、鍵に対応する分を引きます。差を先に丸める方法とは同じにならないことがあります。",
+            "penalty": 2
+          },
+          {
+            "id": "index-hint-2",
+            "content": "丸めた b=4,a=[2,1],s=[1,0] なら4-(2×1+1×0)=2。これを2*nで割った余りにします。",
+            "penalty": 2
+          },
+          {
+            "id": "index-hint-3",
+            "content": "index で a の各値を rh に通す → s の同じ位置と掛けて足す → rh(q,n,b)から引く → % (2*n) → index -> を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "readout",
-        "label": "回して 0 番地を読む",
-        "points": 25,
+        "label": "表から答えを読む",
+        "points": 15,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "readout-hint-1",
-            "content": "idx が n 未満なら v[idx] そのまま、n 以上なら -v[idx - n]。f(m) を直接打つのではなく、c(idx) が出した値を貼ります。",
-            "penalty": 6
+            "content": "表を1回ぶん進むと符号が反転します。2回ぶんで元に戻るので、その位置と符号を両方使って読みます。",
+            "penalty": 2
+          },
+          {
+            "id": "readout-hint-2",
+            "content": "表[1,2,3,4]は n=4。位置−1は8で割った余り7、7−4=3なので−表[3]=−4です。",
+            "penalty": 2
+          },
+          {
+            "id": "readout-hint-3",
+            "content": "index を先に埋める → readout で table と index を呼ぶ → read(表,位置) を返す → readout -> を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "window",
-        "label": "答えが変わらない幅",
-        "points": 20,
+        "label": "丸める順序で答えが変わる例を作る",
+        "points": 50,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "window-hint-1",
-            "content": "d を -slot から slot まで動かして c(idx + d) == c(idx) の個数を数えます。片側だけではありません。slot と同じ値になるとは限りません。",
-            "penalty": 6
+            "content": "丸め誤差が、答えに影響する例を作ります。二つの位置が違っても、同じ答えを読むだけなら反例になりません。",
+            "penalty": 2
+          },
+          {
+            "id": "window-hint-2",
+            "content": "round(2.5)-round(1.5)=0、round(2.5-1.5)=1。差を先に取ると、消えていた差が残る例です。",
+            "penalty": 2
+          },
+          {
+            "id": "window-hint-3",
+            "content": "window で候補 new_a,new_b を選ぶ → 本文の商とノイズの条件を確認 → 二つの位置で同じ table を read → 答えが違う組を return → window -> を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "edge",
-        "label": "境界まであと何位置か",
-        "points": 20,
+        "label": "位置がずれても答えが変わらない表を作る",
+        "points": 50,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "edge-hint-1",
-            "content": "初めて値が変わる d から 1 を引きます。変わる位置そのものは含めません。0 になる deploy もあります。",
-            "penalty": 6
+            "content": "ずれた先にも正しい答えを置きます。元の数0だけでなく、使う全ての元の数を守る表が必要です。",
+            "penalty": 2
+          },
+          {
+            "id": "edge-hint-2",
+            "content": "n=4で位置−1は−表[3]。答え1を保つには表[3]=−1です。負の位置も符号を戻して表へ書き込みます。",
+            "penalty": 2
+          },
+          {
+            "id": "edge-hint-3",
+            "content": "edge で長さnの表を作る → 各 m と offsets の各ずれで本文の等式を確認 → 未対応の場所を直す → edge -> の新しい表を提出。",
+            "penalty": 2
           }
         ]
       }
@@ -180,97 +259,160 @@
   },
   "i18n": {
     "en": {
-      "name": "Rotate the table of answers without decrypting",
-      "shortDescription": "A ciphertext full of noise needs remaking — without decrypting it. Rotate a table of the answers by the amount the ciphertext points at and read the constant term; that is all it takes. Twelve lines of type-one-line-paste-the-value in your own Python retrace that \"all\", down to it returning f(m) — on numbers you produced yourself.",
-      "description": "A Week 5 drill. Not a write-a-function problem: you type one line, paste the value it prints, twelve times, and produce the core of Programmable Bootstrapping — from a noisy ciphertext, without decrypting, rotate a polynomial whose coefficients spell out the answers by the amount the ciphertext points at and read the constant term. The path: the four constants → the phase b − a·s → (a look-only divmod: plaintext and noise) → the slot width 2n/p → the test polynomial with f(m) written out in centred slot-wide runs → rescaling by 2n/q → the rotation amount (mod 2n) → the constant-term readout → its agreement with f(m) (slide 42's \"programmable\") → the width → the room to the boundary → the sweep over every usable plaintext.\n\nThe statement explains three points, each essential to reading the lecture slides: (1) only the lower half of the plaintext space is usable — a rotation past n negates the constant term, which can never equal f(m) ∈ [0, p); slide 26 writing the plaintext space as Z_8 and adding \"actually using 0–3\" is this constraint, not a simplification. (2) the test polynomial lays the same value out in slot-wide runs — a and b are rounded separately, so the index carries error; slide 24's heading \"the point is to give it width\" is this. (3) the index is a residue mod 2n — reducing mod n silently deletes the entire sign story. The generator redraws the mask until the readout equals f(m) for every usable plaintext, so these three points survive every seed.\n\nThe format is the same as ac26-w3-schnorr-drill, the three Week 4 drills, and the sibling ac26-w5-negacyclic-drill (the \"type one line, paste the value, read the one sentence about that value\" shape validated in the companion self-study notes). The numbers are seed-derived, and the lecture's example (p=8, n=16, q=64) is excluded from generation — the procedure is the lecture's, the numbers are this deployment's (independent reimplementation). This drill shows the secret s on screen: the learner is inside the bootstrapping machine, retracing in the clear the arithmetic blind rotation performs under encryption.\n\nEight of the twelve lines have an answer field (the platform's per-problem maximum). The four ungraded lines (split, slots, programmable, sweep) are a cross-check, a construction constant, and the closing sweep, and the statement explains them in place. fixtures/generate.py derives the expected values in the same function as the public ones, so it does not ship in the participant image (Issue 537/543 option B2); the public half is served by the verifier's GET /public.",
-      "instructions": "## A worn-out ciphertext, made new without dividing by D\n\nKeep adding and multiplying under encryption and the noise inside grows with every operation, until the answer stops being readable. Throwing the ciphertext away and re-encrypting would take the key — and producing the key ends the whole point of computing on hidden data. You want the noise refreshed, with nothing decrypted.\n\nTFHE's answer is a procedure almost disappointingly short: **rotate a table of the answers by the amount the ciphertext points at, and read the constant term. That is all.** What you read is a ciphertext with fresh noise — and if the table held f's answers, f(m) got computed along the way. Lecture slide 42 calls this \"Programmable\". In this drill you step inside the machine and retrace that \"that is all\", one line at a time.\n\nThe real machine performs the same rotation without ever knowing the secret key. On this practice rig — your deploy, the runtime that starts for you alone when you press Start — the secret s is visible, so you follow the procedure with the key in view. **You never decrypt** (divide by D and round) — looking the answer up without dividing is the heart of the procedure.\n\nThis is not a write-a-function problem. You **type one line, paste the value it printed**, twelve times over. Eight of the twelve lines have an answer field (a checkpoint — one small graded question); the other four are cross-checks, or they define names later lines use. **Type all twelve in order, skipping none** — skip an ungraded line and a later one will tell you the name does not exist. The numbers change per deploy; someone else's answers, or a notebook's, do not pass.\n\n## Before you start (three facts are enough)\n\n- **Quotient and remainder**: `divmod(11, 8)` returns `(1, 3)`. **Proportion**: to carry a value from the q ruler onto the 2n ruler, multiply by 2n/q and round. **Table lookup**: lay the answers out in advance and read the position you are pointed at — the twelve lines are built from these three alone\n- Symbols: p = the modulus of the plaintext (the original number being hidden), q = the ciphertext modulus (NOT 2n in this construction), n = how many coefficients the polynomial has, D = q ÷ p = the lift of one plaintext step, a ciphertext = a mask `a` (a list of numbers) paired with a body `b` (one integer), s = the 0-and-1 secret key, inner product = multiply two lists pairwise and add it all up (`sum(x*y for x, y in zip(a, s))` in Python), phase = b − a·s (holding only \"the lifted plaintext plus noise\"), constant term = the coefficient at the front (address 0)\n- **The world divided by x^n + 1**: advance n places and you are back at the front — **with the sign flipped** (x^n = −1) — so one full turn is 2n. Producing that rule from both of its sides is the sibling drill `ac26-w5-negacyclic-drill`; if mod itself is new, `ac26-w1-constraint-lab`\n\nThe procedure is the lecture's (Week 5 slides 21–26 and 42); the numbers are your deploy's. The lecture's own example (p=8, n=16, q=64) never appears here.\n\n## First move\n\n**1. Open Python.** On Windows open PowerShell, on a Mac open Terminal, type `python3` and press Enter. When `>>>` appears you are ready (on Windows, try `py` if `python3` is not found). If you have IDLE installed, its Shell window's `>>>` works just the same. That one Python is the only terminal you need — no files to create, no commands to memorise.\n\n**2. Paste the numbers.** In Participant Portal (the site showing this statement) press **起動 (Start)**, then press **Inspect evidence** in the problem editor. Your deployment's numbers appear as **assignment statements you can paste straight into Python**:\n\n```text\np, q, n = …, …, …     ← plaintext modulus, ciphertext modulus, ring degree\nD = q // p             ← computed as you paste\ns = (…)                ← the secret key (0s and 1s)\na = (…)                ← the ciphertext's mask\nb = …                  ← the ciphertext's body\nshift = …              ← the shift in f(t) = (t + shift) % (p // 2), the function the table evaluates\n```\n\nCopy that whole block into `>>>` and press Enter; the twelve lines below will now run. **Inspect evidence does not print what any line produces** — not the phase, not the table, not the rotation amount, not the readout. Those are yours to produce.\n\n**3. If you cannot open Python.** The editor's `rotation_drill.py` holds **the same expressions as the twelve lines, as functions with blanks**: the names inside them (`p`, `q`, `a`, …) are simply the functions' parameters. Copy the right-hand side of each \"line to type\" into the matching function, `return` it, and press **Run public tests**: it prints what your functions return on this deployment's numbers. Paste those into the answer fields. If you can open Python, you never need to touch this file. **Restore starter** puts it back at any time.\n\n## Workflow — twelve lines\n\nEvery line has the same shape. **The line to type** (copy and paste) → **what this line means** → paste the printed value into **that checkpoint's answer field** → once it matches, read **\"read after it matches\"** and move on. Answer fields are one-line inputs; tuple answers are written `[20, 30, 40]` (round brackets, or bare comma-separated values, also work).\n\n**Predict one thing before you paste.** \"Probably a number around this size\", \"probably the same as the previous line\" is enough. It is only when the prediction is wrong that rereading the line's meaning is worth anything. Paste twelve lines without predicting and you finish with nothing.\n\n### 1. The deployment's four constants — p, q, n, D  (answer box 1 of 8)\n\n```python\n(p, q, n, D)\n```\n\n- **What this line means**: the plaintext modulus p, the ciphertext modulus q, the ring degree n (division by x^n + 1), and the lift of one plaintext step, D = q ÷ p.\n- **Answer**: box **1 of 8** (heading \"The deployment's four constants — p, q, n, D\"), a 4-tuple\n- **Read after it matches**: in this construction **q is NOT 2n**. The ciphertext lives in the q world; the rotation lives in the polynomial world, which has only 2n positions. The bridge between them — multiply by 2n/q and round — is line 6, and the story of rounding error starts there.\n\n### 2. The phase b − a·s — stripped without decrypting  (answer box 2 of 8)\n\n```python\nph = (b - sum(x*y for x, y in zip(a, s))) % q; ph\n```\n\n- **What this line means**: subtract the inner product of the mask and the secret from the body. What remains is D·m + e — the lifted plaintext and the noise, nothing else. **Predict**: roughly how many times D will the printed number be?\n- **Answer**: box **2 of 8** (heading \"The phase b − a·s — stripped without decrypting\"), one integer\n- **Read after it matches**: ordinary decryption would now divide by D, round, throw the noise away and return the plaintext. This procedure does not divide — it turns the phase into a rotation amount and looks the answer up in a table. **Looking up without dividing** is this drill's whole subject.\n\n### 3. The look-only division — plaintext and noise  (no answer field)\n\n```python\nm, e = divmod(ph, D); (m, e)\n```\n\n- **What this line means**: divide once, purely to cross-check. m is the plaintext, e the noise.\n- **Answer**: none — but **m is used in line 9 and e in line 12**, so this line must still be typed\n- **Read once it prints**: m sits between 0 and p ÷ 2 − 1. **The upper half of the plaintext values is unusable** — a rotation past n flips the sign, as the premise said, and a flipped value can never equal f(m), which is between 0 and p − 1. Slide 26 writing the plaintext set as Z_8 (= the eight values 0–7) and then adding \"actually using 0–3\" is this constraint, not a simplification made for the lecture's convenience.\n\n### 4. The width one plaintext owns  (no answer field)\n\n```python\nslot = 2*n // p; slot\n```\n\n- **What this line means**: the rotation space 2n divided by the number of plaintexts p — how many positions one plaintext owns.\n- **Answer**: none — but **later lines use it**, so type this line too\n- **Read once it prints**: a plaintext gets `slot` positions, not one. The next line writes the same answer across that whole width. Why one position is not enough becomes clear in lines 6 and 7.\n\n### 5. The test polynomial — laying the answers out  (answer box 3 of 8)\n\n```python\nhalf = p // 2; f = lambda t: (t + shift) % half; v = [f(min((j + slot//2)//slot, half - 1)) for j in range(n)]; tuple(v[min(j*slot, n - 1)] for j in range(4))\n```\n\n- **What this line means**: slot j of the table `v` is written with \"the answer f(m) to return if this position is pointed at\". The same answer is repeated for a full slot width, with the boundaries pulled back by half a slot so that a plaintext's target position lands in the **middle** of its own region. What gets printed is the four region boundaries 0, slot, 2·slot, 3·slot (not the first four entries of `v`).\n- **Answer**: box **3 of 8** (heading \"The test polynomial — four samples at slot boundaries\"), a 4-tuple\n- **Read after it matches**: what went into the coefficients was f(m), not m itself. That is why this is called *Programmable* (slide 42). Everything that follows — rotate, read — is the same whatever f is. **Rewrite the table and the same machine computes a different function.**\n\n### 6. Rescaling by 2n/q  (answer box 4 of 8)\n\n```python\nrh = lambda x: round(x * 2*n / q); (rh(D), rh(a[0]), rh(b))\n```\n\n- **What this line means**: read a value from the q world onto a position in the 2n world. Printed: D̂ = rh(D), the first mask coefficient rh(a[0]), and b̂ = rh(b).\n- **Answer**: box **4 of 8** (heading \"Rescaled by 2n/q — D̂, â[0], b̂\"), a 3-tuple\n- **Read after it matches**: a's coefficients and b are rounded **separately**. Each rounding is off by at most half a position, but the next line's inner product adds many of them together, so the landing is never exactly on target. Giving the table width in line 5 and centring the target in its region is what absorbs that accumulated error (slide 24's heading, \"the point is to give it width\").\n\n### 7. The rotation amount — modulo 2n  (answer box 5 of 8)\n\n```python\nah = [rh(x) for x in a]; idx = (rh(b) - sum(x*y for x, y in zip(ah, s))) % (2*n); idx\n```\n\n- **What this line means**: the rounded b̂ minus the inner product of the rounded â and s — the number of positions actually rotated, counted **modulo 2n**. **Predict**: it should be about 2n/q times line 2's phase. Roughly what?\n- **Answer**: box **5 of 8** (heading \"The rotation amount — a residue mod 2n\"), one integer\n- **Read after it matches**: it must not be modulo n. In this polynomial world x^n = −1, so every n steps the sign flips and a full turn is 2n. Whether the rotation crossed n — the sign information — is carried only by the remainder mod 2n. Reduce mod n and that information is gone, and with it the reason line 3 gave for only the lower half being usable. Your idx should land near m·slot + slot/2, off by the rounding error.\n\n### 8. Rotate and read address zero  (answer box 6 of 8)\n\n```python\nc = lambda i: v[i % (2*n)] if i % (2*n) < n else -v[i % (2*n) - n]; c(idx)\n```\n\n- **What this line means**: the value at address zero after rotating the table `v` by idx. If i is n or more the sign is flipped (this one line is exactly the premise's \"the sign flips at n\"). Your deployment's idx should land below n.\n- **Answer**: box **6 of 8** (heading \"Rotate and read address zero\"), one integer\n- **Read after it matches**: nothing was decrypted, and yet a value came out. Round a and b separately, subtract, rotate the table, read address zero — that is all that happened. **What this value actually is** gets checked on the next line.\n\n### 9. Check it against f(m)  (no answer field)\n\n```python\nf(m)\n```\n\n- **What this line means**: line 3's plaintext m put straight through line 5's f.\n- **Answer**: none — this is the cross-check\n- **Read once it prints**: it should equal line 8. **Line 8 never divided by anything** — it turned the phase into a rotation and read a table. This line is the cross-check, so it does use line 3's m; a real implementation only ever holds line 8's side. f(m) came out of a noisy ciphertext with no division — that is the core of Programmable Bootstrapping. \"Divide by D and round\" was replaced by \"rescale by 2n/q, rotate the table, read\", and because the table held f, the function got evaluated along the way.\n\n### 10. The width where the answer holds  (answer box 7 of 8)\n\n```python\nsum(1 for d in range(-slot, slot + 1) if c(idx + d) == c(idx))\n```\n\n- **What this line means**: sweep slot positions either side of idx and count how many still return line 8's value.\n- **Answer**: box **7 of 8** (heading \"The width where the answer holds\"), one integer\n- **Read after it matches**: because line 5 repeated the same answer across a width, idx drifting a little — from rounding, from noise — does not change the readout. Had each plaintext been written at a single position, line 6's rounding error alone would already have read the neighbour's answer. **The width is not decoration; it is the device that absorbs rounding and noise.**\n\n### 11. How much room to the boundary  (answer box 8 of 8)\n\n```python\nnext(d for d in range(1, 2*n + 1) if c(idx + d) != c(idx)) - 1\n```\n\n- **What this line means**: step up from idx one position at a time and stop one short of where the readout first changes.\n- **Answer**: box **8 of 8** (heading \"Positions left before the boundary\"), one integer\n- **Read after it matches**: the noise may push this many more positions before the answer changes. A 0 means one more position flips it. Noise grows with every operation, so this room shrinks as it is spent. Refreshing the ciphertext before it runs out is bootstrapping — and the inside of that machine is the twelve lines you have just retraced.\n\n### 12. Every usable plaintext  (no answer field)\n\n```python\nall(c((rh((sum(x*y for x, y in zip(a, s)) + D*t + e) % q) - sum(x*y for x, y in zip(ah, s))) % (2*n)) == f(t) for t in range(half))\n```\n\n- **What this line means**: same key, same mask, same noise, sweeping the plaintext from 0 to p ÷ 2 − 1, and asking whether the readout equals f(t) for every one of them.\n- **Answer**: none — the closing check\n- **Read once it prints**: it prints `True`. On this deployment's numbers, any usable plaintext put through the same machine comes back as f(m). Now change `range(half)` to `range(p)` and run it once more — the upper half flips sign and it turns `False`. That is line 3's \"only the lower half is usable\", seen as a counterexample in your own numbers.\n\n## How submitting works\n\nThe answer fields are independent checkpoints. Enter a value, press **Submit (+points)**, and only that field is graded — one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below 0 pt). A solved field is marked solved and is not submitted again.\n\n## What the twelve lines add up to\n\nWith all eight answer fields green, you will have retraced — with numbers your own hands produced, one line at a time — the procedure that reads f(m) out of a noisy ciphertext without dividing by D (line 3's cross-check aside): rescale the phase by 2n/q, rotate a width-padded table of answers by an amount taken mod 2n, read address zero. And with it: why the width absorbs the rounding error, why only the lower half of the plaintexts is usable, why the rotation amount is a residue mod 2n, and why writing f into the coefficients turns the very same procedure into function evaluation.\n\nThe real machine performs the same rotation without knowing s, inside the ciphertext (`ac26-w5-cmux-blind-rotation`), and extracts the constant term it read as a fresh-noise ciphertext (`ac26-w5-extract-key-switch`). The sign flip this drill discarded as \"unusable\" is produced from the other side — as the mechanism behind HomNAND — by the sibling drill `ac26-w5-negacyclic-drill`.\n",
-      "writeup": "## The shape of this problem\n\nTwelve lines are typed; eight have an answer field. The order: the four constants (1) → the phase (2) → the look-only division (3) → the slot width (4) → the test polynomial (5) → the rounding (6) → the rotation amount (7) → the readout (8) → agreement with f(m) (9) → the width (10) → the room (11) → the sweep over every usable plaintext (12).\n\n## What each line protects\n\n- 1–2: the ciphertext world (mod q) and the rotation world (2n positions) are different places, and up to stripping the mask, PBS and ordinary decryption walk the same first step.\n- 3: the plaintext is confined to the lower half. Slide 26's \"actually using 0–3\" is the negacyclic constraint itself, not a simplification.\n- 4–6: the answers are laid out in slot-wide runs with boundaries half a slot early, so each target sits mid-run — because a and b are rounded separately and the errors add in the inner product (slide 24, \"the point is to give it width\").\n- 7: the rotation amount is a residue mod 2n. Mod n erases the sign information, and with it the reason for the lower-half constraint.\n- 8–9: rotating and reading the constant term produces f(m). The coefficients held f, so replacing decryption and evaluating the function happened in one move (slide 42's \"programmable\").\n- 10–12: the width and the room to the boundary are what absorb rounding and noise; widening the sweep to the full plaintext space breaks it on the upper half, closing line 3's constraint with a counterexample.\n\n## How it breaks\n\nD built as q//n / the inner product added in the phase / the centring dropped from the test polynomial / round replaced by // / idx reduced mod n / the negation forgotten in c(i) / the window counted one-sided / the edge counting the changing position itself — each shifts one value and stops at that line. The mod-n slip is the treacherous one: on a clean deployment line 7's number can coincide, but the reason for the lower-half constraint becomes unexplainable forever after. Re-reading that line's \"what this line means\" is how this format teaches.\n\n## Where this leads\n\nThis drill's rotation and lookup are exactly the assignment tfhe-toy-python's blind rotation and test polynomial. Here you retraced them in the clear, secret in view; the real machine performs the same rotation without knowing s, inside the ciphertext (a stack of CMUXes — ac26-w5-cmux-blind-rotation), and extracts the constant term it read as a fresh-noise ciphertext (sample extraction — ac26-w5-extract-key-switch). The sibling drill ac26-w5-negacyclic-drill takes the sign flip this drill discarded as \"unusable\" and produces it from the other side — as the mechanism that makes HomNAND work.",
+      "name": "Rotate an answer table and repair its error tolerance",
+      "shortDescription": "Trace small table reads, then construct a rounding counterexample and an error-tolerant table. Six fill-in steps lead to two construction tasks.",
+      "description": "A visible-key model of TFHE rotation positions and signed table reads. Six teaching rows carry 100 points; two property-graded constructions carry 100. It does not implement encryption or ciphertext refresh.",
+      "instructions": "You are checking an answer table used in encrypted computation. Can you repair a table that returns the wrong answer when its read position moves slightly?\n\n**Start → Inspect evidence. Your numbers appear.** Open `rotation_drill.py` in the editor. In `params`, replace `return None` with `return (p, q, n, q // p)` and run the public tests. Paste the value after `params ->` into “Find the message spacing” and submit.\n\nFollow six arithmetic steps, then construct a counterexample and a new table. Submit one checkpoint at a time; all eight marked solved is the goal. You do not need to read ahead.\n\n## Before you start — what this model shows\n\nA ciphertext is data that hides an original number. Here it is represented by a list `a` and one number `b`. The key `s` would normally stay secret; this model shows it so you can observe the arithmetic. An added small error is called **noise**.\n\nTFHE is a scheme for computing on encrypted numbers. Its real machinery rotates an encrypted answer table and extracts an encrypted result. **Bootstrapping** uses this machinery to reduce ciphertext noise. **This exercise models positions and table reads only. It returns ordinary numbers, not refreshed ciphertexts.**\n\n## Work on one checkpoint at a time\n\nFor steps 1–6, replace the matching function's `return None` with the entire code block and **put `return ` before its final line**. Indent all lines by four spaces inside the function. The helpers `rh`, `table` and `read` are already available. Your numbers are passed automatically.\n\nThe first part of the public-test output checks the small example below. The `your values` part prints your own deployment results. `FAIL` from an unfinished function does not stop submission of another checkpoint. Write grouped answers as `[1, 2]` or `(1, 2)`.\n\n\n## 1. Find the message spacing — `params`\n\n`p` counts the original message slots; `q` is where the hidden data wraps; `n` is the table length. `D=q//p` is the spacing for one message step. `//` is integer quotient: with `8//4=2`, messages 0,1,2 become 0,2,4 before adding noise. This exercise uses messages 0 through `p//2-1`.\n\nReturn four numbers from `params(p,q,n)`.\n\n```python\n(p, q, n, q // p)\n```\n\n## 2. Remove the added mask — `phase`\n\nMultiply matching entries of `a` and `s`, add them, and subtract from `b`. The remaining “message × D + noise” is called the **phase**.\n\nA **division remainder** is written `%`: `7%4=3`, and `-1%4=3`. With `a=[3,2],s=[1,0],b=8`, the sum is `3×1+2×0=3`, and the phase is `8-3=5`. If `D=4`, this is `4×1+1`: message 1, noise 1.\n\nFill `phase(q,s,a,b)`.\n\n```python\ntotal = 0\nfor i in range(len(a)):\n    total += a[i] * s[i]\n(b - total) % q\n```\n\n## 3. Build the answer table — `testpoly`\n\nTable positions start at zero. For message `m`, the answer is `(m+shift)%(p//2)`: `shift` advances the answer. Message centres are `slot=2*n//p` positions apart; the target is `m*slot`.\n\nThe provided `table(p,n,shift)` fills positions `j=0..n-1` as follows: calculate `(j+slot//2)//slot`, cap it at `p//2-1`, and use that as `m` in the answer formula.\n\nExample: `p=4,n=4,shift=1` gives `slot=2`. Positions 0,1,2,3 select messages 0,1,1,1, producing `[1,0,0,0]`. **Positions 0 and 2 are message centres, not boundaries.**\n\nReturn the whole table from `testpoly(p,n,shift)`.\n\n```python\nvalues = table(p, n, shift)\nvalues\n```\n\n## 4. Rescale to table positions — `rescale`\n\nConvert the data's `q` divisions to `2*n` table positions. The provided `rh(q,n,x)` is `round(x*2*n/q)`.\n\n`round` chooses the nearest integer; **an exact halfway tie chooses the even integer**. Examples: `round(1.5)=2`, `round(2.5)=2`, `round(3.5)=4`. With `q=16,n=4`, divide by two then round: `D=4,a[0]=3,b=8` become 2,2,4.\n\nFill `rescale(p,q,n,a,b)`.\n\n```python\nD = q // p\n(rh(q, n, D), rh(q, n, a[0]), rh(q, n, b))\n```\n\n## 5. Calculate the read position — `index`\n\nRound `b` and every entry of `a` **separately**, then subtract the matching products as in step 2. Subtracting first and rounding later can change the answer; you will test that in step 7.\n\nExample: rounded `b=4`, rounded `a=[2,1]`, and `s=[1,0]` give `4-(2×1+1×0)=2`. Take the remainder by `2*n`. Advancing `n` positions flips the sign; another `n` restores it, so one full cycle has `2*n` positions.\n\nFill `index(q,n,s,a,b)`.\n\n```python\ntotal = 0\nfor i in range(len(a)):\n    total += rh(q, n, a[i]) * s[i]\n(rh(q, n, b) - total) % (2 * n)\n```\n\n## 6. Read the answer — `readout`\n\nThe provided `read(values,position)` takes the remainder of the position by `2*n`. Below `n`, read that entry. At or above `n`, subtract `n`, read that entry, and **negate** it.\n\nFor `[1,0,0,0]`, positions 0,4,8 return 1,−1,1. For `[1,2,3,4]`, position −1 has remainder 7 by 8, so it returns −4.\n\nFill `readout(p,q,n,s,a,b,shift)` after completing `index`. In the small example the position is 2 and the answer is 0, matching `(1+1)%2=0` for message 1.\n\n```python\nvalues = table(p, n, shift)\nposition = index(q, n, s, a, b)\nread(values, position)\n```\n\n## 7. Construct a rounding-order counterexample — `window`\n\nNow construct a pair `[new_a,new_b]` for which the two rounding orders produce **different table answers**. Return it from `window(p,q,n,shift)`.\n\nBoth numbers are integers from 0 through `q-1`. Imagine a new mask whose first entry with key bit 1 is `new_a`, with all other entries zero. Its matching-product sum is therefore `new_a`. Meet every condition:\n\n- Let `phase=(new_b-new_a)%q` and `D=q//p`. `divmod(phase,D)` returns quotient and remainder: for example, `divmod(5,4)=(1,1)`. Call these the message and noise. Require message below `p//2` and noise strictly between 0 and `D/2`.\n- Separately rounded position: `(rh(q,n,new_b)-rh(q,n,new_a))%(2*n)`.\n- Difference-first position: `rh(q,n,phase)%(2*n)`.\n- Use the step-3 `table(p,n,shift)` and `read` at both positions. **The answers must differ**; different positions alone are insufficient.\n\nSmall rounding example: `round(2.5)-round(1.5)=0`, whereas `round(2.5-1.5)=1`. Add the table reads to test a candidate. Neither route is assumed always correct. Any pair meeting the conditions is accepted.\n\n## 8. Build a table that tolerates position errors — `edge`\n\nConstruct a **new table** whose answer survives position errors. Return a list of `n` integers from `edge(p,n,shift,offsets)`. Each integer must be between `-(p//2-1)` and `p//2-1`, inclusive.\n\nFor **every combination** of message `m=0..p//2-1` and the displayed errors `offsets`, require `read(new_table,m*(2*n//p)+error)==(m+shift)%(p//2)`. You may repair the original table or build a new one.\n\nExample: with `n=4`, message 0 targets position 0. To return 1 even at error −1, `read(table,-1)=-table[3]` requires −1 in entry 3. Checking position 0 alone is insufficient. Apply the same rule to the other messages and errors.\n\nThe public test reports whether all conditions hold for the small example. Submit the table made for your own numbers; a correct verdict completes the repair.\n",
+      "writeup": "## What the exercise establishes\n\nRounding before versus after subtraction can change a table answer. Repeated entries tolerate position error, but negative positions require sign handling. The last two tasks accept every construction satisfying the published conditions. This visible-key arithmetic model does not generate refreshed ciphertexts.",
       "learningGoals": [
-        "State that the phase b − a·s is decryption's halfway point (D·m + e), and that PBS turns it into a rotation amount instead of dividing",
-        "Explain why the upper half of the plaintext space is unusable (a rotation past n negates the constant term), connecting it to slide 26's \"actually using 0–3\"",
-        "Explain why the test polynomial lays the same f(m) out in slot-wide runs with each target mid-run (a and b are rounded separately)",
-        "Demonstrate the 2n/q rescaling on three values and confirm the rotation amount is a residue mod 2n (mod n erases the sign)",
-        "Show on your own numbers that the rotated table's constant term equals f(m) — and that rewriting the table makes the same procedure another function",
-        "Measure how much rounding and noise the width and the room to the boundary absorb, and confirm by sweep that every usable plaintext works"
+        "Trace mask subtraction on small numbers",
+        "Compute ties-to-even rounding and signed table reads",
+        "Construct an observable rounding-order counterexample",
+        "Build a table correct for every stated message and offset",
+        "Distinguish this arithmetic model from encrypted computation"
       ],
       "checks": [
         {
           "id": "params",
-          "label": "The deployment's four constants — p, q, n, D",
+          "label": "Find the message spacing",
           "hints": [
             {
               "id": "params-hint-1",
-              "content": "With the assignment statements pasted, typing `(p, q, n, D)` is all it takes. q is NOT 2n in this construction. D = q // p. The order is p, q, n, D."
+              "content": "Find how far the hidden data moves when the original message increases by one. This prepares the conversion to table positions."
+            },
+            {
+              "id": "params-hint-2",
+              "content": "The spacing is the integer quotient q//p: 8 divided by 4 gives 2 positions per message step."
+            },
+            {
+              "id": "params-hint-3",
+              "content": "Read p,q,n in Inspect → compute q//p → return four numbers from params → run tests and submit params ->."
             }
           ]
         },
         {
           "id": "phase",
-          "label": "The phase b − a·s — stripped without decrypting",
+          "label": "Remove the added mask",
           "hints": [
             {
               "id": "phase-hint-1",
-              "content": "Subtract the inner product of a and s from b, then % q. Subtract, not add. The inner product is `sum(x*y for x, y in zip(a, s))`."
+              "content": "Remove the added mask wherever the key entry is one. The remainder contains the scaled message and its small noise."
+            },
+            {
+              "id": "phase-hint-2",
+              "content": "For a=[3,2],s=[1,0],b=8: 8-(3×1+2×0)=5. Finish with the remainder by q."
+            },
+            {
+              "id": "phase-hint-3",
+              "content": "In phase start total at zero → add matching a*s products → subtract from b → take % q → submit phase ->."
             }
           ]
         },
         {
           "id": "testpoly",
-          "label": "The test polynomial — four samples at slot boundaries",
+          "label": "Build the answer table",
           "hints": [
             {
               "id": "testpoly-hint-1",
-              "content": "v lays f(m) out in slot-wide runs with the boundaries pulled half a slot early (centring). The answer samples v[0], v[slot], v[2*slot], v[3*slot] — not the first four coefficients v[0:4]."
+              "content": "Pre-store each message answer. A run of equal entries preserves the answer when the read position moves slightly."
+            },
+            {
+              "id": "testpoly-hint-2",
+              "content": "With p=4,n=4,shift=1, spacing is 2. Positions 0,1,2,3 select messages 0,1,1,1; (m+1)%2 gives 1,0,0,0."
+            },
+            {
+              "id": "testpoly-hint-3",
+              "content": "Read p,n,shift → call table(p,n,shift) in testpoly → return the whole list → submit testpoly ->."
             }
           ]
         },
         {
           "id": "rescale",
-          "label": "Rescaled by 2n/q — D̂, â[0], b̂",
+          "label": "Rescale to table positions",
           "hints": [
             {
               "id": "rescale-hint-1",
-              "content": "`round(x * 2*n / q)` applied to D, a[0] and b. round, not // or int() truncation."
+              "content": "The hidden data and table use different scales. Move to the same fraction of the table cycle, then round to an integer position."
+            },
+            {
+              "id": "rescale-hint-2",
+              "content": "rh(q,n,x)=round(x*2*n/q). Halfway ties choose even: 1.5 becomes 2 and 2.5 also becomes 2."
+            },
+            {
+              "id": "rescale-hint-3",
+              "content": "Compute D=q//p → apply rh(q,n,value) to D,a[0],b in that order → submit the three values after rescale ->."
             }
           ]
         },
         {
           "id": "index",
-          "label": "The rotation amount — a residue mod 2n",
+          "label": "Calculate the read position",
           "hints": [
             {
               "id": "index-hint-1",
-              "content": "Subtract the rescaled â·s from the rescaled b̂, then **% (2*n)** — not % n. â is every coefficient of a through rh."
+              "content": "Rescale each number separately, then remove the key-selected part. Rounding the difference first need not agree."
+            },
+            {
+              "id": "index-hint-2",
+              "content": "Rounded b=4,a=[2,1],s=[1,0] give 4-(2×1+1×0)=2. Take the remainder by 2*n."
+            },
+            {
+              "id": "index-hint-3",
+              "content": "In index round each a → multiply by its matching s and add → subtract from rh(q,n,b) → % (2*n) → submit index ->."
             }
           ]
         },
         {
           "id": "readout",
-          "label": "Rotate and read address zero",
+          "label": "Read the answer",
           "hints": [
             {
               "id": "readout-hint-1",
-              "content": "Below n the coefficient v[idx] comes out as it is; at or above n it is -v[idx - n]. Paste what c(idx) printed — not f(m) typed directly."
+              "content": "One table lap flips the sign, and two restore it. Use both the position and sign when reading."
+            },
+            {
+              "id": "readout-hint-2",
+              "content": "For [1,2,3,4], n=4. Position -1 has remainder 7 by 8; 7-4=3, so read -table[3]=-4."
+            },
+            {
+              "id": "readout-hint-3",
+              "content": "Complete index first → call table and index inside readout → return read(table,position) → submit readout ->."
             }
           ]
         },
         {
           "id": "window",
-          "label": "The width where the answer holds",
+          "label": "Construct a rounding-order counterexample",
           "hints": [
             {
               "id": "window-hint-1",
-              "content": "Count c(idx + d) == c(idx) for d from -slot to slot. Both sides, not one. It is not necessarily equal to slot."
+              "content": "Construct a rounding error that changes an answer. Different positions that read the same answer are not enough."
+            },
+            {
+              "id": "window-hint-2",
+              "content": "round(2.5)-round(1.5)=0, but round(2.5-1.5)=1: changing the order preserves a difference lost by separate rounding."
+            },
+            {
+              "id": "window-hint-3",
+              "content": "Choose new_a,new_b in window → check the published message/noise bounds → read the same table at both positions → return a pair with different answers → submit window ->."
             }
           ]
         },
         {
           "id": "edge",
-          "label": "Positions left before the boundary",
+          "label": "Build a table that tolerates position errors",
           "hints": [
             {
               "id": "edge-hint-1",
-              "content": "Subtract 1 from the first d where the value changes. The changing position itself is not counted. Some deployments produce 0."
+              "content": "Put the right answer at every permitted error position. The table must protect all usable messages, not just message zero."
+            },
+            {
+              "id": "edge-hint-2",
+              "content": "With n=4, position -1 reads -table[3]. Keeping answer 1 requires table[3]=-1. Account for that sign when filling an entry."
+            },
+            {
+              "id": "edge-hint-3",
+              "content": "Create n entries in edge → check the stated equality for every m and offset → repair unsatisfied positions → submit the new list after edge ->."
             }
           ]
         }

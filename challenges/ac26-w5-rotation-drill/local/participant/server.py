@@ -5,8 +5,7 @@ checkpoint locally: every `/verify` request is forwarded to the Compose-internal
 verifier, and any missing or invalid verifier response becomes a canonical
 `correct: false` verdict.
 
-Issue 537/543 (option B2): this problem's `fixtures/generate.py` computes the twelve
-lines' expected values inside `setting(seed)`, next to the public numbers, so the
+This problem's `fixtures/generate.py` computes all eight rows' expected values inside `setting(seed)`, next to the public numbers, so the
 module does not ship in this image at all. The inspect output and the public tests
 read this deployment's public half from the verifier's `GET /public` over the
 Compose-internal network instead (see participant/evidence.py and ../Dockerfile).
@@ -27,10 +26,16 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.evidence import public_evidence
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w5-rotation-drill"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+PUBLIC_SNAPSHOT = public_evidence()
+DEPLOYMENT_BINDING = PUBLIC_SNAPSHOT["submissionBinding"]
+protect_supervisor()
+if not isinstance(DEPLOYMENT_BINDING, str) or not DEPLOYMENT_BINDING:
+    raise RuntimeError("verifier did not provide a deployment binding")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18138"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -41,23 +46,12 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
-#: No checkpoint of this drill routes a learner's file through code execution; every
-#: graded line is a pasted value. `code_checkpoints=()` below tells the Workbench
-#: adapter every checkpoint is manual, so `prepare_submissions` seals every one of them
-#: the same way.
-CHECKPOINTS = (
-    "params",
-    "phase",
-    "testpoly",
-    "rescale",
-    "index",
-    "readout",
-    "window",
-    "edge",
-)
+# Each checkpoint grades a pasted value, never learner code.
+CHECKPOINTS = ('params','phase','testpoly','rescale','index','readout','window','edge')
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -67,14 +61,15 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    deployment_binding=DEPLOYMENT_BINDING,
+    public_payload={key:PUBLIC_SNAPSHOT[key] for key in ("assignments","public")},
     problem_id='ac26-w5-rotation-drill',
-    problem_name='復号せずに、答えの表を回して引く',
-    problem_name_en='Rotate the table of answers without decrypting',
-    description='手元の Python で 1 行打って、出た値を貼る。12 行で、ノイズ入りの暗号文から復号せずに、答えを並べたテスト多項式を暗号文が指す量だけ回して定数項を読み、それが f(m) に一致することを出す — 係数を f(m) にすれば同じ手順が関数評価になる（スライド 42 が "Programmable" と呼ぶ所以）。幅を持たせた表が丸め誤差を吸うこと、回す量が 2n で割った余りであること、平文は下半分しか使えないことまで — 自分の手で出した数だけで。',
-    description_en='Type one line in your own Python, paste the value it prints. Twelve lines: from a noisy ciphertext, without decrypting, rotate a polynomial whose coefficients spell out the answers by the amount the ciphertext points at, read the constant term — and see it equal f(m), because writing f into the coefficients makes the same procedure evaluate a function (why slide 42 says "programmable"). Along the way: the slot-wide runs absorb the rounding errors, the rotation amount is a residue mod 2n, and only the lower half of the plaintext space is usable — on numbers you produced yourself.',
-    checkpoint_labels={'params': 'この deploy の 4 定数 — p, q, n, D', 'phase': '位相 b − a·s — 復号せずに剥がす', 'testpoly': 'テスト多項式 — スロット境界の 4 点', 'rescale': '2n/q 倍に丸める — D̂, â[0], b̂', 'index': '回す量 — 2n で割った余り', 'readout': '回して 0 番地を読む', 'window': '答えが変わらない幅', 'edge': '境界まであと何位置か'},
-    checkpoint_labels_en={'params': "The deployment's four constants — p, q, n, D", 'phase': 'The phase b − a·s — stripped without decrypting', 'testpoly': 'The test polynomial — four samples at slot boundaries', 'rescale': 'Rescaled by 2n/q — D̂, â[0], b̂', 'index': 'The rotation amount — a residue mod 2n', 'readout': 'Rotate and read address zero', 'window': 'The width where the answer holds', 'edge': 'Positions left before the boundary'},
+    problem_name='答えの表を回して、ずれに強い計算を作る',
+    problem_name_en='Rotate an answer table and repair its error tolerance',
+    description='小さな数で表の読み方を確かめ、丸め方の反例と、位置のずれに耐える表を作ります。前半は穴埋め、後半は自分で構成する8問です。',
+    description_en='Trace small table reads, then construct a rounding counterexample and an error-tolerant table. Six fill-in steps lead to two construction tasks.',
+    checkpoint_labels={'params': '数の間隔を調べる', 'phase': '隠すために足した数を引く', 'testpoly': '答えの表を作る', 'rescale': '表の目盛りに合わせる', 'index': '読む位置を計算する', 'readout': '表から答えを読む', 'window': '丸める順序で答えが変わる例を作る', 'edge': '位置がずれても答えが変わらない表を作る'},
+    checkpoint_labels_en={'params': 'Find the message spacing', 'phase': 'Remove the added mask', 'testpoly': 'Build the answer table', 'rescale': 'Rescale to table positions', 'index': 'Calculate the read position', 'readout': 'Read the answer', 'window': 'Construct a rounding-order counterexample', 'edge': 'Build a table that tolerates position errors'},
     submitted_files=('rotation_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,
