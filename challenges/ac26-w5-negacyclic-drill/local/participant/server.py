@@ -5,8 +5,7 @@ checkpoint locally: every `/verify` request is forwarded to the Compose-internal
 verifier, and any missing or invalid verifier response becomes a canonical
 `correct: false` verdict.
 
-Issue 537/543 (option B2): this problem's `fixtures/generate.py` computes the twelve
-lines' expected values inside `setting(seed)`, next to the public numbers, so the
+This problem's `fixtures/generate.py` computes all eight rows' expected values inside `setting(seed)`, next to the public numbers, so the
 module does not ship in this image at all. The inspect output and the public tests
 read this deployment's public half from the verifier's `GET /public` over the
 Compose-internal network instead (see participant/evidence.py and ../Dockerfile).
@@ -27,10 +26,16 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.evidence import public_evidence
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w5-negacyclic-drill"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+PUBLIC_SNAPSHOT = public_evidence()
+DEPLOYMENT_BINDING = PUBLIC_SNAPSHOT["submissionBinding"]
+protect_supervisor()
+if not isinstance(DEPLOYMENT_BINDING, str) or not DEPLOYMENT_BINDING:
+    raise RuntimeError("verifier did not provide a deployment binding")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18136"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -41,23 +46,12 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
-#: No checkpoint of this drill routes a learner's file through code execution; every
-#: graded line is a pasted value. `code_checkpoints=()` below tells the Workbench
-#: adapter every checkpoint is manual, so `prepare_submissions` seals every one of them
-#: the same way.
-CHECKPOINTS = (
-    "params",
-    "wrap",
-    "signs",
-    "boundary",
-    "hazard",
-    "rotations",
-    "constants",
-    "margin",
-)
+# Each checkpoint grades a pasted value, never learner code.
+CHECKPOINTS = ('params','wrap','signs','boundary','hazard','rotations','constants','margin')
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -67,14 +61,15 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    deployment_binding=DEPLOYMENT_BINDING,
+    public_payload={key:PUBLIC_SNAPSHOT[key] for key in ("assignments","public")},
     problem_id='ac26-w5-negacyclic-drill',
-    problem_name='裏返りは、事故にも仕掛けにもなる',
-    problem_name_en='The same flip is the accident and the mechanism',
-    description='手元の Python で 1 行打って、出た値を貼る。12 行で、x^n = −1 が指数のはみ出しを符号に変えることを probe で確かめ、境界がちょうど n にあることと n だけ行き過ぎた読み出しの事故を出し、同じ反転を仕掛けとして使う HomNAND の表を 4 通り閉じて、境界までの余裕 n − 3D を測る — 自分の手で出した数だけで。',
-    description_en='Type one line in your own Python, paste the value it prints. Twelve lines: probe how x^n = −1 turns an overflowing exponent into a sign, find the boundary at exactly n, produce the overshoot accident the lecture leaves as a question, close the HomNAND table on all four inputs with the same flip as the mechanism, and measure the room left before the boundary, n − 3D — on numbers you produced yourself.',
-    checkpoint_labels={'params': '環の定数 — p, q = 2n, D = q/p', 'wrap': '指数のはみ出しを畳む — 余りと符号', 'signs': '6 か所の定数項 — 符号の地図', 'boundary': '符号が初めて裏返る i', 'hazard': 'n だけ行き過ぎた読み出し — 事故側', 'rotations': '4 通りの回転量 — D·r からノイズを引く', 'constants': '回した後の定数項 — 仕掛け側', 'margin': '境界までの余裕 — n − 3D'},
-    checkpoint_labels_en={'params': "The ring's constants — p, q = 2n, D = q/p", 'wrap': 'Fold the overflowing exponent — remainder and sign', 'signs': 'The constant term at six probes — a map of signs', 'boundary': 'The first i where the sign flips', 'hazard': 'The read that overshoots by n — the accident side', 'rotations': 'The four rotation amounts — D·r minus the noise', 'constants': 'The constant terms after rotating — the mechanism side', 'margin': 'The room left before the boundary — n − 3D'},
+    problem_name='符号の裏返りで計算し、ずれに強くする',
+    problem_name_en='Compute with sign flips, then tolerate more noise',
+    description='一周すると符号が変わる表を使い、0と1の計算を追います。最後は、ずれで壊れる入力と、それに耐える計算を自分で作ります。',
+    description_en='Follow a bit computation using a table that changes sign each lap. Then construct a failing input and arithmetic that tolerates the larger displacement.',
+    checkpoint_labels={'params': '元に戻る周期と間隔を調べる', 'wrap': 'はみ出した歩数と符号を調べる', 'signs': '六つの位置で符号を読む', 'boundary': '符号が変わる境目を見つける', 'hazard': '表を一巡しすぎた結果を読む', 'rotations': '四つの入力が指す位置を求める', 'constants': 'ずれで答えが壊れる入力を作る', 'margin': 'より大きなずれに耐える計算を作る'},
+    checkpoint_labels_en={'params': 'Find the cycle and spacing', 'wrap': 'Reduce the steps and track the sign', 'signs': 'Read six positions', 'boundary': 'Find the sign boundary', 'hazard': 'Read one table lap too far', 'rotations': 'Locate the four input pairs', 'constants': 'Construct an input that fails under more noise', 'margin': 'Construct arithmetic that tolerates more noise'},
     submitted_files=('negacyclic_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,
