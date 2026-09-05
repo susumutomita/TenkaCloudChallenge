@@ -13,6 +13,7 @@
 name: ac26-w6-zkvm-trace-drill
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

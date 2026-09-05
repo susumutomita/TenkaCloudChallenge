@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -333,7 +334,7 @@ class PortalEditorSupport:
             transcript = Path(transcript_directory) / "stdout"
             try:
                 with transcript.open("w", encoding="utf-8") as sink:
-                    completed = subprocess.run(  # noqa: S603 - fixed argv, shell=False
+                    process = subprocess.Popen(  # noqa: S603 - fixed argv, shell=False
                         command,
                         cwd=cwd,
                         env=env,
@@ -342,11 +343,21 @@ class PortalEditorSupport:
                         stdout=sink,
                         stderr=subprocess.STDOUT,
                         text=True,
-                        timeout=timeout,
                         preexec_fn=self.limit_fn,
-                        check=False,
+                        start_new_session=True,
                     )
+                    try:
+                        returncode = process.wait(timeout=timeout)
+                    finally:
+                        # The child cannot leave this process group: setsid/setpgid
+                        # are blocked after Popen creates the session. Clean up its
+                        # descendants on both normal exit and timeout.
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        process.wait()
                 output = transcript.read_text(encoding="utf-8", errors="replace")
             except (subprocess.SubprocessError, OSError, ValueError):
                 return None
-        return completed.returncode, output[-self.max_output_bytes :]
+        return returncode, output[-self.max_output_bytes :]

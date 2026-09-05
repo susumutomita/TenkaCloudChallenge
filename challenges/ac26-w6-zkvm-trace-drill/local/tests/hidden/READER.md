@@ -102,6 +102,21 @@ socket call (EPERM), parent-memory access (EACCES), and socket creation in an ex
 Python child (EPERM). Endpoints, seed and binding tag were absent from the child
 environment. The trusted proxy still accepted the independent constructed answer
 after that run. Normal learning/verification and the completed CLI starter still pass.
-Three additional Docker regression tests cover the Workbench path, CLI path and
+Four additional Docker regression tests cover the Workbench path, CLI path and
 fail-closed filter setup. This is a specific network/process restriction in addition
 to the existing container boundary, not a claim of a general-purpose hardened sandbox.
+
+
+## Supervisor lifetime regression
+
+PR review then reproduced learner code sending SIGKILL to the same-UID Workbench.
+The filter now denies signal syscalls and resource-limit writes targeting another
+process. Each API run starts in its own session; learner code cannot change session
+or process group, and the parent kills remaining group members on exit or timeout.
+Compose init reaps orphaned children. This addresses the reviewed stop-server path.
+
+Actual API and CLI regression probes received EPERM for a parent SIGKILL attempt,
+parent resource-limit modification, setsid and setpgid. The API remained reachable,
+the trusted grading proxy still accepted the reader's constructed answer, and both
+languages' completed visible starters passed. The fourth Docker regression checks
+that a normally exiting execution leaves no running descendant.
