@@ -49,7 +49,7 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 ## Match lifecycle
 
 1. TenkaCloud mints the match secret before first state creation.
-2. `initialState` creates team secrets, shares, commitments, and the Order plan.
+2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
 4. `validateOp` rejects malformed, stale, unauthorized, or incorrect moves.
 5. `applyOp` changes state only after validation.
@@ -96,8 +96,8 @@ bun run typecheck
 ```
 
 The suite covers reducer behavior, JSON round-trips, method/order compatibility,
-Schnorr verification, Shamir reconstruction, FHE/MPC behavior, nonce-reuse
-HUNT, team projections, deterministic replay, and the vertical playtest.
+sudoku-relabelling verification, Shamir reconstruction, FHE/MPC behavior,
+reused-relabelling HUNT, team projections, deterministic replay, and the vertical playtest.
 
 From the TenkaCloudChallenge root, also run:
 

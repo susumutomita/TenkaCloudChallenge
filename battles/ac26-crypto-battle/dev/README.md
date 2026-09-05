@@ -41,7 +41,7 @@ Read this before quoting anything you see here.
 | Real (unmodified) | Faked (this directory) |
 | --- | --- |
 | `../game/src/reducer.ts` — every rule, score, and verdict | the HTTP dispatcher |
-| `../game/src/shamir.ts`, `schnorr-*.ts`, `field.ts`, `group.ts` | in-memory state, no DynamoDB / Turso |
+| `../game/src/shamir.ts`, `sudoku.ts`, `field.ts` | in-memory state, no DynamoDB / Turso |
 | `../game/src/playtest.ts`'s op builders (scenario setup) | `PortalSlotProps` — team, endpoints, phases |
 | `../portal/*.tsx` — all three declared slots, plus their imports | authentication and tenant isolation |
 | the optimistic-lock version and tick-before-op ordering | the tick cadence (the clock is yours to drive) |

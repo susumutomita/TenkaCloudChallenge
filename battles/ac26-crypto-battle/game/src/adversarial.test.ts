@@ -9,7 +9,7 @@
 import { describe, expect, test } from "bun:test";
 import { deriveFheInputKeys, deriveFhePlaintexts } from "./fhe.ts";
 import { deriveMpcPrivateInputs } from "./mpc.ts";
-import { SUBSTRING_SAFE_FIELD, buildFheOp, buildLeakOp, buildMpcOp, proveThroughExchange, startedMatch } from "./playtest.ts";
+import { SUBSTRING_SAFE_FIELD, buildFheOp, buildLeakOp, buildMpcOp, buildProveSudokuOp, startedMatch } from "./playtest.ts";
 import { completeShares, reconstruct, type Share } from "./shamir.ts";
 import { decodeLedger } from "./ledger-codec.ts";
 import { applyOp, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
@@ -396,14 +396,13 @@ test("adversarial 9: no trusted material reaches any participant-visible surface
       if (order.status !== "open") continue;
       let op: CryptoBattleOp | undefined;
       if (order.task.kind === "reveal-share") {
-        if (!order.allowedMethods.includes("leak")) {
-          // [Issue #701] PROVE is an exchange, not a single op: commit, read
-          // the challenge, respond. It cannot be expressed as one `op` in a
-          // loop that applies one.
-          state = proveThroughExchange(state, "teamA", order.id).state;
-          continue;
-        }
-        op = buildLeakOp(order.id);
+        op = order.allowedMethods.includes("leak")
+          ? buildLeakOp(order.id)
+          : buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id);
+      } else if (order.task.kind === "zk-sudoku") {
+        // [Issue #709] PROVE-only, built from the team's OWN vault -- the
+        // relabelled grid is what leaves the browser, the solution never does.
+        op = buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id);
       } else if (order.task.kind === "homomorphic-sum") {
         op = buildFheOp(order, state.config.prime);
       } else {
@@ -421,6 +420,10 @@ test("adversarial 9: no trusted material reaches any participant-visible surface
   const teamA = state.teams.teamA;
   if (!teamA) throw new Error("expected teamA");
   const secrets: string[] = [teamA.secret];
+  // [Issue #709] The sudoku solution, as the 16-digit run the vault shows.
+  // Structural rather than substring elsewhere (prove.test.ts); here it joins
+  // the sweep as one more thing the other team's view must not contain.
+  secrets.push(JSON.stringify(projectForTeam(state, "teamA").vault.sudokuSolution));
   for (const order of state.contracts.filter((c) => c.teamId === "teamA")) {
     if (order.task.kind === "homomorphic-sum") {
       for (const key of deriveFheInputKeys(state.seed, order.id, prime)) {

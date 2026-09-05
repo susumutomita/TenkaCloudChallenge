@@ -6,11 +6,10 @@ import {
   submitFhe,
   submitHunt,
   submitHuntCipher,
-  submitHuntNonce,
+  submitHuntSudoku,
   submitLeak,
   submitMpc,
-  submitProveCommit,
-  submitProveRespond,
+  submitProveSudoku,
   submitRevealHint,
   submitReady,
   submitRotate,
@@ -20,6 +19,15 @@ import { taskDetail, taskLabel } from "./orderTask.ts";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
 import { BOARD_CSS, Ledger, OrderBelt, Vault } from "./GameBoard.tsx";
 import QuickRules from "./QuickRules.tsx";
+import {
+  describeRevealGroup,
+  emptyCells,
+  parseCells,
+  PermutationChips,
+  SudokuBoard,
+  SudokuInput,
+  SUDOKU_CSS,
+} from "./SudokuGrid.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
 import type { CipherRung } from "../game/src/ladder.ts";
 import type {
@@ -28,6 +36,7 @@ import type {
   CryptoBattleProjection,
   HintProjection,
   HuntBudgetProjection,
+  SudokuRevealArtifact,
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
@@ -100,7 +109,7 @@ export const FAST_MOVE_COPY = {
     leakHint: "FAST / PUBLIC",
     prove: "PROVE",
     proveHint: "COMPUTE / PROTECTED",
-    proveOpen: "Enter proof",
+    proveOpen: "Relabel and submit",
     constraintNone: "any method",
     constraintNoRaw: (methods: readonly string[]) =>
       `${methods.join(" / ").toUpperCase()} only — the raw value must not be published`,
@@ -117,8 +126,6 @@ export const FAST_MOVE_COPY = {
     scoreHint: "Answer an Order to gain. Let one expire and you lose points.",
     leakBlocked: "This Order does not accept LEAK.",
     proveBlocked: "This Order does not accept PROVE.",
-    commitment: "commitment",
-    response: "response",
     hunt: "HUNT FROM LEDGER",
     /*
       [Issue #696] The price of a miss is on the card BEFORE the attempt, in the
@@ -152,17 +159,24 @@ export const FAST_MOVE_COPY = {
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · your row and its answer → PUBLIC LEDGER. ${pairsToBreak} pair${pairsToBreak === 1 ? "" : "s"} recovers your key.`,
-    // [Issue #701] The two moves, named where the participant is standing.
-    proveStep1: "Step 1 of 2. Compute R = g^r mod 227 (at most seven squarings) and submit it. There is no challenge yet -- it is the game's answer to this.",
-    proveStep2: "Step 2 of 2. The game answered your commitment. Compute s = (r + e*w) mod 113 and submit it.",
-    challengeLabel: "the challenge e for this Order: ",
-    commitSend: "SUBMIT COMMITMENT",
-    commitDone: "COMMITMENT POSTED",
-    commitBody: "The challenge is above. Answer it to finish the Order.",
+    // [Issue #709] PROVE is a hand relabelling of the vault's sudoku.
+    proveTitle: "SHOW IT WITHOUT SHOWING IT — a zero-knowledge proof",
+    proveUse: "USED FOR: proving you hold a solution while showing nobody which digit sits where",
+    proveWhy: "WHY IT WORKS: relabelling the digits keeps every row, column and box valid — the judge sees a real solution, everyone else sees 1-4 in some order",
+    proveHelp: "DO THIS: write a table (1→?, 2→?, 3→?, 4→?), rewrite all 16 cells of your solution through it, type them in. Never the same table twice.",
+    proveSolution: "your solution (private)",
+    proveUsed: "tables you already used this generation",
+    proveNoneUsed: "none yet — any table but 1→1 2→2 3→3 4→4 is fresh",
+    proveGrid: "your relabelled grid",
+    proveIncomplete: "Fill all 16 cells with 1-4.",
     proveSuccess: "PROVE SUCCESS",
-    proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
+    proveBody: (points: number, group: string) => `+${points} · ${group} of your RELABELLED grid is on the Public Ledger; your solution is not`,
+    proveMiss: "PROVE MISS",
+    proveMissBody: (cost: number) => `-${cost} · that grid is not a relabelling of your solution. Check the table against every cell.`,
+    proveUnread: "PROVE SUBMITTED",
+    proveUnreadBody: "The result could not be read. Check your score and the Order.",
     proveLesson:
-      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
+      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the solution, and every other team learned only that one row of a relabelled copy reads 1-4 in some order. This is what zk-rollups prove on-chain.",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "Recovered secret accepted.",
     /*
@@ -241,14 +255,17 @@ export const FAST_MOVE_COPY = {
       `LEAK instead and this row is published next to its answer. ${pairs} such pair${pairs === 1 ? "" : "s"} recovers your key.`,
     cipherSuccess: "CIPHER SUCCESS",
     cipherBody: (points: number) => `+${points} · NOTHING PUBLISHED`,
-    huntNonce: "NONCE-REUSE HUNT",
-    huntNonceHint: "Find two of one team's proof rows, same generation, same commitment — then the key is recoverable. Enter the key you worked out.",
-    noNonceTarget: "No other team has posted a proof yet.",
+    huntSudoku: "HUNT · REUSED RELABELLING",
+    huntSudokuHint: (cost: number) =>
+      `Find two of one team's sudoku rows, same generation, SAME TAG — they came from one relabelled grid. Line those cells up against the team's public puzzle to recover the table, undo it, and fill in the rest. A wrong grid costs ${cost} points and one attempt.`,
+    huntSudokuPuzzle: "their public puzzle",
+    huntSudokuReveals: "their opened groups",
+    huntSudokuGrid: "their solution, as you recovered it",
+    noSudokuTarget: "No other team has PROVEd yet.",
     recoveredKey: "recovered key",
-    huntNonceSuccess: "HUNT SUCCESS",
-    huntNonceBody: "Recovered key accepted — nonce reuse punished.",
+    huntSudokuBody: "Recovered solution accepted — relabelling reuse punished.",
     tactics: "NEXT TACTIC FROM THE PUBLIC RECORD",
-    tacticsHint: "Open this when a public share, proof, or one of your exposed shares gives you another move.",
+    tacticsHint: "Open this when a public share, an opened sudoku row, or one of your exposed shares gives you another move.",
     exposure: "EXPOSURE",
     exposureHint: (threshold: number) =>
       `${threshold} shares of one generation reconstruct that team's secret. This is how close everyone is.`,
@@ -273,7 +290,7 @@ export const FAST_MOVE_COPY = {
     leakHint: "速い / 公開",
     prove: "PROVE",
     proveHint: "計算 / 守る",
-    proveOpen: "proof を入力",
+    proveOpen: "付け替えて出す",
     constraintNone: "方法は自由",
     constraintNoRaw: (methods: readonly string[]) =>
       `${methods.join(" / ").toUpperCase()} のみ — 生の値を公開してはいけない`,
@@ -281,8 +298,6 @@ export const FAST_MOVE_COPY = {
     scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
     leakBlocked: "この Order は LEAK を受け付けません。",
     proveBlocked: "この Order は PROVE を受け付けません。",
-    commitment: "commitment",
-    response: "response",
     hunt: "LEDGER から HUNT",
     // [Issue #696] 外したときの代償は、提出する前にカードに書く。
     huntHint: (cost: number) =>
@@ -307,17 +322,24 @@ export const FAST_MOVE_COPY = {
     leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · 記号列と答えが対で公開されました。この段は ${pairsToBreak} 組で鍵が割れます。`,
-    // [Issue #701] 2 手ぶんの案内。
-    proveStep1: "1/2。R = g^r mod 227 を計算して出します (2 乗を最大 7 回)。チャレンジはまだありません — これに対するゲームの返事がそれです。",
-    proveStep2: "2/2。ゲームがチャレンジを返しました。s = (r + e*w) mod 113 を計算して出します。",
-    challengeLabel: "この Order のチャレンジ e: ",
-    commitSend: "コミットを出す",
-    commitDone: "コミットを出しました",
-    commitBody: "上に出ているチャレンジに答えると Order が完了します。",
+    // [Issue #709] PROVE は MY VAULT の数独を手で付け替えて出す。
+    proveTitle: "解を見せずに示す ― ゼロ知識証明",
+    proveUse: "つかいみち: 「解を持っている」ことだけを示し、どのマスに何があるかは誰にも見せない",
+    proveWhy: "しくみ: 数字を付け替えても行・列・箱の性質は崩れない ── 審判には本物の解、相手には「1〜4 の並び替え」にしか見えない",
+    proveHelp: "やること: 表 (1→?、2→?、3→?、4→?) を 1 つ決め、解の 16 マスをその表で書き換えて入力する。同じ表は 2 度使わない。",
+    proveSolution: "自分の解 (非公開)",
+    proveUsed: "この世代で使った表",
+    proveNoneUsed: "まだなし ── 1→1 2→2 3→3 4→4 以外ならどの表でも新品",
+    proveGrid: "付け替えたマス目",
+    proveIncomplete: "16 マスすべてに 1〜4 を入れてください。",
     proveSuccess: "PROVE SUCCESS",
-    proveBody: (points: number) => `+${points} · SHARE PROTECTED`,
+    proveBody: (points: number, group: string) => `+${points} · 付け替えたマス目の${group}が公開記録に載りました。解そのものは載っていません`,
+    proveMiss: "PROVE MISS",
+    proveMissBody: (cost: number) => `-${cost} · そのマス目は自分の解の付け替えになっていません。表を全マスに当て直してください。`,
+    proveUnread: "PROVE を送信しました",
+    proveUnreadBody: "結果を読み取れませんでした。スコアと Order を確認してください。",
     proveLesson:
-      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the secret, and learned nothing about it. This is what zk-rollups prove on-chain.",
+      "いまのが「ゼロ知識証明」です。審判はあなたが解を持っていると確信し、相手チームは「付け替えた写しの 1 行が 1〜4 の並び替えである」ことしか知りませんでした。zkRollup がチェーン上で証明しているのはこれです。",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "復元した secret が受理されました。",
     // [Issue #696] 外れは外れと言う。 ok だけを見て SUCCESS を出していたのが不具合。
@@ -398,14 +420,17 @@ export const FAST_MOVE_COPY = {
       `LEAK すると、この列と答えが対で公開されます。この段は ${pairs} 組で鍵が割れます。`,
     cipherSuccess: "CIPHER SUCCESS",
     cipherBody: (points: number) => `+${points} · 何も公開されない`,
-    huntNonce: "nonce 再利用 HUNT",
-    huntNonceHint: "同じチーム・同じ世代で commitment が同じ proof 2 行を Ledger から探してください。見つかれば鍵を計算で求められます。求めた鍵を入力してください。",
-    noNonceTarget: "まだ proof を出した他チームはいません。",
+    huntSudoku: "HUNT · 付け替えの使い回し",
+    huntSudokuHint: (cost: number) =>
+      `同じチーム・同じ世代で「付け替え」のタグが同じ数独の行を 2 つ、Ledger から探してください。同じ付け替えの写しから出た行です。そのマスをそのチームの公開問題と突き合わせると表が割れ、表を戻せば解が出ます。外すと ${cost} 点減り、回数を 1 回使います。`,
+    huntSudokuPuzzle: "相手の公開問題",
+    huntSudokuReveals: "相手が公開したグループ",
+    huntSudokuGrid: "割り出した相手の解",
+    noSudokuTarget: "まだ PROVE した他チームはいません。",
     recoveredKey: "復元した鍵",
-    huntNonceSuccess: "HUNT SUCCESS",
-    huntNonceBody: "復元した鍵が受理されました — nonce の使い回しを突きました。",
+    huntSudokuBody: "割り出した解が受理されました — 付け替えの使い回しを突きました。",
     tactics: "公開記録からできる次の作戦",
-    tacticsHint: "公開されたかけら・proof、または自分の公開済みかけらがあるときに開きます。",
+    tacticsHint: "公開されたかけら・数独の行、または自分の公開済みかけらがあるときに開きます。",
     exposure: "危険度",
     exposureHint: (threshold: number) =>
       `同じ世代のかけらが ${threshold} 個そろうと、そのチームの秘密は復元されます。いま全員が何個まで来ているかです。`,
@@ -515,18 +540,55 @@ export function huntFeedback(
   next: CryptoBattleProjection | undefined,
   targetTeamId: string,
   locale: Locale,
+  via?: "sudoku",
 ): FeedbackDraft {
   const copy = FAST_MOVE_COPY[locale];
   const outcome = next?.lastHunt;
-  if (next !== undefined && outcome?.outcome === "hit") {
-    return { kind: "hunt", title: copy.huntSuccess, body: copy.huntBody };
+  // [Issue #709] The projection remembers WHICH secret the last HUNT went
+  // after. A sudoku miss must not be read off the Shamir budget, and a Shamir
+  // hit must not be reported as a recovered solution.
+  const matches = outcome !== undefined && (outcome.via ?? undefined) === via;
+  if (next !== undefined && matches && outcome?.outcome === "hit") {
+    return { kind: "hunt", title: copy.huntSuccess, body: via === "sudoku" ? copy.huntSudokuBody : copy.huntBody };
   }
-  if (next !== undefined && outcome?.outcome === "miss") {
-    const budget = next.huntAttempts[targetTeamId];
+  if (next !== undefined && matches && outcome?.outcome === "miss") {
+    const budget = (via === "sudoku" ? next.sudokuHuntAttempts : next.huntAttempts)[targetTeamId];
     const left = budget === undefined ? undefined : Math.max(0, budget.max - budget.spent);
     return { kind: "error", title: copy.huntMiss, body: copy.huntMissBody(next.wrongHuntCost, left) };
   }
   return { kind: "error", title: copy.huntUnread, body: copy.huntUnreadBody };
+}
+
+/**
+ * [Issue #709] What to tell the player after a PROVE the service accepted.
+ *
+ * Accepted is not the same as verified: a wrong grid is a move that lands,
+ * charges `wrongProve`, and comes back `{ ok: true }` like a hit. Only the
+ * projection's `lastProve` can say which it was, so SUCCESS requires it to say
+ * hit, for THIS Order; a miss is named as a miss with the price; and an
+ * accepted op whose result cannot be read is reported as exactly that.
+ *
+ * Exported for `game/src/portal.test.ts`.
+ */
+export function proveFeedback(
+  next: CryptoBattleProjection | undefined,
+  contractId: string,
+  points: number,
+  locale: Locale,
+): FeedbackDraft {
+  const copy = FAST_MOVE_COPY[locale];
+  const outcome = next?.lastProve;
+  if (next !== undefined && outcome?.contractId === contractId && outcome.outcome === "hit") {
+    const reveal = next.publicLedger.find(
+      (a): a is SudokuRevealArtifact => a.kind === "sudoku-reveal" && a.contractId === contractId,
+    );
+    const group = reveal ? describeRevealGroup(reveal.group, locale) : locale === "ja" ? "1 グループ" : "one group";
+    return { kind: "prove", title: copy.proveSuccess, body: copy.proveBody(points, group), lesson: copy.proveLesson };
+  }
+  if (next !== undefined && outcome?.contractId === contractId && outcome.outcome === "miss") {
+    return { kind: "error", title: copy.proveMiss, body: copy.proveMissBody(next.wrongProveCost) };
+  }
+  return { kind: "error", title: copy.proveUnread, body: copy.proveUnreadBody };
 }
 
 function ownExposedShareCount(projection: CryptoBattleProjection | null): number {
@@ -725,37 +787,31 @@ export function primaryActionsFor(order: ContractProjection | undefined): {
 /** The advanced controls that have relevant public material right now. */
 export function tacticAvailability(projection: CryptoBattleProjection | null): {
   readonly hunt: boolean;
-  readonly nonceHunt: boolean;
+  readonly sudokuHunt: boolean;
   readonly cipherHunt: boolean;
   readonly rotate: boolean;
 } {
   return {
     hunt: ledgerTargets(projection).length > 0,
-    nonceHunt: nonceHuntCandidates(projection).length > 0,
+    sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
     rotate: ownExposedShareCount(projection) > 0,
   };
 }
 
 /**
- * [Issue #645 Phase 5] Teams a nonce HUNT can be aimed at: every OTHER team
- * that has posted a proof, with the generation a hunt would have to name.
+ * [Issue #709] Teams a sudoku HUNT can be aimed at: every OTHER team that has
+ * PROVEd on its current generation, with its public puzzle and every group it
+ * has had opened.
  *
  * What this deliberately does NOT do is decide whether any of them is
- * exploitable. An earlier version scanned for two proof rows sharing a
- * commitment and listed only the teams where it found one — so the card went
- * from "no team has reused a commitment" to naming a target at the exact
- * moment the reuse appeared, which is the Portal announcing the ledger pattern
- * the participant is supposed to notice. #486's rule (restated in #646's
- * non-goals) forbids exactly that, and the old code said so in its own
- * docstring while doing the opposite.
- *
- * `ledgerTargets` above is the precedent: it lists every team that has leaked
- * anything and shows WHICH indices, and leaves "is that enough to reconstruct"
- * to the participant. This is the same shape — the ledger table already shows
- * every proof's team, generation, Order and commitment, so spotting a
- * duplicate is a reading the participant does, not a verdict the UI hands
- * them. All this saves is retyping a team id.
+ * exploitable. The nonce-reuse card this replaces once scanned for two proof
+ * rows sharing a commitment and listed only the teams where it found one -- so
+ * the card went from "nobody" to naming a target at the exact moment the reuse
+ * appeared, which is the Portal announcing the ledger pattern the participant
+ * is supposed to notice. #486's rule (restated in #646's non-goals) forbids
+ * exactly that. So every reveal is shown, tag and all, and whether two tags
+ * match is a reading the participant does.
  *
  * Using each team's CURRENT generation is also what makes a stale target
  * impossible: `validateOp` refuses any other generation, so there is nothing
@@ -764,24 +820,45 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
  * Exported for `game/src/portal.test.ts`: `renderToStaticMarkup` never runs
  * the effect that would populate the panel.
  */
-export function nonceHuntCandidates(
+export interface SudokuHuntCandidate {
+  readonly teamId: string;
+  readonly teamName: string;
+  readonly generation: number;
+  readonly puzzle: readonly number[];
+  readonly reveals: readonly SudokuRevealArtifact[];
+}
+
+export function sudokuHuntCandidates(
   projection: CryptoBattleProjection | null,
-): { teamId: string; generation: number }[] {
-  const found: { teamId: string; generation: number }[] = [];
-  if (!projection) return found;
+): readonly SudokuHuntCandidate[] {
+  if (!projection) return [];
+  const byTeam = new Map<string, SudokuHuntCandidate>();
   for (const entry of projection.publicLedger) {
-    if (entry.kind !== "proof" || entry.teamId === projection.vault.teamId) continue;
-    const generation = projection.teams[entry.teamId]?.generation;
-    if (generation === undefined || generation !== entry.generation) continue;
-    if (found.some((t) => t.teamId === entry.teamId)) continue;
-    found.push({ teamId: entry.teamId, generation });
+    if (entry.kind !== "sudoku-reveal" || entry.teamId === projection.vault.teamId) continue;
+    const team = projection.teams[entry.teamId];
+    const puzzle = projection.publicPuzzles[entry.teamId];
+    if (team === undefined || puzzle === undefined || team.generation !== entry.generation) continue;
+    const current = byTeam.get(entry.teamId) ?? {
+      teamId: entry.teamId,
+      teamName: team.teamName || entry.teamId,
+      generation: team.generation,
+      puzzle,
+      reveals: [],
+    };
+    byTeam.set(entry.teamId, { ...current, reveals: [...current.reveals, entry] });
   }
-  return found;
+  return [...byTeam.values()];
 }
 
 const CSS = `
 ${BOARD_CSS}
 ${DIE_CSS}
+${SUDOKU_CSS}
+.tc-sudoku-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.tc-sudoku-block{display:grid;gap:3px;justify-items:start}
+.tc-reveal-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:12px}
+.tc-reveal-list li{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tc-reveal-tag{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;border:1px solid #cfd8e3;border-radius:6px;padding:1px 6px;background:#fff}
 .tc-die-legend{display:inline-flex;gap:8px;flex-wrap:wrap;margin-left:6px;vertical-align:middle}
 .tc-die-legend-item{display:inline-flex;flex-direction:column;align-items:center;gap:1px}
 .tc-die-legend-item small{font-size:9px;color:#5f6b7a;font-weight:700}
@@ -960,8 +1037,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [projectionAtMs, setProjectionAtMs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedOrderId, setSelectedOrderId] = useState("");
-  const [commitment, setCommitment] = useState("");
-  const [response, setResponse] = useState("");
+  // [Issue #709] Sixteen typed cells for the relabelled grid, and sixteen for
+  // a recovered solution. Strings until submit: a half-typed grid is a normal
+  // state, and Number("") would silently be 0.
+  const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
+  const [huntCells, setHuntCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
   // [Issue #645] One box per component of an FHE answer, one for an MPC
   // subtotal. Kept as strings all the way to the op: these are 19-digit field
@@ -971,10 +1051,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [mpcPartial, setMpcPartial] = useState("");
   const [cipherAnswer, setCipherAnswer] = useState("");
   const [huntTargetKey, setHuntTargetKey] = useState("");
-  const [nonceTargetKey, setNonceTargetKey] = useState("");
+  const [sudokuTargetKey, setSudokuTargetKey] = useState("");
   const [cipherTargetKey, setCipherTargetKey] = useState("");
   const [recoveredCipherKey, setRecoveredCipherKey] = useState("");
-  const [recoveredKey, setRecoveredKey] = useState("");
   const [recoveredSecret, setRecoveredSecret] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -1015,11 +1094,17 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // left to be refused by the judge.
   const selectedBudget = selectedTarget === undefined ? undefined : huntBudgetFor(projection, selectedTarget);
   const huntExhausted = selectedBudget !== undefined && selectedBudget.spent >= selectedBudget.max;
-  const nonceTargets = useMemo(() => nonceHuntCandidates(projection), [projection]);
+  const sudokuTargets = useMemo(() => sudokuHuntCandidates(projection), [projection]);
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
   const exposure = useMemo(() => exposureRows(projection), [projection]);
-  const selectedNonceTarget =
-    nonceTargets.find((t) => `${t.teamId}:${t.generation}` === nonceTargetKey) ?? nonceTargets[0];
+  const selectedSudokuTarget =
+    sudokuTargets.find((t) => `${t.teamId}:${t.generation}` === sudokuTargetKey) ?? sudokuTargets[0];
+  const selectedSudokuBudget =
+    selectedSudokuTarget === undefined ? undefined : projection?.sudokuHuntAttempts[selectedSudokuTarget.teamId];
+  const sudokuHuntExhausted =
+    selectedSudokuBudget !== undefined && selectedSudokuBudget.spent >= selectedSudokuBudget.max;
+  const proveGrid = parseCells(proveCells);
+  const huntGrid = parseCells(huntCells);
   const cipherTargets = useMemo(() => cipherHuntCandidates(projection), [projection]);
   const selectedCipherTarget =
     cipherTargets.find((t) => `${t.teamId}:${t.generation}:${t.rung}` === cipherTargetKey) ??
@@ -1175,7 +1260,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         offers LEAK / PROVE; an encrypted-addition Order offers only the thing
         that can answer it. Showing all four buttons and rejecting three of them
         would teach a participant that the game is arbitrary, when the real rule
-        is that a Schnorr proof cannot add two ciphertexts.
+        is that a sudoku PROVE cannot add two ciphertexts.
 
         [Issue #659] Gated on what the Order ACCEPTS, not on which task it is.
         The two were the same thing while `reveal-share` was the only Order that
@@ -1455,50 +1540,53 @@ export default function FastMovePanel(props: PortalSlotProps) {
         select an FHE Order, and submit a PROVE the new Order cannot accept.
         `setProveOpen(false)` on selection is the other half — a form that
         reappears still bound to a different Order is its own surprise.
+
+        [Issue #709] PROVE is one move now: relabel the vault's sudoku and
+        submit the whole grid. Everything the participant needs is on screen --
+        their solution, the tables they have already spent, sixteen boxes --
+        and the one thing the panel does NOT do is apply a table for them. The
+        relabelling is the work; a "fill it in" button would delete it. The
+        ZK sudoku Order opens this directly (there is no LEAK to choose
+        against), a share Order opens it from the PROVE button.
       */}
-      {/*
-        [Issue #701] PROVE is two visible steps, because it is two moves. Until
-        a commitment lands there is no challenge to answer, so showing both
-        fields at once would be asking for the answer to a question nobody has
-        asked yet. Which step is on screen is read off the Order itself
-        (`proveChallenge`), never from local state -- a reload, a poll, or the
-        other browser tab a team is sharing all land on the same step.
-      */}
-      {proveOpen && selectedOrder?.task.kind === "reveal-share" && (
+      {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && proveAllowed && (
         <div className="tc-input-panel">
-          <strong style={{ fontSize: "12px" }}>{copy.proveOpen} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          {selectedOrder.proveChallenge === undefined ? (
-            <>
-              <p className="tc-prove-step">{copy.proveStep1}</p>
-              <input aria-label="fast-prove-commitment" value={commitment} onChange={(event) => setCommitment(event.target.value)} placeholder={copy.commitment} />
-              <button
-                type="button"
-                className="tc-submit-small"
-                disabled={submitting || !commitment.trim()}
-                onClick={() => void run(
-                  () => submitProveCommit(client, selectedOrder.id, commitment.trim()),
-                  () => ({ kind: "prove", title: copy.commitDone, body: copy.commitBody }),
-                )}
-              >{submitting ? copy.running : copy.commitSend}</button>
-            </>
-          ) : (
-            <>
-              <p className="tc-prove-step">{copy.proveStep2}</p>
-              <p className="tc-prove-challenge">
-                {copy.challengeLabel}<strong>{selectedOrder.proveChallenge}</strong>
-              </p>
-              <input aria-label="fast-prove-response" value={response} onChange={(event) => setResponse(event.target.value)} placeholder={copy.response} />
-              <button
-                type="button"
-                className="tc-submit-small"
-                disabled={submitting || !response.trim()}
-                onClick={() => void run(
-                  () => submitProveRespond(client, selectedOrder.id, response.trim()),
-                  () => ({ kind: "prove", title: copy.proveSuccess, body: copy.proveBody(selectedOrder.points), lesson: copy.proveLesson }),
-                )}
-              >{submitting ? copy.running : copy.send}</button>
-            </>
-          )}
+          <strong style={{ fontSize: "12px" }}>{copy.proveTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
+          <div className="tc-lesson">
+            <div className="tc-lesson-use">{copy.proveUse}</div>
+            <div className="tc-lesson-why">{copy.proveWhy}</div>
+          </div>
+          <div className="tc-card-hint">{copy.proveHelp}</div>
+          <div className="tc-sudoku-row">
+            <div className="tc-sudoku-block">
+              <span className="tc-sudoku-caption">{copy.proveSolution}</span>
+              <SudokuBoard cells={projection.vault.sudokuSolution} label="my-solution" />
+            </div>
+            <div className="tc-sudoku-block">
+              <span className="tc-sudoku-caption">{copy.proveGrid}</span>
+              <SudokuInput value={proveCells} onChange={setProveCells} ariaLabel="fast-prove-grid" />
+            </div>
+          </div>
+          <div className="tc-card-hint">
+            {copy.proveUsed}:{" "}
+            {projection.vault.usedPermutations.length === 0
+              ? copy.proveNoneUsed
+              : projection.vault.usedPermutations.map((pi) => (
+                  <span key={pi.join("")} style={{ marginRight: 8 }}><PermutationChips pi={pi} /></span>
+                ))}
+          </div>
+          <button
+            type="button"
+            className="tc-submit-small tc-prove-submit"
+            disabled={submitting || proveGrid === undefined}
+            title={proveGrid === undefined ? copy.proveIncomplete : undefined}
+            onClick={() => proveGrid && void run(
+              () => submitProveSudoku(client, selectedOrder.id, proveGrid),
+              // [Issue #709] Hit or miss is read off the projection the op
+              // came back with -- a wrong grid lands and returns ok.
+              (next) => proveFeedback(next, selectedOrder.id, selectedOrder.points, locale),
+            )}
+          >{submitting ? copy.running : copy.send}</button>
         </div>
       )}
 
@@ -1538,8 +1626,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
       </div>
 
-      {(tactics.hunt || tactics.nonceHunt || tactics.cipherHunt || tactics.rotate) && (
-      <details className="tc-tactics" open={tactics.hunt || tactics.cipherHunt || tactics.nonceHunt}>
+      {(tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rotate) && (
+      <details className="tc-tactics" open={tactics.hunt || tactics.cipherHunt || tactics.sudokuHunt}>
         <summary>{copy.tactics}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
       {tactics.hunt && <div className="tc-secondary-grid">
@@ -1564,10 +1652,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
                   onClick={() => selectedTarget && void run(
                     () => submitHunt(client, selectedTarget.teamId, selectedTarget.generation, recoveredSecret.trim()),
                     // [Issue #696] Hit or miss is read off the projection the
-                    // op came back with -- see `huntFeedback`. The other HUNT
-                    // kinds (nonce, cipher) keep their plain success draft
-                    // because `validateOp` still refuses a wrong answer there,
-                    // so for them ok really does mean hit.
+                    // op came back with -- see `huntFeedback`. The sudoku HUNT
+                    // (#709) reads its verdict the same way; the cipher HUNT
+                    // keeps its plain success draft because `validateOp` still
+                    // refuses a wrong key there, so for it ok really means hit.
                     (next) => huntFeedback(next, selectedTarget.teamId, locale),
                   )}
                 >{submitting ? copy.running : copy.send}</button>
@@ -1642,41 +1730,67 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>}
 
         {/*
-          [Issue #645 Phase 5] Without this the `hunt-nonce` op had no
-          participant-facing sender at all: the reducer accepted it, the README
-          advertised it, and nothing in the Portal could produce one.
+          [Issue #709] The sudoku HUNT. Every opened group of every other team
+          is shown with its tag, next to that team's public puzzle: the match
+          between two tags is the participant's to spot, the lining-up against
+          the puzzle is theirs to do, and the sixteen boxes are where the
+          recovered solution goes. A control that showed only the "huntable"
+          teams would be the Portal doing the noticing.
         */}
-        {tactics.nonceHunt && <div className="tc-hunt-card">
-          <div className="tc-card-title">{copy.huntNonce}</div>
-          <div className="tc-card-hint">{copy.huntNonceHint}</div>
-          <>
-              <div className="tc-target-row">
-                {nonceTargets.map((target) => {
-                  const key = `${target.teamId}:${target.generation}`;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      className="tc-target-chip"
-                      aria-pressed={selectedNonceTarget ? `${selectedNonceTarget.teamId}:${selectedNonceTarget.generation}` === key : false}
-                      onClick={() => setNonceTargetKey(key)}
-                    >{target.teamId} · gen {target.generation}</button>
-                  );
-                })}
-              </div>
-              <div className="tc-input-panel">
-                <input aria-label="fast-hunt-nonce-witness" value={recoveredKey} onChange={(event) => setRecoveredKey(event.target.value)} placeholder={copy.recoveredKey} />
+        {tactics.sudokuHunt && <div className="tc-hunt-card">
+          <div className="tc-card-title">{copy.huntSudoku}</div>
+          <div className="tc-card-hint">{copy.huntSudokuHint(projection.wrongHuntCost)}</div>
+          <div className="tc-target-row">
+            {sudokuTargets.map((target) => {
+              const key = `${target.teamId}:${target.generation}`;
+              const budget = projection.sudokuHuntAttempts[target.teamId];
+              return (
                 <button
+                  key={key}
                   type="button"
-                  className="tc-submit-small tc-hunt-nonce-button"
-                  disabled={submitting || !selectedNonceTarget || !recoveredKey.trim()}
-                  onClick={() => selectedNonceTarget && void run(
-                    () => submitHuntNonce(client, selectedNonceTarget.teamId, selectedNonceTarget.generation, recoveredKey.trim()),
-                    () => ({ kind: "hunt", title: copy.huntNonceSuccess, body: copy.huntNonceBody }),
-                  )}
-                >{submitting ? copy.running : copy.send}</button>
+                  className="tc-target-chip"
+                  aria-pressed={selectedSudokuTarget ? `${selectedSudokuTarget.teamId}:${selectedSudokuTarget.generation}` === key : false}
+                  onClick={() => setSudokuTargetKey(key)}
+                >{target.teamName} · gen {target.generation} · ×{target.reveals.length}{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>
+              );
+            })}
+          </div>
+          {selectedSudokuTarget && (
+            <div className="tc-sudoku-row">
+              <div className="tc-sudoku-block">
+                <span className="tc-sudoku-caption">{copy.huntSudokuPuzzle}</span>
+                <SudokuBoard cells={selectedSudokuTarget.puzzle} label={`puzzle-${selectedSudokuTarget.teamId}`} />
               </div>
-          </>
+              <div className="tc-sudoku-block">
+                <span className="tc-sudoku-caption">{copy.huntSudokuReveals}</span>
+                <ul className="tc-reveal-list">
+                  {selectedSudokuTarget.reveals.map((reveal) => (
+                    <li key={reveal.id}>
+                      <span>{describeRevealGroup(reveal.group, locale)}</span>
+                      <code>{reveal.cells.join(" ")}</code>
+                      <span className="tc-reveal-tag">{reveal.tag}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="tc-sudoku-block">
+                <span className="tc-sudoku-caption">{copy.huntSudokuGrid}</span>
+                <SudokuInput value={huntCells} onChange={setHuntCells} ariaLabel="fast-hunt-sudoku-grid" />
+              </div>
+            </div>
+          )}
+          {sudokuHuntExhausted ? <div className="tc-card-warn">{copy.huntExhausted}</div> : null}
+          <div className="tc-input-panel">
+            <button
+              type="button"
+              className="tc-submit-small tc-hunt-sudoku-button"
+              disabled={submitting || !selectedSudokuTarget || huntGrid === undefined || sudokuHuntExhausted}
+              onClick={() => selectedSudokuTarget && huntGrid && void run(
+                () => submitHuntSudoku(client, selectedSudokuTarget.teamId, selectedSudokuTarget.generation, huntGrid),
+                (next) => huntFeedback(next, selectedSudokuTarget.teamId, locale, "sudoku"),
+              )}
+            >{submitting ? copy.running : copy.send}</button>
+          </div>
         </div>}
 
         {tactics.rotate && <div className="tc-rotate-card">

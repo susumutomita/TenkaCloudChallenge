@@ -1,89 +1,56 @@
 /**
- * [Issue #645 Phase 5] Can a HUMAN actually perform the nonce-reuse HUNT?
+ * [Issue #709] Can a HUMAN actually perform the sudoku HUNT?
  *
  * §12c says a playability claim must come from what a participant can see, and
  * that play which reads repository internals "proves nothing about human
- * playability and must not be cited as if it did". `nonce-reuse.test.ts` calls
- * `computeChallenge` and `buildNonceReuseHuntOp` — shipped code. It proves the
- * HUNT is *implementable*. It cannot prove it is *playable*, and in fact it
- * passed while two of the five values a challenge binds — the Order id and the
- * target's public value Y — reached no participant surface at all.
+ * playability and must not be cited as if it did". `pi-reuse.test.ts` calls
+ * `buildSudokuHuntOp` — shipped code, fed a projection. It proves the HUNT is
+ * *implementable*. It cannot prove it is *playable*: the nonce-reuse HUNT this
+ * replaces passed its own implementability test while two of its inputs
+ * reached no participant surface at all.
  *
- * So this file imports NO transcript, prover or hunt helper. It:
+ * So this file imports NO hunt helper and NO sudoku helper. It:
  *
  *  1. renders the participant's own Status panel to HTML;
- *  2. scrapes the transcripts out of that HTML, and nothing else;
- *  3. solves `w = (s1 - s2) / (e1 - e2)` exactly as the statement says;
+ *  2. scrapes the target's opened groups (group, digits, tag) and its public
+ *     puzzle out of that HTML, and nothing else;
+ *  3. does the reasoning the statement describes -- same tag means same
+ *     relabelled grid; line its cells up against the puzzle; recover the
+ *     table; undo it; fill the rest by the sudoku rule -- in plain code that
+ *     mirrors what a person does on paper;
  *  4. submits it and expects the judge to accept.
- *
- * [Issue #701] Step 3 used to be "recompute both challenges from the rule the
- * Help Drawer publishes". It cannot be, any more, and that is the point of the
- * rebuild: the challenge is bound to the match seed, so a participant CANNOT
- * derive it -- they read it, off the transcript on the Public Ledger. Which
- * makes this test's own premise stricter rather than looser: if the challenge
- * ever stops being rendered, this attack stops being available to a human at
- * all, and this file is what notices.
  */
 
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StatusPanelBody } from "../../portal/StatusPanel.tsx";
-import { inv, mod } from "./field.ts";
-import { groupPow, HAND_GROUP as PROVE_GROUP } from "./group.ts";
-import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { deriveWitness } from "./schnorr-witness.ts";
-import { startedMatch } from "./playtest.ts";
-import type { Contract, CryptoBattleState, SchnorrProof } from "./types.ts";
+import { buildProveSudokuOp, startedMatch } from "./playtest.ts";
+import { applyOp, DEFAULT_CONFIG, projectForTeam, tick, validateOp } from "./reducer.ts";
+import type { CryptoBattleState } from "./types.ts";
 
 const CTX = { eventId: "hunt-playability", teamIds: ["victim", "attacker"] } as const;
 const VICTIM = "victim";
 const ATTACKER = "attacker";
-const FIXED_NONCE = 123_456_789n;
+const CARELESS_TABLE = [4, 3, 2, 1] as const;
 
-function carelessExchange(
-  state: CryptoBattleState,
-  contractId: string,
-): CryptoBattleState {
-  const group = PROVE_GROUP;
-  const vault = projectForTeam(state, VICTIM).vault;
-  const witness = deriveWitness(BigInt(vault.secret), vault.generation, VICTIM, group);
-  const commitmentR = groupPow(group.generator, FIXED_NONCE, group);
-  const committed = applyOp(state, VICTIM, {
-    kind: "prove-commit",
-    contractId,
-    commitment: commitmentR.toString(),
-  });
-  const order = projectForTeam(committed, VICTIM).myContracts.find((c) => c.id === contractId);
-  if (!order?.proveChallenge) throw new Error(`no challenge on ${contractId}`);
-  const op = {
-    kind: "prove-respond" as const,
-    contractId,
-    response: mod(FIXED_NONCE + BigInt(order.proveChallenge) * witness, group.order).toString(),
-  };
-  // The proofs VERIFY. Reuse does not make a proof invalid -- it makes the
-  // pair leak.
-  expect(validateOp(committed, VICTIM, op)).toEqual({ ok: true });
-  return applyOp(committed, VICTIM, op);
-}
-
+/** The victim PROVEs three Orders with ONE relabelling -- the mistake. */
 function stateAfterCarelessProofs(): CryptoBattleState {
   let state = tick(startedMatch(CTX), 0);
-  let open: Contract[] = [];
-  // Both Orders must be open in the SAME state the proofs are submitted
-  // against -- collecting across ticks would let the first one expire.
-  for (let round = 0; round < 20; round += 1) {
-    open = state.contracts.filter(
-      (c) => c.teamId === VICTIM && c.status === "open" && c.task.kind === "reveal-share",
-    );
-    if (open.length >= 2) break;
-    state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+  let proved = 0;
+  for (let round = 0; round < 20 && proved < 3; round += 1) {
+    for (const order of state.contracts.filter(
+      (c) => c.teamId === VICTIM && c.status === "open" && c.allowedMethods.includes("prove"),
+    )) {
+      if (proved >= 3) break;
+      const op = buildProveSudokuOp(projectForTeam(state, VICTIM).vault, order.id, CARELESS_TABLE);
+      expect(validateOp(state, VICTIM, op)).toEqual({ ok: true });
+      state = applyOp(state, VICTIM, op);
+      proved += 1;
+    }
+    if (proved < 3) state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
   }
-  expect(open.length).toBeGreaterThanOrEqual(2);
-
-  for (const order of open.slice(0, 2)) {
-    state = carelessExchange(state, order.id);
-  }
+  expect(proved).toBe(3);
   return state;
 }
 
@@ -91,14 +58,12 @@ function stateAfterCarelessProofs(): CryptoBattleState {
  * Reading the screen -- the only channel this test is allowed to use.
  * ------------------------------------------------------------------ */
 
-interface ScreenProofRow {
+interface ScreenReveal {
   readonly teamId: string;
   readonly generation: string;
-  readonly contractId: string;
-  readonly commitment: string;
-  /** [Issue #701] Read, never derived -- see this file's header. */
-  readonly challenge: string;
-  readonly response: string;
+  readonly groupLabel: string;
+  readonly cells: readonly number[];
+  readonly tag: string;
 }
 
 function renderParticipantScreen(state: CryptoBattleState): string {
@@ -112,88 +77,146 @@ function renderParticipantScreen(state: CryptoBattleState): string {
 }
 
 /** Ledger rows, straight off the rendered table: team | gen | kind | order | detail | when. */
-function proofRowsOnScreen(html: string): ScreenProofRow[] {
-  const rows: ScreenProofRow[] = [];
+function revealsOnScreen(html: string): ScreenReveal[] {
+  const rows: ScreenReveal[] = [];
   for (const [, body] of html.matchAll(/<tr>((?:<td[^>]*>.*?<\/td>)+)<\/tr>/g)) {
     const cells = [...(body ?? "").matchAll(/<td[^>]*>(.*?)<\/td>/g)].map(([, cell]) =>
       (cell ?? "").replace(/<[^>]+>/g, "").trim(),
     );
     if (cells.length < 5) continue;
-    const [teamId, generation, kind, contractId, detail] = cells;
-    if (!kind?.includes("proof") || !teamId || !generation || !contractId || !detail) continue;
-    const [commitment, challenge, response] = detail.split("/").map((part) => part.trim());
-    if (!commitment || !challenge || !response) continue;
-    rows.push({ teamId, generation, contractId, commitment, challenge, response });
+    const [teamId, generation, kind, , detail] = cells;
+    if (!kind?.includes("sudoku") || !teamId || !generation || !detail) continue;
+    // "row 2: 4 2 3 1 · relabelling a1b2c3d4e5f6"
+    const match = detail.match(/^(\w+ \d): ([1-4]) ([1-4]) ([1-4]) ([1-4]) · relabelling ([0-9a-f]+)$/);
+    if (!match) continue;
+    rows.push({
+      teamId,
+      generation,
+      groupLabel: match[1] ?? "",
+      cells: [match[2], match[3], match[4], match[5]].map(Number),
+      tag: match[6] ?? "",
+    });
   }
   return rows;
 }
 
-/** Y, straight off the rendered public-commitments list. */
-function publicYOnScreen(html: string, teamId: string): string | undefined {
-  const list = html.split("Public commitments").at(1) ?? "";
-  const entries = [...list.matchAll(/<dt[^>]*>(.*?)<\/dt><dd[^>]*>(.*?)<\/dd>/g)];
-  for (const [, rawTeam, rawValue] of entries) {
+/** The puzzle, straight off the rendered public-puzzles list: four rows, dots hidden. */
+function puzzleOnScreen(html: string, teamId: string): number[] | undefined {
+  const list = html.split("Public puzzles").at(1) ?? "";
+  for (const [, rawTeam, rawGrid] of list.matchAll(/<dt[^>]*>([\s\S]*?)<\/dt><dd[^>]*>([\s\S]*?)<\/dd>/g)) {
     const name = (rawTeam ?? "").replace(/<[^>]+>/g, "").trim();
-    if (name === teamId || name.startsWith(teamId)) return (rawValue ?? "").replace(/<[^>]+>/g, "").trim();
+    if (name !== teamId && !name.startsWith(teamId)) continue;
+    const text = (rawGrid ?? "").replace(/<[^>]+>/g, "").trim();
+    return text.split(/\s+/).map((t) => (t === "." ? 0 : Number(t)));
   }
   return undefined;
 }
 
-describe("the nonce-reuse HUNT is computable from the screen alone", () => {
-  test("the whole transcript -- R, e and s -- is on the screen", () => {
-    const html = renderParticipantScreen(stateAfterCarelessProofs());
-    const rows = proofRowsOnScreen(html);
+/* ------------------------------------------------------------------ *
+ * The reasoning, as a person does it -- written out, not imported.
+ * ------------------------------------------------------------------ */
 
-    expect(rows).toHaveLength(2);
-    for (const row of rows) {
-      expect(row.teamId).toContain(VICTIM);
-      expect(row.contractId.length).toBeGreaterThan(0);
-      expect(row.generation).toBe("1");
-      expect(BigInt(row.commitment)).toBeGreaterThan(0n);
-      // [Issue #701] The value a participant cannot compute, and therefore the
-      // one that has to be rendered.
-      expect(BigInt(row.challenge)).toBeGreaterThanOrEqual(0n);
-      expect(BigInt(row.response)).toBeGreaterThanOrEqual(0n);
+/** "row 2" -> the four cell indices, exactly as the statement numbers them. */
+function cellsOfGroup(label: string): number[] {
+  const [kind, n] = label.split(" ");
+  const i = Number(n) - 1;
+  if (kind === "row") return [0, 1, 2, 3].map((c) => i * 4 + c);
+  if (kind === "column") return [0, 1, 2, 3].map((r) => r * 4 + i);
+  const br = i < 2 ? 0 : 2;
+  const bc = i % 2 === 0 ? 0 : 2;
+  return [br * 4 + bc, br * 4 + bc + 1, (br + 1) * 4 + bc, (br + 1) * 4 + bc + 1];
+}
+
+/** Every 4x4 grid that extends `known` (0 = unknown) under the sudoku rule. */
+function completions(known: readonly number[]): number[][] {
+  const groups = [
+    ...[0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((c) => r * 4 + c)),
+    ...[0, 1, 2, 3].map((c) => [0, 1, 2, 3].map((r) => r * 4 + c)),
+    ...[0, 2].flatMap((br) => [0, 2].map((bc) => [br * 4 + bc, br * 4 + bc + 1, (br + 1) * 4 + bc, (br + 1) * 4 + bc + 1])),
+  ];
+  const out: number[][] = [];
+  const grid = [...known];
+  const ok = (cell: number, v: number) =>
+    groups.every((g) => !g.includes(cell) || g.every((other) => other === cell || grid[other] !== v));
+  const fill = (cell: number) => {
+    if (cell === 16) {
+      out.push([...grid]);
+      return;
     }
+    if (grid[cell] !== 0) {
+      fill(cell + 1);
+      return;
+    }
+    for (const v of [1, 2, 3, 4]) {
+      if (!ok(cell, v)) continue;
+      grid[cell] = v;
+      fill(cell + 1);
+      grid[cell] = 0;
+    }
+  };
+  fill(0);
+  return out;
+}
+
+describe("the sudoku HUNT is computable from the screen alone", () => {
+  test("the opened groups, their tags and the target's puzzle are all on the screen", () => {
+    const html = renderParticipantScreen(stateAfterCarelessProofs());
+    const reveals = revealsOnScreen(html).filter((r) => r.teamId.startsWith(VICTIM));
+    expect(reveals).toHaveLength(3);
     // The reuse is visible as the statement describes it: same team, same
-    // generation, same commitment.
-    expect(rows[0]?.commitment).toBe(rows[1]?.commitment ?? "");
-    expect(publicYOnScreen(html, VICTIM)).toBeDefined();
+    // generation, same tag.
+    expect(new Set(reveals.map((r) => r.tag)).size).toBe(1);
+    expect(new Set(reveals.map((r) => r.generation))).toEqual(new Set(["1"]));
+    const puzzle = puzzleOnScreen(html, VICTIM);
+    expect(puzzle).toBeDefined();
+    expect(puzzle?.filter((v) => v !== 0)).toHaveLength(8);
   });
 
-  test("a reader with only the screen recovers the key, and the judge accepts it", () => {
+  test("a reader with only the screen recovers the solution, and the judge accepts it", () => {
     const state = stateAfterCarelessProofs();
     const html = renderParticipantScreen(state);
+    const reveals = revealsOnScreen(html).filter((r) => r.teamId.startsWith(VICTIM));
+    const puzzle = puzzleOnScreen(html, VICTIM);
+    if (!puzzle) throw new Error("expected the victim's puzzle on screen");
 
-    const rows = proofRowsOnScreen(html).filter((r) => r.teamId.startsWith(VICTIM));
-    const [first, second] = rows;
-    if (!first || !second) throw new Error("expected two proof rows on screen");
-    const publicY = publicYOnScreen(html, VICTIM);
-    if (!publicY) throw new Error("expected the victim's Y on screen");
+    // 1. Same tag -> same relabelled grid. Pool the opened cells.
+    const tag = reveals[0]?.tag;
+    const relabelled = new Array<number>(16).fill(0);
+    for (const reveal of reveals.filter((r) => r.tag === tag)) {
+      cellsOfGroup(reveal.groupLabel).forEach((cell, at) => {
+        relabelled[cell] = reveal.cells[at] ?? 0;
+      });
+    }
+    // 2. Where the puzzle shows a digit at an opened cell, that is one row of
+    //    the table: original digit -> relabelled digit.
+    const table = new Array<number>(4).fill(0);
+    puzzle.forEach((given, i) => {
+      if (given !== 0 && relabelled[i] !== 0) table[given - 1] = relabelled[i] ?? 0;
+    });
+    // A missing fourth row of the table is forced by the other three.
+    if (table.filter((v) => v !== 0).length === 3) {
+      const missingFrom = table.indexOf(0);
+      const missingTo = [1, 2, 3, 4].find((v) => !table.includes(v)) ?? 0;
+      table[missingFrom] = missingTo;
+    }
+    expect(table.filter((v) => v !== 0)).toHaveLength(4);
+    // 3. Undo the table on every opened cell, add the puzzle's givens, and
+    //    finish the grid by the sudoku rule.
+    const inverse = new Map(table.map((to, from) => [to, from + 1]));
+    const known = puzzle.map((given, i) => (given !== 0 ? given : inverse.get(relabelled[i] ?? 0) ?? 0));
+    const candidates = completions(known);
+    expect(candidates).toHaveLength(1);
+    const [solution] = candidates;
+    if (!solution) throw new Error("unreachable");
 
-    const group = PROVE_GROUP;
-    // key = (s1 - s2) / (e1 - e2), exactly as the statement gives it, from the
-    // two challenges the screen showed.
-    const gap = mod(BigInt(first.challenge) - BigInt(second.challenge), group.order);
-    expect(gap).not.toBe(0n);
-    const recovered = mod(
-      mod(BigInt(first.response) - BigInt(second.response), group.order) * inv(gap, group.order),
-      group.order,
-    );
-
-    // It really is the discrete log behind the Y that was on screen.
-    expect(groupPow(group.generator, recovered, group).toString()).toBe(publicY);
-
-    const op = {
-      kind: "hunt-nonce" as const,
-      targetTeamId: VICTIM,
-      generation: Number(first.generation),
-      recoveredWitness: recovered.toString(),
-    };
+    // 4. Submit. The judge holds the victim's real solution and agrees.
+    const op = { kind: "hunt-sudoku" as const, targetTeamId: VICTIM, generation: 1, solution };
     expect(validateOp(state, ATTACKER, op)).toEqual({ ok: true });
     const before = state.teams[ATTACKER]?.score ?? 0;
-    expect(applyOp(state, ATTACKER, op).teams[ATTACKER]?.score).toBe(
-      before + state.config.scores.huntBonus,
-    );
+    const after = applyOp(state, ATTACKER, op);
+    expect(after.teams[ATTACKER]?.score).toBe(before + state.config.scores.huntBonus);
+    expect(after.teams[VICTIM]?.sudokuHuntedGenerations).toEqual([1]);
+    // Never read until now, and only to confirm the screen was enough.
+    expect(solution).toEqual([...projectForTeam(state, VICTIM).vault.sudokuSolution]);
   });
 });

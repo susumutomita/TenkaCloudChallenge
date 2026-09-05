@@ -58,7 +58,7 @@ describe("the Order belt a participant actually sees", () => {
   test("every task kind appears", () => {
     const kinds = new Set<OrderTaskKind>(orders.map((o) => o.task.kind));
     expect(kinds).toEqual(
-      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "masked-total"]),
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total"]),
     );
   });
 
@@ -73,7 +73,7 @@ describe("the Order belt a participant actually sees", () => {
     // cycle or this would assert that a rotation is shorter than it is.
     const firstFive = orders.slice(0, 5).map((o) => o.task.kind);
     expect(new Set(firstFive)).toEqual(
-      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "masked-total"]),
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total"]),
     );
   });
 
@@ -125,12 +125,16 @@ describe("the Order belt a participant actually sees", () => {
    * anything.
    */
   test("constrained Orders exist: the rule leaves exactly one method", () => {
-    const constrained = orders.filter(
-      (o) => o.task.kind === "reveal-share" && o.privacyConstraint === "no-raw-disclosure",
-    );
+    // [Issue #709] The PROVE-only Order is the ZK sudoku Order now, with its
+    // own slot; a share Order always leaves the choice open.
+    const constrained = orders.filter((o) => o.task.kind === "zk-sudoku");
     expect(constrained.length).toBeGreaterThan(0);
     for (const order of constrained) {
+      expect(order.privacyConstraint).toBe("no-raw-disclosure");
       expect(order.allowedMethods).toEqual(["prove"]);
+    }
+    for (const share of orders.filter((o) => o.task.kind === "reveal-share")) {
+      expect(share.privacyConstraint).toBe("none");
     }
   });
 

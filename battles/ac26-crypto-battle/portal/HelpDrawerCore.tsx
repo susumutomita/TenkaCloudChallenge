@@ -42,62 +42,27 @@ const moveStyle = {
 const laneStyle = { margin: "0 0 6px 0", fontSize: "13px" } as const;
 
 /**
- * The `p = 0x...` line below MUST stay byte-for-byte equal to
- * `../game/src/group.ts`'s `MODP_2048_P` (RFC 3526 Group 14) -- copied from
- * that module's own hex chunks, not hand-transcribed from the RFC, and
- * cross-checked with `game/src/portal.test.ts`'s
- * "PROVE Python snippet's prime matches the real group constant" test
- * (`String(MODP_2048_P.toString(16)) === ` the hex this line embeds).
- * `derive` / `lp` / `fw` / the witness, nonce, and challenge construction
- * below are transcribed from `schnorr-witness.ts` / `schnorr-prover.ts` /
- * `schnorr-transcript.ts` and were run end-to-end (real Python, real
- * inputs) against `createProof` + `verifyProof` before shipping: identical
- * `commitment` / `response`, and the resulting proof verifies. This snippet
- * previously shipped with `p = <RFC 3526 Group 14 prime>`, a syntactically
- * invalid placeholder, despite "そのまま動く Python" / "runnable Python"
- * both promising otherwise -- this file's own claim was never executed
- * before this fix (part of the same onboarding-repair pass that fixed
- * `../game/src/types.ts`'s `matchRemainingMs` / `remainingMs` unit
- * mismatch -- see that file's doc comments).
+ * [Issue #709] PROVE is a hand relabelling now, so the "runnable" half of this
+ * snippet is HUNT's Lagrange interpolation, unchanged. The PROVE half is the
+ * relabelling written out as three lines -- shown so a reader who wants to
+ * check their sixteen cells against a program can, not because the move
+ * needs one: the whole point of the rebuild is that it does not.
+ * `game/src/portal.test.ts` executes the HUNT half against `shamir.ts`.
  */
-export const PYTHON_SNIPPET = String.raw`# PROVE -- two moves. Everything here is public except 'secret'.
+export const PYTHON_SNIPPET = String.raw`# PROVE -- relabel your sudoku solution. No code needed; this is the same
+# thing written for a machine so you can check your hand work.
+solution = [1, 2, 3, 4,           # <- MY VAULT's 16 cells, row by row
+            3, 4, 1, 2,
+            2, 1, 4, 3,
+            4, 3, 2, 1]
+table = {1: 3, 2: 1, 3: 4, 4: 2}  # <- YOUR choice. Never the same one twice.
+grid = [table[v] for v in solution]   # <- submit these 16 digits
 #
-# [Issue #701] The numbers are small on purpose: this is a teaching group, and
-# the point is that you can do every line of it on paper. p = 227 has no
-# security -- the real thing is the same arithmetic with a 617-digit p.
-p, q, g = 227, 113, 4          # p = 2q + 1, g generates the order-q subgroup
-import hashlib
-
-# --- Move 1: commit ---------------------------------------------------------
-# w is your witness, derived from your secret. Y = g^w is already published.
-w = int.from_bytes(hashlib.sha256(
-        f"{secret}|schnorr-witness:{team}|{generation}".encode()).digest(),
-        "big") % q
-Y = pow(g, w, p)
-r = int.from_bytes(hashlib.sha256(
-        f"{w}|schnorr-nonce:{team}:{contract}|{generation}".encode()).digest(),
-        "big") % q
-R = pow(g, r, p)               # <- submit this as the commitment
-#
-# By hand: r < 113, so pow(g, r, p) is at most 7 squarings. Square, take the
-# remainder mod 227, square again. The largest number you ever write down is
-# 226 * 226 = 51076.
-
-# --- Move 2: respond --------------------------------------------------------
-# The game answers your commitment with a challenge e. READ IT OFF THE ORDER.
-# You cannot compute it: it is bound to the match seed, which only the judge
-# holds. That is exactly what lets this group be small enough to work in.
-e = ...                        # <- the number the Order now shows
-s = (r + e * w) % q            # <- submit this as the response
-#
-# The judge checks g^s == R * Y^e (mod p). You can check it yourself from the
-# Public Ledger, which publishes R / e / s for every proof.
-
-# --- Never reuse r ----------------------------------------------------------
-# Two proofs under one R carry two different e. Subtract the two equations:
-#     w = (s1 - s2) / (e1 - e2)  mod q
-# ...and your witness is gone. That is what HUNT-by-nonce-reuse does, and the
-# Ledger shows every value it needs.
+# The judge holds your solution and checks grid == table(solution) for some
+# table. It then publishes ONE row, column or box of grid, with a tag naming
+# the table. One row of a relabelled grid is 1-4 in some order: it says
+# nothing. Two groups with the SAME tag are two pieces of one relabelled grid,
+# and a hunter lines them up against your public puzzle to recover the table.
 
 # HUNT -- Lagrange interpolation at x = 0
 P = 97                         # the match's field, from the Order's "p"
@@ -126,7 +91,7 @@ const COPY = {
       "You want points, and points come from finishing Orders. There are two ways to finish one.",
     whyRows: [
       { name: "LEAK", how: "Publish one piece as it is", cost: "Fast — but everyone can see the piece" },
-      { name: "PROVE", how: "Compute, and prove it without showing the piece", cost: "The piece stays safe — but it costs you a calculation" },
+      { name: "PROVE", how: "Relabel your sudoku solution by hand and hand that over — a proof that shows nothing", cost: "The piece stays safe — but it costs you the relabelling" },
     ],
     whyThen:
       "LEAK three times and an opponent holds three of your pieces. Three is enough to rebuild the secret. Which is why:",
@@ -149,7 +114,7 @@ const COPY = {
     goals: [
       { name: "Homomorphic encryption", body: "Compute on numbers you cannot read. That is the add-without-decrypting Order." },
       { name: "Secure computation (MPC)", body: "Everyone learns the total, nobody learns anyone's number. That is the masked-subtotal Order." },
-      { name: "Zero-knowledge proofs", body: "Prove you hold a secret without showing it. That is PROVE." },
+      { name: "Zero-knowledge proofs", body: "Prove you hold a solution without showing it. That is PROVE: relabel your sudoku, and the judge opens one row of the copy." },
     ],
     goalTail:
       "Older ciphers like Caesar show up too, but as the way in: meeting a breakable cipher first is what makes an unbreakable one worth something.",
@@ -159,7 +124,7 @@ const COPY = {
     lanes: [
       { name: "Contract Queue", body: "Orders addressed to your team right now. Each names what it asks for -- a share, an encrypted addition, or a masked subtotal -- and which methods it accepts. Miss the deadline and one expires unclaimed." },
       { name: "My Vault", body: "Your team's current secret, this generation's shares, and your ROTATE cooldown. Only your team sees this." },
-      { name: "Public Ledger", body: "Everything every team has ever published: LEAKed shares, PROVE transcripts, FHE answers and MPC subtotals -- in the open, forever. Each row names the method that produced it, the Order it answers, and the team's public value Y is listed below the table." },
+      { name: "Public Ledger", body: "Everything every team has ever published: LEAKed shares, opened sudoku groups from PROVE, FHE answers and MPC subtotals -- in the open, forever. Each row names the method that produced it and the Order it answers, and every team's public puzzle is listed below the table." },
     ],
     movesTitle: 'The moves (under "PROVE / LEAK / HUNT -- Submit a move" above)',
     moves: [
@@ -169,7 +134,7 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "Complete an open Contract by submitting a Schnorr proof of knowledge instead of a share -- built locally beforehand (this portal never builds it for you). Pays MORE than LEAKing the same Contract -- the calculation is what you are being paid for. Nothing that could reconstruct your secret goes public; only the proof transcript is recorded, for audit.",
+        body: "Complete an open Contract by handing over your 4x4 sudoku solution with every digit relabelled through a table you chose (1->3, 2->1, ...), done on paper -- this portal never relabels it for you. Pays MORE than LEAKing the same Contract; the relabelling is what you are being paid for. The judge checks the whole grid and publishes ONE row, column or box of your relabelled copy with a tag naming the table. One opened group is 1-4 in some order and tells nobody anything. Two opened groups under the SAME table do: never reuse a table on one generation -- MY VAULT lists the ones you have spent.",
       },
       {
         name: "CIPHER",
@@ -185,7 +150,7 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores. A wrong guess is not free: it costs you points, and it spends one of the small number of attempts you get against each team per generation -- the price and the attempts you have left are printed on the HUNT card before you submit. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing. A second kind of HUNT exists for a team that reused a proof nonce: two of their proof rows in one generation sharing a commitment let you solve for their key. Correctly built proofs never produce that -- misuse is what this punishes, not correct use.",
+        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores. A wrong guess is not free: it costs you points, and it spends one of the small number of attempts you get against each team per generation -- the price and the attempts you have left are printed on the HUNT card before you submit. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing. A second kind of HUNT exists for a team that reused a relabelling: two of their opened sudoku groups in one generation with the same tag are pieces of one relabelled grid, and lining them up against that team's public puzzle recovers the table and then the solution. A team that picks a fresh table every time never produces that -- misuse is what this punishes, not correct use.",
       },
       {
         name: "ROTATE",
@@ -194,15 +159,15 @@ const COPY = {
     ],
     prereqTitle: "Before you start",
     prereq: [
-      "PROVE is the Schnorr proof ac26-w3-schnorr builds, run INTERACTIVELY and in a group small enough to work in on paper: you post a commitment, the game answers with a challenge you could not have predicted, and you respond. Do that one first and the arithmetic here is the same, at three digits instead of six hundred.",
+      "PROVE is the ZK sudoku from the lecture, at 4x4: relabel the digits of your solution and hand over the copy; the judge opens one row of it. No arithmetic at all -- a table of four entries applied to sixteen cells.",
       "HUNT is Shamir reconstruction, the same one ac26-w2-secret-sharing builds. Do that one first and HUNT here is one Lagrange evaluation.",
     ],
-    computeTitle: "Computing PROVE and HUNT yourself",
+    computeTitle: "Doing PROVE and HUNT yourself",
     computeIntro:
-      "This portal never computes a proof or a reconstruction for you -- doing it yourself is the real cost of each move. The group is p = 227, chosen so that every exponentiation is at most seven squarings of three-digit numbers: this is a teaching size with no security, and the real thing is the same arithmetic with a 617-digit modulus (group.ts still carries it). Any language works, and so does paper; this is Python for concreteness.",
+      "This portal never relabels a grid or reconstructs a secret for you -- doing it yourself is the real cost of each move. PROVE needs no code: a four-entry table applied to sixteen cells. HUNT is Lagrange interpolation at p = 97, three shares. Any language works, and so does paper; this is Python for concreteness.",
     computeCode: PYTHON_SNIPPET,
     computeNote:
-      "The challenge is the one number you cannot compute: it is bound to the match seed, which only the judge holds, so you read it off your Order after committing. That is what makes a group this small sound -- a prover who could evaluate the challenge would simply try challenges until one suited them.",
+      "Which row, column or box the judge opens after a PROVE is decided by the Order, not by you, so relabel the whole grid rather than the four cells you hope will be read. The real ZK sudoku commits every cell first and opens one group per challenge; here the judge holds your solution and does that check in one step.",
     scoringTitle: "Scoring, in short",
     scoring: [
       "Every method pays what the Order states -- LEAK, PROVE, FHE and MPC alike. No technique is worth extra just for being the harder path.",
@@ -231,7 +196,7 @@ const COPY = {
       "点が欲しい。でも点を取るには仕事 (ORDER) をこなす必要がある。そこで 2 通りのやり方があります。",
     whyRows: [
       { name: "LEAK", how: "かけらを 1 個そのまま公開して提出", cost: "速い。でも公開したかけらが相手に見える" },
-      { name: "PROVE", how: "計算して、かけらを見せずに証明", cost: "かけらは安全。でも計算が要る" },
+      { name: "PROVE", how: "数独の解の数字を手で付け替えて出す ── 何も見せない証明", cost: "かけらは安全。でも付け替えの手間が要る" },
     ],
     whyThen:
       "そして LEAK を 3 回やると、相手はあなたのかけらを 3 個手に入れます。3 個そろえば秘密が復元できる。そうなると:",
@@ -263,7 +228,7 @@ const COPY = {
     goals: [
       { name: "準同型暗号", body: "中身を読めないまま計算する。暗号文のまま足す ORDER がこれです。" },
       { name: "秘密計算 (MPC)", body: "全員の合計だけを知り、誰の数も知らない。覆面つき小計の ORDER がこれです。" },
-      { name: "ゼロ知識証明", body: "秘密を見せずに「持っている」ことだけ証明する。PROVE がこれです。" },
+      { name: "ゼロ知識証明", body: "解を見せずに「持っている」ことだけ証明する。PROVE がこれです。数独を付け替えて出すと、審判が写しの 1 行だけ開きます。" },
     ],
     goalTail:
       "シーザー暗号のような古い暗号も出てきますが、それは入口です。「破れる暗号」を先に体験しておくと、破れない暗号のありがたみが分かります。",
@@ -273,7 +238,7 @@ const COPY = {
     lanes: [
       { name: "Contract Queue", body: "今まさに自チーム宛に届いている依頼です。何を求められているか（share / 暗号文のまま足す / 覆面つき小計）と、使える方法がそれぞれ書いてあります。期限内に応じないと失効します。" },
       { name: "My Vault", body: "自チームの現行 secret、この世代の share、ROTATE クールダウンです。自チームにのみ表示されます。" },
-      { name: "Public Ledger", body: "全チームがこれまでに公開したすべて — LEAK した share、PROVE の記録、FHE の答え、MPC の小計 — の永久に残る履歴です。各行にはどの方法で作られたか、どの依頼への応答かが並び、表の下には各チームの公開値 Y があります。" },
+      { name: "Public Ledger", body: "全チームがこれまでに公開したすべて — LEAK した share、PROVE で開かれた数独のグループ、FHE の答え、MPC の小計 — の永久に残る履歴です。各行にはどの方法で作られたか、どの依頼への応答かが並び、表の下には各チームの公開問題があります。" },
     ],
     movesTitle: "操作 (上の「PROVE / LEAK / HUNT — 操作を送信」の中)",
     moves: [
@@ -283,7 +248,7 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "share の代わりに Schnorr 知識証明を提出して Contract を完了します。proof は事前にローカルで作成してください (この portal は代わりに作成しません)。同じ Contract を LEAK した場合よりも高い得点です。secret を復元できる情報は一切公開されず、監査用に proof transcript のみが記録されます。",
+        body: "4×4 の数独の解を、自分で決めた表 (1→3、2→1、…) で全マス付け替えたものを出して Contract を完了します。付け替えは紙で行います (この portal は代わりに付け替えません)。同じ Contract を LEAK した場合よりも高い得点で、付け替えの手間に払われる点です。審判はマス目全体を検査し、付け替えた写しの 1 行・1 列・1 箱だけを、表を名指すタグ付きで公開します。1 グループだけなら 1〜4 の並び替えにすぎず、誰にも何も分かりません。同じ表で 2 グループ開くと分かります。同じ世代で表を使い回さないでください。使った表は MY VAULT に並びます。",
       },
       {
         name: "CIPHER",
@@ -299,7 +264,7 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。外した HUNT はタダではありません。減点され、相手チームの世代ごとに決まっている少ない回数の持ち分を 1 回使います。減点の値と残り回数は、提出する前に HUNT カードに表示されます。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。もう 1 種類の HUNT として、proof の nonce を使い回した相手を突く方法があります。同じ世代の proof 2 行が同じ commitment を持っていれば、そこから相手の鍵が解けます。正しく作られた proof では起こらないので、これが罰するのは誤用であって正しい利用ではありません。",
+        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。外した HUNT はタダではありません。減点され、相手チームの世代ごとに決まっている少ない回数の持ち分を 1 回使います。減点の値と残り回数は、提出する前に HUNT カードに表示されます。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。もう 1 種類の HUNT として、付け替えを使い回した相手を突く方法があります。同じ世代で同じタグの数独グループが 2 つあれば、それは 1 つの付け替えた写しの断片なので、そのチームの公開問題と突き合わせて表を割り、解を出せます。毎回新しい表を選ぶチームでは起こらないので、これが罰するのは誤用であって正しい利用ではありません。",
       },
       {
         name: "ROTATE",
@@ -308,15 +273,15 @@ const COPY = {
     ],
     prereqTitle: "始める前に",
     prereq: [
-      "PROVE は ac26-w3-schnorr と同じ Schnorr 証明を、対話型で、紙で回せる大きさの群で行います。コミットを出す → ゲームが予測不能なチャレンジを返す → 答える、の 3 手です。あちらを先にやれば計算は同じで、桁が 617 桁から 3 桁になるだけです。",
+      "PROVE は講義の ZK 数独を 4×4 にしたものです。解の数字を付け替えて写しを出すと、審判が写しの 1 行だけ開きます。計算はありません。4 つの対応表を 16 マスに当てるだけです。",
       "HUNT は ac26-w2-secret-sharing が組み立てるのと同じ Shamir 復元です。あちらを先にやれば HUNT は Lagrange の 1 回評価です。",
     ],
-    computeTitle: "PROVE と HUNT を自分で計算する",
+    computeTitle: "PROVE と HUNT を自分でやる",
     computeIntro:
-      "このポータルが代わりに proof や復元を計算することはありません — 自分で計算すること自体が各操作の本来のコストだからです。群は p = 227 です。べき乗は 3 桁の数の 2 乗を最大 7 回するだけになるよう選んであります。これは教材用の大きさで安全性はありません。本物は同じ計算を 617 桁の法で行うもので、group.ts に今も置いてあります。言語は問いませんし、紙でも解けます。具体性のため Python で書いています。",
+      "このポータルが代わりにマス目を付け替えたり secret を復元したりすることはありません — 自分でやること自体が各操作の本来のコストだからです。PROVE にプログラムは要りません。4 つの対応表を 16 マスに当てるだけです。HUNT は p = 97 での Lagrange 補間で、かけら 3 枚から求めます。言語は問いませんし、紙でも解けます。具体性のため Python で書いています。",
     computeCode: PYTHON_SNIPPET,
     computeNote:
-      "チャレンジだけは自分で計算できません。試合の seed に紐づいていて、それを持っているのは審判だけだからです。コミットを出したあと、自分の Order に表示された数を読んでください。群をここまで小さくしても成立するのはこの一点のおかげで、チャレンジを自分で計算できる相手なら、都合のよいチャレンジが出るまで試すだけで通せてしまいます。",
+      "PROVE のあとどの行・列・箱が開かれるかは Order が決め、あなたは選べません。だから読まれそうな 4 マスではなく、16 マス全部を付け替えてください。本物の ZK 数独は全マスを先に封じてから質問ごとに 1 グループ開きますが、ここでは審判があなたの解を持っているので、その検査を 1 手で済ませています。",
     scoringTitle: "スコアリング、要点だけ",
     scoring: [
       "どの方法でも、その依頼に書かれた得点がそのまま入ります — LEAK / PROVE / FHE / MPC のいずれも同じです。難しい方法だからといって多く得点することはありません。",

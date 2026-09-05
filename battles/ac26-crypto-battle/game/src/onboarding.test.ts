@@ -20,7 +20,7 @@ import {
   TUTORIAL_LAGRANGE_COEFFICIENTS,
   TUTORIAL_OPPONENT_SHARES,
   TUTORIAL_PRIME,
-  TUTORIAL_TOY_SCHNORR,
+  TUTORIAL_TOY_SUDOKU,
   TUTORIAL_WORKED_EXAMPLE,
 } from "../../portal/TutorialWalkthrough.tsx";
 import { DEFAULT_CONFIG } from "./reducer.ts";
@@ -49,6 +49,9 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
       rotateCooldownRemainingMs: 0,
       completedContractIds: [],
       huntedGenerations: [],
+      sudokuSolution: [1, 2, 3, 4, 3, 4, 1, 2, 2, 1, 4, 3, 4, 3, 2, 1],
+      usedPermutations: [],
+      sudokuHuntedGenerations: [],
     },
     myContracts: [
       {
@@ -105,9 +108,14 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
       blue: { teamId: "blue", teamName: "blue", score: 0, generation: 1, huntedGenerationCount: 0 },
       red: { teamId: "red", teamName: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
     },
-    publicCommitments: { blue: "1", red: "2" },
+    publicPuzzles: {
+      blue: [1, 0, 0, 4, 0, 4, 1, 0, 2, 0, 0, 3, 0, 3, 2, 0],
+      red: [0, 3, 1, 0, 1, 0, 0, 3, 0, 2, 4, 0, 4, 0, 0, 2],
+    },
     huntAttempts: { red: { generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    sudokuHuntAttempts: { red: { generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
     wrongHuntCost: DEFAULT_CONFIG.scores.wrongHunt,
+    wrongProveCost: DEFAULT_CONFIG.scores.wrongProve,
     ...overrides,
   };
 }
@@ -253,26 +261,20 @@ describe("Issue #643 hand-calculable tutorial HUNT", () => {
   });
 
   /**
-   * The paper-sized Schnorr has to actually verify, or the optional PROVE
+   * [Issue #709] The paper-sized PROVE has to actually relabel, or the optional
    * detour teaches a worked example that does not work.
    */
-  it("ships a toy Schnorr whose verification equation holds", () => {
-    const { p, q, g, w, r, e, publicValue, commitment, response, verifies } = TUTORIAL_TOY_SCHNORR;
-    const modPow = (base: number, exponent: number, prime: number): number => {
-      let result = 1;
-      let factor = base % prime;
-      for (let remaining = exponent; remaining > 0; remaining = Math.floor(remaining / 2)) {
-        if (remaining % 2 === 1) result = (result * factor) % prime;
-        factor = (factor * factor) % prime;
-      }
-      return result;
-    };
-    expect(modPow(g, q, p)).toBe(1); // g really generates the order-q subgroup
-    expect(modPow(g, w, p)).toBe(publicValue);
-    expect(modPow(g, r, p)).toBe(commitment);
-    expect((r + e * w) % q).toBe(response);
-    expect(modPow(g, response, p)).toBe(verifies);
-    expect((commitment * modPow(publicValue, e, p)) % p).toBe(verifies);
+  it("ships a toy sudoku whose relabelling and opened row are what the judge would produce", async () => {
+    const { applyPermutation, isValidSolution, permutationBetween, CONSTRAINT_GROUPS } = await import("./sudoku.ts");
+    const { solution, table, relabelled, openedRow, opened } = TUTORIAL_TOY_SUDOKU;
+    expect(isValidSolution(solution)).toBe(true);
+    expect(applyPermutation(solution, table)).toEqual([...relabelled]);
+    expect(isValidSolution(relabelled)).toBe(true);
+    expect(permutationBetween(solution, relabelled)).toEqual([...table]);
+    const row = CONSTRAINT_GROUPS[openedRow] ?? [];
+    expect(row.map((i) => relabelled[i])).toEqual([...opened]);
+    // The opened row is a permutation of 1..4 -- it says nothing on its own.
+    expect([...opened].sort()).toEqual([1, 2, 3, 4]);
   });
 
   for (const locale of ["ja", "en"] as const) {
@@ -283,8 +285,8 @@ describe("Issue #643 hand-calculable tutorial HUNT", () => {
       expect(html).toContain(tutorialTitle);
       expect(html).toContain("<details");
       expect(html.indexOf(tutorialTitle)).toBeLessThan(html.indexOf(fullReference));
-      // [Issue #701] The snippet's group is the hand-sized one now.
-      expect(html).toContain("p, q, g = 227, 113, 4");
+      // [Issue #709] The snippet opens with the relabelling table.
+      expect(html).toContain("table = {1: 3, 2: 1, 3: 4, 4: 2}");
     });
   }
 });

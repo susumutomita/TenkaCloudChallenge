@@ -342,3 +342,77 @@ describe("an Order from between #645 and #659 still gets its leak rate", () => {
     expect(score).toBe(DEFAULT_CONFIG.scores.contractLeak);
   });
 });
+
+/**
+ * [Issue #709] A row written while PROVE was still a Schnorr exchange.
+ *
+ * Such a row has `publicCommitments` and no `publicPuzzles`, may carry a
+ * `proof` entry on its ledger, and its Orders may still hold a
+ * `proveCommitment` / `proveChallenge` pair. None of that may take the match
+ * down: the puzzle is derivable from what the row already holds, the legacy
+ * ledger entry decodes and renders, and the stale Order fields are simply
+ * ignored.
+ */
+describe("a match persisted before the sudoku PROVE still loads", () => {
+  function preSudokuState(): CryptoBattleState {
+    let state = tick(startedMatch(CTX), 0);
+    state = tick(state, DEFAULT_CONFIG.contractIntervalMs);
+    const { publicPuzzles: _dropped, ...rest } = state;
+    const legacy = {
+      ...rest,
+      publicCommitments: { teamA: "123", teamB: "456" },
+      teams: Object.fromEntries(
+        Object.entries(state.teams).map(([id, team]) => {
+          const { sudokuHuntedGenerations: _gone, ...older } = team;
+          return [id, older];
+        }),
+      ),
+      contracts: state.contracts.map((c) => ({ ...c, proveCommitment: "9", proveChallenge: "11" })),
+      publicLedger: [
+        ...state.publicLedger,
+        { k: "proof", tm: "teamB", c: "teamB-c1", g: 1, m: "prove", t: 1, o: "9", e: "11", z: "13" },
+      ],
+    } as unknown as CryptoBattleState;
+    return legacy;
+  }
+
+  test("every team's puzzle is backfilled from the seed, and matches its vault", () => {
+    const state = preSudokuState();
+    for (const teamId of CTX.teamIds) {
+      const view = projectForTeam(state, teamId);
+      const puzzle = view.publicPuzzles[teamId];
+      if (!puzzle) throw new Error(`expected a puzzle for ${teamId}`);
+      expect(puzzle.filter((v) => v !== 0)).toHaveLength(8);
+      puzzle.forEach((v, i) => {
+        if (v !== 0) expect(view.vault.sudokuSolution[i]).toBe(v);
+      });
+      expect(view.vault.sudokuHuntedGenerations).toEqual([]);
+    }
+  });
+
+  test("a legacy proof row still decodes, and the new PROVE works beside it", () => {
+    const state = preSudokuState();
+    const view = projectForTeam(state, "teamA");
+    expect(view.publicLedger.some((a) => a.kind === "proof")).toBe(true);
+    const order = state.contracts.find(
+      (c) => c.teamId === "teamA" && c.status === "open" && c.allowedMethods.includes("prove"),
+    );
+    if (!order) throw new Error("expected a PROVE-able order");
+    const op = {
+      kind: "prove-sudoku" as const,
+      contractId: order.id,
+      grid: view.vault.sudokuSolution.map((v) => [2, 3, 4, 1][v - 1] ?? 0),
+    };
+    expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
+    const next = applyOp(state, "teamA", op);
+    expect(next.contracts.find((c) => c.id === order.id)?.resolution).toBe("prove");
+    expect(next.publicLedger.at(-1)?.k).toBe("sudoku-reveal");
+  });
+
+  test("the backfilled puzzle is written back, so the migration is not redone forever", () => {
+    const state = preSudokuState();
+    const next = tick(state, 2 * DEFAULT_CONFIG.contractIntervalMs);
+    expect(next.publicPuzzles).toBeDefined();
+    expect(Object.keys(next.publicPuzzles ?? {}).sort()).toEqual([...CTX.teamIds].sort());
+  });
+});

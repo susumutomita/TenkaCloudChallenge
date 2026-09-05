@@ -10,7 +10,7 @@
  *      entry needing the `d` escape hatch.
  *   3. `migrateState` lifts a v1 state to v2 without losing any ledger
  *      content, and `decodeLedger` recovers it.
- *   4. HUNT still works -- covered by the existing suite (nonce-reuse.test.ts,
+ *   4. HUNT still works -- covered by the existing suite (pi-reuse.test.ts,
  *      reducer.test.ts's "hunt" describe block), not re-derived here.
  *   5. `state-size.test.ts` passes with re-measured numbers -- that file's own
  *      concern, not this one's.
@@ -26,7 +26,7 @@ import {
   type StoredArtifact,
 } from "./ledger-codec.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildFheOp, buildLeakOp, buildMpcOp, proveThroughExchange, startedMatch } from "./playtest.ts";
+import { buildFheOp, buildLeakOp, buildMpcOp, buildProveSudokuOp, startedMatch } from "./playtest.ts";
 import type { CryptoBattleOp, CryptoBattleState, PublicArtifact } from "./types.ts";
 
 // ---------------------------------------------------------------------------
@@ -67,6 +67,20 @@ const FIXTURES: readonly PublicArtifact[] = [
     commitment: "987654321098765432109876543210",
     response: "112233445566778899001122334455",
     postedAtMs: 3000,
+  },
+  {
+    // [Issue #709] The PROVE artifact the sudoku Order writes today; "proof"
+    // above is what a match persisted before #709 still holds.
+    id: "contract-6-sudoku",
+    teamId: "teamB",
+    generation: 2,
+    kind: "sudoku-reveal",
+    method: "prove",
+    contractId: "contract-6",
+    group: 5,
+    cells: [3, 1, 4, 2],
+    tag: "a1b2c3d4e5f6",
+    postedAtMs: 3500,
   },
   {
     id: "contract-4-ciphertext",
@@ -125,13 +139,14 @@ describe("ledger-codec: round trip (test 1)", () => {
 
 // ---------------------------------------------------------------------------
 // Test 2: id derivation matches what the REAL reducer constructs, at scale,
-// across all 5 kinds, with no entry needing the `d` escape hatch.
+// across all 5 reducer-written kinds, with no entry needing the `d` escape hatch.
 // ---------------------------------------------------------------------------
 
 /**
- * Plays a small match exercising all 5 `PublicArtifact` kinds through the
- * REAL reducer (leak-on-share -> "share", leak-on-ladder -> "cipher-pair",
- * prove -> "proof", fhe -> "ciphertext", mpc -> "partial"), the same way
+ * Plays a small match exercising all 5 reducer-written `PublicArtifact` kinds
+ * through the REAL reducer (leak-on-share -> "share", leak-on-ladder ->
+ * "cipher-pair", prove -> "sudoku-reveal", fhe -> "ciphertext", mpc ->
+ * "partial"; the legacy "proof" kind is decode-only since #709), the same way
  * `adversarial.test.ts`'s "adversarial 9" plays a multi-method match, but
  * covering LEAK on both Order shapes (share and ladder) so "cipher-pair"
  * appears too, which that test does not need.
@@ -151,20 +166,13 @@ function playMultiMethodMatch(teamCount: number, rounds: number): CryptoBattleSt
       for (const order of projectForTeam(state, teamId).myContracts) {
         if (order.status !== "open") continue;
         let op: CryptoBattleOp | undefined;
-        if (order.task.kind === "reveal-share" || order.task.kind === "caesar-shift") {
-          // Alternate LEAK/PROVE by team parity so both "share" and "proof"
-          // (and, via the ladder Order, "cipher-pair") land on the ledger,
-          // rather than every team converging on the same method.
-          const teamIndex = Number(teamId.split("-")[1] ?? 0);
-          if (
-            order.task.kind !== "caesar-shift" &&
-            teamIndex % 2 !== 0 &&
-            order.allowedMethods.includes("prove")
-          ) {
-            // [Issue #701] Two moves, so it cannot ride the single-op path.
-            state = proveThroughExchange(state, teamId, order.id).state;
-            continue;
-          }
+        if (order.task.kind === "zk-sudoku") {
+          // [Issue #709] PROVE is its own Order now, so "sudoku-reveal" lands
+          // without any team having to choose PROVE over LEAK on a share Order.
+          op = buildProveSudokuOp(projectForTeam(state, teamId).vault, order.id);
+        } else if (order.task.kind === "reveal-share" || order.task.kind === "caesar-shift") {
+          // LEAK on both Order shapes so "share" and, via the ladder Order,
+          // "cipher-pair" land on the ledger.
           op = buildLeakOp(order.id);
         } else if (order.task.kind === "homomorphic-sum") {
           op = buildFheOp(order, state.config.prime);
@@ -190,6 +198,8 @@ function expectedIdFor(artifact: PublicArtifact): string {
       return `${artifact.contractId}-pair`;
     case "proof":
       return `${artifact.contractId}-proof`;
+    case "sudoku-reveal":
+      return `${artifact.contractId}-sudoku`;
     case "ciphertext":
       return `${artifact.contractId}-ciphertext`;
     case "partial":
@@ -198,10 +208,10 @@ function expectedIdFor(artifact: PublicArtifact): string {
 }
 
 describe("ledger-codec: id derivation matches real reducer-constructed data (test 2)", () => {
-  test("a small multi-method match reaches all 5 PublicArtifact kinds, and none of them needed the `d` escape hatch", () => {
+  test("a small multi-method match reaches all 5 reducer-written PublicArtifact kinds, and none of them needed the `d` escape hatch", () => {
     const state = playMultiMethodMatch(6, 10);
     const kindsSeen = new Set(state.publicLedger.map((a) => a.k));
-    expect(kindsSeen).toEqual(new Set(["share", "cipher-pair", "proof", "ciphertext", "partial"]));
+    expect(kindsSeen).toEqual(new Set(["share", "cipher-pair", "sudoku-reveal", "ciphertext", "partial"]));
     expect(state.publicLedger.length).toBeGreaterThan(20);
 
     // `encodeArtifact` (called by reducer.ts on every write) already compared

@@ -62,6 +62,7 @@ and what you do with the time left over -- that is the game.
 | What the card asks for | What you do |
 | --- | --- |
 | reveal a share | choose LEAK or PROVE |
+| show it without showing it | PROVE: relabel your sudoku solution with an unused table and open the line asked for |
 | encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
 | encrypted addition | add both pairs component by component, remainder p |
 | masked subtotal | compute my number + received masks - sent masks, remainder p |
@@ -73,11 +74,11 @@ Every card shows its deadline, points, task, and accepted methods. A method abse
 | Move | Meaning |
 | --- | --- |
 | LEAK | let the system answer the ORDER. What becomes public depends on the ORDER |
-| PROVE | complete it with a Schnorr proof and publish no share |
+| PROVE | rewrite your 4x4 sudoku solution with a fresh digit-relabelling table and open one line; no share is published |
 | CIPHER | encrypt the symbols with your key and submit. Nothing is published |
 | FHE | add ciphertexts without decrypting |
 | MPC | submit one subtotal while each office's input stays private |
-| HUNT | submit a secret, a reused-nonce key, or a cipher key recovered from public records |
+| HUNT | submit a secret, a sudoku solution recovered from a reused relabelling, or a cipher key recovered from public records |
 | ROTATE | replace your secret and shares with a fresh generation |
 | HINT | open the next step of the selected ORDER's hint ladder. Nothing is published |
 
@@ -118,7 +119,7 @@ is something you can read off the board.
 ROTATE moves your key to a new generation too, and every pair published before it
 stops being worth anything.
 
-The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE matches `ac26-w3-schnorr`; share reconstruction matches `ac26-w2-secret-sharing`.
+The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE is the 4x4 sudoku relabelling the drawer walks through by hand; share reconstruction matches `ac26-w2-secret-sharing`.
 
 ## Reading the screen
 
@@ -129,7 +130,7 @@ The complete Portal reference contains the formulas, constants, and runnable Pyt
 5. **Next tactic from the public record** — opens only when material exists
 6. **Practice and help** — open only when needed
 
-HUNT, reused-nonce HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
+HUNT, reused-relabelling HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
 
 ## Data boundary
 

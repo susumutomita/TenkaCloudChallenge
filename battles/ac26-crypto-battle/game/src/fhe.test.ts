@@ -9,6 +9,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { allowedMethodsFor } from "./methods.ts";
 import {
   addCiphertexts,
   decrypt,
@@ -451,18 +452,28 @@ describe("the FHE Order's trust boundary", () => {
   test("a method the rule forbids is still refused as a privacy violation", () => {
     const { state } = orderWithTask("homomorphic-sum");
     let current = state;
-    let strictShare: Contract | undefined;
-    for (let round = 0; round < 20 && !strictShare; round += 1) {
-      strictShare = current.contracts.find(
-        (c) =>
-          c.teamId === "teamA" &&
-          c.status === "open" &&
-          c.task.kind === "reveal-share" &&
-          c.privacyConstraint === "no-raw-disclosure",
+    let openShare: Contract | undefined;
+    for (let round = 0; round < 20 && !openShare; round += 1) {
+      openShare = current.contracts.find(
+        (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share",
       );
-      if (!strictShare) current = tick(current, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+      if (!openShare) current = tick(current, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
     }
-    if (!strictShare) throw new Error("expected an open PROVE-only share order");
+    if (!openShare) throw new Error("expected an open share order");
+    // [Issue #709] The belt no longer issues a PROVE-only share Order (the ZK
+    // sudoku Order took that slot, and LEAK cannot serve it at all -- which is
+    // the OTHER refusal, tested above). The rule is still live code, so give a
+    // share Order the rule by hand: LEAK can do the job, and only the rule
+    // stands in its way.
+    const strictShare: Contract = {
+      ...openShare,
+      privacyConstraint: "no-raw-disclosure",
+      allowedMethods: allowedMethodsFor("reveal-share", "no-raw-disclosure"),
+    };
+    current = {
+      ...current,
+      contracts: current.contracts.map((c) => (c.id === openShare?.id ? strictShare : c)),
+    };
 
     const verdict = validateOp(current, "teamA", { kind: "leak", contractId: strictShare.id });
     expect(verdict.ok).toBe(false);

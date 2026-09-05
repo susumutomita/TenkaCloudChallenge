@@ -2,12 +2,14 @@ import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
 import { DIE_CSS, DieRow } from "./DieFace.tsx";
+import { describeRevealGroup, SudokuBoard, SUDOKU_CSS } from "./SudokuGrid.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
   CryptoBattleProjection,
   PublicArtifact,
   ShareArtifact,
+  SudokuRevealArtifact,
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
@@ -43,6 +45,10 @@ const COPY = {
     nextUp: "DUE FIRST",
     vaultOpen: "show shares",
     phase: "PHASE",
+    solution: "MY SOLUTION",
+    solutionHint: "Only you see this. PROVE relabels it; never send it as it is.",
+    puzzle: "PUZZLE",
+    tag: "relabelling",
   },
   ja: {
     title: "LIVE MATCH",
@@ -74,6 +80,10 @@ const COPY = {
     nextUp: "締切が最短",
     vaultOpen: "かけらを見る",
     phase: "フェーズ",
+    solution: "自分の解",
+    solutionHint: "自分だけに見えます。PROVE は数字を付け替えて出すもので、このまま出してはいけません。",
+    puzzle: "問題",
+    tag: "付け替え",
   },
 } as const;
 
@@ -106,6 +116,13 @@ interface LedgerGroup {
    * about the team that posted it.
    */
   pairs: CipherPairArtifact[];
+  /**
+   * [Issue #709] Opened sudoku groups. Neither exposure nor mere protection:
+   * a single reveal gives nothing away, and two under one tag give a
+   * relabelling away. They are shown in full -- group, digits, tag -- because
+   * spotting the matching tags is the reading the HUNT asks for.
+   */
+  reveals: SudokuRevealArtifact[];
   /**
    * [Issue #645] Counted per artifact kind, not lumped into one "proof" bucket.
    * Before FHE and MPC existed, everything that was not a leaked share WAS a
@@ -146,10 +163,12 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
         generation: entry.generation,
         shares: [],
         pairs: [],
+        reveals: [],
         protected: new Map(),
       };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
     else if (entry.kind === "cipher-pair") current.pairs.push(entry);
+    else if (entry.kind === "sudoku-reveal") current.reveals.push(entry);
     else current.protected.set(entry.kind, (current.protected.get(entry.kind) ?? 0) + 1);
     groups.set(key, current);
   }
@@ -175,6 +194,9 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
       // A share reaches this grouping only when a method other than LEAK posted
       // one, which no method does today.
       return "SHARE";
+    case "sudoku-reveal":
+      // Unreachable: reveals are grouped and drawn in full above.
+      return "SUDOKU";
     default: {
       const exhaustive: never = kind;
       throw new Error(`protectedLabel: unknown kind ${JSON.stringify(exhaustive)}`);
@@ -341,6 +363,16 @@ export function Vault({ projection, locale }: { readonly projection: CryptoBattl
             </details>
           ))}
         </div>
+        {/*
+          [Issue #709] The sudoku solution, beside the shares. It is the thing
+          PROVE relabels, and it is private in exactly the way the shares are:
+          this team's projection carries it, nobody else's does.
+        */}
+        <div className="tc-vault-solution">
+          <div className="tc-section-label">{copy.solution}</div>
+          <SudokuBoard cells={projection.vault.sudokuSolution} label="my-solution" />
+          <div className="tc-scoreline-hint">{copy.solutionHint}</div>
+        </div>
       </details>
     </section>
   );
@@ -401,10 +433,36 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                     </div>
                   </details>
                 ))}
+                {/*
+                  [Issue #709] An opened group, in full: which group, its
+                  four digits, and the tag naming the relabelling. Two rows
+                  from one team with one tag are the reuse a hunter looks
+                  for, so the tags have to be readable side by side -- and a
+                  board that summarised these as "PROOF ×2" would hide the
+                  one thing about them that matters.
+                */}
+                {group.reveals.map((reveal) => (
+                  <div className={`tc-proof-card tc-reveal-card${reveal.id === lastId ? " tc-new-public" : ""}`} key={reveal.id}>
+                    {describeRevealGroup(reveal.group, locale)} <code>{reveal.cells.join(" ")}</code>{" "}
+                    <span className="tc-reveal-tag" title={copy.tag}>{reveal.tag}</span>
+                  </div>
+                ))}
                 {[...group.protected.entries()].map(([kind, count]) => (
                   <div className="tc-proof-card" key={kind}>{protectedLabel(kind)} ×{count}</div>
                 ))}
               </div>
+              {/*
+                [Issue #709] Every team's public puzzle, on its ledger card:
+                the eight cells a hunter lines a reused relabelling up
+                against. Public by construction, and shown for every team
+                including the reader's own, so no team is singled out.
+              */}
+              {projection.publicPuzzles[group.teamId] ? (
+                <div className="tc-ledger-puzzle">
+                  <span className="tc-sudoku-caption">{copy.puzzle}</span>
+                  <SudokuBoard cells={projection.publicPuzzles[group.teamId] ?? []} size={18} label={`puzzle-${group.teamId}`} />
+                </div>
+              ) : null}
             </article>
           ))}
         </div>
@@ -415,6 +473,11 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
 
 export const BOARD_CSS = `
 ${DIE_CSS}
+${SUDOKU_CSS}
+.tc-vault-solution{margin-top:10px;display:grid;gap:4px;justify-items:start}
+.tc-reveal-card{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tc-reveal-tag{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;border:1px solid #cfd8e3;border-radius:6px;padding:1px 5px;background:#fff;font-weight:600}
+.tc-ledger-puzzle{margin-top:8px;display:grid;gap:3px;justify-items:start}
 
 /* [Issue #659] The board paints its own light surfaces, so it has to state its
    own text colour too. Without this it inherits the text colour from whatever
