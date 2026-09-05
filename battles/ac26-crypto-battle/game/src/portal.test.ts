@@ -36,6 +36,7 @@ import HelpDrawer, { PYTHON_SNIPPET } from "../../portal/HelpDrawer.tsx";
 import RegistrationPanel, {
   COPY as REGISTRATION_COPY,
   describeOutcome,
+  describeProveOutcome,
   submitHunt,
   submitHuntSudoku,
   submitLeak,
@@ -1914,4 +1915,26 @@ describe("the sudoku side of the vault reaches the participant [Issue #709 revie
     // The fixture's own vault (one table used, nothing hunted) still does not open it.
     expect(tacticAvailability(fixtureProjection({ publicLedger: [] })).rotate).toBe(false);
   });
+});
+
+describe("the manual PROVE form reports a landed miss, not a generic 'submitted' [Issue #709 review]", () => {
+  for (const locale of ["ja", "en"] as const) {
+    const copy = REGISTRATION_COPY[locale];
+    it(`a miss on the submitted Order names the cost; a hit says so; anything else falls through (${locale})`, () => {
+      const miss = fixtureProjection({ lastProve: { contractId: "blue-c0", outcome: "miss" } });
+      const text = describeProveOutcome({ kind: "ok", projection: miss }, "blue-c0", copy);
+      expect(text).toBe(copy.proveMissResult(miss.wrongProveCost));
+      expect(text).toContain(String(miss.wrongProveCost));
+      expect(text).not.toBe(copy.submitted);
+
+      const hit = fixtureProjection({ lastProve: { contractId: "blue-c0", outcome: "hit" } });
+      expect(describeProveOutcome({ kind: "ok", projection: hit }, "blue-c0", copy)).toBe(copy.proveHitResult);
+
+      // A stale lastProve from another Order is not this submission's verdict.
+      expect(describeProveOutcome({ kind: "ok", projection: miss }, "blue-c9", copy)).toBe(copy.submitted);
+      // A projection the guard rejects, or a rejection, reads as before.
+      expect(describeProveOutcome({ kind: "ok", projection: {} }, "blue-c0", copy)).toBe(copy.submitted);
+      expect(describeProveOutcome({ kind: "rejected", error: "boom" }, "blue-c0", copy)).toBe(`${copy.rejectedPrefix}boom`);
+    });
+  }
 });

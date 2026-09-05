@@ -260,7 +260,7 @@ export const FAST_MOVE_COPY = {
     cipherBody: (points: number) => `+${points} · NOTHING PUBLISHED`,
     huntSudoku: "HUNT · REUSED RELABELLING",
     huntSudokuHint: (cost: number) =>
-      `Find two of one team's sudoku rows, same generation, SAME TAG — they came from one relabelled grid. Line those cells up against the team's public puzzle to recover the table, undo it, and fill in the rest. A wrong grid costs ${cost} points and one attempt.`,
+      `Find two or more of one team's sudoku rows, same generation, SAME TAG — they came from one relabelled grid. Line those cells up against the team's public puzzle to recover the table, undo it, and fill in the rest. The judge accepts this HUNT only once those same-tag groups pin a single solution; if two still leave a choice, wait for the next one. A wrong grid costs ${cost} points and one attempt.`,
     huntSudokuPuzzle: "their public puzzle",
     huntSudokuReveals: "their opened groups",
     huntSudokuGrid: "their solution, as you recovered it",
@@ -427,7 +427,7 @@ export const FAST_MOVE_COPY = {
     cipherBody: (points: number) => `+${points} · 何も公開されない`,
     huntSudoku: "HUNT · 付け替えの使い回し",
     huntSudokuHint: (cost: number) =>
-      `同じチーム・同じ世代で「付け替え」のタグが同じ数独の行を 2 つ、Ledger から探してください。同じ付け替えの写しから出た行です。そのマスをそのチームの公開問題と突き合わせると表が割れ、表を戻せば解が出ます。外すと ${cost} 点減り、回数を 1 回使います。`,
+      `同じチーム・同じ世代で「付け替え」のタグが同じ数独の行を 2 つ以上、Ledger から探してください。同じ付け替えの写しから出た行です。そのマスをそのチームの公開問題と突き合わせると表が割れ、表を戻せば解が出ます。審判がこの HUNT を受け付けるのは、同じタグのグループで解が 1 つに絞れたときだけです。2 つでまだ絞れないなら、次の公開を待ってください。外すと ${cost} 点減り、回数を 1 回使います。`,
     huntSudokuPuzzle: "相手の公開問題",
     huntSudokuReveals: "相手が公開したグループ",
     huntSudokuGrid: "割り出した相手の解",
@@ -1131,6 +1131,23 @@ export default function FastMovePanel(props: PortalSlotProps) {
     selectedSudokuBudget !== undefined && selectedSudokuBudget.spent >= selectedSudokuBudget.max;
   const proveGrid = parseCells(proveCells);
   const huntGrid = parseCells(huntCells);
+  // [Issue #709 review] A typed grid belongs to the Order (and generation) it
+  // was typed for, and a recovered solution to the target it was recovered
+  // from. Left in place, a grid that just PROVEd would be one click from being
+  // submitted again on the next Order -- the same table twice, which is the
+  // exact reuse the HUNT punishes -- and a solution recovered from one team
+  // would be one click from being charged as a miss against another. So the
+  // buffers empty whenever their context moves.
+  const selectedOrderIdForProve = selectedOrder?.id;
+  const ownGeneration = projection?.vault.generation;
+  useEffect(() => {
+    setProveCells(emptyCells());
+  }, [selectedOrderIdForProve, ownGeneration]);
+  const sudokuTargetTeam = selectedSudokuTarget?.teamId;
+  const sudokuTargetGeneration = selectedSudokuTarget?.generation;
+  useEffect(() => {
+    setHuntCells(emptyCells());
+  }, [sudokuTargetTeam, sudokuTargetGeneration]);
   const cipherTargets = useMemo(() => cipherHuntCandidates(projection), [projection]);
   const selectedCipherTarget =
     cipherTargets.find((t) => `${t.teamId}:${t.generation}:${t.rung}` === cipherTargetKey) ??
@@ -1609,8 +1626,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
             onClick={() => proveGrid && void run(
               () => submitProveSudoku(client, selectedOrder.id, proveGrid),
               // [Issue #709] Hit or miss is read off the projection the op
-              // came back with -- a wrong grid lands and returns ok.
-              (next) => proveFeedback(next, selectedOrder.id, selectedOrder.points, locale),
+              // came back with -- a wrong grid lands and returns ok. A hit
+              // empties the grid: that relabelling is spent now, and the next
+              // Order needs a different one. A miss keeps it, to be corrected.
+              (next) => {
+                const draft = proveFeedback(next, selectedOrder.id, selectedOrder.points, locale);
+                if (draft.kind === "prove") setProveCells(emptyCells());
+                return draft;
+              },
             )}
           >{submitting ? copy.running : copy.send}</button>
         </div>
@@ -1813,7 +1836,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
               disabled={submitting || !selectedSudokuTarget || huntGrid === undefined || sudokuHuntExhausted}
               onClick={() => selectedSudokuTarget && huntGrid && void run(
                 () => submitHuntSudoku(client, selectedSudokuTarget.teamId, selectedSudokuTarget.generation, huntGrid),
-                (next) => huntFeedback(next, selectedSudokuTarget.teamId, locale, "sudoku"),
+                // A hit empties the grid: that solution is recovered and
+                // this target's generation is closed to a second HUNT.
+                (next) => {
+                  const draft = huntFeedback(next, selectedSudokuTarget.teamId, locale, "sudoku");
+                  if (draft.kind === "hunt") setHuntCells(emptyCells());
+                  return draft;
+                },
               )}
             >{submitting ? copy.running : copy.send}</button>
           </div>

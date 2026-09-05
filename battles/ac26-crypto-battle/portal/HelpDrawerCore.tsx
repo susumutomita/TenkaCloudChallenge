@@ -134,7 +134,7 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "Complete an open Contract by handing over your 4x4 sudoku solution with every digit relabelled through a table you chose (1->3, 2->1, ...; each of 1-4 used exactly once on the right, so it is a swap and never a merge), done on paper -- this portal never relabels it for you. Pays MORE than LEAKing the same Contract; the relabelling is what you are being paid for. The judge checks the whole grid and publishes ONE row, column or box of your relabelled copy with a tag naming the table. One opened group is 1-4 in some order and tells nobody anything. Two opened groups under the SAME table do: never reuse a table on one generation -- MY VAULT lists the ones you have spent.",
+        body: "Complete an open Contract by handing over your 4x4 sudoku solution with every digit relabelled through a table you chose (1->3, 2->1, ...; each of 1-4 used exactly once on the right, so it is a swap and never a merge), done on paper -- this portal never relabels it for you. Pays MORE than LEAKing the same Contract; the relabelling is what you are being paid for. The judge checks the whole grid and publishes ONE row, column or box of your relabelled copy with a tag naming the table. One opened group is 1-4 in some order and tells nobody anything. Two or more opened groups under the SAME table can give the solution away: never reuse a table on one generation -- MY VAULT lists the ones you have spent.",
       },
       {
         name: "CIPHER",
@@ -150,7 +150,7 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores. A wrong guess is not free: it costs you points, and it spends one of the small number of attempts you get against each team per generation -- the price and the attempts you have left are printed on the HUNT card before you submit. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing. A second kind of HUNT exists for a team that reused a relabelling: two of their opened sudoku groups in one generation with the same tag are pieces of one relabelled grid, and lining them up against that team's public puzzle recovers the table and then the solution. A team that picks a fresh table every time never produces that -- misuse is what this punishes, not correct use.",
+        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores. A wrong guess is not free: it costs you points, and it spends one of the small number of attempts you get against each team per generation -- the price and the attempts you have left are printed on the HUNT card before you submit. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing. A second kind of HUNT exists for a team that reused a relabelling: two of their opened sudoku groups in one generation with the same tag are pieces of one relabelled grid, and lining them up against that team's public puzzle recovers the table and then the solution. The judge accepts that HUNT only once the same-tag groups pin one solution against the puzzle -- two usually do; if they still leave a choice, wait for the next one. A team that picks a fresh table every time never produces that -- misuse is what this punishes, not correct use.",
       },
       {
         name: "ROTATE",
@@ -248,7 +248,7 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "4×4 の数独の解を、自分で決めた表 (1→3、2→1、…。右側は 1〜4 を 1 回ずつ使う入れ替えで、まとめではありません) で全マス付け替えたものを出して Contract を完了します。付け替えは紙で行います (この portal は代わりに付け替えません)。同じ Contract を LEAK した場合よりも高い得点で、付け替えの手間に払われる点です。審判はマス目全体を検査し、付け替えた写しの 1 行・1 列・1 箱だけを、表を名指すタグ付きで公開します。1 グループだけなら 1〜4 の並び替えにすぎず、誰にも何も分かりません。同じ表で 2 グループ開くと分かります。同じ世代で表を使い回さないでください。使った表は MY VAULT に並びます。",
+        body: "4×4 の数独の解を、自分で決めた表 (1→3、2→1、…。右側は 1〜4 を 1 回ずつ使う入れ替えで、まとめではありません) で全マス付け替えたものを出して Contract を完了します。付け替えは紙で行います (この portal は代わりに付け替えません)。同じ Contract を LEAK した場合よりも高い得点で、付け替えの手間に払われる点です。審判はマス目全体を検査し、付け替えた写しの 1 行・1 列・1 箱だけを、表を名指すタグ付きで公開します。1 グループだけなら 1〜4 の並び替えにすぎず、誰にも何も分かりません。同じ表で 2 グループ以上開くと、解が割れることがあります。同じ世代で表を使い回さないでください。使った表は MY VAULT に並びます。",
       },
       {
         name: "CIPHER",
@@ -264,7 +264,7 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。外した HUNT はタダではありません。減点され、相手チームの世代ごとに決まっている少ない回数の持ち分を 1 回使います。減点の値と残り回数は、提出する前に HUNT カードに表示されます。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。もう 1 種類の HUNT として、付け替えを使い回した相手を突く方法があります。同じ世代で同じタグの数独グループが 2 つあれば、それは 1 つの付け替えた写しの断片なので、そのチームの公開問題と突き合わせて表を割り、解を出せます。毎回新しい表を選ぶチームでは起こらないので、これが罰するのは誤用であって正しい利用ではありません。",
+        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。外した HUNT はタダではありません。減点され、相手チームの世代ごとに決まっている少ない回数の持ち分を 1 回使います。減点の値と残り回数は、提出する前に HUNT カードに表示されます。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。もう 1 種類の HUNT として、付け替えを使い回した相手を突く方法があります。同じ世代で同じタグの数独グループが 2 つあれば、それは 1 つの付け替えた写しの断片なので、そのチームの公開問題と突き合わせて表を割り、解を出せます。審判がこの HUNT を受け付けるのは、同じタグのグループで解が 1 つに絞れたときだけです。2 つで絞れることがほとんどですが、絞れなければ次の公開を待ってください。毎回新しい表を選ぶチームでは起こらないので、これが罰するのは誤用であって正しい利用ではありません。",
       },
       {
         name: "ROTATE",

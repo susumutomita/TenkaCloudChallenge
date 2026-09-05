@@ -48,7 +48,7 @@ import { useState } from "react";
 import type { CipherRung } from "../game/src/ladder.ts";
 import { describeTaskShort } from "./orderTask.ts";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
-import { usePolledProjection } from "./coordination.ts";
+import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
 import type {
   ContractProjection,
   CryptoBattleOp,
@@ -83,6 +83,8 @@ interface Copy {
   readonly gridLabel: string;
   readonly gridError: string;
   readonly proveSubmit: string;
+  readonly proveHitResult: string;
+  readonly proveMissResult: (cost: number) => string;
   readonly huntTitle: string;
   readonly huntLocalNote: string;
   readonly huntNoTargets: string;
@@ -122,6 +124,8 @@ export const COPY: Record<Locale, Copy> = {
     gridLabel: "relabelled grid: 16 digits, row by row (e.g. 2341 4123 1432 3214)",
     gridError: "Enter exactly 16 digits, each 1-4, in row order.",
     proveSubmit: "PROVE this contract",
+    proveHitResult: "PROVE accepted -- one group of your relabelled copy is on the Public Ledger; your solution is not.",
+    proveMissResult: (cost: number) => `PROVE missed -- that grid is not a relabelling of your solution (-${cost}). The Order is still open. Check that the table uses each of 1-4 once, then check it against every cell.`,
     huntTitle: "HUNT",
     huntLocalNote:
       "Reconstruct the secret locally first, from threshold-many of the target's Public Ledger shares. The Lagrange evaluation is further down this page under \"Computing PROVE and HUNT yourself\". Guessing does not score.",
@@ -154,6 +158,8 @@ export const COPY: Record<Locale, Copy> = {
     gridLabel: "付け替えたマス目: 1 行ずつ 16 桁 (例 2341 4123 1432 3214)",
     gridError: "1〜4 の数字を、行の順に 16 個入力してください。",
     proveSubmit: "この contract を PROVE する",
+    proveHitResult: "PROVE 成功 — 付け替えた写しの 1 グループが Public Ledger に載りました。解は載っていません。",
+    proveMissResult: (cost: number) => `PROVE 失敗 — そのマス目は自分の解の付け替えになっていません (-${cost})。Order は開いたままです。表が 1〜4 を 1 回ずつ使っているか確かめてから、全マスに当て直してください。`,
     huntTitle: "HUNT",
     huntLocalNote:
       "先に相手の Public Ledger の share を threshold 分集めてローカルで secret を復元してください。Lagrange の評価式はこのページ下部の「PROVE と HUNT を自分で計算する」にあります。当て推量では得点になりません。",
@@ -390,6 +396,29 @@ export function describeOutcome(outcome: PortalCoordinationOutcome, copy: Copy):
   }
 }
 
+/**
+ * [Issue #709 review] The PROVE form's own outcome text. A wrong grid LANDS:
+ * the judge returns ok, charges `wrongProve`, leaves the Order open and writes
+ * `lastProve.outcome: "miss"` -- so "Submitted" would be true and useless.
+ * Read off the projection the op came back with, the way the primary form's
+ * `proveFeedback` does; anything that is not a landed PROVE on this Order
+ * falls through to the shared three-way text.
+ */
+export function describeProveOutcome(
+  outcome: PortalCoordinationOutcome,
+  contractId: string,
+  copy: Copy,
+): string {
+  if (outcome.kind === "ok" && isCryptoBattleProjection(outcome.projection)) {
+    const last = outcome.projection.lastProve;
+    if (last?.contractId === contractId && last.outcome === "miss") {
+      return copy.proveMissResult(outcome.projection.wrongProveCost);
+    }
+    if (last?.contractId === contractId && last.outcome === "hit") return copy.proveHitResult;
+  }
+  return describeOutcome(outcome, copy);
+}
+
 function LeakForm({
   client,
   contracts,
@@ -467,7 +496,7 @@ function ProveForm({
     setSubmitting(true);
     setResult(null);
     void submitProveSudoku(client, selected, [...digits].map(Number)).then((outcome) => {
-      setResult(describeOutcome(outcome, copy));
+      setResult(describeProveOutcome(outcome, selected, copy));
       setSubmitting(false);
     });
   };
