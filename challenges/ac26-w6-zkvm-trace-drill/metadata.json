@@ -1,0 +1,422 @@
+{
+  "id": "ac26-w6-zkvm-trace-drill",
+  "name": "計算の記録から、不正な承認を見つける",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 635,
+    "chapter": "Week 6 / Drill: execution trace and exact claim"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 6,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+        "path": "week6/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+        "path": "week6/problems/zkvm-exploit/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "30-45 分",
+  "shortDescription": "小さな数を足すプログラムを一歩ずつ追います。機械の承認と、本来の規則を比べ、主張の条件を確かめる8つの演習です。",
+  "description": "小さな数を足すプログラムを一歩ずつ追います。機械の承認と、本来の規則を比べ、主張の条件を確かめる8つの演習です。 zkVMで証明対象とする計算・主張の条件の模型。暗号証明の生成は対象外。",
+  "instructions": "## 前提\n\n割引を足して、上限以下のときだけ承認するプログラムを調べます。この機械は0〜m−1までしか保存できず、**足すたびにmで割った余りへ戻します**。普通の合計と違う値になったら、承認の結果も変わるでしょうか。\n\n**最初の操作：**「証拠を確認」の `m =` から `other_limit =` までの代入文だけを `python3` に貼り、1行目の合計を出してください。出た数を `exact` の回答欄へ提出し、正解になれば最初の一歩です。全8欄を順に進めます。\n\nPythonの対話入力では、`for` の字下げした行の後に空行を1回入れてから最後の式を入力します。\n\nPythonを開けないときは、エディタの `zkvm_trace_drill.py` を使います。1〜7行目の各関数の `return None` を対応する行のコード全体に置き換え、最後の式へ `return` を付けます。「公開テストを実行」で自分の値が出ます。\n\n`discounts` は足す三つの数、`limit` は承認できる上限、`m` は割る数です。`x % m` は「xをmで割った余り」で、例は `9 % 8 = 1`。`sum` は合計。`<=` は以下、`>=` は以上、`==` は等しいか、`and` は両方を満たす、`not` は反対の判定です。`True` ははい、`False` はいいえ。`[i]` は0番目から数えた位置、`case[\"limit\"]` はその例の上限です。\n\nプログラムがそのとおりに実行されたことを証明する仕組みをzkVMと呼びます。この演習では暗号証明は作らず、**証明で確かめる計算と主張の条件**を扱います。同じ入力でも、プログラムの規則が違えば主張の成否も変わります。最後はその違いが出る入力を自分で作ります。\n\n**一桁の見本（提出は自分の画面の数）：** m=8、discounts=[7,2,1]、limit=3。機械は7→1→2と保存します。普通の合計は10です。\n\n### 1. 普通に足した合計 — `exact`\n\nまず、上限や機械の制限を考えずに合計を出します。後で「本来は承認してよいか」を比べる基準になります。\n\n```python\nsum(discounts)\n```\n\n### 2. 機械の途中経過を記録する — `trace`\n\n各足し算の直後にmで割った余りを保存します。この途中経過の列をtrace（計算の記録）と呼びます。appendはリストの末尾に追加する操作です。\n\n```python\ntotal = 0\nsteps = []\nfor amount in discounts:\n    total = (total + amount) % m\n    steps.append(total)\n\nsteps\n```\n\n### 3. どの足し算で桁があふれたか — `overflow`\n\n今回の足し算で、余りに直す前の合計rawがm以上なら、保存できる範囲を超えています。これをoverflow（桁あふれ）と呼びます。前の足し算であふれていても、今回もあふれたとは限りません。\n\n```python\ntotal = 0\nflags = []\nfor amount in discounts:\n    raw = total + amount\n    flags.append(raw >= m)\n    total = raw % m\n\nflags\n```\n\n### 4. 二つの承認結果を比べる — `decision`\n\n余りに戻す操作はmの倍数を取り除くだけなので、最後にまとめて `full % m` としても同じ値です。見本では途中で8を一つ除いた2と、10を8で割った余り2が一致します。\n\n左は機械の合計で承認するか、右は普通の合計で承認するかです。Trueは「はい」、Falseは「いいえ」。承認は上限limit以下のときです。\n\n```python\nfull = sum(discounts)\n(full % m <= limit), (full <= limit)\n```\n\n### 5. 不正な承認を見つける — `exploit`\n\n不正な承認（exploit）は「機械が承認した」「普通の合計は上限を超える」の両方が必要です。上限を超えていても、機械が拒否した入力は含めません。casesは四つの入力例です。\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    answers.append(full % m <= case[\"limit\"] and full > case[\"limit\"])\n\nanswers\n```\n\n### 6. 足りない条件の反例を選ぶ — `predicate`\n\n「普通の合計が上限を超える」だけを検査する人がいます。その人は通すが、本当は不正な承認でない例をTrueにします。条件の不足を示す例を反例と呼びます。\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    weak = full > case[\"limit\"]\n    genuine = full % m <= case[\"limit\"] and weak\n    answers.append(weak and not genuine)\n\nanswers\n```\n\n### 7. 報告を計算し直して確かめる — `tamper`\n\nreportsには別の人の「不正な承認だった」という報告が並びます。自分で計算した判定と一致すればTrue。報告をそのまま採点すると、計算の正しさを確かめられません。lenは個数、rangeは0から順にその個数分をたどります。\n\n```python\nanswers = []\nfor i in range(len(cases)):\n    case = cases[i]\n    full = sum(case[\"discounts\"])\n    actual = full % m <= case[\"limit\"] and full > case[\"limit\"]\n    answers.append(reports[i] == actual)\n\nanswers\n```\n\n### 8. 別のプログラムでしか通らない入力を作る — `binding`\n\n同じ機械の足し算でも、今回の `program` は上限 `limit`、別の `other_program` は上限 `other_limit` を使います。別のプログラムで不正な承認を示せても、今回のプログラムの証拠になるでしょうか。\n\n上限は `0 <= limit < other_limit < m` になるように用意されています。\n\n**自分で三つの数 `[a,b,c]` を選んでください。** 各数は0〜m−1。普通の合計を `full=a+b+c`、保存値を `stored=full % m` として、次の両方を満たす入力を提出します。\n\n- 普通の合計が別の上限も超える：`full > other_limit`\n- 今回は拒否、別のプログラムでは承認：`limit < stored <= other_limit`\n\n一桁の見本：m=8、今回の上限3、別の上限5なら、[7,5,0]は普通の合計12、保存値4。今回は4>3で拒否し、別のプログラムは4<=5で不正に承認します。\n\n見本の数を自分の画面の条件に合わせて作り直し、三つを `binding` 欄へ提出します。条件を満たす入力ならどれでも正解です。自動で探す場合は、スターターの `binding(m, limit, other_limit)` を自分で実装してください。\n\n",
+  "writeup": "実行どおりの記録があっても、主張の条件は別に確かめます。不正な承認には機械の承認と普通の合計の超過が両方必要です。さらに、確認したプログラム番号と主張が、依頼と同じでなければなりません。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week6",
+    "drill",
+    "zkvm",
+    "execution-trace",
+    "integer-overflow",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18165,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "各足し算の保存値と桁あふれを追う",
+    "機械の承認と本来の規則の違いを見つける",
+    "条件を一つ落とした検査の反例を選ぶ",
+    "報告を信じず入力から判定し直す",
+    "確認したプログラムと主張を依頼に合わせる"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18165/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "exact",
+        "label": "普通に足した合計",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "exact-hint-1",
+            "content": "まず、機械の制限を受けない合計を作ります。これが、本来の規則なら承認するべきかを比べる基準です。",
+            "penalty": 2
+          },
+          {
+            "id": "exact-hint-2",
+            "content": "見本は7+2+1=10。この段階では8で割らず、10のままです。",
+            "penalty": 2
+          },
+          {
+            "id": "exact-hint-3",
+            "content": "証拠のdiscountsにある三つを左から足し、その合計をexactへ。mで割る処理は次の行です。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "trace",
+        "label": "機械の途中経過を記録する",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "trace-hint-1",
+            "content": "保存するたびに余りへ戻るので、途中からは小さくなった値へ次の数を足します。その経過を一つずつ記録します。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-2",
+            "content": "見本は0+7→7、7+2=9→8で割った余り1、1+1→2。提出の形は[7,1,2]。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-3",
+            "content": "totalを0にする。自分のdiscountsの一つ目を足してmで割った余りを記録。同じtotalへ次の数を足して余りを記録。三つ目までの三つの記録をtraceへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "overflow",
+        "label": "どの足し算で桁があふれたか",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "overflow-hint-1",
+            "content": "今回の足し算で保存範囲を超えたかを調べます。前の計算で範囲を超えたことと、今回超えたことを分けます。",
+            "penalty": 2
+          },
+          {
+            "id": "overflow-hint-2",
+            "content": "見本では0+7は8未満でFalse。7+2は8以上でTrue。その余り1へ1を足すと2なのでFalse。形は[False,True,False]。",
+            "penalty": 2
+          },
+          {
+            "id": "overflow-hint-3",
+            "content": "各段で、今保存しているtotalへ次のamountを足したrawを見る。rawがm以上ならTrue、未満ならFalseを記録。その後totalをrawの余りに替え、三つの判定をoverflowへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "decision",
+        "label": "二つの承認結果を比べる",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "decision-hint-1",
+            "content": "保存された合計での承認と、普通の合計での承認を比べます。上限の検査が同じでも、先の計算が違えば判定は変わります。",
+            "penalty": 2
+          },
+          {
+            "id": "decision-hint-2",
+            "content": "見本の機械の合計は2、普通は10、上限3。2<=3はTrue、10<=3はFalseなので(True,False)。",
+            "penalty": 2
+          },
+          {
+            "id": "decision-hint-3",
+            "content": "自分の三つの合計fullを出す。fullをmで割った余りがlimit以下かを左に、fullそのものがlimit以下かを右にしてdecisionへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "exploit",
+        "label": "不正な承認を見つける",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "exploit-hint-1",
+            "content": "上限を超えるだけでは、不正な承認とは言えません。プログラムが実際に承認してしまったことも必要です。",
+            "penalty": 2
+          },
+          {
+            "id": "exploit-hint-2",
+            "content": "m=8、上限3で[7,2,1]は普通の合計10、機械は2なのでTrue。[4,1,0]は普通も機械も5で拒否するためFalse。",
+            "penalty": 2
+          },
+          {
+            "id": "exploit-hint-3",
+            "content": "casesの各例でdiscountsを足す。合計の余りがその例のlimit以下、かつ普通の合計がlimitより大きければTrue。それ以外はFalse。表示順の四つをexploitへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "predicate",
+        "label": "足りない条件の反例を選ぶ",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "predicate-hint-1",
+            "content": "条件を一つだけにすると、拒否された入力まで不正な承認の証拠として扱ってしまいます。その間違いが出る例を選びます。",
+            "penalty": 2
+          },
+          {
+            "id": "predicate-hint-2",
+            "content": "m=8、上限3で[4,1,0]は合計5。合計>3だけの検査は通すが、機械も5で拒否するので反例True。[7,2,1]は本当の不正承認なので反例False。",
+            "penalty": 2
+          },
+          {
+            "id": "predicate-hint-3",
+            "content": "各例で普通の合計>limitをweakとする。5行目と同じ二条件を満たすかをgenuineとする。weakがTrueでgenuineがFalseの例だけTrue。四つをpredicateへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "tamper",
+        "label": "報告を計算し直して確かめる",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "tamper-hint-1",
+            "content": "報告は、確かめる対象です。入力から計算し直して同じ結論になるかを見ることで、誤った報告を見つけられます。",
+            "penalty": 2
+          },
+          {
+            "id": "tamper-hint-2",
+            "content": "上限3の[4,1,0]を「不正承認True」と報告しても、再計算はFalseなので一致はFalse。[7,2,1]へのTrueという報告は一致してTrue。",
+            "penalty": 2
+          },
+          {
+            "id": "tamper-hint-3",
+            "content": "cases[i]で5行目の判定を計算し直す。その結果がreports[i]と等しければTrue、違えばFalse。i=0〜3の順に四つをtamperへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "binding",
+        "label": "別のプログラムでしか通らない入力を作る",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "binding-hint-1",
+            "content": "証明が確かめた規則が違えば、同じ入力でも結論は変わります。今回では拒否され、別の規則では不正に承認される入力を作り、番号の照合が必要な理由を示します。",
+            "penalty": 2
+          },
+          {
+            "id": "binding-hint-2",
+            "content": "見本はm=8、limit=3、other_limit=5。[7,5,0]の合計12は5を超え、余り4は3より大きく5以下。別の規則だけが不正に承認します。",
+            "penalty": 2
+          },
+          {
+            "id": "binding-hint-3",
+            "content": "自分のlimitより大きくother_limit以下の保存値を一つ選ぶ。mを足した普通の合計を、各0〜m−1の三つに分ける。二条件を確認し、三つの数をbinding欄へ。",
+            "penalty": 2
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Find an improper acceptance in the execution trace",
+      "shortDescription": "Follow a tiny addition program, compare its acceptance with the intended rule, and check the exact claim in eight exercises.",
+      "description": "Follow a tiny addition program, compare its acceptance with the intended rule, and check the exact claim in eight exercises. A model of the computation and claim to prove in a zkVM; it generates no cryptographic proofs.",
+      "instructions": "## Before you start\n\nAn input lists discounts. A program should accept only when their total is at most a limit. This machine stores only 0 through m−1: **after every addition it keeps the remainder by m**. Can this change which requests are accepted?\n\n**Start:** paste only the Inspect assignment lines from `m =` through `other_limit =` into `python3`, compute row 1, then submit its number to `exact`. An accepted answer completes your first step. Continue through all eight fields.\n\nIn an interactive Python prompt, enter one blank line after the indented `for` body, before entering the final expression.\n\nWithout Python, use `zkvm_trace_drill.py` in the editor. For rows 1–7, replace each `return None` with that row’s whole code block, prefixing the final expression with `return`. Run public tests to see your outputs.\n\n`discounts` is the list of three input numbers, `limit` the largest accepted total, and `m` the divisor. `x % m` means the remainder by m: `9 % 8 = 1`. `sum` adds entries; `<=` means at most, `>=` at least, `==` equality, `and` both conditions, and `not` the opposite decision. `True` means yes and `False` no. `[i]` selects a position starting at zero; `case[\"limit\"]` selects that case’s limit.\n\nA zkVM proves that a program executed as specified. This exercise generates no cryptographic proof; it studies **the computation and the exact claim to check**. The same input can support different claims under different program rules. In the last row, construct an input demonstrating that difference.\n\n**One-digit example (submit your own values):** m=8, discounts=[7,2,1], limit=3. The machine stores 7→1→2. The ordinary total is 10.\n\n### 1. Add without wrapping — `exact`\n\nFirst add without the machine limit. This gives the baseline for deciding whether the request should be accepted.\n\n```python\nsum(discounts)\n```\n\n### 2. Record each machine step — `trace`\n\nAfter each addition store the remainder by m. This sequence is a trace, a record of the computation. append adds an entry to a list.\n\n```python\ntotal = 0\nsteps = []\nfor amount in discounts:\n    total = (total + amount) % m\n    steps.append(total)\n\nsteps\n```\n\n### 3. Locate each overflow — `overflow`\n\nThe raw sum is this step’s total before taking the remainder. An overflow occurs when it reaches m. An earlier step overflowing does not mean this step overflows too.\n\n```python\ntotal = 0\nflags = []\nfor amount in discounts:\n    raw = total + amount\n    flags.append(raw >= m)\n    total = raw % m\n\nflags\n```\n\n### 4. Compare the two acceptance decisions — `decision`\n\nKeeping a remainder only removes multiples of m, so reducing the full sum once with `full % m` gives the same final value. In the example, removing one 8 during the calculation leaves 2, just like the remainder of 10 by 8.\n\nThe left decision uses the machine total; the right uses ordinary arithmetic. True means yes, False means no. A total is accepted when it is at most limit.\n\n```python\nfull = sum(discounts)\n(full % m <= limit), (full <= limit)\n```\n\n### 5. Identify an improper acceptance — `exploit`\n\nAn exploit here requires both machine acceptance and an ordinary total over the limit. An input the machine rejects is not an exploit. cases contains four input examples.\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    answers.append(full % m <= case[\"limit\"] and full > case[\"limit\"])\n\nanswers\n```\n\n### 6. Find counterexamples to an incomplete condition — `predicate`\n\nSomeone checks only whether the ordinary total exceeds the limit. Mark True where that weak check passes but there is no actual exploit: a counterexample to the incomplete condition.\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    weak = full > case[\"limit\"]\n    genuine = full % m <= case[\"limit\"] and weak\n    answers.append(weak and not genuine)\n\nanswers\n```\n\n### 7. Recompute rather than trust a report — `tamper`\n\nreports contains another person’s claims that each case is an exploit. Return True when a report agrees with your recomputed result. len counts entries; range visits their positions starting at 0.\n\n```python\nanswers = []\nfor i in range(len(cases)):\n    case = cases[i]\n    full = sum(case[\"discounts\"])\n    actual = full % m <= case[\"limit\"] and full > case[\"limit\"]\n    answers.append(reports[i] == actual)\n\nanswers\n```\n\n### 8. Construct an input that works only for another program — `binding`\n\nBoth programs use the same wrapping addition. The requested `program` uses `limit`; `other_program` uses `other_limit`. Does an exploit of that other program establish one for the requested program?\n\nThe supplied limits satisfy `0 <= limit < other_limit < m`.\n\n**Choose your own three numbers `[a,b,c]`, each from 0 through m−1.** Let `full=a+b+c` and `stored=full % m`. Submit an input meeting both conditions:\n\n- The ordinary total exceeds even the other limit: `full > other_limit`.\n- The requested program rejects but the other accepts: `limit < stored <= other_limit`.\n\nOne-digit example: with m=8, requested limit 3 and other limit 5, [7,5,0] sums to 12 and stores 4. The requested program rejects 4>3, while the other improperly accepts 4<=5.\n\nAdapt the example to your own screen’s conditions and submit the three numbers to `binding`. Any input satisfying the conditions is accepted. To automate the search, implement `binding(m, limit, other_limit)` yourself in the starter.\n\n",
+      "writeup": "A faithful execution record still needs the exact claim. An exploit requires both machine acceptance and an excessive ordinary total. The verified program identity and assertion must also match the request.",
+      "learningGoals": [
+        "Trace stored totals and per-step overflow",
+        "Compare machine acceptance with the intended rule",
+        "Identify counterexamples to an incomplete condition",
+        "Recompute instead of trusting a report",
+        "Match the checked program and claim to the request"
+      ],
+      "checks": [
+        {
+          "id": "exact",
+          "label": "Add without wrapping",
+          "hints": [
+            {
+              "id": "exact-hint-1",
+              "content": "Compute the total without machine limits first. It is the baseline for what the original rule should accept."
+            },
+            {
+              "id": "exact-hint-2",
+              "content": "7+2+1=10 in the example. Do not reduce by 8 yet."
+            },
+            {
+              "id": "exact-hint-3",
+              "content": "Add the three entries of your discounts list and submit the sum to exact. Reduction comes in the next row."
+            }
+          ]
+        },
+        {
+          "id": "trace",
+          "label": "Record each machine step",
+          "hints": [
+            {
+              "id": "trace-hint-1",
+              "content": "Every stored result is reduced, so the next addition starts from that smaller stored value. Record each step."
+            },
+            {
+              "id": "trace-hint-2",
+              "content": "0+7 gives 7; 7+2=9 has remainder 1 by 8; 1+1 gives 2. Shape: [7,1,2]."
+            },
+            {
+              "id": "trace-hint-3",
+              "content": "Start total at 0. Add each of your discounts, take the remainder by m, and record it. Submit the three stored totals in order."
+            }
+          ]
+        },
+        {
+          "id": "overflow",
+          "label": "Locate each overflow",
+          "hints": [
+            {
+              "id": "overflow-hint-1",
+              "content": "Check whether this particular addition exceeds storage capacity. An earlier overflow does not establish an overflow now."
+            },
+            {
+              "id": "overflow-hint-2",
+              "content": "0+7 is below 8: False. 7+2 reaches 8: True. Its remainder 1 plus the last 1 gives 2: False. Shape: [False,True,False]."
+            },
+            {
+              "id": "overflow-hint-3",
+              "content": "At each step compute raw=stored total+next amount. Record True if raw>=m, otherwise False. Then replace total by raw’s remainder. Submit the three flags in order."
+            }
+          ]
+        },
+        {
+          "id": "decision",
+          "label": "Compare the two acceptance decisions",
+          "hints": [
+            {
+              "id": "decision-hint-1",
+              "content": "Compare acceptance using the stored total with acceptance using ordinary arithmetic. The same limit test can disagree because its input differs."
+            },
+            {
+              "id": "decision-hint-2",
+              "content": "Stored total 2 is at most limit 3: True. Ordinary total 10 is not: False. Shape: (True,False)."
+            },
+            {
+              "id": "decision-hint-3",
+              "content": "Compute full from your discounts. First decide whether its remainder by m is at most limit. Then decide whether full itself is at most limit. Submit those two decisions."
+            }
+          ]
+        },
+        {
+          "id": "exploit",
+          "label": "Identify an improper acceptance",
+          "hints": [
+            {
+              "id": "exploit-hint-1",
+              "content": "Exceeding the limit is insufficient: the program must also have accepted the input for this to be an improper acceptance."
+            },
+            {
+              "id": "exploit-hint-2",
+              "content": "With m=8 and limit=3, [7,2,1] has full total 10 and machine total 2: True. [4,1,0] has total 5 and is rejected: False."
+            },
+            {
+              "id": "exploit-hint-3",
+              "content": "For each case, sum its discounts. Return True only if the remainder is at most that case’s limit AND the full sum is over the limit. Submit the four results in displayed order."
+            }
+          ]
+        },
+        {
+          "id": "predicate",
+          "label": "Find counterexamples to an incomplete condition",
+          "hints": [
+            {
+              "id": "predicate-hint-1",
+              "content": "Dropping one condition can mislabel rejected inputs as evidence of an improper acceptance. Identify those counterexamples."
+            },
+            {
+              "id": "predicate-hint-2",
+              "content": "For [4,1,0], m=8,limit=3: the weak total>3 check passes, but the machine also sees 5 and rejects. Counterexample: True. [7,2,1] is a real exploit, so False."
+            },
+            {
+              "id": "predicate-hint-3",
+              "content": "For each case let weak mean full total>limit, and genuine mean both conditions from row 5. Mark True only when weak is True and genuine is False. Submit all four flags."
+            }
+          ]
+        },
+        {
+          "id": "tamper",
+          "label": "Recompute rather than trust a report",
+          "hints": [
+            {
+              "id": "tamper-hint-1",
+              "content": "A report is something to check. Recompute from the inputs and compare conclusions to find incorrect reports."
+            },
+            {
+              "id": "tamper-hint-2",
+              "content": "A True exploit report for [4,1,0] at limit 3 disagrees with recomputation: False. A True report for [7,2,1] agrees: True."
+            },
+            {
+              "id": "tamper-hint-3",
+              "content": "Recompute row 5’s decision for cases[i]. Compare it with reports[i]. Record True for equality, False for disagreement, for i=0 through 3."
+            }
+          ]
+        },
+        {
+          "id": "binding",
+          "label": "Construct an input that works only for another program",
+          "hints": [
+            {
+              "id": "binding-hint-1",
+              "content": "A proof about different program rules can establish a different claim for the same input. Construct a rejection here and an improper acceptance there to show why program identity matters."
+            },
+            {
+              "id": "binding-hint-2",
+              "content": "With m=8, limit=3, other_limit=5, [7,5,0] sums to 12 and stores 4: only the other program improperly accepts."
+            },
+            {
+              "id": "binding-hint-3",
+              "content": "Choose a stored value greater than your limit and at most other_limit. Add m, split that ordinary total into three numbers each from 0 through m−1, check both conditions, and submit them to binding."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
