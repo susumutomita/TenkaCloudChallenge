@@ -1,6 +1,8 @@
 # Cryptography Battle
 
-The problem explanation stays visible above the board. Optional practice opens only from the compact “Practice (optional)” button there, and can be closed in place; it never opens automatically or gates play. For sudoku PROVE, choose a digit-relabelling table and complete four holes beside twelve worked cells. Each original digit is practised once; the judge checks the full grid, and reusing a table still creates HUNT exposure.
+The purpose and “Rules, how the cryptography works, and optional practice” sit above the board. Opening either is optional and never gates play. Practice covers remainders, secret sharing, MPC, ZK, FHE, and Caesar shifts with one missing digit per step, followed by an explanation of the result. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
+
+The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers, free of charge. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
 
 Free “How it works” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
@@ -127,12 +129,11 @@ The complete Portal reference contains the formulas, constants, and runnable Pyt
 
 ## Reading the screen
 
-1. **Order Belt** — requests you can act on now
-2. **MAKE A MOVE** — the action for your selected request
-3. **My Vault** — your generation and shares
-4. **Public Ledger** — records everyone chose to publish
-5. **Next tactic from the public record** — opens only when material exists
-6. **Practice and help** — open only when needed
+1. **Current Order** — the request and its remaining time
+2. **Answer methods and inputs** — compare score and disclosure cost, then answer in the same card
+3. **Result** — score and outcome above the answer area
+4. **Exposure, records and vault** — read the summary and expand what you need
+5. **Rules, explanations and practice** — optional, above the board
 
 HUNT, reused-relabelling HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
 

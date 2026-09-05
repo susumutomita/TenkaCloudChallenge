@@ -16,7 +16,9 @@ import {
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import ConceptExplanation from "./ConceptExplanation.tsx";
-import { taskDetail, taskLabel } from "./orderTask.ts";
+import MpcWorksheet from "./MpcWorksheet.tsx";
+import { taskDetail } from "./orderTask.ts";
+import { disclosurePreview, orderHeading } from "./OrderFocus.tsx";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
 import { BOARD_CSS, Ledger, OrderBelt, Vault } from "./GameBoard.tsx";
 import {
@@ -95,7 +97,7 @@ export const FAST_MOVE_COPY = {
     title: "MAKE A MOVE",
     selectOrder: "1. PICK AN ORDER",
     noOrder: "No Order is open right now.",
-    choose: "2. CHOOSE ONE",
+    choose: "Choose how to answer",
     /*
       [Issue #702] Free, and on the card rather than behind a hint. The live run
       bought all three hint levels on this Order (-14) and came back with
@@ -108,9 +110,9 @@ export const FAST_MOVE_COPY = {
     shareDo: (indices: readonly number[]) =>
       `This Order asks for ${indices.map((i) => `#${i}`).join(", ")}. LEAK hands it over and completes the Order in one press — no calculation. PROVE answers without handing it over.`,
     leak: "LEAK",
-    leakHint: "FAST / PUBLIC",
+    leakHint: "One press · no calculation",
     prove: "PROVE",
-    proveHint: "COMPUTE / PROTECTED",
+    proveHint: "Choose a table · fill four cells",
     proveOpen: "Relabel and submit",
     constraintNone: "any method",
     constraintNoRaw: (methods: readonly string[]) =>
@@ -155,7 +157,7 @@ export const FAST_MOVE_COPY = {
     hintBuy: (cost: number) => `OPEN THE NEXT HINT (-${cost})`,
     hintsExhausted: "Every hint on this Order is open.",
     hintOpened: "HINT OPENED",
-    hintOpenedBody: (cost: number) => `-${cost} · read it below`,
+    hintOpenedBody: (cost: number) => `-${cost} · the next step is in this Order’s hints.`,
     send: "SUBMIT",
     running: "SUBMITTING…",
     leakRate: "pass",
@@ -165,9 +167,9 @@ export const FAST_MOVE_COPY = {
       `+${points} · your row and its answer → PUBLIC LEDGER. ${pairsToBreak} pair${pairsToBreak === 1 ? "" : "s"} recovers your key.`,
     // [Issue #709] PROVE is a hand relabelling of the vault's sudoku.
     proveTitle: "SHOW IT WITHOUT SHOWING IT — a zero-knowledge proof",
-    proveUse: "USED FOR: proving you hold a solution while showing nobody which digit sits where",
+    proveUse: "USED FOR: having the judge check your solution without directly handing the full original to another team",
     proveWhy: "WHY IT WORKS: relabelling the digits keeps every row, column and box valid — the judge sees a real solution, everyone else sees 1-4 in some order",
-    proveHelp: "Choose a relabelling table, then fill just four holes. Each digit changes to the number after its arrow. The other twelve cells are worked examples. Every table uses 1–4 once each, so the rows, columns and boxes stay valid. Never the same table twice.",
+    proveHelp: "Choose a table. Replace each left-hand digit with the digit after its arrow, and fill the four holes on the right. Never the same table twice.",
     proveTable: "1. Choose a relabelling table",
     proveChooseTable: "Choose a table…",
     proveReused: "used in this generation — reuse exposes your solution",
@@ -233,8 +235,8 @@ export const FAST_MOVE_COPY = {
     fheLesson:
       "That was HOMOMORPHIC ENCRYPTION: you computed on numbers you could not read, and the answer came out right. Blockchains use it so a chain can verify a total without anyone publishing the amounts.",
     mpcTitle: "MASKED SUBTOTAL — MPC (secure multi-party computation)",
-    mpcUse: "USED FOR: three companies publishing a combined total, none revealing its own",
-    mpcWhy: "WHY IT WORKS: the masks cancel — (a+r₁−r₂)+(b+r₂−r₃)+(c+r₃−r₁) = a+b+c",
+    mpcUse: "USED FOR: offices finding a total while keeping each input private",
+    mpcWhy: "A mask is a number shared privately by two offices. One adds it and the other subtracts it, so the masks cancel when all subtotals are added.",
     mpcHelp: "DO THIS: your number + masks received − masks sent, then the remainder after dividing by p",
     mpcMine: "your number (private)",
     mpcIncoming: "masks received",
@@ -245,7 +247,7 @@ export const FAST_MOVE_COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · YOUR NUMBER STAYED PRIVATE`,
     mpcLesson:
-      "That was SECURE COMPUTATION (MPC): three parties learned the total and nobody learned anyone else's number. The masks cancelled. Blockchains use it for shared settlement without a trusted middleman.",
+      "You submitted a masked subtotal. Adding every office’s subtotal cancels the masks and gives the remainder of the combined total. This is the secure-computation (MPC) mechanism.",
     prime: "p (the divisor)",
     cipher: "CIPHER",
     huntCipher: "HUNT · CIPHER KEY",
@@ -287,7 +289,7 @@ export const FAST_MOVE_COPY = {
     title: "MAKE A MOVE",
     selectOrder: "1. ORDER を選ぶ",
     noOrder: "現在 open な Order はありません。",
-    choose: "2. どちらかを選ぶ",
+    choose: "答え方を選ぶ",
     // [Issue #702] 無料、 かつヒントの裏ではなくカード上。 ライブ実戦では 3 段すべて
     // (-14 点) 買ったうえで 「Share ってそもそもなに？」 と返ってきた。
     // 用語を知るのに得点を払わせない。
@@ -295,9 +297,9 @@ export const FAST_MOVE_COPY = {
     shareDo: (indices: readonly number[]) =>
       `この Order が要求しているのは ${indices.map((i) => `#${i}`).join("・")} です。LEAK を押すとそれを渡して即完了 — 計算はありません。PROVE は渡さずに答えます。`,
     leak: "LEAK",
-    leakHint: "速い / 公開",
+    leakHint: "押すだけで完了・計算なし",
     prove: "PROVE",
-    proveHint: "計算 / 守る",
+    proveHint: "表を選んで、4 マスを穴埋め",
     proveOpen: "付け替えて出す",
     constraintNone: "方法は自由",
     constraintNoRaw: (methods: readonly string[]) =>
@@ -334,9 +336,9 @@ export const FAST_MOVE_COPY = {
       `+${points} · 記号列と答えが対で公開されました。この段は ${pairsToBreak} 組で鍵が割れます。`,
     // [Issue #709] PROVE は MY VAULT の数独を手で付け替えて出す。
     proveTitle: "解を見せずに示す ― ゼロ知識証明",
-    proveUse: "つかいみち: 「解を持っている」ことだけを示し、どのマスに何があるかは誰にも見せない",
+    proveUse: "つかいみち: 相手チームに元の解全体を直接渡さず、解を持っていることを審判に確認してもらう",
     proveWhy: "しくみ: 数字を付け替えても行・列・箱の性質は崩れない ── 審判には本物の解、相手には「1〜4 の並び替え」にしか見えない",
-    proveHelp: "付け替え表を選んで、空欄4マスだけを埋めます。数字を矢印の先の数字に読み替えるのが「付け替え」です。残り12マスは見本です。どの表も1〜4を1回ずつ使うので、行・列・箱のルールは崩れません。同じ表は 2 度使わないでください。",
+    proveHelp: "表を1つ選び、左の数字を矢印の先の数字に読み替えて、右の空欄4マスに入力します。同じ表は 2 度使わないでください。",
     proveTable: "1. 付け替え表を選ぶ",
     proveChooseTable: "表を選んでください",
     proveReused: "この世代で使用済み — 再利用すると解が漏れる危険あり",
@@ -404,8 +406,8 @@ export const FAST_MOVE_COPY = {
     fheLesson:
       "いまのが「準同型暗号」です。中身を読めない数のまま計算して、答えは正しく出ました。ブロックチェーンでは、金額を誰も公開せずに合計を検証するのに使われています。",
     mpcTitle: "覆面をかけた小計 ― MPC (秘密計算)",
-    mpcUse: "つかいみち: 3社が売上の合計だけ出す。各社の売上は誰にも見せない",
-    mpcWhy: "しくみ: 覆面は足すと打ち消し合う ── (a+r₁−r₂)+(b+r₂−r₃)+(c+r₃−r₁) = a+b+c",
+    mpcUse: "つかいみち: 各拠点が自分の数を隠し、合計の余りだけを出す",
+    mpcWhy: "覆面は、2つの拠点が内緒で共有する数です。片方が足し、もう片方が引くので、全拠点の小計を足すと覆面は打ち消し合います。",
     mpcHelp: "やること: 自分の数 + 受け取った覆面 − 送った覆面 を、p で割った余り",
     mpcMine: "自分の数 (非公開)",
     mpcIncoming: "受け取った覆面",
@@ -416,7 +418,7 @@ export const FAST_MOVE_COPY = {
     mpcSuccess: "MPC SUCCESS",
     mpcBody: (points: number) => `+${points} · 自分の数は公開されていない`,
     mpcLesson:
-      "いまのが「秘密計算 (MPC)」です。3 者が合計だけを知り、誰も他人の数を知りませんでした。覆面が打ち消し合ったからです。ブロックチェーンでは、信頼できる仲介者なしの決済に使われています。",
+      "覆面を足し引きした小計を提出しました。各拠点の小計を足すと覆面が打ち消し合い、合計を割る数で割った余りが得られます。これが秘密計算 (MPC) の仕組みです。",
     prime: "p (割る数)",
     cipher: "CIPHER",
     huntCipher: "HUNT · 暗号鍵",
@@ -1021,6 +1023,41 @@ ${SUDOKU_CSS}
 /* [Issue #688] The escape, deliberately quieter than READY. */
 .tc-start-anyway{font-size:12px;padding:6px 12px;border-radius:8px;border:1px solid #cfd8e3;background:#fff;color:#5f6b7a;cursor:pointer}
 .tc-start-anyway:hover{border-color:#8c9bab;color:#16212e}
+
+.tc-calculation-guide>p{font-size:13px;line-height:1.7;margin:0 0 12px}.tc-calculation-steps{list-style:none;margin:0;padding:0;display:grid;gap:10px}.tc-calculation-steps li{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#f7f9fc;border:1px solid #e0e7ef;border-radius:8px;font-size:13px}.tc-calculation-number{flex:none;background:#315f91;color:white;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px}.tc-calculation-steps code{display:block;margin-top:4px;font:650 17px/1.6 system-ui;overflow-wrap:anywhere}.tc-calculation-steps p{font-size:12px;margin:2px 0 0;color:#526277;line-height:1.6}.tc-answer-label{display:grid;gap:6px;font-size:13px;font-weight:650}.tc-answer-label>input{max-width:220px;font-size:17px}
+.tc-chosen-method{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:#315f91}
+.tc-chosen-method button{border:1px solid #b9cbe0;border-radius:6px;color:#42536a;background:#fff;font-size:12px;padding:6px 10px;cursor:pointer}
+.tc-why{font-size:12px;color:#42536a}.tc-why>summary{cursor:pointer}.tc-why[open]>summary{margin-bottom:8px}
+.tc-move-shell{max-width:1080px;margin:0 auto;padding:20px;gap:12px;border:1px solid #dce3ec;background:#f6f8fb}
+.tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
+.tc-order-picker,.tc-records{font-size:13px;color:#42536a}
+.tc-order-picker>summary,.tc-records>summary{padding:8px 0;cursor:pointer}
+.tc-order-picker .tc-order-belt{margin:8px 0;border:1px solid #cfd8e3;background:#fff}
+.tc-result-anchor:empty{display:none}.tc-result-anchor:focus{outline:2px solid #2563a6;outline-offset:3px;border-radius:10px}
+.tc-workspace{display:grid;gap:16px;background:#fff;border:1px solid #b9cbe0;border-top:4px solid #315f91;border-radius:12px;padding:22px;box-shadow:0 3px 10px #1e3a5f08}
+.tc-ticket{border:0;border-radius:0;padding:0;margin:0;background:transparent}
+.tc-ticket-head{align-items:center}.tc-ticket-head>span{font-size:12px;color:#556579}
+.tc-ticket-head .tc-ticket-clock{font-size:14px}.tc-order-heading{margin:8px 0 12px;font-size:24px;line-height:1.45;font-weight:800;letter-spacing:0}
+.tc-ticket-track{height:3px;margin-top:0}.tc-ticket-fill{background:#7995b4}
+.tc-ticket-urgent .tc-ticket-clock{color:#b52815}.tc-ticket-urgent{background:transparent}
+.tc-card-title{font-size:13px;letter-spacing:0}.tc-share-primer{padding:0;border:0;background:transparent;margin:6px 0 8px;font-size:13px;line-height:1.65}
+.tc-primary-actions{margin-top:12px;gap:14px}.tc-action{align-items:stretch;text-align:left;padding:17px;font-size:16px;font-weight:750;gap:8px;border:1px solid #b6c8dc;border-radius:10px;box-shadow:none;line-height:1.5}
+.tc-action-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px}.tc-action-heading b{white-space:nowrap;font-size:18px}
+.tc-action small{font-size:12px;font-weight:500;letter-spacing:0}.tc-action-risk{font-size:12px;font-weight:500;line-height:1.65}
+.tc-leak-button{background:#fffbf3;border-color:#decba7}.tc-prove-button{background:#edf5ff;border-color:#8badd3}
+.tc-prove-button[aria-expanded="true"]{border-color:#315f91;box-shadow:0 0 0 1px #315f91}
+.tc-action:not(:disabled):hover{border-color:#315f91;box-shadow:0 2px 6px #20395815}
+.tc-action:focus-visible,.tc-submit-small:focus-visible,summary:focus-visible{outline:3px solid #3372b5;outline-offset:3px}
+.tc-input-panel{border:0;border-top:1px solid #e2e8f0;border-radius:0;padding:16px 0 0;gap:10px}
+.tc-input-panel>.tc-submit-small{justify-self:start;min-width:180px;padding:11px 18px;background:#315f91;font-size:14px}
+.tc-input-panel>strong{font-size:16px!important}.tc-card-hint,.tc-lesson-use,.tc-lesson-why{font-size:12px;line-height:1.65}
+.tc-hints{border-top:1px solid #e2e8f0;margin:0;padding-top:12px}.tc-hints>summary{font-size:13px;color:#42536a;cursor:pointer}.tc-hints[open]>summary{margin-bottom:10px}
+.tc-hint-text{white-space:pre-line;line-height:1.85}.tc-hint-button{width:auto;font-size:12px;font-weight:600;border:1px solid #a1b5cf;letter-spacing:0;padding:8px 12px}
+.tc-exposure{margin:0;padding:12px;border-color:#dce3ec;background:transparent;font-size:12px}.tc-exposure>summary{cursor:pointer;font-weight:650}.tc-exposure>summary>span{margin-left:16px;color:#556579;font-weight:500}
+.tc-tactics{background:transparent;border-color:#dce3ec}.tc-tactics>summary{font-weight:650}.tc-tactics>summary span{display:none}.tc-tactics[open]>summary span{display:block}
+.tc-records>.tc-board-grid{margin-top:8px}
+@media(max-width:720px){.tc-move-shell{padding:10px}.tc-workspace{padding:15px;gap:12px}.tc-order-heading{font-size:20px}.tc-primary-actions{grid-template-columns:1fr}.tc-action{padding:14px}.tc-exposure>summary>span{display:block;margin:5px 0 0}.tc-scoreline{gap:6px}}
+
 @media(prefers-reduced-motion:reduce){.tc-feedback{animation:none!important}}
 `;
 
@@ -1078,6 +1115,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
   const [huntCells, setHuntCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
+  const orderPickerRef = useRef<HTMLDetailsElement>(null);
+  const feedbackRef = useRef<HTMLDivElement>(null);
   // [Issue #645] One box per component of an FHE answer, one for an MPC
   // subtotal. Keep decimal strings through the wire boundary: the default
   // field is 97, but a configured larger field must not be rounded by Number().
@@ -1093,6 +1132,12 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const attemptRef = useRef(0);
+  useEffect(() => {
+    if (feedback && feedback.kind !== "hint") {
+      feedbackRef.current?.focus({ preventScroll: true });
+      feedbackRef.current?.scrollIntoView({ block: "nearest" });
+    }
+  }, [feedback?.attempt]);
 
   const setProjection = (next: CryptoBattleProjection) => {
     setPolledProjection(next);
@@ -1157,6 +1202,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
   useEffect(() => {
     setProveCells(emptyCells());
     setProveTableKey("");
+    setProveOpen(false);
+    setFheR("");
+    setFheY("");
+    setMpcPartial("");
+    setCipherAnswer("");
   }, [selectedOrderIdForProve, ownGeneration]);
   const sudokuTargetTeam = selectedSudokuTarget?.teamId;
   const sudokuTargetGeneration = selectedSudokuTarget?.generation;
@@ -1286,111 +1336,44 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </div>
 
 
-      <div>
-        {/*
-          [Issue #659] The belt IS the picker, and the work surface is directly
-          below it. There is no second list: choosing a ticket in one host slot
-          and working on it in another, far apart down the page, is what made
-          the screen unintuitive — "which Order" and "what do I do with it" were
-          never in view together. Now they are.
-        */}
-        <OrderBelt
-          projection={projection}
-          locale={locale}
-          selectedId={selectedOrder?.id}
+      <details className="tc-order-picker" ref={orderPickerRef}>
+        <summary>{locale === "ja" ? `ほかのお題を選ぶ（残り ${orders.length} 件）` : `Choose another Order (${orders.length} open)`}</summary>
+        <OrderBelt projection={projection} locale={locale} selectedId={selectedOrder?.id}
           onSelect={(id) => {
             setSelectedOrderId(id);
             setProveOpen(false);
-          }}
-        />
+            if (orderPickerRef.current) orderPickerRef.current.open = false;
+          }} />
+      </details>
+
+      <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={feedback} locale={locale} />}
       </div>
 
-      {/*
-        [Issue #645] The action area follows the Order's TASK. A share Order
-        offers LEAK / PROVE; an encrypted-addition Order offers only the thing
-        that can answer it. Showing all four buttons and rejecting three of them
-        would teach a participant that the game is arbitrary, when the real rule
-        is that a sudoku PROVE cannot add two ciphertexts.
-
-        [Issue #659] Gated on what the Order ACCEPTS, not on which task it is.
-        The two were the same thing while `reveal-share` was the only Order that
-        took LEAK; the ladder Order takes it too, and the task-name test hid the
-        button on the one Order whose entire point is the choice between
-        computing and passing. The card advertised LEAK, the working panel
-        warned what LEAKing would cost, and there was nothing to press.
-      */}
-      {/*
-        [Issue #659] The ticket you are working on, on the surface you work at.
-        
-        The Order lived in one host slot and the controls in another, far apart
-        down the page, so "which Order am I answering, and how long do I have"
-        was never in view while answering it. In Overcooked the ticket and the
-        counter are the same place; the slots cannot merge, so the ticket comes
-        to the counter instead. The bar drains and changes colour, because a
-        deadline you have to read a number to feel is not a deadline.
-      */}
+      <section className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
       {selectedOrder && (
         <div className={`tc-ticket${selectedOrder.remainingMs <= 30_000 ? " tc-ticket-urgent" : ""}`}>
           <div className="tc-ticket-head">
-            <strong>{selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-            <span>{taskLabel(selectedOrder.task, locale)}</span>
+            <span>{locale === "ja" ? "いまのお題" : "Current Order"} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</span>
             <span className="tc-ticket-clock">{Math.ceil(selectedOrder.remainingMs / 1000)}s</span>
           </div>
+          <h2 className="tc-order-heading">{orderHeading(selectedOrder, locale)}</h2>
           <div className="tc-ticket-track" aria-hidden="true">
             <div
               className="tc-ticket-fill"
               style={{ width: `${Math.max(2, Math.min(100, (selectedOrder.remainingMs / 300_000) * 100))}%` }}
             />
           </div>
-          {/*
-            [Issue #659 §9] Help, attached to the ticket it is help WITH.
 
-            It sits inside the ticket rather than in a drawer of its own because
-            the moment a player needs it is the moment they are staring at an
-            Order they cannot start, and a stuck player does not go looking. The
-            price is printed on the button before it is pressed -- the whole
-            mechanism is a trade, and a trade whose cost you learn afterwards is
-            not one you made.
-
-            Only opened rungs have any text to show: `projectForTeam` withholds
-            the rest, so there is nothing here to reveal by reading the bundle.
-          */}
-          <div className="tc-hints">
-            <div className="tc-card-title">{copy.hintsTitle}</div>
-            <div className="tc-card-hint">{copy.hintsHint}</div>
-            {selectedOrder.hints
-              .filter((hint) => hint.text !== undefined)
-              .map((hint) => (
-                <p className="tc-hint-text" key={hint.id}>
-                  <span className="tc-hint-step">{hint.level + 1}</span>
-                  {hint.text?.[locale]}
-                </p>
-              ))}
-            {nextHint ? (
-              <button
-                type="button"
-                className="tc-hint-button"
-                disabled={submitting}
-                onClick={() => void run(
-                  () => submitRevealHint(client, selectedOrder.id),
-                  () => ({
-                    kind: "hint",
-                    title: copy.hintOpened,
-                    body: copy.hintOpenedBody(nextHint.cost),
-                  }),
-                )}
-              >
-                {copy.hintBuy(nextHint.cost)}
-              </button>
-            ) : (
-              <div className="tc-card-hint">{copy.hintsExhausted}</div>
-            )}
-          </div>
         </div>
       )}
 
-      {primaryActionsVisible && (
+      {primaryActionsVisible && selectedOrder?.task.kind !== "zk-sudoku" && (
       <div>
+        {proveOpen ? <div className="tc-chosen-method">
+          <strong>{locale === "ja" ? `秘密を守って証明する · +${selectedOrder?.points} 点` : `PROVE · +${selectedOrder?.points} pt`}</strong>
+          <button type="button" onClick={() => setProveOpen(false)}>{locale === "ja" ? "答え方を選び直す" : "Change answer method"}</button>
+        </div> : <>
         <div className="tc-card-title">{copy.choose}</div>
         {/*
           [Issue #702] The noun, then the move, before the two buttons. Placed
@@ -1400,19 +1383,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
         */}
         {selectedOrder?.task.kind === "reveal-share" && (
           <p className="tc-share-primer">
-            <strong>{copy.shareWhat}</strong>
-            <span>{copy.shareDo(selectedOrder.task.shareIndices)}</span>
+            <span>{locale === "ja"
+              ? `かけら (share) は、秘密の数から作った ${projection.vault.shares.length} 個の数です。公開して答えるか、かけらを渡さずに証明するか選びます。`
+              : `A share is one of ${projection.vault.shares.length} numbers made from your secret. Choose to publish it or prove without handing it over.`}</span>
           </p>
         )}
+        {selectedOrder?.task.kind === "reveal-share" && <ConceptExplanation key={selectedOrder.id} locale={locale} topic="sharing" task={selectedOrder.task} prime={projection.prime} />}
         <div className="tc-primary-actions">
-          {/*
-            [Issue #645] LEAK is disabled, not hidden, on an Order that forbids
-            raw disclosure -- and the reason is spelled out below. Hiding it
-            would leave the participant wondering where the option went; showing
-            it live and rejecting the submission would spend their time to teach
-            them a rule the card already stated.
-          */}
-          <button
+          {leakAllowed && <button
             type="button"
             className="tc-action tc-leak-button"
             disabled={!selectedOrder || submitting || !leakAllowed}
@@ -1437,29 +1415,29 @@ export default function FastMovePanel(props: PortalSlotProps) {
               }),
             )}
           >
-            {copy.leak}<small>{copy.leakHint}</small>
-          </button>
-          {/*
-            [Issue #659] Disabled rather than hidden on an Order that PROVE
-            cannot serve, for the same reason LEAK is: the participant sees the
-            option exists and reads why it is unavailable here, instead of
-            watching a button appear and disappear as they click between cards.
-          */}
-          <button
+            <span className="tc-action-heading"><span>{locale === "ja" ? "公開して答える" : "Publish to answer"}</span><b>+{selectedOrder?.leakPoints} {locale === "ja" ? "点" : "pt"}</b></span>
+            <small>LEAK · {copy.leakHint}</small>
+            <span className="tc-action-risk">{selectedOrder && disclosurePreview(projection, selectedOrder, locale)}</span>
+          </button>}
+          {proveAllowed && <button
             type="button"
             className="tc-action tc-prove-button"
+            aria-expanded={proveOpen}
             disabled={!selectedOrder || submitting || !proveAllowed}
             title={selectedOrder && !proveAllowed ? copy.proveBlocked : undefined}
             onClick={() => setProveOpen((value) => !value)}
           >
-            {copy.prove}<small>{copy.proveHint}</small>
-          </button>
+            <span className="tc-action-heading"><span>{locale === "ja" ? "秘密を守って証明する" : "Prove while protecting your secret"}</span><b>+{selectedOrder?.points} {locale === "ja" ? "点" : "pt"}</b></span>
+            <small>PROVE · {copy.proveHint}</small>
+            <span className="tc-action-risk">{locale === "ja" ? "かけらの公開は増えません。付け替えた数字の一列などを公開します。" : "No extra share is published. One relabelled row, column or box becomes public."}</span>
+          </button>}
         </div>
         {selectedOrder && (!leakAllowed || !proveAllowed) && (
           <div className="tc-card-hint">
             {!leakAllowed ? copy.leakBlocked : copy.proveBlocked}
           </div>
         )}
+        </>}
       </div>
       )}
 
@@ -1495,7 +1473,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
               () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points), lesson: copy.fheLesson }),
             )}
-          >{submitting ? copy.running : copy.fhe}</button>
+          >{submitting ? copy.running : `${copy.fhe} · +${selectedOrder.points}`}</button>
         </div>
       )}
 
@@ -1549,7 +1527,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               () => submitCipher(client, selectedOrder.id, cipherAnswer.trim().split(/\s+/)),
               () => ({ kind: "prove", title: copy.cipherSuccess, body: copy.cipherBody(selectedOrder.points) }),
             )}
-          >{submitting ? copy.running : copy.cipher}</button>
+          >{submitting ? copy.running : `${copy.cipher} · +${selectedOrder.points}`}</button>
         </div>
       )}
 
@@ -1561,28 +1539,22 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "masked-total" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.mpcTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          <div className="tc-lesson">
-            <div className="tc-lesson-use">{copy.mpcUse}</div>
-            <div className="tc-lesson-why">{copy.mpcWhy}</div>
-          </div>
-          <div className="tc-card-hint">{copy.mpcHelp}</div>
-          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />
-          <ul className="tc-material-list">
-            <li>{copy.mpcMine}: <code>{selectedOrder.task.myInput}</code></li>
-            <li>{copy.mpcIncoming}: <code>{selectedOrder.task.incomingMasks.join(", ")}</code></li>
-            <li>{copy.mpcOutgoing}: <code>{selectedOrder.task.outgoingMasks.join(", ")}</code></li>
-          </ul>
-          <div className="tc-card-hint">{copy.prime}: <code>{projection.prime}</code></div>
-          <input aria-label="fast-mpc-partial" value={mpcPartial} onChange={(event) => setMpcPartial(event.target.value)} placeholder={copy.mpcAnswer} />
+          <p className="tc-card-hint">{locale === "ja" ? "自分の数をそのまま相手に見せず、ほかの拠点と合計だけを出す練習です。今回は、自分の数に『覆面』と呼ぶ数を足し引きしてから提出します。" : "Find a combined total without directly showing your own input. Add and subtract the numbers called masks before submitting."}</p>
+          <MpcWorksheet task={selectedOrder.task} prime={projection.prime} locale={locale} />
+          <label className="tc-answer-label">{copy.mpcAnswer} · {locale === "ja" ? `④ の答えを 1 つ入力（0〜${BigInt(projection.prime) - 1n}）` : `Enter the result of step 4 (0–${BigInt(projection.prime) - 1n})`}
+            <input aria-label={copy.mpcAnswer} inputMode="numeric" value={mpcPartial} onChange={(event) => setMpcPartial(event.target.value)} placeholder={locale === "ja" ? "最後に出た数" : "Your final number"} />
+          </label>
           <button
             type="button"
             className="tc-submit-small tc-mpc-button"
             disabled={submitting || !mpcPartial.trim()}
             onClick={() => void run(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
-              () => ({ kind: "prove", title: copy.mpcSuccess, body: copy.mpcBody(selectedOrder.points), lesson: copy.mpcLesson }),
+              () => ({ kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(selectedOrder.points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, lesson: copy.mpcLesson }),
             )}
-          >{submitting ? copy.running : copy.mpc}</button>
+          >{submitting ? copy.running : `${copy.mpc} · +${selectedOrder.points}`}</button>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />
+          <details className="tc-why"><summary>{locale === "ja" ? "なぜ、足し引きすると秘密が隠れる？" : "Why do these additions and subtractions hide my input?"}</summary><p className="tc-card-hint">{copy.mpcWhy}</p></details>
         </div>
       )}
 
@@ -1601,13 +1573,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
       */}
       {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && proveAllowed && (
         <div className="tc-input-panel">
-          <strong style={{ fontSize: "12px" }}>{copy.proveTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          <div className="tc-lesson">
-            <div className="tc-lesson-use">{copy.proveUse}</div>
-            <div className="tc-lesson-why">{copy.proveWhy}</div>
-          </div>
+          <strong>{locale === "ja" ? "空欄4マスに、付け替えた数字を入力" : "Fill four holes with the renamed digits"}</strong>
+
           <div className="tc-card-hint">{copy.proveHelp}</div>
-          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="zk" task={selectedOrder.task} prime={projection.prime} />
           <label className="tc-card-hint" style={{ display: "block" }}>
             {copy.proveTable}
             <select aria-label={copy.proveTable} value={proveTableKey} style={{ display: "block", maxWidth: "100%", margin: "6px 0", padding: "6px", color: "#16212e", background: "#fff" }}
@@ -1629,22 +1597,22 @@ export default function FastMovePanel(props: PortalSlotProps) {
           <div className="tc-sudoku-row">
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveSolution}</span>
-              <SudokuBoard cells={projection.vault.sudokuSolution} label="my-solution" />
+              <SudokuBoard cells={projection.vault.sudokuSolution} size={36} label="my-solution" />
             </div>
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveGrid}</span>
-              <SudokuInput value={proveCells} givens={proveGivens} onChange={setProveCells} ariaLabel="fast-prove-grid" />
+              <SudokuInput size={36} value={proveCells} givens={proveGivens} onChange={setProveCells} ariaLabel="fast-prove-grid" />
             </div>
           </div>
           </>}
-          <div className="tc-card-hint">
+          {projection.vault.usedPermutations.length > 0 && <div className="tc-card-hint">
             {copy.proveUsed}:{" "}
             {projection.vault.usedPermutations.length === 0
               ? copy.proveNoneUsed
               : projection.vault.usedPermutations.map((pi) => (
                   <span key={pi.join("")} style={{ marginRight: 8 }}><PermutationChips pi={pi} /></span>
                 ))}
-          </div>
+          </div>}
           <button
             type="button"
             className="tc-submit-small tc-prove-submit"
@@ -1662,16 +1630,59 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 return draft;
               },
             )}
-          >{submitting ? copy.running : copy.send}</button>
+          >{submitting ? copy.running : `${copy.send} · +${selectedOrder.points}`}</button>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="zk" task={selectedOrder.task} prime={projection.prime} />
+          <details className="tc-why">
+            <summary>{locale === "ja" ? "何を証明している？" : "What am I proving?"}</summary>
+            <div className="tc-lesson-use">{copy.proveUse}</div>
+            <div className="tc-lesson-why">{copy.proveWhy}</div>
+          </details>
         </div>
       )}
+
+      {selectedOrder ? (
+          <details className="tc-hints" key={selectedOrder.id}>
+            <summary>{locale === "ja" ? `このお題のヒント${nextHint ? `（次は −${nextHint.cost} 点）` : "（購入済み）"}` : `Hints for this Order${nextHint ? ` (next: −${nextHint.cost})` : " (all opened)"}`}</summary>
+            <div className="tc-card-hint">{copy.hintsHint}</div>
+            {selectedOrder.hints
+              .filter((hint) => hint.text !== undefined)
+              .map((hint) => (
+                <p className="tc-hint-text" key={hint.id}>
+                  <span className="tc-hint-step">{hint.level + 1}</span>
+                  <span>{hint.text?.[locale]}</span>
+                </p>
+              ))}
+            {nextHint ? (
+              <button
+                type="button"
+                className="tc-hint-button"
+                disabled={submitting}
+                onClick={() => void run(
+                  () => submitRevealHint(client, selectedOrder.id),
+                  () => ({
+                    kind: "hint",
+                    title: copy.hintOpened,
+                    body: copy.hintOpenedBody(nextHint.cost),
+                  }),
+                )}
+              >
+                {copy.hintBuy(nextHint.cost)}
+              </button>
+            ) : (
+              <div className="tc-card-hint">{copy.hintsExhausted}</div>
+            )}
+          </details>
+      ) : <p className="tc-card-hint">{copy.noOrder}</p>}
+      </section>
 
       {/*
         [Issue #682] The exposure lane, always on screen. See `exposureRows`
         for why it is not gated on anything being actionable yet.
       */}
-      <div className="tc-exposure">
-        <div className="tc-card-title">{copy.exposure}</div>
+      <details className="tc-exposure">
+        <summary>{locale === "ja" ? `秘密の公開状況 · あなた ${ownExposedShareCount(projection)}/${projection.threshold} 個` : `Secret exposure · you ${ownExposedShareCount(projection)}/${projection.threshold}`}
+          <span>{exposure.filter((row) => !row.isSelf).map((row) => `${row.teamName} ${row.exposed}/${projection.threshold}`).join(" · ")}</span>
+        </summary>
         <div className="tc-card-hint">{copy.exposureHint(projection.threshold)}</div>
         <div className="tc-exposure-rows">
           {exposure.map((row) => (
@@ -1700,11 +1711,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
           ))}
         </div>
         {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
-      </div>
+      </details>
 
       {(tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rotate) && (
-      <details className="tc-tactics" open={tactics.hunt || tactics.cipherHunt || tactics.sudokuHunt}>
-        <summary>{copy.tactics}<span>{copy.tacticsHint}</span></summary>
+      <details className="tc-tactics">
+        <summary>{copy.tactics}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
       {tactics.hunt && <div className="tc-secondary-grid">
         <div className="tc-hunt-card">
@@ -1908,12 +1919,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </details>
       )}
 
-      <div className="tc-board-grid">
-        <Ledger projection={projection} locale={locale} />
-        <Vault projection={projection} locale={locale} />
-      </div>
-
-      {feedback && <FeedbackBanner key={feedback.attempt} feedback={feedback} locale={locale} />}
+      <details className="tc-records">
+        <summary>{locale === "ja" ? `公開記録と自分の保管庫を見る（記録 ${projection.publicLedger.length} 件）` : `Public Ledger and My Vault (${projection.publicLedger.length} records)`}</summary>
+        <div className="tc-board-grid">
+          <Ledger projection={projection} locale={locale} />
+          <Vault projection={projection} locale={locale} />
+        </div>
+      </details>
     </section>
   );
 }

@@ -47,7 +47,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
-    "reveal-share": "share を出す",
+    "reveal-share": "かけらを公開するか、秘密を守って証明する",
     "homomorphic-sum": "暗号文のまま足す",
     "masked-total": "覆面をかけた小計を出す",
     // [Issue #659] 「シーザー暗号で」ではなく「自分の鍵で暗号にする」。
@@ -81,7 +81,7 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
     case "reveal-share":
-      return `share [${task.shareIndices.join(", ")}]`;
+      return `${locale === "ja" ? "かけら" : "share"} [${task.shareIndices.join(", ")}]`;
     case "homomorphic-sum":
       return locale === "ja" ? `暗号文 ${task.inputs.length} 個` : `${task.inputs.length} ciphertexts`;
     case "masked-total":

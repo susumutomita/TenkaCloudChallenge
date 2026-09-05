@@ -1552,7 +1552,9 @@ describe("each Order carries its use, its mechanism, and its procedure", () => {
   it("gives the MPC Order the cancellation that makes it work", () => {
     const copy = FAST_MOVE_COPY.ja;
     expect(copy.mpcUse).toContain("つかいみち");
-    expect(copy.mpcWhy).toContain("a+b+c");
+    expect(copy.mpcWhy).toContain("覆面");
+    expect(copy.mpcWhy).toContain("小計");
+    expect(copy.mpcWhy).toContain("打ち消し合");
     expect(copy.mpcHelp).toContain("やること");
   });
 

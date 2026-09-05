@@ -87,8 +87,12 @@ The tutorial starts collapsed on every visit, including the waiting room. It
 never gates or automatically interrupts play, and can be closed in place. It
 uses only fixed practice data; changing team or deployment resets practice.
 
+Optional practice now uses six one-digit fill-ins: remainder, share recovery,
+MPC, ZK, FHE, Caesar. Each answer is checked locally and followed by the reason
+for the calculation. There is no practice score, fake Contract, or fake Ledger.
+
 Free concept explanations are separate from practice. They start as compact
-controls above the board and beside each calculation form, use fixed one-digit
+controls in the top rules disclosure and beside each calculation form, use fixed one-digit
 examples, and show unsolved expressions from only the current team's projected
 Order operands. No hint purchase or tutorial completion is needed. FHE is
 labelled an addition model with separate per-input keys; the ZK explanation

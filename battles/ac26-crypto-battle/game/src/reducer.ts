@@ -65,7 +65,7 @@ import {
 } from "./fixtures.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
-import { hintCostAt, hintsFor } from "./hints.ts";
+import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
   encryptWithRung,
@@ -124,6 +124,7 @@ import type {
   TeamState,
   TeamSummaryProjection,
   ValidateResult,
+  VaultProjection,
 } from "./types.ts";
 
 /**
@@ -2057,13 +2058,32 @@ function projectTask(
  * refuses to SELL a level with no configured price, so this branch only ever
  * renders one, and rendering it as `NaN` would put that straight on a card.
  */
-function projectHints(state: CryptoBattleState, contract: Contract): readonly HintProjection[] {
+function projectHints(
+  state: CryptoBattleState,
+  contract: Contract,
+  task: OrderTaskProjection,
+  vault: VaultProjection,
+  exposedShareIndices: readonly number[],
+): readonly HintProjection[] {
   const revealed = hintsRevealedOn(contract);
+  // [Issue #712] Rendered against THIS Order and THIS reader's vault -- both of
+  // which are already on the projection this hint ships with. Rendered only for
+  // the rungs that were bought, so an unbought rung never has its text computed,
+  // let alone shipped.
+  const ctx: HintContext = {
+    task,
+    vault,
+    prime: state.config.prime,
+    threshold: state.config.threshold,
+    shareCount: state.config.shareCount,
+    allowedMethods: contract.allowedMethods,
+    exposedShareIndices,
+  };
   return hintsFor(contract.task.kind).map((spec, level) => ({
     level,
     id: spec.id,
     cost: hintCostAt(state.config.scores.hintCosts, level) ?? 0,
-    ...(level < revealed ? { text: spec.text } : {}),
+    ...(level < revealed ? { text: spec.text(ctx) } : {}),
   }));
 }
 
@@ -2456,30 +2476,55 @@ export function projectForTeam(
       ? 0
       : Math.max(0, state.config.rotateCooldownMs - (state.nowMs - team.lastRotateAtMs));
 
+  const vault: VaultProjection = {
+    teamId,
+    // team.secret / team.shares are already stringified bigints
+    // (TeamState / StoredShare, see types.ts) -- VaultProjection uses the
+    // exact same wire shape, so no conversion is needed here.
+    secret: team.secret,
+    shares: team.shares,
+    generation: team.generation,
+    lastRotateAtMs: team.lastRotateAtMs,
+    rotateCooldownRemainingMs,
+    completedContractIds: team.completedContractIds,
+    huntedGenerations: team.huntedGenerations,
+    sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
+    usedPermutations: usedPermutationsFor(state, teamId, team.generation),
+    sudokuHuntedGenerations: team.sudokuHuntedGenerations ?? [],
+  };
+
+  const publicLedger = decodeLedger(state.publicLedger);
+  const exposedShareIndices = [...new Set(publicLedger.flatMap((entry) =>
+    entry.kind === "share" && entry.teamId === teamId && entry.generation === team.generation
+      ? [entry.shareIndex] : [],
+  ))];
   const myContracts = state.contracts
     .filter((c) => c.teamId === teamId)
-    .map((c) => ({
-      id: c.id,
-      kind: c.kind,
-      points: c.points,
-      leakPoints: c.leakPoints,
-      task: projectTask(state, teamId, c.task, c.id),
-      status: c.status,
-      // [Issue #645] The Order's rule and the methods that satisfy it are
-      // participant-visible by design: an Order the participant cannot LEAK
-      // must say so BEFORE they choose, not by rejecting their submission.
-      // Both are public properties of the job, not of anyone's secret.
-      privacyConstraint: c.privacyConstraint,
-      allowedMethods: c.allowedMethods,
-      // `state.nowMs` is only ever undefined before the first `tick()`, and
-      // `state.contracts` is only ever non-empty AFTER at least one `tick()`
-      // (`initialState` sets `contracts: []`; only `tick()` ever pushes to
-      // it) -- so the `?? c.expiresAtMs` fallback (remainingMs 0) is
-      // unreachable in practice. It exists only to keep this arithmetic
-      // total without an unsafe assertion.
-      remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
-      hints: projectHints(state, c),
-    }));
+    .map((c) => {
+      const task = projectTask(state, teamId, c.task, c.id);
+      return {
+        id: c.id,
+        kind: c.kind,
+        points: c.points,
+        leakPoints: c.leakPoints,
+        task,
+        status: c.status,
+        // [Issue #645] The Order's rule and the methods that satisfy it are
+        // participant-visible by design: an Order the participant cannot LEAK
+        // must say so BEFORE they choose, not by rejecting their submission.
+        // Both are public properties of the job, not of anyone's secret.
+        privacyConstraint: c.privacyConstraint,
+        allowedMethods: c.allowedMethods,
+        // `state.nowMs` is only ever undefined before the first `tick()`, and
+        // `state.contracts` is only ever non-empty AFTER at least one `tick()`
+        // (`initialState` sets `contracts: []`; only `tick()` ever pushes to
+        // it) -- so the `?? c.expiresAtMs` fallback (remainingMs 0) is
+        // unreachable in practice. It exists only to keep this arithmetic
+        // total without an unsafe assertion.
+        remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
+        hints: projectHints(state, c, task, vault, exposedShareIndices),
+      };
+    });
 
   const otherOpenContractCount = state.contracts.filter(
     (c) => c.teamId !== teamId && c.status === "open",
@@ -2534,26 +2579,7 @@ export function projectForTeam(
       me: (state.readyTeamIds ?? []).includes(teamId),
     },
     matchRemainingMs,
-    vault: {
-      teamId,
-      // team.secret / team.shares are already stringified bigints
-      // (TeamState / StoredShare, see types.ts) -- VaultProjection uses the
-      // exact same wire shape, so no conversion is needed here.
-      secret: team.secret,
-      shares: team.shares,
-      generation: team.generation,
-      lastRotateAtMs: team.lastRotateAtMs,
-      rotateCooldownRemainingMs,
-      completedContractIds: team.completedContractIds,
-      huntedGenerations: team.huntedGenerations,
-      // [Issue #709] The team's own solution, derived rather than stored -- the
-      // same boundary `secret` sits on, and the same reason MPC inputs are not
-      // persisted: `state` never holds a value a projection would have to
-      // remember to redact.
-      sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
-      usedPermutations: usedPermutationsFor(state, teamId, team.generation),
-      sudokuHuntedGenerations: team.sudokuHuntedGenerations ?? [],
-    },
+    vault,
     myContracts,
     otherOpenContractCount,
     // [Issue #679] `state.publicLedger` is the compact persisted form
@@ -2564,7 +2590,7 @@ export function projectForTeam(
     // side used to be a zero-cost passthrough (5377 entries at 99 teams,
     // worst case) -- an intentional trade against the ~430 KB this shaves off
     // every write's HTTP body (state-size.test.ts), not a free lunch.
-    publicLedger: decodeLedger(state.publicLedger),
+    publicLedger,
     teams,
     // Public by construction (see CryptoBattleState.publicPuzzles) -- passed
     // through unredacted, unlike `teams` above it does not need a per-team

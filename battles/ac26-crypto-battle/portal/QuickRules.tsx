@@ -19,14 +19,14 @@ export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
     // player told to pick an Order from an empty belt has been sent to a screen
     // that cannot answer them.
     summary:
-      "Press START THE MATCH. Orders arrive at once; pick one blue ORDER card, then choose one of the two large buttons below it.",
+      "Start the match. Read the current Order, then use the answer area directly below it. Choose another Order from the list whenever you like.",
     choice: "LEAK = score now, but publish a secret fragment. PROVE = do a calculation and keep the fragment protected.",
   },
   ja: {
     title: "この問題の解説",
     explanation: "自分の秘密のかけらを守りながら、届くお題（ORDER）に答えて得点を競います。公開したかけらが一定数そろうと、相手は秘密を復元して HUNT で得点できます。",
     summary:
-      "「試合を始める」を押します。すぐに ORDER が届くので、青い ORDER カードを1枚選び、その下にある大きなボタンを1つ選びます。",
+      "試合を始めたら「いまのお題」を読み、その直下で答えます。別のお題には「ほかのお題を選ぶ」から切り替えられます。",
     choice: "LEAK = すぐ得点する代わりに秘密のかけらを 1 個公開。PROVE = 計算してかけらを守る。",
   },
 };
@@ -36,11 +36,11 @@ export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
 // a dark host is white -- white on a pale blue card. The same omission has now
 // been fixed three times in this problem's portal; see BOARD_CSS's header.
 const panelStyle = {
-  border: "2px solid #0972d3",
+  border: "1px solid #dce3ec",
   borderRadius: "8px",
   padding: "12px",
   marginBottom: "12px",
-  background: "#f1f8ff",
+  background: "#fff",
   color: "#16212e",
 } as const;
 
