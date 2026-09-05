@@ -44,7 +44,7 @@
  * microservice-migration-battle precedent for why. Plain HTML + inline style.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CipherRung } from "../game/src/ladder.ts";
 import { describeTaskShort } from "./orderTask.ts";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
@@ -120,7 +120,7 @@ export const COPY: Record<Locale, Copy> = {
     leakSubmit: "LEAK the selected shares",
     proveTitle: "PROVE",
     proveLocalNote:
-      "Relabel your solution on paper first: pick a table like 1->3, 2->1, 3->4, 4->2 and rewrite all 16 cells of MY VAULT's grid through it. This form never computes a proof for you.",
+      "Relabel your solution on paper first: pick a table like 1->3, 2->1, 3->4, 4->2 -- each of 1-4 exactly once on the right, a swap and never a merge -- and rewrite all 16 cells of MY VAULT's grid through it. Never the same table twice on one generation. This form never computes a proof for you.",
     gridLabel: "relabelled grid: 16 digits, row by row (e.g. 2341 4123 1432 3214)",
     gridError: "Enter exactly 16 digits, each 1-4, in row order.",
     proveSubmit: "PROVE this contract",
@@ -154,7 +154,7 @@ export const COPY: Record<Locale, Copy> = {
     leakSubmit: "選択した share を LEAK する",
     proveTitle: "PROVE",
     proveLocalNote:
-      "先に紙で付け替えてください。「1→3、2→1、3→4、4→2」のような表を 1 つ決め、MY VAULT のマス目 16 個をその表で書き換えます。この form が代わりに proof を計算することはありません。",
+      "先に紙で付け替えてください。「1→3、2→1、3→4、4→2」のような表を 1 つ決め (右側は 1〜4 を 1 回ずつ。入れ替えであって、まとめではありません)、MY VAULT のマス目 16 個をその表で書き換えます。同じ世代で同じ表は 2 度使いません。この form が代わりに proof を計算することはありません。",
     gridLabel: "付け替えたマス目: 1 行ずつ 16 桁 (例 2341 4123 1432 3214)",
     gridError: "1〜4 の数字を、行の順に 16 個入力してください。",
     proveSubmit: "この contract を PROVE する",
@@ -409,14 +409,21 @@ export function describeProveOutcome(
   contractId: string,
   copy: Copy,
 ): string {
-  if (outcome.kind === "ok" && isCryptoBattleProjection(outcome.projection)) {
-    const last = outcome.projection.lastProve;
-    if (last?.contractId === contractId && last.outcome === "miss") {
-      return copy.proveMissResult(outcome.projection.wrongProveCost);
-    }
-    if (last?.contractId === contractId && last.outcome === "hit") return copy.proveHitResult;
-  }
+  const verdict = proveVerdict(outcome, contractId);
+  if (verdict?.outcome === "miss") return copy.proveMissResult(verdict.cost);
+  if (verdict?.outcome === "hit") return copy.proveHitResult;
   return describeOutcome(outcome, copy);
+}
+
+/** The landed PROVE verdict on `contractId` in an ok outcome, if there is one. */
+function proveVerdict(
+  outcome: PortalCoordinationOutcome,
+  contractId: string,
+): { readonly outcome: "hit" | "miss"; readonly cost: number } | undefined {
+  if (outcome.kind !== "ok" || !isCryptoBattleProjection(outcome.projection)) return undefined;
+  const last = outcome.projection.lastProve;
+  if (last?.contractId !== contractId) return undefined;
+  return { outcome: last.outcome, cost: outcome.projection.wrongProveCost };
 }
 
 function LeakForm({
@@ -470,10 +477,12 @@ function LeakForm({
 function ProveForm({
   client,
   contracts,
+  generation,
   copy,
 }: {
   readonly client: PortalCoordinationClient;
   readonly contracts: readonly ContractProjection[];
+  readonly generation: number | undefined;
   readonly copy: Copy;
 }) {
   const [contractId, setContractId] = useState("");
@@ -482,6 +491,15 @@ function ProveForm({
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const selected = contractId || contracts[0]?.id || "";
+  // [Issue #709 review] A typed grid belongs to the Order and generation it
+  // was typed for. When the default Order completes, `selected` falls through
+  // to the next open one, and a grid left behind would be one click from a
+  // second PROVE under the same table; after a ROTATE it would be a charged
+  // miss against the new solution. Same rule as the fast panel's grids.
+  useEffect(() => {
+    setGridText("");
+    setParseError(null);
+  }, [selected, generation]);
 
   const onSubmit = () => {
     // [Issue #709] Sixteen digits, whitespace ignored -- a participant who
@@ -497,6 +515,8 @@ function ProveForm({
     setResult(null);
     void submitProveSudoku(client, selected, [...digits].map(Number)).then((outcome) => {
       setResult(describeProveOutcome(outcome, selected, copy));
+      // A hit spends that table; the box empties so it cannot be sent twice.
+      if (proveVerdict(outcome, selected)?.outcome === "hit") setGridText("");
       setSubmitting(false);
     });
   };
@@ -678,7 +698,7 @@ export default function RegistrationPanel(props: PortalSlotProps) {
       {!projection && <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#5f6b7a" }}>{copy.loadingContracts}</p>}
       <div style={formsGridStyle}>
         <LeakForm client={coordinationClient} contracts={leakContracts} copy={copy} />
-        <ProveForm client={coordinationClient} contracts={proveContracts} copy={copy} />
+        <ProveForm client={coordinationClient} contracts={proveContracts} generation={projection?.vault.generation} copy={copy} />
         <HuntForm client={coordinationClient} teamIds={teamIds} myTeamId={myTeamId} teams={teams} copy={copy} />
         <RotateForm client={coordinationClient} copy={copy} />
       </div>

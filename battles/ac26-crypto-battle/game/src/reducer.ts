@@ -962,13 +962,26 @@ function revealsByTag(
   return byTag;
 }
 
-/** Every group this team's generation has had opened, under any tag. */
-function openedGroupsFor(state: CryptoBattleState, teamId: string, generation: number): ReadonlySet<number> {
-  const opened = new Set<number>();
-  for (const reveals of revealsByTag(state, teamId, generation).values()) {
-    for (const reveal of reveals) opened.add(reveal.group);
+/**
+ * The groups this team's generation has had opened: every one under any tag,
+ * and the ones under `tag` alone. Both feed `deriveRevealGroup`, in that
+ * order of preference -- see its doc comment.
+ */
+function openedGroupsFor(
+  state: CryptoBattleState,
+  teamId: string,
+  generation: number,
+  tag: string,
+): { readonly any: ReadonlySet<number>; readonly underTag: ReadonlySet<number> } {
+  const any = new Set<number>();
+  const underTag = new Set<number>();
+  for (const [seen, reveals] of revealsByTag(state, teamId, generation)) {
+    for (const reveal of reveals) {
+      any.add(reveal.group);
+      if (seen === tag) underTag.add(reveal.group);
+    }
   }
-  return opened;
+  return { any, underTag };
 }
 
 /**
@@ -2188,10 +2201,13 @@ function applyProveSudoku(
     };
   }
   const nowMs = state.nowMs ?? contract.issuedAtMs;
-  // A group this generation has not had opened yet, while any remain: a
-  // repeated group under a reused table would be the same row twice, and the
-  // reuse HUNT the statement promises needs distinct cells to line up.
-  const group = deriveRevealGroup(state.seed, contract.id, openedGroupsFor(state, teamId, team.generation));
+  const tag = derivePermutationTag(state.seed, teamId, team.generation, pi);
+  // A group this generation has not had opened yet while any remain, and
+  // failing that one this TABLE has not had opened: a repeated group under a
+  // reused table would be the same row twice, and the reuse HUNT the
+  // statement promises needs distinct cells to line up.
+  const opened = openedGroupsFor(state, teamId, team.generation, tag);
+  const group = deriveRevealGroup(state.seed, contract.id, [opened.any, opened.underTag]);
   const cells = CONSTRAINT_GROUPS[group];
   if (!cells) throw new Error(`applyOp(prove-sudoku): no constraint group ${group}`);
   const artifact: SudokuRevealArtifact = {
@@ -2203,7 +2219,7 @@ function applyProveSudoku(
     contractId: contract.id,
     group,
     cells: cells.map((i) => op.grid[i] ?? 0),
-    tag: derivePermutationTag(state.seed, teamId, team.generation, pi),
+    tag,
     postedAtMs: nowMs,
   };
   const completed = completeOrder(state, teamId, contract, artifact, "prove");

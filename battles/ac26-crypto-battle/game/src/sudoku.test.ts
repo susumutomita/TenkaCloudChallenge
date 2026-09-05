@@ -185,15 +185,34 @@ describe("what the seed derives", () => {
   test("the judge avoids a group this generation already opened, until all twelve are", () => {
     const opened = new Set<number>();
     for (let i = 0; i < CONSTRAINT_GROUP_COUNT; i += 1) {
-      const group = deriveRevealGroup(seed, `teamA-c${i}`, opened);
+      const group = deriveRevealGroup(seed, `teamA-c${i}`, [opened]);
       expect(opened.has(group)).toBe(false);
       opened.add(group);
     }
     expect(opened.size).toBe(CONSTRAINT_GROUP_COUNT);
     // Everything open: the pick falls back to the whole set rather than failing.
-    const fallback = deriveRevealGroup(seed, "teamA-c99", opened);
+    const fallback = deriveRevealGroup(seed, "teamA-c99", [opened]);
     expect(fallback).toBeGreaterThanOrEqual(0);
     expect(fallback).toBeLessThan(CONSTRAINT_GROUP_COUNT);
+  });
+
+  test("past twelve, the judge still keeps the groups under one relabelling distinct", () => {
+    // Every group is open on the generation; under THIS table only group 8
+    // is. The thirteenth PROVE onward must not repeat 8 for the same table,
+    // whatever the Order id hashes to -- or a reuse could publish the same
+    // row twice and be unhuntable.
+    const all = new Set(Array.from({ length: CONSTRAINT_GROUP_COUNT }, (_, i) => i));
+    const underTag = new Set([8]);
+    for (let i = 0; i < 200; i += 1) {
+      expect(deriveRevealGroup(seed, `teamA-c${i}`, [all, underTag])).not.toBe(8);
+    }
+    // Eleven under the tag: the twelfth pick is the one group left.
+    const elevenUnderTag = new Set(Array.from({ length: 11 }, (_, i) => i));
+    expect(deriveRevealGroup(seed, "teamA-c7", [all, elevenUnderTag])).toBe(11);
+    // Twelve under the tag: nothing left to prefer, whole set.
+    const pick = deriveRevealGroup(seed, "teamA-c7", [all, all]);
+    expect(pick).toBeGreaterThanOrEqual(0);
+    expect(pick).toBeLessThan(CONSTRAINT_GROUP_COUNT);
   });
 
   test("a tag names a relabelling without revealing it", () => {
