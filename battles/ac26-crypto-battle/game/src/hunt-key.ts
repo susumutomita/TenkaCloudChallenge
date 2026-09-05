@@ -1,5 +1,19 @@
 import type { CryptoBattleState } from "./types.ts";
 
+type Teams = CryptoBattleState["teams"];
+const rosterCache = new WeakMap<Teams, { ids: readonly string[]; positions: ReadonlyMap<string, number> }>();
+
+/** Reducer team maps are immutable; memoization only avoids repeated sorting. */
+function rosterOf(teams: Teams) {
+  let roster = rosterCache.get(teams);
+  if (!roster) {
+    const ids = Object.keys(teams).sort();
+    roster = { ids, positions: new Map(ids.map((id, index) => [id, index])) };
+    rosterCache.set(teams, roster);
+  }
+  return roster;
+}
+
 /** Logical Shamir/RPS identity; successful-HUNT records keep this public-ID form. */
 export function huntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
   return JSON.stringify([attackerTeamId, targetTeamId, generation]);
@@ -14,9 +28,9 @@ export function storedHuntKey(state: Pick<CryptoBattleState, "teams">, logicalKe
   const parts: unknown[] = JSON.parse(logicalKey);
   const offset = parts.length === 4 && parts[0] === "sudoku" ? 1 : 0;
   if (parts.length !== offset + 3 || typeof parts[offset] !== "string" || typeof parts[offset + 1] !== "string" || !Number.isSafeInteger(parts[offset + 2])) throw new Error("Invalid logical HUNT budget key");
-  const roster = Object.keys(state.teams).sort();
-  const attacker = roster.indexOf(parts[offset] as string), target = roster.indexOf(parts[offset + 1] as string);
-  if (attacker < 0 || target < 0) throw new Error("HUNT budget references an unknown team");
+  const roster = rosterOf(state.teams);
+  const attacker = roster.positions.get(parts[offset] as string), target = roster.positions.get(parts[offset + 1] as string);
+  if (attacker === undefined || target === undefined) throw new Error("HUNT budget references an unknown team");
   return JSON.stringify([...(offset ? ["sudoku"] : []), attacker, target, parts[offset + 2]]);
 }
 
@@ -31,7 +45,7 @@ export function compactHuntAttempts(state: CryptoBattleState): CryptoBattleState
 
 /** Old-generation counters have no legal caller except a reserved RPS refund. */
 export function pruneRetiredHuntAttempts(state: CryptoBattleState): CryptoBattleState {
-  const roster = Object.keys(state.teams).sort();
+  const roster = rosterOf(state.teams).ids;
   const reserved = new Set<string>();
   for (const c of state.contracts) for (const [attacker, [, generation]] of Object.entries(c.rps?.predictions ?? {})) reserved.add(storedHuntKey(state, huntKey(predictionTeam(state, attacker), c.teamId, generation)));
   const entries = Object.entries(state.huntAttempts).filter(([key]) => {
@@ -45,12 +59,12 @@ export function pruneRetiredHuntAttempts(state: CryptoBattleState): CryptoBattle
 
 /** Judge-private pending predictions use the same fixed-roster identity. */
 export function predictionKey(state: Pick<CryptoBattleState, "teams">, teamId: string): string {
-  const index = Object.keys(state.teams).sort().indexOf(teamId);
-  if (index < 0) throw new Error("Prediction references an unknown team");
+  const index = rosterOf(state.teams).positions.get(teamId);
+  if (index === undefined) throw new Error("Prediction references an unknown team");
   return String(index);
 }
 export function predictionTeam(state: Pick<CryptoBattleState, "teams">, key: string): string {
-  const index = Number(key), teamId = Object.keys(state.teams).sort()[index];
+  const index = Number(key), teamId = rosterOf(state.teams).ids[index];
   if (!Number.isSafeInteger(index) || String(index) !== key || teamId === undefined) throw new Error("Invalid prediction roster position");
   return teamId;
 }
