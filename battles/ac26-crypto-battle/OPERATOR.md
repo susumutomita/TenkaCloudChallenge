@@ -60,6 +60,18 @@ All state and operations must remain JSON-safe. Large field and group values
 cross the state/op boundary as decimal strings, never JavaScript numbers or
 raw `bigint`.
 
+### Upgrading across a schema version
+
+The plugin declares `stateSchemaVersion` (3 since the sudoku PROVE) and a
+`migrateState` that lifts older rows on first touch. One case is refused on
+purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
+Schnorr transcripts sharing a commitment on a team's current generation, and
+an attacker that has not collected on it). v3 has no move that attack maps
+onto, and dropping it silently would change the match's scoring mid-run. The
+platform leaves such a row untouched, so finish that match on the plugin that
+made it, or reset it, before deploying the upgrade. Upgrade between events,
+not during one.
+
 ## Participant surface
 
 The default surface is deliberately staged:

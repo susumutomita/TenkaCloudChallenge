@@ -615,6 +615,21 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
     throw new Error("reducer: migrateState: v2 state is missing seed, contracts or teams");
   }
   const { publicCommitments: _legacyCommitments, ...rest } = row;
+  // v3 has no nonce-reuse HUNT. A v2 row whose ledger still holds an UNSPENT
+  // one -- two Schnorr transcripts sharing a commitment on a team's current
+  // generation, and some other team that has not yet hunted that generation
+  // -- carries an attack the visible record had already earned. Dropping it
+  // silently would change the match's scoring mid-run, and there is no v3
+  // move it maps onto (a sudoku HUNT needs reveals the row does not have).
+  // So the migration refuses, which the platform treats as "leave the row
+  // alone": the match finishes on the plugin that made it, or the operator
+  // resets it. See OPERATOR.md, "Upgrading across a schema version".
+  const exposure = unspentNonceExposure(rest as CryptoBattleState);
+  if (exposure) {
+    throw new Error(
+      `reducer: migrateState: team "${exposure.teamId}" generation ${exposure.generation} carries an unspent nonce-reuse HUNT from the retired Schnorr PROVE; finish or reset this match before upgrading`,
+    );
+  }
   const lifted = withMigratedContracts(rest as CryptoBattleState);
   return {
     ...lifted,
@@ -626,6 +641,35 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
       return kept as Contract;
     }),
   };
+}
+
+/**
+ * [Issue #709] A team whose CURRENT generation has two legacy `proof` rows
+ * sharing a commitment, and some other team that has not yet spent a HUNT on
+ * that generation. Under v2 the nonce HUNT and the Shamir HUNT shared one
+ * `successfulHunts` key, so a key from any attacker on (team, generation)
+ * means that attacker has already collected.
+ */
+function unspentNonceExposure(
+  state: CryptoBattleState,
+): { readonly teamId: string; readonly generation: number } | undefined {
+  const teamIds = Object.keys(state.teams);
+  for (const team of Object.values(state.teams)) {
+    const commitments = new Set<string>();
+    let reused = false;
+    for (const artifact of state.publicLedger) {
+      if (artifact.k !== "proof" || artifact.tm !== team.teamId || artifact.g !== team.generation) continue;
+      if (commitments.has(artifact.o)) reused = true;
+      commitments.add(artifact.o);
+    }
+    if (!reused) continue;
+    const spent = state.successfulHunts ?? [];
+    const attackerLeft = teamIds.some(
+      (attacker) => attacker !== team.teamId && !spent.includes(huntKey(attacker, team.teamId, team.generation)),
+    );
+    if (attackerLeft) return { teamId: team.teamId, generation: team.generation };
+  }
+  return undefined;
 }
 
 function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {

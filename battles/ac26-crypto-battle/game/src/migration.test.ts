@@ -420,6 +420,38 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     expect(view.publicPuzzles.teamB).toHaveLength(16);
   });
 
+  /**
+   * A v2 row can hold a nonce-reuse HUNT the visible ledger had already
+   * earned. v3 cannot serve it, so the migration refuses that row rather than
+   * silently retiring the attack mid-match; a row where every other team has
+   * already collected on it carries nothing v3 loses, and migrates.
+   */
+  test("migrateState refuses a v2 row with an UNSPENT nonce-reuse HUNT, and accepts a spent one", () => {
+    const base = preSudokuState();
+    const reused = {
+      ...base,
+      publicLedger: [
+        ...base.publicLedger,
+        { k: "proof", tm: "teamB", c: "teamB-c2", g: 1, m: "prove", t: 2, o: "9", e: "17", z: "21" },
+      ],
+    } as unknown as CryptoBattleState;
+    expect(base.teams.teamB?.generation).toBe(1);
+    expect(() => migrateState(reused, 2)).toThrow(/unspent nonce-reuse HUNT/);
+
+    const spent = {
+      ...reused,
+      successfulHunts: [...(reused.successfulHunts ?? []), JSON.stringify(["teamA", "teamB", 1])],
+    } as unknown as CryptoBattleState;
+    expect(migrateState(spent, 2).publicPuzzles?.teamB).toHaveLength(16);
+
+    // A reuse on a RETIRED generation is history, not exposure.
+    const rotated = {
+      ...reused,
+      teams: { ...reused.teams, teamB: { ...reused.teams.teamB, generation: 2 } },
+    } as unknown as CryptoBattleState;
+    expect(migrateState(rotated, 2).teams.teamB?.generation).toBe(2);
+  });
+
   test("migrateState chains v1 through v2, and refuses a version it does not know", () => {
     const v2 = preSudokuState();
     const v1 = { ...v2, publicLedger: decodeLedger(v2.publicLedger) };
