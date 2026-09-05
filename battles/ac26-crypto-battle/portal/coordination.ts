@@ -123,6 +123,24 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof v.sudokuHuntAttempts !== "object" || v.sudokuHuntAttempts === null) return false;
   if (typeof v.wrongHuntCost !== "number" || !Number.isFinite(v.wrongHuntCost)) return false;
   if (typeof v.wrongProveCost !== "number" || !Number.isFinite(v.wrongProveCost)) return false;
+  if (v.rpsHunt !== undefined) {
+    const h = v.rpsHunt as Record<string, unknown> | null;
+    if (!h || typeof h !== "object" || !Array.isArray(h.targets) || !Array.isArray(h.pending) || typeof h.winPoints !== "number") return false;
+    const hand = (x: unknown) => x === 1 || x === 2 || x === 3;
+    const identified = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null
+      && typeof (x as Record<string, unknown>).targetTeamId === "string"
+      && typeof (x as Record<string, unknown>).duelId === "string"
+      && typeof (x as Record<string, unknown>).generation === "number";
+    for (const t of h.targets) {
+      if (!identified(t) || typeof t.commitment !== "number" || typeof t.remainingMs !== "number" || !Array.isArray(t.evidence)) return false;
+      for (const a of t.evidence) if (!a || a.kind !== "rps-open" || typeof a.contractId !== "string" || typeof a.id !== "string" || !hand(a.hand) || typeof a.randomness !== "number" || typeof a.commitment !== "number") return false;
+    }
+    for (const p of h.pending) if (!identified(p) || !hand(p.predictedHand)) return false;
+    if (h.lastResult !== undefined) {
+      const r = h.lastResult;
+      if (!identified(r) || !hand(r.predictedHand) || (r.actualHand !== undefined && !hand(r.actualHand)) || typeof r.points !== "number" || !["hit", "miss", "cancelled"].includes(String(r.outcome))) return false;
+    }
+  }
   if (v.lastHunt !== undefined) {
     const last = v.lastHunt as Record<string, unknown> | null;
     if (typeof last !== "object" || last === null) return false;

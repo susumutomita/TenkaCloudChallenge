@@ -62,7 +62,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (3 since the sudoku PROVE) and a
+The plugin declares `stateSchemaVersion` (4 for compact budgets and Order IDs) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -91,7 +91,8 @@ The optional explanation has ten scenes: remainder, additive sharing, indexed
 sharing, reconstruction, exposure, MPC, ZK, FHE, Caesar, commit-reveal. Each
 scene can be read without answering; Next is never gated by correctness. An
 optional one-digit field checks understanding, and a separate control shows
-the fixed result and reason. There is no practice score, fake Contract, or
+the fixed answer with a one-sentence takeaway. Calculation steps and full reasons
+remain in the free collapsed explanation. There is no practice score, fake Contract, or
 fake Ledger. The numbered sharing example explains the candidate secrets and
 why the private-number terms cancel without requiring a second disclosure.
 
@@ -209,23 +210,31 @@ The plugin is handed team ids and never headcount, so a different team size has
 to be re-tuned by hand.
 
 **Match size depends on the backend and is checked by the platform's capacity preflight.**
-The full-play fixture now completes FHE, MPC, sudoku and both RPS stages as well
-as LEAK, purchases every hint, and uses 26-character team IDs and epoch times.
-At 99 teams it measures **3,109,666 UTF-8 bytes** (2026-09-05). The old fixture
-missed non-LEAK records and some rush Orders and therefore understated capacity.
-`metadata.json` reserves **32 KiB per team + 1,536 bytes**. This is a forecast for
-the default 90-minute configuration; remeasure after changing duration or batch size.
+The full-play fixture completes every mechanism, buys every hint and uses
+26-character team IDs and epoch times. It spends RPS attempts against all eligible
+opponents, then rotates near match end to exercise pending predictions beside the
+nearly full ledger. At 99 teams the measured peak is **2,968,946 UTF-8 bytes**,
+with **9,604 simultaneous predictions**; the terminal row is **2,887,478 bytes**
+(2026-09-05). These are measurements of this deterministic route, not a universal
+bound over every operation sequence. Duration/batch changes require remeasurement.
+
+Schema 4 replaces repeated IDs in private budget/prediction keys with positions in
+the fixed sorted roster, and stores a ledger Order number only when the original
+ID can be reconstructed exactly. Public projections, successful-HUNT history and
+ledger contents stay identical. Retired-generation counters are discarded only
+when no pending prediction needs them for a refund. Upgrade migrates v1/v2/v3 rows;
+unknown IDs/counts fail migration without rewriting the row. A rollback to schema 3
+must not read schema-4 rows. Finish running matches on their compatible plugin.
+The existing v2 unspent-Schnorr-exposure upgrade restriction still applies.
+
+`metadata.json` reserves **30 KiB per team + 1,536 bytes**. The platform owns the
+limits below; this problem does not raise them. The local capacity tests retain
+25% headroom and check both the peak and the final state.
 
 | Backend | Platform policy | Default-match capacity |
 | --- | --- | --- |
-| Turso / libSQL | 4 MiB, environment-overridable | 99 teams, with at least 25% headroom in the tested full-play path |
-| DynamoDB | 400 KiB item; platform reserves 16 KiB | 9 teams with 25% headroom; the declaration's preflight limit is 11 |
-
-The platform owns these limits (`coordination-budget.ts`); this change does not
-raise them. The test's old 2 MiB SQL allowance was not the platform's 4 MiB policy.
-The revised test checks the real policy with headroom, instead of letting most
-Orders expire and calling that a worst case. Records remain public for the match;
-none are deleted to improve the measurement. Live AWS checks remain optional.
+| Turso / libSQL | 4 MiB, environment-overridable | 99 teams with at least 25% headroom in the tested route |
+| DynamoDB | 400 KiB item; platform reserves 16 KiB | 11 teams with 25% headroom in the tested route; declaration preflight limit 12 |
 
 ## Rock-paper-scissors lifecycle
 
@@ -250,6 +259,27 @@ existing config migration. Persisted openings must never be spread into another
 team's projection. Tests cover all 33 first openings and all nine hand pairs.
 The toy has no computational binding security; fairness relies on the judge
 keeping openings private until both arrive. It is commit-reveal, not a full ZK protocol.
+
+## RPS reuse prediction HUNT
+
+`hunt-rps { targetTeamId, duelId, predictedHand }` accepts a hand 1–3 only when the
+target's current duel is sealed and not yet privately opened, and two distinct
+past public duels show equal randomness. Evidence may cross generations; ROTATE
+does not erase it. Any other team may predict, not only the paired opponent.
+Acceptance does not test the hidden answer or assume the current r was reused.
+
+The same `huntAttempts` budget as Shamir HUNT is reserved immediately against the
+target's acceptance generation. A hunter gets one immutable prediction per duel,
+even if the target rotates. Only the hunter sees the pending receipt. Both public
+openings trigger hit `huntBonus` / miss `wrongHunt` once, with score floor zero;
+first opening alone never produces a grade or answer oracle. Forfeit/expiry cancels
+all predictions, shows no hand, and refunds the exact reserved generation.
+
+Browser rehearsal: select `rps-reuse` in the local harness, alpha seat. Use only
+the public rows and free tables to predict bravo, submit, then finish both sides
+of the duel using the controls. Confirm no early grade, the public outcome and
+separate HUNT points. Automated tests cover misses, expiry, rotation, shared budgets,
+malformed inputs, third-team privacy and old projection compatibility.
 
 ## Release checks
 

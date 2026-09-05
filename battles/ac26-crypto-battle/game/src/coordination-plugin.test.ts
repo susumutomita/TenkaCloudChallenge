@@ -157,7 +157,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
    */
   it("declares the current stateSchemaVersion with reducer.ts's migrateState wired [Issue #679, #709]", () => {
     expect(plugin.stateSchemaVersion).toBe(STATE_SCHEMA_VERSION);
-    expect(STATE_SCHEMA_VERSION).toBe(3);
+    expect(STATE_SCHEMA_VERSION).toBe(4);
     expect(plugin.migrateState).toBe(migrateState);
   });
 

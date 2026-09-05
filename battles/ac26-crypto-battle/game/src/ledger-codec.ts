@@ -25,14 +25,14 @@
  * relabelling-reuse scan -- reads the compact form directly where it can, so
  * the hot path never pays for a full-array decode it does not need.
  *
- * KEY MAP (values unchanged, only field names shrink):
+ * KEY MAP (schema 4 also stores an exactly reconstructible Order ID as a number):
  *
  * | PublicArtifact  | Stored | kinds it applies to     |
  * |-----------------|--------|--------------------------|
  * | `id`            | (none) | derived, see below       |
  * | `kind`          | `k`    | all                       |
  * | `teamId`        | `tm`   | all                       |
- * | `contractId`    | `c`    | all                       |
+ * | `contractId`    | `c`    | all; numeric for exact teamId-cN IDs |
  * | `generation`    | `g`    | all                       |
  * | `method`        | `m`    | all                       |
  * | `postedAtMs`    | `t`    | all                       |
@@ -105,7 +105,8 @@ import type {
  */
 interface StoredArtifactBase {
   readonly tm: string;
-  readonly c: string;
+  /** Schema 4: N reconstructs `${tm}-c${N}`; older/unfamiliar IDs stay strings. */
+  readonly c: string | number;
   readonly g: number;
   readonly m: SubmissionMethod;
   readonly t: number;
@@ -172,6 +173,17 @@ export type StoredArtifact =
   | StoredPartialArtifact
   | StoredSudokuRevealArtifact;
 
+/** Schema 4 preserves unfamiliar IDs verbatim and shortens exact Order IDs. */
+function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
+  return typeof stored.c === "number" ? `${stored.tm}-c${stored.c}` : stored.c;
+}
+
+function compactContractId(teamId: string, id: string): string | number {
+  const prefix = `${teamId}-c`;
+  const n = id.startsWith(prefix) ? Number(id.slice(prefix.length)) : NaN;
+  return Number.isSafeInteger(n) && n >= 0 && `${prefix}${n}` === id ? n : id;
+}
+
 /**
  * Reconstructs `PublicArtifact.id` from a `StoredArtifact` that carries no
  * `d` -- the whole reason `id` can be dropped from the persisted form at
@@ -200,20 +212,20 @@ export type StoredArtifact =
  */
 function deriveArtifactId(stored: StoredArtifact): string {
   switch (stored.k) {
-    case "rps-commit": return `${stored.c}-rps-commit`;
-    case "rps-open": return `${stored.c}-rps-open`;
+    case "rps-commit": return `${contractId(stored)}-rps-commit`;
+    case "rps-open": return `${contractId(stored)}-rps-open`;
     case "share":
-      return `${stored.c}-share${stored.i}`;
+      return `${contractId(stored)}-share${stored.i}`;
     case "cipher-pair":
-      return `${stored.c}-pair`;
+      return `${contractId(stored)}-pair`;
     case "proof":
-      return `${stored.c}-proof`;
+      return `${contractId(stored)}-proof`;
     case "ciphertext":
-      return `${stored.c}-ciphertext`;
+      return `${contractId(stored)}-ciphertext`;
     case "partial":
-      return `${stored.c}-partial`;
+      return `${contractId(stored)}-partial`;
     case "sudoku-reveal":
-      return `${stored.c}-sudoku`;
+      return `${contractId(stored)}-sudoku`;
     default: {
       const exhaustive: never = stored;
       throw new Error(`deriveArtifactId: unknown stored artifact ${JSON.stringify(exhaustive)}`);
@@ -232,7 +244,7 @@ function deriveArtifactId(stored: StoredArtifact): string {
 export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
   const base = {
     tm: artifact.teamId,
-    c: artifact.contractId,
+    c: compactContractId(artifact.teamId, artifact.contractId),
     g: artifact.generation,
     m: artifact.method,
     t: artifact.postedAtMs,
@@ -298,18 +310,19 @@ export function encodeLedger(entries: readonly PublicArtifact[]): StoredArtifact
 /** One `StoredArtifact` -> the `PublicArtifact` it was encoded from. */
 export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
   const id = stored.d ?? deriveArtifactId(stored);
-  const { tm: teamId, c: contractId, g: generation, m: method, t: postedAtMs } = stored;
+  const { tm: teamId, g: generation, m: method, t: postedAtMs } = stored;
+  const decodedContractId = contractId(stored);
   switch (stored.k) {
-    case "rps-commit": return { id, teamId, contractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v };
-    case "rps-open": return { id, teamId, contractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v, hand: stored.h, randomness: stored.r };
+    case "rps-commit": return { id, teamId, contractId: decodedContractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v };
+    case "rps-open": return { id, teamId, contractId: decodedContractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v, hand: stored.h, randomness: stored.r };
     case "share":
-      return { id, kind: "share", teamId, contractId, generation, method, postedAtMs, shareIndex: stored.i, value: stored.v };
+      return { id, kind: "share", teamId, contractId: decodedContractId, generation, method, postedAtMs, shareIndex: stored.i, value: stored.v };
     case "cipher-pair":
       return {
         id,
         kind: "cipher-pair",
         teamId,
-        contractId,
+        contractId: decodedContractId,
         generation,
         method,
         postedAtMs,
@@ -322,7 +335,7 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
         id,
         kind: "proof",
         teamId,
-        contractId,
+        contractId: decodedContractId,
         generation,
         method,
         postedAtMs,
@@ -335,7 +348,7 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
         id,
         kind: "ciphertext",
         teamId,
-        contractId,
+        contractId: decodedContractId,
         generation,
         method,
         postedAtMs,
@@ -347,7 +360,7 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
         id,
         kind: "partial",
         teamId,
-        contractId,
+        contractId: decodedContractId,
         generation,
         method,
         postedAtMs,
@@ -360,7 +373,7 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
         id,
         kind: "sudoku-reveal",
         teamId,
-        contractId,
+        contractId: decodedContractId,
         generation,
         method,
         postedAtMs,

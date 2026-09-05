@@ -1092,6 +1092,7 @@ describe("advanced tactics use progressive disclosure", () => {
       hunt: false,
       sudokuHunt: false,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: false,
     });
   });
@@ -1101,18 +1102,21 @@ describe("advanced tactics use progressive disclosure", () => {
       hunt: true,
       sudokuHunt: false,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: false,
     });
     expect(tacticAvailability(fixtureProjection({ publicLedger: [proof("red", 1)] }))).toEqual({
       hunt: false,
       sudokuHunt: true,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: false,
     });
     expect(tacticAvailability(fixtureProjection({ publicLedger: [share("blue", 1)] }))).toEqual({
       hunt: false,
       sudokuHunt: false,
       cipherHunt: false,
+      rpsHunt: false,
       rotate: true,
     });
   });

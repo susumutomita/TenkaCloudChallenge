@@ -44,6 +44,7 @@ const COPY = {
     evidence: [
       "『世代』は、同じ秘密から作った一組のことです。例えば 3 個で戻る設定なら、同じ世代の異なる番号 #1・#2・#3 が公開されると秘密を戻せます。#1・#2・#1 は 2 個分です。必要な個数は画面の公開状況で確認します。",
       "相手の秘密を読み解いて得点する攻撃を HUNT と呼びます。外した HUNT はタダではありません。減点され、その相手・世代に使える試行回数も 1 回減ります。送信前に画面の減点と残り回数を確認します。",
+      "じゃんけんで同じ隠す数を使った過去の2記録があれば、今回の手を開封前に予測できます。今回も同じ数だと仮定した予測なので、外れることもあります。かけらの HUNT と試行回数を共有します。予測は相手に見えず、両者の開封後に採点。時間切れで公開されなければ回数を返します。",
       "ROTATE は自分の秘密を作り直す操作です。新しい世代になるので、古いかけらとは混ぜられません。次に使うまでの待ち時間があり、秘密に結び付く未完了のお題は失効して減点されます。じゃんけんのお題は続きます。",
     ],
     movesTitle: "ほかのお題で、何を体験する？",
@@ -72,6 +73,7 @@ const COPY = {
     evidenceTitle: "What can an opponent do with published information?",
     evidence: [
       "A generation is a set made from the same secret. In a three-share setting, distinct indices #1, #2, #3 in one generation allow recovery. #1, #2, #1 count as two pieces. Check the displayed exposure threshold.",
+      "Two past RPS openings with the same hiding number let you predict a current sealed hand. Reuse now is an assumption, not a guarantee. Predictions share the share-HUNT budget, stay private, and score after both openings. A timeout without publication refunds the attempt.",
       "HUNT scores by recovering an opponent’s secret. A wrong guess is not free: it costs points and one of your limited attempts against that team and generation. Check the cost and remaining attempts before submitting.",
       "ROTATE creates a new secret and generation. Old and new shares cannot be mixed. It has a waiting period before reuse and expires unfinished Orders tied to your secret, charging their expiry penalty. Rock-paper-scissors Orders continue.",
     ],

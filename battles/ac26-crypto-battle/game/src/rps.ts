@@ -1,5 +1,6 @@
 /** Paired Orders. Openings stay with the judge until BOTH have been accepted. */
 import { isCommitment, isHand, isRandomness, rpsOutcome, verifyOpening } from "./commitment.ts";
+import { settleRpsHunts } from "./rps-hunt.ts";
 import { encodeArtifact } from "./ledger-codec.ts";
 import type { Contract, CryptoBattleOp, CryptoBattleState, DuelOutcome, OrderTaskProjection, RpsOpenArtifact, ValidateResult } from "./types.ts";
 
@@ -75,11 +76,11 @@ export function applyRps(state: CryptoBattleState, teamId: string, op: DuelOp): 
       commitment: c.rps!.commitment!, ...c.rps!.opening!,
     });
   }
-  return {
+  return settleRpsHunts({
     ...next, teams,
     contracts: next.contracts.map(c => outcomes.has(c.id) ? { ...c, status: "completed", resolution: "duel", rps: { ...c.rps, outcome: outcomes.get(c.id)! } } : c),
     publicLedger: [...state.publicLedger, ...artifacts.map(encodeArtifact)],
-  };
+  }, [opened.id, opponent.id], state.nowMs!, false);
 }
 
 /** A ready player cannot be held hostage by an absent opponent. No opening is published on a timeout. */
@@ -94,7 +95,7 @@ export function expireRps(state: CryptoBattleState, atMs: number): CryptoBattleS
     return ready ? { ...c, status: "completed", resolution: "duel", rps: { ...c.rps, outcome: "forfeit-win" } }
       : { ...c, status: "expired", expiryCause: "deadline" };
   });
-  return { ...state, teams, contracts };
+  return settleRpsHunts({ ...state, teams, contracts }, state.contracts.filter(c => c.task.kind === "rps-duel" && c.status === "open" && c.expiresAtMs <= atMs).map(c => c.id), atMs, true);
 }
 
 export function projectRps(state: CryptoBattleState, order: Contract): Extract<OrderTaskProjection, { kind: "rps-duel" }> {

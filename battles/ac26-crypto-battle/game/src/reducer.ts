@@ -63,6 +63,8 @@ import {
   deriveTeamGeneration,
   type FieldConfig,
 } from "./fixtures.ts";
+import { applyRpsHunt, projectRpsHunt, validateRpsHunt } from "./rps-hunt.ts";
+import { huntKey, storedHuntKey, compactHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
 import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
@@ -89,7 +91,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { HAND_PRIME, mod } from "./field.ts";
-import { decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
+import { decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
 import {
   ALL_PERMUTATIONS,
   CONSTRAINT_GROUPS,
@@ -585,13 +587,14 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *      ledger gains the `sudoku-reveal` kind, teams gain
  *      `sudokuHuntedGenerations` / `lastProve`, Orders lose
  *      `proveCommitment` / `proveChallenge`
+ *   4  roster-indexed HUNT budget keys and lossless numeric ledger Order IDs
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 3;
+export const STATE_SCHEMA_VERSION = 4;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -607,9 +610,9 @@ export const STATE_SCHEMA_VERSION = 3;
  * A legacy `proof` ledger entry is kept: it still decodes and renders.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1 and v2 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2 and v3 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -633,7 +636,7 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   // An ENDED match has nothing left to spend: `validateOp` refuses every op
   // after the end, so the exposure is history and the row migrates for its
   // scores, ledger and replay.
-  const exposure = rest.phase === "ended" ? undefined : unspentNonceExposure(rest as CryptoBattleState);
+  const exposure = fromVersion === 3 || rest.phase === "ended" ? undefined : unspentNonceExposure(rest as CryptoBattleState);
   if (exposure) {
     throw new Error(
       `reducer: migrateState: team "${exposure.teamId}" generation ${exposure.generation} carries an unspent nonce-reuse HUNT from the retired Schnorr PROVE; finish or reset this match before upgrading`,
@@ -642,6 +645,8 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   const lifted = withMigratedContracts(rest as CryptoBattleState);
   return {
     ...lifted,
+    publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a))),
+    huntAttempts: compactHuntAttempts(lifted),
     contracts: lifted.contracts.map((contract) => {
       const { proveCommitment: _c, proveChallenge: _e, ...kept } = contract as Contract & {
         readonly proveCommitment?: unknown;
@@ -966,10 +971,6 @@ function hintsRevealedOn(contract: Contract): number {
   return contract.hintsRevealed ?? 0;
 }
 
-function huntKey(attackerTeamId: string, targetTeamId: string, generation: number): string {
-  return JSON.stringify([attackerTeamId, targetTeamId, generation]);
-}
-
 /**
  * [Issue #645 Phase 2] Parse a participant-submitted ciphertext.
  *
@@ -1199,6 +1200,7 @@ export function validateOp(
   }
 
   switch (op.kind) {
+    case "hunt-rps": return validateRpsHunt(state, teamId, op);
     case "rps-commit":
     case "rps-open": {
       const gate = validateOrderSubmission(state, teamId, op.contractId, "duel");
@@ -1249,7 +1251,7 @@ export function validateOp(
       // retries are a faster path to the secret than the interpolation, so a
       // miss has to land, cost `scores.wrongHunt`, and spend one of these.
       // `applyHunt` does the comparison and reports which happened.
-      const spent = state.huntAttempts[huntKey(teamId, op.targetTeamId, op.generation)] ?? 0;
+      const spent = state.huntAttempts[storedHuntKey(state, huntKey(teamId, op.targetTeamId, op.generation))] ?? 0;
       if (spent >= state.config.maxHuntAttemptsPerTarget) {
         return {
           ok: false,
@@ -1415,7 +1417,7 @@ export function validateOp(
       // [Issue #696] Same budget logic as the Shamir HUNT, on its own counter.
       // There are only 288 solutions and a public puzzle rules most of them
       // out, so free retries would be cheaper than lining the reveals up.
-      const spent = state.huntAttempts[sudokuHuntKey(teamId, op.targetTeamId, op.generation)] ?? 0;
+      const spent = state.huntAttempts[storedHuntKey(state, sudokuHuntKey(teamId, op.targetTeamId, op.generation))] ?? 0;
       if (spent >= state.config.maxHuntAttemptsPerTarget) {
         return {
           ok: false,
@@ -2146,7 +2148,8 @@ function applyHunt(
   const nowMs = state.nowMs;
 
   const key = huntKey(teamId, op.targetTeamId, op.generation);
-  const huntAttempts = { ...state.huntAttempts, [key]: (state.huntAttempts[key] ?? 0) + 1 };
+  const budgetKey = storedHuntKey(state, key);
+  const huntAttempts = { ...state.huntAttempts, [budgetKey]: (state.huntAttempts[budgetKey] ?? 0) + 1 };
 
   // [Issue #696] The comparison moved here from `validateOp` so a miss is a
   // move that happened rather than a request that never existed. `validateOp`
@@ -2262,7 +2265,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     voided,
     state.config.scores.expiredOrder,
   );
-  return { ...state, contracts, teams, publicPuzzles };
+  return pruneRetiredHuntAttempts({ ...state, contracts, teams, publicPuzzles });
 }
 
 /**
@@ -2370,7 +2373,8 @@ function applyHuntSudoku(
   }
   const nowMs = state.nowMs;
   const key = sudokuHuntKey(teamId, op.targetTeamId, op.generation);
-  const huntAttempts = { ...state.huntAttempts, [key]: (state.huntAttempts[key] ?? 0) + 1 };
+  const budgetKey = storedHuntKey(state, key);
+  const huntAttempts = { ...state.huntAttempts, [budgetKey]: (state.huntAttempts[budgetKey] ?? 0) + 1 };
   const solution = deriveSudokuSolution(state.seed, op.targetTeamId, op.generation);
   const hit = solution.every((v, i) => v === op.solution[i]);
   if (!hit) {
@@ -2455,6 +2459,7 @@ export function applyOp(
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "hunt-rps": return applyRpsHunt(state, teamId, op);
     case "rps-commit":
     case "rps-open":
       return applyRps(state, teamId, op);
@@ -2587,12 +2592,12 @@ export function projectForTeam(
     if (other.teamId === teamId) continue;
     huntAttempts[other.teamId] = {
       generation: other.generation,
-      spent: state.huntAttempts[huntKey(teamId, other.teamId, other.generation)] ?? 0,
+      spent: state.huntAttempts[storedHuntKey(state, huntKey(teamId, other.teamId, other.generation))] ?? 0,
       max: state.config.maxHuntAttemptsPerTarget,
     };
     sudokuHuntAttempts[other.teamId] = {
       generation: other.generation,
-      spent: state.huntAttempts[sudokuHuntKey(teamId, other.teamId, other.generation)] ?? 0,
+      spent: state.huntAttempts[storedHuntKey(state, sudokuHuntKey(teamId, other.teamId, other.generation))] ?? 0,
       max: state.config.maxHuntAttemptsPerTarget,
     };
   }
@@ -2634,6 +2639,7 @@ export function projectForTeam(
     // through unredacted, unlike `teams` above it does not need a per-team
     // summary shape. `withMigratedContracts` guarantees it is present.
     publicPuzzles: state.publicPuzzles ?? {},
+    rpsHunt: projectRpsHunt(state, teamId),
     huntAttempts,
     sudokuHuntAttempts,
     wrongHuntCost: state.config.scores.wrongHunt,
