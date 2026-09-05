@@ -73,6 +73,7 @@ export const SCENARIO_IDS = [
   "fhe-order",
   "mpc-order",
   "rps-order",
+  "rps-reuse",
   "hunt-reachable",
   "pi-reuse",
   "after-rotate",
@@ -102,6 +103,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "暗号文のまま足す Order が開いている状態",
     en: "An encrypted-addition Order is open",
   },
+  "rps-reuse": { ja: "じゃんけんの使い回し — bravo の次の手を予測", en: "RPS reuse — predict bravo’s next hand" },
   "rps-order": { ja: "相手とじゃんけん — まだ両者とも封じていない", en: "Rock-paper-scissors — neither team has sealed" },
   "mpc-order": {
     ja: "覆面つき小計の Order が開いている状態",
@@ -370,6 +372,22 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
     }
 
+    case "rps-reuse": {
+      for (let round = 0; round < 3; round++) {
+        if (!playUntilRaw(driver, state => state.contracts.some(c => c.teamId === "bravo" && c.status === "open" && c.task.kind === "rps-duel"), 10)) throw new Error("rps-reuse scenario did not reach a duel");
+        const a = driver.host.state.contracts.find(c => c.teamId === "alpha" && c.status === "open" && c.task.kind === "rps-duel")!;
+        const b = driver.host.state.contracts.find(c => c.teamId === "bravo" && c.status === "open" && c.task.kind === "rps-duel")!;
+        // Fixed teaching choices, driven through the real commitment gates.
+        const bHand = round === 0 ? 1 : round === 1 ? 3 : 2;
+        mustPlay(driver, "bravo", {kind:"rps-commit",contractId:b.id,commitment:round===0?2:round===1?9:8}, "seal bravo");
+        if (round === 2) break;
+        mustPlay(driver, "alpha", {kind:"rps-commit",contractId:a.id,commitment:13}, "seal alpha");
+        mustPlay(driver, "bravo", {kind:"rps-open",contractId:b.id,hand:bHand,randomness:2}, "open bravo");
+        mustPlay(driver, "alpha", {kind:"rps-open",contractId:a.id,hand:1,randomness:1}, "open alpha");
+        driver.advance(DEV_CONFIG.contractIntervalMs!);
+      }
+      break;
+    }
     case "rps-order": {
       if (!playUntilRaw(driver, state => state.contracts.some(c => c.teamId === "alpha" && c.status === "open" && c.task.kind === "rps-duel"), 10)) {
         throw new Error("scenario 'rps-order' never saw a paired duel");

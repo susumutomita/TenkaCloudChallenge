@@ -462,7 +462,7 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     const lifted = migrateState(v1, 1);
     expect(lifted.publicLedger).toEqual(migrateState(v2, 2).publicLedger);
     expect(lifted.publicPuzzles?.teamA).toHaveLength(16);
-    expect(() => migrateState(v2, 3)).toThrow();
+    expect(() => migrateState(v2, 4)).toThrow();
     expect(() => migrateState(v2, 0)).toThrow();
     expect(() => migrateState(null, 2)).toThrow();
     expect(() => migrateState({ seed: "x" }, 2)).toThrow();

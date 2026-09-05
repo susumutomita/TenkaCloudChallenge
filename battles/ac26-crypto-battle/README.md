@@ -1,6 +1,7 @@
 # Cryptography Battle
 
 The purpose and first action are always visible above the board. “Read the guided explanation (optional)” opens with one click. Read results without answering, advance freely, or close at any point. Its ten scenes connect remainders, additive shares, indexed sharing, why reconstruction works, publication risk, MPC, ZK, FHE, Caesar and commit-reveal. Optional one-digit checks never change the match score or state. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
+Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
 
 The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers, free of charge. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
 
@@ -200,3 +201,22 @@ it has no practical binding security. Fairness trusts the judge to withhold both
 openings until simultaneous publication. Commit-reveal is not itself a
 zero-knowledge proof. Free stepwise explanations and optional fill-in practice
 connect the calculation to its purpose.
+
+
+## Predict an opponent's sealed hand
+
+This tactic becomes available when two different past public rounds show the same
+hiding number r. Open “NEXT TACTIC FROM THE PUBLIC RECORD” to compare those records,
+the current sealed c, and the free calculation tables. Assume the same r again,
+calculate c for rock, scissors and paper, and submit the matching hand to the judge.
+Past reuse does not guarantee reuse in the current round.
+
+Example: for r=1 the table gives 9. Rock gives 4×9=36→13, scissors
+16×9=144→6, and paper 18×9=162→1, taking remainders after division by 23.
+For c=6, predict scissors.
+
+Submit once per duel before the target opens. Predictions are immutable and private.
+After both hands become public, a hit earns 25 points and a miss costs 8 (score floor 0).
+The three-attempt limit per opponent generation is shared with share-recovery HUNT.
+A timeout without publication cancels the prediction and refunds its attempt.
+ROTATE keeps the public RPS history and already submitted predictions.

@@ -386,7 +386,34 @@ export type ContractStatus = "open" | "completed" | "expired";
 export interface RpsOpening { readonly hand: Hand; readonly randomness: number }
 export type DuelOutcome = "win" | "loss" | "draw" | "forfeit-win";
 /** Judge-held data: never spread this into a participant projection. */
+export interface RpsHuntResult {
+  readonly targetTeamId: string;
+  readonly duelId: string;
+  readonly generation: number;
+  readonly predictedHand: Hand;
+  readonly actualHand?: Hand;
+  readonly outcome: "hit" | "miss" | "cancelled";
+  readonly points: number;
+  readonly atMs: number;
+}
+export interface RpsHuntTarget {
+  readonly targetTeamId: string;
+  readonly duelId: string;
+  readonly generation: number;
+  readonly commitment: number;
+  readonly remainingMs: number;
+  readonly evidence: readonly RpsOpenArtifact[];
+}
+export interface RpsHuntProjection {
+  readonly targets: readonly RpsHuntTarget[];
+  readonly pending: readonly { readonly targetTeamId: string; readonly duelId: string; readonly generation: number; readonly predictedHand: Hand }[];
+  readonly lastResult?: RpsHuntResult;
+  readonly winPoints: number;
+}
 export interface RpsSubmission {
+  /** Private: attacker -> [prediction, budget generation at acceptance]. */
+  /** Keys are fixed sorted-roster positions, never participant-visible IDs. */
+  readonly predictions?: Readonly<Record<string, readonly [Hand, number]>>;
   readonly commitment?: number;
   readonly opening?: RpsOpening;
   readonly outcome?: DuelOutcome;
@@ -755,6 +782,7 @@ export interface TeamState {
    * same thing: nothing to report.
    */
   readonly lastHunt?: LastHunt;
+  readonly lastRpsHunt?: RpsHuntResult;
 }
 
 /** [Issue #696] What a Shamir HUNT came to -- see `TeamState.lastHunt`. */
@@ -830,6 +858,8 @@ export interface CryptoBattleState {
    */
   readonly successfulHunts: readonly string[];
   /**
+   * Schema 4 uses sorted-roster numeric positions in these private JSON keys.
+   * Shamir and RPS share a key; sudoku has its own prefixed key.
    * [Issue #696] Attempts spent per `attacker:target:generation`, successful or
    * not, against `config.maxHuntAttemptsPerTarget`.
    *
@@ -867,6 +897,7 @@ export interface HuntLogEntry {
 }
 
 export type CryptoBattleOp =
+  | { readonly kind: "hunt-rps"; readonly targetTeamId: string; readonly duelId: string; readonly predictedHand: number }
   | { readonly kind: "rps-commit"; readonly contractId: string; readonly commitment: number }
   | { readonly kind: "rps-open"; readonly contractId: string; readonly hand: number; readonly randomness: number }
   | { readonly kind: "leak"; readonly contractId: string }
@@ -1194,6 +1225,8 @@ export interface TeamSummaryProjection {
  * place that has to get the redaction right.
  */
 export interface CryptoBattleProjection {
+  /** Public evidence plus only this reader’s private predictions/results. */
+  readonly rpsHunt?: RpsHuntProjection;
   readonly phase: Phase;
   /**
    * [Issue #645] The modulus every calculation in this Battle runs over,

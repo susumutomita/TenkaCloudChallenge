@@ -16,6 +16,7 @@ import {
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import ConceptExplanation from "./ConceptExplanation.tsx";
+import RpsHunt, { RpsHuntStatus } from "./RpsHunt.tsx";
 import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
 import { taskDetail } from "./orderTask.ts";
@@ -276,7 +277,7 @@ export const FAST_MOVE_COPY = {
     recoveredKey: "recovered key",
     huntSudokuBody: "Recovered solution accepted — relabelling reuse punished.",
     tactics: "NEXT TACTIC FROM THE PUBLIC RECORD",
-    tacticsHint: "Open this when a public share, an opened sudoku row, or one of your exposed shares gives you another move.",
+    tacticsHint: "Open this when a public share, an opened sudoku row, reused RPS hiding numbers, or one of your exposed shares gives you another move.",
     exposure: "EXPOSURE",
     exposureHint: (threshold: number) =>
       `${threshold} shares of one generation reconstruct that team's secret. This is how close everyone is.`,
@@ -447,7 +448,7 @@ export const FAST_MOVE_COPY = {
     recoveredKey: "復元した鍵",
     huntSudokuBody: "割り出した解が受理されました — 付け替えの使い回しを突きました。",
     tactics: "公開記録からできる次の作戦",
-    tacticsHint: "公開されたかけら・数独の行、または自分の公開済みかけらがあるときに開きます。",
+    tacticsHint: "公開されたかけら・数独の行・じゃんけんの使い回し、または自分の公開済みかけらがあるときに開きます。",
     exposure: "危険度",
     exposureHint: (threshold: number) =>
       `同じ世代のかけらが ${threshold} 個そろうと、そのチームの秘密は復元されます。いま全員が何個まで来ているかです。`,
@@ -806,12 +807,14 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
   readonly hunt: boolean;
   readonly sudokuHunt: boolean;
   readonly cipherHunt: boolean;
+  readonly rpsHunt: boolean;
   readonly rotate: boolean;
 } {
   return {
     hunt: ledgerTargets(projection).length > 0,
     sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
+    rpsHunt: (projection?.rpsHunt?.targets.length ?? 0) > 0,
     rotate: ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined,
   };
 }
@@ -1084,6 +1087,7 @@ export function ageProjection(
   const drop = (ms: number) => Math.max(0, ms - elapsedMs);
   return {
     ...projection,
+    ...(projection.rpsHunt ? { rpsHunt: { ...projection.rpsHunt, targets: projection.rpsHunt.targets.map(t => ({ ...t, remainingMs: drop(t.remainingMs) })) } } : {}),
     matchRemainingMs:
       projection.matchRemainingMs === undefined ? undefined : drop(projection.matchRemainingMs),
     myContracts: projection.myContracts.map((order) =>
@@ -1338,6 +1342,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
 
 
       <RpsResult projection={projection} locale={locale} />
+      <RpsHuntStatus projection={projection} locale={locale} />
       <details className="tc-order-picker" ref={orderPickerRef}>
         <summary>{locale === "ja" ? `ほかのお題を選ぶ（残り ${orders.length} 件）` : `Choose another Order (${orders.length} open)`}</summary>
         <OrderBelt projection={projection} locale={locale} selectedId={selectedOrder?.id}
@@ -1720,10 +1725,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
       </details>
 
-      {(tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rotate) && (
+      {(tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt || tactics.rotate) && (
       <details className="tc-tactics">
-        <summary>{copy.tactics}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
+        <summary>{copy.tactics}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
+        {tactics.rpsHunt && <RpsHunt projection={projection} locale={locale} submitting={submitting}
+          onSubmit={op => run(() => client.submitOp(op), next => next ? ({kind:"hunt",title:locale === "ja" ? "予測を預けました" : "Prediction submitted",body:locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings."}) : ({kind:"error",title:copy.rejected,body:copy.unavailable}))} />}
+
       {tactics.hunt && <div className="tc-secondary-grid">
         <div className="tc-hunt-card">
           <div className="tc-card-title">{copy.hunt}</div>

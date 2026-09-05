@@ -82,6 +82,7 @@ faking it.
 | --- | --- |
 | `fresh` | Match just started, first Orders issued, empty Ledger. |
 | `ledger-filling` | A LEAKed share and a PROVE transcript side by side. |
+| `rps-reuse` | Two public bravo openings reuse r; the next sealed hand can be predicted through the real participant controls. |
 | `hunt-reachable` | `alpha` has leaked threshold-many distinct shares of its current generation. |
 | `after-rotate` | `bravo` landed a HUNT, then `alpha` re-keyed — generation 2, penalty applied. |
 | `ended` | Match over; every op is rejected and the surface is read-only. |

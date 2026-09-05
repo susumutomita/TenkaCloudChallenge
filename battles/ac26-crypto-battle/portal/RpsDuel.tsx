@@ -79,6 +79,13 @@ export function RpsResult({ projection, locale }: { readonly projection: CryptoB
 export function rpsRejection(error: string, locale: Locale): string {
   if (locale !== "ja") return error;
   const messages: Record<string, string> = {
+    "RPS prediction requires a running match.": "予測は試合の開始後、終了前に送ってください。",
+    "Choose another team for the prediction.": "自分以外のチームを予測の対象にしてください。",
+    "The predicted hand must be 1, 2 or 3.": "予測した手をグー・チョキ・パーから選んでください。",
+    "Predict after the target seals a number and before they open it.": "相手が数字を封じたあと、手を審判に渡す前に予測してください。この対戦は受付を終了した可能性があります。",
+    "Your prediction for this duel was already submitted; it cannot be replaced.": "この対戦の予測は受け付け済みです。変更はできません。",
+    "Two public openings from different duels must show the same hiding number.": "異なる2回の公開記録で、相手の隠す数が同じという証拠が必要です。",
+    "No shared HUNT attempts remain for this target generation.": "この相手・世代へのHUNTの試行回数は残っていません。かけらのHUNTと共通です。",
     "Choose your open rock-paper-scissors Order.": "自分の未回答のじゃんけんのお題を選んでください。",
     "This duel has ended.": "この対戦は終了しています。ほかのお題を選んでください。",
     "Your sealed number was already submitted; it cannot be replaced.": "数字はすでに封じてあります。提出後の数字は変更できません。",
