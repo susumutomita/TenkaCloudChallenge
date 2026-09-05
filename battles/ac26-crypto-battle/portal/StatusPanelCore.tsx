@@ -90,6 +90,7 @@ interface Copy {
   readonly rotateCooldownLabel: string;
   readonly rotateReady: string;
   readonly huntedGenerationsLabel: string;
+  readonly sudokuHuntedGenerationsLabel: string;
   readonly none: string;
   readonly ledgerTitle: string;
   readonly ledgerBody: string;
@@ -145,6 +146,7 @@ const COPY: Record<Locale, Copy> = {
     rotateCooldownLabel: "ROTATE cooldown",
     rotateReady: "ready now",
     huntedGenerationsLabel: "Generations successfully HUNTed against you",
+    sudokuHuntedGenerationsLabel: "Generations whose sudoku solution was recovered from your reused relabelling (ROTATE retires it)",
     none: "none",
     ledgerTitle: "Public Ledger",
     ledgerBody: "Every share every team has LEAKed, and every sudoku group every team has had opened by PROVE -- forever, in the open.",
@@ -198,6 +200,7 @@ const COPY: Record<Locale, Copy> = {
     rotateCooldownLabel: "ROTATE クールダウン",
     rotateReady: "今すぐ実行可",
     huntedGenerationsLabel: "自チームが HUNT された世代",
+    sudokuHuntedGenerationsLabel: "付け替えの使い回しから数独の解を割り出された世代 (ROTATE で退役)",
     none: "なし",
     ledgerTitle: "Public Ledger",
     ledgerBody: "全チームがこれまでに LEAK したかけらと、PROVE で公開された数独のグループの全公開履歴です。",
@@ -474,6 +477,16 @@ function VaultLane({
       <p style={{ margin: "4px 0 0 0", fontSize: "12px" }}>
         {copy.huntedGenerationsLabel}:{" "}
         {vault.huntedGenerations.length > 0 ? vault.huntedGenerations.join(", ") : copy.none}
+      </p>
+      {/*
+        [Issue #709] The sudoku HUNT charges the victim too, on its own list.
+        Without this line a team would see the score drop and nothing on its
+        own screen saying which generation gave its solution away, or that
+        ROTATE is the answer.
+      */}
+      <p style={{ margin: "4px 0 0 0", fontSize: "12px" }}>
+        {copy.sudokuHuntedGenerationsLabel}:{" "}
+        {vault.sudokuHuntedGenerations.length > 0 ? vault.sudokuHuntedGenerations.join(", ") : copy.none}
       </p>
     </div>
   );

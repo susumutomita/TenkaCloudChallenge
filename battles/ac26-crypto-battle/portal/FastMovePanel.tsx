@@ -29,6 +29,7 @@ import {
   SUDOKU_CSS,
 } from "./SudokuGrid.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
+import { ALL_PERMUTATIONS } from "../game/src/sudoku.ts";
 import type { CipherRung } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
@@ -142,6 +143,8 @@ export const FAST_MOVE_COPY = {
     recovered: "recovered secret",
     rotate: "ROTATE",
     rotateHint: "Switch to a fresh generation.",
+    rotateSudokuHunted: "This generation's sudoku solution has been recovered by another team. A fresh generation gets a fresh solution.",
+    rotateSudokuExhausted: "Every fresh relabelling table on this generation is spent. ROTATE before the next PROVE, or the next table would be a reuse.",
     rotateCost: (orders: number) => `Voids your ${orders} open Order${orders === 1 ? "" : "s"} -- each costs you points, exactly as letting it expire would.`,
     // [Issue #659 §9] The hint ladder. The price is on the button, always,
     // because a cost the player only discovers after paying it is not a choice
@@ -308,6 +311,8 @@ export const FAST_MOVE_COPY = {
     recovered: "復元した secret",
     rotate: "ROTATE",
     rotateHint: "新しい世代へ切り替えます。",
+    rotateSudokuHunted: "この世代の数独の解は他チームに割り出されています。新しい世代は新しい解になります。",
+    rotateSudokuExhausted: "この世代で未使用の付け替え表がもうありません。次の PROVE の前に ROTATE しないと、次の表は使い回しになります。",
     rotateCost: (orders: number) => `未処理の ORDER ${orders} 件が無効になります。期限切れと同じだけ減点されます。`,
     hintsTitle: "ヒント",
     hintsHint: "1 段ごとに少しずつ説明します。Order を解けなくても得点は引かれます。",
@@ -795,8 +800,28 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
     hunt: ledgerTargets(projection).length > 0,
     sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
-    rotate: ownExposedShareCount(projection) > 0,
+    rotate: ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined,
   };
+}
+
+/**
+ * [Issue #709] Why the sudoku side of the vault wants a ROTATE, if it does.
+ *
+ * Shares are not the only material a generation can run out of. There are 23
+ * usable relabellings, the belt keeps serving PROVE-capable Orders, and a team
+ * that has spent every table can only reuse one (and become huntable) or LEAK
+ * to reach the ROTATE card -- unless the card opens on this too. And a
+ * generation whose solution was recovered is exposed the same way a hunted
+ * Shamir generation is; ROTATE is the answer to both.
+ */
+export function sudokuRotatePressure(
+  projection: CryptoBattleProjection | null,
+): "hunted" | "exhausted" | undefined {
+  if (!projection) return undefined;
+  const { vault } = projection;
+  if (vault.sudokuHuntedGenerations.includes(vault.generation)) return "hunted";
+  if (vault.usedPermutations.length >= ALL_PERMUTATIONS.length - 1) return "exhausted";
+  return undefined;
 }
 
 /**
@@ -1096,6 +1121,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const huntExhausted = selectedBudget !== undefined && selectedBudget.spent >= selectedBudget.max;
   const sudokuTargets = useMemo(() => sudokuHuntCandidates(projection), [projection]);
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
+  const sudokuPressure = useMemo(() => sudokuRotatePressure(projection), [projection]);
   const exposure = useMemo(() => exposureRows(projection), [projection]);
   const selectedSudokuTarget =
     sudokuTargets.find((t) => `${t.teamId}:${t.generation}` === sudokuTargetKey) ?? sudokuTargets[0];
@@ -1796,6 +1822,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {tactics.rotate && <div className="tc-rotate-card">
           <div className="tc-card-title">{copy.rotate}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
+          {sudokuPressure === "hunted" && <div className="tc-card-hint">{copy.rotateSudokuHunted}</div>}
+          {sudokuPressure === "exhausted" && <div className="tc-card-hint">{copy.rotateSudokuExhausted}</div>}
           {/*
             [Issue #659] ROTATE voids every Order still open, and each one now
             costs what letting it expire costs -- up to a whole batch. That is a

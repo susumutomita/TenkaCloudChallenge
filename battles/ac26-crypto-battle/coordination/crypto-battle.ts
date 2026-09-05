@@ -147,8 +147,15 @@
  * hits that throw path.
  */
 import { defineCoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
-import { migrateStateV1 } from "../game/src/ledger-codec.ts";
-import { applyOp, initialState, projectForTeam, tick, validateOp } from "../game/src/reducer.ts";
+import {
+  applyOp,
+  initialState,
+  migrateState,
+  projectForTeam,
+  STATE_SCHEMA_VERSION,
+  tick,
+  validateOp,
+} from "../game/src/reducer.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState } from "../game/src/types.ts";
 
 /**
@@ -174,15 +181,16 @@ export default defineCoordinationPlugin<CryptoBattleState, CryptoBattleOp, Crypt
   tick,
   projectForTeam,
   teamScores,
-  // [Issue #679 / TenkaCloud#3150] `publicLedger` moved from `PublicArtifact[]`
-  // to the compact `StoredArtifact[]` form (`../game/src/ledger-codec.ts`) --
-  // a real shape change to `CryptoBattleState`, so the version bump is
-  // required, not optional (see that SDK Issue's rule: "State の形を変えたら
-  // 必ずこの値を上げる"). `migrateStateV1` is forwarded directly, unwrapped,
-  // the same "thin wrapper" way every other hook above is -- it IS this
-  // plugin's `migrateState`, not a re-implementation of it, which is what lets
-  // `coordination-plugin.test.ts` assert `plugin.migrateState ===
-  // migrateStateV1` rather than merely "is a function".
-  stateSchemaVersion: 2,
-  migrateState: migrateStateV1,
+  // [Issue #679 / TenkaCloud#3150, #709] Every real shape change to
+  // `CryptoBattleState` bumps this (the SDK's rule: "State の形を変えたら必ず
+  // この値を上げる"): v2 for the compact ledger, v3 for the sudoku PROVE (a new
+  // ledger kind, `publicPuzzles`, per-team hunted lists) -- see
+  // `STATE_SCHEMA_VERSION`'s doc comment in reducer.ts for why the bump is
+  // what keeps a rollback safe. `migrateState` is forwarded directly,
+  // unwrapped, the same "thin wrapper" way every other hook above is -- it IS
+  // this plugin's `migrateState`, which is what lets
+  // `coordination-plugin.test.ts` assert identity rather than merely "is a
+  // function".
+  stateSchemaVersion: STATE_SCHEMA_VERSION,
+  migrateState,
 });

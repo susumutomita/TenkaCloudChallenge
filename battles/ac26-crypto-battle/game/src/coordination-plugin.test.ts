@@ -51,8 +51,8 @@
  * code -- including the `mock.module` call -- has a chance to run).
  */
 import { describe, expect, it, mock } from "bun:test";
-import { decodeLedger, migrateStateV1 } from "./ledger-codec.ts";
-import { LOCAL_PLAY_SEED_PREFIX } from "./reducer.ts";
+import { decodeLedger } from "./ledger-codec.ts";
+import { LOCAL_PLAY_SEED_PREFIX, migrateState, STATE_SCHEMA_VERSION } from "./reducer.ts";
 import { reconstruct } from "./shamir.ts";
 import { buildProveSudokuOp, startedMatch } from "./playtest.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState, StoredShare } from "./types.ts";
@@ -148,14 +148,17 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
    * [Issue #679 / TenkaCloud#3150] The platform rejects a plugin at LOAD time
    * if it declares `stateSchemaVersion` without `migrateState` -- so both have
    * to be wired together, and `migrateState` has to be the SAME function
-   * `ledger-codec.ts` exports (not a re-implementation crypto-battle.ts wrote
-   * itself), or this file's own migration tests (below, and
-   * `ledger-codec.test.ts`) would be proving something crypto-battle.ts does
-   * not actually run in production.
+   * `reducer.ts` exports (not a re-implementation crypto-battle.ts wrote
+   * itself), or `migration.test.ts`'s and `ledger-codec.test.ts`'s migration
+   * tests would be proving something crypto-battle.ts does not actually run
+   * in production. [Issue #709] The version is 3: the sudoku PROVE changed the
+   * state shape, and an undeclared bump is exactly what the SDK says the
+   * platform cannot detect.
    */
-  it("declares stateSchemaVersion 2 with migrateStateV1 wired as its migrateState [Issue #679]", () => {
-    expect(plugin.stateSchemaVersion).toBe(2);
-    expect(plugin.migrateState).toBe(migrateStateV1);
+  it("declares the current stateSchemaVersion with reducer.ts's migrateState wired [Issue #679, #709]", () => {
+    expect(plugin.stateSchemaVersion).toBe(STATE_SCHEMA_VERSION);
+    expect(STATE_SCHEMA_VERSION).toBe(3);
+    expect(plugin.migrateState).toBe(migrateState);
   });
 
   /**

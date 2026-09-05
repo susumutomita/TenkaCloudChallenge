@@ -13,7 +13,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { decodeLedger } from "./ledger-codec.ts";
+import { applyOp, DEFAULT_CONFIG, initialState, migrateState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import { startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState } from "./types.ts";
@@ -394,6 +395,42 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     } as unknown as CryptoBattleState;
     return legacy;
   }
+
+  /**
+   * The platform-facing half of the same guarantee. `stateSchemaVersion` is 3
+   * for this row's sake: a v2 worker would throw on the first `sudoku-reveal`
+   * it decoded, so the version has to say the shape changed, and the
+   * migration has to lift a v2 row to the shape v3 reads.
+   */
+  test("migrateState(row, 2) lifts it to v3: puzzles present, legacy fields gone, legacy ledger kept", () => {
+    const lifted = migrateState(preSudokuState(), 2);
+    expect("publicCommitments" in lifted).toBe(false);
+    for (const teamId of CTX.teamIds) {
+      expect(lifted.publicPuzzles?.[teamId]).toHaveLength(16);
+      expect(lifted.teams[teamId]?.sudokuHuntedGenerations).toEqual([]);
+    }
+    for (const contract of lifted.contracts) {
+      expect("proveCommitment" in contract).toBe(false);
+      expect("proveChallenge" in contract).toBe(false);
+    }
+    expect(lifted.config.scores.wrongProve).toBe(DEFAULT_CONFIG.scores.wrongProve);
+    expect(lifted.publicLedger.some((a) => a.k === "proof")).toBe(true);
+    // What it produced is what the reducer reads: a tick and a projection run.
+    const view = projectForTeam(tick(lifted, (lifted.nowMs ?? 0) + 1), "teamA");
+    expect(view.publicPuzzles.teamB).toHaveLength(16);
+  });
+
+  test("migrateState chains v1 through v2, and refuses a version it does not know", () => {
+    const v2 = preSudokuState();
+    const v1 = { ...v2, publicLedger: decodeLedger(v2.publicLedger) };
+    const lifted = migrateState(v1, 1);
+    expect(lifted.publicLedger).toEqual(migrateState(v2, 2).publicLedger);
+    expect(lifted.publicPuzzles?.teamA).toHaveLength(16);
+    expect(() => migrateState(v2, 3)).toThrow();
+    expect(() => migrateState(v2, 0)).toThrow();
+    expect(() => migrateState(null, 2)).toThrow();
+    expect(() => migrateState({ seed: "x" }, 2)).toThrow();
+  });
 
   test("every team's puzzle is backfilled from the seed, and matches its vault", () => {
     const state = preSudokuState();

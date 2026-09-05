@@ -370,8 +370,9 @@ export function decodeLedger(stored: readonly StoredArtifact[]): PublicArtifact[
  * this package wrote before this module existed: `publicLedger` as full
  * `PublicArtifact[]`) to v2 (`publicLedger` as `StoredArtifact[]`).
  *
- * Wired as `coordination/crypto-battle.ts`'s `migrateState`, alongside
- * `stateSchemaVersion: 2` -- see that file and TenkaCloud's
+ * The v1 -> v2 step of `reducer.ts`'s `migrateState` (the plugin's
+ * `migrateState`; `stateSchemaVersion` is 3 since #709) -- see that file, and
+ * `coordination/crypto-battle.ts`, and TenkaCloud's
  * `packages/coordination-plugin-sdk/src/index.ts` for the platform contract
  * this fulfills: `migrateState` is REQUIRED once `stateSchemaVersion` is
  * declared (a plugin that skips it is rejected at load, before any row is

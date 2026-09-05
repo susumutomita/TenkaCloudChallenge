@@ -59,12 +59,14 @@ import {
   ageProjection,
   exposureRows,
   sudokuHuntCandidates,
+  sudokuRotatePressure,
   tacticAvailability,
 } from "../../portal/FastMovePanel.tsx";
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { rungSpec } from "./ladder.ts";
 import { reconstruct } from "./shamir.ts";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
+import { ALL_PERMUTATIONS, IDENTITY_PERMUTATION, samePermutation } from "./sudoku.ts";
 import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
 
 const FIXED_NOW = 1_700_000_000_000;
@@ -1872,5 +1874,44 @@ describe("Issue #696: the Help Drawer says what a wrong HUNT costs", () => {
     const ja = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale: "ja" })));
     expect(ja).toContain("外した HUNT はタダではありません");
     expect(ja).toContain("減点");
+  });
+});
+
+describe("the sudoku side of the vault reaches the participant [Issue #709 review]", () => {
+  const vaultWith = (overrides: Partial<CryptoBattleProjection["vault"]>): CryptoBattleProjection =>
+    fixtureProjection({ vault: { ...fixtureProjection().vault, ...overrides } });
+
+  it("the Vault lane names the generations whose sudoku solution was recovered, separately from Shamir HUNTs", () => {
+    for (const locale of ["ja", "en"] as const) {
+      const projection = vaultWith({ sudokuHuntedGenerations: [1] });
+      const html = renderToStaticMarkup(
+        createElement(StatusPanelBody, { projection, locale, elapsedSincePollMs: 0 }),
+      );
+      const label = locale === "en" ? "sudoku solution was recovered" : "数独の解を割り出された世代";
+      expect(html).toContain(label);
+      // The line reads "label: 1" -- the generation is printed after this label,
+      // not folded into the Shamir line, which still reads "none".
+      const at = html.indexOf(label);
+      expect(html.slice(at, at + 200)).toMatch(/:\s*(<!-- -->)?1\b/);
+    }
+  });
+
+  it("ROTATE opens when this generation's solution was recovered, with no share exposed", () => {
+    const hunted = vaultWith({ sudokuHuntedGenerations: [1] });
+    expect(sudokuRotatePressure(hunted)).toBe("hunted");
+    expect(tacticAvailability(hunted).rotate).toBe(true);
+    // An OLDER generation's recovery is history, not pressure.
+    expect(sudokuRotatePressure(vaultWith({ generation: 2, sudokuHuntedGenerations: [1] }))).toBeUndefined();
+  });
+
+  it("ROTATE opens when every usable relabelling on this generation is spent", () => {
+    const allButIdentity = ALL_PERMUTATIONS.filter((pi) => !samePermutation(pi, IDENTITY_PERMUTATION));
+    expect(allButIdentity).toHaveLength(23);
+    const exhausted = vaultWith({ usedPermutations: allButIdentity });
+    expect(sudokuRotatePressure(exhausted)).toBe("exhausted");
+    expect(tacticAvailability(exhausted).rotate).toBe(true);
+    expect(sudokuRotatePressure(vaultWith({ usedPermutations: allButIdentity.slice(0, 22) }))).toBeUndefined();
+    // The fixture's own vault (one table used, nothing hunted) still does not open it.
+    expect(tacticAvailability(fixtureProjection({ publicLedger: [] })).rotate).toBe(false);
   });
 });

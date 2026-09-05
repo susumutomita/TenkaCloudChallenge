@@ -88,7 +88,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { HAND_PRIME, mod } from "./field.ts";
-import { decodeLedger, encodeArtifact, encodeLedger } from "./ledger-codec.ts";
+import { decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
 import {
   ALL_PERMUTATIONS,
   CONSTRAINT_GROUPS,
@@ -566,6 +566,66 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
     puzzles[team.teamId] = deriveSudokuPuzzle(state.seed, team.teamId, team.generation);
   }
   return puzzles;
+}
+
+/**
+ * [Issue #709] The schema version this package reads and writes. Declared on
+ * the plugin (`coordination/crypto-battle.ts`), compared by the platform
+ * against the version stamped on a persisted row.
+ *
+ *   1  `publicLedger` as full `PublicArtifact[]`
+ *   2  `publicLedger` as compact `StoredArtifact[]` (TenkaCloud#3150)
+ *   3  the sudoku PROVE: `publicPuzzles` replaces `publicCommitments`, the
+ *      ledger gains the `sudoku-reveal` kind, teams gain
+ *      `sudokuHuntedGenerations` / `lastProve`, Orders lose
+ *      `proveCommitment` / `proveChallenge`
+ *
+ * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
+ * decoder throws on a kind it does not know, so a v3 row it was told was v2
+ * would take the match down the first time it decoded a `sudoku-reveal`.
+ * With the version declared, the platform refuses the row instead.
+ */
+export const STATE_SCHEMA_VERSION = 3;
+
+/**
+ * [Issue #709] The plugin's `migrateState`: lifts a row written under an
+ * earlier schema version to `STATE_SCHEMA_VERSION`. Pure in `(state,
+ * fromVersion)` -- no `ctx`, so no secret material can reach a migration --
+ * and it THROWS on anything it does not recognise, which the platform treats
+ * as "leave the row alone" (no `initialState`, no write, no reset).
+ *
+ * v1 -> v2 is `ledger-codec.ts`'s `migrateStateV1`, unchanged. v2 -> v3 is
+ * the same repair `withMigratedContracts` already performs on every read --
+ * puzzles derived from the seed, hunted-generation lists backfilled, the
+ * wrong-PROVE price merged in -- plus dropping the fields v3 no longer has.
+ * A legacy `proof` ledger entry is kept: it still decodes and renders.
+ */
+export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
+  if (fromVersion !== 1 && fromVersion !== 2) {
+    throw new Error(
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1 and v2 -> v${STATE_SCHEMA_VERSION} are defined)`,
+    );
+  }
+  const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
+  if (typeof v2 !== "object" || v2 === null) {
+    throw new Error("reducer: migrateState received a non-object state");
+  }
+  const row = v2 as Partial<CryptoBattleState> & { readonly publicCommitments?: unknown };
+  if (typeof row.seed !== "string" || !Array.isArray(row.contracts) || typeof row.teams !== "object" || row.teams === null) {
+    throw new Error("reducer: migrateState: v2 state is missing seed, contracts or teams");
+  }
+  const { publicCommitments: _legacyCommitments, ...rest } = row;
+  const lifted = withMigratedContracts(rest as CryptoBattleState);
+  return {
+    ...lifted,
+    contracts: lifted.contracts.map((contract) => {
+      const { proveCommitment: _c, proveChallenge: _e, ...kept } = contract as Contract & {
+        readonly proveCommitment?: unknown;
+        readonly proveChallenge?: unknown;
+      };
+      return kept as Contract;
+    }),
+  };
 }
 
 function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
