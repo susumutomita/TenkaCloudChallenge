@@ -125,11 +125,11 @@ function slotProps(locale: "ja" | "en") {
 }
 
 describe("optional arithmetic practice", () => {
-  it("covers the six small-number operations and rejects empty, wrong and non-digit answers", () => {
+  it("covers the seven small-number operations and rejects empty, wrong and non-digit answers", () => {
     // Fixed, hand-worked values; the real cryptographic examples are checked
     // against the game primitives in concept-explanation.test.ts.
-    const answers = ["1", "1", "6", "2", "4", "1"];
-    expect(PRACTICE_STEPS.map(step => step.topic)).toEqual(["remainder", "sharing", "mpc", "zk", "fhe", "caesar"]);
+    const answers = ["1", "1", "6", "2", "4", "1", "2"];
+    expect(PRACTICE_STEPS.map(step => step.topic)).toEqual(["remainder", "sharing", "mpc", "zk", "fhe", "caesar", "commit"]);
     for (let i = 0; i < answers.length; i++) {
       expect(checkPracticeAnswer(i, answers[i]!)).toBe(true);
       for (const invalid of ["", " ", "-1", "10", "a", "0"]) expect(checkPracticeAnswer(i, invalid)).toBe(false);

@@ -16,6 +16,7 @@ import {
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import ConceptExplanation from "./ConceptExplanation.tsx";
+import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
 import { taskDetail } from "./orderTask.ts";
 import { disclosurePreview, orderHeading } from "./OrderFocus.tsx";
@@ -459,7 +460,7 @@ export const FAST_MOVE_COPY = {
 } as const;
 
 function outcomeError(outcome: PortalCoordinationOutcome, locale: Locale): string {
-  if (outcome.kind === "rejected") return outcome.error;
+  if (outcome.kind === "rejected") return rpsRejection(outcome.error, locale);
   if (outcome.kind === "not_configured") return locale === "ja" ? "coordination が未設定です。" : "Coordination is not configured.";
   return FAST_MOVE_COPY[locale].unavailable;
 }
@@ -1336,6 +1337,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </div>
 
 
+      <RpsResult projection={projection} locale={locale} />
       <details className="tc-order-picker" ref={orderPickerRef}>
         <summary>{locale === "ja" ? `ほかのお題を選ぶ（残り ${orders.length} 件）` : `Choose another Order (${orders.length} open)`}</summary>
         <OrderBelt projection={projection} locale={locale} selectedId={selectedOrder?.id}
@@ -1536,6 +1538,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
         here and nowhere else -- they arrive on this Order's projection because
         it belongs to this team. What leaves the browser is the subtotal only.
       */}
+      {selectedOrder?.task.kind === "rps-duel" && selectedOrder.allowedMethods.includes("duel") && <RpsDuel
+        key={`${projection.vault.teamId}:${selectedOrder.id}`} order={selectedOrder} locale={locale} submitting={submitting}
+        opponentName={projection.teams[selectedOrder.task.opponentTeamId]?.teamName ?? selectedOrder.task.opponentTeamId}
+        onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
+      />}
       {selectedOrder?.task.kind === "masked-total" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.mpcTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>

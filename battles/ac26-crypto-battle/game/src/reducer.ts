@@ -63,6 +63,7 @@ import {
   deriveTeamGeneration,
   type FieldConfig,
 } from "./fixtures.ts";
+import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
@@ -162,6 +163,8 @@ export const DEFAULT_CONFIG: CryptoBattleConfig = {
   scores: {
     // [Issue #659] 失効 -15 < LEAK して狩られる -2 < LEAK 無事 +10 < PROVE +30
     contract: 30,
+    duelWin: 30,
+    duelDraw: 10,
     contractLeak: 10,
     expiredOrder: -15,
     rushContract: 45,
@@ -487,6 +490,8 @@ function needsConfigMigration(config: CryptoBattleConfig): boolean {
     // and the Portal's projection guard requires it to be a number -- so a row
     // written before the sudoku PROVE existed would project `undefined` and
     // the whole Battle surface would read as unavailable for that match.
+    config.scores?.duelWin === undefined ||
+    config.scores?.duelDraw === undefined ||
     config.scores?.wrongProve === undefined
   );
 }
@@ -705,7 +710,7 @@ function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
-  const state = withMigratedContracts(persistedState);
+  const state = expireRps(withMigratedContracts(persistedState), eventNowMs);
   // [Issue #677] An unstarted match is not a match in progress at minute zero.
   //
   // The belt used to begin the moment the platform first ticked, which is one
@@ -746,6 +751,7 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
     Object.entries(state.teams).map(([teamId, team]) => [teamId, team.issuedOrderCount]),
   );
 
+  const duelCountByTeam = new Map(Object.entries(state.teams).map(([id, team]) => [id, team.issuedDuelCount ?? 0]));
   const issued: Contract[] = [];
   const fieldConfig = fieldConfigOf(state.config);
   let nextContractAtMs = state.nextContractAtMs ?? startedAtMs;
@@ -771,7 +777,25 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
         (issuedCountByTeam.get(teamId) ?? 0) === 0 ? 1 : state.config.contractsPerIssue;
       for (let inBatch = 0; inBatch < batchSize; inBatch += 1) {
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
-      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex, fieldConfig);
+      // One of six slots, even with a smaller configured batch. A one-Order
+      // batch must still progress through the other five mechanisms.
+      const pairs = !isOpeningBatch && sequenceIndex % 6 === 0
+        ? pairTeams(teamIds, Math.floor(sequenceIndex / 6) - 1) : [];
+      const pair = pairs.find(pair => pair.includes(teamId));
+      const opponentTeamId = pair?.find(id => id !== teamId);
+      if (opponentTeamId !== undefined) {
+        const duelId = `${nextContractAtMs}:${sequenceIndex}:${pairs.indexOf(pair!)}`;
+        const expiresAtMs = Math.min(nextContractAtMs + state.config.contractTtlMs, matchEndAtMs);
+        if (expiresAtMs > eventNowMs) issued.push({
+          id: `${teamId}-c${sequenceIndex}`, teamId, kind: "standard", points: state.config.scores.duelWin, leakPoints: 0,
+          task: { kind: "rps-duel", duelId, opponentTeamId }, issuedAtMs: nextContractAtMs, expiresAtMs,
+          status: "open", privacyConstraint: "none", allowedMethods: ["duel"],
+        });
+        issuedCountByTeam.set(teamId, sequenceIndex + 1);
+        duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
+        continue;
+      }
+      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
       //
@@ -789,7 +813,8 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
       // index is frozen on one, the belt never issues anything again. A rush
       // slot (2.5 min) going stale would take the five standard slots behind
       // it, which would still have been live, down with it.
-      if (nextContractAtMs + ttlMs <= eventNowMs) {
+      const expiresAtMs = Math.min(nextContractAtMs + ttlMs, matchEndAtMs);
+      if (expiresAtMs <= eventNowMs) {
         issuedCountByTeam.set(teamId, sequenceIndex + 1);
         continue;
       }
@@ -805,7 +830,7 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
         leakPoints: state.config.scores.contractLeak,
         task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
         issuedAtMs: nextContractAtMs,
-        expiresAtMs: nextContractAtMs + ttlMs,
+        expiresAtMs,
         status: "open",
         // [Issue #645] The Order states its rule, and the method list follows
         // from it and the task -- never the other way round, so a method added
@@ -835,7 +860,7 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
   const teams: Record<string, TeamState> = {};
   for (const [teamId, team] of Object.entries(charged)) {
     const issued = issuedCountByTeam.get(teamId) ?? team.issuedOrderCount;
-    teams[teamId] = issued === team.issuedOrderCount ? team : { ...team, issuedOrderCount: issued };
+    teams[teamId] = { ...team, issuedOrderCount: issued, issuedDuelCount: duelCountByTeam.get(teamId) ?? 0 };
   }
 
   return {
@@ -1174,6 +1199,11 @@ export function validateOp(
   }
 
   switch (op.kind) {
+    case "rps-commit":
+    case "rps-open": {
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "duel");
+      return gate.ok ? validateRps(state, teamId, op) : gate;
+    }
     case "leak":
       // [Issue #645] LEAK's trusted check is exactly the Order gate: the team
       // owns the Order, it is still open, and it permits publishing the raw
@@ -1993,6 +2023,11 @@ function projectTask(
   contractId: string,
 ): OrderTaskProjection {
   switch (task.kind) {
+    case "rps-duel": {
+      const order = state.contracts.find(c => c.id === contractId);
+      if (!order || order.teamId !== teamId) throw new Error("projectTask: missing owned duel");
+      return projectRps(state, order);
+    }
     case "reveal-share":
       return task;
     case "homomorphic-sum":
@@ -2206,7 +2241,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   // the decision, rather than whether to rotate instead of playing.
   const voided: string[] = [];
   const contracts = state.contracts.map((c) => {
-    if (c.teamId !== teamId || c.status !== "open") return c;
+    if (c.teamId !== teamId || c.status !== "open" || c.task.kind === "rps-duel") return c;
     voided.push(c.teamId);
     return { ...c, status: "expired" as const, expiryCause: "rotate" as const };
   });
@@ -2420,6 +2455,9 @@ export function applyOp(
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "rps-commit":
+    case "rps-open":
+      return applyRps(state, teamId, op);
     case "ready":
       return applyReady(state, teamId);
     case "start":

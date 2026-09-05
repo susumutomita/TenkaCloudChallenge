@@ -192,6 +192,8 @@ function playMultiMethodMatch(teamCount: number, rounds: number): CryptoBattleSt
 /** Same template reducer.ts's 5 construction sites use -- see ledger-codec.ts's `deriveArtifactId` doc comment. */
 function expectedIdFor(artifact: PublicArtifact): string {
   switch (artifact.kind) {
+    case "rps-commit": return `${artifact.contractId}-rps-commit`;
+    case "rps-open": return `${artifact.contractId}-rps-open`;
     case "share":
       return `${artifact.contractId}-share${artifact.shareIndex}`;
     case "cipher-pair":

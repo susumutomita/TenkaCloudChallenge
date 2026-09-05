@@ -204,23 +204,48 @@ Issue #659 sizes it as "team size + 1 to 2" for the standard three-person team.
 The plugin is handed team ids and never headcount, so a different team size has
 to be re-tuned by hand.
 
-**Match size depends on the backend, and nothing enforces it.** The whole match
-is one persisted row, read and rewritten on every participant action. Measured
-worst case for a 90-minute match — every team buys every hint and then leaks
-everything it is allowed to leak: **16.7 KB per team**, linear.
+**Match size depends on the backend and is checked by the platform's capacity preflight.**
+The full-play fixture now completes FHE, MPC, sudoku and both RPS stages as well
+as LEAK, purchases every hint, and uses 26-character team IDs and epoch times.
+At 99 teams it measures **3,109,666 UTF-8 bytes** (2026-09-05). The old fixture
+missed non-LEAK records and some rush Orders and therefore understated capacity.
+`metadata.json` reserves **32 KiB per team + 1,536 bytes**. This is a forecast for
+the default 90-minute configuration; remeasure after changing duration or batch size.
 
-| Backend | Limit | Teams this Battle supports |
+| Backend | Platform policy | Default-match capacity |
 | --- | --- | --- |
-| Turso / libSQL | no per-row cap | **99** (the platform maximum) — a full match is ~1.7 MB |
-| DynamoDB | 400 KB per item, no partial write | **17** with headroom; the match stops mid-play past 24 |
+| Turso / libSQL | 4 MiB, environment-overridable | 99 teams, with at least 25% headroom in the tested full-play path |
+| DynamoDB | 400 KiB item; platform reserves 16 KiB | 9 teams with 25% headroom; the declaration's preflight limit is 11 |
 
-The DynamoDB ceiling is a property of the game, not something left unoptimised.
-The public ledger is permanent by design — its permanence is what gives LEAK its
-weight — and it grows with every team that plays; at 99 teams it is about two
-thirds of the row. Pruning it would delete the thing the game is about.
+The platform owns these limits (`coordination-budget.ts`); this change does not
+raise them. The test's old 2 MiB SQL allowance was not the platform's 4 MiB policy.
+The revised test checks the real policy with headroom, instead of letting most
+Orders expire and calling that a worst case. Records remain public for the match;
+none are deleted to improve the measurement. Live AWS checks remain optional.
 
-**So a full-size event has to run on the Turso backend** (`CONTROL_DATA_BACKEND`).
-`game/src/state-size.test.ts` measures both ceilings and fails if either moves.
+## Rock-paper-scissors lifecycle
+
+After the opening, one of every six Order slots is a paired duel. The default
+six-Order batch therefore has one of each mechanism. Teams rotate through a
+circle schedule; an odd roster rotates one bye, which receives an individual
+Order instead. Small batches still receive the other five mechanisms. Late
+unseen slots are consumed but not issued or charged. All deadlines stop at match end.
+
+`rps-commit` accepts only the nonzero order-11 subgroup modulo 23. A second
+commitment is refused. `rps-open` requires both commitments and a matching hand
+and hiding number; a mismatch is rejected without a penalty. The first accepted
+opening stays judge-private; the second atomically settles both Orders and
+publishes both openings. Win 30, draw 10, loss 0, configurable through `scores`.
+ROTATE changes long-lived secrets and does not cancel a duel. At timeout, a team
+that finished its current stage gets `duelWin`; the team with a required action
+outstanding receives ordinary `expiredOrder`. No opening is published on timeout.
+
+`Contract.rps` and `TeamState.issuedDuelCount` are optional on old rows; missing
+counters mean zero. Old score configs backfill `duelWin` and `duelDraw` through
+existing config migration. Persisted openings must never be spread into another
+team's projection. Tests cover all 33 first openings and all nine hand pairs.
+The toy has no computational binding security; fairness relies on the judge
+keeping openings private until both arrive. It is commit-reveal, not a full ZK protocol.
 
 ## Release checks
 

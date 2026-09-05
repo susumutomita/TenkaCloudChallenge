@@ -37,6 +37,7 @@
  * and travel as plain JSON numbers.
  */
 
+import type { Hand } from "./commitment.ts";
 import type { CipherRung } from "./ladder.ts";
 import type { StoredArtifact } from "./ledger-codec.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
@@ -104,6 +105,8 @@ export interface ScoreRules {
    * not exist.
    */
   readonly contract: number;
+  readonly duelWin: number;
+  readonly duelDraw: number;
   /**
    * [Issue #659] Points for a standard Order fulfilled WITHOUT computing —
    * the participant let the system answer, publishing a plaintext/ciphertext
@@ -364,7 +367,8 @@ export type OrderTask =
    * stated here, so a team relabels the whole grid rather than the four cells
    * it knows will be read.
    */
-  | { readonly kind: "zk-sudoku" };
+  | { readonly kind: "zk-sudoku" }
+  | { readonly kind: "rps-duel"; readonly duelId: string; readonly opponentTeamId: string };
 
 export type OrderTaskKind = OrderTask["kind"];
 
@@ -379,7 +383,17 @@ export type ContractStatus = "open" | "completed" | "expired";
  * unchanged on purpose (#646 non-goals), so a rename does not churn every
  * reducer test at the same time as the model grows.
  */
+export interface RpsOpening { readonly hand: Hand; readonly randomness: number }
+export type DuelOutcome = "win" | "loss" | "draw" | "forfeit-win";
+/** Judge-held data: never spread this into a participant projection. */
+export interface RpsSubmission {
+  readonly commitment?: number;
+  readonly opening?: RpsOpening;
+  readonly outcome?: DuelOutcome;
+}
+
 export interface Contract {
+  readonly rps?: RpsSubmission;
   readonly id: string;
   /** The team this Order was issued to (only that team may submit against it). */
   readonly teamId: string;
@@ -632,7 +646,19 @@ export interface SudokuRevealArtifact {
   readonly postedAtMs: number;
 }
 
+export interface RpsCommitArtifact {
+  readonly id: string; readonly teamId: string; readonly generation: number;
+  readonly kind: "rps-commit"; readonly method: SubmissionMethod;
+  readonly contractId: string; readonly duelId: string; readonly postedAtMs: number;
+  readonly commitment: number;
+}
+export interface RpsOpenArtifact extends Omit<RpsCommitArtifact, "kind">, RpsOpening {
+  readonly kind: "rps-open";
+}
+
 export type PublicArtifact =
+  | RpsCommitArtifact
+  | RpsOpenArtifact
   | ShareArtifact
   | ProofArtifact
   | CiphertextArtifact
@@ -683,6 +709,8 @@ export interface TeamState {
    * live Order as "already completed".
    */
   readonly issuedOrderCount: number;
+  /** Includes skipped stale duel slots; absent on pre-duel rows means zero. */
+  readonly issuedDuelCount?: number;
   readonly completedContractIds: readonly string[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
   readonly huntedGenerations: readonly number[];
@@ -839,6 +867,8 @@ export interface HuntLogEntry {
 }
 
 export type CryptoBattleOp =
+  | { readonly kind: "rps-commit"; readonly contractId: string; readonly commitment: number }
+  | { readonly kind: "rps-open"; readonly contractId: string; readonly hand: number; readonly randomness: number }
   | { readonly kind: "leak"; readonly contractId: string }
   /**
    * [Issue #645 Phase 2] The ciphertext this team computed for an FHE Order.
@@ -1078,7 +1108,11 @@ export type OrderTaskProjection =
    * [Issue #709] Nothing to add: the solution is on the vault and the puzzle
    * is public. Kept as its own arm so a card can name the job.
    */
-  | { readonly kind: "zk-sudoku" };
+  | { readonly kind: "zk-sudoku" }
+  | { readonly kind: "rps-duel"; readonly duelId: string; readonly opponentTeamId: string;
+      readonly myCommitment?: number; readonly opponentCommitment?: number;
+      readonly myOpening?: RpsOpening; readonly opponentOpened: boolean;
+      readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
   readonly id: string;

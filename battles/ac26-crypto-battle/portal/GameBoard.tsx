@@ -16,6 +16,7 @@ type Locale = "ja" | "en";
 
 const COPY = {
   en: {
+    duel: "DUEL",
     title: "LIVE MATCH",
     orderBelt: "ORDER BELT",
     noOrders: "Waiting for the next Order…",
@@ -52,6 +53,7 @@ const COPY = {
     tag: "relabelling",
   },
   ja: {
+    duel: "じゃんけん",
     title: "LIVE MATCH",
     orderBelt: "ORDER BELT",
     noOrders: "次の Order を待っています…",
@@ -125,6 +127,7 @@ interface LedgerGroup {
    * spotting the matching tags is the reading the HUNT asks for.
    */
   reveals: SudokuRevealArtifact[];
+  duels: Extract<PublicArtifact, { kind: "rps-commit" | "rps-open" }>[];
   /**
    * [Issue #645] Counted per artifact kind, not lumped into one "proof" bucket.
    * Before FHE and MPC existed, everything that was not a leaked share WAS a
@@ -172,11 +175,13 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
         shares: [],
         pairs: [],
         reveals: [],
+        duels: [],
         protected: new Map(),
       };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
     else if (entry.kind === "cipher-pair") current.pairs.push(entry);
     else if (entry.kind === "sudoku-reveal") current.reveals.push(entry);
+    else if (entry.kind === "rps-commit" || entry.kind === "rps-open") current.duels.push(entry);
     else current.protected.set(entry.kind, (current.protected.get(entry.kind) ?? 0) + 1);
     groups.set(key, current);
   }
@@ -186,6 +191,8 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
 /** The chip label for one non-share artifact kind. */
 function protectedLabel(kind: PublicArtifact["kind"]): string {
   switch (kind) {
+    case "rps-commit": return "COMMIT";
+    case "rps-open": return "OPEN";
     case "proof":
       return "PROOF";
     case "ciphertext":
@@ -454,6 +461,10 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                     <span className="tc-reveal-tag" title={copy.tag}>{reveal.tag}</span>
                   </div>
                 ))}
+                {group.duels.map(entry => <div className="tc-proof-card" key={entry.id}>
+                  {entry.kind === "rps-commit" ? "COMMIT" : "OPEN"} · c={entry.commitment}
+                  {entry.kind === "rps-open" && <> · {locale === "ja" ? "手" : "hand"} m={entry.hand} · {locale === "ja" ? "隠す数" : "hiding number"} r={entry.randomness}</>}
+                </div>)}
                 {[...group.protected.entries()].map(([kind, count]) => (
                   <div className="tc-proof-card" key={kind}>{protectedLabel(kind)} ×{count}</div>
                 ))}

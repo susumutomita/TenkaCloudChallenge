@@ -229,7 +229,7 @@ export interface ContractPlan {
    * `reducer.ts` derives at issuance from the match seed and the Order id, so
    * nothing about them has to live in this plan.
    */
-  readonly taskKind: OrderTaskKind;
+  readonly taskKind: Exclude<OrderTaskKind, "rps-duel">;
   /** Only meaningful for a `reveal-share` task. */
   readonly requestedShareIndices: readonly number[];
   /**
@@ -287,7 +287,7 @@ export function deriveContractPlan(
   // the belt. The PROVE-only slot is now the ZK sudoku Order outright: same
   // proof, stated as its own job, so a team meets the relabelling once per
   // rotation rather than only when a share Order happens to forbid LEAK.
-  const TASK_ROTATION: readonly OrderTaskKind[] = [
+  const TASK_ROTATION: readonly Exclude<OrderTaskKind, "rps-duel">[] = [
     "reveal-share",
     "caesar-shift",
     "homomorphic-sum",

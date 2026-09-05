@@ -128,6 +128,7 @@ const COPY = {
     ],
     movesTitle: 'The moves (under "PROVE / LEAK / HUNT -- Submit a move" above)',
     moves: [
+      { name: "DUEL", body: "Seal a number hiding your hand, then give the judge your opening after both commitments arrive. Both openings are published together and the hands determine the score. This tiny-number teaching model trusts its judge to enforce simultaneous publication." },
       {
         name: "LEAK",
         body: "Complete an open Contract by revealing the share(s) it asks for. Scores immediately. The revealed value is published to the Public Ledger forever -- it becomes ammunition for another team's HUNT.",
@@ -242,6 +243,7 @@ const COPY = {
     ],
     movesTitle: "操作 (上の「PROVE / LEAK / HUNT — 操作を送信」の中)",
     moves: [
+      { name: "DUEL", body: "じゃんけんは手を隠した数字を先に出し、両者が出したら審判へ手を渡します。両開封がそろうと同時公開され、勝敗で得点します。小さい数の教材なので、同時公開を守る審判を信頼します。" },
       {
         name: "LEAK",
         body: "Contract が要求する share を公開して即座に完了・得点します。公開した値は Public Ledger に永久に残り、相手チームの HUNT 材料になります。",

@@ -72,6 +72,7 @@ export const SCENARIO_IDS = [
   "ledger-filling",
   "fhe-order",
   "mpc-order",
+  "rps-order",
   "hunt-reachable",
   "pi-reuse",
   "after-rotate",
@@ -101,6 +102,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "暗号文のまま足す Order が開いている状態",
     en: "An encrypted-addition Order is open",
   },
+  "rps-order": { ja: "相手とじゃんけん — まだ両者とも封じていない", en: "Rock-paper-scissors — neither team has sealed" },
   "mpc-order": {
     ja: "覆面つき小計の Order が開いている状態",
     en: "A masked-subtotal Order is open",
@@ -368,6 +370,12 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
     }
 
+    case "rps-order": {
+      if (!playUntilRaw(driver, state => state.contracts.some(c => c.teamId === "alpha" && c.status === "open" && c.task.kind === "rps-duel"), 10)) {
+        throw new Error("scenario 'rps-order' never saw a paired duel");
+      }
+      break;
+    }
     case "mpc-order": {
       if (
         !playUntilRaw(

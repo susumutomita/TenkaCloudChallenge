@@ -48,6 +48,7 @@
  * something and checks no other team's secret or un-leaked share appears.
  */
 
+import { handWorkSteps } from "./commitment.ts";
 import type { SubmissionMethod } from "./methods.ts";
 import type { OrderTaskKind, OrderTaskProjection, VaultProjection } from "./types.ts";
 
@@ -133,6 +134,20 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
    * for free (`shareWhat` in FastMovePanel.tsx), so a player who never buys a
    * hint is not the one left out.
    */
+  "rps-duel": [
+    { id: "rps-duel/1", text: () => ({
+      ja: "相手とじゃんけんをします。先に手を言うと相手に勝つ手を選ばれるので、手に『隠す数』を混ぜた数字だけを先に出します。この数字をコミットメントと呼びます。両者が出したあとに、手と隠す数を審判へ渡します。審判は数字が一致するか確かめ、両方の開封がそろってから同時に公開します。隠す数は毎回くじで選び直します。",
+      en: "Play rock-paper-scissors. Announcing your hand first would let your opponent counter it. First send a number combining your hand with a hiding number: a commitment. Once both arrive, give the judge your hand and hiding number. The judge checks them, holds each opening privately, and publishes both together. Draw a fresh hiding number every round.",
+    }) },
+    { id: "rps-duel/2", text: () => ({
+      ja: "手の番号 m はグー 1・チョキ 2・パー 3。隠す数 r は 0〜10 のくじから毎回選びます。封じる数字 c は『4 を m 回掛けた数 × 9 を r 回掛けた数』を 23 で割った余り。4^m × 9^r mod 23 と書き、0 回掛ける場合は 1 とします。例：m=1、r=1 なら 4×9=36、36−23=13。まず 13 だけ送り、あとで (1,1) を渡します。この小さな数では別の開け方も探せるため、審判が両開封を同時公開して後出しを防ぎます。commit-reveal は『先に封じて後で開く』手順で、それだけでゼロ知識証明になるわけではありません。",
+      en: "m is rock 1, scissors 2, paper 3. Draw r uniformly from 0–10. Multiply m factors of 4 and r factors of 9, then multiply those results and keep the remainder after division by 23: c = 4^m × 9^r mod 23. A zeroth power is 1. For m=1, r=1: 4×9=36; 36−23=13. Send 13, then open with (1,1). Tiny numbers permit alternative openings, so the judge publishes both together to prevent adapting after seeing the other hand. Commit-reveal is not itself a zero-knowledge proof.",
+    }) },
+    { id: "rps-duel/3", text: () => ({
+      ja: `「手の番号」と「隠す数」を選び、紙に控えます。表から 4^m と 9^r をそれぞれ 23 で割った余りを読み、掛けて 23 で割った余りを「封じる数字」に入れます。審判はあなたの選択をまだ知らないため、見本 m=2・r=2 で行を追います。\n${handWorkSteps(2, 2).join('\n').replaceAll('mod 23', '23 で割った余り')}\n自分の値で計算して「数字を封じる」。両者の数字がそろったら、控えた手と隠す数を入れて「手を審判へ渡す」。待ち表示なら相手の操作待ちです。`,
+      en: `Choose and write down your hand and hiding number. Read the remainders of 4^m and 9^r after division by 23 from the table, multiply, and enter the remainder after division by 23 in Sealed number. The judge does not know your choice yet, so this is a sample m=2, r=2:\n${handWorkSteps(2, 2).join('\n')}\nCalculate with your choice and press Seal the number. When both arrive, use your notes and press Give my opening to the judge. A waiting message means the opponent must act.`,
+    }) },
+  ],
   "reveal-share": [
     {
       id: "reveal-share/1",
