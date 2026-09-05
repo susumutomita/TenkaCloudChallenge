@@ -16,7 +16,7 @@ COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p 
 # that cannot bind-mount the checkout's host path. No host Python is required.
 STARTER_FILE ?= local/starter/zkvm_trace_drill.py
 RUN := $(COMPOSE) run --rm -T workbench
-RUN_TEST := $(RUN) sh -c 'mkdir -p /tmp/learner; cat > /tmp/learner/zkvm_trace_drill.py; PARTICIPANT_STARTER_DIR=/tmp/learner python tests/public/test_zkvm_trace_drill.py "$$@"' sh
+RUN_TEST := $(RUN) sh -c 'mkdir -p /tmp/learner; cat > /tmp/learner/zkvm_trace_drill.py; exec env PARTICIPANT_STARTER_DIR=/tmp/learner python participant/cli_test.py "$$@"' sh
 
 .PHONY: build test test-one inspect reset reference-test verifier-up verifier-down
 
@@ -53,3 +53,4 @@ reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
 	docker run --rm -i -e READ_METADATA_STDIN=1 $(IMAGE)-author python tests/hidden/test_learning_contract.py < metadata.json
+	docker run --rm $(IMAGE)-author python tests/hidden/test_network_isolation.py

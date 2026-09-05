@@ -84,3 +84,24 @@ unfilled starter still failed the public examples. This change is confined to th
 Catalog checks do not prove Portal rendering. These runs verify the real participant
 editor/Inspect/prepare/verify APIs and CLI, not a deployed Portal, an AWS event, or a
 human playtest. No production deployment was performed.
+
+
+## Grading-service network boundary
+
+A subsequent PR review found that the learner subprocess inherited the direct
+verifier URL and network access. The trusted server now fetches the public snapshot
+before execution; the child receives only its assignments and public values, without
+verifier endpoints or the deployment binding tag. A native libseccomp filter denies
+network socket/transfer syscalls, io_uring and process-FD stealing paths. Child execs
+inherit it. The supervisor is non-dumpable to prevent same-UID child memory access.
+The CLI fetches the snapshot first and installs the same filter before importing the
+edited starter. A failed filter prevents learner execution.
+
+The actual participant API rejected IPv4, IPv6 and Unix sockets (EPERM), a native libc
+socket call (EPERM), parent-memory access (EACCES), and socket creation in an executed
+Python child (EPERM). Endpoints, seed and binding tag were absent from the child
+environment. The trusted proxy still accepted the independent constructed answer
+after that run. Normal learning/verification and the completed CLI starter still pass.
+Three additional Docker regression tests cover the Workbench path, CLI path and
+fail-closed filter setup. This is a specific network/process restriction in addition
+to the existing container boundary, not a claim of a general-purpose hardened sandbox.

@@ -48,7 +48,12 @@ Only the verifier receives `FLAG_SEED` and generates the deployment fixture. The
 participant image contains the starter, public tests and Portal API; it contains no
 fixture generator, reference solution or hidden checks. A public one-way deployment
 tag binds prepared submissions to this deployment. It is not authentication; the
-separate verifier decides correctness.
+separate verifier decides correctness. The trusted Workbench fetches a public snapshot
+once; learner processes receive only that snapshot, with no verifier URLs or submission
+tag. Linux seccomp blocks socket creation, network transfers and descriptor-stealing
+paths before learner code runs, including executed child processes. The supervisor
+is non-dumpable. The CLI applies the same restriction and execution fails if the
+filter cannot be installed.
 
 Only Workbench port 18165 is published on 127.0.0.1. The verifier is internal. Both
 services run non-root with read-only filesystems and capability, memory and PID limits.

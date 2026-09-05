@@ -27,10 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
 from participant.evidence import public_evidence
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w6-zkvm-trace-drill"
-DEPLOYMENT_BINDING = public_evidence()["submissionBinding"]
+PUBLIC_SNAPSHOT = public_evidence()
+DEPLOYMENT_BINDING = PUBLIC_SNAPSHOT["submissionBinding"]
+protect_supervisor()
 if not isinstance(DEPLOYMENT_BINDING, str) or not DEPLOYMENT_BINDING:
     raise RuntimeError("verifier did not provide a deployment binding")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18165"))
@@ -48,6 +51,7 @@ CHECKPOINTS = ('exact', 'trace', 'overflow', 'decision', 'exploit', 'predicate',
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -58,6 +62,7 @@ def _limits() -> None:
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
     deployment_binding=DEPLOYMENT_BINDING,
+    public_payload={key:PUBLIC_SNAPSHOT[key] for key in ("assignments","public")},
     problem_id='ac26-w6-zkvm-trace-drill',
     problem_name='計算の記録から、不正な承認を見つける',
     problem_name_en='Find an improper acceptance in the execution trace',

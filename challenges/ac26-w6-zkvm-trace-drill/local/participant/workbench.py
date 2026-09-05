@@ -38,10 +38,12 @@ class PortalEditorSupport:
         run_timeout_seconds: int,
         max_output_bytes: int,
         limit_fn: Callable[[], None],
+        public_payload: dict[str, object] | None = None,
         problem_name_en: str | None = None,
         description_en: str | None = None,
         checkpoint_labels_en: dict[str, str] | None = None,
     ) -> None:
+        self.public_payload = public_payload
         self.root = root
         self.deployment_binding = deployment_binding
         self.problem_id = problem_id
@@ -103,24 +105,10 @@ class PortalEditorSupport:
         }
 
     def _child_env(self, **extra: str) -> dict[str, str]:
-        """The fixed environment `show.py` and the public tests run under.
-
-        Deliberately built from nothing rather than inherited, so a Portal run cannot
-        pick up whatever the server process happens to carry. The one value forwarded
-        from this process is `VERIFIER_PUBLIC_URL`, and only when it is set: a problem
-        whose `fixtures/` no longer ships in the participant image (Issue 543/537) has
-        no local way to derive this deployment's public evidence, and fetches it from
-        its own Compose-internal verifier's `GET /public` instead. Problems that still
-        carry `fixtures/` never set it and see exactly the environment they saw before.
-        """
-        env = {
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
-            "PYTHONDONTWRITEBYTECODE": "1",
-            **extra,
-        }
-        verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
-        if verifier_public_url:
-            env["VERIFIER_PUBLIC_URL"] = verifier_public_url
+        """Pass a public snapshot, never verifier connectivity or fixture credentials."""
+        env = {"PATH":"/usr/local/bin:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE":"1", **extra}
+        if self.public_payload is not None:
+            env["PUBLIC_EVIDENCE_JSON"] = json.dumps(self.public_payload)
         return env
 
     def inspect_payload(self) -> dict[str, object]:
@@ -349,6 +337,8 @@ class PortalEditorSupport:
                         command,
                         cwd=cwd,
                         env=env,
+                        stdin=subprocess.DEVNULL,
+                        close_fds=True,
                         stdout=sink,
                         stderr=subprocess.STDOUT,
                         text=True,
@@ -357,6 +347,6 @@ class PortalEditorSupport:
                         check=False,
                     )
                 output = transcript.read_text(encoding="utf-8", errors="replace")
-            except (subprocess.TimeoutExpired, OSError, ValueError):
+            except (subprocess.SubprocessError, OSError, ValueError):
                 return None
         return completed.returncode, output[-self.max_output_bytes :]
