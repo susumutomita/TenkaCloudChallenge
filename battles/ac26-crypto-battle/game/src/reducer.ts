@@ -624,7 +624,10 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   // So the migration refuses, which the platform treats as "leave the row
   // alone": the match finishes on the plugin that made it, or the operator
   // resets it. See OPERATOR.md, "Upgrading across a schema version".
-  const exposure = unspentNonceExposure(rest as CryptoBattleState);
+  // An ENDED match has nothing left to spend: `validateOp` refuses every op
+  // after the end, so the exposure is history and the row migrates for its
+  // scores, ledger and replay.
+  const exposure = rest.phase === "ended" ? undefined : unspentNonceExposure(rest as CryptoBattleState);
   if (exposure) {
     throw new Error(
       `reducer: migrateState: team "${exposure.teamId}" generation ${exposure.generation} carries an unspent nonce-reuse HUNT from the retired Schnorr PROVE; finish or reset this match before upgrading`,

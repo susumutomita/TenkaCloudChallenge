@@ -444,6 +444,10 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     } as unknown as CryptoBattleState;
     expect(migrateState(spent, 2).publicPuzzles?.teamB).toHaveLength(16);
 
+    // An ENDED match cannot spend anything: it migrates for its record.
+    const ended = { ...reused, phase: "ended" } as unknown as CryptoBattleState;
+    expect(migrateState(ended, 2).phase).toBe("ended");
+
     // A reuse on a RETIRED generation is history, not exposure.
     const rotated = {
       ...reused,

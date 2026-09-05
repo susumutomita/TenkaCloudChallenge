@@ -112,15 +112,15 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "reveal-share/2",
       text: {
-        ja: "では、なぜ LEAK を押さない選択があるのか。公開したかけらは消えない。同じ世代のかけらが 3 個そろうと、相手はあなたの秘密を復元できる (= HUNT)。PROVE はかけらを渡さずに「秘密を持っている」ことだけを示す方法で、得点が高いのはそのぶん公開量が少ないから。",
-        en: "LEAK publishes the requested share to the public record as it is. PROVE shows only that you hold the secret and publishes no share. The two pay differently because they expose different amounts.",
+        ja: "では、なぜ LEAK を押さない選択があるのか。公開したかけらは消えない。同じ世代のかけらが 3 個そろうと、相手はあなたの秘密を復元できる (= HUNT)。PROVE はかけらを一切渡さずに Order を完了する方法。MY VAULT の 4×4 数独の解を、自分で決めた付け替え表 (右側に 1〜4 を 1 回ずつ) で 16 マス書き換えて出す ― 「解を見せずに示す」Order と同じ手順。得点が高いのはそのぶん公開量が少ないから。",
+        en: "LEAK publishes the requested share to the public record as it is. PROVE completes the Order without handing over any share: you rewrite MY VAULT's 4x4 sudoku solution through a relabelling table of your own (each of 1-4 once on the right) and submit the 16 cells -- the same procedure as the 'show it without showing it' Order. The two pay differently because they expose different amounts.",
       },
     },
     {
       id: "reveal-share/3",
       text: {
-        ja: "判断材料は画面の「危険度」レーンにある。あなたの行の丸が何個埋まっているかが、公開済みのかけらの数。あと 1 個で 3 個に届くなら LEAK は危険で、PROVE を選ぶか、ROTATE で世代を変えてから LEAK する。まだ 0〜1 個なら LEAK が速くて安全な手。",
-        en: "LEAK needs no calculation — pressing it publishes the requested share to the public record and completes the Order. PROVE means building a proof from your vault's secret yourself and submitting that. Which one to press is a question for the EXPOSURE lane: how many more shares fill your row. Once it is full, ROTATE moves you to a fresh generation.",
+        ja: "判断材料は画面の「危険度」レーンにある。あなたの行の丸が何個埋まっているかが、公開済みのかけらの数。あと 1 個で 3 個に届くなら LEAK は危険で、PROVE (数独の付け替え。PROVE カードが手順を示す) を選ぶか、ROTATE で世代を変えてから LEAK する。まだ 0〜1 個なら LEAK が速くて安全な手。",
+        en: "LEAK needs no calculation — pressing it publishes the requested share to the public record and completes the Order. PROVE means relabelling MY VAULT's sudoku solution by hand -- a table with each of 1-4 once, applied to all 16 cells -- and submitting the result; the PROVE card walks it. Which one to press is a question for the EXPOSURE lane: how many more shares fill your row. Once it is full, ROTATE moves you to a fresh generation.",
       },
     },
   ],
@@ -193,8 +193,8 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "zk-sudoku/3",
       text: {
-        ja: "表を書いたら、左上のマスから順に 16 個置き換えて入力します。審判は通ったあと 1 行 (または 1 列・1 箱) だけを公開します。同じ表を 2 回使うと、公開された行どうしがつながって解が割れます。MY VAULT の「使った表」に無い表を毎回選んでください。",
-        en: "Write the table, then replace the 16 cells starting from the top-left and enter them. After the judge accepts it, one row (or column, or box) is published. Use the same table twice and the published groups link up into your solution -- pick a table not yet listed under MY VAULT's used relabellings, every time.",
+        ja: "表を書いたら、左上のマスから順に 16 個置き換えて入力します。審判は通ったあと 1 行 (または 1 列・1 箱) だけを公開します。同じ表を 2 回以上使うと、公開された行どうしがつながり、公開問題と合わせて解が 1 つに絞れた時点で HUNT されます (2 つで足りないこともありますが、次の公開で絞られていきます)。MY VAULT の「使った表」に無い表を毎回選んでください。",
+        en: "Write the table, then replace the 16 cells starting from the top-left and enter them. After the judge accepts it, one row (or column, or box) is published. Use the same table twice or more and the published groups link up; once they pin your public puzzle to one solution you can be HUNTed (two may not be enough yet; the next one narrows it further) -- pick a table not yet listed under MY VAULT's used relabellings, every time.",
       },
     },
   ],

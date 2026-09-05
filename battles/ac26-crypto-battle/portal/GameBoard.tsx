@@ -48,6 +48,7 @@ const COPY = {
     solution: "MY SOLUTION",
     solutionHint: "Only you see this. PROVE relabels it; never send it as it is.",
     puzzle: "PUZZLE",
+    puzzleRetired: "retired generation — its puzzle is no longer shown",
     tag: "relabelling",
   },
   ja: {
@@ -83,6 +84,7 @@ const COPY = {
     solution: "自分の解",
     solutionHint: "自分だけに見えます。PROVE は数字を付け替えて出すもので、このまま出してはいけません。",
     puzzle: "問題",
+    puzzleRetired: "退役した世代 — 問題はもう表示しません",
     tag: "付け替え",
   },
 } as const;
@@ -151,6 +153,12 @@ function ledgerTeamLabel(
   if (teamId === projection.vault.teamId) return selfLabel;
   const name = projection.teams[teamId]?.teamName;
   return name && name.trim() ? name : teamId;
+}
+
+/** The generation a team is on now: its own vault for the reader, the roster for everyone else. */
+function currentGenerationOf(projection: CryptoBattleProjection, teamId: string): number | undefined {
+  if (teamId === projection.vault.teamId) return projection.vault.generation;
+  return projection.teams[teamId]?.generation;
 }
 
 function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
@@ -457,11 +465,19 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                 against. Public by construction, and shown for every team
                 including the reader's own, so no team is singled out.
               */}
-              {projection.publicPuzzles[group.teamId] ? (
+              {/*
+                Only on the card of the generation the puzzle belongs to.
+                `publicPuzzles` holds each team's CURRENT puzzle; a reveal from
+                a retired generation lined up against it would be an
+                impossible reconstruction, so that card says so instead.
+              */}
+              {group.generation === currentGenerationOf(projection, group.teamId) && projection.publicPuzzles[group.teamId] ? (
                 <div className="tc-ledger-puzzle">
                   <span className="tc-sudoku-caption">{copy.puzzle}</span>
                   <SudokuBoard cells={projection.publicPuzzles[group.teamId] ?? []} size={18} label={`puzzle-${group.teamId}`} />
                 </div>
+              ) : group.reveals.length > 0 ? (
+                <div className="tc-ledger-puzzle"><span className="tc-sudoku-caption">{copy.puzzleRetired}</span></div>
               ) : null}
             </article>
           ))}

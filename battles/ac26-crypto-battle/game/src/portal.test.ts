@@ -1938,3 +1938,39 @@ describe("the manual PROVE form reports a landed miss, not a generic 'submitted'
     });
   }
 });
+
+describe("the Ledger pairs a puzzle only with the generation it belongs to [Issue #709 review]", () => {
+  const revealFor = (teamId: string, generation: number): PublicArtifact => ({
+    id: `${teamId}-g${generation}-sudoku`, teamId, generation, kind: "sudoku-reveal", method: "prove",
+    contractId: `${teamId}-c-g${generation}`, group: 2, cells: [4, 1, 2, 3], tag: "0a0a0a0a0a0a", postedAtMs: 7,
+  });
+  const boardWith = (ledger: readonly PublicArtifact[], redGeneration: number) => {
+    const base = fixtureProjection();
+    const projection = fixtureProjection({
+      publicLedger: ledger,
+      teams: { ...base.teams, red: { ...base.teams.red, generation: redGeneration } as (typeof base.teams)["red"] },
+    });
+    return renderToStaticMarkup(createElement(GameBoardBody, { projection, locale: "en" }));
+  };
+
+  it("shows the current puzzle on the current generation's card", () => {
+    const html = boardWith([revealFor("red", 1)], 1);
+    expect(html).toContain('aria-label="puzzle-red"');
+    expect(html).not.toContain("retired generation");
+  });
+
+  it("does not show the current puzzle beside a retired generation's reveals", () => {
+    // red has ROTATEd to generation 2; its generation-1 reveal is still on the
+    // ledger. Pairing it with the generation-2 puzzle would invite an
+    // impossible reconstruction.
+    const html = boardWith([revealFor("red", 1)], 2);
+    expect(html).not.toContain('aria-label="puzzle-red"');
+    expect(html).toContain("retired generation");
+  });
+
+  it("with reveals on both generations, only the current card carries the puzzle", () => {
+    const html = boardWith([revealFor("red", 1), revealFor("red", 2)], 2);
+    expect(html.split('aria-label="puzzle-red"')).toHaveLength(2);
+    expect(html).toContain("retired generation");
+  });
+});
