@@ -57,7 +57,9 @@ votes; per-election marker keys give three; markers alone give two; adding vote 
 before the remainder gives four per-election keys. The reader combined the conditions
 independently and judged that copying the teaching blocks cannot finish these tasks.
 It caught one remaining starter instruction saying rows 1–7 could be copied; that was
-corrected to 1–6 before final runtime checks.
+corrected to 1–6 before final runtime checks. Its last wording note also narrowed
+the visible-secret claim to the learner’s secret and the constructed votes; Inspect
+does not display every other voter’s secret.
 
 The reader also generalized the five-vote construction: start with secret and p-secret
 in this election, repeat the first person with a changed vote, then choose x,y with
