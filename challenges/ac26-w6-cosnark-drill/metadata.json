@@ -1,0 +1,280 @@
+{
+  "id": "ac26-w6-cosnark-drill",
+  "name": "分けたまま、証明を組む",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 605,
+    "chapter": "Week 6 / Drill: co-SNARK on shares"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 6,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+        "path": "week6/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+        "path": "week6/problems/co-snark-prove/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "40-60 分",
+  "shortDescription": "秘密の 2 つの数（witness）を、2 人の証明者のどちらにも丸ごとは見せたくない。それでも力を合わせて証明の部品 (A, B, C) を作りたい。線形結合はシェアのまま各自の手元で、掛け算だけ 1 回、あらかじめ配った三つ組（Beaver triple）を使って 1 往復だけ通信する — それだけでいい。手元の Python で 1 行打って出た値を貼る 14 行で、その「それだけ」を自分の手で出した数だけでなぞる。",
+  "description": "Week 6 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 14 行繰り返して、co-SNARK の核 — witness を一度も戻さずに、線形結合は share のまま各自ローカルに計算し、secret × secret の掛け算 1 回だけ Beaver triple で通信して証明 (A, B, C) を組む — を自分の手で出す。道筋: witness を見る → w[0], w[1] を 2 人に分ける（share）→ reconstruct（戻す）→ share 1 枚は秘密を語らない → 線形結合 A を share のまま計算 → 戻した A と直接計算した A の一致 → 線形結合 B → share ごとの掛け算では正解にならない（交差項が消える）→ Beaver triple の確認 → d, e の開示（唯一の通信）→ C の share 計算 → C の復元 → 展開公式での種明かし（なぜ合うのか）→ d から A は絞れないことの確認（なぜ漏れないのか）。\n\n課題 `week6/problems/co-snark-prove/README.md` の `linear_combination_shares`（5 行目）/ `mpc_prove`（5・7・11 行目）への対応を statement 本文に明記する。\n\n数は FLAG_SEED 由来。課題の数値例（modulus 97, witness [3, 5], 係数 [1, 2] / [4, 1]）と `python/tests/public.py` の全組（modulus 101 / 89, 3-wire witness 2 組、Beaver (a, b) = (5, 9) / (4, 20) / (3, 6)）は生成から除外してある。除外は `fixtures/generate.py` の `EXCLUDED_PRIMES` / `EXCLUDED_WITNESS` / `EXCLUDED_BEAVER_AB` に定数として明示し、docstring に出典を書く（independent-reimplementation）。\n\n14 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄のない 6 行（witness, reconstruct, noleak, triple, expand, nolink）は見るだけ・答え合わせ・Beaver の下ごしらえ・種明かしで、statement がその場で説明する。fixtures/generate.py は expected を public と同じ関数で導くため participant image には載せず（Issue 537/543 option B2）、公開値は verifier の GET /public から配る。",
+  "instructions": "## witness を一度も戻さずに、証明を組めるか\n\nco-SNARK では、2 人（以上）の証明者が秘密の witness（証明したい元の数）をどちらも全部は知らないまま、力を合わせて 1 つの証明を作ります。誰かが全部を持ってしまえば、それはもう「秘密のまま」ではありません。**このドリルの目標は、witness を誰にも丸ごと見せずに、証明の部品 (A, B, C) を組む手順を、自分の手で出した数だけでなぞることです。**\n\n種明かしを先に言うと、手順はこうです。**掛けて足すだけの計算（線形結合）は、分けた欠片（share）のまま各自の手元で終わります。掛け算だけは 1 回、あらかじめ配っておいた三つ組（Beaver triple）を使って、1 往復だけ通信します。** 通信で開くのは「乱数でずらした値」だけで、witness も証明の部品も一度も開きません。この 14 行は、その一部始終を自分の手で出した数だけでなぞります。\n\nこれは関数を書く問題ではありません。**1 行打って、出た値を回答欄に貼る**、を 14 回くり返します。14 行のうち 8 行に回答欄（checkpoint = 採点される小問）があり、残り 6 行は答え合わせか、後の行が使う変数を作る行、または種明かしです。**14 行は上から順に、1 行も飛ばさずに打ってください** — 飛ばすと後の行が「そんな名前は無い」と怒ります。数は deploy ごとに変わるので、他人の答えやノートの数値は通りません。\n\n## 前提（要るのは 3 つだけ）\n\n- **割った余り**: `13 % 5` は 3（13 を 5 で割った余り）。このドリルの計算は全部、ある数 p（素数）で割った余りの世界でします。\n- **秘密分散（share）**: 1 つの数を、足すと元に戻る複数の欠片に分けること。たとえば秘密が 3 なら、「1」と「(3 − 1) を p で割った余り」の 2 つに分ければ、2 つを足す（p で割った余りで）と 3 に戻ります。1 つの欠片だけを見ても、元の数は分かりません。\n- **線形結合**: 係数を掛けて全部足すだけの計算。たとえば係数 (1, 2) と数の組 (3, 5) の線形結合は 1·3 + 2·5 = 13。**掛け算と足し算だけなら、欠片のままでも計算できます**（5 行目で確かめます）。「秘密 × 秘密」の掛け算だけは別で、8 行目で行き詰まり、9〜11 行目で抜けます。\n\n## 最初の一手\n\n**1. Python を開く。** Windows なら PowerShell、Mac なら「ターミナル」を開いて `python3` と打ち、Enter。`>>>` が出れば準備完了です（Windows で見つからないときは `py`）。Python の IDLE を入れているなら、その「シェル」ウィンドウの `>>>` でも同じです。使うターミナルはこの 1 つだけで、ファイルを作る必要も、コマンドを覚える必要もありません。\n\n**2. 数を貼る。** Participant Portal（この問題文が表示されているサイト）で **「起動」** を押し、問題エディタの **「証拠を確認」** を押してください。この deploy の数が、**そのまま Python に貼れる代入文**の形で出ます。\n\n```text\np = …                   ← 割った余りを取る法（素数）\nw = […, …]              ← 2 人の証明者が合わせて持つ秘密（witness）\nr0, r1 = …, …           ← 各 wire の share を作る乱数\nca = […, …]             ← A = ca[0]*w[0] + ca[1]*w[1] の係数\ncb = […, …]             ← B = cb[0]*w[0] + cb[1]*w[1] の係数\na, b = …, …             ← Beaver triple の 2 つの乱数（c = a*b はまだ出しません）\nra, rb, rc = …, …, …    ← Beaver triple の share を作る乱数\n```\n\nこのブロックを丸ごとコピーして `>>>` に貼り、Enter。これで下の 14 行が打てる状態になります。**「証拠を確認」は各行が出す値までは教えません** — share の中身も、線形結合の結果も、開いた d, e も、証明の部品 (A, B, C) も、あなたの Python が出します。\n\n**3. Python が開けないときは。** 問題エディタの `co_snark_drill.py` に、下の 14 行と**同じ式が関数の形で穴あきに並んでいます**。式の中の `p`・`w`・`ca` などが、そのまま関数の引数になっているだけです。下の「打つ行」の右辺をその関数の中に写して `return` し、**「公開テストを実行」** を押すと、あなたの関数がこの deploy の数で出した値が印字されます。それを回答欄に貼ります。Python を開ける人は、このファイルを触る必要はありません。**「初期状態に戻す」** でいつでも元に戻せます。\n\n## 解き方 — 14 行\n\n各行の形はいつも同じです。**打つ行**（コピーして貼る）→ **この行の意味** → 出た値を **その checkpoint の回答欄に貼る** → 合ったら **「合ったら読む」** を読んで次へ。回答欄は 1 行の入力欄で、組で答える行は `[20, 30]` の形で書きます（丸かっこでも、かっこ無しのカンマ区切りでも通ります）。\n\n**貼る前に、1 行だけ予想してください。**「たぶん前の行と同じ値になる」「たぶん画面の数と一致する」程度で構いません。予想と違ったときだけ、その行の意味を読み直す価値があります。\n\n### 1. witness を見る — 2 人が合わせて持つ秘密（回答欄なし）\n\n```python\n(p, w)\n```\n\n- **この行の意味**: p は割った余りの法。w が、2 人の証明者が合わせて持つ秘密（witness）です。\n- **回答欄**: なし。答え合わせのために一度だけ秘密そのものを見ます\n- **出たら読む**: co-SNARK の目標は、この 2 つの数を誰にも丸ごと見せずに、証明の部品 (A, B, C) を作ることです。**ここから先、w を丸ごと持つ人は 1 人も出てきません。** 次の行で、まず w[0] と w[1] を 2 人に分けます。\n\n### 2. 2 人へのシェア — w0 と w1 の 2 番目（回答欄 1 / 8）\n\n```python\nw0 = [r0, (w[0] - r0) % p]; w1 = [r1, (w[1] - r1) % p]; (w0[1], w1[1])\n```\n\n- **この行の意味**: w0, w1 が w[0], w[1] の share。0 番目は乱数 r0, r1（もう画面にある数）、1 番目が今はじめて出てくる値です。\n- **回答欄**: 上から **1 番目**（見出し「2 人へのシェア — w0 と w1 の 2 番目」）に 2 つ組\n- **合ったら読む**: 今出た 2 つが、それぞれの share の新しい方の欠片です。1 番目の乱数 r0, r1 と横に足す（p で割った余りで）と w[0], w[1] に戻ります（次の行で確かめます）。**なぜ分けるか**: 1 人が w0 だけ、もう 1 人が w1 だけを持てば、どちらも秘密を全部は知りません。これが秘密分散（share）です。宿題では `share()` が支給されていて、この計算をします。\n\n### 3. 戻す — 全員の share を持ち寄る（回答欄なし）\n\n```python\n(sum(w0) % p, sum(w1) % p)\n```\n\n- **この行の意味**: share を全部足して p で割った余り。\n- **回答欄**: なし。画面の w と同じ組が出るはずです\n- **出たら読む**: 画面の w と一致したはずです。全員の share を足すと元の秘密に戻る — これが `reconstruct()` で、**戻すには全員の share が要ります**。逆に言えば 1 人では戻せないはず — それを次の行で確かめます。\n\n### 4. share 1 枚は秘密を語らない（回答欄なし）\n\n```python\n[(r0, (s - r0) % p) for s in (w[0], p // 2, p - 1)]\n```\n\n- **この行の意味**: 秘密 s を 3 通り変えて、1 人目の乱数 r0 を固定したときの share の組。\n- **回答欄**: なし\n- **出たら読む**: 1 人目の手元（1 番目の数）は、どの秘密でも r0 のまま変わりません。つまり **share 1 枚は秘密について何も語りません**。分けるだけで「見せずに預ける」ができています。ここまでが「分ける」。次から、分けたまま**計算**します。\n\n### 5. 線形結合 A — シェアのまま各自で（回答欄 2 / 8）\n\n```python\nA_sh = [(ca[0] * x + ca[1] * y) % p for x, y in zip(w0, w1)]; A_sh\n```\n\n- **この行の意味**: 1 人目は自分の (w0[0], w1[0]) から `ca[0]*w0[0] + ca[1]*w1[0]`、2 人目は自分の (w0[1], w1[1]) から同じ式を計算します。\n- **回答欄**: 上から **2 番目**（見出し「線形結合 A — シェアのまま各自で」）に 2 つ組\n- **合ったら読む**: **誰も相手に何も送らずに**、証明の部品 A の share が出ました。掛けて足すだけ（線形結合）なら share のまま各自で終わります。**なぜこれが嬉しいか**: SNARK の証明生成の大半（MSM・FFT）は線形結合なので、そこは通信なしで進められます。宿題の `linear_combination_shares` はこの 1 行です（`scale_shares` と `add_shares` で書きます）。次の行で、この share が本当に A の share になっているか確かめます。\n\n### 6. A を戻す — シェアの和と直接計算（回答欄 3 / 8）\n\n```python\nA = sum(A_sh) % p; (A, (ca[0] * w[0] + ca[1] * w[1]) % p)\n```\n\n- **この行の意味**: 左は share を戻した値、右は秘密を知る人が直接計算した値。\n- **回答欄**: 上から **3 番目**（見出し「A を戻す — シェアの和と直接計算」）に 2 つ組\n- **合ったら読む**: 2 つの数は一致したはずです。**線形なら share の上と平文の上で同じ結果**になる — これが co-SNARK の「MSM・FFT はローカルで無料」の正体です。同じ手で、もう 1 つの部品 B も作ります。\n\n### 7. 線形結合 B — シェアと戻した値（回答欄 4 / 8）\n\n```python\nB_sh = [(cb[0] * x + cb[1] * y) % p for x, y in zip(w0, w1)]; B = sum(B_sh) % p; (B_sh[0], B_sh[1], B)\n```\n\n- **この行の意味**: 各自 `cb[0]*x + cb[1]*y` を計算し、戻すと B。\n- **回答欄**: 上から **4 番目**（見出し「線形結合 B — シェアと戻した値」）に 3 つ組\n- **合ったら読む**: A と B の share が手元にできました。まだ誰も A も B も見ていません（いま戻したのは答え合わせのためで、本番のプロトコルでは戻しません）。**なぜ A と B の 2 つを作ったか**: 次に欲しいのは積 C = A·B で、**掛け算は線形結合ではありません**。ここから話が変わります。\n\n### 8. シェアごとの積 vs 正しい積（回答欄 5 / 8）\n\n```python\n(sum(x * y for x, y in zip(A_sh, B_sh)) % p, (A * B) % p)\n```\n\n- **この行の意味**: 左は share ごとに掛けて足したもの、右は正しい答え。\n- **回答欄**: 上から **5 番目**（見出し「シェアごとの積 vs 正しい積」）に 2 つ組\n- **合ったら読む**: 2 つの数は**合わなかった**はずです。(A_sh[0]+A_sh[1])·(B_sh[0]+B_sh[1]) を展開すると交差項が出ますが、share ごとの掛け算はそれを落とします。足し算と違って、**掛け算は各自だけでは終わりません**。ここだけ通信が要ります。次の 4 行で、その通信を 1 往復・秘密ゼロで済ませる仕掛け（Beaver triple）を見ます。\n\n### 9. Beaver triple の確認（回答欄なし）\n\n```python\na_sh = [ra, (a - ra) % p]; b_sh = [rb, (b - rb) % p]; c_sh = [rc, (a * b - rc) % p]; (sum(a_sh) % p, sum(b_sh) % p, sum(c_sh) % p, a * b % p)\n```\n\n- **この行の意味**: 戻すと a, b, c = a·b がそろっているかを確かめます。\n- **回答欄**: なし。ただし `a_sh`, `b_sh`, `c_sh` は **次の 3 行で使う**ので、この行は必ず打ってください\n- **出たら読む**: 最後の 2 つの数（c を戻した値と a·b）が一致したはずです。a, b は秘密と無関係な乱数で、その積 c をあらかじめ用意した「三つ組」が **Beaver triple** です。実運用では試合前の offline phase で（別の MPC か信頼できる配布者が）用意して配っておきます。ここでは天下りに与えています — 宿題も同じで、`beaver_triple` は引数で渡されます。\n\n### 10. 唯一の通信 — d と e（回答欄 6 / 8）\n\n```python\nd = (A - sum(a_sh)) % p; e = (B - sum(b_sh)) % p; (d, e)\n```\n\n- **この行の意味**: 全員が share を持ち寄って d と e だけを復元します。これが唯一の通信（1 往復）です。\n- **回答欄**: 上から **6 番目**（見出し「唯一の通信 — d と e」）に 2 つ組\n- **合ったら読む**: A も B も開いていません。開いたのは**乱数 a, b でずらした値だけ**です。**なぜこれを開くか**: 次の行で各自が積の share を組むのに、d と e という公開値が要るからです。これが掛け算 1 回あたりの唯一の通信です。\n\n### 11. C のシェア — Beaver 補正込み（回答欄 7 / 8）\n\n```python\nz = [(c_sh[i] + d * b_sh[i] + e * a_sh[i]) % p for i in range(2)]; z[0] = (z[0] + d * e) % p; z\n```\n\n- **この行の意味**: 各自「c の share + d·(b の share) + e·(a の share)」を計算し、d·e は公開値どうしの積なので 1 人だけが足します。\n- **回答欄**: 上から **7 番目**（見出し「C のシェア — Beaver 補正込み」）に 2 つ組\n- **合ったら読む**: これが C = A·B の share です（まだ正しいかは分かりません — 次の行で確かめます）。d·e は公開値どうしの積なので share にする必要がなく、1 人だけが足します。宿題では支給の `beaver_multiply` がこの計算をします。\n\n### 12. C を戻す（回答欄 8 / 8）\n\n```python\nC = sum(z) % p; C\n```\n\n- **この行の意味**: share を戻して、正解と比べます。\n- **回答欄**: 上から **8 番目**（見出し「C を戻す」）に 整数 1 つ\n- **合ったら読む**: **証明の部品 (A, B, C) の share が、witness を一度も戻さずに揃いました。** 通信は 10 行目の 1 往復だけです。宿題の `mpc_prove` は 5・7・11 行目を並べたものです。残る疑問は 2 つ: なぜ合うのか、10 行目で開いた d, e から秘密が漏れないのか。次の 2 行で種明かしします。\n\n### 13. なぜ合うのか — 展開公式（回答欄なし）\n\n```python\n(d * e + d * b + e * a + a * b) % p\n```\n\n- **この行の意味**: d·e + d·b + e·a + c。全部足して p で割った余り。\n- **回答欄**: なし\n- **出たら読む**: 12 行目と同じ数が、**公開値 d, e と三つ組だけ**から出たはずです。種明かしは中学の展開公式 1 本です: (x−a)(y−b) = xy − xb − ya + ab を xy について解くと、xy = (x−a)(y−b) + (x−a)·b + (y−b)·a + ab = d·e + d·b + e·a + c。右辺に x, y（= A, B）は現れず、share で持っているもの（a, b, c）と公開値（d, e）だけになっています。だから各自で組めました。\n\n### 14. なぜ漏れないのか — d から A は絞れない（回答欄なし）\n\n```python\n[(cand, (cand - d) % p) for cand in (A, (A + p // 3) % p, (A + 2 * (p // 3)) % p)]\n```\n\n- **この行の意味**: A を 3 通り変えて、その d を作る a を逆算します。\n- **回答欄**: なし\n- **出たら読む**: A がどの値でも、a を合わせれば同じ d になります。a は乱数で相手に見えないので、**d を見た人は A を絞れません**。4 行目（share 1 枚は秘密を語らない）と同じ理屈です。**まとめると**: 線形は各自の手元、掛け算は乱数でずらした値を 1 往復。開いたのは「乱数でずらした値」だけで、秘密は 1 つも出ていません。これが co-SNARK の「分けたまま証明を組む」の全体です。\n\n## 提出のしかた\n\n回答欄は checkpoint ごとに独立しています。値を入れて **「提出 (+点数)」** を押すとその欄だけが採点され、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計スコアが 0 未満になることはありません）。正解した欄は「解答済み」になり、それ以上は提出しません。\n\n## 打ち終わったとき、手元に残るもの\n\n8 つの回答欄がすべて通れば、witness を一度も戻さずに、線形結合は各自の手元で share のまま計算し、掛け算 1 回だけ Beaver triple で 1 往復通信して証明 (A, B, C) を組む手順を、**自分の手で出した数で 1 回ずつ**確かめたことになります。なぜ線形結合が share のまま終わるのか、なぜ掛け算だけ通信が要るのか、なぜ開いた d, e から秘密が絞れないのかまで、展開公式 1 本で種明かしまで見ました。\n\n宿題 `co-snark-prove` の `linear_combination_shares` は 5 行目、`mpc_prove` は 5・7・11 行目を並べたものです。実際の SNARK 証明者は、この 2 行の関係（線形は無料、掛け算だけ通信）を MSM・FFT の規模でくり返します。\n",
+  "writeup": "## この問題の形\n\n14 行を打ち、8 行に回答欄があります。順番は、witness を見る（1）→ share に分ける（2）→ reconstruct（3）→ share 1 枚は語らない（4）→ 線形結合 A（5）→ A を戻す（6）→ 線形結合 B（7）→ share ごとの積は誤り（8）→ Beaver triple の確認（9）→ 唯一の通信 d, e（10）→ C の share（11）→ C を戻す（12）→ 展開公式（13）→ d から A は絞れない（14）。\n\n## 各行が守っているもの\n\n- 1〜4: witness は 2 つの share に分かれ、1 枚だけを見ても秘密は分からないこと。分けるだけの段階で「見せずに預ける」が成立している。\n- 5〜7: 公開の係数を掛けて足すだけの計算（線形結合）は、share のまま各自ローカルに完結し、開いた値が平文計算と一致すること。SNARK 証明者の計算の大半（MSM・FFT）がここに当たる。\n- 8: share ごとの掛け算は正しい積にならないこと。展開すると出る交差項を share ごとの積は落とすため、掛け算だけは通信が要る。\n- 9〜12: Beaver triple を使えば、その 1 回の掛け算が「d, e を開く」1 往復の通信だけで済むこと。witness も A も B も一度も開かずに C の share が組める。\n- 13〜14: 展開公式 1 本で「なぜ share の和が正しい積になるか」が説明でき、開いた d, e からは A, B が絞り込めないこと（4 行目と同じ理屈）。\n\n## 間違えるとどう壊れるか\n\nshare を作るときに乱数を引くはずが足す／線形結合の係数を取り違える／share ごとの掛け算をそのまま正解として使う／Beaver open の符号を逆にする（引くはずが足す）／C の share で定数 d·e の補正を 1 人にしか足さない規則を忘れて全員に足す（または誰にも足さない）／展開公式から a·b の項を落とす — どれも値が 1 つずれて、その行で止まります。とくに「線形結合の係数の順番」は、この deploy の数によっては偶然一致することすらありますが、その先の「なぜ share のまま計算できるか」の説明が二度と成り立たなくなります。止まった行の「この行の意味」を読み直すのがこの形式の学び方です。\n\n## 次への接続\n\nこのドリルの share・線形結合・Beaver triple はそのまま、課題 `co-snark-prove` の `linear_combination_shares`（5 行目）と `mpc_prove`（5・7・11 行目）です。ここでは 2 wire・2 party のトイ規模で手計算しましたが、実際の SNARK 証明者は同じ関係（線形は無料、secret × secret の掛け算だけ通信）を MSM・FFT の規模でくり返します。\n",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week6",
+    "drill",
+    "co-snark",
+    "secret-sharing",
+    "beaver-triple",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18163,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "witness の share 1 枚は秘密について何も語らないことを、複数の候補秘密で自分の数で確かめられる",
+    "線形結合（係数を掛けて足すだけの計算）が share のまま各自ローカルに完結し、開いた値と平文計算が一致することを言える",
+    "share ごとの掛け算が正しい積にならない理由（交差項が share ごとの積では落ちる）を自分の数で示せる",
+    "Beaver triple を使って secret × secret の掛け算を 1 往復の通信（d, e の開示）だけで済ませる手順を再現できる",
+    "d·e + d·b + e·a + c の展開公式が、なぜ share の和が正しい積に一致するかを説明することを言える",
+    "開いた d, e からは A, B が絞り込めないことを、複数の候補値で自分の数から確かめられる"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18163/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "shares",
+        "label": "2 人へのシェア — w0 と w1 の 2 番目",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "shares-hint-1",
+            "content": "w0 = [r0, (w[0] - r0) % p]; w1 = [r1, (w[1] - r1) % p]。回答は w0[1], w1[1] の組で、0 番目（r0, r1 そのもの、もう画面にあります）ではありません。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "ashares",
+        "label": "線形結合 A — シェアのまま各自で",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "ashares-hint-1",
+            "content": "各自 ca[0]*x + ca[1]*y を w0, w1 の対応する要素に。zip(w0, w1) で組にしてから掛けて足します。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "aopen",
+        "label": "A を戻す — シェアの和と直接計算",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "aopen-hint-1",
+            "content": "sum(A_sh) % p と (ca[0]*w[0] + ca[1]*w[1]) % p の 2 つ組。shares を戻した値が先です。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "bshares",
+        "label": "線形結合 B — シェアと戻した値",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "bshares-hint-1",
+            "content": "cb[0]*x + cb[1]*y を w0, w1 に。回答は (B_sh[0], B_sh[1], B) の 3 つ組で、B_sh の 2 つだけではありません。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "crossmul",
+        "label": "シェアごとの積 vs 正しい積",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "crossmul-hint-1",
+            "content": "左は A_sh と B_sh をそのまま順に掛けて足したもの（交差項なし）。右は (A * B) % p。どちらも 0 番目の値ではなく、計算した 2 つの数です。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "beaveropen",
+        "label": "唯一の通信 — d と e",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "beaveropen-hint-1",
+            "content": "d = (A - sum(a_sh)) % p、e = (B - sum(b_sh)) % p。引く順番は A が先、a を引きます。符号を逆にしないこと。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "cshares",
+        "label": "C のシェア — Beaver 補正込み",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "cshares-hint-1",
+            "content": "z[i] = (c_sh[i] + d*b_sh[i] + e*a_sh[i]) % p を 2 人ぶん。最後に z[0] だけへ d*e を足すのを忘れずに（z[1] には足しません）。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "csum",
+        "label": "C を戻す",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "csum-hint-1",
+            "content": "sum(z) % p。11 行目で作った z の 2 つの要素を足して p で割った余りです。",
+            "penalty": 6
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Build the proof without ever putting the witness back together",
+      "shortDescription": "Two provers hold a secret pair of numbers (a witness), and neither should ever see it whole. They still need to build a proof's pieces (A, B, C) together. Linear combinations finish on shares alone, each party working locally; only the one multiplication needs a single round of communication, through a Beaver triple handed out in advance — that is all it takes. Fourteen lines of type-one-line-paste-the-value in your own Python retrace that \"all\", on numbers you produced yourself.",
+      "description": "A Week 6 drill. Not a write-a-function problem: you type one line, paste the value it prints, fourteen times, and produce the core of a co-SNARK — from a witness that is never put back together, linear combinations computed on shares alone by each party locally, and one secret-times-secret multiplication resolved through a single round of communication with a Beaver triple, to build the proof (A, B, C). The path: look at the witness -> split w[0], w[1] between two parties (a share) -> reconstruct -> a single share reveals nothing -> linear form A computed on shares -> the opened A agrees with the directly computed A -> linear form B -> the share-wise product is NOT the right answer (the cross terms vanish) -> confirm the Beaver triple -> open d, e (the one round of communication) -> compute C's shares -> open C -> the reveal via a textbook identity (why it agrees) -> confirm d never narrows down A (why nothing leaks).\n\nThe correspondence with the assignment `week6/problems/co-snark-prove/README.md`'s `linear_combination_shares` (line 5) and `mpc_prove` (lines 5, 7, 11) is stated in the statement itself.\n\nThe numbers are seed-derived from FLAG_SEED. The assignment's own worked example (modulus 97, witness [3, 5], coefficients [1, 2] / [4, 1]) and every pair drawn from `python/tests/public.py` (modulus 101 / 89, two 3-wire witnesses, Beaver (a, b) = (5, 9) / (4, 20) / (3, 6)) are excluded from generation. The exclusion lives as named constants in `fixtures/generate.py` (`EXCLUDED_PRIMES` / `EXCLUDED_WITNESS` / `EXCLUDED_BEAVER_AB`), with a docstring citing the source (independent-reimplementation).\n\nEight of the fourteen lines have an answer field (the platform's per-problem maximum). The six ungraded lines (witness, reconstruct, noleak, triple, expand, nolink) are a look-only step, a cross-check, Beaver bookkeeping, or the closing reveal, and the statement explains them in place. fixtures/generate.py derives the expected values in the same function as the public ones, so it does not ship in the participant image (Issue 537/543 option B2); the public half is served by the verifier's GET /public.",
+      "instructions": "## Can you build the proof without ever putting the witness back together?\n\nIn a co-SNARK, two (or more) provers build one proof together while neither one ever holds the whole secret witness (the original numbers the proof is about). The moment someone holds all of it, it stops being secret. **This drill's goal is to retrace, on numbers you produce yourself, the procedure that builds the proof's pieces (A, B, C) without the witness ever being put back together.**\n\nHere is the punch line up front: **anything that only multiplies by a public number and adds (a linear combination) finishes on shares alone, each party working locally. Only the one multiplication needs communication — one round, using a Beaver triple handed out in advance.** What that round opens is only a value shifted by a random number; the witness and the proof's pieces are never opened. These 14 lines retrace that whole story, using numbers you produce yourself.\n\nThis is not a write-a-function problem. You **type one line, paste the value it printed**, fourteen times over. Eight of the fourteen lines have an answer field (a checkpoint — one small graded question); the other six are a cross-check, they define names later lines use, or they are the reveal at the end. **Type all fourteen in order, skipping none** — skip an ungraded line and a later one will tell you the name does not exist. The numbers change per deploy; someone else's answers, or a notebook's, do not pass.\n\n## Before you start (three facts are enough)\n\n- **Quotient and remainder**: `13 % 5` is 3 (13 divided by 5, remainder 3). Every computation in this drill happens modulo some number p (a prime).\n- **Secret sharing**: splitting one number into pieces that add back up to it. If the secret is 3, splitting it into \"1\" and \"(3 − 1) mod p\" means the two pieces add back to 3 (modulo p). Seeing only one piece tells you nothing about the original number.\n- **A linear combination**: multiply by coefficients and add — nothing else. Coefficients (1, 2) with numbers (3, 5) give 1·3 + 2·5 = 13. **When it is only multiplication by a public number and addition, it still works on the pieces alone** (you will see this at line 5). Only \"secret × secret\" is different — that is where line 8 gets stuck, and lines 9–11 get past it.\n\n## First move\n\n**1. Open Python.** On Windows open PowerShell, on a Mac open Terminal, type `python3` and press Enter. When `>>>` appears you are ready (on Windows, try `py` if `python3` is not found). If you have IDLE installed, its Shell window's `>>>` works just the same. That one Python is the only terminal you need — no files to create, no commands to memorise.\n\n**2. Paste the numbers.** In Participant Portal (the site showing this statement) press **Start**, then press **Inspect evidence** in the problem editor. Your deployment's numbers appear as **assignment statements you can paste straight into Python**:\n\n```text\np = …                    <- the modulus everything is reduced by (a prime)\nw = […, …]               <- the secret witness the two provers together hold\nr0, r1 = …, …            <- the randomness each wire's share is built from\nca = […, …]              <- the coefficients of A = ca[0]*w[0] + ca[1]*w[1]\ncb = […, …]              <- the coefficients of B = cb[0]*w[0] + cb[1]*w[1]\na, b = …, …              <- the Beaver triple's two random factors (c = a*b is not shown yet)\nra, rb, rc = …, …, …     <- the randomness the Beaver triple's own shares are built from\n```\n\nCopy that whole block into `>>>` and press Enter; the fourteen lines below will now run. **Inspect evidence does not print what any line produces** — not the shares, not the linear combinations, not the opened d, e, not the proof's pieces (A, B, C). Those are yours to produce.\n\n**3. If you cannot open Python.** The editor's `co_snark_drill.py` holds **the same expressions as the fourteen lines, as functions with blanks**: the names inside them (`p`, `w`, `ca`, …) are simply the functions' parameters. Copy the right-hand side of each \"line to type\" into the matching function, `return` it, and press **Run public tests**: it prints what your functions return on this deployment's numbers. Paste those into the answer fields. If you can open Python, you never need to touch this file. **Restore starter** puts it back at any time.\n\n## Workflow — fourteen lines\n\nEvery line has the same shape. **The line to type** (copy and paste) → **what this line means** → paste the printed value into **that checkpoint's answer field** → once it matches, read **\"read after it matches\"** and move on. Answer fields are one-line inputs; tuple answers are written `[20, 30]` (round brackets, or bare comma-separated values, also work).\n\n**Predict one thing before you paste.** \"Probably the same as the previous line\", \"probably matches what's on screen\" is enough. It is only when the prediction is wrong that rereading the line's meaning is worth anything.\n\n### 1. Look at the witness — the secret the two provers hold together (no answer field)\n\n```python\n(p, w)\n```\n\n- **What this line means**: p is the modulus everything reduces by. w is the secret witness the two provers together hold.\n- **Answer**: none — a one-time look at the secret, purely for cross-checking later\n- **Read once it prints**: the whole point of a co-SNARK is to build the proof's pieces (A, B, C) without ever showing this pair to anyone whole. **From here on, nobody holds all of w.** The next line splits w[0] and w[1] between the two parties.\n\n### 2. Shares for two parties — the 2nd entry of w0 and w1 (answer box 1 of 8)\n\n```python\nw0 = [r0, (w[0] - r0) % p]; w1 = [r1, (w[1] - r1) % p]; (w0[1], w1[1])\n```\n\n- **What this line means**: w0, w1 are w[0]'s and w[1]'s shares. Entry 0 is the randomness r0, r1 (already on screen); entry 1 is new information.\n- **Answer**: box **1 of 8** (heading \"Shares for two parties — the 2nd entry of w0 and w1\"), a 2-tuple\n- **Read after it matches**: what just printed is each share's newly-revealed piece. Add it to the randomness r0, r1 (modulo p) and you get back w[0], w[1] — the next line checks exactly that. **Why split at all**: if one party holds only w0 and the other only w1, neither one knows the whole secret. That is secret sharing. The assignment's `share()` is handed to you and does exactly this arithmetic.\n\n### 3. Reconstruct — add every party's shares back (no answer field)\n\n```python\n(sum(w0) % p, sum(w1) % p)\n```\n\n- **What this line means**: add up every share and reduce mod p.\n- **Answer**: none — this should match the witness already on screen\n- **Read once it prints**: it should match w on screen. Adding every party's shares back returns the original secret — that is `reconstruct()`, and **reconstructing needs every party's share**. One party alone should not be able to undo it — the next line checks that.\n\n### 4. A single share reveals nothing (no answer field)\n\n```python\n[(r0, (s - r0) % p) for s in (w[0], p // 2, p - 1)]\n```\n\n- **What this line means**: vary the secret s three ways, holding the first party's randomness r0 fixed.\n- **Answer**: none\n- **Read once it prints**: the first party's own half (the first number) stays r0 no matter which secret it came from. **A single share reveals nothing about the secret.** That is \"hand something over without showing it\", done with nothing but splitting. That closes the \"splitting\" half of the drill; from here on, everything stays split while it computes.\n\n### 5. Linear form A — computed on shares alone (answer box 2 of 8)\n\n```python\nA_sh = [(ca[0] * x + ca[1] * y) % p for x, y in zip(w0, w1)]; A_sh\n```\n\n- **What this line means**: the first party computes `ca[0]*w0[0] + ca[1]*w1[0]` from their own (w0[0], w1[0]); the second computes the same expression from their own (w0[1], w1[1]).\n- **Answer**: box **2 of 8** (heading \"Linear form A — computed on shares alone\"), a 2-tuple\n- **Read after it matches**: **neither party sent the other anything**, and the proof piece A's shares came out. Multiply by public numbers and add — a linear combination — finishes on shares alone, each party working locally. **Why this matters**: most of what a SNARK prover computes (MSM, FFT) is exactly this kind of linear combination, so that part needs zero communication. The assignment's `linear_combination_shares` is this one line (built from `scale_shares` and `add_shares`). The next line checks that this really is A's share.\n\n### 6. Opening A — the summed shares against the direct value (answer box 3 of 8)\n\n```python\nA = sum(A_sh) % p; (A, (ca[0] * w[0] + ca[1] * w[1]) % p)\n```\n\n- **What this line means**: the left value is the shares opened up; the right is what someone who knew the secret would compute directly.\n- **Answer**: box **3 of 8** (heading \"Opening A — the summed shares against the direct value\"), a 2-tuple\n- **Read after it matches**: the two numbers should agree. **For anything linear, the computation on shares and the computation in the clear give the same result** — that is the whole reason a SNARK prover's linear algebra (MSM, FFT) is \"free\" under co-SNARK. The same recipe now builds B.\n\n### 7. Linear form B — the shares and the opened value (answer box 4 of 8)\n\n```python\nB_sh = [(cb[0] * x + cb[1] * y) % p for x, y in zip(w0, w1)]; B = sum(B_sh) % p; (B_sh[0], B_sh[1], B)\n```\n\n- **What this line means**: each party computes `cb[0]*x + cb[1]*y`; opened, it gives B.\n- **Answer**: box **4 of 8** (heading \"Linear form B — the shares and the opened value\"), a 3-tuple\n- **Read after it matches**: A and B's shares now exist. Nobody has actually seen A or B yet (opening them just now was only for this cross-check; the real protocol never does). **Why build two linear forms**: what you actually want next is the product C = A·B, and multiplication is not a linear combination. From here the story changes.\n\n### 8. The share-wise product vs. the correct product (answer box 5 of 8)\n\n```python\n(sum(x * y for x, y in zip(A_sh, B_sh)) % p, (A * B) % p)\n```\n\n- **What this line means**: the left value is each party's shares multiplied and summed; the right is the correct answer.\n- **Answer**: box **5 of 8** (heading \"The share-wise product vs. the correct product\"), a 2-tuple\n- **Read after it matches**: the two numbers should **not** agree. Expanding (A_sh[0]+A_sh[1])·(B_sh[0]+B_sh[1]) produces cross terms that the share-wise product drops. Unlike addition, **multiplication cannot finish locally.** This is the one place communication is needed. The next four lines show how to do that communication in one round, revealing nothing, using a Beaver triple.\n\n### 9. Confirm the Beaver triple (no answer field)\n\n```python\na_sh = [ra, (a - ra) % p]; b_sh = [rb, (b - rb) % p]; c_sh = [rc, (a * b - rc) % p]; (sum(a_sh) % p, sum(b_sh) % p, sum(c_sh) % p, a * b % p)\n```\n\n- **What this line means**: open everything to confirm a, b, and c = a·b line up.\n- **Answer**: none — but `a_sh`, `b_sh`, `c_sh` are **used by the next three lines**, so type this line too\n- **Read once it prints**: the last two numbers (c opened, and a·b) should match. a and b are random numbers unrelated to the secret, and their product c, pre-packaged this way, is a **Beaver triple**. In practice these are produced ahead of time, during an offline phase (by a separate MPC, or a trusted party), and handed out. Here it is simply given to you — the assignment does the same: `beaver_triple` arrives as an argument.\n\n### 10. The one round of communication — d and e (answer box 6 of 8)\n\n```python\nd = (A - sum(a_sh)) % p; e = (B - sum(b_sh)) % p; (d, e)\n```\n\n- **What this line means**: every party brings their shares together and reconstructs only d and e. This is the only communication (one round).\n- **Answer**: box **6 of 8** (heading \"The one round of communication — d and e\"), a 2-tuple\n- **Read after it matches**: neither A nor B got opened. What opened was only **a value shifted by the random a, b**. **Why open this at all**: the next line needs the public values d and e for every party to build their share of the product. This one round is the entire communication cost of one multiplication.\n\n### 11. C's shares — with the Beaver correction (answer box 7 of 8)\n\n```python\nz = [(c_sh[i] + d * b_sh[i] + e * a_sh[i]) % p for i in range(2)]; z[0] = (z[0] + d * e) % p; z\n```\n\n- **What this line means**: each party computes \"their share of c, plus d times their share of b, plus e times their share of a\"; d·e is public-times-public, so only one party adds it.\n- **Answer**: box **7 of 8** (heading \"C's shares — with the Beaver correction\"), a 2-tuple\n- **Read after it matches**: these are C = A·B's shares (you do not yet know they are correct — the next line checks). d·e is a product of two public values, so it needs no sharing at all; only one party adds it. The assignment's supplied `beaver_multiply` does exactly this.\n\n### 12. Opening C (answer box 8 of 8)\n\n```python\nC = sum(z) % p; C\n```\n\n- **What this line means**: open the shares and compare against the correct answer.\n- **Answer**: box **8 of 8** (heading \"Opening C\"), one integer\n- **Read after it matches**: **the proof's pieces (A, B, C) came together as shares, and the witness was never put back together.** The only communication was line 10's one round. The assignment's `mpc_prove` is exactly lines 5, 7, and 11 laid one after another. Two questions remain: why does this work, and does opening d, e at line 10 leak the secret? The next two lines answer both.\n\n### 13. Why it works — the textbook identity (no answer field)\n\n```python\n(d * e + d * b + e * a + a * b) % p\n```\n\n- **What this line means**: d·e + d·b + e·a + c, all added and reduced mod p.\n- **Answer**: none\n- **Read once it prints**: the same number as line 12 came out of **only the public values d, e and the triple** — no A, no B. The reveal is one identity from school algebra: solving (x−a)(y−b) = xy − xb − ya + ab for xy gives xy = (x−a)(y−b) + (x−a)·b + (y−b)·a + ab = d·e + d·b + e·a + c. Neither x nor y (A or B) appears on the right — only what each party already holds as shares (a, b, c) and the public values (d, e). That is why each party could build it alone.\n\n### 14. Why it's safe — d never narrows down A (no answer field)\n\n```python\n[(cand, (cand - d) % p) for cand in (A, (A + p // 3) % p, (A + 2 * (p // 3)) % p)]\n```\n\n- **What this line means**: try three different candidate values for A, and back out the a that would produce the same d for each.\n- **Answer**: none\n- **Read once it prints**: whichever candidate A you try, some a makes it produce the same d. Since a is random and never shown to the other party, **seeing d never narrows down A**. Same logic as line 4 (a single share reveals nothing). **Putting it together**: linear stays local, multiplication opens only a randomly-shifted value in one round, and the witness is never reconstructed. That is co-SNARK's \"build the proof without ever putting the witness back together\", end to end.\n\n## How submitting works\n\nThe answer fields are independent checkpoints. Enter a value, press **Submit (+points)**, and only that field is graded — one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below 0 pt). A solved field is marked solved and is not submitted again.\n\n## What the fourteen lines add up to\n\nWith all eight answer fields green, you will have confirmed — with numbers your own hands produced, one line at a time — that a linear combination finishes on shares alone, that only the multiplication needs a single round of communication through a Beaver triple, and that neither the witness nor the proof's pieces are ever put back together along the way. You also saw, via one algebraic identity, why the reconstructed values agree, and why the opened d, e never narrow down what they came from.\n\nThe assignment `co-snark-prove`'s `linear_combination_shares` is line 5; `mpc_prove` is lines 5, 7, and 11 laid one after another. A real SNARK prover repeats this exact relationship — linear is free, only multiplication needs communication — at the scale of an MSM or an FFT.\n",
+      "writeup": "## The shape of this problem\n\nFourteen lines are typed; eight have an answer field. The order: look at the witness (1) -> split into shares (2) -> reconstruct (3) -> a single share reveals nothing (4) -> linear form A (5) -> open A (6) -> linear form B (7) -> the share-wise product is wrong (8) -> confirm the Beaver triple (9) -> the one round of communication, d and e (10) -> C's shares (11) -> open C (12) -> the textbook identity (13) -> d never narrows down A (14).\n\n## What each line protects\n\n- 1-4: the witness splits into two shares, and a single share tells you nothing about the secret. \"Hand something over without showing it\" already holds at the splitting stage alone.\n- 5-7: a linear combination (multiply by public coefficients, then add) finishes on shares alone, each party working locally, and the opened result agrees with the value computed directly. This is where most of a SNARK prover's work (MSM, FFT) lives.\n- 8: the share-wise product is not the correct product. Expanding the sum of shares produces cross terms that share-wise multiplication drops, so only multiplication needs communication.\n- 9-12: with a Beaver triple, that one multiplication costs exactly one round of communication (opening d, e). C's shares come together without the witness, A, or B ever being reconstructed.\n- 13-14: one algebraic identity explains why the sum of the shares equals the correct product, and the opened d, e never narrow down A or B (the same logic as line 4).\n\n## How it breaks\n\nBuilding a share by adding the randomness back instead of subtracting it / swapping a linear form's coefficients / accepting the share-wise product as the answer / flipping the sign in the Beaver open (adding instead of subtracting) / forgetting that the `d * e` correction goes to exactly one party's share of C (adding it to both, or to neither) / dropping the `a * b` term from the textbook identity — each shifts one value and stops at that line. The coefficient-order slip is the treacherous one: on some deployments it can coincidentally still produce a plausible-looking number, but the reason \"why this finishes on shares alone\" stops holding. Re-reading that line's \"what this line means\" is how this format teaches.\n\n## Where this leads\n\nThis drill's shares, linear combinations, and Beaver triple are exactly the assignment `co-snark-prove`'s `linear_combination_shares` (line 5) and `mpc_prove` (lines 5, 7, and 11). Here the arithmetic was worked by hand at toy scale (two wires, two parties); a real SNARK prover repeats the same relationship — linear is free, only secret-times-secret multiplication needs communication — at the scale of an MSM or an FFT.\n",
+      "learningGoals": [
+        "Show, on your own numbers with several candidate secrets, that a single share of the witness reveals nothing about it",
+        "State that a linear combination (multiply by public coefficients, then add) finishes on shares alone, each party working locally, and that the opened result agrees with the value computed directly",
+        "Demonstrate on your own numbers why the share-wise product is not the correct product (the cross terms vanish under share-wise multiplication)",
+        "Reproduce the Beaver-triple procedure that resolves one secret-times-secret multiplication with a single round of communication (opening d, e)",
+        "Explain how the identity d*e + d*b + e*a + c shows why the sum of the shares equals the correct product",
+        "Confirm, using several candidate values, that the opened d and e never narrow down A or B"
+      ],
+      "checks": [
+        {
+          "id": "shares",
+          "label": "Shares for two parties — the 2nd entry of w0 and w1",
+          "hints": [
+            {
+              "id": "shares-hint-1",
+              "content": "w0 = [r0, (w[0] - r0) % p]; w1 = [r1, (w[1] - r1) % p]. The answer is (w0[1], w1[1]) — not entry 0 (r0, r1, already on screen)."
+            }
+          ]
+        },
+        {
+          "id": "ashares",
+          "label": "Linear form A — computed on shares alone",
+          "hints": [
+            {
+              "id": "ashares-hint-1",
+              "content": "ca[0]*x + ca[1]*y for the matching entries of w0 and w1. Pair them with zip(w0, w1) first."
+            }
+          ]
+        },
+        {
+          "id": "aopen",
+          "label": "Opening A — the summed shares against the direct value",
+          "hints": [
+            {
+              "id": "aopen-hint-1",
+              "content": "(sum(A_sh) % p, (ca[0]*w[0] + ca[1]*w[1]) % p) — the opened shares first, the direct value second."
+            }
+          ]
+        },
+        {
+          "id": "bshares",
+          "label": "Linear form B — the shares and the opened value",
+          "hints": [
+            {
+              "id": "bshares-hint-1",
+              "content": "cb[0]*x + cb[1]*y on w0, w1. The answer is (B_sh[0], B_sh[1], B), a 3-tuple, not just the two shares."
+            }
+          ]
+        },
+        {
+          "id": "crossmul",
+          "label": "The share-wise product vs. the correct product",
+          "hints": [
+            {
+              "id": "crossmul-hint-1",
+              "content": "Left: A_sh and B_sh multiplied entrywise and summed (no cross terms). Right: (A * B) % p. Neither is entry 0 — both are computed values."
+            }
+          ]
+        },
+        {
+          "id": "beaveropen",
+          "label": "The one round of communication — d and e",
+          "hints": [
+            {
+              "id": "beaveropen-hint-1",
+              "content": "d = (A - sum(a_sh)) % p, e = (B - sum(b_sh)) % p. A comes first in both subtractions; do not flip the sign."
+            }
+          ]
+        },
+        {
+          "id": "cshares",
+          "label": "C's shares — with the Beaver correction",
+          "hints": [
+            {
+              "id": "cshares-hint-1",
+              "content": "z[i] = (c_sh[i] + d*b_sh[i] + e*a_sh[i]) % p for both parties, then add d*e to z[0] only (never to z[1])."
+            }
+          ]
+        },
+        {
+          "id": "csum",
+          "label": "Opening C",
+          "hints": [
+            {
+              "id": "csum-hint-1",
+              "content": "sum(z) % p — add the two entries of line 11's z and reduce mod p."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
