@@ -12,24 +12,16 @@ FLAG_SEED ?= local-dev-seed
 IMAGE := ac26-w5-rotation-drill
 COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p $(IMAGE)
 
-# starter/ is bind-mounted read-only: the learner edits their checkout, the container
-# reads it. reference/ and tests/hidden/ stay inside the author/verifier images and are
-# not bind-mounted, which keeps them out of the checkout rather than out of reach --
-# local mode is honor-system verification.
-#
-# Issue 537/543 option B2: `fixtures/` does not ship in the participant image, because
-# this problem's `setting(seed)` derives the expected values next to the public
-# numbers. `show.py` and the public tests therefore need a live verifier to fetch this
-# deployment's numbers from over the network, so `test`, `test-one` and `inspect` run
-# through Compose, whose `workbench` service declares the verifier as a health-gated
-# dependency, rather than a single `docker run` against a standalone image.
-RUN := $(COMPOSE) run --rm \
-	-v $(CURDIR)/local/starter:/problem/starter:ro workbench
+# Stream the edited source over stdin so the CLI also works with a Docker VM
+# that cannot bind-mount the checkout's host path. No host Python is required.
+STARTER_FILE ?= local/starter/rotation_drill.py
+RUN := $(COMPOSE) run --rm -T workbench
+RUN_TEST := $(RUN) sh -c 'mkdir -p /tmp/learner; cat > /tmp/learner/rotation_drill.py; exec env PARTICIPANT_STARTER_DIR=/tmp/learner python participant/cli_test.py "$$@"' sh
 
 .PHONY: build test test-one inspect reset reference-test verifier-up verifier-down
 
 build:
-	docker build --target participant -t $(IMAGE) local
+	$(COMPOSE) build workbench
 
 # Detached and left running between calls, so iterating with `make test-one` repeatedly
 # does not pay a verifier rebuild/boot each time. `make verifier-down` (or the platform
@@ -41,11 +33,11 @@ verifier-down:
 	$(COMPOSE) down
 
 test: build verifier-up
-	$(RUN) python tests/public/test_rotation_drill.py
+	$(RUN_TEST) < "$(STARTER_FILE)"
 
 test-one: build verifier-up
 	@test -n "$(ID)" || (echo "usage: make test-one ID=<test name substring>" && exit 1)
-	$(RUN) python tests/public/test_rotation_drill.py --only $(ID)
+	$(RUN_TEST) --only "$(ID)" < "$(STARTER_FILE)"
 
 inspect: build verifier-up
 	$(RUN) python show.py
@@ -60,3 +52,5 @@ reset:
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm -i -e READ_METADATA_STDIN=1 $(IMAGE)-author python tests/hidden/test_learning_contract.py < metadata.json
+	docker run --rm $(IMAGE)-author python tests/hidden/test_network_isolation.py

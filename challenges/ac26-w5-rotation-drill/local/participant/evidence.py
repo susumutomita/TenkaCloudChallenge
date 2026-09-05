@@ -1,17 +1,8 @@
-"""This deployment's public half, however this process can reach it.
+"""Read this deployment's public assignments from the internal verifier.
 
-Issue 537/543 (option B2): `fixtures/generate.py` does not ship in the `participant`
-Docker stage of this problem at all. Unlike the Week 4 drills, whose generators return
-public values only, this drill's `setting(seed)` returns the twelve lines' expected
-values alongside the public ones — one dict, one function, so shipping the module would
-put every graded answer one `import` inside the learner's own image. The public half
-(the assignment statements and the numbers behind them) is genuinely the problem
-statement, so it moved to the verifier's `GET /public` rather than disappearing: see
-verifier/server.py and ../Dockerfile.
-
-Everything on the participant side that needs this deployment's numbers — show.py and
-tests/public/test_rotation_drill.py — goes through `public_evidence` below, so there
-is one resolution order rather than two.
+Fixture generation and expected values never ship in the participant image.
+Only the public payload travels. An author can inject the same public JSON
+for a local test; a checkout-only fallback is unavailable in participant images.
 """
 
 from __future__ import annotations
@@ -57,7 +48,7 @@ def public_evidence() -> dict:
     # checkout, or the verifier/author Docker stage — and never inside a built
     # `participant` image, so this branch does not reopen the leak above. Only the
     # public half is taken; the expected values `setting` also returns stay behind.
-    from fixtures.generate import assignments, setting
+    from fixtures.generate import assignments, setting, submission_binding
 
     seed = os.environ.get("FLAG_SEED", "local-dev-seed")
-    return {"assignments": assignments(seed), "public": setting(seed)["public"]}
+    return {"assignments": assignments(seed), "public": setting(seed)["public"], "submissionBinding": submission_binding(seed)}
