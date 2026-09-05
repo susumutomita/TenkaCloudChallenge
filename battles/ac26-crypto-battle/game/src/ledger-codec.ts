@@ -173,6 +173,17 @@ export type StoredArtifact =
   | StoredPartialArtifact
   | StoredSudokuRevealArtifact;
 
+/** Schema 4 preserves unfamiliar IDs verbatim and shortens exact Order IDs. */
+function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
+  return typeof stored.c === "number" ? `${stored.tm}-c${stored.c}` : stored.c;
+}
+
+function compactContractId(teamId: string, id: string): string | number {
+  const prefix = `${teamId}-c`;
+  const n = id.startsWith(prefix) ? Number(id.slice(prefix.length)) : NaN;
+  return Number.isSafeInteger(n) && n >= 0 && `${prefix}${n}` === id ? n : id;
+}
+
 /**
  * Reconstructs `PublicArtifact.id` from a `StoredArtifact` that carries no
  * `d` -- the whole reason `id` can be dropped from the persisted form at
@@ -199,16 +210,6 @@ export type StoredArtifact =
  * nothing from before this module existed can silently lose its id, whether
  * or not the template ever moved.
  */
-function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
-  return typeof stored.c === "number" ? `${stored.tm}-c${stored.c}` : stored.c;
-}
-
-function compactContractId(teamId: string, id: string): string | number {
-  const prefix = `${teamId}-c`;
-  const n = id.startsWith(prefix) ? Number(id.slice(prefix.length)) : NaN;
-  return Number.isSafeInteger(n) && n >= 0 && `${prefix}${n}` === id ? n : id;
-}
-
 function deriveArtifactId(stored: StoredArtifact): string {
   switch (stored.k) {
     case "rps-commit": return `${contractId(stored)}-rps-commit`;

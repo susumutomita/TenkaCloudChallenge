@@ -62,7 +62,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (3 since the sudoku PROVE) and a
+The plugin declares `stateSchemaVersion` (4 for compact budgets and Order IDs) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -91,7 +91,8 @@ The optional explanation has ten scenes: remainder, additive sharing, indexed
 sharing, reconstruction, exposure, MPC, ZK, FHE, Caesar, commit-reveal. Each
 scene can be read without answering; Next is never gated by correctness. An
 optional one-digit field checks understanding, and a separate control shows
-the fixed result and reason. There is no practice score, fake Contract, or
+the fixed answer with a one-sentence takeaway. Calculation steps and full reasons
+remain in the free collapsed explanation. There is no practice score, fake Contract, or
 fake Ledger. The numbered sharing example explains the candidate secrets and
 why the private-number terms cancel without requiring a second disclosure.
 
