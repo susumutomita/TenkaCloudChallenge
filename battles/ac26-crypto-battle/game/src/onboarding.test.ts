@@ -106,6 +106,8 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
       red: { teamId: "red", teamName: "red", score: 20, generation: 1, huntedGenerationCount: 0 },
     },
     publicCommitments: { blue: "1", red: "2" },
+    huntAttempts: { red: { generation: 1, spent: 0, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
+    wrongHuntCost: DEFAULT_CONFIG.scores.wrongHunt,
     ...overrides,
   };
 }

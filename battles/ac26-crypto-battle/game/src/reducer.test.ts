@@ -421,6 +421,85 @@ describe("hunt", () => {
     expect(DEFAULT_CONFIG.scores.huntBonus / prime).toBeLessThan(DEFAULT_CONFIG.scores.wrongHunt);
   });
 
+  // [Issue #696] A miss has to be TELLABLE, not just charged. The plugin SDK
+  // answers a landed op with `{ ok: true }` whether it hit or missed, and the
+  // projection is a pure function of state -- so unless the state records the
+  // outcome, the Portal has nothing to read and calls a -8 a SUCCESS (which
+  // is exactly what shipped). These pin the record and the projection of it.
+  test("a miss is written to the attacker's row as a miss, and the projection says so", () => {
+    const state = tick(startedMatch(CTX), 0);
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
+    const next = applyOp(state, "teamA", wrong);
+    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+
+    const view = projectForTeam(next, "teamA");
+    expect(view.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+    expect(view.huntAttempts.teamB).toEqual({
+      generation: 1,
+      spent: 1,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    expect(view.wrongHuntCost).toBe(DEFAULT_CONFIG.scores.wrongHunt);
+  });
+
+  test("a hit is written as a hit, and it spends an attempt too", () => {
+    let state = tick(startedMatch(CTX), 0);
+    state = leakThreshold(state, "teamB");
+    const shares = decodeLedger(state.publicLedger)
+      .filter((a) => a.teamId === "teamB")
+      .filter(isShareArtifact)
+      .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
+    const recoveredSecret = reconstruct(shares, BigInt(state.config.prime));
+    const next = applyOp(state, "teamA", {
+      kind: "hunt",
+      targetTeamId: "teamB",
+      generation: 1,
+      recoveredSecret: recoveredSecret.toString(),
+    });
+    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "hit" });
+    expect(projectForTeam(next, "teamA").lastHunt?.outcome).toBe("hit");
+    expect(projectForTeam(next, "teamA").huntAttempts.teamB?.spent).toBe(1);
+  });
+
+  test("the budget on the projection is MINE against each OTHER team, never anyone else's", () => {
+    const state = tick(startedMatch(CTX), 0);
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
+    const next = applyOp(state, "teamA", wrong);
+
+    // teamA sees its own spend against teamB, and no row for itself.
+    const attacker = projectForTeam(next, "teamA");
+    expect(Object.keys(attacker.huntAttempts)).toEqual(["teamB"]);
+
+    // teamB sees a full budget against teamA -- it has not hunted -- and
+    // nothing about what teamA has tried against it: no lastHunt, and its own
+    // row absent from its own view.
+    const target = projectForTeam(next, "teamB");
+    expect(Object.keys(target.huntAttempts)).toEqual(["teamA"]);
+    expect(target.huntAttempts.teamA).toEqual({
+      generation: 1,
+      spent: 0,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    expect(target.lastHunt).toBeUndefined();
+    expect("lastHunt" in target).toBe(false);
+  });
+
+  test("the projected budget follows the target's CURRENT generation, so a ROTATE starts it fresh", () => {
+    let state = tick(startedMatch(CTX), 0);
+    const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
+    state = applyOp(state, "teamA", wrong);
+    expect(projectForTeam(state, "teamA").huntAttempts.teamB?.spent).toBe(1);
+
+    state = applyOp(state, "teamB", { kind: "rotate" });
+    expect(projectForTeam(state, "teamA").huntAttempts.teamB).toEqual({
+      generation: 2,
+      spent: 0,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    // The record of the last HUNT is not rewritten by the target's move.
+    expect(projectForTeam(state, "teamA").lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+  });
+
   test("the attempt budget runs out, so the field cannot be scanned", () => {
     let state: CryptoBattleState = tick(startedMatch(CTX), 0);
     const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };

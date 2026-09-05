@@ -203,6 +203,28 @@ describe("a config persisted before this version still drives a playable match",
     expect(after.huntAttempts).toEqual({});
   });
 
+  /**
+   * [Issue #696] `TeamState.lastHunt` is optional and additive: a row written
+   * before it existed has no such field, and that means the same thing as a
+   * team that has never HUNTed. The projection must not throw on it, and must
+   * not invent an outcome.
+   */
+  test("a team row without lastHunt projects a full budget and no outcome", () => {
+    const before = legacyConfigState();
+    const teams = before.teams as unknown as Record<string, Record<string, unknown>>;
+    for (const row of Object.values(teams)) delete row.lastHunt;
+    const stripped = { ...before, huntAttempts: undefined } as unknown as CryptoBattleState;
+
+    const view = projectForTeam(stripped, "teamA");
+    expect("lastHunt" in view).toBe(false);
+    expect(view.huntAttempts.teamB).toEqual({
+      generation: 1,
+      spent: 0,
+      max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
+    });
+    expect(view.wrongHuntCost).toBe(DEFAULT_CONFIG.scores.wrongHunt);
+  });
+
   test("an expiry charges a real penalty rather than turning the score into NaN", () => {
     // `score + undefined` is NaN, and NaN survives every later addition: the
     // team's total is unrecoverable for the rest of the match.

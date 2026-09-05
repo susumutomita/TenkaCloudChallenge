@@ -105,6 +105,7 @@ import type {
   CryptoBattleProjection,
   CryptoBattleState,
   HintProjection,
+  HuntBudgetProjection,
   OrderTask,
   OrderTaskProjection,
   PartialArtifact,
@@ -1870,7 +1871,16 @@ function applyHunt(
       ...state,
       teams: {
         ...state.teams,
-        [teamId]: { ...attacker, score: Math.max(0, attacker.score - state.config.scores.wrongHunt) },
+        [teamId]: {
+          ...attacker,
+          score: Math.max(0, attacker.score - state.config.scores.wrongHunt),
+          // [Issue #696] The miss is written down, not just charged. The SDK
+          // answers a landed op with `{ ok: true }` whether it hit or missed,
+          // and `projectForTeam` is a pure function of state -- so if the
+          // state does not say "that was a miss", nothing downstream can, and
+          // the Portal is left calling a -8 a SUCCESS.
+          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss" },
+        },
       },
       huntAttempts,
     };
@@ -1879,6 +1889,7 @@ function applyHunt(
   const updatedAttacker: TeamState = {
     ...attacker,
     score: attacker.score + state.config.scores.huntBonus,
+    lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit" },
   };
   const updatedTarget: TeamState = {
     ...target,
@@ -2281,6 +2292,12 @@ export function projectForTeam(
   ).length;
 
   const teams: Record<string, TeamSummaryProjection> = {};
+  // [Issue #696] MY attempts against each OTHER team's current generation.
+  // Read through the same `huntKey` `validateOp` charges against, so the
+  // number the Portal shows is the number the judge will enforce -- and only
+  // the reader's own row of it: `state.huntAttempts` also holds what every
+  // other pairing has spent, and none of that is this team's to see.
+  const huntAttempts: Record<string, HuntBudgetProjection> = {};
   for (const other of Object.values(state.teams)) {
     teams[other.teamId] = {
       teamId: other.teamId,
@@ -2288,6 +2305,12 @@ export function projectForTeam(
       score: other.score,
       generation: other.generation,
       huntedGenerationCount: other.huntedGenerations.length,
+    };
+    if (other.teamId === teamId) continue;
+    huntAttempts[other.teamId] = {
+      generation: other.generation,
+      spent: state.huntAttempts[huntKey(teamId, other.teamId, other.generation)] ?? 0,
+      max: state.config.maxHuntAttemptsPerTarget,
     };
   }
 
@@ -2340,5 +2363,13 @@ export function projectForTeam(
     // passed through unredacted, unlike `teams` above it does not need a
     // per-team summary shape.
     publicCommitments: state.publicCommitments,
+    huntAttempts,
+    wrongHuntCost: state.config.scores.wrongHunt,
+    // [Issue #696] The reader's OWN last HUNT only -- `team` is the row
+    // `teamId` resolved to above, never another team's. Spread conditionally
+    // so a team that has never HUNTed projects no key at all, which keeps the
+    // JSON round trip byte-identical to the object (dev/harness.test.ts
+    // compares the two).
+    ...(team.lastHunt === undefined ? {} : { lastHunt: team.lastHunt }),
   };
 }

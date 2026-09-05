@@ -185,7 +185,7 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores -- a wrong or partial guess does nothing. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing. A second kind of HUNT exists for a team that reused a proof nonce: two of their proof rows in one generation sharing a commitment let you solve for their key. Correctly built proofs never produce that -- misuse is what this punishes, not correct use.",
+        body: "Reconstruct another team's secret from enough of their Public Ledger shares (via Lagrange interpolation, computed locally) and submit the recovered value. Only an exact match to their real secret scores. A wrong guess is not free: it costs you points, and it spends one of the small number of attempts you get against each team per generation -- the price and the attempts you have left are printed on the HUNT card before you submit. This Battle's threshold is currently 3 DISTINCT share indices of the same generation -- re-revealing an already-exposed index adds nothing. A second kind of HUNT exists for a team that reused a proof nonce: two of their proof rows in one generation sharing a commitment let you solve for their key. Correctly built proofs never produce that -- misuse is what this punishes, not correct use.",
       },
       {
         name: "ROTATE",
@@ -206,7 +206,7 @@ const COPY = {
     scoringTitle: "Scoring, in short",
     scoring: [
       "Every method pays what the Order states -- LEAK, PROVE, FHE and MPC alike. No technique is worth extra just for being the harder path.",
-      "HUNT only pays out on a genuine, verified reconstruction -- guessing never scores.",
+      "HUNT only pays out on a genuine, verified reconstruction. A wrong guess costs points and one of your limited attempts against that team's generation, so guessing is a losing trade rather than a free one.",
       "ROTATE costs a cooldown, but retroactively devalues every share you leaked before it.",
     ],
   },
@@ -299,7 +299,7 @@ const COPY = {
       },
       {
         name: "HUNT",
-        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。誤った値や部分的な推測では何も起こりません。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。もう 1 種類の HUNT として、proof の nonce を使い回した相手を突く方法があります。同じ世代の proof 2 行が同じ commitment を持っていれば、そこから相手の鍵が解けます。正しく作られた proof では起こらないので、これが罰するのは誤用であって正しい利用ではありません。",
+        body: "相手チームの Public Ledger 上の share を十分な数集め、Lagrange 補間でローカルに secret を復元し、その値を提出します。実際の secret と厳密に一致した場合のみ得点します。外した HUNT はタダではありません。減点され、相手チームの世代ごとに決まっている少ない回数の持ち分を 1 回使います。減点の値と残り回数は、提出する前に HUNT カードに表示されます。このBattleの現在のしきい値は同じ世代の異なる index で 3 種類です — 同じ index を何度公開しても増えません。もう 1 種類の HUNT として、proof の nonce を使い回した相手を突く方法があります。同じ世代の proof 2 行が同じ commitment を持っていれば、そこから相手の鍵が解けます。正しく作られた proof では起こらないので、これが罰するのは誤用であって正しい利用ではありません。",
       },
       {
         name: "ROTATE",
@@ -320,7 +320,7 @@ const COPY = {
     scoringTitle: "スコアリング、要点だけ",
     scoring: [
       "どの方法でも、その依頼に書かれた得点がそのまま入ります — LEAK / PROVE / FHE / MPC のいずれも同じです。難しい方法だからといって多く得点することはありません。",
-      "HUNT は検証済みの正しい復元でのみ得点します — 当て推量は得点になりません。",
+      "HUNT は検証済みの正しい復元でのみ得点します。外すと減点され、その相手・世代に対する残り回数も 1 回減るので、当て推量は損にしかなりません。",
       "ROTATE はクールダウンというコストを払いますが、それ以前に漏洩した share を遡ってすべて無価値にします。",
     ],
   },
