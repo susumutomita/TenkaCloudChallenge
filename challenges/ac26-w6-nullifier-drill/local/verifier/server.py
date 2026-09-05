@@ -34,7 +34,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import GRADED, LINES, assignments, normalize_answer, setting, submission_binding
+from fixtures.generate import GRADED, LINES, assignments, normalize_answer, setting, submission_binding, valid_order, valid_schedule
 from verifier.expected import expected_for
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,8 +55,8 @@ def _check_line(line: str, submission: object) -> bool:
     """The value the learner pasted for one drill line, against this deployment's value.
 
     A tuple may arrive as `[a, b, c]`, `(a, b, c)` or `a, b, c`; an integer as a number
-    or a digit string. The comparison is exact: there is one right value per line per
-    seed, and it is the value the line prints when typed against this seed's numbers.
+    or a digit string. The six teaching rows compare values; the final two validate the published
+    construction conditions and accept every satisfying answer.
     """
     if line not in GRADED or line not in LINES:
         return False
@@ -71,6 +71,8 @@ def _check_line(line: str, submission: object) -> bool:
     got = normalize_answer(line, answer)
     if got is None:
         return False
+    if line=='unchecked':return valid_order(setting(SEED)['public'],got)
+    if line=='collision':return valid_schedule(setting(SEED)['public'],got)
     expected = expected_for(SEED)[line]
     return got == expected
 

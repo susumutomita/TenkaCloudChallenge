@@ -1,6 +1,6 @@
 """Complete the visible rows; the tiny model provides no cryptographic anonymity.
-For rows 1-7 copy the whole matching block and return its final expression.
-For row 8 construct a collision yourself; no completed implementation is supplied.
+For rows 1-6 copy the whole matching block and return its final expression.
+For rows 7-8 construct the request order and vote schedule yourself; no completed code is supplied.
 """
 
 def label(p, secret, scope):
@@ -46,14 +46,25 @@ def message(p, secret, scope, messages):
 
 
 def unchecked(scope, attempts):
-    """確認済みかを見ず、「今回の番号で、印が未使用なら受理」とする方式を試します。その方式で受理したうち、未確認だった依頼をTrueにします。
-    Try a design that skips verified status and accepts any unused marker in this election. Mark True for requests it accepts despite being unverified.
+    """Choose four distinct request numbers (1..6), in order.
+
+    Correct: check verified, election and unused marker, THEN record it.
+    Buggy: record an unused marker first, THEN check verified and election.
+    Return an order where correct accepts two and buggy accepts zero.
+    Each calculation starts with an empty record. See the free row 7 example.
     """
     return None
 
 
 def collision(p, secret, scope):
-    """0〜p−1のうちsecretと違う数で、同じ印になる最小の数を探します。違う入力から同じ印が出ることを衝突と呼びます。この模型では必ず一つ見つかります。
-    Among 0 through p−1, find the smallest number different from secret that produces the same marker. Different inputs producing the same output are a collision. This model always provides one.
+    """Construct five [person_secret, election, vote] rows.
+
+    Secrets: 0..p-1; elections: scope or scope+1; votes: 0 or 1.
+    First row starts with this secret and scope. Use at least three secrets,
+    both elections and both votes. All rows represent eligible, verified voters.
+    Fresh records keyed by (election, secret), (election, marker), marker alone,
+    and (election, vote-dependent marker) must accept 4, 3, 2, 4 respectively.
+    marker=(person_secret**2+election)%p; vote-dependent adds vote before remainder.
+    Each key can be accepted only once. See the free row 8 rules and small examples.
     """
     return None

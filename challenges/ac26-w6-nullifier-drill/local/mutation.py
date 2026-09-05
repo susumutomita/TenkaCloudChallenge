@@ -31,8 +31,8 @@ def main():
         ('count counts all requests','count',lambda c,a:len(a)),
         ('count counts only proof flags','count',lambda c,a:sum(v['verified'] for v in a)),
         ('message reports the correct rather than flawed design','message',lambda p,s,c,ms:[True,False]),
-        ('unchecked sees no false acceptance','unchecked',lambda c,a:[False]*len(a)),
-        ('collision returns the same secret','collision',lambda p,s,c:s),
+        ('unchecked repeats one request','unchecked',lambda c,a:[1,1,1,1]),
+        ('collision repeats the same vote','collision',lambda p,s,c:[[s,c,0]]*5),
         ('collision returns out of range','collision',lambda p,s,c:p),
     ]
     for label,row,bad in mutations:
@@ -45,7 +45,10 @@ def main():
     for row in GRADED:
         value=expected[row]
         assert server.evaluate(row,value),row
-        if isinstance(value,tuple):
+        if row=='collision':
+            wrong=[list(v) for v in value];wrong[0][0]=setting(seed)['public']['p']
+        elif row=='unchecked':wrong=[value[0]]*4
+        elif isinstance(value,tuple):
             wrong=list(value);wrong[0]=not wrong[0] if SHAPES[row][0]=='bool' else wrong[0]+1
             assert not server.evaluate(row,list(value)[:-1]),row
         else:wrong=value+1

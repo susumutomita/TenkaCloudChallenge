@@ -1,9 +1,11 @@
 """Private fixtures for a tiny nullifier/state model, not cryptographic anonymity."""
 from __future__ import annotations
+import ast
 import hashlib
+import itertools
 LINES = GRADED = ('label','repeat','scopes','accept','count','message','unchecked','collision')
 SHAPES = {'label':'int','repeat':('int',2),'scopes':('int',2),'accept':('bool',6),
-          'count':'int','message':('bool',2),'unchecked':('bool',6),'collision':'int'}
+          'count':'int','message':('bool',2),'unchecked':('int',4),'collision':('schedule',5)}
 
 
 def _draw(seed, label, low, high):
@@ -36,18 +38,14 @@ def setting(seed):
         [attempt(True,scope+1,y),attempt(True,scope,y)],
         [attempt(bool(_draw(seed,"third-proof",0,1)),scope,z)],
     ])
-    attempts=[item for group in groups for item in group]
+    attempts=_order(seed,'arrival-order',[item for group in groups for item in group])
     label=(secret*secret+scope)%p
     seen=set(); accepted=[]
-    bad_seen=set(); unchecked=[]
     for item in attempts:
         right_scope=item['scope']==scope
         good=item['verified'] and right_scope and item['nullifier'] not in seen
         accepted.append(good)
         if good:seen.add(item['nullifier'])
-        bad=right_scope and item['nullifier'] not in bad_seen
-        unchecked.append(bad and not good)
-        if bad:bad_seen.add(item['nullifier'])
     bad_message_seen=set(); message=[]
     for vote in messages:
         wrong=(secret*secret+scope+vote)%p
@@ -56,11 +54,61 @@ def setting(seed):
     expected={'label':label,'repeat':(label,label),
               'scopes':tuple((secret*secret+s)%p for s in scope_ids),
               'accept':tuple(accepted),'count':len(seen),'message':tuple(message),
-              'unchecked':tuple(unchecked),'collision':p-secret}
+              'unchecked':None,'collision':None}
     public={'p':p,'secret':secret,'scope':scope,'scope_ids':scope_ids,
             'messages':messages,'attempts':attempts}
+    expected['unchecked']=next(order for order in itertools.permutations(range(1,7),4) if valid_order(public,order))
+    expected['collision']=construct_schedule(public)
     return {'public':public,'expected':expected}
 
+
+
+def valid_order(public, order):
+    if not isinstance(order,(list,tuple)) or len(order)!=4 or any(type(i) is not int or not 1<=i<=6 for i in order) or len(set(order))!=4:
+        return False
+    seen=set(); early=set(); correct=wrong=0
+    for index in order:
+        item=public['attempts'][index-1]
+        marker=item['nullifier']
+        eligible=item['verified'] and item['scope']==public['scope']
+        if eligible and marker not in seen:
+            correct+=1;seen.add(marker)
+        fresh=marker not in early
+        early.add(marker)  # the deliberate bug: consume before verification/scope checks
+        wrong+=bool(fresh and eligible)
+    return correct==2 and wrong==0
+
+
+def valid_schedule(public, rows):
+    if not isinstance(rows,(list,tuple)) or len(rows)!=5:
+        return False
+    p=public['p'];scope=public['scope']
+    for row in rows:
+        if not isinstance(row,(list,tuple)) or len(row)!=3 or any(type(x) is not int for x in row):return False
+        secret,election,vote=row
+        if not (0<=secret<p and election in (scope,scope+1) and vote in (0,1)):return False
+    if tuple(rows[0][:2])!=(public['secret'],scope):return False
+    if len({r[0] for r in rows})<3 or len({r[1] for r in rows})!=2 or len({r[2] for r in rows})!=2:return False
+    identity={(e,s) for s,e,v in rows}
+    scoped={(e,(s*s+e)%p) for s,e,v in rows}
+    global_markers={(s*s+e)%p for s,e,v in rows}
+    vote_markers={(e,(s*s+e+v)%p) for s,e,v in rows}
+    return tuple(map(len,(identity,scoped,global_markers,vote_markers)))==(4,3,2,4)
+
+
+def construct_schedule(public):
+    p=public['p'];own=public['secret'];scope=public['scope']
+    for person in range(1,p):
+        marker=(person*person+scope)%p
+        for other in range(p):
+            if (other*other+scope+1)%p!=marker:continue
+            candidates=[
+                ((own,scope,0),(person,scope,0),(p-person,scope,0),(person,scope,1),(other,scope+1,0)),
+                ((own,scope,0),(p-own,scope,0),(own,scope,1),(other,scope+1,0),(own,scope+1,0)),
+            ]
+            for rows in candidates:
+                if valid_schedule(public,rows):return rows
+    raise RuntimeError('could not construct the documented schedule')
 
 def assignments(seed):
     return '\n'.join(f'{name} = {value!r}' for name,value in setting(seed)['public'].items())
@@ -147,6 +195,13 @@ def normalize_answer(line: str, raw: object):
     a Python tuple/list literal typed as text `(1, 2)` / `[1, 2]`, or bare comma-
     separated values `1, 2`.
     """
+    if line=='collision':
+        if isinstance(raw,str):
+            try:raw=ast.literal_eval(raw)
+            except (ValueError,SyntaxError,TypeError,RecursionError):return None
+        if not isinstance(raw,(list,tuple)) or len(raw)!=5:return None
+        if any(not isinstance(row,(list,tuple)) or len(row)!=3 or any(type(x) is not int for x in row) for row in raw):return None
+        return tuple(tuple(row) for row in raw)
     shape = SHAPES.get(line)
     if shape is None:
         return None

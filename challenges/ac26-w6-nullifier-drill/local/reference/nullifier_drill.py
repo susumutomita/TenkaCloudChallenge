@@ -50,20 +50,23 @@ def message(p, secret, scope, messages):
 
 
 def unchecked(scope, attempts):
-    used = []
-    answers = []
-    for attempt in attempts:
-        ok = attempt['scope'] == scope and attempt['nullifier'] not in used
-        answers.append(ok and (not attempt['verified']))
-        if ok:
-            used.append(attempt['nullifier'])
-    return answers
+    # Author-only exhaustive search, deliberately independent of the grader helper.
+    from itertools import permutations
+    for order in permutations(range(1,len(attempts)+1),4):
+        good=[];bad=[];accepted=blocked=0
+        for i in order:
+            row=attempts[i-1];marker=row['nullifier']
+            eligible=row['verified'] and row['scope']==scope
+            if eligible and marker not in good:
+                accepted+=1;good.append(marker)
+            new=marker not in bad
+            bad.append(marker)
+            if eligible and new:blocked+=1
+        if accepted==2 and blocked==0:return list(order)
+    raise ValueError('no witness')
 
 
 def collision(p, secret, scope):
-    target = (secret * secret + scope) % p
-    matches = []
-    for candidate in range(p):
-        if candidate != secret and (candidate * candidate + scope) % p == target:
-            matches.append(candidate)
-    return matches[0]
+    # Author-only construction search; published material gives conditions, not this code.
+    from fixtures.generate import construct_schedule
+    return construct_schedule({'p':p,'secret':secret,'scope':scope})

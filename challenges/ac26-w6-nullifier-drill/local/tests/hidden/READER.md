@@ -1,84 +1,89 @@
 # Participant-only reader and runtime evidence — 2026-09-06
 
-An independent agent used only the Japanese statement, 24 hints, editor starter and
-public Inspect values. It took the role of a reader with junior-high mathematics and
-one beginner Python book. It did not execute code or read the generator, reference
-solution or grading implementation. This is an agent read-through, not a human event.
+An independent agent read only the Japanese statement, hints, editor starter and
+public Inspect values, with junior-high mathematics and beginner Python as its assumed
+background. It did not execute code or read generators, reference answers or grading.
+This is an agent read-through, not a human event playtest.
 
-## First pass and corrections
+## Corrections before the final design
 
-The initial read could calculate all eight answers, but found three real gaps:
+The initial reader found verified markers that the formula could not produce, a count
+example missing its requests, and an overbroad claim about different-election markers.
+Fixtures now draw verified markers from the formula's output range for that election;
+the statement shows the example requests and explains the tiny model's repeated markers.
 
-1. A request was marked verified although its marker could not be produced by the
-   stated formula for that election. Fixtures now choose all verified markers from
-   the actual formula's output range for that request's scope. The learner's secret
-   is 1 through p−1 to ensure a closing collision; other participants may use 0 through
-   p−1, which is now stated. The author regression checks every verified fixture.
-2. The count hint claimed three records without showing the six requests. Row 4 now
-   includes the full one-digit table. Its accepted markers are 5, 3 and 2, each a valid
-   output of the toy formula for the stated scope.
-3. The scope wording implied every different election has a different marker. It now
-   refers to the two supplied elections and explicitly explains that adding p to a
-   scope repeats the marker in this tiny model.
+PR review then found that seven completed code blocks plus a tiny final search made
+most of the exercise transcription. It also requested a concrete participant role and
+plain definitions of the claimed checks. The introduction now casts the participant
+as a school voting-service maintainer investigating lost legitimate votes. It describes
+what is checked without assuming anonymity or proof vocabulary.
 
-The final packet included actual `/api/inspect` output. The reader confirmed each
-repair and independently checked the revised verified markers: at p=5, scope=3,
-marker 3 can come from secret 0 and marker 4 from secret 1; at scope=4, marker 4 can
-come from secret 0. It did not infer real anonymity from this model.
+The last two rows were replaced with constructions carrying half the score. Row 7
+combines verification and election failures to erase two valid votes; row 8 composes
+identity collisions, changed votes and election handling into one five-vote witness
+with four distinct counting policies. Both accept any satisfying construction.
+Only the first six rows provide completed code. Required rules and pair-sized examples
+for both constructions are free; each has the same three optional hint stages.
 
-## Independent arithmetic
+## Final independent hand answers
 
-The reviewed local fixture has p=5, secret=2, scope=3, scope_ids=[3,4] and messages=[1,1].
-The marker is (2×2+3) remainder by 5 = 2. Both messages keep that marker. The other
-supplied election has marker 3. The deliberately vote-dependent marker is 3 for both
-votes, so the flawed design accepts the first and rejects the duplicate.
+The reader's fixture is p=5, secret=2, scope=3, scope_ids=[3,4], messages=[1,1].
+Number the six attempts from 1 through 6:
 
-Requests arrive with (verified, scope, marker):
-(False,3,3), (True,3,3), (True,3,3), (True,4,4), (True,3,4), (False,3,2).
-Only the second and fifth requests pass all three checks, leaving markers 3 and 4.
-The version that skips verification wrongly accepts the first and sixth requests.
+1. (True,4,4)
+2. (True,3,3)
+3. (True,3,4)
+4. (True,3,3)
+5. (False,3,3)
+6. (False,3,2)
 
-| Field | Hand-computed answer |
+| Field | Hand answer |
 | --- | --- |
 | label | 2 |
 | repeat | [2,2] |
 | scopes | [2,3] |
-| accept | [False,True,False,False,True,False] |
+| accept | [False,True,True,False,False,False] |
 | count | 2 |
 | message | [True,False] |
-| unchecked | [True,False,False,False,False,True] |
-| collision | 3 |
+| unchecked | [5,2,1,3] |
+| collision | [[2,3,0],[3,3,0],[2,3,1],[0,3,1],[2,4,0]] |
 
-For the last row, the reader independently constructed secret 3: 3×3+3=12 has
-remainder 2, the same marker as secret 2. It independently proposed `return p-secret`
-under the stated prime/nonzero domain. The published statement does not provide a
-completed implementation for that final construction.
+For row 7, request 5 consumes marker 3 prematurely and request 1 consumes marker 4
+for the wrong election. A correct handler accepts requests 2 and 3; the record-first
+handler accepts none. This differs from the author's first valid ordering.
+
+For row 8, ordinary markers are 2,2,2,3,3. Keys identifying people directly give four
+votes; per-election marker keys give three; markers alone give two; adding vote content
+before the remainder gives four per-election keys. The reader combined the conditions
+independently and judged that copying the teaching blocks cannot finish these tasks.
+It caught one remaining starter instruction saying rows 1–7 could be copied; that was
+corrected to 1–6 before final runtime checks.
+
+The reader also generalized the five-vote construction: start with secret and p-secret
+in this election, repeat the first person with a changed vote, then choose x,y with
+different x² from secret² and x²−y² remainder 1. The latter two votes share a second
+marker across elections. Choose the fourth vote's content to keep its vote-dependent
+marker distinct. At most p² candidate pairs suffice. The author executed this
+independently proposed construction for all 30 permitted p/secret/scope combinations;
+every result met the published conditions. No such completed construction is shipped.
 
 ## Actual participant runtime
 
-The author submitted the hand answers through real Docker Workbench `/api/prepare`
-and `/verify`: 8/8 accepted; eight wrong and eight unprepared submissions rejected.
-Both languages' seven code blocks copied into the real `/api/starter` passed the
-teaching rows but left `collision` unfinished. Adding the reader-authored construction
-made `/api/test` pass. Learner execution could see neither the fixture seed nor the
-generator. An actual Inspect run caught a missing import path in show.py; it was
-repaired and an Inspect regression added.
+The author submitted all eight hand answers through Docker `/api/prepare` and `/verify`:
+8/8 accepted; eight wrong and eight unprepared submissions rejected. Both languages'
+six published blocks copied into the actual `/api/starter` passed the teaching rows
+but left both constructions unfinished. Implementing the hand-order construction and
+the reader's generalized five-vote construction passed `/api/test` and the CLI public
+suite. Different satisfying schedules were accepted; well-formed constructions with
+incorrect acceptance counts were rejected.
 
-The trusted Workbench passes a prefetched public snapshot and isolates learner
-processes with Linux seccomp. Actual API probes denied IPv4, IPv6 and Unix sockets,
-a native libc socket call, parent-memory access, and networking from an executed
-Python child. Verifier URLs, seed and deployment tag were absent from the child.
-The trusted grading proxy still worked after the probe. Docker regressions also
-cover CLI isolation and refusal to execute when filter setup fails. The follow-up
-process restriction from the trace drill also denies signals and resource-limit
-writes against the supervisor. Actual API probes received EPERM for parent SIGKILL,
-parent resource-limit modification, setsid and setpgid; normal grading still worked.
-Each API run has a fixed process group, cleaned up on exit or timeout, and Compose
-init reaps orphans. A regression confirms no running descendant survives a finished run.
+Actual Inspect originally exposed a missing import path; it was fixed and is covered
+by a regression. Learner execution could see neither the fixture seed nor the generator.
+API probes denied IPv4/IPv6/Unix sockets, native libc networking, child networking,
+parent memory, parent SIGKILL/resource-limit changes and changing session/process group.
+The trusted grading proxy still worked. A completed execution left no running descendant.
+CLI uses the same fail-closed restrictions.
 
-The final author suite killed 20 mutants and passed nine learning/boundary tests plus
-five Linux runtime tests. CLI Inspect, the completed visible starter, and the label-only
-public test also passed.
-
-These runs exercise the participant APIs, not a deployed Portal or live AWS event.
-No human playtest or production deployment was performed.
+The final author suite killed 20 mutants and passed 11 learning/boundary checks plus
+five Linux runtime checks. These runs exercise real participant APIs and CLI, not a
+deployed Portal, live AWS event or human event. No production deployment was performed.

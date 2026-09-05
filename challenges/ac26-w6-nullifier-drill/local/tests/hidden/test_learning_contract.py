@@ -6,19 +6,20 @@ from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
 METADATA=json.load(sys.stdin) if os.environ.get('READ_METADATA_STDIN')=='1' else json.loads((ROOT.parent/'metadata.json').read_text())
-from fixtures.generate import GRADED,LINES,normalize_answer,setting,submission_binding
+from fixtures.generate import GRADED,LINES,normalize_answer,setting,submission_binding,valid_order,valid_schedule
 from participant.workbench import PortalEditorSupport
 from participant.exercise import EXAMPLE,EXAMPLE_EXPECTED,call_row
 from tests.hidden import check_nullifier_drill
+from reference import nullifier_drill as reference
 from verifier import server
 
 
 def editor_solution(text):
     blocks=re.findall(r'```python\n(.*?)\n```',text,re.S)
-    assert len(blocks)==7,'Only the seven teaching rows supply complete code'
+    assert len(blocks)==6,'Only the six teaching rows supply complete code'
     tree=ast.parse((ROOT/'starter/nullifier_drill.py').read_text())
     for fn in tree.body:
-        if isinstance(fn,ast.FunctionDef) and fn.name in LINES[:-1]:
+        if isinstance(fn,ast.FunctionDef) and fn.name in LINES[:-2]:
             body=ast.parse(blocks[LINES.index(fn.name)]).body
             assert isinstance(body[-1],ast.Expr)
             body[-1]=ast.Return(body[-1].value)
@@ -43,9 +44,10 @@ class LearningContract(unittest.TestCase):
             learner=editor_solution(text)
             for seed in ('reader-nullifier','one','two','three'):
                 failures=check_nullifier_drill.run(learner,seed)
-                self.assertEqual(len(failures),2)
-                self.assertTrue(all('collision' in failure for failure in failures))
-            learner.collision=lambda p,secret,scope:p-secret
+                self.assertEqual(len(failures),4)
+                self.assertTrue(all(any(row in failure for row in ('unchecked','collision')) for failure in failures))
+            learner.unchecked=reference.unchecked
+            learner.collision=reference.collision
             for seed in ('reader-nullifier','one','two','three'):
                 self.assertEqual(check_nullifier_drill.run(learner,seed),[])
 
@@ -53,7 +55,8 @@ class LearningContract(unittest.TestCase):
         learner=editor_solution(METADATA['instructions'])
         status,output=public_run(learner)
         self.assertEqual(status,1,output);self.assertIn('FAIL collision',output)
-        learner.collision=lambda p,secret,scope:p-secret
+        learner.unchecked=reference.unchecked
+        learner.collision=reference.collision
         status,output=public_run(learner)
         self.assertEqual(status,0,output);self.assertIn('public tests: PASS',output)
 
@@ -68,7 +71,6 @@ class LearningContract(unittest.TestCase):
         attempts=[{'verified':False,'scope':1,'nullifier':2},{'verified':True,'scope':1,'nullifier':2},{'verified':True,'scope':1,'nullifier':2}]
         self.assertEqual(learner.accept(1,attempts),[False,True,False])
         self.assertEqual(learner.count(1,attempts),1)
-        self.assertEqual(learner.unchecked(1,attempts),[True,False,False])
         attempts[0]={'verified':True,'scope':2,'nullifier':2}
         self.assertEqual(learner.accept(1,attempts),[False,True,False])
 
@@ -83,19 +85,45 @@ class LearningContract(unittest.TestCase):
         counts=set(); message_outcomes=set(); divisors=set()
         for i in range(50):
             fixture=setting(f'coverage-{i}');public=fixture['public'];answers=fixture['expected']
-            p=public['p'];secret=public['secret'];other=answers['collision'];scope=public['scope']
-            self.assertTrue(0<secret<p and 0<=other<p and other!=secret)
-            self.assertEqual((secret*secret+scope)%p,(other*other+scope)%p)
+            p=public['p'];secret=public['secret'];scope=public['scope']
+            self.assertTrue(valid_order(public,answers['unchecked']))
+            self.assertTrue(valid_schedule(public,answers['collision']))
             self.assertEqual(len(public['attempts']),6)
             for attempt in public['attempts']:
                 if attempt['verified']:
                     self.assertIn(attempt['nullifier'], {(s*s+attempt['scope'])%p for s in range(p)})
             self.assertEqual(sum(answers['accept']),answers['count'])
-            self.assertIn(sum(answers['unchecked']),(1,2))
             counts.add(answers['count']);message_outcomes.add(answers['message']);divisors.add(p)
         self.assertEqual(counts,{2,3})
         self.assertEqual(message_outcomes,{(True,True),(True,False)})
         self.assertEqual(divisors,{5,7})
+
+    def test_every_small_domain_has_a_joint_schedule_witness(self):
+        for p in (5,7):
+            for secret in range(1,p):
+                for scope in (1,2,3):
+                    rows=reference.collision(p,secret,scope)
+                    self.assertTrue(valid_schedule({'p':p,'secret':secret,'scope':scope},rows))
+
+    def test_constructions_require_all_published_conditions(self):
+        fixture=setting('reader-nullifier');public=fixture['public']
+        order=reference.unchecked(public['scope'],public['attempts'])
+        self.assertTrue(valid_order(public,order))
+        self.assertFalse(valid_order(public,[order[0]]*4))
+        self.assertFalse(valid_order(public,[0,*order[1:]]))
+        self.assertFalse(valid_order(public,order[:3]))
+        rows=reference.collision(public['p'],public['secret'],public['scope'])
+        self.assertTrue(valid_schedule(public,rows))
+        self.assertFalse(valid_schedule(public,[rows[0]]*5))
+        for column,value in ((0,public['p']),(1,public['scope']+2),(2,2)):
+            invalid=[list(row) for row in rows];invalid[0][column]=value
+            self.assertFalse(valid_schedule(public,invalid))
+        self.assertFalse(valid_schedule(public,rows[:4]))
+        # These five verified votes distinguish all four designs at p=7.
+        example=[[2,1,0],[3,1,0],[4,1,0],[3,1,1],[1,2,0]]
+        self.assertTrue(valid_schedule(EXAMPLE,example))
+        self.assertTrue(valid_schedule(EXAMPLE,[example[i] for i in (0,2,1,4,3)]))
+        self.assertFalse(valid_schedule(EXAMPLE,[[2,1,0],[3,1,0],[4,1,0],[3,1,0],[1,2,0]]))
 
     def test_answer_normalization_enforces_shape_and_type(self):
         self.assertIsNone(normalize_answer('accept',[0,1,0,0,1,1]))
