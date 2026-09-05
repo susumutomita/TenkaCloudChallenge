@@ -92,6 +92,12 @@ announce "you can hunt now" — that rule (Issue #486, restated in #646's
 non-goals) is unchanged, and the check that builds this scenario lives in
 `scenarios.ts`, never in a panel.
 
+## Participant walkthrough
+
+[次のイベントでの参加者画面確認](PLAYTHROUGH.ja.md) maps the nine
+pre-event checks to the real scenario names, visible controls, and expected
+feedback. It separates local UI evidence from optional live Portal checks.
+
 ## Checks
 
 ```bash
