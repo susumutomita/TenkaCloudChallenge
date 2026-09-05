@@ -41,7 +41,7 @@ import type { OrderTaskKind } from "./types.ts";
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher";
+export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel";
 
 /**
  * What an Order forbids being made public.
@@ -78,6 +78,7 @@ export interface SubmissionMethodSpec {
 }
 
 export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMethodSpec>> = {
+  duel: { method: "duel", publishesRawSecretMaterial: true },
   leak: { method: "leak", publishesRawSecretMaterial: true },
   prove: { method: "prove", publishesRawSecretMaterial: false },
   // [Phase 2] An FHE submission publishes a ciphertext under a key only the
@@ -100,6 +101,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
   "fhe",
   "mpc",
   "cipher",
+  "duel",
 ];
 
 /**
@@ -115,6 +117,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
  * whole point is that participants learn which is which.
  */
 const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[]>> = {
+  "rps-duel": ["duel"],
   "reveal-share": ["leak", "prove"],
   "homomorphic-sum": ["fhe"],
   "masked-total": ["mpc"],

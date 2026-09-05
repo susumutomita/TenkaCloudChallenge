@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { OrderTaskProjection } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-export type Concept = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar";
+export type Concept = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "commit";
 interface Step { readonly title: string; readonly lines: readonly string[]; readonly table?: { readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] } }
 interface Explanation { readonly name: string; readonly steps: readonly Step[] }
 
@@ -12,6 +12,12 @@ export const SHARE_PAIR_TABLE = [["0", "5", "4"], ["1", "0", "1"], ["2", "2", "5
 /** Fixed teaching examples, independent of every match's private data. */
 export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
   ja: {
+    commit: { name: "手を先に封じる", steps: [
+      { title: "相手の手を見る前に、数字を出す", lines: ["先に手を言うと相手に勝つ手を選ばれるため、手と『隠す数』を混ぜた数字を先に出します。この数字をコミットメントと呼びます。", "手の番号 m はグー 1・チョキ 2・パー 3。隠す数 r は 0〜10 のくじから毎回引き直します。0〜10 の紙を 1 枚ずつ用意し、毎回戻して引けば均等に選べます。"] },
+      { title: "掛け算で手を封じる", lines: ["4^m は 4 を m 回掛ける意味。9^r は 9 を r 回掛け、0 回の場合は 1 とします。両方を掛けて、23 で割った余りを c とします。", "m=1、r=1 なら、4×9=36。36−23=13。まず 13 だけを出します。手と r は紙に控えます。", "画面の表は 4^m と 9^r をそれぞれ 23 で割った余りです。例えば 4^3=64→18。途中で 23 の倍数を引いても、積から 23 の倍数が減るだけで、最後の余りは変わりません。"] },
+      { title: "両者が封じたら、審判へ開く", lines: ["両者の c がそろったら、控えた m と r を審判へ渡します。審判が同じ計算をして c と一致するか確かめます。不一致なら修正でき、減点はありません。開封した手と r が受理された後は、その開封内容を変更できません。", "片方だけの開封は相手へ渡さず、両方そろってから同時に公開します。グーはチョキ、チョキはパー、パーはグーに勝ちます。"] },
+      { title: "何が隠れ、何に審判が必要か", lines: ["r を 0〜10 から同じ確率で選ぶと、この計算で実際に出てくるどの c にも 3 種類すべての手が対応します。c だけで手を絞れません。0 を除くと、例えば c=4 のグーは候補から外れます。グーで c=4 にするには r=0 が必要だからです。", "この教材の小さい数では、同じ c へ別の手でも開ける値を探せます。すり替えを暗号だけで防ぐ実用的な安全性はありません。相手の開封を見て後出しできないよう、審判が同時公開を守ります。", "commit-reveal は先に封じて後で開く手順です。それ自体は ZK（秘密を明かさず正しさを示す証明）ではありません。r を使い回すと別の回の記録を手掛かりに手を読まれるため、毎回くじを引き直します。"] },
+    ] },
     remainder: { name: "割った余り", steps: [
       { title: "0〜6 の時計で考える", lines: ["0、1、2、3、4、5、6 の次は 0 に戻る、7 目盛りの時計を考えます。7 で割った余りだけを残す計算です。カードでは『割る数』を p と書きます。"] },
       { title: "大きくなったら 7 を引く", lines: ["5 + 4 = 9。9 は 7 が 1 個と、残り 2 個なので、9 − 7 = 2。時計でも 5 → 6 → 0 → 1 → 2 と進みます。", "『7 で割った余りは 2』を 9 mod 7 = 2 と書きます。mod は余りの短い書き方です。"] },
@@ -51,6 +57,12 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
     ] },
   },
   en: {
+    commit: { name: "Commit-reveal", steps: [
+      { title: "Seal before seeing the opponent's hand", lines: ["Combine hand m (rock 1, scissors 2, paper 3) with a hiding number r drawn uniformly from 0–10. The combined number is a commitment. Draw from eleven slips marked 0–10, returning the slip before each draw."] },
+      { title: "Multiply, then take a remainder", lines: ["4^m means m factors of 4; 9^r means r factors of 9, with the zeroth power defined as 1. c is their product's remainder after division by 23.", "For m=1, r=1: 4×9=36; 36−23=13. Send only 13 and keep m and r in your notes.", "The on-screen tables are remainders of 4^m and 9^r after division by 23; for example 4^3=64→18. Removing a multiple of 23 before multiplying only removes a multiple of 23 from the product, preserving its final remainder."] },
+      { title: "Both seal, then both open", lines: ["After both commitments arrive, give the judge your m and r. The judge recomputes c. A mismatch can be corrected without a penalty; an accepted opening cannot be replaced.", "The judge keeps each opening private until both arrive, then publishes them together and scores the hands. Rock beats scissors, scissors beats paper, paper beats rock."] },
+      { title: "What the toy and judge guarantee", lines: ["With uniform r from 0–10, every c that this calculation can produce is compatible with all three hands. c alone does not narrow the hand. Excluding r=0 would rule out rock when c=4, because rock produces c=4 only with r=0.", "These tiny numbers let you find alternative openings, so the toy has no practical binding security. Simultaneous publication prevents adapting after seeing the other opening. Commit-reveal is not itself a zero-knowledge proof. Reusing r makes other rounds informative; draw again each time."] },
+    ] },
     remainder: { name: "Remainders", steps: [
       { title: "Imagine a clock numbered 0–6", lines: ["After 0, 1, 2, 3, 4, 5, 6 comes 0 again. We keep the remainder after dividing by 7. The card calls this divisor p."] },
       { title: "Subtract 7 when you reach it", lines: ["5 + 4 = 9; 9 contains one 7 with 2 left, so 9 − 7 = 2. On the clock: 5 → 6 → 0 → 1 → 2.", "Write this as 9 mod 7 = 2. mod simply means remainder."] },
@@ -93,6 +105,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
 
 export function conceptForTask(task: OrderTaskProjection): Concept {
   switch (task.kind) {
+    case "rps-duel": return "commit";
     case "homomorphic-sum": return "fhe";
     case "masked-total": return "mpc";
     case "zk-sudoku": return "zk";

@@ -454,6 +454,11 @@ export function buildClearingOp(
   prime: string,
 ): CryptoBattleOp | undefined {
   switch (contract.task.kind) {
+    case "rps-duel":
+      if (contract.task.myCommitment === undefined) return { kind: "rps-commit", contractId: contract.id, commitment: 13 };
+      if (contract.task.opponentCommitment !== undefined && contract.task.myOpening === undefined) return { kind: "rps-open", contractId: contract.id, hand: 1, randomness: 1 };
+      return undefined; // Waiting for the opponent is not a cleared Order.
+
     case "reveal-share":
       // A share Order may forbid raw disclosure, in which case PROVE is the
       // only way to clear it. Ask the Order rather than assuming LEAK.

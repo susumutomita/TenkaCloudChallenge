@@ -159,7 +159,12 @@ export interface StoredSudokuRevealArtifact extends StoredArtifactBase {
  * header. One variant per `PublicArtifact` kind, discriminated on `k` the
  * same way `PublicArtifact` discriminates on `kind`.
  */
+interface StoredRpsCommit extends StoredArtifactBase { readonly k: "rps-commit"; readonly du: string; readonly v: number }
+interface StoredRpsOpen extends StoredArtifactBase { readonly k: "rps-open"; readonly du: string; readonly v: number; readonly h: 1 | 2 | 3; readonly r: number }
+
 export type StoredArtifact =
+  | StoredRpsCommit
+  | StoredRpsOpen
   | StoredShareArtifact
   | StoredCipherPairArtifact
   | StoredProofArtifact
@@ -195,6 +200,8 @@ export type StoredArtifact =
  */
 function deriveArtifactId(stored: StoredArtifact): string {
   switch (stored.k) {
+    case "rps-commit": return `${stored.c}-rps-commit`;
+    case "rps-open": return `${stored.c}-rps-open`;
     case "share":
       return `${stored.c}-share${stored.i}`;
     case "cipher-pair":
@@ -232,6 +239,12 @@ export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
   };
   let withoutId: StoredArtifact;
   switch (artifact.kind) {
+    case "rps-commit":
+      withoutId = { ...base, k: artifact.kind, du: artifact.duelId, v: artifact.commitment };
+      break;
+    case "rps-open":
+      withoutId = { ...base, k: artifact.kind, du: artifact.duelId, v: artifact.commitment, h: artifact.hand, r: artifact.randomness };
+      break;
     case "share":
       withoutId = { ...base, k: "share", i: artifact.shareIndex, v: artifact.value };
       break;
@@ -287,6 +300,8 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
   const id = stored.d ?? deriveArtifactId(stored);
   const { tm: teamId, c: contractId, g: generation, m: method, t: postedAtMs } = stored;
   switch (stored.k) {
+    case "rps-commit": return { id, teamId, contractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v };
+    case "rps-open": return { id, teamId, contractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v, hand: stored.h, randomness: stored.r };
     case "share":
       return { id, kind: "share", teamId, contractId, generation, method, postedAtMs, shareIndex: stored.i, value: stored.v };
     case "cipher-pair":

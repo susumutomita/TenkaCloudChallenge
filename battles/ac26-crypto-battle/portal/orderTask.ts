@@ -28,6 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "rps-duel": return `rps vs ${task.opponentTeamId}`;
     case "reveal-share":
       return `shares[${task.shareIndices.join(",")}]`;
     case "homomorphic-sum":
@@ -47,6 +48,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
+    "rps-duel": "手を隠して、相手とじゃんけん",
     "reveal-share": "かけらを公開するか、秘密を守って証明する",
     "homomorphic-sum": "暗号文のまま足す",
     "masked-total": "覆面をかけた小計を出す",
@@ -60,6 +62,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "rps-duel": "Seal your hand, then play rock-paper-scissors",
     "reveal-share": "account for a share",
     "homomorphic-sum": "add without decrypting",
     "masked-total": "publish a masked subtotal",
@@ -80,6 +83,7 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "rps-duel": return locale === "ja" ? "① 数字を封じる → ② 両者が開く" : "1. Seal a number → 2. Both open";
     case "reveal-share":
       return `${locale === "ja" ? "かけら" : "share"} [${task.shareIndices.join(", ")}]`;
     case "homomorphic-sum":
@@ -113,6 +117,8 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
  */
 export function ledgerKindLabel(artifact: PublicArtifact): string {
   switch (artifact.kind) {
+    case "rps-commit": return "RPS / COMMIT";
+    case "rps-open": return "RPS / OPEN";
     case "share":
       return "share (LEAK)";
     case "proof":
@@ -141,6 +147,8 @@ const LEDGER_COPY = {
 export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string {
   const copy = LEDGER_COPY[locale];
   switch (artifact.kind) {
+    case "rps-commit": return `c = ${artifact.commitment}`;
+    case "rps-open": return `c = ${artifact.commitment} · ${locale === "ja" ? "手 m" : "hand m"} = ${artifact.hand} · ${locale === "ja" ? "隠す数 r" : "hiding number r"} = ${artifact.randomness}`;
     case "share":
       return `#${artifact.shareIndex} = ${artifact.value}`;
     case "proof":

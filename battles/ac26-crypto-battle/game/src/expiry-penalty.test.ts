@@ -153,9 +153,13 @@ describe("ROTATE cannot be used to void a batch for free", () => {
     state = applyOp(state, "teamA", { kind: "rotate" });
 
     expect(state.teams.teamA?.score).toBe(
-      Math.max(0, batch.length * DEFAULT_CONFIG.scores.expiredOrder),
+      Math.max(0, batch.filter(c => c.task.kind !== "rps-duel").length * DEFAULT_CONFIG.scores.expiredOrder),
     );
     for (const c of batch) {
+      if (c.task.kind === "rps-duel") {
+        expect(state.contracts.find(x => x.id === c.id)?.status).toBe("open");
+        continue; // ROTATE changes long-lived secrets, not a paired hand.
+      }
       const final = state.contracts.find((x) => x.id === c.id);
       expect(final?.status).toBe("expired");
       expect(final?.expiryCause).toBe("rotate");

@@ -73,6 +73,7 @@ interface ReplayEventBase {
 }
 
 export type ReplayEvent =
+  | (ReplayEventBase & { readonly kind: "rps-commit" | "rps-open"; readonly teamId: string; readonly detail: { readonly contractId: string; readonly generation: number } })
   | (ReplayEventBase & {
       readonly kind: "leak";
       readonly teamId: string;
@@ -191,6 +192,13 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
             en: `Team ${artifact.teamId} FHE order ${artifact.contractId} (generation ${artifact.generation}) -- added two ciphertexts without decrypting either`,
             ja: `${artifact.teamId} が FHE: order ${artifact.contractId} (世代 ${artifact.generation}) -- 復号せずに暗号文を足した`,
           },
+          detail: { contractId: artifact.contractId, generation: artifact.generation },
+        });
+        break;
+      case "rps-commit":
+      case "rps-open":
+        events.push({ atMs: artifact.postedAtMs, teamId: artifact.teamId, kind: artifact.kind,
+          summary: { ja: `${artifact.teamId} がじゃんけんの${artifact.kind === "rps-commit" ? "数字を封じた" : "手を開いた"}`, en: `${artifact.teamId} ${artifact.kind === "rps-commit" ? "sealed a number" : "opened a hand"}` },
           detail: { contractId: artifact.contractId, generation: artifact.generation },
         });
         break;

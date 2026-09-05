@@ -180,3 +180,23 @@ The release gate is the game/dev test and typecheck suites plus the browser harn
 - `portal/` — participant UI
 - `dev/` — local UI harness
 - `OPERATOR.md` — current operating boundary and checks
+
+## Seal a hand, then play rock-paper-scissors
+
+Choose hand m (1=rock, 2=scissors, 3=paper) and draw a fresh hiding number r
+uniformly from 0–10, including zero. Write both down. Read the remainders of 4^m and 9^r after division by 23 from the
+free on-screen tables, multiply, and enter the **remainder after division by 23**
+in Sealed number. For m=1, r=1: 4×9=36; 36−23=13.
+
+Once both numbers arrive, submit m and r using Give my opening to the judge.
+The judge verifies and publishes both openings together. Win +30, draw +10,
+loss 0. A mismatched opening can be corrected without a penalty; accepted
+commitments and openings cannot be replaced. Work on another Order while waiting.
+At the deadline, finishing your required stage earns a forfeit win; an outstanding
+required action gets the ordinary expiry penalty. ROTATE does not cancel a duel.
+
+This is a commit-reveal teaching model. Tiny numbers permit alternative openings;
+it has no practical binding security. Fairness trusts the judge to withhold both
+openings until simultaneous publication. Commit-reveal is not itself a
+zero-knowledge proof. Free stepwise explanations and optional fill-in practice
+connect the calculation to its purpose.
