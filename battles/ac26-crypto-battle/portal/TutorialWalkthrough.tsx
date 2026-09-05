@@ -36,18 +36,63 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
     },
   },
   {
+    topic: "sharing", answer: "2",
+    ja: {
+      title: "2 個見えても、秘密が決まらないようにする",
+      purpose: "あなたは秘密の数字を仲間に分けて持たせたい。でも、2 人分が相手に見えても秘密は守りたい。まず、3 個を全部足して 7 で割った余りを秘密にする例を見ます。別々に持つ数を『かけら』と呼びます。",
+      steps: ["見えているかけらは 1 と 2。3 個目はまだ見えません。", "3 個目が 3 なら、秘密は 1+2+3=6。3 個目が 6 なら、1+2+6=9、7 を引いて □。", "3 個目は 0〜6 のどれでもありえます。秘密の候補も 3・4・5・6・0・1・2 と、全部残ります。"],
+      question: "3 個目が 6 の場合の秘密", result: "秘密は 2 です。同じ 1 と 2 が見えていても、秘密が 6 の場合と 2 の場合がありました。足りないかけら次第で秘密が変わるので、2 個だけでは決められません。次は、5 個のうちどの 3 個からでも戻せる分け方へ進みます。", retry: "1+2+6=9。9 から 7 を引いてください。",
+    },
+    en: {
+      title: "Keep the secret undetermined when two pieces are visible",
+      purpose: "Share a secret number with teammates while keeping it hidden if two pieces become visible. First try a rule that adds all three pieces and keeps the remainder after division by 7. Each separately held number is a share.",
+      steps: ["The visible shares are 1 and 2. The third is hidden.", "If the third is 3, the secret is 1+2+3=6. If it is 6, the sum is 9. Subtract 7 to get □.", "The third share can be any of 0–6, leaving secrets 3,4,5,6,0,1,2: every candidate remains."],
+      question: "The secret when the third share is 6", result: "The secret is 2. The same visible shares 1 and 2 fit both secret 6 and secret 2, depending on the hidden share. Two pieces do not determine it. Next, a different construction lets any three of five pieces work.", retry: "1+2+6=9. Subtract 7.",
+    },
+  },
+  {
+    topic: "sharing", answer: "2",
+    ja: {
+      title: "どの 3 個でも戻せるよう、番号でかけらを作る",
+      purpose: "先ほどは 3 個全部が必要でした。5 人に配り、どの 3 人が集まっても戻せるようにするには、番号も使ってかけらを作ります。秘密を 1、内緒で選ぶ数を A=0、B=1 とした見本です。A と B は、毎回 0〜6 からそれぞれ同じ確率で選びます。",
+      steps: ["かけら = 秘密 + A×番号 + B×番号×番号 を計算し、7 で割った余りにします。#1 は番号 1、#2 は番号 2 という意味です。", "#1 は 1+0×1+1×1×1=2。#2 は 1+0×2+1×2×2=5。#3 は 1+0×3+1×3×3=10、7 を引いて 3。", "別の秘密でも同じかけらになるか確かめます。秘密 2、A=2、B=5 なら、#1 は 2+2+5=9。7 を引くと □。#2 も 2+4+20=26、7 を 3 回引いて 5 です。"],
+      question: "別の秘密 2 から作った #1 の値", result: "また 2 になりました。見えている #1=2、#2=5 は、秘密 1 にも 2 にも合います。\n実際には秘密 0〜6 のどれも可能です。条件に合う (秘密,A,B) は (0,5,4)、(1,0,1)、(2,2,5)、(3,4,2)、(4,6,6)、(5,1,3)、(6,3,0)。どれも上の式に入れると #1=2、#2=5 です。\nどの秘密にも A と B が 1 組ずつあるので、2 個では秘密を絞れません。次は 3 個目を加えて、秘密だけを取り出します。", retry: "9 から 7 を引いてください。同じ #1=2 が作れます。",
+    },
+    en: {
+      title: "Use indices so any three pieces can recover the secret",
+      purpose: "The addition example needed all three pieces. To distribute five pieces and let any three work, include each piece’s index. Example: secret 1 and private numbers A=0, B=1. Draw A and B independently and uniformly from 0–6 each time.",
+      steps: ["Share = secret + A×index + B×index×index, then remainder after division by 7. #1 has index 1, #2 index 2.", "#1: 1+0+1=2. #2: 1+0+4=5. #3: 1+0+9=10, minus 7 gives 3.", "Try another secret: secret 2, A=2, B=5. #1: 2+2+5=9, minus 7 gives □. #2: 2+4+20=26, minus 7 three times gives 5."],
+      question: "Share #1 made from the other secret 2", result: "Again 2. Visible shares #1=2, #2=5 fit both secrets 1 and 2. Every secret 0–6 is possible: matching (secret,A,B) triples are (0,5,4), (1,0,1), (2,2,5), (3,4,2), (4,6,6), (5,1,3), (6,3,0). Substituting any triple gives the same two shares. Each secret has one matching pair of private numbers, so two shares do not narrow the secret. Next, add the third piece and isolate the secret.", retry: "Subtract 7 from 9 to get #1=2 again.",
+    },
+  },
+  {
     topic: "sharing", answer: "1",
     ja: {
       title: "3 個のかけらから、秘密の数字を戻す",
-      purpose: "秘密分散は、秘密を複数の数にして別々に持つ方法です。この見本では秘密 1 に『番号 × 番号』を足し、7 で割った余りをかけらにします。#1 は 2、#2 は 5、#3 は 3 になります。",
-      steps: ["番号 #1・#2・#3 のかけらを戻す式は、3 × #1 − 3 × #2 + #3 です。この係数は、この 3 つの番号用です。", "値を入れると 3 × 2 − 3 × 5 + 3 = 6 − 15 + 3 = −6。", "マイナスになったので 7 を足します。−6 + 7 = □。"],
-      question: "復元した秘密の数字", result: "秘密の 1 に戻りました。LEAK はかけらを公開する操作です。同じ秘密の異なるかけらが必要な数だけそろうと、相手がこのように秘密を戻せます。戻した秘密で得点する攻撃を HUNT と呼びます。2 個では決められない理由は、下の解説で追えます。", retry: "−6 に 7 を足すと、0 を 1 つ超えます。",
+      purpose: "前の見本で作った #1=2、#2=5、#3=3 を使い、隠していた秘密を戻します。この番号の組なら『#1 を 3 倍、#2 を 3 倍して引き、#3 を足す』と、内緒で選んだ A と B が消えます。",
+      steps: ["秘密 = 3×#1 − 3×#2 + #3。数字を入れると 3×2 − 3×5 + 3 = 6−15+3 = −6。", "なぜ戻る？ 各かけらに入っている秘密は 3−3+1=1 個分残ります。A の倍数は 3×1−3×2+3=0。B の倍数も 3×1−3×4+9=0。内緒の数に掛かる数が 0 なので消え、秘密だけが残ります。", "計算結果の −6 は負なので、7 を足して 0〜6 に戻します。−6+7=□。"],
+      question: "復元した秘密の数字", result: "元の秘密 1 に戻りました。これが復元です。3 倍・−3 倍・1 倍という組は #1・#2・#3 専用です。別の番号から戻すときは、その番号に合う式を使います。次は、この計算が相手にもできると何が起きるかを見ます。", retry: "−6 に 7 を足すと、0 を 1 つ超えます。",
     },
     en: {
       title: "Recover a secret number from three shares",
-      purpose: "Secret sharing splits a secret into numbers held separately. This example adds index × index to secret 1 and takes the remainder after division by 7. Shares #1, #2, #3 are 2, 5, 3.",
-      steps: ["For indices #1, #2, #3, recover using 3 × #1 − 3 × #2 + #3. These coefficients belong to these three indices.", "Insert the values: 3 × 2 − 3 × 5 + 3 = 6 − 15 + 3 = −6.", "It is negative, so add 7: −6 + 7 = □."],
-      question: "The recovered secret", result: "The secret is 1 again. LEAK publishes a share. Enough distinct shares of the same secret let an opponent recover it and score with an attack called HUNT. The explanation below shows why two shares do not determine it.", retry: "Add 7 to −6: you pass zero by one.",
+      purpose: "Use #1=2, #2=5, #3=3 from the previous example to recover the secret. For these indices, three times #1 minus three times #2 plus #3 cancels the private A and B.",
+      steps: ["Secret = 3×#1 − 3×#2 + #3 = 3×2 − 3×5 + 3 = 6−15+3 = −6.", "Why? The secret remains 3−3+1=1 time. A’s multiplier is 3×1−3×2+3=0; B’s is 3×1−3×4+9=0. The private-number terms vanish and only the secret remains.", "Add 7 to the negative result: −6+7=□."],
+      question: "The recovered secret", result: "The original secret 1 is back. The multipliers 3, −3, 1 belong to indices #1, #2, #3; other indices need their own formula. Next, see what happens when an opponent can do this calculation too.", retry: "Add 7 to −6: you pass zero by one.",
+    },
+  },
+  {
+    topic: "sharing", answer: "2",
+    ja: {
+      title: "公開すると、相手に材料を渡すことになる",
+      purpose: "かけらを公開してすぐ得点する操作が LEAK です。公開した数は、みんなが読める公開記録（PUBLIC LEDGER）へ残ります。相手は前の場面の式を使えるので、公開する個数が大事になります。",
+      steps: ["『同じ秘密から作った一組』を世代と呼びます。この例は同じ世代の異なる番号が 3 個で秘密を戻せる設定です。", "#1、#2、もう一度 #1 を公開しました。違う番号は何個ありますか。", "危険度の丸は公開操作の回数ではなく、同じ世代の異なる番号の個数を表します。"],
+      question: "公開済みの異なる番号の個数", result: "2 個です。#1 を再び出しても増えません。#3 も出すと 3 個になり、相手が秘密を戻して得点する HUNT（秘密を読み解く攻撃）に使えます。ROTATE（秘密を作り直す操作）をすると新しい世代になります。古いかけらと新しいかけらは混ぜて使えません。", retry: "番号は #1 と #2 です。重複した #1 をもう一度数えないでください。",
+    },
+    en: {
+      title: "Publishing gives an opponent evidence",
+      purpose: "LEAK publishes a share to score immediately. Everyone can read it in the PUBLIC LEDGER. An opponent can use the reconstruction formula from the previous scene, so the number of exposed shares matters.",
+      steps: ["A generation is a set made from the same secret. This example requires three distinct indices in one generation.", "Publish #1, #2, then #1 again. How many different indices are visible?", "Exposure circles count distinct indices in one generation, not how many times you clicked publish."],
+      question: "The number of distinct public indices", result: "Two. Repeating #1 adds no new index. Publishing #3 would allow recovery and HUNT, an attack that scores by recovering the secret. ROTATE makes a new secret and generation; old and new shares cannot be mixed.", retry: "The distinct indices are #1 and #2. Count #1 only once.",
     },
   },
   {
@@ -99,7 +144,7 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
     topic: "caesar", answer: "1",
     ja: {
       title: "数字をずらして、暗号を作る",
-      purpose: "最後は、暗号を作る操作です。0〜5 の数字を輪のように並べ、決めた数だけ先へずらします。このずらす数が『鍵』です。",
+      purpose: "次は、暗号を作る操作です。0〜5 の数字を輪のように並べ、決めた数だけ先へずらします。このずらす数が『鍵』です。",
       steps: ["鍵は 3、元の数字は 4。まず 4 + 3 = 7。", "使う数字は 0〜5 なので、6 に達したら先頭へ戻ります。", "7 − 6 = □。これが暗号にした数字です。"],
       question: "4 を鍵 3 で暗号にした数字", result: "暗号にした数字は 1。これをシーザー暗号と呼びます。逆に 1−4=−3、6 を足すと鍵の 3 を求められます。元と暗号の組を公開すると、相手に鍵を復元される理由です。本番では『計算して答える』と『公開してすぐ答える（LEAK）』の得点・公開リスクを見て選びます。", retry: "7 から 6 を引いてください。",
     },
@@ -142,14 +187,14 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
   const copy = step[locale];
   const move = (next: number) => { setIndex(next); setAnswer(""); setVerdict(null); };
   if (!visible) return <div aria-label="crypto-battle-tutorial-collapsed">
-    <button type="button" aria-expanded={false} style={buttonStyle} onClick={() => setVisible(true)}>{locale === "ja" ? "練習する（任意）" : "Practice (optional)"}</button>
+    <button type="button" aria-expanded={false} style={buttonStyle} onClick={() => setVisible(true)}>{locale === "ja" ? "順番に解説を読む（任意）" : "Read the guided explanation (optional)"}</button>
   </div>;
   return <section aria-label="crypto-battle-tutorial" style={{ border: "1px solid #b4c5da", borderRadius: 10, padding: 18, color: "#16212e", background: "#fff", marginTop: 10 }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-      <strong>{locale === "ja" ? "小さい数字で、暗号の計算を練習する" : "Practice cryptography with small numbers"}</strong>
-      <button type="button" style={buttonStyle} aria-expanded={true} onClick={() => setVisible(false)}>{locale === "ja" ? "練習を閉じる" : "Close practice"}</button>
+      <strong>{locale === "ja" ? "暗号のしくみを、一つずつ追う" : "Follow the cryptography, one scene at a time"}</strong>
+      <button type="button" style={buttonStyle} aria-expanded={true} onClick={() => setVisible(false)}>{locale === "ja" ? "解説を閉じる" : "Close explanation"}</button>
     </div>
-    <p style={{ fontSize: 12, color: "#526277" }}>{locale === "ja" ? "1 回に埋めるのは数字 1 つ。計算したあとに、その計算を使う理由を確かめます。本番の得点には影響しません。" : "Fill one digit at a time, then see why that calculation is useful. Practice does not affect your match score."}</p>
+    <p style={{ fontSize: 12, color: "#526277" }}>{locale === "ja" ? "数字を小さくした見本です。読むだけでも進めます。手で確かめたいときは空欄を 1 つ埋めてください。本番の得点には影響しません。" : "These are small fixed examples. Read straight through, or fill one hole to check your understanding. This does not affect your match score."}</p>
     <p style={{ fontSize: 12, color: "#315f91" }}>{index + 1} / {PRACTICE_STEPS.length}</p>
     <h3 style={{ fontSize: 19, margin: "8px 0" }}>{copy.title}</h3>
     <p style={{ fontSize: 14, lineHeight: 1.8 }}>{copy.purpose}</p>
@@ -163,13 +208,14 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
     </form>
     <div aria-live="polite" style={{ fontSize: 14, lineHeight: 1.8 }}>
       {verdict === "wrong" && <p style={{ color: "#a33223" }}>{copy.retry}</p>}
-      {verdict === "correct" && <div style={{ marginTop: 14, padding: 14, background: "#edf7f0", borderRadius: 8 }}><strong>{locale === "ja" ? "正解。何ができた？" : "Correct. What did you achieve?"}</strong><p style={{ margin: "6px 0 0", whiteSpace: "pre-line" }}>{copy.result}</p></div>}
+      <button type="button" style={{ ...buttonStyle, marginTop: 10 }} onClick={() => setVerdict("correct")}>{locale === "ja" ? "計算の結果と理由を読む" : "Read the result and why it works"}</button>
+      {verdict === "correct" && <div style={{ marginTop: 14, padding: 14, background: "#edf7f0", borderRadius: 8 }}><strong>{locale === "ja" ? "この計算で、何が分かった？" : "What did this calculation show?"}</strong><p style={{ margin: "6px 0 0", whiteSpace: "pre-line" }}>{copy.result}</p></div>}
     </div>
     <div style={{ display: "flex", gap: 8, margin: "14px 0", flexWrap: "wrap" }}>
-      {index > 0 && <button type="button" style={buttonStyle} onClick={() => move(index - 1)}>{locale === "ja" ? "前の計算へ" : "Previous calculation"}</button>}
-      {verdict === "correct" && (index + 1 < PRACTICE_STEPS.length
-        ? <button type="button" style={buttonStyle} onClick={() => move(index + 1)}>{locale === "ja" ? "次の計算へ" : "Next calculation"}</button>
-        : <button type="button" style={buttonStyle} onClick={() => { setVisible(false); move(0); }}>{locale === "ja" ? "練習を終えて、お題へ戻る" : "Finish practice and return to the Order"}</button>)}
+      {index > 0 && <button type="button" style={buttonStyle} onClick={() => move(index - 1)}>{locale === "ja" ? "前の場面へ" : "Previous scene"}</button>}
+      {index + 1 < PRACTICE_STEPS.length
+        ? <button type="button" style={buttonStyle} onClick={() => move(index + 1)}>{locale === "ja" ? "次の場面へ" : "Next scene"}</button>
+        : <button type="button" style={buttonStyle} onClick={() => { setVisible(false); move(0); }}>{locale === "ja" ? "解説を閉じて、お題へ戻る" : "Close the explanation and return to the Order"}</button>}
     </div>
     <ConceptExplanation key={step.topic} topic={step.topic} locale={locale} />
   </section>;

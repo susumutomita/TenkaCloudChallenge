@@ -77,7 +77,7 @@ not during one.
 The default surface is deliberately staged:
 
 1. read the always-visible problem explanation above the board; the compact
-   “Practice (optional)” control opens a walkthrough only on request;
+   “Read the guided explanation (optional)” control opens a walkthrough only on request;
 2. pick one ORDER and choose the action it accepts;
 3. for sudoku PROVE, select a relabelling table and fill four holes beside
    twelve worked cells; all four digit substitutions are exercised once;
@@ -87,12 +87,16 @@ The tutorial starts collapsed on every visit, including the waiting room. It
 never gates or automatically interrupts play, and can be closed in place. It
 uses only fixed practice data; changing team or deployment resets practice.
 
-Optional practice now uses six one-digit fill-ins: remainder, share recovery,
-MPC, ZK, FHE, Caesar. Each answer is checked locally and followed by the reason
-for the calculation. There is no practice score, fake Contract, or fake Ledger.
+The optional explanation has ten scenes: remainder, additive sharing, indexed
+sharing, reconstruction, exposure, MPC, ZK, FHE, Caesar, commit-reveal. Each
+scene can be read without answering; Next is never gated by correctness. An
+optional one-digit field checks understanding, and a separate control shows
+the fixed result and reason. There is no practice score, fake Contract, or
+fake Ledger. The numbered sharing example explains the candidate secrets and
+why the private-number terms cancel without requiring a second disclosure.
 
 Free concept explanations are separate from practice. They start as compact
-controls in the top rules disclosure and beside each calculation form, use fixed one-digit
+controls in the top topic disclosure and beside each calculation form, use fixed one-digit
 examples, and show unsolved expressions from only the current team's projected
 Order operands. No hint purchase or tutorial completion is needed. FHE is
 labelled an addition model with separate per-input keys; the ZK explanation
