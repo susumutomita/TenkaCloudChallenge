@@ -1234,8 +1234,17 @@ export function validateOp(
       // not left to throw out of `mod()` / `BigInt()` uncaught. A value that
       // does not parse is not an attempt: nothing was guessed, so nothing is
       // charged and no budget is spent.
-      if (parseCanonicalDecimal(op.recoveredSecret) === undefined) {
+      const recoveredSecret = parseCanonicalDecimal(op.recoveredSecret);
+      if (recoveredSecret === undefined) {
         return { ok: false, error: "recoveredSecret must be a canonical, length-bounded decimal integer" };
+      }
+      // Match FHE/MPC's remainder rule. An unreduced value is a format error,
+      // not a wrong guess: refuse it before applyHunt can charge an attempt.
+      if (recoveredSecret >= BigInt(state.config.prime)) {
+        return {
+          ok: false,
+          error: "recoveredSecret must already be reduced -- take the remainder after dividing by the modulus",
+        };
       }
       return { ok: true };
     }

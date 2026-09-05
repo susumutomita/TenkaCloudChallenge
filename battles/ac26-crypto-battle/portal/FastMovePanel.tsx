@@ -1069,8 +1069,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [huntCells, setHuntCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
   // [Issue #645] One box per component of an FHE answer, one for an MPC
-  // subtotal. Kept as strings all the way to the op: these are 19-digit field
-  // elements, and Number() would silently round them.
+  // subtotal. Keep decimal strings through the wire boundary: the default
+  // field is 97, but a configured larger field must not be rounded by Number().
   const [fheR, setFheR] = useState("");
   const [fheY, setFheY] = useState("");
   const [mpcPartial, setMpcPartial] = useState("");

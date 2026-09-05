@@ -349,10 +349,9 @@ export function Vault({ projection, locale }: { readonly projection: CryptoBattl
     /*
       [Issue #659] Collapsed by default.
       
-      Five 19-digit numbers took a third of the board while being the thing a
-      player looks at least — they matter when building a PROVE, and not
-      otherwise. The generation stays visible, because ROTATE changes it and
-      that IS worth noticing; the share values are one click away.
+      Keep the private share list one click away so it does not crowd out
+      the selected Order. The generation stays visible because ROTATE changes
+      it. Matches default to two-digit shares; the configured field may differ.
     */
     <section className="tc-game-card">
       <details className="tc-vault-details">
