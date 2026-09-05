@@ -1,0 +1,422 @@
+{
+  "id": "ac26-w6-cosnark-drill",
+  "name": "二人で分担して、秘密の数を掛ける",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 605,
+    "chapter": "Week 6 / Drill: co-SNARK on shares"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 6,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+        "path": "week6/README.md",
+        "kind": "lecture"
+      },
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+        "path": "week6/problems/co-snark-prove/README.md",
+        "kind": "assignment"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "40-60 分",
+  "shortDescription": "二人のかけらを使って、足し算と掛け算を分担します。「証拠を確認」で自分の数を読み、短い式を順に試して8個の回答欄を埋めます。",
+  "description": "Week 6 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 14 行繰り返して、co-SNARK の核 — witness を一度も戻さずに、線形結合は share のまま各自ローカルに計算し、secret × secret の掛け算 1 回だけ Beaver triple で通信して証明 (A, B, C) を組む — を自分の手で出す。道筋: witness を見る → w[0], w[1] を 2 人に分ける（share）→ reconstruct（戻す）→ share 1 枚は秘密を語らない → 線形結合 A を share のまま計算 → 戻した A と直接計算した A の一致 → 線形結合 B → share ごとの掛け算では正解にならない（交差項が消える）→ Beaver triple の確認 → d, e の開示（唯一の通信）→ C の share 計算 → C の復元 → 展開公式での種明かし（なぜ合うのか）→ d から A は絞れないことの確認（なぜ漏れないのか）。\n\n課題 `week6/problems/co-snark-prove/README.md` の `linear_combination_shares`（5 行目）/ `mpc_prove`（5・7・11 行目）への対応を statement 本文に明記する。\n\n数は FLAG_SEED 由来。課題の数値例（modulus 97, witness [3, 5], 係数 [1, 2] / [4, 1]）と `python/tests/public.py` の全組（modulus 101 / 89, 3-wire witness 2 組、Beaver (a, b) = (5, 9) / (4, 20) / (3, 6)）は生成から除外してある。除外は `fixtures/generate.py` の `EXCLUDED_PRIMES` / `EXCLUDED_WITNESS` / `EXCLUDED_BEAVER_AB` に定数として明示し、docstring に出典を書く（independent-reimplementation）。\n\n14 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄のない 6 行（witness, reconstruct, noleak, triple, expand, nolink）は見るだけ・答え合わせ・Beaver の下ごしらえ・種明かしで、statement がその場で説明する。fixtures/generate.py は expected を public と同じ関数で導くため participant image には載せず（Issue 537/543 option B2）、公開値は verifier の GET /public から配る。",
+  "instructions": "## 前提\n\n二人が元の数を集めず、決められた掛け算・足し算を分担する練習です。最後に、その二つの結果 A と B の積 C を作ります。\n\n**最初の操作：**「証拠を確認」を押し、出た代入文を `python3` に貼ってください。下の行を順に実行し、回答欄がある8行では出た数を提出します。正解になることが各行のゴールです。\n\nPythonを開けない場合は、エディタの `co_snark_drill.py` を使います。各関数の `return None` を、その行のコード全体に置き換え、最後の式の前に `return` を付けます。前段を使う名前は関数内に用意済みです。上から順に埋めて「公開テストを実行」すると、自分の値が表示されます。\n\n**この画面は二人分を見渡す見学席です。** w・a・b全体や、答え合わせ用に戻したA・Bも見えます。実際の二人が知るのは自分の列だけです。これは秘密を分けたまま計算する MPC（秘密計算）の模型で、計算の正しさを短い証明で示す SNARK そのものを作る問題ではありません。複数人でSNARKの生成を分担する co-SNARK の中の、掛け算・足し算の部分を取り出しています。\n\n使う名前：`w` は元の二つの秘密の数（証明に使う秘密の入力を witness とも呼びます）。`ca,cb` は掛ける数の組（係数）。`p` は割る数です。`x % p` は「xをpで割った余り」で、0〜p−1に収めます。例：`9 % 7 = 2`、`-1 % 7 = 6`。`sum` は合計、`range(2)` は0と1、`[i]` は並んだ値の0番目・1番目を選びます。w0,w1,A_shなどのかけらの組では、その位置が人番号です。`//` は割り算の整数部分です。\n\n**かけら（share）**は、二人分を足した余りで元の数に戻せる数です。隠すための数（乱数）は、秘密とは無関係に0〜p−1を同じ確率で選ぶのが仕組みの前提です。この教材の値は再現可能な練習用で、本物の秘密を守りません。0や同じ値もあり、答えが入力の数と偶然一致することもあります。\n\n| 持ち物 | 人0 | 人1 |\n| --- | --- | --- |\n| w[0] のかけら | w0[0] | w0[1] |\n| w[1] のかけら | w1[0] | w1[1] |\n\n**一桁の見本（提出するのは自分の画面の数）：** p=7、w=[2,3]、r0=1、r1=2、ca=[1,2]、cb=[2,1]、a=4、b=5、ra=1、rb=3、rc=2。以下のヒントではこの同じ見本を使います。\n\n### 1. 二人分を見渡す\n\n```python\np, tuple(w)\n```\n\n先頭は割る数p、その次のかっこ内の二つが秘密の数wです。あなたは見学者として全体を見ます。\n\n### 2. 秘密の数を二人に分ける（回答欄あり）\n\n```python\nw0 = [r0, (w[0]-r0)%p]; w1 = [r1, (w[1]-r1)%p]\nw0[1], w1[1]\n```\n\n人0は w0[0], w1[0]、人1は w0[1], w1[1] を持ちます。w0全体を一人に渡しません。\n\n### 3. 答え合わせ用に戻す\n\n```python\nsum(w0)%p, sum(w1)%p\n```\n\nこれは見学者の答え合わせ。実際の二人が元の数を集める操作ではありません。\n\n### 4. 一人分から残る候補を見る\n\n```python\n[(r0, (s-r0)%p) for s in (w[0], p//2, p-1)]\n```\n\n一つ目のかけらは r0 のままでも、二つ目を変えると別の秘密になります。\n\n### 5. 掛けて足す計算Aを分担する（回答欄あり）\n\n```python\nA_sh = [(ca[0]*w0[i]+ca[1]*w1[i])%p for i in range(2)]\nA_sh\n```\n\nca の二つの数をそれぞれ掛けて足します。この形を線形結合と呼びます。人0と人1は自分の列だけで計算できます。\n\n### 6. 二つの方法でAを確かめる（回答欄あり）\n\n```python\nA = sum(A_sh)%p\nA, (ca[0]*w[0]+ca[1]*w[1])%p\n```\n\n二つの値が同じなら、分担しても同じ結果です。ここでもAを戻すのは見学者の答え合わせです。\n\n### 7. 別の掛け方でBも作る（回答欄あり）\n\n```python\nB_sh = [(cb[0]*w0[i]+cb[1]*w1[i])%p for i in range(2)]\nB = sum(B_sh)%p\nB_sh[0], B_sh[1], B\n```\n\nAの ca を cb に替えます。Bを戻す表示も見学者用です。\n\n### 8. そのまま掛けると何が抜けるか（回答欄あり）\n\n```python\n(A_sh[0]*B_sh[0]+A_sh[1]*B_sh[1])%p, (A*B)%p\n```\n\n展開に必要な A_sh[0]*B_sh[1] と A_sh[1]*B_sh[0] が左側にはありません。この二項を交差項と呼びます。余りが0なら偶然一致するため、一致してもこの方法がいつも正しいとは言えません。\n\n### 9. 掛け算のための材料を用意する\n\n```python\na_sh = [ra, (a-ra)%p]; b_sh = [rb, (b-rb)%p]\nc_sh = [rc, (a*b-rc)%p]\nsum(a_sh)%p, sum(b_sh)%p, sum(c_sh)%p, (a*b)%p\n```\n\na,b とその積の余り c の三つ組を Beaver triple と呼びます。事前に別の準備役が各人へ自分の列だけを渡す想定です。a,b全体を二人に教える想定ではありません。\n\n### 10. 差のかけらだけを送り合う（回答欄あり）\n\n```python\nd_sh = [(A_sh[i]-a_sh[i])%p for i in range(2)]\ne_sh = [(B_sh[i]-b_sh[i])%p for i in range(2)]\nd, e = sum(d_sh)%p, sum(e_sh)%p\nd, e\n```\n\n二人が送り合うのは d_sh[i], e_sh[i] です。足してd,eを共有します。元のA,Bやそのかけらを集める必要はありません。\n\n### 11. 積Cのかけらを組み立てる（回答欄あり）\n\n```python\nz = [(c_sh[i]+d*b_sh[i]+e*a_sh[i])%p for i in range(2)]\nz[0] = (z[0]+d*e)%p\nz\n```\n\nd*eを足すのは人0だけ。二人とも足すと二重計上です。最後の加算後にも余りを取ります。\n\n### 12. 積Cを受け取る（回答欄あり）\n\n```python\nsum(z)%p\n```\n\nこれが二人で求めた積です。8行目の右側 A*B の余りと比べてください。\n\n### 13. 正しくなる理由を展開する\n\n```python\n(d*e+d*b+e*a+a*b)%p\n```\n\nA=(d+a)%p、B=(e+b)%p です。普通の展開式 (d+a)*(e+b)=d*e+d*b+e*a+a*b の四項を足してpで割った余りが、11行目の二人分を足した余りと一致します。\n\n### 14. dだけを見た人に何が残るか\n\n```python\n[(cand, (cand-d)%p) for cand in (A, (A+p//3)%p, (A+2*(p//3))%p)]\n```\n\n各組は「Aの候補、その場合のa」です。aを知らない人には別の候補が残ります。aを画面で見ている学習者はAを戻せるので、その人への秘匿は主張していません。\n",
+  "writeup": "A=(d+a)%p、B=(e+b)%p。積を展開してpで割った余りは、(d*e+d*b+e*a+a*b)%p。Cのかけらを足すと同じ四項になるのが仕組みです。見学者用のA/Bの復元は、二人が行う差の共有とは別です。かけら同士の積だけでは交差項が抜け、偶然一致しても一般には使えません。",
+  "tags": [
+    "advanced-cryptography-2026",
+    "week6",
+    "drill",
+    "co-snark",
+    "secret-sharing",
+    "beaver-triple",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18163,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "かけらの配り方と、誰がどの数を知るかを説明する",
+    "掛けて足す計算を各人のかけらで分担する",
+    "掛け算で抜ける二項を見つける",
+    "差のかけらを共有し、積のかけらを作る",
+    "展開公式で結果が正しい理由を確かめる"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18163/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "shares",
+        "label": "秘密の数を二人に分ける",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "shares-hint-1",
+            "content": "秘密の数は、二人分のかけらを足した余りで戻します。一人のかけらが同じでも、もう一人の分を変えると別の秘密になります。",
+            "penalty": 2
+          },
+          {
+            "id": "shares-hint-2",
+            "content": "秘密2、隠す数1、割る数7なら、二つ目は(2−1)の余り=1。秘密3、隠す数2なら同じく1。二人分は[1,1]と[2,1]です。",
+            "penalty": 2
+          },
+          {
+            "id": "shares-hint-3",
+            "content": "証拠のw[0]からr0を引き、pで割った余りを取る。次にw[1]からr1を引いて同じ処理。負ならpを足す。この順で二つを回答欄sharesへ書きます。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "ashares",
+        "label": "掛けて足す計算Aを分担する",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "ashares-hint-1",
+            "content": "Aは二つの元の数へ決めた数を掛けて足す計算です。人ごとに同じ計算をすると、結果も二人分のかけらになります。",
+            "penalty": 2
+          },
+          {
+            "id": "ashares-hint-2",
+            "content": "見本のca=[1,2]。人0は(1×1+2×2)%7=5、人1は(1×1+2×1)%7=3。A_sh=[5,3]。",
+            "penalty": 2
+          },
+          {
+            "id": "ashares-hint-3",
+            "content": "自分のw0,w1,caを見る。人0はca[0]×w0[0]+ca[1]×w1[0]の余り、人1は添字を1にして同じ計算。pで割った二つの余りをasharesへ書きます。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "aopen",
+        "label": "二つの方法でAを確かめる",
+        "points": 20,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "aopen-hint-1",
+            "content": "分担した結果を足した値と、元の数から直接計算した値を比べます。二つが一致すれば、足し算を分担できたと確かめられます。",
+            "penalty": 2
+          },
+          {
+            "id": "aopen-hint-2",
+            "content": "見本は(5+3)%7=1。直接の計算も(1×2+2×3)%7=1。提出の形は(1,1)。",
+            "penalty": 2
+          },
+          {
+            "id": "aopen-hint-3",
+            "content": "自分のA_sh[0]+A_sh[1]の余りを求める。次にca[0]×w[0]+ca[1]×w[1]の余り。割る数は両方pです。この順で二つをaopenへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "bshares",
+        "label": "別の掛け方でBも作る",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "bshares-hint-1",
+            "content": "積を作るにはAのほかにBが要ります。Bも、掛ける数を替えた同じ足し算なので、各人が自分のかけらで計算できます。",
+            "penalty": 2
+          },
+          {
+            "id": "bshares-hint-2",
+            "content": "見本のcb=[2,1]。人0は(2×1+1×2)%7=4、人1は(2×1+1×1)%7=3。B=(4+3)%7=0。形は(4,3,0)。",
+            "penalty": 2
+          },
+          {
+            "id": "bshares-hint-3",
+            "content": "自分のcbを使い、人0はcb[0]×w0[0]+cb[1]×w1[0]の余り、人1は添字1で計算。最後にこの二つを足した余り。すべてpで割り、三つをbsharesへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "crossmul",
+        "label": "そのまま掛けると何が抜けるか",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "crossmul-hint-1",
+            "content": "同じ人のかけら同士を掛けるだけでは、別の人どうしを掛ける二項が抜けます。抜けた項の余りが0のときだけ偶然一致します。",
+            "penalty": 2
+          },
+          {
+            "id": "crossmul-hint-2",
+            "content": "見本の左は(5×4+3×3)%7=29%7=1。右は1×0=0。抜けた項は5×3と3×4で、合計27の余り6を左に足すと0になります。",
+            "penalty": 2
+          },
+          {
+            "id": "crossmul-hint-3",
+            "content": "左はA_sh[0]×B_sh[0]+A_sh[1]×B_sh[1]をpで割った余り。右はA×Bの余り。自分の二つの結果をcrossmulへ。一致した場合も実際の二つの値を書きます。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "beaveropen",
+        "label": "差のかけらだけを送り合う",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "beaveropen-hint-1",
+            "content": "二人は元のA,Bを送りません。事前の材料を引いた差のかけらだけを送り、足してd,eを共有します。材料の全体を知らない相手には元の数は決まりません。",
+            "penalty": 2
+          },
+          {
+            "id": "beaveropen-hint-2",
+            "content": "見本のa_sh=[1,3],b_sh=[3,2]。d_sh=[(5−1)%7,(3−3)%7]=[4,0]なのでd=4。e_sh=[(4−3)%7,(3−2)%7]=[1,1]なのでe=2。",
+            "penalty": 2
+          },
+          {
+            "id": "beaveropen-hint-3",
+            "content": "人i=0,1ごとに(A_sh[i]−a_sh[i])をpで割った余りと、(B_sh[i]−b_sh[i])の余りを出す。前者の二人分を足した余りがd、後者がe。この順でbeaveropenへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "cshares",
+        "label": "積Cのかけらを組み立てる",
+        "points": 30,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "cshares-hint-1",
+            "content": "各人は事前に持つ積のかけらへ、共有したd,eを使う補正を足します。二人分を足したとき積になるよう、最後のd×eは人0だけに足します。",
+            "penalty": 2
+          },
+          {
+            "id": "cshares-hint-2",
+            "content": "見本のc_sh=[2,4],d=4,e=2。人0は(2+4×3+2×1+4×2)%7=24%7=3。人1は(4+4×2+2×3)%7=18%7=4。z=[3,4]。",
+            "penalty": 2
+          },
+          {
+            "id": "cshares-hint-3",
+            "content": "自分の人0の値はc_sh[0]+d×b_sh[0]+e×a_sh[0]+d×eをpで割った余り。人1はc_sh[1]+d×b_sh[1]+e×a_sh[1]の余り。最後の加算後も余りを取って、二つをcsharesへ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "csum",
+        "label": "積Cを受け取る",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "csum-hint-1",
+            "content": "出来たかけらを足すと、欲しかった積Cになります。かけらのまま作った結果が元の数での掛け算と合うことを確かめます。",
+            "penalty": 2
+          },
+          {
+            "id": "csum-hint-2",
+            "content": "見本はz=[3,4]。C=(3+4)%7=0。元の積A×B=1×0=0と一致します。",
+            "penalty": 2
+          },
+          {
+            "id": "csum-hint-3",
+            "content": "自分が11行目で作ったz[0]とz[1]を足し、pで割った余りを求める。その一つの数をcsumへ。8行目の右側と同じなら計算がつながっています。",
+            "penalty": 2
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Multiply shared secrets together",
+      "shortDescription": "Split addition and multiplication across two people’s shares. Read your numbers in Inspect evidence, try the short expressions, and complete eight answer fields.",
+      "description": "A Week 6 drill. Not a write-a-function problem: you type one line, paste the value it prints, fourteen times, and produce the core of a co-SNARK — from a witness that is never put back together, linear combinations computed on shares alone by each party locally, and one secret-times-secret multiplication resolved through a single round of communication with a Beaver triple, to build the proof (A, B, C). The path: look at the witness -> split w[0], w[1] between two parties (a share) -> reconstruct -> a single share reveals nothing -> linear form A computed on shares -> the opened A agrees with the directly computed A -> linear form B -> the share-wise product is NOT the right answer (the cross terms vanish) -> confirm the Beaver triple -> open d, e (the one round of communication) -> compute C's shares -> open C -> the reveal via a textbook identity (why it agrees) -> confirm d never narrows down A (why nothing leaks).\n\nThe correspondence with the assignment `week6/problems/co-snark-prove/README.md`'s `linear_combination_shares` (line 5) and `mpc_prove` (lines 5, 7, 11) is stated in the statement itself.\n\nThe numbers are seed-derived from FLAG_SEED. The assignment's own worked example (modulus 97, witness [3, 5], coefficients [1, 2] / [4, 1]) and every pair drawn from `python/tests/public.py` (modulus 101 / 89, two 3-wire witnesses, Beaver (a, b) = (5, 9) / (4, 20) / (3, 6)) are excluded from generation. The exclusion lives as named constants in `fixtures/generate.py` (`EXCLUDED_PRIMES` / `EXCLUDED_WITNESS` / `EXCLUDED_BEAVER_AB`), with a docstring citing the source (independent-reimplementation).\n\nEight of the fourteen lines have an answer field (the platform's per-problem maximum). The six ungraded lines (witness, reconstruct, noleak, triple, expand, nolink) are a look-only step, a cross-check, Beaver bookkeeping, or the closing reveal, and the statement explains them in place. fixtures/generate.py derives the expected values in the same function as the public ones, so it does not ship in the participant image (Issue 537/543 option B2); the public half is served by the verifier's GET /public.",
+      "instructions": "## Before you start\n\nTwo people split a calculation without collecting the original numbers. They compute A and B, then shares of their product C.\n\n**Start:** press “Inspect evidence”, then paste the assignments into `python3`. Run the rows below in order. For the eight rows with answer fields, submit the values you produce; an accepted answer finishes that row.\n\nWithout Python, use `co_snark_drill.py` in the editor. Replace each `return None` with the row’s whole code block and put `return` before its final expression. Preceding names are prepared in each function. Complete the functions in order and press “Run public tests” to see your values.\n\n**You observe both people.** The screen shows full w, a, b and observer checks that reconstruct A and B. Each actual person would see only their own column. This models MPC (multi-party computation): computing on shared secrets. It is not a complete SNARK, a short proof of a computation’s correctness. It isolates arithmetic used when several people jointly generate such a proof, called co-SNARK.\n\nNames: `w` holds the two secret inputs (a secret input to a proof is also called a witness). `ca,cb` hold the multipliers, or coefficients. `p` is the divisor. `x % p` means the remainder after division by p, between 0 and p−1: `9 % 7 = 2`, `-1 % 7 = 6`. `sum` adds entries; `range(2)` gives 0 and 1; `[i]` selects entry 0 or 1; for share lists such as w0,w1,A_sh, that position identifies the person; `//` takes the integer part of division.\n\nA **share** is one of two numbers whose sum’s remainder recovers the original. The hiding model requires random numbers chosen independently of the secret, with equal probability from 0 to p−1. This reproducible teaching fixture protects no real secrets. Zero and equal values are valid; a result can coincidentally equal an input.\n\n| Holding | Person 0 | Person 1 |\n| --- | --- | --- |\n| Share of w[0] | w0[0] | w0[1] |\n| Share of w[1] | w1[0] | w1[1] |\n\n**One-digit example (submit your own screen’s numbers):** p=7, w=[2,3], r0=1, r1=2, ca=[1,2], cb=[2,1], a=4, b=5, ra=1, rb=3, rc=2. The hints use this same example.\n\n### 1. Look at the two-party experiment\n\n```python\np, tuple(w)\n```\n\nThe first output entry is divisor p; the next pair holds the two original numbers w. You observe both parties for this exercise.\n\n### 2. Split the numbers between two people (answer field)\n\n```python\nw0 = [r0, (w[0]-r0)%p]; w1 = [r1, (w[1]-r1)%p]\nw0[1], w1[1]\n```\n\nPerson 0 holds w0[0], w1[0]; person 1 holds w0[1], w1[1]. Neither person receives both entries of w0.\n\n### 3. Reconstruct for the observer\n\n```python\nsum(w0)%p, sum(w1)%p\n```\n\nThis is an observer check, not a step where the two people collect the original numbers.\n\n### 4. Keep one share and vary the secret\n\n```python\n[(r0, (s-r0)%p) for s in (w[0], p//2, p-1)]\n```\n\nThe first share stays r0; changing the other share changes the secret.\n\n### 5. Compute A on each person’s shares (answer field)\n\n```python\nA_sh = [(ca[0]*w0[i]+ca[1]*w1[i])%p for i in range(2)]\nA_sh\n```\n\nMultiply by the two numbers in ca, then add. This is a linear combination. Each person uses only their own column.\n\n### 6. Check A in two ways (answer field)\n\n```python\nA = sum(A_sh)%p\nA, (ca[0]*w[0]+ca[1]*w[1])%p\n```\n\nMatching values show that the shared calculation agrees with the direct one. Opening A here is an observer check.\n\n### 7. Compute B using the other coefficients (answer field)\n\n```python\nB_sh = [(cb[0]*w0[i]+cb[1]*w1[i])%p for i in range(2)]\nB = sum(B_sh)%p\nB_sh[0], B_sh[1], B\n```\n\nReplace ca with cb. The displayed reconstruction of B is also for the observer.\n\n### 8. Find what a share-wise product misses (answer field)\n\n```python\n(A_sh[0]*B_sh[0]+A_sh[1]*B_sh[1])%p, (A*B)%p\n```\n\nThe left omits A_sh[0]*B_sh[1] and A_sh[1]*B_sh[0], called cross terms. If their sum has remainder zero, the results happen to match; one match does not make this a correct general method.\n\n### 9. Prepare the multiplication material\n\n```python\na_sh = [ra, (a-ra)%p]; b_sh = [rb, (b-rb)%p]\nc_sh = [rc, (a*b-rc)%p]\nsum(a_sh)%p, sum(b_sh)%p, sum(c_sh)%p, (a*b)%p\n```\n\na, b and their product’s remainder c form a Beaver triple. A separate preparation role supplies each person only their own column, not the full a and b.\n\n### 10. Exchange only shares of the differences (answer field)\n\n```python\nd_sh = [(A_sh[i]-a_sh[i])%p for i in range(2)]\ne_sh = [(B_sh[i]-b_sh[i])%p for i in range(2)]\nd, e = sum(d_sh)%p, sum(e_sh)%p\nd, e\n```\n\nEach person sends d_sh[i], e_sh[i]. Adding them makes d and e available to both, without collecting A, B or their shares.\n\n### 11. Build the shares of the product C (answer field)\n\n```python\nz = [(c_sh[i]+d*b_sh[i]+e*a_sh[i])%p for i in range(2)]\nz[0] = (z[0]+d*e)%p\nz\n```\n\nOnly person 0 adds d*e. Adding it twice would double-count it. Reduce after this final addition too.\n\n### 12. Recover the product C (answer field)\n\n```python\nsum(z)%p\n```\n\nThis is the shared product. Compare it with the right-hand A*B remainder in row 8.\n\n### 13. Expand the identity\n\n```python\n(d*e+d*b+e*a+a*b)%p\n```\n\nA=(d+a)%p and B=(e+b)%p. The ordinary expansion (d+a)*(e+b)=d*e+d*b+e*a+a*b has the same remainder by p as the sum of the two shares in row 11.\n\n### 14. Consider an observer who sees only d\n\n```python\n[(cand, (cand-d)%p) for cand in (A, (A+p//3)%p, (A+2*(p//3))%p)]\n```\n\nEach pair gives a candidate A and the required a. Someone who does not know a retains other candidates. You can recover A because this exercise shows you a; it does not hide A from you.\n",
+      "writeup": "Expanding (d+a)*(e+b) gives d*e+d*b+e*a+a*b, the same four terms obtained by adding the shares of C. Observer checks that reconstruct A and B are separate from the two people exchanging differences. Share-wise multiplication omits cross terms; occasional agreement does not make it a general method.",
+      "learningGoals": [
+        "Explain each person’s shares and knowledge",
+        "Compute linear forms on each person’s shares",
+        "Identify the two missing cross terms",
+        "Exchange differences and build shares of a product",
+        "Check correctness using the expanded identity"
+      ],
+      "checks": [
+        {
+          "id": "shares",
+          "label": "Split the numbers between two people",
+          "hints": [
+            {
+              "id": "shares-hint-1",
+              "content": "The two shares add back to the secret after reduction. Holding one share fixed still allows different secrets by changing the other share."
+            },
+            {
+              "id": "shares-hint-2",
+              "content": "With divisor 7: secret 2 and mask 1 give second share (2−1)%7=1; secret 3 and mask 2 give (3−2)%7=1. The share pairs are [1,1] and [2,1]."
+            },
+            {
+              "id": "shares-hint-3",
+              "content": "Read w[0],r0,w[1],r1,p from Inspect. Subtract r0 from w[0] and reduce by p; do the same for w[1]−r1. Add p if negative. Submit those two remainders, in order."
+            }
+          ]
+        },
+        {
+          "id": "ashares",
+          "label": "Compute A on each person’s shares",
+          "hints": [
+            {
+              "id": "ashares-hint-1",
+              "content": "A multiplies the original numbers by fixed coefficients and adds. Applying the same calculation to each person’s shares produces shares of A."
+            },
+            {
+              "id": "ashares-hint-2",
+              "content": "For ca=[1,2], person 0 gets (1×1+2×2)%7=5 and person 1 gets (1×1+2×1)%7=3. A_sh=[5,3]."
+            },
+            {
+              "id": "ashares-hint-3",
+              "content": "For person 0 compute ca[0]×w0[0]+ca[1]×w1[0], then its remainder by p. Repeat with index 1. Submit the two remainders."
+            }
+          ]
+        },
+        {
+          "id": "aopen",
+          "label": "Check A in two ways",
+          "hints": [
+            {
+              "id": "aopen-hint-1",
+              "content": "Compare the shared result with the direct calculation. Matching results check that the linear calculation can be split between the two people."
+            },
+            {
+              "id": "aopen-hint-2",
+              "content": "Shared: (5+3)%7=1. Direct: (1×2+2×3)%7=1. The answer shape is (1,1)."
+            },
+            {
+              "id": "aopen-hint-3",
+              "content": "Reduce A_sh[0]+A_sh[1] by p. Separately reduce ca[0]×w[0]+ca[1]×w[1] by p. Submit those two results, shared first."
+            }
+          ]
+        },
+        {
+          "id": "bshares",
+          "label": "Compute B using the other coefficients",
+          "hints": [
+            {
+              "id": "bshares-hint-1",
+              "content": "The product needs a second value B. Change the coefficients and apply the same local calculation to each person’s own shares."
+            },
+            {
+              "id": "bshares-hint-2",
+              "content": "For cb=[2,1], the shares are (2×1+1×2)%7=4 and (2×1+1×1)%7=3. Their sum has remainder 0. Shape: (4,3,0)."
+            },
+            {
+              "id": "bshares-hint-3",
+              "content": "Using your cb, compute the remainder of cb[0]×w0[i]+cb[1]×w1[i] for i=0 and i=1. Add those two results and reduce by p. Submit both shares followed by their sum’s remainder."
+            }
+          ]
+        },
+        {
+          "id": "crossmul",
+          "label": "Find what a share-wise product misses",
+          "hints": [
+            {
+              "id": "crossmul-hint-1",
+              "content": "A share-wise product omits the two cross-person products. It only happens to match when the missing terms sum to remainder zero."
+            },
+            {
+              "id": "crossmul-hint-2",
+              "content": "Left: (5×4+3×3)%7=1. Right: 1×0=0. Missing terms 5×3+3×4 have remainder 6; adding that to the left gives remainder 0."
+            },
+            {
+              "id": "crossmul-hint-3",
+              "content": "Reduce A_sh[0]×B_sh[0]+A_sh[1]×B_sh[1] by p for the left result. Reduce A×B by p for the right. Submit both actual values, even if they coincide."
+            }
+          ]
+        },
+        {
+          "id": "beaveropen",
+          "label": "Exchange only shares of the differences",
+          "hints": [
+            {
+              "id": "beaveropen-hint-1",
+              "content": "Each person sends shares of differences, not A or B. Adding them opens d and e. A person who lacks the full preparation masks cannot recover the original values from these alone."
+            },
+            {
+              "id": "beaveropen-hint-2",
+              "content": "With a_sh=[1,3], b_sh=[3,2], d_sh=[4,0] gives d=4; e_sh=[1,1] gives e=2. Each subtraction and sum is reduced by 7."
+            },
+            {
+              "id": "beaveropen-hint-3",
+              "content": "For each i, reduce A_sh[i]−a_sh[i] and B_sh[i]−b_sh[i] by p. Sum the first pair and reduce to obtain d; sum the second and reduce to obtain e. Submit (d,e)."
+            }
+          ]
+        },
+        {
+          "id": "cshares",
+          "label": "Build the shares of the product C",
+          "hints": [
+            {
+              "id": "cshares-hint-1",
+              "content": "Each person corrects their prepared product share using the opened differences. Only person 0 adds d×e so it appears exactly once when shares are added."
+            },
+            {
+              "id": "cshares-hint-2",
+              "content": "With c_sh=[2,4], d=4,e=2: person 0 gets (2+4×3+2×1+4×2)%7=3; person 1 gets (4+4×2+2×3)%7=4. z=[3,4]."
+            },
+            {
+              "id": "cshares-hint-3",
+              "content": "Reduce c_sh[0]+d×b_sh[0]+e×a_sh[0]+d×e by p. For person 1 reduce c_sh[1]+d×b_sh[1]+e×a_sh[1] by p. Reduce after every final addition, then submit the two values."
+            }
+          ]
+        },
+        {
+          "id": "csum",
+          "label": "Recover the product C",
+          "hints": [
+            {
+              "id": "csum-hint-1",
+              "content": "Adding the completed shares recovers the desired product C. Check it against direct multiplication of A and B."
+            },
+            {
+              "id": "csum-hint-2",
+              "content": "For z=[3,4], C=(3+4)%7=0, matching A×B=1×0=0."
+            },
+            {
+              "id": "csum-hint-3",
+              "content": "Add your z[0] and z[1] from row 11 and take the remainder by p. Submit that one number; compare it with the right-hand result in row 8."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
