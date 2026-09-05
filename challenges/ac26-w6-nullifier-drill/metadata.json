@@ -1,0 +1,412 @@
+{
+  "id": "ac26-w6-nullifier-drill",
+  "name": "名前を出さずに、二票目を見分ける",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "track": {
+    "id": "advanced-cryptography-2026",
+    "order": 655,
+    "chapter": "Week 6 / Drill: scoped nullifiers and state"
+  },
+  "courseAlignment": {
+    "courseId": "advanced-cryptography-program",
+    "edition": "2026",
+    "week": 6,
+    "role": "mechanism",
+    "spoilerPolicy": "independent-reimplementation",
+    "sources": [
+      {
+        "repository": "zk-tokyo/advanced-cryptography-2026",
+        "ref": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+        "path": "week6/README.md",
+        "kind": "lecture"
+      }
+    ]
+  },
+  "difficulty": 3,
+  "estimatedDuration": "30-45 分",
+  "shortDescription": "使用済みの印を小さな数で計算し、二重投票と確認漏れを追います。",
+  "description": "Week 6の構成設計に向けた8段の導入。小さなnullifier模型、投票番号と内容の分離、確認後の状態更新、誤った方式と衝突を扱う。匿名性や暗号証明そのものは提供しない。",
+  "instructions": "## 前提\n\n同じ投票で一人一票だけを受け付ける仕組みを調べます。名前の代わりに、使うたびに同じになる印を記録します。この「使用済みを見分ける印」がnullifier（ヌリファイア）です。\n\n**最初の操作：**「証拠を確認」の `p =` から `attempts =` までの代入文だけを `python3` に貼り、1行目の印を計算して `label` 欄へ提出します。全8欄が正解になれば完了です。\n\n一桁で追うための模型なので、秘密の数も見学用に表示します。この小さな式には匿名性を守る強さがありません。実際には暗号で作る印と、参加資格・印・投票内容を結び付けた証明の確認を組み合わせます。この演習の `verified` は、その確認結果を表す練習用の札です。\n\nこの演習ではpは5か7、自分のsecretは1〜p−1です。ほかの参加者の秘密の数には0〜p−1を使います。\n\n`p` は割る数、`secret` は本人の秘密の数、`scope` は今回の投票番号です。`x % p` は「xをpで割った余り」で、例は `9 % 7 = 2`。`True` ははい、`False` はいいえ。`==` は等しい、`!=` は違う、`and` は両方を満たす、`not` は反対。`not in used` は「usedの一覧にない」、`append` は一覧への追加、`range(p)` は0からp−1まで、`[0]` は最初の要素です。\n\n**一桁の見本（提出は自分の画面の数）：** p=7、secret=2、scope=1なら、印は `(2×2+1)を7で割った余り = 5`。\n\nPythonの対話入力では、`for` の字下げした行の後に空行を1回入れてから最後の式を入力します。端末を開けなければ、エディタの `nullifier_drill.py` で1〜7行目の `return None` を対応するコード全体に置き換え、最後の式に `return` を付けます。「公開テストを実行」で自分の値が出ます。最後のreturnはforの外側です。\n\n### 1. 使用済みを見分ける印 — `label`\n\n同じ人が同じ投票で使う印を計算します。この模型では「秘密の数を二乗して投票番号を足し、pで割った余り」です。\n\n```python\n(secret * secret + scope) % p\n```\n\n### 2. 投票内容を変えても同じ印 — `repeat`\n\nmessagesは二回の投票内容です。各回の印を並べます。内容が変わっても同じ人の二票目を見分けたいので、式にmessageを入れません。\n\n```python\nlabels = []\nfor message in messages:\n    labels.append((secret * secret + scope) % p)\n\nlabels\n```\n\n### 3. 今回の二つの投票番号を比べる — `scopes`\n\nscope_idsは別々の投票番号です。同じ人でも、別の投票には参加できます。今回の二番号で印を比べます。小さな模型では、番号をpだけ増やすと同じ印へ戻るため、どの別番号でも違う印になるとは限りません。\n\n```python\nlabels = []\nfor scope_id in scope_ids:\n    labels.append((secret * secret + scope_id) % p)\n\nlabels\n```\n\n### 4. 確認してから使用済みにする — `accept`\n\nattemptsは届いた六件です。verifiedは確認済みか、scopeは投票番号、nullifierは印。確認済み・今回の番号・印が未使用の三条件を満たすときだけ受理し、印を記録します。\n\n一桁の見本の六件（今回の番号1）：\n\n| 順 | 確認済み | 番号 | 印 | 受理 |\n| --- | --- | --- | --- | --- |\n| 1 | False | 1 | 5 | False |\n| 2 | True | 1 | 5 | True |\n| 3 | True | 1 | 5 | False |\n| 4 | True | 2 | 3 | False |\n| 5 | True | 1 | 3 | True |\n| 6 | True | 1 | 2 | True |\n\n```python\nused = []\nanswers = []\nfor attempt in attempts:\n    ok = attempt[\"verified\"] and attempt[\"scope\"] == scope and attempt[\"nullifier\"] not in used\n    answers.append(ok)\n    if ok:\n        used.append(attempt[\"nullifier\"])\n\nanswers\n```\n\n### 5. 受理後の記録を数える — `count`\n\n受理した印の個数を確かめます。届いた件数や、確認済みの件数ではありません。lenはリストの個数です。\n\n```python\nused = []\nfor attempt in attempts:\n    if attempt[\"verified\"] and attempt[\"scope\"] == scope and attempt[\"nullifier\"] not in used:\n        used.append(attempt[\"nullifier\"])\n\nlen(used)\n```\n\n### 6. 投票内容を印に混ぜるとどうなるか — `message`\n\n誤った式として、印へmessageも足す人がいます。その式で二回の投票を処理し、未使用の印なら受理すると何が起きるか調べます。ここは意図的に誤った方式の結果を答えます。\n\n```python\nused = []\nanswers = []\nfor vote in messages:\n    marker = (secret * secret + scope + vote) % p\n    ok = marker not in used\n    answers.append(ok)\n    if ok:\n        used.append(marker)\n\nanswers\n```\n\n### 7. 確認を省くと不正な依頼を受け入れるか — `unchecked`\n\n確認済みかを見ず、「今回の番号で、印が未使用なら受理」とする方式を試します。その方式で受理したうち、未確認だった依頼をTrueにします。\n\n```python\nused = []\nanswers = []\nfor attempt in attempts:\n    ok = attempt[\"scope\"] == scope and attempt[\"nullifier\"] not in used\n    answers.append(ok and not attempt[\"verified\"])\n    if ok:\n        used.append(attempt[\"nullifier\"])\n\nanswers\n```\n\n### 8. 小さな模型では別人の印も重なる — `collision`\n\n0〜p−1のうちsecretと違う数で、同じ印になる最小の数を探します。違う入力から同じ印が出ることを衝突と呼びます。この模型では必ず一つ見つかります。\n\nここは自分で別の数を選び、印が一致するか計算して提出します。自動で探すなら `collision` を自分で実装してください。\n\n",
+  "writeup": "印は同じ投票内では固定し、別の投票には番号を含めて分ける。確認済み・番号一致・未使用の全条件を満たしてから記録する。投票内容で印を変える方式や確認を省く方式では不正な受理が起きる。小さな二乗式ではsecretとp-secretが同じ印になる。",
+  "tags": [
+    "ac26",
+    "zk",
+    "nullifier",
+    "privacy",
+    "state",
+    "drill"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18167,
+      "name": "Portal editor API + /verify (loopback only)"
+    }
+  ],
+  "learningGoals": [
+    "使用済みの印が二重送信を検出する理由を説明する",
+    "投票内容と投票番号の役割を分ける",
+    "確認が済んだ依頼だけで状態を更新する",
+    "小さな式の衝突から模型の限界を理解する"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "verifyUrl": "http://127.0.0.1:18167/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "label",
+        "label": "使用済みを見分ける印",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "label-hint-1",
+            "content": "印が同じなら、同じ投票での使い直しか調べられます。投票の内容を変えても印は変えません。",
+            "penalty": 2
+          },
+          {
+            "id": "label-hint-2",
+            "content": "p=7、secret=2、scope=1なら、2×2+1=5。7で割った余りも5です。",
+            "penalty": 2
+          },
+          {
+            "id": "label-hint-3",
+            "content": "自分のsecretを二乗し、scopeを足す。pで割った余りをlabel欄へ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "repeat",
+        "label": "投票内容を変えても同じ印",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "repeat-hint-1",
+            "content": "二票目だけ内容を変えても、同じ印なら使用済みだと分かります。",
+            "penalty": 2
+          },
+          {
+            "id": "repeat-hint-2",
+            "content": "見本で投票内容が0→1と変わっても、印は5→5。提出は[5,5]です。",
+            "penalty": 2
+          },
+          {
+            "id": "repeat-hint-3",
+            "content": "messagesの一つ目と二つ目について、同じsecretとscopeで印を計算。二つの印を表示順にrepeat欄へ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "scopes",
+        "label": "今回の二つの投票番号を比べる",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "scopes-hint-1",
+            "content": "今回の二番号では印が変わります。実際の匿名性には暗号の強さも必要で、この模型では番号をpだけ増やすと同じ印へ戻ります。",
+            "penalty": 2
+          },
+          {
+            "id": "scopes-hint-2",
+            "content": "見本のsecret=2で番号1なら5、番号2なら6。形は[5,6]。",
+            "penalty": 2
+          },
+          {
+            "id": "scopes-hint-3",
+            "content": "scope_idsの各番号を、secretの二乗へ足してpで割る。二つの余りをscopes欄へ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "accept",
+        "label": "確認してから使用済みにする",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "accept-hint-1",
+            "content": "使用済みの一覧は、受理したときだけ増やします。未確認や別の投票の依頼で埋めると、後から来た正しい投票まで拒否してしまいます。",
+            "penalty": 2
+          },
+          {
+            "id": "accept-hint-2",
+            "content": "見本の印5は、未確認ならFalseで記録しない。次の確認済みはTrueで記録する。同じ印の三件目はFalse。",
+            "penalty": 2
+          },
+          {
+            "id": "accept-hint-3",
+            "content": "usedを空にし、attemptsを上から読む。三条件を満たすならTrueを書いて印をusedへ追加。満たさなければFalseだけを書く。六つの判定をaccept欄へ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "count",
+        "label": "受理後の記録を数える",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "count-hint-1",
+            "content": "記録が増えるのは、新しい印の正しい投票を受け取ったときです。拒否した依頼で記録は増えません。",
+            "penalty": 2
+          },
+          {
+            "id": "count-hint-2",
+            "content": "4行目の見本の六件では、受理する印は5、3、2の三つ。拒否した三件は記録しないので、個数は3です。",
+            "penalty": 2
+          },
+          {
+            "id": "count-hint-3",
+            "content": "acceptと同じ順に三条件を確認し、受理した印だけをusedへ追加。最後の個数をcount欄へ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "message",
+        "label": "投票内容を印に混ぜるとどうなるか",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "message-hint-1",
+            "content": "投票内容で印が変わると、同じ人の二票目が新しい印に見えてしまいます。同じ内容を繰り返した場合とは分けて考えます。",
+            "penalty": 2
+          },
+          {
+            "id": "message-hint-2",
+            "content": "見本の0→1では誤った印が5→6となり、両方未使用なので[True,True]。0→0なら[True,False]です。",
+            "penalty": 2
+          },
+          {
+            "id": "message-hint-3",
+            "content": "messagesの各voteを秘密の二乗とscopeへ足してpで割る。この誤った印が未使用ならTrueとして記録。二回の結果をmessage欄へ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "unchecked",
+        "label": "確認を省くと不正な依頼を受け入れるか",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "unchecked-hint-1",
+            "content": "未使用の印であるだけでは、参加資格や印の作り方は確認できません。先に未確認の依頼を記録すると、本物の投票も妨げられます。",
+            "penalty": 2
+          },
+          {
+            "id": "unchecked-hint-2",
+            "content": "見本の先頭は未確認の印5。誤った方式は受理するのでTrue。次の本物は印が使用済みとなって拒否されます。",
+            "penalty": 2
+          },
+          {
+            "id": "unchecked-hint-3",
+            "content": "usedを空にして、番号と未使用だけを確認。この方式が受理し、かつverifiedがFalseならTrueを記録。方式が受理した印はusedに入れる。六つの判定をunchecked欄へ。",
+            "penalty": 2
+          }
+        ]
+      },
+      {
+        "id": "collision",
+        "label": "小さな模型では別人の印も重なる",
+        "points": 25,
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "collision-hint-1",
+            "content": "一桁の印では候補を全部試せるので、別人の印との重なりも簡単に探せます。本物の暗号では、この探索が現実的にできない大きさと仕組みを使います。",
+            "penalty": 2
+          },
+          {
+            "id": "collision-hint-2",
+            "content": "見本は2×2+1を7で割ると5。別の数5でも5×5+1=26、7で割った余り5なので衝突。答えは別の数5です。",
+            "penalty": 2
+          },
+          {
+            "id": "collision-hint-3",
+            "content": "自分の印を計算。0からp−1を順に二乗しscopeを足して余りを比べる。secret以外で最初に同じ印となる候補をcollision欄へ。",
+            "penalty": 2
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Detect a second vote without a name",
+      "shortDescription": "Calculate tiny spent markers and trace duplicate votes and missing verification.",
+      "description": "An eight-step arithmetic/state model for scoped nullifiers, verification order and counterexamples. It does not provide anonymity or cryptographic proofs.",
+      "instructions": "## Before you start\n\nStudy how to accept one vote per person in an election. Instead of recording a name, the application records a stable spent marker, called a nullifier.\n\n**Start:** paste only the Inspect assignments from `p =` through `attempts =` into `python3`. Calculate row 1 and submit the marker to `label`. Finish when all eight fields are correct.\n\nThis one-digit model displays the secret for an observer. Its tiny formula does not provide anonymity. Real systems combine a cryptographic marker with proof checks binding eligibility, marker and vote. Here `verified` is a practice card representing that verification result.\n\nThis exercise supplies p equal to 5 or 7 and your secret from 1 through p−1. Other participants may use secret numbers from 0 through p−1.\n\n`p` is the divisor, `secret` the person’s secret number, and `scope` the requested election number. `x % p` means the remainder by p: `9 % 7 = 2`. `True` means yes and `False` no. `==` tests equality, `!=` difference, `and` both conditions, and `not` the opposite. `not in used` means absent from that list; `append` adds to it; `range(p)` visits 0 through p−1; `[0]` selects the first entry.\n\n**One-digit example (submit your own values):** p=7, secret=2, scope=1 gives marker `(2×2+1) remainder by 7 = 5`.\n\nIn an interactive Python prompt, enter a blank line after the indented `for` body before the final expression. Without a terminal, edit `nullifier_drill.py`: for rows 1–7, replace `return None` with the row’s entire code block, prefixing the last expression with `return`. Keep that return outside the for loop. Run public tests to see your values.\n\n### 1. Calculate a spent marker — `label`\n\nCalculate the marker for this person and election. In this toy model, square the secret, add the election number, then keep the remainder by p.\n\n```python\n(secret * secret + scope) % p\n```\n\n### 2. Keep the marker when the vote changes — `repeat`\n\nmessages contains two votes. List their markers. The formula excludes message so a changed vote cannot disguise this person’s second submission.\n\n```python\nlabels = []\nfor message in messages:\n    labels.append((secret * secret + scope) % p)\n\nlabels\n```\n\n### 3. Separate elections — `scopes`\n\nscope_ids contains two different election numbers. The same person may participate in each. Compare these two numbers. In the tiny model, adding p to an election number repeats the marker; different numbers do not always give different markers.\n\n```python\nlabels = []\nfor scope_id in scope_ids:\n    labels.append((secret * secret + scope_id) % p)\n\nlabels\n```\n\n### 4. Check before marking as spent — `accept`\n\nattempts contains six requests. verified is prechecked status, scope the election number, and nullifier the marker. Accept and record a marker only when verification passed, the election matches, and the marker is unused.\n\nThe six requests in the one-digit example (requested election 1):\n\n| Order | Verified | Election | Marker | Accept |\n| --- | --- | --- | --- | --- |\n| 1 | False | 1 | 5 | False |\n| 2 | True | 1 | 5 | True |\n| 3 | True | 1 | 5 | False |\n| 4 | True | 2 | 3 | False |\n| 5 | True | 1 | 3 | True |\n| 6 | True | 1 | 2 | True |\n\n```python\nused = []\nanswers = []\nfor attempt in attempts:\n    ok = attempt[\"verified\"] and attempt[\"scope\"] == scope and attempt[\"nullifier\"] not in used\n    answers.append(ok)\n    if ok:\n        used.append(attempt[\"nullifier\"])\n\nanswers\n```\n\n### 5. Count the resulting records — `count`\n\nCount recorded markers after processing the requests. This is not the number received or merely verified. len counts list entries.\n\n```python\nused = []\nfor attempt in attempts:\n    if attempt[\"verified\"] and attempt[\"scope\"] == scope and attempt[\"nullifier\"] not in used:\n        used.append(attempt[\"nullifier\"])\n\nlen(used)\n```\n\n### 6. Test a marker that includes the vote — `message`\n\nAn incorrect design adds message to the marker formula. Process two votes under that design, accepting unused markers. Here report the behavior of the deliberately incorrect design.\n\n```python\nused = []\nanswers = []\nfor vote in messages:\n    marker = (secret * secret + scope + vote) % p\n    ok = marker not in used\n    answers.append(ok)\n    if ok:\n        used.append(marker)\n\nanswers\n```\n\n### 7. Find false acceptances when verification is skipped — `unchecked`\n\nTry a design that skips verified status and accepts any unused marker in this election. Mark True for requests it accepts despite being unverified.\n\n```python\nused = []\nanswers = []\nfor attempt in attempts:\n    ok = attempt[\"scope\"] == scope and attempt[\"nullifier\"] not in used\n    answers.append(ok and not attempt[\"verified\"])\n    if ok:\n        used.append(attempt[\"nullifier\"])\n\nanswers\n```\n\n### 8. Find a collision in the tiny model — `collision`\n\nAmong 0 through p−1, find the smallest number different from secret that produces the same marker. Different inputs producing the same output are a collision. This model always provides one.\n\nChoose another number yourself, calculate its marker, and submit it when they match. To automate the search, implement `collision` yourself.\n\n",
+      "writeup": "Keep the marker stable within one election. Check verification, election and freshness before recording it. Vote-dependent markers and skipped verification fail. In the tiny squared model, secret and p-secret collide.",
+      "learningGoals": [
+        "Explain how spent markers expose duplicate submissions",
+        "Separate vote content from election scope",
+        "Update state only after checking requests",
+        "Understand the tiny model through a collision"
+      ],
+      "checks": [
+        {
+          "id": "label",
+          "label": "Calculate a spent marker",
+          "hints": [
+            {
+              "id": "label-hint-1",
+              "content": "A repeated marker lets the application detect reuse in the same election. Changing the vote must not change the marker."
+            },
+            {
+              "id": "label-hint-2",
+              "content": "With p=7, secret=2, scope=1: 2×2+1=5, whose remainder by 7 is 5."
+            },
+            {
+              "id": "label-hint-3",
+              "content": "Square your secret, add scope, and submit the remainder by p to label."
+            }
+          ]
+        },
+        {
+          "id": "repeat",
+          "label": "Keep the marker when the vote changes",
+          "hints": [
+            {
+              "id": "repeat-hint-1",
+              "content": "Keeping the same marker exposes a second vote even when its content changes."
+            },
+            {
+              "id": "repeat-hint-2",
+              "content": "In the example, changing the vote from 0 to 1 still produces [5,5]."
+            },
+            {
+              "id": "repeat-hint-3",
+              "content": "For each of the two messages, calculate the marker with the same secret and scope. Submit the two markers to repeat."
+            }
+          ]
+        },
+        {
+          "id": "scopes",
+          "label": "Separate elections",
+          "hints": [
+            {
+              "id": "scopes-hint-1",
+              "content": "The two supplied elections have different markers. Real anonymity needs cryptographic strength; in this toy model, adding p to the election number repeats a marker."
+            },
+            {
+              "id": "scopes-hint-2",
+              "content": "With secret=2, election 1 gives 5 and election 2 gives 6: [5,6]."
+            },
+            {
+              "id": "scopes-hint-3",
+              "content": "Add each scope_ids entry to the square of secret and keep the remainder by p. Submit the two results to scopes."
+            }
+          ]
+        },
+        {
+          "id": "accept",
+          "label": "Check before marking as spent",
+          "hints": [
+            {
+              "id": "accept-hint-1",
+              "content": "Only acceptance changes the spent list. Consuming an unverified or wrong-election marker can block a later valid request."
+            },
+            {
+              "id": "accept-hint-2",
+              "content": "For example marker 5: an unverified request is False and records nothing; the next verified request is True and records it; reuse is False."
+            },
+            {
+              "id": "accept-hint-3",
+              "content": "Start with empty used. Read attempts in order; record True and add the marker only when all three conditions hold, otherwise record False. Submit six decisions to accept."
+            }
+          ]
+        },
+        {
+          "id": "count",
+          "label": "Count the resulting records",
+          "hints": [
+            {
+              "id": "count-hint-1",
+              "content": "A record is added only for an accepted, previously unused marker. Rejected requests do not add records."
+            },
+            {
+              "id": "count-hint-2",
+              "content": "In row 4’s six-request example, accepted markers are 5, 3 and 2. The three rejected requests add nothing, leaving 3 records."
+            },
+            {
+              "id": "count-hint-3",
+              "content": "Process the same three conditions in order, add only accepted markers to used, and submit its final length to count."
+            }
+          ]
+        },
+        {
+          "id": "message",
+          "label": "Test a marker that includes the vote",
+          "hints": [
+            {
+              "id": "message-hint-1",
+              "content": "A vote-dependent marker can make a changed second vote look new. Repeating exactly the same vote behaves differently."
+            },
+            {
+              "id": "message-hint-2",
+              "content": "In the example, votes 0→1 produce markers 5→6 and [True,True]; votes 0→0 give [True,False]."
+            },
+            {
+              "id": "message-hint-3",
+              "content": "For each vote, add it to secret squared plus scope and reduce by p. Accept and record this incorrect marker if unused. Submit the two outcomes to message."
+            }
+          ]
+        },
+        {
+          "id": "unchecked",
+          "label": "Find false acceptances when verification is skipped",
+          "hints": [
+            {
+              "id": "unchecked-hint-1",
+              "content": "An unused marker alone establishes neither membership nor correct marker construction. Recording an unverified request can also block a valid one."
+            },
+            {
+              "id": "unchecked-hint-2",
+              "content": "The first example request has unverified marker 5. The incorrect design accepts it, so mark True; the following valid request is then blocked as spent."
+            },
+            {
+              "id": "unchecked-hint-3",
+              "content": "Start with empty used and check only scope and reuse. Record True when this design accepts an unverified request. Add every marker this design accepts. Submit six flags to unchecked."
+            }
+          ]
+        },
+        {
+          "id": "collision",
+          "label": "Find a collision in the tiny model",
+          "hints": [
+            {
+              "id": "collision-hint-1",
+              "content": "A one-digit marker is small enough to search exhaustively. Real cryptography uses constructions and sizes that make finding such collisions infeasible."
+            },
+            {
+              "id": "collision-hint-2",
+              "content": "With p=7 and scope=1, secret 2 gives 5. Candidate 5 gives 5×5+1=26, also remainder 5. Submit the other secret, 5."
+            },
+            {
+              "id": "collision-hint-3",
+              "content": "Compute your marker. Try candidates from 0 through p−1 using the same formula, skipping secret. Submit the first candidate with the same marker to collision."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
