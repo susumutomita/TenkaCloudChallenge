@@ -182,6 +182,20 @@ describe("what the seed derives", () => {
     expect(deriveRevealGroup(seed, "teamA-c1")).toBe(deriveRevealGroup(seed, "teamA-c1"));
   });
 
+  test("the judge avoids a group this generation already opened, until all twelve are", () => {
+    const opened = new Set<number>();
+    for (let i = 0; i < CONSTRAINT_GROUP_COUNT; i += 1) {
+      const group = deriveRevealGroup(seed, `teamA-c${i}`, opened);
+      expect(opened.has(group)).toBe(false);
+      opened.add(group);
+    }
+    expect(opened.size).toBe(CONSTRAINT_GROUP_COUNT);
+    // Everything open: the pick falls back to the whole set rather than failing.
+    const fallback = deriveRevealGroup(seed, "teamA-c99", opened);
+    expect(fallback).toBeGreaterThanOrEqual(0);
+    expect(fallback).toBeLessThan(CONSTRAINT_GROUP_COUNT);
+  });
+
   test("a tag names a relabelling without revealing it", () => {
     const tags = ALL_PERMUTATIONS.map((pi) => derivePermutationTag(seed, "teamA", 1, pi));
     // Distinct relabellings, distinct tags: equality of tags means equality of π.

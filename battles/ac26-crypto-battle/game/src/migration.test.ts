@@ -14,6 +14,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import { startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState } from "./types.ts";
 
@@ -223,6 +224,24 @@ describe("a config persisted before this version still drives a playable match",
       max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
     });
     expect(view.wrongHuntCost).toBe(DEFAULT_CONFIG.scores.wrongHunt);
+  });
+
+  /**
+   * [Issue #709] `wrongProveCost` is projected unconditionally and the Portal's
+   * projection guard requires it to be a number. A row from before the sudoku
+   * PROVE has every OTHER config field, so nothing else would trigger the
+   * backfill -- without this entry that match's whole Battle surface reads
+   * as unavailable.
+   */
+  test("a row from before the sudoku PROVE gains its wrong-PROVE price and still projects", () => {
+    const before = legacyConfigState();
+    delete ((before.config as unknown as Record<string, unknown>).scores as Record<string, unknown>).wrongProve;
+
+    const after = tick(before, 1);
+    expect(after.config.scores.wrongProve).toBe(DEFAULT_CONFIG.scores.wrongProve);
+    const view = projectForTeam(before, "teamA");
+    expect(view.wrongProveCost).toBe(DEFAULT_CONFIG.scores.wrongProve);
+    expect(isCryptoBattleProjection(view)).toBe(true);
   });
 
   test("an expiry charges a real penalty rather than turning the score into NaN", () => {

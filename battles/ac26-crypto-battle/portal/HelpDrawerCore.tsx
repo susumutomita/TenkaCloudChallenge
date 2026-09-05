@@ -55,7 +55,7 @@ solution = [1, 2, 3, 4,           # <- MY VAULT's 16 cells, row by row
             3, 4, 1, 2,
             2, 1, 4, 3,
             4, 3, 2, 1]
-table = {1: 3, 2: 1, 3: 4, 4: 2}  # <- YOUR choice. Never the same one twice.
+table = {1: 3, 2: 1, 3: 4, 4: 2}  # <- YOUR choice: each of 1-4 once on the right. Never the same one twice.
 grid = [table[v] for v in solution]   # <- submit these 16 digits
 #
 # The judge holds your solution and checks grid == table(solution) for some
@@ -134,7 +134,7 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "Complete an open Contract by handing over your 4x4 sudoku solution with every digit relabelled through a table you chose (1->3, 2->1, ...), done on paper -- this portal never relabels it for you. Pays MORE than LEAKing the same Contract; the relabelling is what you are being paid for. The judge checks the whole grid and publishes ONE row, column or box of your relabelled copy with a tag naming the table. One opened group is 1-4 in some order and tells nobody anything. Two opened groups under the SAME table do: never reuse a table on one generation -- MY VAULT lists the ones you have spent.",
+        body: "Complete an open Contract by handing over your 4x4 sudoku solution with every digit relabelled through a table you chose (1->3, 2->1, ...; each of 1-4 used exactly once on the right, so it is a swap and never a merge), done on paper -- this portal never relabels it for you. Pays MORE than LEAKing the same Contract; the relabelling is what you are being paid for. The judge checks the whole grid and publishes ONE row, column or box of your relabelled copy with a tag naming the table. One opened group is 1-4 in some order and tells nobody anything. Two opened groups under the SAME table do: never reuse a table on one generation -- MY VAULT lists the ones you have spent.",
       },
       {
         name: "CIPHER",
@@ -248,7 +248,7 @@ const COPY = {
       },
       {
         name: "PROVE",
-        body: "4×4 の数独の解を、自分で決めた表 (1→3、2→1、…) で全マス付け替えたものを出して Contract を完了します。付け替えは紙で行います (この portal は代わりに付け替えません)。同じ Contract を LEAK した場合よりも高い得点で、付け替えの手間に払われる点です。審判はマス目全体を検査し、付け替えた写しの 1 行・1 列・1 箱だけを、表を名指すタグ付きで公開します。1 グループだけなら 1〜4 の並び替えにすぎず、誰にも何も分かりません。同じ表で 2 グループ開くと分かります。同じ世代で表を使い回さないでください。使った表は MY VAULT に並びます。",
+        body: "4×4 の数独の解を、自分で決めた表 (1→3、2→1、…。右側は 1〜4 を 1 回ずつ使う入れ替えで、まとめではありません) で全マス付け替えたものを出して Contract を完了します。付け替えは紙で行います (この portal は代わりに付け替えません)。同じ Contract を LEAK した場合よりも高い得点で、付け替えの手間に払われる点です。審判はマス目全体を検査し、付け替えた写しの 1 行・1 列・1 箱だけを、表を名指すタグ付きで公開します。1 グループだけなら 1〜4 の並び替えにすぎず、誰にも何も分かりません。同じ表で 2 グループ開くと分かります。同じ世代で表を使い回さないでください。使った表は MY VAULT に並びます。",
       },
       {
         name: "CIPHER",

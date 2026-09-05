@@ -95,8 +95,10 @@ import {
   IDENTITY_PERMUTATION,
   isFullGridShape,
   isValidSolution,
+  type OpenedGroup,
   type Permutation,
   permutationBetween,
+  recoverableSolutions,
   samePermutation,
   type SudokuGrid,
 } from "./sudoku.ts";
@@ -479,7 +481,12 @@ function needsConfigMigration(config: CryptoBattleConfig): boolean {
     // exactly the hole the cap exists to close. Fail towards the cap, not past
     // it.
     config.maxHuntAttemptsPerTarget === undefined ||
-    config.scores?.wrongHunt === undefined
+    config.scores?.wrongHunt === undefined ||
+    // [Issue #709] `projectForTeam` exposes `wrongProveCost` unconditionally,
+    // and the Portal's projection guard requires it to be a number -- so a row
+    // written before the sudoku PROVE existed would project `undefined` and
+    // the whole Battle surface would read as unavailable for that match.
+    config.scores?.wrongProve === undefined
   );
 }
 
@@ -867,17 +874,65 @@ function hasPermutationReuse(
   targetTeamId: string,
   generation: number,
 ): boolean {
-  // Reads `state.publicLedger`'s STORED (compact) shape directly rather than
-  // decoding the whole ledger first -- `k`/`tm`/`g`/`tg` are all readable off
-  // `StoredArtifact` without expanding back to `PublicArtifact` (see
-  // ledger-codec.ts's header on why the hot path avoids a decode it does not
-  // need).
-  const tags = new Set<string>();
+  return [...revealsByTag(state, targetTeamId, generation).values()].some((opened) => opened.length >= 2);
+}
+
+/**
+ * [Issue #709] The opened groups of one team's generation, keyed by tag.
+ *
+ * Reads `state.publicLedger`'s STORED (compact) shape directly rather than
+ * decoding the whole ledger first -- `k`/`tm`/`g`/`tg`/`gr`/`cl` are all
+ * readable off `StoredArtifact` without expanding back to `PublicArtifact`
+ * (see ledger-codec.ts's header on why the hot path avoids a decode it does
+ * not need).
+ */
+function revealsByTag(
+  state: CryptoBattleState,
+  teamId: string,
+  generation: number,
+): ReadonlyMap<string, readonly OpenedGroup[]> {
+  const byTag = new Map<string, OpenedGroup[]>();
   for (const artifact of state.publicLedger) {
     if (artifact.k !== "sudoku-reveal") continue;
-    if (artifact.tm !== targetTeamId || artifact.g !== generation) continue;
-    if (tags.has(artifact.tg)) return true;
-    tags.add(artifact.tg);
+    if (artifact.tm !== teamId || artifact.g !== generation) continue;
+    const bucket = byTag.get(artifact.tg) ?? [];
+    bucket.push({ group: artifact.gr, cells: artifact.cl });
+    byTag.set(artifact.tg, bucket);
+  }
+  return byTag;
+}
+
+/** Every group this team's generation has had opened, under any tag. */
+function openedGroupsFor(state: CryptoBattleState, teamId: string, generation: number): ReadonlySet<number> {
+  const opened = new Set<number>();
+  for (const reveals of revealsByTag(state, teamId, generation).values()) {
+    for (const reveal of reveals) opened.add(reveal.group);
+  }
+  return opened;
+}
+
+/**
+ * [Issue #709] Whether the public record has actually given a team's solution
+ * away: some reused relabelling whose opened groups, held against the team's
+ * public puzzle, leave exactly one solution standing.
+ *
+ * A repeated tag is the MISUSE; this is the EVIDENCE, and the HUNT opens only
+ * on both. Without the second half a reuse whose reveals happened not to pin
+ * the grid -- the puzzle allows several solutions and the opened cells do not
+ * separate them -- would let an attacker in to guess, spending the limited
+ * attempts on a record the statement had promised was enough. The attacker's
+ * side of this is `recoverableSolutions`, the same function, run on the same
+ * public inputs.
+ */
+function isSolutionRecoverable(
+  state: CryptoBattleState,
+  targetTeamId: string,
+  generation: number,
+): boolean {
+  const puzzle = state.publicPuzzles?.[targetTeamId] ?? deriveSudokuPuzzle(state.seed, targetTeamId, generation);
+  for (const opened of revealsByTag(state, targetTeamId, generation).values()) {
+    if (opened.length < 2) continue;
+    if (recoverableSolutions(puzzle, opened).length === 1) return true;
   }
   return false;
 }
@@ -1186,6 +1241,15 @@ export function validateOp(
         return {
           ok: false,
           error: `team "${op.targetTeamId}" has not reused a relabelling in generation ${op.generation}`,
+        };
+      }
+      // ...and the reuse has to have actually given the solution away. Two
+      // reveals of one group under one tag are the same four digits twice;
+      // a HUNT on that would be a guess, not a recovery.
+      if (!isSolutionRecoverable(state, op.targetTeamId, op.generation)) {
+        return {
+          ok: false,
+          error: `team "${op.targetTeamId}" reused a relabelling in generation ${op.generation}, but its opened groups do not yet pin one solution against its public puzzle`,
         };
       }
       // [Issue #696] Same budget logic as the Shamir HUNT, on its own counter.
@@ -2064,7 +2128,10 @@ function applyProveSudoku(
     };
   }
   const nowMs = state.nowMs ?? contract.issuedAtMs;
-  const group = deriveRevealGroup(state.seed, contract.id);
+  // A group this generation has not had opened yet, while any remain: a
+  // repeated group under a reused table would be the same row twice, and the
+  // reuse HUNT the statement promises needs distinct cells to line up.
+  const group = deriveRevealGroup(state.seed, contract.id, openedGroupsFor(state, teamId, team.generation));
   const cells = CONSTRAINT_GROUPS[group];
   if (!cells) throw new Error(`applyOp(prove-sudoku): no constraint group ${group}`);
   const artifact: SudokuRevealArtifact = {

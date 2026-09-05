@@ -16,6 +16,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildProveSudokuOp, buildSudokuHuntOp, startedMatch } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { solutionsConsistentWith } from "./sudoku.ts";
 import type { Contract, CryptoBattleState } from "./types.ts";
 
 const CTX = { eventId: "pi-reuse-tests", teamIds: ["victim", "attacker"] } as const;
@@ -39,8 +40,12 @@ function proveableOrders(state: CryptoBattleState, teamId: string, count: number
 }
 
 /** Play the victim into a state where it has proved `times` Orders under ONE relabelling. */
-function stateAfterReuse(times: number, pi: readonly number[] = [2, 3, 4, 1]): CryptoBattleState {
-  let state = tick(startedMatch(CTX), 0);
+function stateAfterReuse(
+  times: number,
+  pi: readonly number[] = [2, 3, 4, 1],
+  ctx: { readonly eventId: string; readonly teamIds: readonly string[] } = CTX,
+): CryptoBattleState {
+  let state = tick(startedMatch(ctx), 0);
   let proved = 0;
   for (let round = 0; round < 20 && proved < times; round += 1) {
     for (const order of state.contracts.filter(
@@ -136,6 +141,57 @@ describe("reuse is a real, and really exploitable, mistake", () => {
     const spent = validateOp(state, ATTACKER, wrong);
     expect(spent.ok).toBe(false);
     if (!spent.ok) expect(spent.error).toContain("no sudoku HUNT attempts left");
+  });
+});
+
+describe("a reuse that gave nothing away is not huntable either", () => {
+  /**
+   * The judge opens a group the generation has not had opened yet, so real
+   * play never produces two reveals of one group under one tag. This builds
+   * the case by hand -- the second reveal is a copy of the first under a new
+   * Order id -- to pin that the gate asks for EVIDENCE, not only for a
+   * repeated tag: two copies of one row pin no solution, and a HUNT on them
+   * would be a guess against a limited budget.
+   */
+  test("two reveals of the SAME group under one tag do not open the HUNT", () => {
+    // A seed whose victim puzzle allows more than one solution -- otherwise
+    // the eight givens alone would pin it and no reveal could add or withhold
+    // anything. Found by search; pinned here so the case is the one described.
+    const ambiguous = { eventId: "pi-reuse-ambiguous-10", teamIds: ["victim", "attacker"] } as const;
+    const state = stateAfterReuse(1, [2, 3, 4, 1], ambiguous);
+    expect(solutionsConsistentWith(projectForTeam(state, ATTACKER).publicPuzzles[VICTIM] ?? []).length).toBeGreaterThan(1);
+    const first = state.publicLedger.find((a) => a.k === "sudoku-reveal" && a.tm === VICTIM);
+    if (first?.k !== "sudoku-reveal") throw new Error("expected one reveal on the ledger");
+    const duplicated: CryptoBattleState = {
+      ...state,
+      publicLedger: [...state.publicLedger, { ...first, c: `${first.c}-again` }],
+    };
+    const view = projectForTeam(duplicated, ATTACKER);
+    const tags = view.publicLedger
+      .filter((a) => a.kind === "sudoku-reveal" && a.teamId === VICTIM)
+      .map((a) => (a.kind === "sudoku-reveal" ? a.tag : ""));
+    expect(tags).toHaveLength(2);
+    expect(new Set(tags).size).toBe(1);
+    expect(buildSudokuHuntOp(view, VICTIM)).toBeUndefined();
+
+    const honest = {
+      kind: "hunt-sudoku" as const,
+      targetTeamId: VICTIM,
+      generation: 1,
+      solution: [...projectForTeam(duplicated, VICTIM).vault.sudokuSolution],
+    };
+    const verdict = validateOp(duplicated, ATTACKER, honest);
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.error).toContain("do not yet pin one solution");
+  });
+
+  test("real play opens a different group each time, so a reuse is always informative", () => {
+    const state = stateAfterReuse(3);
+    const groups = projectForTeam(state, ATTACKER)
+      .publicLedger.filter((a) => a.kind === "sudoku-reveal" && a.teamId === VICTIM)
+      .map((a) => (a.kind === "sudoku-reveal" ? a.group : -1));
+    expect(groups).toHaveLength(3);
+    expect(new Set(groups).size).toBe(3);
   });
 });
 

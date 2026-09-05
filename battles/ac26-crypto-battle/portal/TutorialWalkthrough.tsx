@@ -367,7 +367,7 @@ const COPY: Record<Locale, TutorialCopy> = {
       "The live PROVE is exactly this, with your own grid. A 4x4 sudoku: every row, column and 2x2 box holds 1-4 once each.",
     toySteps: [
       `Your solution (private): ${rows(TUTORIAL_TOY_SUDOKU.solution)}. Eight of its cells are public as your puzzle.`,
-      `Pick a table: 1→${TUTORIAL_TOY_SUDOKU.table[0]}, 2→${TUTORIAL_TOY_SUDOKU.table[1]}, 3→${TUTORIAL_TOY_SUDOKU.table[2]}, 4→${TUTORIAL_TOY_SUDOKU.table[3]}.`,
+      `Pick a table: 1→${TUTORIAL_TOY_SUDOKU.table[0]}, 2→${TUTORIAL_TOY_SUDOKU.table[1]}, 3→${TUTORIAL_TOY_SUDOKU.table[2]}, 4→${TUTORIAL_TOY_SUDOKU.table[3]}. Each of 1-4 appears once on the right: it swaps digits, it never merges two into one.`,
       `Rewrite every cell through it: ${rows(TUTORIAL_TOY_SUDOKU.relabelled)}. Still a valid sudoku — relabelling cannot break a row, column or box.`,
       `Submit the copy. The judge checks it is your solution relabelled, then opens ONE row: row ${TUTORIAL_TOY_SUDOKU.openedRow + 1} reads ${TUTORIAL_TOY_SUDOKU.opened.join(" ")}.`,
       "Everyone else sees 1-4 in some order and a tag naming your table. They learn nothing about which digit sits where. Use a DIFFERENT table next time: two opened groups under one table line up against your puzzle and give the table away.",
@@ -431,7 +431,7 @@ const COPY: Record<Locale, TutorialCopy> = {
       "本番の PROVE はまさにこれを、自分のマス目で行います。4×4 の数独: どの行・列・2×2 の箱にも 1〜4 が 1 回ずつ入ります。",
     toySteps: [
       `自分の解 (非公開): ${rows(TUTORIAL_TOY_SUDOKU.solution)}。このうち 8 マスが「問題」として公開されています。`,
-      `表を 1 つ決めます: 1→${TUTORIAL_TOY_SUDOKU.table[0]}、2→${TUTORIAL_TOY_SUDOKU.table[1]}、3→${TUTORIAL_TOY_SUDOKU.table[2]}、4→${TUTORIAL_TOY_SUDOKU.table[3]}。`,
+      `表を 1 つ決めます: 1→${TUTORIAL_TOY_SUDOKU.table[0]}、2→${TUTORIAL_TOY_SUDOKU.table[1]}、3→${TUTORIAL_TOY_SUDOKU.table[2]}、4→${TUTORIAL_TOY_SUDOKU.table[3]}。右側には 1〜4 が 1 回ずつ現れます。数字を入れ替えるだけで、2 つを 1 つにまとめることはありません。`,
       `全マスをその表で書き換えます: ${rows(TUTORIAL_TOY_SUDOKU.relabelled)}。これも正しい数独です ── 付け替えで行・列・箱は崩れません。`,
       `写しを出します。審判は「自分の解の付け替え」であることを検査し、1 行だけ開きます: ${TUTORIAL_TOY_SUDOKU.openedRow + 1} 行目は ${TUTORIAL_TOY_SUDOKU.opened.join(" ")}。`,
       "相手には「1〜4 の並び替え」と、表を名指すタグしか見えません。どのマスに何があったかは分かりません。次は別の表を使ってください。同じ表で開いた 2 グループは、公開問題と突き合わせると表が割れます。",

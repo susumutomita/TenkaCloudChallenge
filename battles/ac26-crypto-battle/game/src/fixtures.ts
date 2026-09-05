@@ -167,9 +167,26 @@ export function deriveSudokuPuzzle(
  * [Issue #709] Which constraint group (0..11: rows, columns, boxes) the judge
  * opens after a successful PROVE on this Order. Bound to the Order id so a
  * team cannot learn it before submitting, and so a replay opens the same one.
+ *
+ * `alreadyOpened` is the groups this team's current generation has had opened
+ * before; the pick avoids them while any remain. Two reveals of the SAME group
+ * under one relabelling are identical rows and teach a hunter nothing, so a
+ * reuse that happened to land on a repeated group would be a mistake the
+ * record could not punish -- and the statement promises that it can. Once all
+ * twelve are open the pick falls back to the whole set.
  */
-export function deriveRevealGroup(seed: string, contractId: string): number {
-  return Number(deriveBigInt(seed, `sudoku-reveal:${contractId}`, 0, BigInt(CONSTRAINT_GROUP_COUNT)));
+export function deriveRevealGroup(
+  seed: string,
+  contractId: string,
+  alreadyOpened: ReadonlySet<number> = new Set(),
+): number {
+  const candidates: number[] = [];
+  for (let group = 0; group < CONSTRAINT_GROUP_COUNT; group += 1) {
+    if (!alreadyOpened.has(group)) candidates.push(group);
+  }
+  const pool = candidates.length > 0 ? candidates : Array.from({ length: CONSTRAINT_GROUP_COUNT }, (_, i) => i);
+  const index = Number(deriveBigInt(seed, `sudoku-reveal:${contractId}`, 0, BigInt(pool.length)));
+  return pool[index] ?? 0;
 }
 
 /**

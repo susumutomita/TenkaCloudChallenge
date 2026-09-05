@@ -35,12 +35,10 @@ import { computePartial } from "./mpc.ts";
 import {
   ALL_PERMUTATIONS,
   applyPermutation,
-  CONSTRAINT_GROUPS,
   IDENTITY_PERMUTATION,
   type Permutation,
-  partialPermutationBetween,
+  recoverableSolutions,
   samePermutation,
-  solutionsConsistentWith,
 } from "./sudoku.ts";
 import type {
   CoordinationContext,
@@ -520,25 +518,12 @@ export function buildSudokuHuntOp(
 
   for (const reveals of byTag.values()) {
     if (reveals.length < 2) continue;
-    // The union of every revealed cell of this one relabelled grid.
-    const relabelled = new Array<number>(puzzle.length).fill(0);
-    for (const reveal of reveals) {
-      // The ledger's `group` numbering IS sudoku.ts's: rows, columns, boxes.
-      (CONSTRAINT_GROUPS[reveal.group] ?? []).forEach((cell, at) => {
-        relabelled[cell] = reveal.cells[at] ?? 0;
-      });
-    }
     // Every solution the public puzzle allows, tested against what was seen:
     // the true S relabels onto the revealed cells consistently; a wrong
-    // candidate does not.
-    //
-    // A candidate survives when SOME relabelling table sends every one of its
-    // digits to what was revealed at that cell, without contradiction. The
-    // table need not be complete -- three opened groups may mention only
-    // three of the four digits -- but it must be consistent and injective.
-    const matching = solutionsConsistentWith(puzzle).filter(
-      (candidate) => partialPermutationBetween(candidate, relabelled) !== undefined,
-    );
+    // candidate does not. `recoverableSolutions` is the one statement of that
+    // reasoning -- the judge gates the HUNT on it too, so what this builder
+    // finds is exactly what the judge will accept.
+    const matching = recoverableSolutions(puzzle, reveals);
     const [only] = matching;
     if (only && matching.length === 1) {
       return { kind: "hunt-sudoku", targetTeamId, generation: target.generation, solution: [...only] };

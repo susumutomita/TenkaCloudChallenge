@@ -222,6 +222,39 @@ export function solutionsConsistentWith(puzzle: SudokuGrid): readonly SudokuGrid
   return ALL_SOLUTIONS.filter((s) => puzzle.every((v, i) => v === 0 || v === s[i]));
 }
 
+/** One opened group of a relabelled grid, as the ledger publishes it. */
+export interface OpenedGroup {
+  readonly group: number;
+  readonly cells: readonly number[];
+}
+
+/**
+ * [Issue #709] Every solution the public record still allows, given a team's
+ * puzzle and some opened groups of ONE relabelled copy of its solution.
+ *
+ * This is the whole sudoku HUNT, stated once: the union of the opened cells is
+ * a partial view of `π(S)`; a candidate `S'` survives when the puzzle allows it
+ * and SOME consistent, injective table sends its digits to what was opened.
+ * The judge uses it to decide whether the record has actually given the
+ * solution away before it lets anyone HUNT on it (a repeated tag alone is not
+ * enough -- two reveals of the SAME group say nothing new); the playtest
+ * builder and a hunter on paper do the same reasoning.
+ */
+export function recoverableSolutions(
+  puzzle: SudokuGrid,
+  opened: readonly OpenedGroup[],
+): readonly SudokuGrid[] {
+  const relabelled = new Array<number>(SUDOKU_CELLS).fill(0);
+  for (const reveal of opened) {
+    (CONSTRAINT_GROUPS[reveal.group] ?? []).forEach((cell, at) => {
+      relabelled[cell] = reveal.cells[at] ?? 0;
+    });
+  }
+  return solutionsConsistentWith(puzzle).filter(
+    (candidate) => partialPermutationBetween(candidate, relabelled) !== undefined,
+  );
+}
+
 /**
  * Whether `grid` agrees with `puzzle` under SOME relabelling: cells the puzzle
  * shows as equal are equal in the grid, and cells it shows as different are

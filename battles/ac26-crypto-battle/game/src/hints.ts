@@ -186,8 +186,8 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "zk-sudoku/2",
       text: {
-        ja: "数字を付け替えます。「1→3、2→1、3→4、4→2」のような表を自分で 1 つ決め、解の 16 マスすべてをその表で書き換えたものを出します。付け替えても行・列・箱の性質は崩れないので、審判は「本物の解を持っている」と分かり、相手はどのマスに何があったかを知れません。",
-        en: "Relabel the digits. Pick one table of your own, like 1->3, 2->1, 3->4, 4->2, and rewrite all 16 cells of your solution through it. Relabelling keeps every row, column and box valid, so the judge learns you hold a real solution and other teams learn nothing about which digit sat where.",
+        ja: "数字を付け替えます。「1→3、2→1、3→4、4→2」のような表を自分で 1 つ決め、解の 16 マスすべてをその表で書き換えたものを出します。表の右側には 1・2・3・4 をちょうど 1 回ずつ使います (2 つの数字を同じ数字にまとめると、行に同じ数字が 2 つ並んで数独でなくなります)。付け替えても行・列・箱の性質は崩れないので、審判は「本物の解を持っている」と分かり、相手はどのマスに何があったかを知れません。",
+        en: "Relabel the digits. Pick one table of your own, like 1->3, 2->1, 3->4, 4->2, and rewrite all 16 cells of your solution through it. Each of 1, 2, 3, 4 must appear exactly once on the right of the table (merging two digits into one puts the same digit twice in a row, and that is no longer a sudoku). Relabelling keeps every row, column and box valid, so the judge learns you hold a real solution and other teams learn nothing about which digit sat where.",
       },
     },
     {
