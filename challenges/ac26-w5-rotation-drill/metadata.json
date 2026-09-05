@@ -227,7 +227,7 @@
           },
           {
             "id": "window-hint-3",
-            "content": "window で候補 new_a,new_b を選ぶ → 本文の商とノイズの条件を確認 → 二つの位置で同じ table を read → 答えが違う組を return → window -> を提出。",
+            "content": "window で new_a を0〜q−1、内側で new_b を0〜q−1へ一つずつ増やす二重ループを作ります。各候補で phase=(new_b-new_a)%q と divmod(phase,q//p) を求め、本文の商・ノイズ条件から外れたら次へ。残った候補で別々に丸めた位置と差を先に丸めた位置を求め、同じ table を read します。答えが違った最初の [new_a,new_b] を return して終了。最大 q*q 組で終わり、この問題の数には条件を満たす組があります。window -> の組を提出します。",
             "penalty": 2
           }
         ]
@@ -250,7 +250,7 @@
           },
           {
             "id": "edge-hint-3",
-            "content": "edge で長さnの表を作る → 各 m と offsets の各ずれで本文の等式を確認 → 未対応の場所を直す → edge -> の新しい表を提出。",
+            "content": "edge でまず0をn個並べます。mを0〜p//2−1、内側でoffsetsのずれを一つずつ取り、position=(m*(2*n//p)+ずれ)%(2*n)、answer=(m+shift)%(p//2)を計算します。position<nなら表[position]にanswer、そうでなければ表[position-n]に-answerを書きます。全組を書いたら同じ全組をreadで確かめて表をreturn。指定されない位置は0のままで構いません。edge -> の表を提出します。",
             "penalty": 2
           }
         ]
@@ -394,7 +394,7 @@
             },
             {
               "id": "window-hint-3",
-              "content": "Choose new_a,new_b in window → check the published message/noise bounds → read the same table at both positions → return a pair with different answers → submit window ->."
+              "content": "In window, loop new_a from 0 through q-1; inside it loop new_b through the same range. For each pair calculate phase=(new_b-new_a)%q and divmod(phase,q//p); skip pairs outside the published message/noise bounds. For the remaining pairs, calculate the separate-rounding and difference-first positions and read the same table at both. Return the first [new_a,new_b] whose answers differ and stop. This checks at most q*q pairs, and a witness exists for the displayed parameters. Submit window ->."
             }
           ]
         },
@@ -412,7 +412,7 @@
             },
             {
               "id": "edge-hint-3",
-              "content": "Create n entries in edge → check the stated equality for every m and offset → repair unsatisfied positions → submit the new list after edge ->."
+              "content": "In edge, start with n zeros. Loop m from 0 through p//2-1 and, inside it, over offsets. Compute position=(m*(2*n//p)+offset)%(2*n) and answer=(m+shift)%(p//2). If position<n, write answer to table[position]; otherwise write -answer to table[position-n]. After assigning every pair, read-check all pairs and return the table. Unconstrained entries may stay zero. Submit edge ->."
             }
           ]
         }

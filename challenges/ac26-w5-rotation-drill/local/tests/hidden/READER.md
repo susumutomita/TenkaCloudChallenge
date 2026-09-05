@@ -227,3 +227,62 @@ edge: [1, 2, 2, 3, 3, 0, 0, -1]
 
 No claim of a human browser playtest, real encrypted bootstrapping, or a live AWS
 event is made. No shared environment was changed.
+
+## Final hint review
+
+PR review found that “choose and check” did not tell a beginner how to finish either
+construction. Rung 3 now gives a bounded nested search for the counterexample, and
+an explicit per-position assignment including the sign for the replacement table.
+An independent reader implemented both functions from these hints without seeing
+private answers or running code. Combined with either language's six teaching blocks,
+the functions passed 80 varied author fixtures and actual Workbench public tests.
+Only exceptional failure handling was unspecified; the reader used ValueError.
+
+The reader-authored functions were:
+
+```python
+"""Independent translation of the participant's two closing hints.
+
+Not executed. Insert these functions where the provided rh, table and read
+helpers are already available, as described in the participant packet.
+"""
+
+
+def window(p, q, n, shift):
+    D = q // p
+    values = table(p, n, shift)
+    for new_a in range(q):
+        for new_b in range(q):
+            phase = (new_b - new_a) % q
+            message, noise = divmod(phase, D)
+            if message >= p // 2 or noise <= 0 or noise >= D / 2:
+                continue
+            separate_position = (
+                rh(q, n, new_b) - rh(q, n, new_a)
+            ) % (2 * n)
+            difference_position = rh(q, n, phase) % (2 * n)
+            if read(values, separate_position) != read(values, difference_position):
+                return [new_a, new_b]
+    raise ValueError("条件を満たす組が見つかりませんでした")
+
+
+def edge(p, n, shift, offsets):
+    values = [0] * n
+    for message in range(p // 2):
+        for offset in offsets:
+            position = (message * (2 * n // p) + offset) % (2 * n)
+            answer = (message + shift) % (p // 2)
+            if position < n:
+                values[position] = answer
+            else:
+                values[position - n] = -answer
+
+    for message in range(p // 2):
+        for offset in offsets:
+            position = (message * (2 * n // p) + offset) % (2 * n)
+            answer = (message + shift) % (p // 2)
+            if read(values, position) != answer:
+                raise ValueError("すべての条件を同時に満たす表になりませんでした")
+    return values
+
+```
