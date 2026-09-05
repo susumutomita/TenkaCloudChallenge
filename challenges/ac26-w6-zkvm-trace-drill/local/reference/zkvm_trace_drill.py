@@ -51,5 +51,11 @@ def tamper(m, cases, reports):
     return [report==truth for report,truth in zip(reports,actual)]
 
 
-def binding(program, receipts):
-    return [r['verified'] and r['program']==program and r['claim']=='exploit' for r in receipts]
+def binding(m, limit, other_limit):
+    for a in range(m):
+        for b in range(m):
+            for c in range(m):
+                full=a+b+c
+                if full>other_limit and limit<full%m<=other_limit:
+                    return [a,b,c]
+    raise ValueError('fixture has no distinguishing input')

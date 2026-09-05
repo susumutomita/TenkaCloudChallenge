@@ -12,7 +12,7 @@ def main():
     print('m: 割る数 / divisor; limit: 上限 / limit; discounts: 足す数 / inputs')
     print('cases: 4つの入力例 / four cases; reports: その例についての報告 / reported claims')
     print('program: 確かめたいプログラム番号 / requested program number')
-    print('receipts: 確認済みか・番号・主張の見本カード / prechecked flag, program, claim cards')
+    print('other_program: 別のプログラム番号 / other program; other_limit: その上限 / its limit')
 
 
 if __name__=='__main__':main()

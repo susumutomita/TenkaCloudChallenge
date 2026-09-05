@@ -17,7 +17,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 METADATA = json.load(sys.stdin) if os.environ.get('READ_METADATA_STDIN') == '1' else json.loads((ROOT.parent/'metadata.json').read_text())
-from fixtures.generate import GRADED, LINES, normalize_answer, setting, submission_binding
+from fixtures.generate import GRADED, LINES, normalize_answer, setting, submission_binding, valid_binding
 from participant.workbench import PortalEditorSupport
 from participant.exercise import EXAMPLE, EXAMPLE_EXPECTED, call_row
 from tests.hidden import check_zkvm_trace_drill
@@ -27,11 +27,11 @@ from verifier import server
 def editor_solution(instructions: str):
     """Follow only the published copy-into-editor route, including supplied names."""
     blocks = re.findall(r'```python\n(.*?)\n```', instructions, re.S)
-    if len(blocks) != len(LINES):
-        raise AssertionError('Each visible row must have one runnable code block')
+    if len(blocks) != len(LINES)-1:
+        raise AssertionError('Only the seven teaching rows supply complete code')
     source = ast.parse((ROOT/'starter/zkvm_trace_drill.py').read_text())
     for fn in source.body:
-        if not isinstance(fn, ast.FunctionDef) or fn.name not in LINES:
+        if not isinstance(fn, ast.FunctionDef) or fn.name not in LINES[:-1]:
             continue
         code = ast.parse(blocks[LINES.index(fn.name)]).body
         if not isinstance(code[-1], ast.Expr):
@@ -50,9 +50,13 @@ class LearningContract(unittest.TestCase):
         for text in (metadata['instructions'], metadata['i18n']['en']['instructions']):
             learner = editor_solution(text)
             for seed in ('visible-1', 'visible-2', 'test-403', 'mask-18'):
+                self.assertEqual(len(check_zkvm_trace_drill.run(learner, seed)), 2, seed)
+                self.assertTrue(all('binding' in failure for failure in check_zkvm_trace_drill.run(learner, seed)))
+            learner.binding = lambda m,l,o: [m-1,l+2,0]
+            for seed in ('visible-1','visible-2','test-403','mask-18'):
                 self.assertEqual(check_zkvm_trace_drill.run(learner, seed), [], seed)
 
-    def test_visible_solution_passes_the_actual_public_test_route(self):
+    def test_copying_only_the_visible_code_leaves_the_construction_unfinished(self):
         learner = editor_solution(METADATA['instructions'])
         evidence = json.dumps(server.public_payload('reader-followup'))
         with patch.dict(sys.modules, {'zkvm_trace_drill': learner}), patch.dict(os.environ, {'PUBLIC_EVIDENCE_JSON': evidence}):
@@ -60,8 +64,9 @@ class LearningContract(unittest.TestCase):
             with contextlib.redirect_stdout(output):
                 with self.assertRaises(SystemExit) as result:
                     runpy.run_path(str(ROOT/'tests/public/test_zkvm_trace_drill.py'), run_name='__main__')
-            self.assertEqual(result.exception.code, 0, output.getvalue())
-            self.assertIn('public tests: PASS', output.getvalue())
+            self.assertEqual(result.exception.code, 1, output.getvalue())
+            self.assertIn('FAIL binding', output.getvalue())
+            self.assertIn('public tests: FAIL', output.getvalue())
 
     def test_public_tests_reject_numeric_boolean_results(self):
         learner = editor_solution(METADATA['instructions'])
@@ -85,7 +90,7 @@ class LearningContract(unittest.TestCase):
 
     def test_one_digit_example_has_the_documented_results(self):
         learner = editor_solution(METADATA['instructions'])
-        for row in GRADED:
+        for row in GRADED[:-1]:
             self.assertEqual(normalize_answer(row, call_row(learner, row, EXAMPLE)),
                              normalize_answer(row, EXAMPLE_EXPECTED[row]), row)
 
@@ -107,10 +112,17 @@ class LearningContract(unittest.TestCase):
             self.assertEqual(sum(answers['exploit']), 1)
             self.assertEqual(sum(answers['predicate']), 2)
             self.assertEqual(sum(answers['tamper']), 2)
-            self.assertEqual(sum(answers['binding']), 1)
+            self.assertTrue(valid_binding(public, answers['binding']))
             observed_orders.add(tuple(roles))
         self.assertEqual(machines, {8, 16})
         self.assertGreater(len(observed_orders), 1)
+
+    def test_construction_accepts_multiple_witnesses_but_rejects_both_wrong_decisions(self):
+        public={'m':8,'limit':3,'other_limit':5}
+        for value in ([7,5,0],[7,6,0],[0,5,7]):
+            self.assertTrue(valid_binding(public,value))
+        for value in ([7,1,0],[7,7,0],[8,4,0],[7,True,4],[7,5]):
+            self.assertFalse(valid_binding(public,value))
 
     def test_boolean_answers_do_not_accept_numbers_or_missing_entries(self):
         for value in ('1,0', [1,0], [True], '', None):

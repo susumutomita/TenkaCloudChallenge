@@ -1,14 +1,13 @@
-"""Eight rows about a tiny addition program and the claim made about it.
+"""Seven worked rows, then construct an input distinguishing two programs.
 
-Use the statement's code blocks in order. Replace return None with the whole
-block for that row, adding return before the block's final expression. Run the
-public tests to see your own outputs, then submit them in that row's answer field.
+For rows 1-7, replace return None with the statement's whole block and return its
+final expression. Row 8 supplies the required conditions; construct your own input
+by hand or implement binding yourself. Public tests print your own outputs.
 
-m is the wrapping divisor; discounts is the three input numbers; limit is the
-largest allowed total. cases holds four lists of inputs and limits. reports
-holds another person's claims about those cases. program is the requested program
-number. receipts are teaching cards with a prechecked flag, program number and
-claim label. They are not real cryptographic proofs. True means yes; False means no.
+m is the wrapping divisor; discounts contains three inputs; limit is the requested
+program's maximum accepted total. cases contains four examples and reports contains
+someone else's claims. other_program uses the same arithmetic but other_limit.
+No cryptographic proof is generated. True means yes; False means no.
 """
 from __future__ import annotations
 
@@ -48,6 +47,11 @@ def tamper(m, cases, reports):
     return None
 
 
-def binding(program, receipts):
-    """Row 8: prechecked, expected program, and the exact exploit claim must all match."""
+def binding(m, limit, other_limit):
+    """Construct three integers, each 0 through m-1.
+    Inputs guarantee 0 <= limit < other_limit < m.
+    Their ordinary sum exceeds other_limit. Its remainder by m is greater than
+    limit and at most other_limit: only the other program improperly accepts.
+    Write your own construction here, or submit a hand-constructed triple directly.
+    """
     return None

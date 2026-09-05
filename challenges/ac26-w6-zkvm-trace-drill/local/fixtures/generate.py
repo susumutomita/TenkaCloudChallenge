@@ -1,6 +1,6 @@
 """Private, deterministic fixtures for an arithmetic/claim drill. No proof is generated.
 
-The participant sees program inputs, example claims and receipt labels through
+The participant sees program inputs, example claims and two program limits through
 GET /public. Expected answers and the fixture seed stay in the verifier image.
 The instruction machine wraps additions at 8 or 16, independently of the pinned
 course's u16 coupon example and its 1000-unit limit.
@@ -11,7 +11,7 @@ import hashlib
 LINES = GRADED = ("exact", "trace", "overflow", "decision", "exploit", "predicate", "tamper", "binding")
 SHAPES = {"exact":"int", "trace":("int",3), "overflow":("bool",3),
           "decision":("bool",2), "exploit":("bool",4), "predicate":("bool",4),
-          "tamper":("bool",4), "binding":("bool",4)}
+          "tamper":("bool",4), "binding":("int",3)}
 
 
 def _draw(seed, label, low, high):
@@ -68,12 +68,8 @@ def setting(seed):
     flipped=set(_order(seed,"reports",list(range(4)))[:2])
     reports=[not value if i in flipped else value for i,value in enumerate(correct_claims)]
     program=_draw(seed,"program",1,8)
-    receipts=_order(seed,"receipts",[
-        {"verified":True,"program":program,"claim":"exploit"},
-        {"verified":True,"program":program+1,"claim":"exploit"},
-        {"verified":True,"program":program,"claim":"accept"},
-        {"verified":False,"program":program,"claim":"exploit"},
-    ])
+    other_program=program+1
+    other_limit=_draw(seed,"other-limit",limit+1,m-1)
     trace,overflow=_execution(m,discounts)
     exact=sum(discounts)
     expected={
@@ -84,10 +80,10 @@ def setting(seed):
         "exploit":tuple(correct_claims),
         "predicate":tuple(sum(c["discounts"])>c["limit"] and not hit for c,hit in zip(cases,correct_claims)),
         "tamper":tuple(report==actual for report,actual in zip(reports,correct_claims)),
-        "binding":tuple(r["verified"] and r["program"]==program and r["claim"]=="exploit" for r in receipts),
+        "binding":(m-1,limit+2,0),
     }
     public={"m":m,"limit":limit,"discounts":discounts,"cases":cases,
-            "reports":reports,"program":program,"receipts":receipts}
+            "reports":reports,"program":program,"other_program":other_program,"other_limit":other_limit}
     return {"public":public,"expected":expected}
 
 
@@ -196,3 +192,13 @@ def normalize_answer(line: str, raw: object):
             return None
         return tuple(values)
     return normalize_scalar(shape, raw)
+
+
+def valid_binding(public, answer):
+    """Accept any witness distinguishing the requested and other program's rules."""
+    got=normalize_answer('binding',answer)
+    if got is None or not all(0 <= value < public['m'] for value in got):
+        return False
+    full=sum(got)
+    stored=full % public['m']
+    return full > public['other_limit'] and public['limit'] < stored <= public['other_limit']

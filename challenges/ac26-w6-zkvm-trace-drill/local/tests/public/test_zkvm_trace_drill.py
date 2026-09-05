@@ -27,12 +27,19 @@ def main():
     for row in rows:
         try:
             got=call_row(drill,row,EXAMPLE)
-            expected=EXAMPLE_EXPECTED[row]
-            if isinstance(got, (list, tuple)) and isinstance(expected, (list, tuple)):
-                same = len(got) == len(expected) and all(type(a) is type(b) and a == b for a, b in zip(got, expected))
+            if row == 'binding':
+                same = isinstance(got, (list, tuple)) and len(got) == 3 and all(type(n) is int and 0 <= n < EXAMPLE['m'] for n in got)
+                if same:
+                    full=sum(got)
+                    same=full>EXAMPLE['other_limit'] and EXAMPLE['limit']<full%EXAMPLE['m']<=EXAMPLE['other_limit']
+                print(f'{"PASS" if same else "FAIL"} binding: candidate {got!r}; require three in-range inputs, excess ordinary total, and different program decisions')
             else:
-                same = type(got) is type(expected) and got == expected
-            print(f'{"PASS" if same else "FAIL"} {row}: got {got!r}, example {expected!r}')
+                expected=EXAMPLE_EXPECTED[row]
+                if isinstance(got, (list, tuple)) and isinstance(expected, (list, tuple)):
+                    same = len(got) == len(expected) and all(type(a) is type(b) and a == b for a, b in zip(got, expected))
+                else:
+                    same = type(got) is type(expected) and got == expected
+                print(f'{"PASS" if same else "FAIL"} {row}: got {got!r}, example {expected!r}')
             passed &= same
         except Exception as error:
             print(f'FAIL {row}: {type(error).__name__}: {error}')

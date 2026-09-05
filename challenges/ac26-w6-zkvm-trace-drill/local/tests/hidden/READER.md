@@ -17,7 +17,7 @@ The reader hand-computed all eight answers but found three gaps:
 3. The first packet contained the public evidence JSON rather than the actual Inspect
    rendering. The reader correctly treated copyability as unverified. The final packet
    used actual `/api/inspect` output, and the statement identifies the copy range from
-   `m =` through `receipts =`, excluding the surrounding explanations.
+   `m =` through the last assignment (now `other_limit =`), excluding the surrounding explanations.
 
 The second read confirmed these three repairs and retained the same eight answers.
 The reader also suggested defining `raw` at first use; it now says the sum before
@@ -38,8 +38,17 @@ so only the second addition overflows. The machine approves 2<=5, but 10>5.
 
 The second and third cases refute the incomplete condition that checks only excess.
 Reports [True,True,False,True] match recomputation only in the last two positions.
-For requested program 8, only the first receipt satisfies all three checks; the others
-have claim `accept`, are unverified, or refer to program 9.
+The closing row was subsequently redesigned after PR review found that all eight
+rows could be completed by copying. The first seven retain worked code; the last
+now requires a constructed input and accepts any candidate meeting its conditions.
+
+The same independent reader received the revised participant-only packet. For m=8,
+requested limit 5 and other limit 6, it selected stored value 6, then ordinary total
+8+6=14, and constructed [7,6,1]. Each input is in range; 14 exceeds 6; stored 6 is
+rejected by the requested program and improperly accepted by the other program.
+The reader independently proposed `return [m-1, other_limit, 1]` for the editor.
+It asked for the parameter guarantee to be explicit; the statement and starter now
+state `0 <= limit < other_limit < m`.
 
 | Field | Independent answer |
 | --- | --- |
@@ -50,21 +59,26 @@ have claim `accept`, are unverified, or refer to program 9.
 | exploit | [False,False,False,True] |
 | predicate | [False,True,True,False] |
 | tamper | [False,False,True,True] |
-| binding | [True,False,False,False] |
+| binding | [7,6,1] (one valid constructed input) |
 
 ## Runtime boundary
 
 The author separately submitted these hand answers through actual Docker Workbench
 `/api/prepare` and `/verify`: 8/8 accepted. Eight wrong answers and eight unprepared
 submissions were rejected. Both Japanese and English code blocks, copied into the
-actual `/api/starter` functions, passed `/api/test`. An unfilled starter failed.
+actual `/api/starter` functions, passed rows 1–7 but left the construction failing.
+Adding the reader-authored construction made `/api/test` pass in both languages.
+Additional valid triples [7,7,0] and [0,7,7] were accepted; inputs accepted by both
+programs, rejected by both, or outside the allowed range were rejected. An unfilled
+starter failed.
 Learner code saw neither `FLAG_SEED` nor the fixture generator module.
 
 The initial CLI run exposed a Docker VM host-mount limitation: the starter directory
 was empty inside the container. The CLI now streams the edited file over stdin and
 builds the Compose workbench image it actually runs. It requires no host Python or
 shared filesystem path. `make inspect`, `make test` with the starter filled from the
-visible Japanese rows, and `make test-one ID=exact` passed after the repair. The
+visible Japanese rows plus the reader-authored construction, and
+`make test-one ID=exact` passed after the repair. The
 unfilled starter still failed the public examples. This change is confined to this problem.
 
 Catalog checks do not prove Portal rendering. These runs verify the real participant

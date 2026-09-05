@@ -22,9 +22,9 @@ def main():
         ('exploit uses OR','exploit',lambda m,c:[sum(x['discounts'])%m<=x['limit'] or sum(x['discounts'])>x['limit'] for x in c]),
         ('predicate calls every real exploit a counterexample','predicate',reference.exploit),
         ('tamper trusts reported values','tamper',lambda m,c,r:r),
-        ('binding ignores program','binding',lambda p,rs:[r['verified'] and r['claim']=='exploit' for r in rs]),
-        ('binding ignores claim','binding',lambda p,rs:[r['verified'] and r['program']==p for r in rs]),
-        ('binding ignores verification','binding',lambda p,rs:[r['program']==p and r['claim']=='exploit' for r in rs]),
+        ('binding constructs no overflow','binding',lambda m,l,o:[0,0,0]),
+        ('binding makes both programs accept','binding',lambda m,l,o:[m-1,1,0]),
+        ('binding uses out-of-range inputs','binding',lambda m,l,o:[m,l+1,0]),
     ]
     killed=0
     for label,row,bad in mutations:
@@ -39,7 +39,9 @@ def main():
     for row in GRADED:
         assert server.evaluate(row,correct[row]),row
         value=correct[row]
-        if isinstance(value,tuple):
+        if row=='binding':
+            wrong=[0,0,0]
+        elif isinstance(value,tuple):
             wrong=list(value)
             wrong[0]=not wrong[0] if SHAPES[row][0]=='bool' else wrong[0]+1
         else:wrong=value+1
