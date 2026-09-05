@@ -6,13 +6,15 @@ type Locale = "ja" | "en";
 
 interface QuickRulesCopy {
   readonly title: string;
+  readonly explanation: string;
   readonly summary: string;
   readonly choice: string;
 }
 
 export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
   en: {
-    title: "Your first move",
+    title: "How this problem works",
+    explanation: "Score by answering the incoming tasks (ORDERs) while protecting fragments of your secret. Once enough fragments are public, another team can reconstruct your secret and score with HUNT.",
     // [Issue #677] Press START first. Nothing arrives until someone does, and a
     // player told to pick an Order from an empty belt has been sent to a screen
     // that cannot answer them.
@@ -21,7 +23,8 @@ export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
     choice: "LEAK = score now, but publish a secret fragment. PROVE = do a calculation and keep the fragment protected.",
   },
   ja: {
-    title: "最初にやること",
+    title: "この問題の解説",
+    explanation: "自分の秘密のかけらを守りながら、届くお題（ORDER）に答えて得点を競います。公開したかけらが一定数そろうと、相手は秘密を復元して HUNT で得点できます。",
     summary:
       "「試合を始める」を押します。すぐに ORDER が届くので、青い ORDER カードを1枚選び、その下にある大きなボタンを1つ選びます。",
     choice: "LEAK = すぐ得点する代わりに秘密のかけらを 1 個公開。PROVE = 計算してかけらを守る。",
@@ -46,6 +49,7 @@ export default function QuickRules({ locale }: Pick<PortalSlotProps, "locale">) 
   return (
     <section style={panelStyle} aria-label="crypto-battle-quick-rules">
       <strong>{copy.title}</strong>
+      <p style={{ margin: "4px 0", fontSize: "13px" }}>{copy.explanation}</p>
       <p style={{ margin: "4px 0", fontSize: "13px" }}>{copy.summary}</p>
       <p style={{ margin: "4px 0 0", fontSize: "13px" }}>
         <strong>{copy.choice}</strong>

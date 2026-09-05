@@ -76,13 +76,31 @@ not during one.
 
 The default surface is deliberately staged:
 
-1. pick one ORDER;
-2. choose the action that Order accepts;
-3. open tactics only after public material makes HUNT or ROTATE relevant;
-4. open the tutorial or full computation reference only when needed.
+1. read the always-visible problem explanation above the board; the compact
+   “Practice (optional)” control opens a walkthrough only on request;
+2. pick one ORDER and choose the action it accepts;
+3. for sudoku PROVE, select a relabelling table and fill four holes beside
+   twelve worked cells; all four digit substitutions are exercised once;
+4. open tactics or the full reference when needed.
 
-The Portal must not compute a participant's PROVE or HUNT answer, announce that
-a target is exploitable, or show another team's private material.
+The tutorial starts collapsed on every visit, including the waiting room. It
+never gates or automatically interrupts play, and can be closed in place. It
+uses only fixed practice data; changing team or deployment resets practice.
+
+Free concept explanations are separate from practice. They start as compact
+controls above the board and beside each calculation form, use fixed one-digit
+examples, and show unsolved expressions from only the current team's projected
+Order operands. No hint purchase or tutorial completion is needed. FHE is
+labelled an addition model with separate per-input keys; the ZK explanation
+states that this game trusts a judge holding the solution.
+
+The sudoku scaffold is an explicit participant aid: it applies the selected
+table to twelve cells of the owning team's solution. Four answers remain empty,
+and the trusted judge still checks the complete submitted grid. Tables used in
+the same generation remain selectable with a reuse warning, preserving the
+misuse that sudoku HUNT teaches. The Portal must not fill these four answers,
+compute a HUNT answer, announce that a target is exploitable, or show another
+team's private material.
 
 ## Local UI harness
 

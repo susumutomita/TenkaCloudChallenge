@@ -193,8 +193,8 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {
       id: "zk-sudoku/3",
       text: {
-        ja: "表を書いたら、左上のマスから順に 16 個置き換えて入力します。審判は通ったあと 1 行 (または 1 列・1 箱) だけを公開します。同じ表を 2 回以上使うと、公開された行どうしがつながり、公開問題と合わせて解が 1 つに絞れた時点で HUNT されます (2 つで足りないこともありますが、次の公開で絞られていきます)。MY VAULT の「使った表」に無い表を毎回選んでください。",
-        en: "Write the table, then replace the 16 cells starting from the top-left and enter them. After the judge accepts it, one row (or column, or box) is published. Use the same table twice or more and the published groups link up; once they pin your public puzzle to one solution you can be HUNTed (two may not be enough yet; the next one narrows it further) -- pick a table not yet listed under MY VAULT's used relabellings, every time.",
+        ja: "PROVE の付け替え表を選ぶと、12 マスは入力例として表示されます。残り 4 マスを、左の解と表を見て埋めて SUBMIT を押します。審判は通ったあと 1 行 (または 1 列・1 箱) だけを公開します。同じ表を 2 回以上使うと、公開された行どうしがつながり、公開問題と合わせて解が 1 つに絞れた時点で HUNT されます (2 つで足りないこともありますが、次の公開で絞られていきます)。MY VAULT の「使った表」に無い表を毎回選んでください。",
+        en: "Choose a relabelling table in PROVE. Twelve cells appear as worked examples; fill the remaining four using the solution on the left and your table, then press SUBMIT. After the judge accepts it, one row (or column, or box) is published. Use the same table twice or more and the published groups link up; once they pin your public puzzle to one solution you can be HUNTed (two may not be enough yet; the next one narrows it further) -- pick a table not yet listed under MY VAULT's used relabellings, every time.",
       },
     },
   ],

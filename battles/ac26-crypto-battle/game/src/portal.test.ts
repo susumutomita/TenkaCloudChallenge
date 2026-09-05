@@ -1537,11 +1537,15 @@ describe("the help drawer names what the player is learning", () => {
  * is supposed to work, let alone why.
  */
 describe("each Order carries its use, its mechanism, and its procedure", () => {
-  it("gives the FHE Order all three, with the identity that makes it work", () => {
+  it("explains the FHE input-specific hiding totals instead of a shared-key identity", () => {
     const copy = FAST_MOVE_COPY.ja;
     expect(copy.fheUse).toContain("つかいみち");
-    // The mechanism is one line and it is the actual identity, not a paraphrase.
-    expect(copy.fheWhy).toContain("Enc(a) + Enc(b) = Enc(a+b)");
+    // Each input has a different key; the old Enc(a+b) wording taught a
+    // shared-key identity that this scheme does not implement.
+    expect(copy.fheWhy).toContain("中身の合計 + 隠す数の合計");
+    expect(copy.fheWhy).toContain("各入力の鍵");
+    expect(copy.fheWhy).not.toContain("Enc(a+b)");
+    expect(FAST_MOVE_COPY.en.fheWhy).toContain("separate input keys");
     expect(copy.fheHelp).toContain("やること");
   });
 

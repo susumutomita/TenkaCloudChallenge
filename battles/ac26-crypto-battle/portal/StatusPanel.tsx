@@ -21,6 +21,9 @@
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import BattleSurface from "./FastMovePanel.tsx";
 import CoreStatusPanel from "./StatusPanelCore.tsx";
+import ConceptExplanation from "./ConceptExplanation.tsx";
+import QuickRules from "./QuickRules.tsx";
+import TutorialWalkthrough from "./TutorialWalkthrough.tsx";
 
 export * from "./StatusPanelCore.tsx";
 
@@ -31,8 +34,12 @@ const COPY = {
 
 export default function StatusPanel(props: PortalSlotProps) {
   const locale = props.locale === "ja" ? "ja" : "en";
+  const tutorialKey = `crypto-battle-tutorial:${props.team.eventId}:${props.jobId}:${props.team.teamId}`;
   return (
     <>
+      <QuickRules locale={locale} />
+      <ConceptExplanation locale={locale} />
+      <TutorialWalkthrough key={tutorialKey} locale={locale} />
       <BattleSurface {...props} />
       <details style={{ marginTop: "10px" }}>
         <summary style={{ cursor: "pointer", fontSize: "12px", color: "#5f6b7a" }}>{COPY[locale].raw}</summary>
