@@ -67,7 +67,7 @@ export interface TutorialState {
 /**
  * The tutorial's field. 17 is small enough that `3 x 8 - 3 x 13 + 3` is a
  * pencil-and-paper subtraction, and prime, so the mathematics is the same
- * mathematics the live match runs over its 61-bit prime.
+ * mathematics the live match runs over its configured prime (97 by default).
  */
 export const TUTORIAL_PRIME = 17;
 export const DOCUMENTED_THRESHOLD = 3;
@@ -344,8 +344,8 @@ const COPY: Record<Locale, TutorialCopy> = {
     title: "Guided rules walkthrough (no score, no match changes)",
     intro:
       "Fixed tutorial values run only in this browser. Your live secret, Contracts, ledger, and score are untouched.",
-    skip: "Skip for now",
-    show: "Show the walkthrough",
+    skip: "Close practice",
+    show: "Practice (optional)",
     reset: "Start over",
     score: "Tutorial score",
     generation: "Current generation",
@@ -408,8 +408,8 @@ const COPY: Record<Locale, TutorialCopy> = {
     title: "ルールを順番に体験する（無得点・本番に影響なし）",
     intro:
       "固定された練習用データだけをブラウザ内で動かします。本物の secret、Contract、Ledger、得点には触れません。",
-    skip: "今はスキップ",
-    show: "チュートリアルを表示",
+    skip: "練習を閉じる",
+    show: "練習する（任意）",
     reset: "最初からやり直す",
     score: "練習スコア",
     generation: "現在の世代",
@@ -476,8 +476,9 @@ const cardStyle = {
   padding: "12px",
   marginBottom: "12px",
   background: "#fff",
+  color: "#16212e",
 } as const;
-const actionStyle = { padding: "6px 10px", fontSize: "12px", cursor: "pointer" } as const;
+const actionStyle = { padding: "6px 10px", fontSize: "12px", cursor: "pointer", color: "#fff", background: "#175b91", border: "1px solid #175b91", borderRadius: "6px" } as const;
 const statsStyle = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
@@ -576,17 +577,20 @@ function ToySudoku({ copy }: { readonly copy: TutorialCopy }) {
 export default function TutorialWalkthrough({ locale }: { readonly locale: Locale }) {
   const copy = COPY[locale];
   const [state, setState] = useState<TutorialState>(() => createTutorialState());
+  // Practice is opt-in on every visit. The live problem explanation is always
+  // visible above this control; starting a match never requires this detour.
   const [visible, setVisible] = useState(false);
+  const collapse = () => setVisible(false);
   const stage = copy.stages[state.stage];
   const showOpponent = state.stage === "proved" || state.stage === "hunted" || state.stage === "rotated";
   const isHuntStep = state.stage === "proved";
 
   if (!visible) {
     return (
-      <div style={cardStyle}>
-        <strong>{copy.title}</strong>
-        <p style={{ margin: "4px 0 8px", fontSize: "12px", color: "#5f6b7a" }}>{copy.intro}</p>
-        <button type="button" style={actionStyle} onClick={() => setVisible(true)}>
+      <div style={{ margin: "0 0 8px" }} aria-label="crypto-battle-tutorial-collapsed">
+        <button type="button" aria-expanded={false}
+          style={{ cursor: "pointer", fontSize: "12px", padding: "5px 10px", border: "1px solid #9ba7b6", borderRadius: "6px", color: "#24476d", background: "#fff" }}
+          onClick={() => setVisible(true)}>
           {copy.show}
         </button>
       </div>
@@ -600,7 +604,7 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
           <strong>{copy.title}</strong>
           <p style={{ margin: "4px 0", fontSize: "12px", color: "#5f6b7a" }}>{copy.intro}</p>
         </div>
-        <button type="button" style={actionStyle} onClick={() => setVisible(false)}>
+        <button type="button" style={actionStyle} aria-expanded={true} onClick={collapse}>
           {copy.skip}
         </button>
       </div>
@@ -629,8 +633,8 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
             }
           />
         ) : (
-          <button type="button" style={actionStyle} onClick={() => setState((current) => advanceTutorial(current))}>
-            {stage.action}
+          <button type="button" style={actionStyle} onClick={() => state.stage === "rotated" ? collapse() : setState((current) => advanceTutorial(current))}>
+            {state.stage === "rotated" ? (locale === "ja" ? "本番へ（折りたたむ）" : "Play the match (collapse)") : stage.action}
           </button>
         )}
 

@@ -1,4 +1,8 @@
-# PROVE / LEAK / HUNT — Cryptography Battle
+# Cryptography Battle
+
+The problem explanation stays visible above the board. Optional practice opens only from the compact “Practice (optional)” button there, and can be closed in place; it never opens automatically or gates play. For sudoku PROVE, choose a digit-relabelling table and complete four holes beside twelve worked cells. Each original digit is practised once; the judge checks the full grid, and reusing a table still creates HUNT exposure.
+
+Free “How it works” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
 ## What is going on
 

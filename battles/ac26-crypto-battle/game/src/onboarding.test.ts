@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GameBoardBody } from "../../portal/GameBoard.tsx";
 import HelpDrawer from "../../portal/HelpDrawer.tsx";
+import StatusPanel from "../../portal/StatusPanel.tsx";
 import {
   getActionableContracts,
   isMatchClosed,
@@ -278,11 +279,24 @@ describe("Issue #643 hand-calculable tutorial HUNT", () => {
   });
 
   for (const locale of ["ja", "en"] as const) {
-    it(`renders the walkthrough before the collapsed complete reference (${locale})`, () => {
-      const html = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
-      const tutorialTitle = locale === "ja" ? "ルールを順番に体験する" : "Guided rules walkthrough";
+    it(`keeps the explanation visible and offers only optional practice above the board (${locale})`, () => {
+      const status = renderToStaticMarkup(createElement(StatusPanel, slotProps(locale)));
+      const help = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
+      const html = status + help;
+      const tutorialTitle = locale === "ja" ? "練習する（任意）" : "Practice (optional)";
+      const explanation = locale === "ja" ? "この問題の解説" : "How this problem works";
       const fullReference = locale === "ja" ? "完全なルール" : "complete rules";
-      expect(html).toContain(tutorialTitle);
+      expect(status).toContain(tutorialTitle);
+      expect(status).toContain('aria-label="crypto-battle-tutorial-collapsed"');
+      expect(status).toContain('aria-expanded="false"');
+      expect(status).not.toContain('aria-label="crypto-battle-tutorial"');
+      expect(status.indexOf(explanation)).toBeGreaterThanOrEqual(0);
+      expect(status.indexOf(explanation)).toBeLessThan(status.indexOf(tutorialTitle));
+      expect(status).not.toContain("tutorial-contract-a");
+      expect(help).not.toContain(tutorialTitle);
+      const raw = locale === "ja" ? "生の試合データ" : "Raw match data";
+      expect(status.indexOf(tutorialTitle)).toBeLessThan(status.indexOf(raw));
+      expect(status).toContain("color:#16212e");
       expect(html).toContain("<details");
       expect(html.indexOf(tutorialTitle)).toBeLessThan(html.indexOf(fullReference));
       // [Issue #709] The snippet opens with the relabelling table.

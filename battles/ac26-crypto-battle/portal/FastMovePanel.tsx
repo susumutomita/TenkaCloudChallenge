@@ -15,10 +15,10 @@ import {
   submitRotate,
   submitStart,
 } from "./RegistrationPanelCore.tsx";
+import ConceptExplanation from "./ConceptExplanation.tsx";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
 import { BOARD_CSS, Ledger, OrderBelt, Vault } from "./GameBoard.tsx";
-import QuickRules from "./QuickRules.tsx";
 import {
   describeRevealGroup,
   emptyCells,
@@ -26,6 +26,7 @@ import {
   PermutationChips,
   SudokuBoard,
   SudokuInput,
+  sudokuFillInGivens,
   SUDOKU_CSS,
 } from "./SudokuGrid.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
@@ -166,12 +167,16 @@ export const FAST_MOVE_COPY = {
     proveTitle: "SHOW IT WITHOUT SHOWING IT — a zero-knowledge proof",
     proveUse: "USED FOR: proving you hold a solution while showing nobody which digit sits where",
     proveWhy: "WHY IT WORKS: relabelling the digits keeps every row, column and box valid — the judge sees a real solution, everyone else sees 1-4 in some order",
-    proveHelp: "DO THIS: write a table (1→?, 2→?, 3→?, 4→?) in which each of 1, 2, 3, 4 appears exactly once on the right — a swap, not a merge — rewrite all 16 cells of your solution through it, type them in. Never the same table twice.",
+    proveHelp: "Choose a relabelling table, then fill just four holes. Each digit changes to the number after its arrow. The other twelve cells are worked examples. Every table uses 1–4 once each, so the rows, columns and boxes stay valid. Never the same table twice.",
+    proveTable: "1. Choose a relabelling table",
+    proveChooseTable: "Choose a table…",
+    proveReused: "used in this generation — reuse exposes your solution",
+    proveExample: (from: number, to: number) => `Example: a ${from} on the left becomes ${to} on the right. Use the same table for the four holes.`,
     proveSolution: "your solution (private)",
     proveUsed: "tables you already used this generation",
     proveNoneUsed: "none yet — any table that uses each of 1-4 once, other than 1→1 2→2 3→3 4→4, is fresh",
-    proveGrid: "your relabelled grid",
-    proveIncomplete: "Fill all 16 cells with 1-4.",
+    proveGrid: "2. Fill the four holes",
+    proveIncomplete: "Choose a table and fill the four holes with 1–4.",
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number, group: string) => `+${points} · ${group} of your RELABELLED grid is on the Public Ledger; your solution is not`,
     proveMiss: "PROVE MISS",
@@ -179,7 +184,7 @@ export const FAST_MOVE_COPY = {
     proveUnread: "PROVE SUBMITTED",
     proveUnreadBody: "The result could not be read. Check your score and the Order.",
     proveLesson:
-      "That was a ZERO-KNOWLEDGE PROOF: the judge is now certain you hold the solution, and every other team learned only that one row of a relabelled copy reads 1-4 in some order. This is what zk-rollups prove on-chain.",
+      "You explored the idea behind ZK: the trusted game judge checked your solution, while other teams saw one relabelled group. A full ZK protocol also hides the solution from its verifier.",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "Recovered secret accepted.",
     /*
@@ -216,8 +221,8 @@ export const FAST_MOVE_COPY = {
     startBody: "The first Orders are on the belt.",
     fheTitle: "ENCRYPTED ADDITION — FHE (homomorphic encryption)",
     fheUse: "USED FOR: verifying a total without seeing anyone's amount",
-    fheWhy: "WHY IT WORKS: Enc(a) + Enc(b) = Enc(a+b) — adding then locking equals locking then adding",
-    fheHelp: "DO THIS: add the two ciphertexts position by position, remainder mod p",
+    fheWhy: "WHY IT WORKS: the sum contains the content total plus the hiding-number total; the judge uses the separate input keys and original left values to subtract the hiding numbers",
+    fheHelp: "DO THIS: add the lefts and the rights separately, then take each remainder after dividing by p",
     fheInputs: "the Order's ciphertexts",
     fheAnswerR: "your answer: left part",
     fheAnswerY: "your answer: right part",
@@ -230,7 +235,7 @@ export const FAST_MOVE_COPY = {
     mpcTitle: "MASKED SUBTOTAL — MPC (secure multi-party computation)",
     mpcUse: "USED FOR: three companies publishing a combined total, none revealing its own",
     mpcWhy: "WHY IT WORKS: the masks cancel — (a+r₁−r₂)+(b+r₂−r₃)+(c+r₃−r₁) = a+b+c",
-    mpcHelp: "DO THIS: your number + masks received − masks sent, remainder mod p",
+    mpcHelp: "DO THIS: your number + masks received − masks sent, then the remainder after dividing by p",
     mpcMine: "your number (private)",
     mpcIncoming: "masks received",
     mpcOutgoing: "masks sent",
@@ -241,7 +246,7 @@ export const FAST_MOVE_COPY = {
     mpcBody: (points: number) => `+${points} · YOUR NUMBER STAYED PRIVATE`,
     mpcLesson:
       "That was SECURE COMPUTATION (MPC): three parties learned the total and nobody learned anyone else's number. The masks cancelled. Blockchains use it for shared settlement without a trusted middleman.",
-    prime: "p (the modulus)",
+    prime: "p (the divisor)",
     cipher: "CIPHER",
     huntCipher: "HUNT · CIPHER KEY",
     huntCipherHint:
@@ -331,12 +336,16 @@ export const FAST_MOVE_COPY = {
     proveTitle: "解を見せずに示す ― ゼロ知識証明",
     proveUse: "つかいみち: 「解を持っている」ことだけを示し、どのマスに何があるかは誰にも見せない",
     proveWhy: "しくみ: 数字を付け替えても行・列・箱の性質は崩れない ── 審判には本物の解、相手には「1〜4 の並び替え」にしか見えない",
-    proveHelp: "やること: 表 (1→?、2→?、3→?、4→?) を 1 つ決める。右側には 1・2・3・4 をちょうど 1 回ずつ使う (入れ替えであって、まとめではない)。解の 16 マスをその表で書き換えて入力する。同じ表は 2 度使わない。",
+    proveHelp: "付け替え表を選んで、空欄4マスだけを埋めます。数字を矢印の先の数字に読み替えるのが「付け替え」です。残り12マスは見本です。どの表も1〜4を1回ずつ使うので、行・列・箱のルールは崩れません。同じ表は 2 度使わないでください。",
+    proveTable: "1. 付け替え表を選ぶ",
+    proveChooseTable: "表を選んでください",
+    proveReused: "この世代で使用済み — 再利用すると解が漏れる危険あり",
+    proveExample: (from: number, to: number) => `見本: 左の「${from}」は、表の矢印をたどると右の「${to}」になります。同じ表を使って、空欄4マスも読み替えてください。`,
     proveSolution: "自分の解 (非公開)",
     proveUsed: "この世代で使った表",
     proveNoneUsed: "まだなし ── 1〜4 を 1 回ずつ使う表なら、1→1 2→2 3→3 4→4 以外はどれでも新品",
-    proveGrid: "付け替えたマス目",
-    proveIncomplete: "16 マスすべてに 1〜4 を入れてください。",
+    proveGrid: "2. 空欄4マスを埋める",
+    proveIncomplete: "表を選び、空欄4マスに1〜4を入れてください。",
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number, group: string) => `+${points} · 付け替えたマス目の${group}が公開記録に載りました。解そのものは載っていません`,
     proveMiss: "PROVE MISS",
@@ -344,7 +353,7 @@ export const FAST_MOVE_COPY = {
     proveUnread: "PROVE を送信しました",
     proveUnreadBody: "結果を読み取れませんでした。スコアと Order を確認してください。",
     proveLesson:
-      "いまのが「ゼロ知識証明」です。審判はあなたが解を持っていると確信し、相手チームは「付け替えた写しの 1 行が 1〜4 の並び替えである」ことしか知りませんでした。zkRollup がチェーン上で証明しているのはこれです。",
+      "いま体験したのは ZK の考え方です。ゲームの審判が解を検査し、相手には付け替えた 1 組だけを見せました。本来の ZK では審判にも解を渡しません。",
     huntSuccess: "HUNT SUCCESS",
     huntBody: "復元した secret が受理されました。",
     // [Issue #696] 外れは外れと言う。 ok だけを見て SUCCESS を出していたのが不具合。
@@ -383,7 +392,7 @@ export const FAST_MOVE_COPY = {
       何のための技術か、なぜ成り立つのか (式 1 本)、手を何回動かすか。
     */
     fheUse: "つかいみち: 誰がいくら持っているか見ずに、合計だけ検証する",
-    fheWhy: "しくみ: Enc(a) + Enc(b) = Enc(a+b) ── 足してから閉じても、閉じてから足しても同じ",
+    fheWhy: "しくみ: 足すと「中身の合計 + 隠す数の合計」になる ── 判定側は各入力の鍵と左の値から隠す数を求めて引ける",
     fheHelp: "やること: 2つの暗号文を左どうし・右どうし足して、p で割った余り",
     fheInputs: "Order の暗号文",
     fheAnswerR: "答え: 左の値",
@@ -939,7 +948,7 @@ ${SUDOKU_CSS}
 .tc-share-primer strong{display:block;margin-bottom:3px}
 .tc-share-primer span{display:block;color:#3f4b57}
 .tc-primary-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.tc-action{border:0;border-radius:12px;padding:16px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:900;font-size:18px}
+.tc-action{color:#16212e;border:0;border-radius:12px;padding:16px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;font-weight:900;font-size:18px}
 .tc-action small{font-size:10px;font-weight:800;letter-spacing:.06em}
 .tc-action:disabled{cursor:not-allowed;opacity:.45}
 .tc-leak-button{background:#ffefd1;box-shadow:inset 0 0 0 2px #d8a657}
@@ -948,7 +957,7 @@ ${SUDOKU_CSS}
 .tc-prove-challenge{margin:0 0 6px;font-size:13px}
 .tc-prove-challenge strong{font-size:18px;letter-spacing:.02em}
 .tc-input-panel{border:1px solid #cfd8e3;border-radius:9px;padding:9px;background:#fff;display:grid;gap:6px}
-.tc-input-panel input,.tc-input-panel select{padding:8px;border:1px solid #aab7c4;border-radius:6px;font-size:12px;min-width:0}
+.tc-input-panel input,.tc-input-panel select{background:#fff;color:#16212e;padding:8px;border:1px solid #aab7c4;border-radius:6px;font-size:12px;min-width:0}
 .tc-secondary-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
 .tc-tactics{border:1px solid #cfd8e3;border-radius:10px;background:#eef3f8}.tc-tactics>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:900}.tc-tactics>summary span{display:block;margin-top:3px;color:#5f6b7a;font-size:11px;font-weight:500}.tc-tactics-body{display:grid;gap:10px;padding:0 10px 10px}
 .tc-hunt-card,.tc-rotate-card{border:1px solid #cfd8e3;border-radius:10px;padding:10px;background:#fff}
@@ -1065,6 +1074,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // [Issue #709] Sixteen typed cells for the relabelled grid, and sixteen for
   // a recovered solution. Strings until submit: a half-typed grid is a normal
   // state, and Number("") would silently be 0.
+  const [proveTableKey, setProveTableKey] = useState("");
   const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
   const [huntCells, setHuntCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
@@ -1129,7 +1139,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
     selectedSudokuTarget === undefined ? undefined : projection?.sudokuHuntAttempts[selectedSudokuTarget.teamId];
   const sudokuHuntExhausted =
     selectedSudokuBudget !== undefined && selectedSudokuBudget.spent >= selectedSudokuBudget.max;
-  const proveGrid = parseCells(proveCells);
+  const proveTable = ALL_PERMUTATIONS.find((table) => table.join("") === proveTableKey);
+  const proveGivens = proveTable && projection
+    ? sudokuFillInGivens(projection.vault.sudokuSolution, proveTable) : undefined;
+  const proveGrid = proveGivens
+    ? parseCells(proveCells.map((value, index) => proveGivens[index] || value)) : undefined;
   const huntGrid = parseCells(huntCells);
   // [Issue #709 review] A typed grid belongs to the Order (and generation) it
   // was typed for, and a recovered solution to the target it was recovered
@@ -1142,6 +1156,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const ownGeneration = projection?.vault.generation;
   useEffect(() => {
     setProveCells(emptyCells());
+    setProveTableKey("");
   }, [selectedOrderIdForProve, ownGeneration]);
   const sudokuTargetTeam = selectedSudokuTarget?.teamId;
   const sudokuTargetGeneration = selectedSudokuTarget?.generation;
@@ -1255,14 +1270,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
   return (
     <section className="tc-move-shell" aria-label="crypto-battle-fast-moves">
       <style>{CSS}</style>
-      {/*
-        [Issue #690] 「最初にやること」 is the first thing to read, so it is the
-        first thing on the surface. It used to live at the bottom of the help
-        drawer, below the board, the exposure lane, the Ledger and the Vault —
-        a first-time player had to scroll past the whole game to find out how to
-        start playing it.
-      */}
-      <QuickRules locale={props.locale} />
       {/*
         [Issue #659] One surface: score, tickets, the counter you work at, then
         the public record. It used to be two host slots — the board in one, the
@@ -1470,6 +1477,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <div className="tc-lesson-why">{copy.fheWhy}</div>
           </div>
           <div className="tc-card-hint">{copy.fheHelp}</div>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="fhe" task={selectedOrder.task} prime={projection.prime} />
           <div className="tc-card-hint">{copy.fheInputs}</div>
           <ul className="tc-material-list">
             {selectedOrder.task.inputs.map((input, index) => (
@@ -1510,6 +1518,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <div className="tc-lesson-why">{copy.cipherWhy}</div>
           </div>
           <div className="tc-card-hint">{copy.cipherHelp}</div>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="caesar" task={selectedOrder.task} prime={projection.prime} />
           <ul className="tc-material-list">
             <li>
               {copy.cipherAlphabet}:
@@ -1557,6 +1566,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <div className="tc-lesson-why">{copy.mpcWhy}</div>
           </div>
           <div className="tc-card-hint">{copy.mpcHelp}</div>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />
           <ul className="tc-material-list">
             <li>{copy.mpcMine}: <code>{selectedOrder.task.myInput}</code></li>
             <li>{copy.mpcIncoming}: <code>{selectedOrder.task.incomingMasks.join(", ")}</code></li>
@@ -1584,13 +1594,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
         `setProveOpen(false)` on selection is the other half — a form that
         reappears still bound to a different Order is its own surprise.
 
-        [Issue #709] PROVE is one move now: relabel the vault's sudoku and
-        submit the whole grid. Everything the participant needs is on screen --
-        their solution, the tables they have already spent, sixteen boxes --
-        and the one thing the panel does NOT do is apply a table for them. The
-        relabelling is the work; a "fill it in" button would delete it. The
-        ZK sudoku Order opens this directly (there is no LEAK to choose
-        against), a share Order opens it from the PROVE button.
+        The participant chooses the relabelling and completes four cells;
+        twelve worked cells reduce transcription under the five-minute limit.
+        The judge still receives and checks the complete grid. Used tables stay
+        selectable so reuse remains a real decision, with its risk labelled.
       */}
       {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && proveAllowed && (
         <div className="tc-input-panel">
@@ -1600,6 +1607,25 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <div className="tc-lesson-why">{copy.proveWhy}</div>
           </div>
           <div className="tc-card-hint">{copy.proveHelp}</div>
+          <ConceptExplanation key={selectedOrder.id} locale={locale} topic="zk" task={selectedOrder.task} prime={projection.prime} />
+          <label className="tc-card-hint" style={{ display: "block" }}>
+            {copy.proveTable}
+            <select aria-label={copy.proveTable} value={proveTableKey} style={{ display: "block", maxWidth: "100%", margin: "6px 0", padding: "6px", color: "#16212e", background: "#fff" }}
+              onChange={(event) => { setProveTableKey(event.target.value); setProveCells(emptyCells()); }}>
+              <option value="">{copy.proveChooseTable}</option>
+              {ALL_PERMUTATIONS.filter((table) => table.some((to, from) => to !== from + 1)).map((table) => (
+                <option key={table.join("")} value={table.join("")}>
+                  {table.map((to, from) => `${from + 1}→${to}`).join("  ")}
+                  {projection.vault.usedPermutations.some((used) => used.every((to, i) => to === table[i])) ? ` · ${copy.proveReused}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {proveTable && proveGivens && <>
+          <p className="tc-card-hint">{(() => {
+            const example = proveGivens.findIndex((cell) => cell !== "");
+            return copy.proveExample(projection.vault.sudokuSolution[example]!, Number(proveGivens[example]));
+          })()}</p>
           <div className="tc-sudoku-row">
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveSolution}</span>
@@ -1607,9 +1633,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
             </div>
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveGrid}</span>
-              <SudokuInput value={proveCells} onChange={setProveCells} ariaLabel="fast-prove-grid" />
+              <SudokuInput value={proveCells} givens={proveGivens} onChange={setProveCells} ariaLabel="fast-prove-grid" />
             </div>
           </div>
+          </>}
           <div className="tc-card-hint">
             {copy.proveUsed}:{" "}
             {projection.vault.usedPermutations.length === 0
@@ -1631,7 +1658,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               // Order needs a different one. A miss keeps it, to be corrected.
               (next) => {
                 const draft = proveFeedback(next, selectedOrder.id, selectedOrder.points, locale);
-                if (draft.kind === "prove") setProveCells(emptyCells());
+                if (draft.kind === "prove") { setProveCells(emptyCells()); setProveTableKey(""); }
                 return draft;
               },
             )}

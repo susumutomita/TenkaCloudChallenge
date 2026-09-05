@@ -61,17 +61,20 @@ export function SudokuInput({
   onChange,
   size = 30,
   ariaLabel,
+  givens,
 }: {
   readonly value: readonly string[];
   readonly onChange: (next: readonly string[]) => void;
   readonly size?: number;
   readonly ariaLabel: string;
+  /** Worked cells are read-only; empty entries still require a typed answer. */
+  readonly givens?: readonly string[];
 }) {
   return (
     <div className="tc-sudoku" aria-label={ariaLabel}>
       {value.map((text, i) => (
         <span key={i} className="tc-sudoku-cell" style={{ width: size, height: size, fontSize: size * 0.55 }}>
-          <input
+          {givens?.[i] ? <span aria-label={`${ariaLabel}-${i}: ${givens[i]}`}>{givens[i]}</span> : <input
             className="tc-sudoku-input"
             aria-label={`${ariaLabel}-${i}`}
             inputMode="numeric"
@@ -82,10 +85,17 @@ export function SudokuInput({
               next[i] = event.target.value.replace(/[^1-4]/g, "").slice(-1);
               onChange(next);
             }}
-          />
+          />}
         </span>
       ))}
     </div>
+  );
+}
+
+/** Twelve worked cells; one hole per row, covering each original digit once. */
+export function sudokuFillInGivens(solution: Grid, table: readonly number[]): string[] {
+  return solution.map((digit, index) =>
+    digit === Math.floor(index / 4) + 1 ? "" : String(table[digit - 1]),
   );
 }
 
