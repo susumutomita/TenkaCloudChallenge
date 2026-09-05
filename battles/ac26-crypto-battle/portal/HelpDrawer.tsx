@@ -14,12 +14,12 @@ export * from "./HelpDrawerCore.tsx";
 
 const COPY = {
   en: {
-    title: "Practice and help",
-    fullReference: "Open the complete rules, prerequisites, and PROVE / HUNT computation",
+    title: "Rules reference",
+    fullReference: "Open the complete rules and optional calculation reference",
   },
   ja: {
-    title: "練習とヘルプ",
-    fullReference: "完全なルール、前提問題、PROVE / HUNT の計算方法を開く",
+    title: "ルールの参照",
+    fullReference: "完全なルールと計算の補足を開く",
   },
 } as const;
 

@@ -1,6 +1,6 @@
 # Cryptography Battle
 
-The purpose and “Rules, how the cryptography works, and optional practice” sit above the board. Opening either is optional and never gates play. Practice covers remainders, secret sharing, MPC, ZK, FHE, and Caesar shifts with one missing digit per step, followed by an explanation of the result. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
+The purpose and first action are always visible above the board. “Read the guided explanation (optional)” opens with one click. Read results without answering, advance freely, or close at any point. Its ten scenes connect remainders, additive shares, indexed sharing, why reconstruction works, publication risk, MPC, ZK, FHE, Caesar and commit-reveal. Optional one-digit checks never change the match score or state. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
 
 The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers, free of charge. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
 

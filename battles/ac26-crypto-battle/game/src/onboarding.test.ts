@@ -125,11 +125,11 @@ function slotProps(locale: "ja" | "en") {
 }
 
 describe("optional arithmetic practice", () => {
-  it("covers the seven small-number operations and rejects empty, wrong and non-digit answers", () => {
+  it("covers the prerequisite scenes and small-number operations and rejects empty, wrong and non-digit answers", () => {
     // Fixed, hand-worked values; the real cryptographic examples are checked
     // against the game primitives in concept-explanation.test.ts.
-    const answers = ["1", "1", "6", "2", "4", "1", "2"];
-    expect(PRACTICE_STEPS.map(step => step.topic)).toEqual(["remainder", "sharing", "mpc", "zk", "fhe", "caesar", "commit"]);
+    const answers = ["1", "2", "2", "1", "2", "6", "2", "4", "1", "2"];
+    expect(PRACTICE_STEPS.map(step => step.topic)).toEqual(["remainder", "sharing", "sharing", "sharing", "sharing", "mpc", "zk", "fhe", "caesar", "commit"]);
     for (let i = 0; i < answers.length; i++) {
       expect(checkPracticeAnswer(i, answers[i]!)).toBe(true);
       for (const invalid of ["", " ", "-1", "10", "a", "0"]) expect(checkPracticeAnswer(i, invalid)).toBe(false);
@@ -142,7 +142,7 @@ describe("optional arithmetic practice", () => {
       const status = renderToStaticMarkup(createElement(StatusPanel, slotProps(locale)));
       const help = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
       const html = status + help;
-      const tutorialTitle = locale === "ja" ? "練習する（任意）" : "Practice (optional)";
+      const tutorialTitle = locale === "ja" ? "順番に解説を読む（任意）" : "Read the guided explanation (optional)";
       const explanation = locale === "ja" ? "この問題の解説" : "How this problem works";
       const fullReference = locale === "ja" ? "完全なルール" : "complete rules";
       expect(status).toContain(tutorialTitle);
@@ -151,6 +151,8 @@ describe("optional arithmetic practice", () => {
       expect(status).not.toContain('aria-label="crypto-battle-tutorial"');
       expect(status.indexOf(explanation)).toBeGreaterThanOrEqual(0);
       expect(status.indexOf(explanation)).toBeLessThan(status.indexOf(tutorialTitle));
+      expect(status.indexOf(explanation)).toBeLessThan(status.indexOf("<details"));
+      expect(status).not.toContain("<details open");
       expect(status).not.toContain("tutorial-contract-a");
       expect(help).not.toContain(tutorialTitle);
       const raw = locale === "ja" ? "生の試合データ" : "Raw match data";
