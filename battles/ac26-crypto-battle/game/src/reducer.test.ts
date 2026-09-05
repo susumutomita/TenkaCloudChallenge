@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { decodeLedger } from "./ledger-codec.ts";
 import { reconstruct } from "./shamir.ts";
+import { allowedMethodsFor } from "./methods.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { startedMatch } from "./playtest.ts";
 import type {
@@ -259,11 +260,24 @@ describe("leak", () => {
    * learns nothing they can carry to the next Order.
    */
   test("validateOp refuses LEAK on an Order that forbids raw disclosure", () => {
-    // The share Order is the one whose only remaining method is PROVE; FHE and
-    // MPC Orders also forbid raw disclosure but were never LEAK-able anyway.
-    const { state, order: constrained } = orderMatching(
-      (c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share",
+    // [Issue #709] The belt no longer issues a PROVE-only SHARE Order (that
+    // slot is the ZK sudoku Order, which LEAK cannot serve at all -- a
+    // different refusal, see fhe.test.ts). The rule itself is still live code
+    // (`allowedMethodsFor` applies it to every Order), so it is exercised here
+    // on a share Order given the rule by hand: LEAK CAN do a share Order, and
+    // this is the one refusal that is about the rule rather than the tool.
+    const { state: open, order: share } = orderMatching(
+      (c) => c.privacyConstraint === "none" && c.task.kind === "reveal-share",
     );
+    const constrained: Contract = {
+      ...share,
+      privacyConstraint: "no-raw-disclosure",
+      allowedMethods: allowedMethodsFor("reveal-share", "no-raw-disclosure"),
+    };
+    const state: CryptoBattleState = {
+      ...open,
+      contracts: open.contracts.map((c) => (c.id === share.id ? constrained : c)),
+    };
 
     expect(constrained.allowedMethods).toEqual(["prove"]);
     const verdict = validateOp(state, "teamA", { kind: "leak", contractId: constrained.id });

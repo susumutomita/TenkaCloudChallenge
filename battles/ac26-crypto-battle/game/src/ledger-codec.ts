@@ -22,8 +22,8 @@
  * `PublicArtifact` at the two boundaries that need the full shape:
  * `projectForTeam` (participant-facing projection) and `replay.ts` (the
  * post-match debrief). Everything else in `reducer.ts` -- including the HUNT
- * nonce-reuse scan -- reads the compact form directly where it can, so the
- * hot path never pays for a full-array decode it does not need.
+ * relabelling-reuse scan -- reads the compact form directly where it can, so
+ * the hot path never pays for a full-array decode it does not need.
  *
  * KEY MAP (values unchanged, only field names shrink):
  *
@@ -49,6 +49,9 @@
  * | `partial`       | `v`    | partial (same "the one published number" role `v` plays for share) |
  * | `peerPartials`  | `pp`   | partial                   |
  * | `total`         | `s`    | partial (sum)             |
+ * | `group`         | `gr`   | sudoku-reveal (#709)      |
+ * | `cells`         | `cl`   | sudoku-reveal             |
+ * | `tag`           | `tg`   | sudoku-reveal             |
  *
  * The common fields (`kind`/`teamId`/`contractId`/`generation`/`method`/
  * `postedAtMs`) and share/cipher-pair's own keys are pinned by the design
@@ -79,6 +82,7 @@ import type {
   ProofArtifact,
   PublicArtifact,
   ShareArtifact,
+  SudokuRevealArtifact,
 } from "./types.ts";
 
 /**
@@ -142,6 +146,14 @@ export interface StoredPartialArtifact extends StoredArtifactBase {
   readonly s: string;
 }
 
+/** [Issue #709] One opened group of a relabelled sudoku grid. */
+export interface StoredSudokuRevealArtifact extends StoredArtifactBase {
+  readonly k: "sudoku-reveal";
+  readonly gr: number;
+  readonly cl: readonly number[];
+  readonly tg: string;
+}
+
 /**
  * `CryptoBattleState.publicLedger`'s actual element type -- see this file's
  * header. One variant per `PublicArtifact` kind, discriminated on `k` the
@@ -152,7 +164,8 @@ export type StoredArtifact =
   | StoredCipherPairArtifact
   | StoredProofArtifact
   | StoredCiphertextArtifact
-  | StoredPartialArtifact;
+  | StoredPartialArtifact
+  | StoredSudokuRevealArtifact;
 
 /**
  * Reconstructs `PublicArtifact.id` from a `StoredArtifact` that carries no
@@ -162,9 +175,10 @@ export type StoredArtifact =
  *
  *   - "share":       reducer.ts `applyLeak`        -- `` `${contract.id}-share${shareIndex}` ``
  *   - "cipher-pair": reducer.ts `applyLadderLeak`   -- `` `${contract.id}-pair` ``
- *   - "proof":       reducer.ts `applyProve`        -- `` `${contract.id}-proof` ``
+ *   - "proof":       (legacy, decode-only since #709; was reducer.ts `applyProve`) -- `` `${contract.id}-proof` ``
  *   - "ciphertext":  reducer.ts `applyFhe`           -- `` `${contract.id}-ciphertext` ``
  *   - "partial":     reducer.ts `applyMpc`           -- `` `${contract.id}-partial` ``
+ *   - "sudoku-reveal": reducer.ts `applyProveSudoku` -- `` `${contract.id}-sudoku` `` (#709)
  *
  * Every one of these five is the ONLY construction site for its
  * `PublicArtifact` kind in `game/src` (confirmed: `grep -n 'kind: "<kind>"'
@@ -191,6 +205,8 @@ function deriveArtifactId(stored: StoredArtifact): string {
       return `${stored.c}-ciphertext`;
     case "partial":
       return `${stored.c}-partial`;
+    case "sudoku-reveal":
+      return `${stored.c}-sudoku`;
     default: {
       const exhaustive: never = stored;
       throw new Error(`deriveArtifactId: unknown stored artifact ${JSON.stringify(exhaustive)}`);
@@ -248,6 +264,9 @@ export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
         pp: artifact.peerPartials,
         s: artifact.total,
       };
+      break;
+    case "sudoku-reveal":
+      withoutId = { ...base, k: "sudoku-reveal", gr: artifact.group, cl: artifact.cells, tg: artifact.tag };
       break;
     default: {
       const exhaustive: never = artifact;
@@ -321,6 +340,19 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
         peerPartials: stored.pp,
         total: stored.s,
       } satisfies PartialArtifact;
+    case "sudoku-reveal":
+      return {
+        id,
+        kind: "sudoku-reveal",
+        teamId,
+        contractId,
+        generation,
+        method,
+        postedAtMs,
+        group: stored.gr,
+        cells: stored.cl,
+        tag: stored.tg,
+      } satisfies SudokuRevealArtifact;
     default: {
       const exhaustive: never = stored;
       throw new Error(`decodeArtifact: unknown stored artifact ${JSON.stringify(exhaustive)}`);
@@ -338,8 +370,9 @@ export function decodeLedger(stored: readonly StoredArtifact[]): PublicArtifact[
  * this package wrote before this module existed: `publicLedger` as full
  * `PublicArtifact[]`) to v2 (`publicLedger` as `StoredArtifact[]`).
  *
- * Wired as `coordination/crypto-battle.ts`'s `migrateState`, alongside
- * `stateSchemaVersion: 2` -- see that file and TenkaCloud's
+ * The v1 -> v2 step of `reducer.ts`'s `migrateState` (the plugin's
+ * `migrateState`; `stateSchemaVersion` is 3 since #709) -- see that file, and
+ * `coordination/crypto-battle.ts`, and TenkaCloud's
  * `packages/coordination-plugin-sdk/src/index.ts` for the platform contract
  * this fulfills: `migrateState` is REQUIRED once `stateSchemaVersion` is
  * declared (a plugin that skips it is rejected at load, before any row is

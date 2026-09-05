@@ -120,33 +120,25 @@ export const TUTORIAL_WORKED_EXAMPLE = {
 const TUTORIAL_OWN_SHARE = { index: 1, value: 14 } as const;
 
 /**
- * Issue #643: a Schnorr proof small enough to check on paper.
+ * [Issue #709] The ZK sudoku PROVE, at the size the live match plays it.
  *
- * Production PROVE runs over RFC 3526 Group 14 (2048-bit p) with a SHA-256
- * Fiat-Shamir challenge — correctly, and unusable by hand. Rather than pretend
- * otherwise, this is a separate toy instance with the SAME SHAPE: commit,
- * challenge, respond, verify one equation. p = 23, q = 11, g = 2 (whose order
- * really is 11, since 2^11 = 2048 = 1 mod 23), witness w = 4, nonce r = 3,
- * challenge e = 5 fixed rather than hashed.
- *
- * `onboarding.test.ts` verifies the identity actually holds, so the teaching
- * numbers cannot rot into a worked example that does not work.
+ * The live PROVE IS this: a 4x4 solution, a relabelling table, the relabelled
+ * copy, one opened row. Nothing here is a scale model of something larger --
+ * which is the point of the rebuild (#709): the toy and the real thing are the
+ * same move. `onboarding.test.ts` verifies the worked example actually
+ * relabels and that the opened row is a row of the copy, so the teaching
+ * numbers cannot rot.
  */
-export const TUTORIAL_TOY_SCHNORR = {
-  p: 23,
-  q: 11,
-  g: 2,
-  w: 4,
-  r: 3,
-  e: 5,
-  /** Y = g^w mod p */
-  publicValue: 16,
-  /** R = g^r mod p */
-  commitment: 8,
-  /** s = r + e*w mod q */
-  response: 1,
-  /** Both sides of g^s == R * Y^e (mod p). */
-  verifies: 2,
+export const TUTORIAL_TOY_SUDOKU = {
+  /** A solution, row by row. */
+  solution: [1, 2, 3, 4, 3, 4, 1, 2, 2, 1, 4, 3, 4, 3, 2, 1],
+  /** The table: 1->3, 2->1, 3->4, 4->2. */
+  table: [3, 1, 4, 2],
+  /** The solution with every digit sent through the table. */
+  relabelled: [3, 1, 4, 2, 4, 2, 3, 1, 1, 3, 2, 4, 2, 4, 1, 3],
+  /** Which row the judge opens (0-based) and what everyone then sees. */
+  openedRow: 1,
+  opened: [4, 2, 3, 1],
 } as const;
 
 function mod(value: number, prime: number): number {
@@ -340,6 +332,13 @@ const EXAMPLE_SHARES = TUTORIAL_WORKED_EXAMPLE.shares
   .map((share) => `(${share.index}, ${share.value})`)
   .join(" ");
 
+/** `1 2 3 4 / 3 4 1 2 / ...` -- a 16-cell grid as four rows. */
+function rows(cells: readonly number[]): string {
+  const out: string[] = [];
+  for (let r = 0; r < 4; r += 1) out.push(cells.slice(r * 4, r * 4 + 4).join(" "));
+  return out.join(" / ");
+}
+
 const COPY: Record<Locale, TutorialCopy> = {
   en: {
     title: "Guided rules walkthrough (no score, no match changes)",
@@ -365,17 +364,18 @@ const COPY: Record<Locale, TutorialCopy> = {
     huntMalformed: `Enter one whole number between 0 and ${TUTORIAL_PRIME - 1}. A negative intermediate result still needs its remainder taken.`,
     toyTitle: "Optional: PROVE on paper",
     toyIntro:
-      "The live PROVE runs over a 2048-bit group, so it needs code. The same four steps in tiny numbers, which you can check by hand:",
+      "The live PROVE is exactly this, with your own grid. A 4x4 sudoku: every row, column and 2x2 box holds 1-4 once each.",
     toySteps: [
-      `Setup: p = ${TUTORIAL_TOY_SCHNORR.p}, g = ${TUTORIAL_TOY_SCHNORR.g}, secret w = ${TUTORIAL_TOY_SCHNORR.w}. Public value Y = g^w = ${TUTORIAL_TOY_SCHNORR.publicValue} (mod ${TUTORIAL_TOY_SCHNORR.p}).`,
-      `Commit: pick r = ${TUTORIAL_TOY_SCHNORR.r}, publish R = g^r = ${TUTORIAL_TOY_SCHNORR.commitment} (mod ${TUTORIAL_TOY_SCHNORR.p}).`,
-      `Challenge: e = ${TUTORIAL_TOY_SCHNORR.e}.`,
-      `Respond: s = r + e x w = ${TUTORIAL_TOY_SCHNORR.r} + ${TUTORIAL_TOY_SCHNORR.e} x ${TUTORIAL_TOY_SCHNORR.w} = ${TUTORIAL_TOY_SCHNORR.r + TUTORIAL_TOY_SCHNORR.e * TUTORIAL_TOY_SCHNORR.w}, remainder after dividing by ${TUTORIAL_TOY_SCHNORR.q} = ${TUTORIAL_TOY_SCHNORR.response}.`,
-      `Verify: g^s = ${TUTORIAL_TOY_SCHNORR.verifies} and R x Y^e = ${TUTORIAL_TOY_SCHNORR.verifies} (mod ${TUTORIAL_TOY_SCHNORR.p}). They match, and w was never published.`,
+      `Your solution (private): ${rows(TUTORIAL_TOY_SUDOKU.solution)}. Eight of its cells are public as your puzzle.`,
+      `Pick a table: 1→${TUTORIAL_TOY_SUDOKU.table[0]}, 2→${TUTORIAL_TOY_SUDOKU.table[1]}, 3→${TUTORIAL_TOY_SUDOKU.table[2]}, 4→${TUTORIAL_TOY_SUDOKU.table[3]}. Each of 1-4 appears once on the right: it swaps digits, it never merges two into one.`,
+      `Rewrite every cell through it: ${rows(TUTORIAL_TOY_SUDOKU.relabelled)}. Still a valid sudoku — relabelling cannot break a row, column or box.`,
+      `Submit the copy. The judge checks it is your solution relabelled, then opens ONE row: row ${TUTORIAL_TOY_SUDOKU.openedRow + 1} reads ${TUTORIAL_TOY_SUDOKU.opened.join(" ")}.`,
+      "Everyone else sees 1-4 in some order and a tag naming your table. They learn nothing about which digit sits where. Use a DIFFERENT table next time: two opened groups under one table line up against your puzzle and give the table away.",
     ],
-    toyRealDifference: `In the live match the challenge is not a fixed ${TUTORIAL_TOY_SCHNORR.e}: it is a SHA-256 hash of the transcript, and p is 2048 bits rather than ${TUTORIAL_TOY_SCHNORR.p}. Same five lines, numbers too large for paper — which is what the runnable Python below is for.`,
+    toyRealDifference:
+      "The real ZK sudoku commits every cell first and opens one group per challenge; here the judge already holds your solution, so it checks the whole copy in one step and opens one group of it. Same idea, one move.",
     toyNotSubmittable:
-      "These toy values cannot be submitted to a real Contract. The live verifier checks the real group, and will reject them.",
+      "These toy values cannot be submitted to a real Contract: the judge checks against YOUR solution, in MY VAULT.",
     stages: {
       ready: {
         title: "Step 1 of 4 — LEAK Contract A",
@@ -384,7 +384,7 @@ const COPY: Record<Locale, TutorialCopy> = {
       },
       leaked: {
         title: "Step 2 of 4 — PROVE a different Contract B",
-        body: "Publish a proof transcript instead. The score rises, but the exposed share-index count stays at one.",
+        body: "Relabel your sudoku and publish the copy instead. One row of the copy goes public; the score rises, but the exposed share-index count stays at one.",
         action: "PROVE tutorial Contract B",
       },
       proved: {
@@ -428,17 +428,18 @@ const COPY: Record<Locale, TutorialCopy> = {
     huntMalformed: `0 〜 ${TUTORIAL_PRIME - 1} の整数を1つ入力してください。途中がマイナスになった場合も、余りを取ってから入力します。`,
     toyTitle: "任意: PROVE を紙で追う",
     toyIntro:
-      "本番の PROVE は 2048 bit の群で動くためプログラムが必要です。同じ4手順を、手で確かめられる小さい数で置き換えたものが次です。",
+      "本番の PROVE はまさにこれを、自分のマス目で行います。4×4 の数独: どの行・列・2×2 の箱にも 1〜4 が 1 回ずつ入ります。",
     toySteps: [
-      `準備: p = ${TUTORIAL_TOY_SCHNORR.p}、g = ${TUTORIAL_TOY_SCHNORR.g}、秘密 w = ${TUTORIAL_TOY_SCHNORR.w}。公開値 Y = g^w = ${TUTORIAL_TOY_SCHNORR.publicValue}（mod ${TUTORIAL_TOY_SCHNORR.p}）。`,
-      `コミット: r = ${TUTORIAL_TOY_SCHNORR.r} を選び、R = g^r = ${TUTORIAL_TOY_SCHNORR.commitment}（mod ${TUTORIAL_TOY_SCHNORR.p}）を公開します。`,
-      `チャレンジ: e = ${TUTORIAL_TOY_SCHNORR.e}。`,
-      `応答: s = r + e × w = ${TUTORIAL_TOY_SCHNORR.r} + ${TUTORIAL_TOY_SCHNORR.e} × ${TUTORIAL_TOY_SCHNORR.w} = ${TUTORIAL_TOY_SCHNORR.r + TUTORIAL_TOY_SCHNORR.e * TUTORIAL_TOY_SCHNORR.w}、これを ${TUTORIAL_TOY_SCHNORR.q} で割った余りは ${TUTORIAL_TOY_SCHNORR.response}。`,
-      `検証: g^s = ${TUTORIAL_TOY_SCHNORR.verifies}、R × Y^e = ${TUTORIAL_TOY_SCHNORR.verifies}（mod ${TUTORIAL_TOY_SCHNORR.p}）。一致し、しかも w は一度も公開されていません。`,
+      `自分の解 (非公開): ${rows(TUTORIAL_TOY_SUDOKU.solution)}。このうち 8 マスが「問題」として公開されています。`,
+      `表を 1 つ決めます: 1→${TUTORIAL_TOY_SUDOKU.table[0]}、2→${TUTORIAL_TOY_SUDOKU.table[1]}、3→${TUTORIAL_TOY_SUDOKU.table[2]}、4→${TUTORIAL_TOY_SUDOKU.table[3]}。右側には 1〜4 が 1 回ずつ現れます。数字を入れ替えるだけで、2 つを 1 つにまとめることはありません。`,
+      `全マスをその表で書き換えます: ${rows(TUTORIAL_TOY_SUDOKU.relabelled)}。これも正しい数独です ── 付け替えで行・列・箱は崩れません。`,
+      `写しを出します。審判は「自分の解の付け替え」であることを検査し、1 行だけ開きます: ${TUTORIAL_TOY_SUDOKU.openedRow + 1} 行目は ${TUTORIAL_TOY_SUDOKU.opened.join(" ")}。`,
+      "相手には「1〜4 の並び替え」と、表を名指すタグしか見えません。どのマスに何があったかは分かりません。次は別の表を使ってください。同じ表で開いた 2 グループは、公開問題と突き合わせると表が割れます。",
     ],
-    toyRealDifference: `本番ではチャレンジが固定の ${TUTORIAL_TOY_SCHNORR.e} ではなく、transcript の SHA-256 ハッシュになり、p も ${TUTORIAL_TOY_SCHNORR.p} ではなく 2048 bit になります。手順は同じ5行のまま、数だけが紙で扱えない大きさになります。そこから先が下の Python の担当です。`,
+    toyRealDifference:
+      "本物の ZK 数独は全マスを先に封じてから、質問ごとに 1 グループ開きます。ここでは審判があなたの解を持っているので、写し全体を 1 手で検査してから 1 グループ開きます。考え方は同じで、手数が 1 手です。",
     toyNotSubmittable:
-      "この練習用の値は実際の Contract には提出できません。本番の検証は本物の群で行われ、これらは拒否されます。",
+      "この練習用の値は実際の Contract には提出できません。審判は MY VAULT にある「あなたの解」と照らし合わせます。",
     stages: {
       ready: {
         title: "1 / 4 — Contract A を LEAK",
@@ -447,7 +448,7 @@ const COPY: Record<Locale, TutorialCopy> = {
       },
       leaked: {
         title: "2 / 4 — 別の Contract B を PROVE",
-        body: "代わりに proof transcript を公開します。得点は増えますが、公開済み share index は1種類のままです。",
+        body: "代わりに数独を付け替えて写しを出します。写しの 1 行が公開されますが、得点は増え、公開済み share index は1種類のままです。",
         action: "練習用 Contract B を PROVE",
       },
       proved: {
@@ -547,13 +548,14 @@ function HuntWorksheet(props: {
 }
 
 /**
- * Issue #643: the paper-sized Schnorr, kept behind a closed `<details>`.
+ * Issue #643: the paper-sized PROVE, kept behind a closed `<details>`.
  *
  * Progressive disclosure on purpose — it is the "why does PROVE work" detour,
  * not part of the four-step loop, and the playtest complaint that started #643
  * was about how much text sits between a reader and their first move.
+ * [Issue #709] The detour is the live move itself now: a 4x4 relabelling.
  */
-function ToySchnorr({ copy }: { readonly copy: TutorialCopy }) {
+function ToySudoku({ copy }: { readonly copy: TutorialCopy }) {
   return (
     <details style={{ marginTop: "10px", fontSize: "12px" }}>
       <summary style={{ cursor: "pointer" }}>{copy.toyTitle}</summary>
@@ -671,7 +673,7 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
         </p>
       )}
 
-      <ToySchnorr copy={copy} />
+      <ToySudoku copy={copy} />
 
       <div style={{ marginTop: "10px" }}>
         <strong style={{ fontSize: "12px" }}>{copy.ledger}</strong>
@@ -694,7 +696,7 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
                   <td style={cellStyle}>{entry.contractId}</td>
                   <td style={cellStyle}>{entry.generation}</td>
                   <td style={{ ...cellStyle, fontFamily: "monospace" }}>
-                    {entry.kind === "share" ? `share[${entry.shareIndex}]=${entry.value}` : "{ commitment, response }"}
+                    {entry.kind === "share" ? `share[${entry.shareIndex}]=${entry.value}` : "one opened row of a relabelled sudoku"}
                   </td>
                 </tr>
               ))}

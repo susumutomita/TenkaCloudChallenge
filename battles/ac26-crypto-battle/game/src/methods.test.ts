@@ -10,7 +10,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
-import { buildProveCommitOp, proveThroughExchange, startedMatch } from "./playtest.ts";
+import { buildProveSudokuOp, startedMatch } from "./playtest.ts";
 import type { Contract, CryptoBattleState, OrderTaskKind } from "./types.ts";
 
 const CTX = { eventId: "methods-645", teamIds: ["teamA", "teamB"] } as const;
@@ -49,8 +49,9 @@ describe("the method registry", () => {
   /**
    * The one fact the whole model turns on, and it is a property of the
    * cryptography rather than a policy knob: a Shamir share is a point on the
-   * secret's polynomial; a Schnorr transcript carries no witness (pinned
-   * independently by schnorr.test.ts's non-leakage test).
+   * secret's polynomial; one opened group of a relabelled sudoku grid is a
+   * permutation of 1..4 whatever the solution is (pinned independently by
+   * prove.test.ts's non-leakage test).
    */
   test("LEAK publishes raw secret material and PROVE does not", () => {
     expect(SUBMISSION_METHODS.leak.publishesRawSecretMaterial).toBe(true);
@@ -60,7 +61,7 @@ describe("the method registry", () => {
   test("an unconstrained share Order accepts every method that can serve it", () => {
     // [Issue #645] "Unconstrained" is about the RULE, not about capability: an
     // Order with no privacy rule still only accepts methods that can do its
-    // job, and a Schnorr proof cannot add two ciphertexts. This is the
+    // job, and a sudoku PROVE cannot add two ciphertexts. This is the
     // free-choice Order -- LEAK or PROVE, the participant decides.
     expect(allowedMethodsFor("reveal-share", "none")).toEqual(["leak", "prove"]);
     for (const method of ALL_SUBMISSION_METHODS) {
@@ -135,7 +136,8 @@ describe("Orders carry the model the registry defines", () => {
    * participant's time to teach them nothing they could have read.
    */
   test("the projection carries the constraint and the allowed methods", () => {
-    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share");
+    // [Issue #709] The PROVE-only Order is the ZK sudoku Order.
+    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "zk-sudoku");
     const projected = projectForTeam(state, "teamA").myContracts.find((c) => c.id === order.id);
     expect(projected).toBeDefined();
     expect(projected?.privacyConstraint).toBe("no-raw-disclosure");
@@ -145,8 +147,8 @@ describe("Orders carry the model the registry defines", () => {
 
 describe("the Order gate runs for every method", () => {
   test("PROVE fulfils an Order that forbids raw disclosure, and is recorded as the resolution", () => {
-    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "reveal-share");
-    const next = proveThroughExchange(state, "teamA", order.id).state;
+    const { state, order } = orderMatching((c) => c.privacyConstraint === "no-raw-disclosure" && c.task.kind === "zk-sudoku");
+    const next = applyOp(state, "teamA", buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id));
 
     const completed = next.contracts.find((c) => c.id === order.id);
     expect(completed?.status).toBe("completed");
@@ -173,12 +175,12 @@ describe("the Order gate runs for every method", () => {
     }
 
     const proveOrder = afterLeak.contracts.find(
-      (c) => c.teamId === "teamB" && c.status === "open",
+      (c) => c.teamId === "teamB" && c.status === "open" && c.allowedMethods.includes("prove"),
     );
     if (!proveOrder) throw new Error("expected an open order for teamB");
-    const afterProve = proveThroughExchange(afterLeak, "teamB", proveOrder.id).state;
-    const proof = afterProve.publicLedger.find((a) => a.k === "proof");
-    expect(proof?.m).toBe("prove");
+    const afterProve = applyOp(afterLeak, "teamB", buildProveSudokuOp(projectForTeam(afterLeak, "teamB").vault, proveOrder.id));
+    const reveal = afterProve.publicLedger.find((a) => a.k === "sudoku-reveal");
+    expect(reveal?.m).toBe("prove");
   });
 
   /**
@@ -194,10 +196,8 @@ describe("the Order gate runs for every method", () => {
     );
     if (!theirs) throw new Error("expected an open order for teamB");
 
-    // [Issue #701] The gate is checked on the FIRST move: an Order belonging
-    // to another team is refused before a commitment can be posted against it.
     const vault = projectForTeam(state, "teamA").vault;
-    const verdict = validateOp(state, "teamA", buildProveCommitOp(vault, theirs.id));
+    const verdict = validateOp(state, "teamA", buildProveSudokuOp(vault, theirs.id));
     expect(verdict.ok).toBe(false);
     if (verdict.ok) throw new Error("unreachable");
     expect(verdict.error).toContain("belongs to another team");

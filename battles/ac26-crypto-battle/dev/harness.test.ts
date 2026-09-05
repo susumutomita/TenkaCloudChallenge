@@ -21,7 +21,7 @@ import { DEFAULT_CONFIG, projectForTeam } from "../game/src/reducer.ts";
 import type { CryptoBattleProjection } from "../game/src/types.ts";
 import { createMatch, dispatch, projectSafely, readProjection, submitOp } from "./host.ts";
 import { buildScenario, DEV_CONFIG, DEV_TEAMS, SCENARIO_IDS, SCENARIO_LABELS } from "./scenarios.ts";
-import { buildNonceReuseHuntOp } from "../game/src/playtest.ts";
+import { buildSudokuHuntOp } from "../game/src/playtest.ts";
 
 describe("dev host is the real reducer", () => {
   /**
@@ -133,7 +133,7 @@ describe("dev scenarios are reachable and deterministic", () => {
     // `PublicArtifact.kind`.
     const { publicLedger } = buildScenario("ledger-filling").host.state;
     expect(publicLedger.some((artifact) => artifact.k === "share")).toBe(true);
-    expect(publicLedger.some((artifact) => artifact.k === "proof")).toBe(true);
+    expect(publicLedger.some((artifact) => artifact.k === "sudoku-reveal")).toBe(true);
   });
 
   /**
@@ -282,17 +282,17 @@ describe("Issue #645 scenarios reach the position they advertise", () => {
     expect(other.myContracts.every((c) => c.id.startsWith("bravo"))).toBe(true);
   });
 
-  it("should produce two alpha transcripts sharing one commitment, and a recoverable witness", () => {
-    const { host } = buildScenario("nonce-reuse");
-    const proofs = host.state.publicLedger.filter(
-      (a) => a.k === "proof" && a.tm === "alpha",
+  it("should produce three alpha reveals sharing one tag, and a recoverable solution", () => {
+    const { host } = buildScenario("pi-reuse");
+    const reveals = host.state.publicLedger.filter(
+      (a) => a.k === "sudoku-reveal" && a.tm === "alpha",
     );
-    expect(proofs).toHaveLength(2);
-    const commitments = new Set(proofs.map((a) => (a.k === "proof" ? a.o : "")));
-    expect(commitments.size).toBe(1);
+    expect(reveals).toHaveLength(3);
+    const tags = new Set(reveals.map((a) => (a.k === "sudoku-reveal" ? a.tg : "")));
+    expect(tags.size).toBe(1);
 
     // And the position is genuinely exploitable from bravo's public view.
-    const op = buildNonceReuseHuntOp(projectForTeam(host.state, "bravo"), "alpha");
+    const op = buildSudokuHuntOp(projectForTeam(host.state, "bravo"), "alpha");
     expect(op).toBeDefined();
   });
 });

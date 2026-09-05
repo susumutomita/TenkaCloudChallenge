@@ -7,7 +7,7 @@
  * already written (PR1/PR2) with the exact shape a
  * `@tenkacloud/coordination-plugin-sdk` `CoordinationPlugin<State, Op,
  * Projection>` needs -- see that file's header. Nothing about the game
- * (Shamir sharing, Schnorr proofs, contract issuance, scoring) is duplicated
+ * (Shamir sharing, sudoku PROVE, contract issuance, scoring) is duplicated
  * or re-derived here; this file only forwards those five exports through
  * `defineCoordinationPlugin`.
  *
@@ -27,9 +27,8 @@
  * true` makes esbuild resolve and INLINE every relative import the entry
  * file makes, however deep the chain -- verified locally by pointing the
  * same esbuild config at this file's whole `game/src` import graph
- * (`reducer.ts` -> `fixtures.ts` / `field.ts` / `group.ts` /
- * `schnorr-witness.ts` / `schnorr-verifier.ts` -> `prng.ts` /
- * `schnorr-transcript.ts` / ...): it bundles cleanly into one ~21.6 KB ESM
+ * (`reducer.ts` -> `fixtures.ts` / `field.ts` / `sudoku.ts` /
+ * `decimal.ts` -> `prng.ts` / ...): it bundled cleanly into one ~21.6 KB ESM
  * file with no resolution errors. So importing `../game/src/reducer.ts`
  * directly here -- rather than hand-copying its logic into this file -- is
  * exactly what the loader expects, and is what this repo's PR1/PR2 header
@@ -60,7 +59,7 @@
  * rather than inlining or erroring. That matters here because
  * `game/src/prng.ts` (SHA-256 seed derivation, used by every "randomness" in
  * this package -- secrets, Shamir coefficients, the contract schedule) and
- * `game/src/schnorr-witness.ts` (witness hashing) both import
+ * `game/src/fixtures.ts` (relabelling tags) both import
  * `createHash` from `node:crypto`. The bundled `.mjs` this produces is later
  * `import()`-ed by
  * `TenkaCloud/infrastructure/lib/problem-deploy/handlers/coordination-dispatcher-handler/index.ts`
@@ -110,7 +109,7 @@
  * Turso/DynamoDB between calls -- neither can carry a `bigint`. Nothing in
  * THIS file has to know that; it is `reducer.ts`'s `validateOp` "hunt"
  * branch that parses the untrusted `recoveredSecret` string (via
- * `schnorr-verifier.ts`'s exported `parseCanonicalDecimal`) and
+ * `decimal.ts`'s exported `parseCanonicalDecimal`) and
  * `reducer.ts`'s other functions that convert at the `bigint` <-> string
  * boundary, so this wrapper stays a pure forward either way.
  *
@@ -148,8 +147,15 @@
  * hits that throw path.
  */
 import { defineCoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
-import { migrateStateV1 } from "../game/src/ledger-codec.ts";
-import { applyOp, initialState, projectForTeam, tick, validateOp } from "../game/src/reducer.ts";
+import {
+  applyOp,
+  initialState,
+  migrateState,
+  projectForTeam,
+  STATE_SCHEMA_VERSION,
+  tick,
+  validateOp,
+} from "../game/src/reducer.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState } from "../game/src/types.ts";
 
 /**
@@ -175,15 +181,16 @@ export default defineCoordinationPlugin<CryptoBattleState, CryptoBattleOp, Crypt
   tick,
   projectForTeam,
   teamScores,
-  // [Issue #679 / TenkaCloud#3150] `publicLedger` moved from `PublicArtifact[]`
-  // to the compact `StoredArtifact[]` form (`../game/src/ledger-codec.ts`) --
-  // a real shape change to `CryptoBattleState`, so the version bump is
-  // required, not optional (see that SDK Issue's rule: "State の形を変えたら
-  // 必ずこの値を上げる"). `migrateStateV1` is forwarded directly, unwrapped,
-  // the same "thin wrapper" way every other hook above is -- it IS this
-  // plugin's `migrateState`, not a re-implementation of it, which is what lets
-  // `coordination-plugin.test.ts` assert `plugin.migrateState ===
-  // migrateStateV1` rather than merely "is a function".
-  stateSchemaVersion: 2,
-  migrateState: migrateStateV1,
+  // [Issue #679 / TenkaCloud#3150, #709] Every real shape change to
+  // `CryptoBattleState` bumps this (the SDK's rule: "State の形を変えたら必ず
+  // この値を上げる"): v2 for the compact ledger, v3 for the sudoku PROVE (a new
+  // ledger kind, `publicPuzzles`, per-team hunted lists) -- see
+  // `STATE_SCHEMA_VERSION`'s doc comment in reducer.ts for why the bump is
+  // what keeps a rollback safe. `migrateState` is forwarded directly,
+  // unwrapped, the same "thin wrapper" way every other hook above is -- it IS
+  // this plugin's `migrateState`, which is what lets
+  // `coordination-plugin.test.ts` assert identity rather than merely "is a
+  // function".
+  stateSchemaVersion: STATE_SCHEMA_VERSION,
+  migrateState,
 });

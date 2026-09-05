@@ -49,7 +49,7 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 ## Match lifecycle
 
 1. TenkaCloud mints the match secret before first state creation.
-2. `initialState` creates team secrets, shares, commitments, and the Order plan.
+2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
 4. `validateOp` rejects malformed, stale, unauthorized, or incorrect moves.
 5. `applyOp` changes state only after validation.
@@ -59,6 +59,18 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 All state and operations must remain JSON-safe. Large field and group values
 cross the state/op boundary as decimal strings, never JavaScript numbers or
 raw `bigint`.
+
+### Upgrading across a schema version
+
+The plugin declares `stateSchemaVersion` (3 since the sudoku PROVE) and a
+`migrateState` that lifts older rows on first touch. One case is refused on
+purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
+Schnorr transcripts sharing a commitment on a team's current generation, and
+an attacker that has not collected on it). v3 has no move that attack maps
+onto, and dropping it silently would change the match's scoring mid-run. The
+platform leaves such a row untouched, so finish that match on the plugin that
+made it, or reset it, before deploying the upgrade. Upgrade between events,
+not during one.
 
 ## Participant surface
 
@@ -96,8 +108,8 @@ bun run typecheck
 ```
 
 The suite covers reducer behavior, JSON round-trips, method/order compatibility,
-Schnorr verification, Shamir reconstruction, FHE/MPC behavior, nonce-reuse
-HUNT, team projections, deterministic replay, and the vertical playtest.
+sudoku-relabelling verification, Shamir reconstruction, FHE/MPC behavior,
+reused-relabelling HUNT, team projections, deterministic replay, and the vertical playtest.
 
 From the TenkaCloudChallenge root, also run:
 
