@@ -1,55 +1,10 @@
-"""Groups, key pairs and share layouts, all derived from the per-deploy FLAG_SEED.
+"""Deterministic classroom groups, key pairs and share layouts for one deployment.
 
-Week 2's other companions all live in a world where the parties can already talk
-freely: shares get added locally, and the one hard operation (multiplication) is
-bought with a triple somebody prepared in advance. Nothing there explains where the
-*preprocessing* could come from, or how two parties who trust each other with
-nothing at all can compute anything together in the first place.
-
-Oblivious transfer is the missing primitive. One party holds two messages, the other
-picks one, and afterwards:
-
-  * the receiver has exactly the message it chose, and nothing about the other one;
-  * the sender does not know which one that was.
-
-The construction here is the standard Diffie-Hellman-flavoured one, in a prime-order
-subgroup of Z_p^*:
-
-    sender publishes   A = g^a
-    receiver sends     B = g^t          (choice 0)
-                       B = A * g^t      (choice 1)
-    sender encrypts    m_0 under H(B^a)
-                       m_1 under H((B/A)^a)
-    receiver decrypts  with H(A^t)
-
-Whichever branch the receiver took, exactly one of the sender's two keys equals
-H(A^t) = H(g^(a*t)); recovering the other one would mean solving a discrete log.
-
-## Why `t` is drawn from 0..q-1 and not 1..q-1
-
-Because the receiver's privacy is a statement about a *distribution*, not about any
-one message. With t uniform over the whole of 0..q-1, `B` is uniform over the
-subgroup under both choices, so the sender sees the same distribution either way and
-learns nothing. Exclude 0 -- the way one habitually excludes it for a secret
-exponent -- and `B = 1` becomes reachable only when the choice was 1, and `B = A`
-only when the choice was 0. Two values out of q now name the choice bit outright.
-
-The parameters are small enough to read and far too small to use: discrete log here
-is a few hundred trial multiplications. The point is to make the failure observable,
-not to withstand anything.
-
-## Where this file does and does not run
-
-Issue 537/538 (Issue 543 option B2): this module does **not** ship in the `participant`
-Docker stage any more (see ../Dockerfile). It shipped there beside
-`tests/hidden/check_oblivious.py`, whose assertions decide every one of this problem's
-six checkpoints, in the single image a learner's own `make build` produced. `show.py`
-and the public tests read `public_payload` below from this deployment's verifier over
-`GET /public` instead of importing it.
-
-The supplied half -- the key derivation both sides of a transfer agree on -- moved to
-`participant/ot.py` and is re-exported below, because the starter imports it and the
-starter does ship to the participant. Everything else here is seed derivation.
+The OT equations are tested as a small model. The sender exponent is nonzero;
+receiver blinds cover a full cycle including exponent residue zero. Uniformity is a
+model for the enumerated privacy checks, not a claim that seed-derived sample data
+is cryptographic randomness. Tiny-group discrete logarithms are easy to enumerate.
+Public test inputs include both roles; private fixtures stay in the verifier image.
 """
 
 from __future__ import annotations
