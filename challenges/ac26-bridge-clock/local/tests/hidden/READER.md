@@ -67,3 +67,7 @@ Root independently ran the HTTP route again: `/private/tmp/bridge-clock-716-root
 The real participant API route was exercised. The full parent Portal, browser layout, physical devices, AWS and third-party human play were not exercised for this increment. No time-to-completion claim is based on the agent's speed. Root reviewed the final diff and owns commit, push and PR.
 
 Root stopped the dedicated ac26-bridge-clock-live-check containers and networks after verification; no project containers remained. The cleanup log is /private/tmp/bridge-clock-716-cleanup.log.
+
+## Final review: independence across messages
+
+PR review correctly identified that one-use and marginal uniformity alone allow correlated covers. For n=5, choose uniform r1 and set r2=(r1+1)%5: each cover is uniform and unequal, but the observations reveal `(m2-m1+1)%5`. The Japanese and English statement and README now require fresh draws independent of every original and independently drawn across messages. Independent draws may coincide by chance; prohibiting equal numerical outcomes would itself introduce dependence. Enumeration confirmed five possible observation pairs for the correlated construction versus all 25 equiprobable pairs for two independent draws. This is a mathematical wording correction; grading and runtime are unchanged.

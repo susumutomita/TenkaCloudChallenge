@@ -21,7 +21,7 @@ Start → Inspect evidence → use n,u,v to compare addition remainders and subm
 
 The early practice original and cover are visible. The later two-message record is separate. Its known_first is also displayed from the start: compare an observer knowing only the observations with one also knowing the first original. There is no delayed UI disclosure. The later record's actual second original and common cover are not directly displayed.
 
-Clocks have 5–9 positions, including composite sizes. Addition gives a unique matching cover for every candidate. The probability claim separately requires a full-range uniform cover independent of the original, unknown to the observer and used once. Deterministic practice fixtures are not evidence of that random experiment. Reuse reveals a remainder of the difference, not necessarily its ordinary signed value.
+Clocks have 5–9 positions, including composite sizes. Addition gives a unique matching cover for every candidate. The probability claim separately requires a fresh full-range uniform cover per message, with draws independent of all originals and independent across messages, unknown to the observer and used once. Deterministic practice fixtures are not evidence of that random experiment. Reuse reveals a remainder of the difference, not necessarily its ordinary signed value.
 
 ## Runtime and grading boundary
 
