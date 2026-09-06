@@ -44,7 +44,13 @@ def restrict_learner():
                  'socketcall','io_uring_setup','pidfd_getfd','ptrace',
                  'process_vm_readv','process_vm_writev',
                  'kill','tkill','tgkill','pidfd_send_signal',
-                 'rt_sigqueueinfo','rt_tgsigqueueinfo','setsid','setpgid')
+                 'rt_sigqueueinfo','rt_tgsigqueueinfo','setsid','setpgid',
+                 # SysV objects otherwise survive the learner process and can exhaust
+                 # or communicate through the container's IPC namespace.
+                 'shmget','shmat','shmdt','shmctl','msgget','msgsnd','msgrcv','msgctl',
+                 'semget','semop','semtimedop','semctl','ipc',
+                 'mq_open','mq_unlink','mq_timedsend','mq_timedreceive',
+                 'mq_notify','mq_getsetattr')
         for name in blocked:
             number=lib.seccomp_syscall_resolve_name(name.encode())
             if number < 0:

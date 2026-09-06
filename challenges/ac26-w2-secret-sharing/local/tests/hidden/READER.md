@@ -1,9 +1,122 @@
 # #716: one secret-sharing problem, reading and runtime evidence
 
+## Final Python types and retained Portal acceptance
+
+The outer Python list contract is enforced before JSON serialization for `share`,
+`rerandomize` and `share_line`; tuple results cannot silently become lists. The
+three scalar reconstruction/completion functions reject booleans as integers. Point
+pairs inside a `share_line` list may still be lists or tuples, preserving the existing
+valid interface. Public and private tuple regressions cover all three list functions.
+The IPC denylist also includes POSIX message queues. Two isolation-only test functions
+were renamed from `share` to `probe` because their diagnostic dict/PID results are not
+share lists; their assertions and actual process restrictions remain unchanged.
+
+Final `make reference-test` passes all 27 mutations, the alternative valid two-of-three
+construction, and 17 Linux tests (23.242 seconds). Catalog validation passes 116 entries.
+
+The unchanged original reader and hand JSON passed all five fields through the
+retained real Portal component/API harness after these changes: one test, 3.31 seconds
+for submissions and 6.60 seconds total. The launcher removed its temporary parent test,
+and the parent checkout remained clean.
+
+The reproducible harness, original reader and manual JSON are checked in under
+`local/tests/hidden/portal/`. They are author-only evidence, absent from the participant
+image. With Docker, Bun and the TenkaCloud checkout dependencies installed, run from
+this problem directory (the seed matches the retained manual calculation):
+
+```sh
+FLAG_SEED=secret-sharing-reader-716 docker compose -p ac26-sharing-reader \
+  -f local/docker-compose.yml up -d --build --wait
+AC26_WORKBENCH_URL=http://127.0.0.1:18095 \
+  ./local/tests/hidden/portal/run.sh /absolute/path/to/TenkaCloud
+FLAG_SEED=secret-sharing-reader-716 docker compose -p ac26-sharing-reader \
+  -f local/docker-compose.yml down
+```
+
+The test renders the real `ContainerWorkbenchPanel` and contacts actual config,
+prepare and verify endpoints; only outer transport/auth/score responses are mocked.
+It checks four code rows, one sealed manual answer, unchanged source and solved-row
+folding. The tested parent commit is `6bce08335caba4b61f28082e01764e46b8549d18`.
+This is component/API evidence, not physical-browser or AWS acceptance.
+
+
 Date: 2026-09-07. Baseline: `1923ddc54b20d1496b0bd959291fcfd51e0e8719`.
 This is one problem's working increment. It does not complete the remaining #716 catalog.
 No AWS service or shared event was changed. These are agent-role reading and local
 runtime checks, not a timed study with a human beginner.
+
+## PR #763 follow-up: call batches, zero draws, and IPC
+
+Based on `2439701`, the review's six before cases were reproduced through the actual
+API on the dedicated localhost deployment. A source renamed all six required functions,
+read `payload.calls` from the worker's initialization frame, computed the correct
+answers with its renamed helpers, printed the old `results` envelope and exited. All
+four code checkpoints accepted it. A rerandomizer that rejected only all-zero draws
+and a reconstructor that returned 0 whenever the two y values were equal also passed
+their individual checkpoints. These are recorded in
+`/private/tmp/secret-sharing-763-before.log`.
+
+The problem-local worker now receives only source at initialization. After a ready
+acknowledgement, the trusted parent generates a fresh 128-bit batch identifier and
+sends that identifier with the existing calls batch. Only a matching result envelope
+can supply values to the unchanged trusted value adapter. A bounded incremental reader
+caps bytes before decoding; the existing 16 MiB result limit and one total deadline
+remain. Keeping a single batch preserves the approximately 100,000 independent
+line-privacy calls within the existing 12-second limit, instead of introducing that
+many synchronous protocol round trips. The `run_functions` return shape, score,
+checkpoint IDs, labels, parent mathematical checks and `tcw1` preparation are unchanged.
+
+This rejects initialization-time access to future calls, queued old envelopes, fixed
+identifiers and incomplete replies. It does **not** attest that a particular Python
+function executed a return statement. Arbitrary learner Python may read later inputs
+and compute the same correct values through another implementation; the parent's
+mathematical checks remain authoritative. The before startup program still computed
+correct mathematics—it was not bypassing those checks by printing a verdict.
+
+The real grader now includes legal zero cases:
+
+- Rerandomization runs both the existing nonzero adjustments and an all-zero draw.
+  The secret must stay the same in both cases. Nonzero adjustments must change a
+  share; zero adjustments must leave the supplied shares unchanged.
+- Pair reconstruction runs each case at its existing slope and at zero, checking
+  all three pairs in both orders. Equal y values on a flat reference line must recover
+  that line's secret. The existing alternative valid two-of-three construction still
+  passes; no requirement to use the reference line was introduced.
+
+The fixture helper documentation now distinguishes its nonzero baseline from the
+full random-input domain. Before cases that rejected zeros or mishandled a flat line
+are rejected after the change; the unchanged independent reader handles both cases.
+
+The Linux filter also denies SysV shared memory, message queue and semaphore creation
+and operations (`shm*`, `msg*`, `sem*`, including the native `ipc` multiplexor where
+available). These kernel objects can otherwise survive the learner process and consume
+resources or pass information between executions. This is problem-local isolation;
+no cloud policy or shared runtime changed.
+
+Validation (synthetic `secret-sharing-reader-716` only):
+
+- `make reference-test`: all 27 existing mutants rejected, one alternate valid sharing
+  accepted, and all 16 Linux boundary tests passed. New checks exercise initialization
+  input visibility, fresh batch IDs, fixed/wrong IDs, partial replies, bounded writes
+  and reads, real zero-case grading, and all 12 SysV operations returning EPERM in 64
+  repetitions with unchanged `/proc/sysvipc` object tables. Existing source diagnostic,
+  time-limit, private-data and complete descendant-reaping checks remain passing.
+- Actual API: all four unchanged startup spoof submissions now fail; the exact two
+  zero-only mutants now fail. The unchanged reader source SHA
+  `657dcad1c86fe04c42b857c8108614a3f339a496ab5eb32f0f318689ffc5a3ca`
+  and hand-produced threshold JSON still pass all five checkpoints through the existing
+  prepare/sealed-submit route. Public checks and location-only diagnostics still pass.
+  Two-of-three took 3.426 seconds in the full acceptance run, below the existing limit.
+- Actual public and private API requests also ran 64 repetitions of each SysV object
+  creation attempt. Each returned EPERM, the otherwise correct reader still passed,
+  and both service IPC object tables were identical before and after.
+- Python compilation, `git diff --check` and the 116-entry catalog gate passed.
+
+Logs: `/private/tmp/secret-sharing-763-{before,after,reader-http,reference,catalog,build}.log`.
+The repeated exact spoof and zero-only mutants are saved alongside those logs, and the
+actual follow-up harness is `/private/tmp/secret-sharing-763-after.py`. Runtime project
+`ac26-secret-sharing-reader-716` exposes only the Workbench on localhost 18148. These are
+local implementation checks, not a new independent reading, browser playtest or AWS run.
 
 ## Public-only first reading
 

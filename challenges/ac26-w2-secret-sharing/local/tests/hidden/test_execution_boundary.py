@@ -41,10 +41,102 @@ class Boundary(unittest.TestCase):
                 self.assertFalse(server.evaluate(checkpoint,source),checkpoint)
             self.assertFalse(public_check(source,public_payload('boundary-negative'))['passed'])
 
+    def test_tuple_results_do_not_become_valid_lists(self):
+        for name,checkpoint in (('share','share-and-reconstruct'),
+                                ('rerandomize','rerandomize'),('share_line','two-of-three')):
+            source=REFERENCE+f'\noriginal={name}\ndef {name}(*args):return tuple(original(*args))\n'
+            self.assertFalse(server.evaluate(checkpoint,source),name)
+            self.assertFalse(public_check(source,public_payload('boundary-types'))['passed'],name)
+        for name in ('reconstruct','complete_shares','reconstruct_line'):
+            result=run_functions(f'def {name}():return True',[{'fn':name,'args':[]}])
+            self.assertIn('raised',result['results'][0],name)
+
+    def test_initialization_cannot_read_calls_or_preprint_a_batch(self):
+        names=('share','reconstruct','complete_shares','rerandomize','share_line','reconstruct_line')
+        source=REFERENCE
+        for name in names:source=source.replace('def '+name+'(', 'def _'+name+'(')
+        source+='\nimport os,sys,json\npayload=sys._getframe(1).f_locals["payload"]\nresults=[{"value":globals()["_"+c["fn"]](*c["args"])} for c in payload["calls"]]\nprint(json.dumps({"results":results}),flush=True)\nos._exit(0)\n'
+        for checkpoint in server.CODE_CHECKPOINTS:
+            self.assertFalse(server.evaluate(checkpoint,source),checkpoint)
+        live='''import sys
+initial_had_calls='calls' in sys._getframe(1).f_locals['payload']
+def share():return [initial_had_calls,sys._getframe(1).f_locals['batch']['batchId']]
+'''
+        ids=[]
+        for _ in range(2):
+            value=run_functions(live,[{'fn':'share','args':[]}])['results'][0]['value']
+            self.assertFalse(value[0])
+            self.assertRegex(value[1],r'^[0-9a-f]{32}$')
+            ids.append(value[1])
+        self.assertNotEqual(*ids)
+
+    def test_fixed_wrong_or_incomplete_batch_reply_is_rejected(self):
+        for mode in ('fixed','wrong','eof'):
+            source='import os,sys,json\nprint(\'{"ready":true}\',flush=True)\n'
+            if mode=='fixed':
+                source+='print(json.dumps({"batchId":"0"*32,"results":[{"value":0}]}),flush=True)\n'
+            else:
+                source+='batch=json.loads(sys.stdin.readline())\n'
+                if mode=='wrong':
+                    source+='print(json.dumps({"batchId":"wrong","results":[{"value":0}]}),flush=True)\n'
+                else:
+                    source+='print(json.dumps({"batchId":batch["batchId"],"results":[]}),flush=True)\n'
+            source+='os._exit(0)\n'
+            self.assertIsNone(run_functions(source,[{'fn':'share','args':[]}]),mode)
+
+    def test_legal_zero_inputs_are_checked_by_actual_grader(self):
+        reject_zero=REFERENCE+'''
+_original_rerandomize=rerandomize
+def rerandomize(shares,p,randomness):
+    if all(r%p==0 for r in randomness):raise ValueError('reject zero')
+    return _original_rerandomize(shares,p,randomness)
+'''
+        flat_wrong=REFERENCE+'''
+_original_line=reconstruct_line
+def reconstruct_line(points,p):
+    if points[0][1]==points[1][1]:return 0
+    return _original_line(points,p)
+'''
+        self.assertTrue(server.evaluate('rerandomize',REFERENCE))
+        self.assertFalse(server.evaluate('rerandomize',reject_zero))
+        self.assertTrue(server.evaluate('two-of-three',REFERENCE))
+        self.assertFalse(server.evaluate('two-of-three',flat_wrong))
+
+    def test_sysv_ipc_is_denied_and_no_objects_accumulate(self):
+        source='''import ctypes
+libc=ctypes.CDLL(None,use_errno=True)
+libc.shmat.restype=ctypes.c_void_p
+def share():
+    calls=[('shmget',(0,4096,0o1600)),('shmat',(-1,None,0)),('shmdt',(None,)),('shmctl',(-1,0,None)),
+           ('msgget',(0,0o1600)),('msgsnd',(-1,None,0,0)),('msgrcv',(-1,None,0,0,0)),('msgctl',(-1,0,None)),
+           ('semget',(0,1,0o1600)),('semop',(-1,None,0)),('semtimedop',(-1,None,0,None)),('semctl',(-1,0,0))]
+    result=[]
+    for name,args in calls:
+        ctypes.set_errno(0)
+        value=getattr(libc,name)(*args)
+        result.append([name,ctypes.get_errno()])
+    return result
+'''
+        def objects():return {name:Path('/proc/sysvipc/'+name).read_text() for name in ('shm','msg','sem')}
+        before=objects()
+        result=run_functions(source,[{'fn':'share','args':[]}] * 64)
+        for row in result['results']:
+            self.assertEqual([code for name,code in row['value']],[1]*12)
+        self.assertEqual(objects(),before)
+
+    def test_partial_output_and_blocked_input_are_time_bounded(self):
+        for source,calls in (
+            ('import os\nos.write(1,b\'{"ready":\')\nwhile True:pass',[]),
+            ('print(\'{"ready":true}\',flush=True)\nwhile True:pass',[{'fn':'share','args':['x'*200000]}]),
+        ):
+            started=time.monotonic()
+            self.assertIsNone(run_functions(source,calls,timeout=.2))
+            self.assertLess(time.monotonic()-started,3)
+
     def test_worker_has_no_seed_checker_private_files_network_or_exec(self):
         source = '''import os,sys,ctypes
 libc=ctypes.CDLL(None,use_errno=True)
-def share(pids):
+def probe(pids):
     paths=['/problem/fixtures/generate.py','/problem/tests/hidden/check_sharing.py',
            '/problem/reference/sharing.py','/proc/self/environ','/proc/self/cmdline']
     paths += ['/proc/'+pid+'/'+name for pid in pids for name in ('environ','cmdline','mem')]
@@ -62,7 +154,7 @@ def share(pids):
             'checker':any(n.startswith(('fixtures','tests.hidden','verifier')) for n in sys.modules)}
 '''
         pids=[p.name for p in Path('/proc').iterdir() if p.name.isdigit()]
-        result=run_functions(source,[{'fn':'share','args':[pids]}])
+        result=run_functions(source,[{'fn':'probe','args':[pids]}])
         self.assertEqual(result['results'],[{'value':dict(seed=False,private_read=False,
                          network=False,exec=False,checker=False)}])
 
@@ -126,7 +218,7 @@ def reconstruct_line(points,p): return int(open('/tmp/sharing-stash').read())
         # Author/Compose commands run with --init/init:true. An orphan must disappear
         # from /proc altogether: a zombie is still a leaked PID, not success.
         source='''import os,time
-def share(spin):
+def probe(spin):
     pid=os.fork()
     if pid==0:
         while True: time.sleep(1)
@@ -135,10 +227,10 @@ def share(spin):
     return pid
 '''
         before={p.name for p in Path('/proc').iterdir() if p.name.isdigit()}
-        result=run_functions(source,[{'fn':'share','args':[False]}],timeout=.5)
+        result=run_functions(source,[{'fn':'probe','args':[False]}],timeout=.5)
         pid=result['results'][0]['value']
         self.assertIsInstance(pid,int)
-        timed=run_functions(source,[{'fn':'share','args':[True]}],timeout=.2)
+        timed=run_functions(source,[{'fn':'probe','args':[True]}],timeout=.2)
         self.assertIsNone(timed)
         for _ in range(100):
             after={p.name for p in Path('/proc').iterdir() if p.name.isdigit()}

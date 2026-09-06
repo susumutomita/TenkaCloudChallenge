@@ -319,32 +319,35 @@ def check_completion(module, seed: str) -> list[str]:
 
 
 def check_rerandomize(module, seed: str) -> list[str]:
-    """The secret is read back by this test (sum of the shares), never by the
-    submission's reconstruct, so a stash from `share` would gain nothing here."""
+    """Preserve the sum for both nonzero and legal all-zero adjustments."""
     failures: list[str] = []
     for label in LABELS:
         cfg = setting(seed, label)
-        p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
+        p, n, secret = cfg['p'], cfg['n'], cfg['secret']
         try:
-            shares = module.share(
-                secret, n, p, share_randomness(seed, label, n - 1, p, secret)
-            )
-            fresh = module.rerandomize(
-                list(shares),
-                p,
-                rerandomization_randomness(seed, f"{label}-rr", n - 1, p),
-            )
-        except Exception as error:  # noqa: BLE001
-            return [f"rerandomize raised {type(error).__name__}"]
-        if not isinstance(fresh, list) or len(fresh) != n:
-            failures.append("rerandomize did not return one value per party")
-            continue
-        if any(not isinstance(s, int) or not 0 <= s < p for s in fresh):
-            failures.append("a rerandomized share is outside [0, modulus)")
-        if sum(fresh) % p != secret % p:
-            failures.append("rerandomizing changed the secret")
-        if fresh == list(shares):
-            failures.append("rerandomize returned the same shares, so nothing was refreshed")
+            shares = module.share(secret, n, p,
+                                  share_randomness(seed, label, n - 1, p, secret))
+        except Exception as error:
+            return [f'share raised {type(error).__name__}']
+        draws = (rerandomization_randomness(seed, f'{label}-rr', n - 1, p), [0] * (n - 1))
+        for draw in draws:
+            try:
+                fresh = module.rerandomize(list(shares), p, list(draw))
+            except Exception as error:
+                return [f'rerandomize raised {type(error).__name__}']
+            if not isinstance(fresh, list) or len(fresh) != n:
+                failures.append('rerandomize did not return one value per party')
+                continue
+            if any(not _is_int(s) or not 0 <= s < p for s in fresh):
+                failures.append('a rerandomized share is outside [0, modulus)')
+                continue
+            if sum(fresh) % p != secret % p:
+                failures.append('rerandomizing changed the secret')
+            if any(r % p for r in draw):
+                if fresh == list(shares):
+                    failures.append('rerandomize returned the same shares, so nothing was refreshed')
+            elif fresh != list(shares):
+                failures.append('zero adjustments must leave the shares unchanged')
     return failures
 
 
@@ -404,14 +407,17 @@ def check_line_pairs(module, seed: str) -> list[str]:
     expected: list[tuple[int, int]] = []
     for case in line_cases(seed):
         p, secret = case["p"], case["secret"]
-        points, failure = _line_points(module, secret, p, case["slope"])
-        if failure is not None or points is None:
-            failures.append(failure or "share_line did not return three points")
-            continue
-        for i, j in ((0, 1), (0, 2), (1, 2)):
-            for pair in ([points[i], points[j]], [points[j], points[i]]):
-                calls.append(("reconstruct_line", [[list(point) for point in pair], p]))
-                expected.append((p, secret))
+        # Every random draw includes zero in its domain. A flat reference line
+        # still reconstructs its (possibly nonzero) secret from any two points.
+        for slope in (case['slope'], 0):
+            points, failure = _line_points(module, secret, p, slope)
+            if failure is not None or points is None:
+                failures.append(failure or "share_line did not return three points")
+                continue
+            for i, j in ((0, 1), (0, 2), (1, 2)):
+                for pair in ([points[i], points[j]], [points[j], points[i]]):
+                    calls.append(("reconstruct_line", [[list(point) for point in pair], p]))
+                    expected.append((p, secret))
     if not calls:
         return failures
     # reconstruct_line never sees what share_line stored: it runs in another

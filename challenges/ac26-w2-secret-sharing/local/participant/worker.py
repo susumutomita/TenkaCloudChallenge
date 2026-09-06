@@ -33,8 +33,7 @@ def diagnostic(error):
 
 
 def main():
-    payload = json.load(sys.stdin)
-    os.close(0)
+    payload = json.loads(sys.stdin.readline())
     restrict_learner()
     module = types.ModuleType('sharing')
     module.__file__ = 'sharing.py'
@@ -44,16 +43,25 @@ def main():
     except BaseException as error:
         print(json.dumps({'error': diagnostic(error)}), flush=True)
         return
+    print('{"ready":true}', flush=True)
+    batch = json.loads(sys.stdin.readline())
+    os.close(0)
     results = []
-    for call in payload['calls']:
+    for call in batch['calls']:
         try:
             value = getattr(module, call['fn'])(*call['args'])
+            # Preserve the documented outer Python types before JSON can turn
+            # a tuple into a list. Point pairs inside share_line may use either.
+            if call['fn'] in ('share', 'rerandomize', 'share_line') and not isinstance(value, list):
+                raise TypeError('sharing functions must return lists')
+            if call['fn'] in ('reconstruct', 'complete_shares', 'reconstruct_line') and (not isinstance(value, int) or isinstance(value, bool)):
+                raise TypeError('reconstruction functions must return integers')
             # JSON values are the only data accepted by the trusted caller.
             json.dumps(value, allow_nan=False)
             results.append({'value': value})
         except BaseException as error:
             results.append({'raised': diagnostic(error)})
-    print(json.dumps({'results': results}, separators=(',', ':'), allow_nan=False), flush=True)
+    print(json.dumps({'batchId': batch['batchId'], 'results': results}, separators=(',', ':'), allow_nan=False), flush=True)
 
 
 if __name__ == '__main__':
