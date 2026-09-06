@@ -33,7 +33,7 @@ Participant Portal で「起動」→「証拠を確認」。最初はpとtだ�
 
 ## Runtime と検証の境界
 
-Composeは参加者Workbenchと非公開verifierを別コンテナで起動します。ホストへ公開するのは `127.0.0.1:18132` のWorkbenchだけ。参加者イメージはstarter・公開テスト・表示処理で、生成器、期待値、非公開チェック、referenceは含みません。Workbenchの親プロセスがverifierから公開値だけを取得し、子プロセスへスナップショットを渡します。提出コードへseedやverifier接続先を渡さず、既存PLONK演習と同じLinuxのsyscall制限・親プロセス保護を使います。最後の構成はverifierが公開検証式で独立に確認し、一つの参考解との一致にはしません。
+Composeは参加者Workbenchと非公開verifierを別コンテナで起動します。ホストへ公開するのは `127.0.0.1:18132` のWorkbenchだけ。参加者イメージはstarter・公開テスト・表示処理で、生成器、期待値、非公開チェック、referenceは含みません。seedを渡すのはverifierコンテナだけです。Workbenchは子プロセスから親を読めないよう保護してから、verifierの内部 `/workbench-key` で派生した封印鍵と、公開値を取得します。子へ渡すのは公開値のスナップショットだけで、鍵やverifier接続先は渡しません。公開proxyには鍵の取得経路がなく、Tiniやhealthcheckの環境にもseedや鍵を残しません。Linuxのsyscall制限で提出コードのネットワーク接続を拒否します。最後の構成はverifierが公開検証式で独立に確認し、一つの参考解との一致にはしません。
 
 各回答は `/api/prepare` で問題・採点欄に結び付けた提出を作り、`/verify` へ送ります。verifierは問題・欄・署名を照合します。コンテナはnon-root、read-only、capability削除、CPU/メモリ/PID上限、内部ネットワークを使います。Docker管理者自身からの秘密保護は保証しません。
 
@@ -48,4 +48,4 @@ make reference-test
 make test STARTER_FILE=local/reference/schnorr_drill.py
 ```
 
-`reference-test` は誤った実装のmutationと、2曲線の手計算表・構成解の全探索・不正入力・metadataの回帰とLinuxのseed・親プロセス・ネットワーク隔離を実行します。カタログrootで `make install && make agent-gate`。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。
+`reference-test` は誤った実装のmutationと、2曲線の手計算表・構成解の全探索・不正入力の回帰、鍵の起動時取得、Linuxのseed・親プロセス・ネットワーク隔離を実行します。実Composeでは `SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132` を設定し、`python -m unittest discover -s local/tests/hidden -p test_isolation.py -v` でTiniやhealthcheckを含む全プロセスの環境を検査します。値は出力しません。metadataはカタログrootの `make install && make agent-gate` で検証します。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。

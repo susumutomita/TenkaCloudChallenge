@@ -72,6 +72,16 @@ P2=(0,1), ef=2
 
 実行記録は `/private/tmp/schnorr-716-compose.log`、`/private/tmp/schnorr-716-isolation.log`、`/private/tmp/schnorr-716-http-acceptance.log`（26 assertion）、公開API応答は `/private/tmp/schnorr-716-live-{config,inspect,starter}.json`。再現スクリプトは `/private/tmp/schnorr-716-http-acceptance.py`。env秘密の内容は出力していない。
 
+### PR #750 review: init process の seed 露出を閉じた追加確認
+
+同じ専用 project `schnorr-716-20260906`、`127.0.0.1:18142` を合成 seed で起動し、実 `/api/test` の提出コードから `/proc` を検査した。修正前は Python の親プロセスを読めなくても、Tini の `/proc/1/environ` で `FLAG_SEED` の存在を確認できた。値は出力せず、readable / secret_present の boolean だけ記録した。
+
+修正後は seed を verifier コンテナだけへ注入する。Workbench は保護後に内部 API から派生封印鍵を取得するため、Tini と healthcheck の起動環境に seed も鍵も入らない。5秒間の実 learner 実行で全5プロセスを確認し、Tini・healthcheck・learner は secret_present=false、supervisor は読み取り拒否だった。公開口の内部鍵候補3経路は GET/POST すべて404。公開値だけから計算した合成問題の8欄と、誤答・未封印・改ざん・欄の移し替え・別の構成解・実隔離を含む26 assertionsも成功した。この追加回は起動と隔離の回帰であり、上の独立読解の代わりにはしていない。
+
+Linux author image は新しい鍵取得9件、既存隔離3件、学習回帰8件を成功。実Compose専用2件はホストから実HTTPで成功した。カタログ116件も成功。英語shortDescriptionとWorkbench description/labelは `one-time random number` に統一し、実 `/api/config` とmetadataの一致を確認した。metadataの検証はrootの `make agent-gate` によるもので、`reference-test` の学習テストがmetadataまで検証するという旧説明は修正した。
+
+追加ログ: `/private/tmp/schnorr-716-proc-before.log`、`/private/tmp/schnorr-716-proc-after.log`、`/private/tmp/schnorr-716-proc-author-tests.log`、`/private/tmp/schnorr-716-proc-http-acceptance.log`、`/private/tmp/schnorr-716-proc-final-copy.log`、`/private/tmp/schnorr-716-proc-catalog.log`。専用projectは検証後に停止し、container残数0を確認済み（`/private/tmp/schnorr-716-proc-cleanup.log`）。共有project・localhost5657・AWSへは接続していない。
+
 検証後は専用projectの `down` によりコンテナ2つとネットワーク2つを削除し、同projectの `ps -a` が空であることを確認した（`/private/tmp/schnorr-716-cleanup.log`）。最新main上の `make install agent-gate` も116件すべて成功した（`/private/tmp/schnorr-716-final-catalog-gate.log`）。
 
 **実Portalのクリック経路は未確認。** HTTP上の参加者契約の実証と、アプリの画面配置・長文表示の実証は区別する。

@@ -27,7 +27,7 @@ class PortalEditorSupport:
         self,
         *,
         root: Path,
-        seed: str,
+        seed: str | None,
         problem_id: str,
         problem_name: str,
         description: str,
@@ -45,7 +45,12 @@ class PortalEditorSupport:
         public_payload: dict[str, object] | None = None,
     ) -> None:
         self.root = root
-        self.seed = seed
+        # Author callers may derive a key locally. The live Workbench receives
+        # only the derived key after protecting its supervisor process.
+        self.sealing_key = (
+            hashlib.sha256((problem_id + "\0" + seed).encode("utf-8")).digest()
+            if seed is not None else None
+        )
         self.public_payload = public_payload
         self.problem_id = problem_id
         self.problem_name = problem_name
@@ -283,16 +288,15 @@ class PortalEditorSupport:
         return base64.urlsafe_b64decode(value + padding)
 
     def _seal_manual(self, checkpoint_id: str, answer: object) -> str:
+        if self.sealing_key is None:
+            raise RuntimeError("workbench sealing key is unavailable")
         payload = json.dumps(
             {"v": 1, "checkpointId": checkpoint_id, "answer": answer},
             ensure_ascii=False,
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8")
-        key = hashlib.sha256(
-            (self.problem_id + "\0" + self.seed).encode("utf-8")
-        ).digest()
-        signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        signature = hmac.new(self.sealing_key, payload, hashlib.sha256).digest()[:16]
         return f"tcw1.{self._b64encode(payload)}.{self._b64encode(signature)}"
 
     def unwrap_submission(self, checkpoint_id: str, submission: object) -> object:
@@ -307,10 +311,9 @@ class PortalEditorSupport:
                 return None
             payload = self._b64decode(encoded_payload)
             signature = self._b64decode(encoded_signature)
-            key = hashlib.sha256(
-                (self.problem_id + "\0" + self.seed).encode("utf-8")
-            ).digest()
-            expected = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+            if self.sealing_key is None:
+                return None
+            expected = hmac.new(self.sealing_key, payload, hashlib.sha256).digest()[:16]
             if not hmac.compare_digest(signature, expected):
                 return None
             decoded = json.loads(payload.decode("utf-8"))

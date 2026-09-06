@@ -53,6 +53,7 @@ CMD ["python", "verifier/server.py"]
 # participant-facing boundary claim.
 FROM participant AS author
 COPY --chown=lab:lab Dockerfile ./Dockerfile
+COPY --chown=lab:lab docker-compose.yml ./docker-compose.yml
 
 COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/

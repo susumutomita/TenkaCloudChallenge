@@ -63,4 +63,5 @@ reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_learning.py" -v
+	docker run --rm $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_bootstrap.py" -v
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_isolation.py" -v

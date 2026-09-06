@@ -16,7 +16,7 @@ Select Start → Inspect in the Participant Portal. Read p and t first, find the
 | order | integer | 25 | Make a point table and count the first return to O |
 | response | integer | 25 | Answer a challenge |
 | verify | [X,Y] | 30 | Compare both public sides |
-| nonce-reuse | integer | 30 | Extract a secret from distinct challenges sharing a nonce |
+| nonce-reuse | integer | 30 | Extract a secret when different challenges reuse a one-time random number |
 | transfer | [Rx,Ry,s] | 30 | Construct a record with the challenge known first |
 
 Every field has three hints: mechanism, a formula with a one-digit example, then steps using Inspect names. Each costs 2 points: 24 hints, maximum 48. A wrong answer costs 10. Required formulas and examples are also free in the statement. The legacy transfer ID now accepts multiple constructed records rather than a response on a second curve.
@@ -33,7 +33,7 @@ Source review covered the seminar’s Week 3 printed slides 54–60 (interactive
 
 ## Runtime boundary and lifecycle
 
-Compose separates the participant Workbench from an unpublished verifier. Only the Workbench is exposed at 127.0.0.1:18132. Its image contains starter, public tests and display code, not fixtures, expected values, hidden checks or reference answers. The trusted Workbench supervisor fetches public inputs and passes a snapshot to learner processes. They receive neither the seed nor verifier URLs. The existing PLONK Linux syscall filter and supervisor protection are reused. The final record is checked against the public equation, independently of any single reference answer.
+Compose separates the participant Workbench from an unpublished verifier. Only the Workbench is exposed at 127.0.0.1:18132. Its image contains starter, public tests and display code, not fixtures, expected values, hidden checks or reference answers. Only the verifier container receives the seed. After protecting itself from child-process inspection, the Workbench supervisor obtains a derived sealing key through the verifier's internal `/workbench-key` route and fetches the public inputs. Learners receive only the public snapshot, with neither the key nor verifier URLs; the public proxy exposes no key route. Tini and healthcheck processes inherit no seed or key. The Linux syscall filter prevents learner network access. The final record is checked against the public equation, independently of any single reference answer.
 
 The participant prepares field-bound submissions at /api/prepare and sends them to /verify. The verifier checks problem identity, field and signature. Containers run non-root with read-only filesystems, dropped capabilities, CPU/memory/PID limits and internal networking. This does not protect hidden material from a local Docker administrator.
 
@@ -48,4 +48,4 @@ make reference-test
 make test STARTER_FILE=local/reference/schnorr_drill.py
 ```
 
-The reference target runs implementation mutants plus regressions for independently calculated point tables, all final constructions, malformed inputs, and Linux seed/parent-process/network isolation. Run make install && make agent-gate at the catalog root. Independent reader and participant API evidence is recorded in local/tests/hidden/READER.md. Live AWS and third-party participant validation remain unrun, separate from local evidence.
+The reference target runs implementation mutants plus regressions for independently calculated point tables, all final constructions, malformed inputs, key bootstrap and Linux seed/parent-process/network isolation. For the live Compose process test, set `SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132` and run `python -m unittest discover -s local/tests/hidden -p test_isolation.py -v`; it checks every visible process environment, including Tini and healthchecks, without printing values. Run make install && make agent-gate at the catalog root. Independent reader and participant API evidence is recorded in local/tests/hidden/READER.md. Live AWS and third-party participant validation remain unrun, separate from local evidence.

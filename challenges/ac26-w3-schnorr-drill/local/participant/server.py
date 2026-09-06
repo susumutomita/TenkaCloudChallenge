@@ -1,7 +1,8 @@
 """Public Participant Workbench and fail-closed verifier proxy.
 
-This process carries public evidence, starter material, and public tests only. It
-never grades a checkpoint locally: every `/verify` request is forwarded to the
+The public API serves evidence, starter material, and public tests. Its protected
+supervisor holds a derived sealing key, never the fixture seed. It never grades
+a checkpoint locally: every `/verify` request is forwarded to the
 Compose-internal verifier, and any missing or invalid verifier response becomes a
 canonical `correct: false` verdict.
 
@@ -23,7 +24,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -33,7 +34,6 @@ from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-schnorr-drill"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18132"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -71,14 +71,14 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    seed=None,
     problem_id='ac26-w3-schnorr-drill',
     problem_name='秘密を送らずに確かめる — Schnorrの順番を試す',
     problem_name_en='Check without sending the secret — test the order of Schnorr',
     description='小さい数で点を足し、秘密を送らずに返事を確かめます。同じ乱数の再利用で秘密を取り出し、最後は質問を先に知った場合の通る記録を自作します。',
-    description_en='Add points with small numbers and check a response without sending the secret. Recover a secret after nonce reuse, then construct a passing record when the challenge is known first.',
+    description_en='Add points with small numbers and check a response without sending the secret. Recover a secret after a one-time random number is reused, then construct a passing record when the challenge is known first.',
     checkpoint_labels={'field-inv': '掛けて1になる相手を見つける', 'add-points': '違う2点 G と Q を足す', 'double': '同じ点 G を2回足す', 'order': 'G を何回足すと O に戻るか', 'response': '質問 e への返事 s を作る', 'verify': '公開された点だけで返事を確かめる', 'nonce-reuse': '同じ乱数を使った人の秘密を取り出す', 'transfer': '質問が先なら通る記録を自作できるか'},
-    checkpoint_labels_en={'field-inv': 'Find the partner that multiplies to 1', 'add-points': 'Add two different points G and Q', 'double': 'Add G to itself', 'order': 'Count additions of G until O', 'response': 'Make the response s to challenge e', 'verify': 'Check the response using public points', 'nonce-reuse': 'Recover a secret after nonce reuse', 'transfer': 'Construct a passing record when the challenge comes first'},
+    checkpoint_labels_en={'field-inv': 'Find the partner that multiplies to 1', 'add-points': 'Add two different points G and Q', 'double': 'Add G to itself', 'order': 'Count additions of G until O', 'response': 'Make the response s to challenge e', 'verify': 'Check the response using public points', 'nonce-reuse': 'Recover a secret after a one-time random number is reused', 'transfer': 'Construct a passing record when the challenge comes first'},
     submitted_files=('schnorr_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,
@@ -235,8 +235,33 @@ def load_public_snapshot() -> dict[str, object]:
     return {key: payload[key] for key in ("public", "pointKeys", "assignments", "lines")}
 
 
+def load_sealing_key() -> bytes:
+    """Fetch only the derived key from the unpublished verifier, before serving learners."""
+    target = urlsplit(VERIFIER_URL)
+    if target.scheme not in ("http", "https") or not target.netloc:
+        raise RuntimeError("VERIFIER_URL is required")
+    # Fixed internal path: participant request paths and query strings never flow here.
+    url = urlunsplit((target.scheme, target.netloc, "/workbench-key", "", ""))
+    with urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        raw = response.read(1025)
+    if len(raw) > 1024:
+        raise RuntimeError("invalid workbench key response")
+    payload = json.loads(raw)
+    value = payload.get("key") if isinstance(payload, dict) else None
+    if not isinstance(value, str) or len(value) != 64:
+        raise RuntimeError("invalid workbench key response")
+    try:
+        key = bytes.fromhex(value)
+    except ValueError:
+        raise RuntimeError("invalid workbench key response") from None
+    if len(key) != 32:
+        raise RuntimeError("invalid workbench key response")
+    return key
+
+
 def main() -> None:
     protect_supervisor()
+    _WORKBENCH.sealing_key = load_sealing_key()
     _WORKBENCH.public_payload = load_public_snapshot()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
