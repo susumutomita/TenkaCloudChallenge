@@ -194,16 +194,15 @@ Why not two shares? Secret 2 with coefficients 2 and 5 gives #1: 2 + 2 + 5 = 9 �
         const after = exposed.size + added;
         const canLeak = ctx.allowedMethods.includes("leak");
         const canProve = ctx.allowedMethods.includes("prove");
-        const prove = canProve ? HINT_LADDER["zk-sudoku"][2]!.text(ctx) : undefined;
         return {
-          ja: `この Order が求めるのは ${cards} (世代 ${ctx.vault.generation}) です。自分の保管庫 MY VAULT の『かけらを見る』でも確認できます。
-${canLeak ? `LEAK を選ぶと、この値がそのまま公開記録へ載ります。すでに公開した異なる番号は ${exposed.size} 個。今回新しく増えるのは ${added} 個なので、${exposed.size} + ${added} = ${after} 個になります。同じ番号をもう一度出しても増えません。${after >= ctx.threshold ? `必要な ${ctx.threshold} 個に達するため、相手は秘密を復元できます。` : `必要な ${ctx.threshold} 個にはまだ達しません。`} 公開してよければ LEAK を押すだけで完了です。` : "この Order は LEAK を受け付けません。かけらの値を提出する操作は使えません。"}
-${prove ? `公開せずに答える PROVE の手順：${prove.ja}` : "この Order には PROVE はありません。カードに表示された方法で答えます。"}
-ROTATE は新しい世代を作りますが、いまの Order を無効にして期限切れと同じ減点にします。ROTATE してからこの Order に答えることはできません。`,
-          en: `This Order asks for ${cards} (generation ${ctx.vault.generation}). You can also see them in MY VAULT under show shares.
-${canLeak ? `LEAK publishes those values unchanged. ${exposed.size} distinct indices are already public; this Order adds ${added} new ones: ${exposed.size} + ${added} = ${after}. Repeating an already-public index adds nothing. ${after >= ctx.threshold ? `That reaches the ${ctx.threshold} needed to recover your secret.` : `That is still below the required ${ctx.threshold}.`} If you accept publication, pressing LEAK completes the Order with no calculation.` : "This Order does not accept LEAK. You cannot submit the raw share values."}
-${prove ? `To answer without the shares, use PROVE: ${prove.en}` : "This Order does not accept PROVE. Use a method shown on its card."}
-ROTATE creates a fresh generation but voids this Order at the same penalty as expiry. You cannot ROTATE and then answer this same Order.`,
+          ja: `選んだこの1題を終えてから、次のお題のヒントへ進みます。
+求められているかけらは ${cards}（世代 ${ctx.vault.generation}）。
+${canLeak ? `LEAK：この値を公開して完了。公開数は ${exposed.size} + ${added} = ${after} 個（公開済み + 新しい番号）。同じ番号は重ねて数えません。${after >= ctx.threshold ? `必要な ${ctx.threshold} 個に達し、相手が秘密を戻せます。` : `秘密を戻す ${ctx.threshold} 個には未到達です。`}` : "この Order は LEAK を受け付けません。"}
+${canProve ? `PROVE：かけらの代わりに、自分の数独の解を使います。①『付け替え表を選ぶ』で未使用の表を選ぶ。矢印は元の数字→替える数字です。② 右の空欄と同じ位置を左の解で探し、表の矢印をたどる。例：元が2で表が2→1なら1を入れる。③ 同じ表で4 マスを埋め、SUBMIT。得点と公開された1組が出れば完了です。表の再使用は解を戻される手がかりになります。` : "この Order には PROVE はありません。"}`,
+          en: `Finish this selected Order before opening hints for the next one.
+Requested shares: ${cards} (generation ${ctx.vault.generation}).
+${canLeak ? `LEAK: publish these values to complete it. ${exposed.size} already public + ${added} new = ${after} distinct indices. Duplicates count once. ${after >= ctx.threshold ? `This reaches the ${ctx.threshold} needed to recover your secret.` : `Still below the ${ctx.threshold} needed for recovery.`}` : "This Order does not accept LEAK."}
+${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choose an unused relabelling table. An arrow means original digit → replacement. (2) Find each right-hand hole's position in your solution on the left; follow the table's arrow. Example: original 2 with 2→1 means enter 1. (3) Fill four holes using the same table and press SUBMIT. A score and one opened group confirm completion. Reusing a table can help others recover your solution.` : "This Order does not accept PROVE."}`,
         };
       },
     },
@@ -315,15 +314,15 @@ ROTATE creates a fresh generation but voids this Order at the same penalty as ex
     {
       id: "caesar-shift/1",
       text: () => ({
-        ja: "この Order (= あなたのチームに届いた依頼) は暗号を作る依頼です。「暗号」とは、文をほかの人に読めない形に変えることです。もとの文を「平文（ひらぶん）」、変えたあとの文を「暗号文」といいます。この Order の文は、サイコロの目のような「記号」の列です。\n変え方はかんたんです。記号を決まった並び順に置き、どの記号も同じ数だけ後ろへずらします。このずらす数を「鍵（かぎ）」といいます。いちばん後ろの記号の次は、先頭に戻ります。\nなぜ元に戻せるのか。全部の記号を同じ数だけずらしたので、受け取った人は同じ数だけ前に戻せば平文になります。同じ鍵を使えば元に戻せます。ただし、この暗号は鍵を全部試したり、公開情報から鍵を求めたりすることもできます。\nずらすというやり方（方式）は全チームが知っています。秘密は鍵の数だけです。だから「この記号がこの記号に変わった」という組が 1 つでも外に知られると、平文の記号から並び順を後ろへたどって暗号文の記号まで何個進むか数えるだけで、ずらした数、つまり鍵がわかってしまいます (いちばん後ろまで来たら先頭に戻って数えます)。それがこの暗号の弱点です。",
-        en: "This Order (= a request sent to your team) asks you to make a cipher. A \"cipher\" changes a message into a form other people cannot read. The original message is the \"plaintext\"; the changed one is the \"ciphertext\". The message on this Order is a row of \"symbols\" that look like die faces.\nThe change is simple. Put the symbols in a fixed order, and move every symbol the same number of places forward. That number is the \"key\". After the last symbol you go back to the first.\nWhy can it be undone? Every symbol was moved by the same amount, so the receiver moves each one back by that amount and gets the plaintext. Knowing the key lets you undo it, but this cipher also allows trying every possible key or recovering it from public evidence.\nThe method (shifting) is known to every team. The only secret is the key. That is why one leaked pair -- \"this symbol became that symbol\" -- gives the key away: start at the plaintext symbol, count forward along the row until you reach the ciphertext symbol (going back to the first after the last), and the count is the shift, which is the key. That is this cipher's weakness.",
+        ja: "目的：元の記号の列（平文）を、別の列（暗号文）へ変えます。記号を輪に並べ、全部を同じ数だけ先へずらすシーザー暗号です。ずらす数が秘密の『鍵』。最後の次は先頭に戻ります。\n同じ数だけ逆へ戻せば平文に戻ります。方式は公開され、秘密は鍵だけです。元と後の記号を1組知られると、その間を何個進むか数えて鍵を求められます。\nまずこの1題の3段だけ読み、計算して提出します。",
+        en: "Goal: change the original row (plaintext) into an encrypted row (ciphertext). Caesar encryption arranges symbols in a circle and shifts every symbol forward by the same number: the secret key. After the last symbol, wrap to the first.\nShifting back by that key recovers the plaintext. The method is public; only the key is secret. One known original/encrypted pair reveals the shift by counting steps.\nRead this Order's three rungs, calculate and submit before moving to another Order.",
       }),
     },
     {
       id: "caesar-shift/2",
       text: () => ({
-        ja: "記号に、並び順のとおり 0 から番号をつけます。記号が 6 種類なら 0, 1, 2, 3, 4, 5 です。\n暗号にする計算は「番号に鍵を足す」です。足した答えが記号の種類数以上になったら、種類数を引きます。これが「先頭に戻る」の意味です。\nこれは「足した答えを種類数で割った余り」と同じです。たとえば 7 を 5 で割った余りは 2 で、これを 7 mod 5 = 2 と書きます。式にすると「(番号 + 鍵) mod 種類数」です。\n例（この Order の数字ではありません）。記号が 5 種類（番号 0〜4）、鍵が 3、平文の番号が 4 と 1 のとき。\n1 番目: 4 + 3 = 7。5 以上なので 5 を引いて 2。\n2 番目: 1 + 3 = 4。5 より小さいのでそのまま 4。\n暗号文の番号は 2, 4 です。",
-        en: "Number the symbols from 0 in the order they are shown. With 6 symbols the numbers are 0, 1, 2, 3, 4, 5.\nEncrypting means \"add the key to the number\". If the sum reaches the number of symbols or more, subtract the number of symbols. That is what \"go back to the first\" means.\nThis is the same as \"the remainder when the sum is divided by the number of symbols\". For example, 7 divided by 5 leaves remainder 2, and we write this as 7 mod 5 = 2. As a formula: (number + key) mod number-of-symbols.\nExample (not this Order's numbers). 5 symbols (numbers 0 to 4), key 3, plaintext numbers 4 and 1.\nPosition 1: 4 + 3 = 7. That is 5 or more, so subtract 5: 2.\nPosition 2: 1 + 3 = 4. That is below 5, so it stays 4.\nThe ciphertext numbers are 2, 4.",
+        ja: "式：記号の並び順に0から番号をつけます。サイコロの面1〜6なら、計算用の番号は0〜5です。\n暗号の番号 = (元の番号 + 鍵) を記号の種類数で割った余り。この『割った余り』を mod と書きます。鍵も0〜種類数−1なので、足した数が種類数以上なら種類数を1回引けば足ります。\n一桁の例：5種類・鍵3・元の番号4,1なら、4+3=7→7−5=2、1+3=4。答えの番号は2,4です。本番は次の段の種類数と鍵を使います。",
+        en: "Formula: number symbols from 0 in their displayed order. Die faces 1–6 have calculation values 0–5.\nEncrypted value = (original value + key), taking the remainder after dividing by the number of symbols. We write remainder as mod. The key is also between 0 and symbol-count−1, so subtracting the count once suffices whenever the sum reaches it.\nOne-digit example: 5 symbols, key 3, originals 4,1. 4+3=7→7−5=2; 1+3=4. The answer is 2,4. For your Order use the count and key in the next rung.",
       }),
     },
     {
@@ -338,8 +337,8 @@ ROTATE creates a fresh generation but voids this Order at the same penalty as ex
         const jaZero = key === 0 ? "\n鍵が 0 なので、足しても番号は変わりません。それでも正しい答えです。" : "";
         const enZero = key === 0 ? "\nYour key is 0, so adding it changes nothing. That is still the correct answer." : "";
         return {
-          ja: `この Order の記号は ${n} 種類で、番号は 0 から ${n - 1} までです。あなたの鍵は ${key} です。\n平文を番号にすると: ${values.join(", ")}（画面の「記号の並び順」で、各記号の下に書いてある数に読みかえたものです）。\n左から 1 つずつ、番号に ${key} を足します。答えが ${n} 以上なら ${n} を引きます。${jaZero}\n${jaLines}\nできた ${values.length} 個の番号を、空白で区切って「暗号にした列」の入力欄に入れ、CIPHER を押します。番号のかわりに記号でも入力できます。`,
-          en: `This Order has ${n} symbols, numbered 0 to ${n - 1}. Your key is ${key}.\nThe plaintext as numbers: ${values.join(", ")} (each symbol replaced by the number written under it in "the symbols, in order" on screen).\nGo left to right and add ${key} to each number. If the result is ${n} or more, subtract ${n}.${enZero}\n${enLines}\nType the ${values.length} numbers you get, separated by spaces, into the "your encrypted row" box and press CIPHER. You may type the symbols instead of the numbers.`,
+          ja: `選んだこの1題を提出してから、次のお題のヒントへ進みます。\n自分の値：${n} 種類（番号0〜${n - 1}）・鍵 ${key}・平文の番号 ${values.join(", ")}。画面の「記号の並び順」の下の数と対応します。\n① 左から鍵を足す：\n${jaLines}\n② ${n} 以上の結果から ${n} を引く。${jaZero}\n③ できた ${values.length} 個の番号を空白区切りで「暗号にした列」へ入力し、CIPHER。受理されて得点が増えれば完了です。`,
+          en: `Submit this selected Order before opening hints for the next one.\nYour values: ${n} symbols (0–${n - 1}), key ${key}, plaintext ${values.join(", ")}, matching the numbers under "the symbols, in order".\n(1) Add the key, left to right:\n${enLines}\n(2) Subtract ${n} from results of ${n} or more.${enZero}\n(3) Enter the ${values.length} numbers separated by spaces in "your encrypted row" and press CIPHER. Acceptance and a score increase confirm completion.`,
         };
       },
     },
