@@ -138,7 +138,7 @@ describe("optional arithmetic practice", () => {
   });
 
   for (const locale of ["ja", "en"] as const) {
-    it(`keeps the explanation visible and offers only optional practice above the board (${locale})`, () => {
+    it(`keeps explanation and practice accessible in a closed disclosure above the board (${locale})`, () => {
       const status = renderToStaticMarkup(createElement(StatusPanel, slotProps(locale)));
       const help = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
       const html = status + help;
@@ -151,7 +151,8 @@ describe("optional arithmetic practice", () => {
       expect(status).not.toContain('aria-label="crypto-battle-tutorial"');
       expect(status.indexOf(explanation)).toBeGreaterThanOrEqual(0);
       expect(status.indexOf(explanation)).toBeLessThan(status.indexOf(tutorialTitle));
-      expect(status.indexOf(explanation)).toBeLessThan(status.indexOf("<details"));
+      expect(status.indexOf(explanation)).toBeGreaterThan(status.indexOf("<details"));
+      expect(status).toContain(locale === "ja" ? "この問題の解説・練習（任意）" : "How to play and practice (optional)");
       expect(status).not.toContain("<details open");
       expect(status).not.toContain("tutorial-contract-a");
       expect(help).not.toContain(tutorialTitle);

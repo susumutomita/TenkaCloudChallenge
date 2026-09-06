@@ -1,6 +1,6 @@
 # Cryptography Battle
 
-The purpose and first action are always visible above the board. “Read the guided explanation (optional)” opens with one click. Read results without answering, advance freely, or close at any point. Its ten scenes connect remainders, additive shares, indexed sharing, why reconstruction works, publication risk, MPC, ZK, FHE, Caesar and commit-reveal. Optional one-digit checks never change the match score or state. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
+A short introduction and “How to play and practice (optional)” appear above the board. Detailed guidance starts collapsed so the current Order and answer controls appear first. Open the disclosure, then choose “Read the guided explanation (optional)”. Read results without answering, advance freely, or close at any point. Its ten scenes connect remainders, additive shares, indexed sharing, why reconstruction works, publication risk, MPC, ZK, FHE, Caesar and commit-reveal. Optional one-digit checks never change the match score or state. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
 Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
 
 The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers, free of charge. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
@@ -134,7 +134,7 @@ The complete Portal reference contains the formulas, constants, and runnable Pyt
 2. **Answer methods and inputs** — compare score and disclosure cost, then answer in the same card
 3. **Result** — score and outcome above the answer area
 4. **Exposure, records and vault** — read the summary and expand what you need
-5. **Rules, explanations and practice** — optional, above the board
+5. **How to play and practice (optional)** — open the disclosure above the board to choose rules, guided scenes or a topic
 
 HUNT, reused-relabelling HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
 
