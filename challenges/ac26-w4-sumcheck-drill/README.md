@@ -1,108 +1,93 @@
-# Type one line, paste the value — two rounds of SumCheck, then count the misses
+# Catch a false sum with short expressions
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> Independent, unofficial companion to Advanced Cryptography Program 2026.
+> Not affiliated with or endorsed by its organizers. Contact TenkaCloud with questions.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 405 · **Chapter:** Week 4 / Drill: SumCheck
-by hand · **Role:** `mechanism` · **Time:** 40–60 minutes · **Points:** 200
-· **Status:** draft — new companions need human play evidence (#465) before leaving draft
+Week 4 / order 405 / difficulty 3 / 200 points / draft / about 40–60 minutes.
 
-## What this is
+Audit a tiny calculation using remainders by 5 or 7. Follow two SumCheck messages,
+then construct false messages that expose why the check position must be chosen
+after fixing the message. This exercise uses ordinary visible arithmetic.
 
-Not a write-a-function problem. You open your own `python3`, paste the numbers the Portal's
-inspect shows you, and then **type one line, paste the value it prints**, twelve times. For nine
-lines you are the verifier; for the last three, the lying prover.
+## Participant route
 
+1. Start → Inspect evidence. Open `sumcheck_drill.py`, replace the first `return None`
+   with `return layer(p,x)`, run public tests, and submit the value after `circuit ->`.
+2. Fill the next five functions using their free blocks. Each function has its own
+   inputs and supplied helpers. Public tests check a worked example, then print the
+   learner's own deployment values. An unfinished row does not block another answer.
+3. Construct a false second message matching an early-revealed r2. Then construct
+   two false messages with exactly two blind spots each and no shared blind spot.
+   Any construction satisfying the stated conditions is accepted.
+
+| Field | Return value | Points |
+| --- | --- | ---: |
+| circuit | Addition result, multiplication result, total | 20 |
+| mle | Line evaluations at 0,1,2 | 15 |
+| grid | Evaluations at (0,0),(0,1),(1,0),(1,1) | 15 |
+| round1 | First endpoint sum, value at r1 | 20 |
+| final-check | Second endpoint sum, value at r2, independent g(r1,r2) | 15 |
+| lie | False first endpoint sum, false next claim | 15 |
+| lie-caught | Three coefficients matching the false sum and early r2 | 50 |
+| miss-points | Two coefficient triples with disjoint pairs of blind spots | 50 |
+
+Every required formula and small example is free. Each field has three optional
+hints: mechanism → example → on-screen procedure. Each costs 2 points, 48 total.
+Wrong answers cost 10 points. Closing hints give bounded searches with termination;
+completed construction code is not supplied.
+
+## Mathematical scope
+
+The honest first message sums g(t,0) and g(t,1); the second fixes r1 and equals
+g(r1,t). Both have degree at most two. The endpoint identities connect each round,
+and the final evaluation is checked against the verifier's own g(r1,r2).
+
+The protocol chooses each challenge after the corresponding message is fixed.
+This exercise displays completed, selected practice records. Its r1 is at least
+two, its inputs are nondegenerate, and its dishonest next claim differs from the
+honest claim, so both construction tasks have solutions. It does not simulate
+uniform sampling of full protocol runs. The early-r2 task intentionally reverses
+the secure ordering; the final task omits r2 and checks every possible position.
+For each constructed fixed false second message, exactly two of p positions agree
+with the truth. The resulting 2/p is conditional on this final check; it is not
+the soundness bound for the full two-round protocol. Tiny fields are not secure.
+
+No speedup, succinct proof size, input privacy, or complete zero-knowledge proof is
+claimed for this toy. See [Thaler, Proofs, Arguments, and Zero-Knowledge,
+Chapter 4](https://people.cs.georgetown.edu/jthaler/ProofsArgsAndZK.pdf) for the
+message order, degree checks, final evaluation, and full-protocol soundness bound.
+
+## Runtime boundary
+
+The participant image contains starter, public tests, arithmetic helpers, and the
+Portal editor API. Seed, generator, hidden checks, and reference answers remain in
+the verifier/author images. The Workbench prefetches public evidence before running
+learner code. Prepared submissions are tied to this run; that tag is not authentication.
+The unpublished verifier grades values and construction properties without executing
+learner code. Failed direct answers carry no reason.
+
+Linux seccomp restricts learner networking and access to supervisor memory, signals,
+and resource limits. Restrictions are inherited by children; remaining descendants
+are stopped after execution. The streamed CLI uses the same launcher and fails
+closed if restrictions cannot be installed. Services are non-root, read-only and
+resource-limited. Only port 18133 is published, on 127.0.0.1. Docker owners can
+inspect their own images; this is not a complete adversarial sandbox claim.
+
+## Local verification and teardown
+
+Run in this problem directory:
+
+```bash
+make inspect
+make test                  # the unfilled starter should fail
+make test-one ID=circuit
+make verifier-down
 ```
-1  (y0, y1, out)                the circuit: two gates and the output   circuit
-2  W1 = ...; (W1(0),W1(1),W1(2))  the table stretched into a line (MLE)  mle
-3  g0 = ...; four grid points    the wiring as a polynomial              grid
-4  sum over the grid             the four-term sum                      (no answer field)
-5  P1 = ...; P1(0)+P1(1)         the prover's p1, sum-checked           (no answer field)
-6  all-points comparison         is p1 genuine? (the check V never does) (no answer field)
-7  P1(r1)                        one random point — the next claim       round1
-8  P2 = ...; P2(0)+P2(1)         the prover's p2, sum-checked           (no answer field)
-9  (P2(r2), g0(r1, r2))          the last point: V computes g0 itself    final-check
-10 P1c = P1 + d*(1-t); ...       inflate the claim by d                  lie
-11 P2c = ...; the triple         the cover-up dies at the last point     lie-caught
-12 sorted(misses)                which r2 would have missed              miss-points
-```
 
-Every line comes with "what this line means"; every matching value unlocks "read after it
-matches". Eight of the twelve lines have an answer field — the platform's per-problem maximum;
-the other four equal a value already produced or feed the line after them.
+Source is streamed to Docker over stdin, requiring neither host Python nor a shared
+mount path. Inspect/test leave the verifier running; stop it with `make verifier-down`.
+No cloud resources or AWS Region are used. Local CPU/memory stay in use until stopped.
 
-## Why the numbers are small and seed-derived
-
-The field is a small prime (11–23), so every line is a one-screen computation and the all-points
-sanity check is a list comprehension. The circuit is the lecture's two-gate GKR example; the
-inputs, the verifier's randomness, the prover's coefficient messages, and the lie parameters all
-come from this deployment's `FLAG_SEED`. There is one right value per line per seed; only the
-value your own Python printed passes, and the two miss points change per deployment.
-
-## Participant Portal
-
-1. Start the problem in the Participant Portal. The problem editor appears on the same page.
-2. Press **inspect**: the numbers are printed as Python assignment statements. Paste them into
-   `python3` first.
-3. Type line 1, paste the value into the `circuit` answer field, submit. Read the sentence for
-   that value. Continue to line 12. **Each answer field is a single-line input.**
-4. If you cannot open Python: fill in the twelve functions of `sumcheck_drill.py` in the editor
-   and press **run the public tests** — it prints your functions' values on this deployment's
-   numbers, which is exactly what the REPL would print.
-
-Direct answers are bound to the current deployment seed, so values copied from another
-deployment are rejected.
-
-## Scoring
-
-Eight checkpoints, graded independently. A wrong answer costs 10 points.
-
-| Checkpoint | Points | Evidence kind | What it checks |
-|---|---:|---|---|
-| `circuit` | 20 | construct | (y₀, y₁, output) |
-| `mle` | 25 | construct | the table stretched to (W₁(0), W₁(1), W₁(2)) |
-| `grid` | 25 | predict | g₀ on the four grid points |
-| `round1` | 25 | predict | p₁ at the verifier's random r₁ |
-| `final-check` | 25 | trace | (p₂(r₂), the verifier's own g₀(r₁, r₂)) |
-| `lie` | 25 | counterexample | the inflated p₁′: its sum check and its value at r₁ |
-| `lie-caught` | 30 | counterexample | the doctored p₂′: sum check passes, the last point fails |
-| `miss-points` | 25 | trace | the exact r₂ values that would have missed the lie |
-
-One hint per checkpoint (penalty 6), naming the usual slip on that line.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
-and every image in the compose stack cannot be prevented from inspecting hidden material.
-The boundary here is misdelivery, not confidentiality against that person: the participant
-Workbench image contains public fixtures, tests, and starter material only. The eight lines'
-expected-value derivation (`verifier/expected.py`) and the hidden suite live in a separate,
-unpublished verifier image, reachable only over the Compose-internal network; `reference/`
-and `mutation.py` are added only to the `author` stage.
-
-Only the Workbench is published, at host `127.0.0.1:18133`; the verifier has no host port.
-Both services run non-root with a read-only root filesystem, no capabilities, `no-new-
-privileges`, and bounded memory/PIDs. A submission cannot hang or crash the verifier, a
-checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer at all, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: eight broken references (the MLE with the table
-swapped, the wiring selector on the wrong corner, a dropped square, the fudge attached to t,
-the miss list counted from 2, …) that the hidden suite must kill, plus twelve verifier-level
-near-misses — a shown fixture value, another line's value, an unsorted or truncated tuple, a
-boolean, another deployment's answer — that the value grader must refuse.
-`scripts/solvability/expected/ac26-w4-sumcheck-drill.py` mirrors the eight graded answers for
-the solvability sweep.
+Authors run `make reference-test`, root `make install`, and root `make agent-gate`.
+Participant-only reading and actual test/prepare/verify evidence are recorded in
+`local/tests/hidden/READER.md`. A human event rehearsal and real AWS event are unrun.

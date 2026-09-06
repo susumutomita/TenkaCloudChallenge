@@ -1,17 +1,14 @@
 """Public Participant Workbench and fail-closed verifier proxy.
 
-This process carries public evidence, starter material, and public tests only. It
-never grades a checkpoint locally: every `/verify` request is forwarded to the
-Compose-internal verifier, and any missing or invalid verifier response becomes a
-canonical `correct: false` verdict.
+This process carries starter material and public tests only. It never grades a
+checkpoint locally: every `/verify` request is forwarded to the Compose-internal
+verifier, and any missing or invalid verifier response becomes a canonical
+`correct: false` verdict.
 
-Issue 543/537: the Portal editor API below used to live in `verifier/server.py`, in the
-same Docker stage and process that also compared a submission against this
-deployment's expected values -- so the expected-value derivation (then a plain function
-in `fixtures/generate.py`) shipped in the one image a learner's own `make build`
-produced. That grading logic and its `verifier/expected.py` import now live only in the
-separate `verifier` image (see ../Dockerfile), which this container never builds and
-cannot import from.
+This problem's `fixtures/generate.py` computes all eight rows' expected values inside `setting(seed)`, next to the public numbers, so the
+module does not ship in this image at all. The inspect output and the public tests
+read this deployment's public half from the verifier's `GET /public` over the
+Compose-internal network instead (see participant/evidence.py and ../Dockerfile).
 """
 
 from __future__ import annotations
@@ -29,10 +26,16 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.evidence import public_evidence
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w4-sumcheck-drill"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+PUBLIC_SNAPSHOT = public_evidence()
+DEPLOYMENT_BINDING = PUBLIC_SNAPSHOT["submissionBinding"]
+protect_supervisor()
+if not isinstance(DEPLOYMENT_BINDING, str) or not DEPLOYMENT_BINDING:
+    raise RuntimeError("verifier did not provide a deployment binding")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18133"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -43,23 +46,12 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
-#: No checkpoint of this drill routes a learner's file through code execution; every
-#: graded line is a pasted value. `code_checkpoints=()` below tells the Workbench
-#: adapter every checkpoint is manual, so `prepare_submissions` seals every one of them
-#: the same way.
-CHECKPOINTS = (
-    "circuit",
-    "mle",
-    "grid",
-    "round1",
-    "final-check",
-    "lie",
-    "lie-caught",
-    "miss-points",
-)
+# Each checkpoint grades a pasted value, never learner code.
+CHECKPOINTS = ('circuit','mle','grid','round1','final-check','lie','lie-caught','miss-points')
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -69,14 +61,15 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    deployment_binding=DEPLOYMENT_BINDING,
+    public_payload={key:PUBLIC_SNAPSHOT[key] for key in ("assignments","public")},
     problem_id='ac26-w4-sumcheck-drill',
-    problem_name='和を確かめるのに、和を計算しない',
-    problem_name_en='Check a sum without computing the sum',
-    description='手元の Python で 1 行打って、出た値を貼る。12 行で、回路 → MLE → 配線の多項式 → 証明者の p₁・p₂ を 2 点の和とランダム 1 点で検査 → 最後の 1 点 → 嘘の証明者が水増しした主張の見逃しを数える、を自分の手で出した数だけで通す。',
-    description_en="Type one line in your own Python, paste the value it prints. Twelve lines: the circuit → MLE → the wiring polynomial → checking the prover's p₁ and p₂ by two-point sums and one random point → the last point → counting where an inflated claim would have slipped through — on numbers you produced yourself.",
-    checkpoint_labels={'circuit': '回路の値 — 2 つのゲートと出力', 'mle': '表を直線に伸ばす（MLE）', 'grid': '配線も式にする — g₀ の 4 つの格子点', 'round1': 'ランダムな 1 点 r₁', 'final-check': '最後の 1 点 — 検証者が自分で g₀ を 1 回計算する', 'lie': '嘘の証明者 — 主張を d だけ水増しする', 'lie-caught': '辻褄合わせの果て — 最後の 1 点で落ちる', 'miss-points': 'どの r₂ なら見逃したか — 数える'},
-    checkpoint_labels_en={'circuit': 'The circuit — two gates and the output', 'mle': 'Stretch the table into a line (MLE)', 'grid': 'Wire the gate into a polynomial — g₀ on the four grid points', 'round1': 'One random point r₁', 'final-check': 'The last point — the verifier computes g₀ once, itself', 'lie': 'A lying prover — inflate the claim by d', 'lie-caught': 'Where the cover-up ends — the last point', 'miss-points': 'Count the r₂ that would have missed'},
+    problem_name='合計のごまかしを、短い式で見つける',
+    problem_name_en='Catch a false sum with short expressions',
+    description='5か7で割った余りを使い、合計を確かめる式のやり取りを追います。前半は穴埋め、後半は確認する順序の抜け道を作る8問です。',
+    description_en='Use remainders by 5 or 7 to trace messages checking a sum. Six fill-in steps lead to two constructions exploiting the order of checks.',
+    checkpoint_labels={'circuit': '小さな計算装置の答えを出す', 'mle': '二つの値を一本の式にする', 'grid': '四か所の値を求める', 'round1': '最初の式を一か所へ絞る', 'final-check': '次の式と自分の計算を照合する', 'lie': '最初の式をごまかす', 'lie-caught': '先に見えた確認位置へ合わせる', 'miss-points': '見逃し点が重ならない二式を作る'},
+    checkpoint_labels_en={'circuit': 'Compute the tiny device output', 'mle': 'Turn two values into one expression', 'grid': 'Evaluate four positions', 'round1': 'Narrow the first expression to one position', 'final-check': 'Compare the next expression with your calculation', 'lie': 'Tamper with the first expression', 'lie-caught': 'Match a check position revealed early', 'miss-points': 'Construct two expressions with disjoint blind spots'},
     submitted_files=('sumcheck_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,

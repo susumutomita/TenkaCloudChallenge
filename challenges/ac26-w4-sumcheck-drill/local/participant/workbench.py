@@ -3,7 +3,7 @@
 This module never decides whether a checkpoint is correct. The existing ``evaluate``
 function remains the only grading seam. It serves authored evidence, runs the public
 suite against Portal-edited files in a throwaway copy, formats Portal submissions, and
-binds direct-answer submissions to this deployment's seed.
+binds direct-answer submissions to this deployment's public binding tag.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -26,7 +27,7 @@ class PortalEditorSupport:
         self,
         *,
         root: Path,
-        seed: str,
+        deployment_binding: str,
         problem_id: str,
         problem_name: str,
         description: str,
@@ -38,12 +39,14 @@ class PortalEditorSupport:
         run_timeout_seconds: int,
         max_output_bytes: int,
         limit_fn: Callable[[], None],
+        public_payload: dict[str, object] | None = None,
         problem_name_en: str | None = None,
         description_en: str | None = None,
         checkpoint_labels_en: dict[str, str] | None = None,
     ) -> None:
+        self.public_payload = public_payload
         self.root = root
-        self.seed = seed
+        self.deployment_binding = deployment_binding
         self.problem_id = problem_id
         self.problem_name = problem_name
         self.description = description
@@ -103,25 +106,10 @@ class PortalEditorSupport:
         }
 
     def _child_env(self, **extra: str) -> dict[str, str]:
-        """The fixed environment `show.py` and the public tests run under.
-
-        Deliberately built from nothing rather than inherited, so a Portal run cannot
-        pick up whatever the server process happens to carry. The one value forwarded
-        from this process is `VERIFIER_PUBLIC_URL`, and only when it is set: a problem
-        whose `fixtures/` no longer ships in the participant image (Issue 543/537) has
-        no local way to derive this deployment's public evidence, and fetches it from
-        its own Compose-internal verifier's `GET /public` instead. Problems that still
-        carry `fixtures/` never set it and see exactly the environment they saw before.
-        """
-        env = {
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
-            "FLAG_SEED": self.seed,
-            "PYTHONDONTWRITEBYTECODE": "1",
-            **extra,
-        }
-        verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
-        if verifier_public_url:
-            env["VERIFIER_PUBLIC_URL"] = verifier_public_url
+        """Pass a public snapshot, never verifier connectivity or fixture credentials."""
+        env = {"PATH":"/usr/local/bin:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE":"1", **extra}
+        if self.public_payload is not None:
+            env["PUBLIC_EVIDENCE_JSON"] = json.dumps(self.public_payload)
         return env
 
     def inspect_payload(self) -> dict[str, object]:
@@ -302,7 +290,7 @@ class PortalEditorSupport:
             sort_keys=True,
         ).encode("utf-8")
         key = hashlib.sha256(
-            (self.problem_id + "\0" + self.seed).encode("utf-8")
+            (self.problem_id + "\0" + self.deployment_binding).encode("utf-8")
         ).digest()
         signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
         return f"tcw1.{self._b64encode(payload)}.{self._b64encode(signature)}"
@@ -320,7 +308,7 @@ class PortalEditorSupport:
             payload = self._b64decode(encoded_payload)
             signature = self._b64decode(encoded_signature)
             key = hashlib.sha256(
-                (self.problem_id + "\0" + self.seed).encode("utf-8")
+                (self.problem_id + "\0" + self.deployment_binding).encode("utf-8")
             ).digest()
             expected = hmac.new(key, payload, hashlib.sha256).digest()[:16]
             if not hmac.compare_digest(signature, expected):
@@ -346,18 +334,30 @@ class PortalEditorSupport:
             transcript = Path(transcript_directory) / "stdout"
             try:
                 with transcript.open("w", encoding="utf-8") as sink:
-                    completed = subprocess.run(  # noqa: S603 - fixed argv, shell=False
+                    process = subprocess.Popen(  # noqa: S603 - fixed argv, shell=False
                         command,
                         cwd=cwd,
                         env=env,
+                        stdin=subprocess.DEVNULL,
+                        close_fds=True,
                         stdout=sink,
                         stderr=subprocess.STDOUT,
                         text=True,
-                        timeout=timeout,
                         preexec_fn=self.limit_fn,
-                        check=False,
+                        start_new_session=True,
                     )
+                    try:
+                        returncode = process.wait(timeout=timeout)
+                    finally:
+                        # The child cannot leave this process group: setsid/setpgid
+                        # are blocked after Popen creates the session. Clean up its
+                        # descendants on both normal exit and timeout.
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        process.wait()
                 output = transcript.read_text(encoding="utf-8", errors="replace")
-            except (subprocess.TimeoutExpired, OSError, ValueError):
+            except (subprocess.SubprocessError, OSError, ValueError):
                 return None
-        return completed.returncode, output[-self.max_output_bytes :]
+        return returncode, output[-self.max_output_bytes :]
