@@ -51,6 +51,7 @@
  * code -- including the `mock.module` call -- has a chance to run).
  */
 import { describe, expect, it, mock } from "bun:test";
+import { scoreReasons } from "./score-reasons.ts";
 import { decodeLedger } from "./ledger-codec.ts";
 import { LOCAL_PLAY_SEED_PREFIX, migrateState, STATE_SCHEMA_VERSION } from "./reducer.ts";
 import { reconstruct } from "./shamir.ts";
@@ -82,6 +83,10 @@ const pluginModule = (await import("../../coordination/crypto-battle.ts")) as {
   default: CryptoBattlePlugin;
 };
 const plugin = pluginModule.default;
+
+it("forwards the public score-reason classifier to the platform", () => {
+  expect(plugin.scoreReasons).toBe(scoreReasons);
+});
 
 // Same mocked specifier, now imported for its `dispatchOp` / `runTick` host
 // utilities -- see this file's header on why these are exercised, not dead

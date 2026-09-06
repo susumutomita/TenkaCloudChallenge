@@ -146,6 +146,7 @@
  * already met structurally, because a correctly-driven dispatcher never
  * hits that throw path.
  */
+import { scoreReasons } from "../game/src/score-reasons.ts";
 import { defineCoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import {
   applyOp,
@@ -181,6 +182,7 @@ export default defineCoordinationPlugin<CryptoBattleState, CryptoBattleOp, Crypt
   tick,
   projectForTeam,
   teamScores,
+  scoreReasons,
   // [Issue #679 / TenkaCloud#3150, #709] Every real shape change to
   // `CryptoBattleState` bumps this (the SDK's rule: "State の形を変えたら必ず
   // この値を上げる"): v2 for the compact ledger, v3 for the sudoku PROVE (a new
