@@ -48,10 +48,12 @@ def main():
             module = modules[call['module']]
             args = call['args']
             value = getattr(module, call['function'])(*args)
-            # JSON turns tuples into arrays. Check the documented Python type
-            # before serialization so a tuple cannot become a passing list.
-            if call['function'] in ('add_shares', 'add_constant', 'mul_constant') and not isinstance(value, list):
-                raise TypeError('arithmetic functions must return lists')
+            # Lists and tuples represent the same ordered sequence. This wrapper
+            # helps ordinary submissions; only the parent validates untrusted JSON.
+            if call['function'] in ('add_shares', 'add_constant', 'mul_constant'):
+                if not isinstance(value, (list, tuple)):
+                    raise TypeError('arithmetic functions must return a list or tuple')
+                value = list(value)
             response = {'callId': call['callId'], 'value': value}
         except BaseException as error:
             # No exception text: a failed hidden call may mention its input values.

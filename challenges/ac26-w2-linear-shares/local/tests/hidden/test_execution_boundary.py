@@ -70,28 +70,62 @@ class ExecutionBoundary(unittest.TestCase):
         source=reference()+'\ndef communication_rounds(operation):\n    return 0 if operation in '+repr([k for k,v in OPERATION_ROUNDS.items() if v==0])+' else 2\n'
         self.assertTrue(server.evaluate('transfer',source))
 
-    def test_tuple_results_rejected_in_public_and_hidden_checks(self):
+    def test_list_and_tuple_sequences_have_the_same_verdict(self):
         for function,checkpoint in (('add_shares','add-shares'),
                                     ('add_constant','add-constant'),
                                     ('mul_constant','mul-constant')):
             source=reference()+f'\noriginal={function}\ndef {function}(*args):return tuple(original(*args))\n'
-            self.assertFalse(server.evaluate(checkpoint,source),function)
-            self.assertFalse(server.evaluate('transfer',source),function)
-            self.assertFalse(_WORKBENCH.run_public_tests({'linear.py':source})['passed'],function)
+            self.assertTrue(server.evaluate(checkpoint,source),function)
+            self.assertTrue(server.evaluate('transfer',source),function)
+            self.assertTrue(_WORKBENCH.run_public_tests({'linear.py':source})['passed'],function)
 
-    def test_predictable_reply_cannot_override_a_tuple_result(self):
-        source=reference()+'''
+    def test_live_reply_values_still_require_the_parent_mathematical_checks(self):
+        mutations={'correct':'value',
+                   'wrong sum':'[(value[0]+1)%p,*value[1:]]',
+                   'wrong length':'value[:-1]',
+                   'boolean':'[True,*value[1:]]',
+                   'float':'[float(value[0]),*value[1:]]',
+                   'out of range':'[value[0]+p,*value[1:]]'}
+        for function,checkpoint in (('add_shares','add-shares'),
+                                    ('add_constant','add-constant'),
+                                    ('mul_constant','mul-constant')):
+            for name,expression in mutations.items():
+                with self.subTest(function=function,variant=name):
+                    source=reference()+f'''
+import json,os,sys
+original={function}
+def {function}(*args):
+    value=list(original(*args))
+    p=args[-1]
+    response={expression}
+    call_id=sys._getframe(1).f_locals['call']['callId']
+    os.write(1,(json.dumps({{'callId':call_id,'value':response}})+'\\n').encode())
+    return tuple(value)
+'''
+                    expected=name=='correct'
+                    self.assertEqual(server.evaluate(checkpoint,source),expected)
+                    self.assertEqual(server.evaluate('transfer',source),expected)
+                    self.assertEqual(_WORKBENCH.run_public_tests({'linear.py':source})['passed'],expected)
+
+    def test_predictable_reply_is_ignored_independently_of_value_correctness(self):
+        for printed_correct in (True,False):
+            # A correct fixed-ID frame cannot replace an incorrect actual response;
+            # an incorrect fixed-ID frame cannot invalidate a correct actual response.
+            source=reference()+f'''
 import json
 reply_number=0
 def add_shares(a,b,p):
     global reply_number
     reply_number+=1
     value=[(x+y)%p for x,y in zip(a,b)]
-    print(json.dumps({'callId':reply_number,'value':value}),flush=True)
-    return tuple(value)
+    wrong=[(value[0]+1)%p,*value[1:]]
+    print(json.dumps({{'callId':reply_number,'value':value if {printed_correct} else wrong}}),flush=True)
+    return wrong if {printed_correct} else tuple(value)
 '''
-        self.assertFalse(server.evaluate('add-shares',source))
-        self.assertFalse(_WORKBENCH.run_public_tests({'linear.py':source})['passed'])
+            self.assertEqual(server.evaluate('add-shares',source),not printed_correct)
+            self.assertEqual(_WORKBENCH.run_public_tests({'linear.py':source})['passed'],not printed_correct)
+
+    def test_call_identifiers_are_fresh_and_absent_during_initialization(self):
         source='''import sys
 initial_had_id='callId' in sys._getframe(1).f_locals['initial']
 def probe():return [initial_had_id,sys._getframe(1).f_locals['call']['callId']]

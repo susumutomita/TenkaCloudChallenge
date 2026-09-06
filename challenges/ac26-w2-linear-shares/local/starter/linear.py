@@ -5,6 +5,10 @@
 各人iは自分の a[i], b[i] だけを使います。エディタは学習用に全員を一覧に
 しているので、一覧を集めればxも求まります。ここで画面の秘密性は主張しません。
 
+返す整数列はPythonのリスト [0,6,0] またはタプル (0,6,0)。
+どちらも数の順序を持ち、同じ長さ・整数・余り・合計の条件で採点します。
+以下の例はリストを使います。bool（True/False）や小数は整数の代わりに使えません。
+
 pは奇数の素数、nは2以上。余りを `% p` で0..p-1に直します。
 乱数で適切に作られた加法的シェアだけから始め、追加の事前配布データはありません。
 
@@ -37,19 +41,19 @@ communication_rounds は必要性の分類で、厳密なラウンド数では�
 from __future__ import annotations
 
 
-def add_shares(a: list[int], b: list[int], p: int) -> list[int]:
+def add_shares(a: list[int], b: list[int], p: int) -> list[int] | tuple[int, ...]:
     """同じ人の2つの持ち分を足し、x+yのシェアを返す。
 
     out[i]=(a[i]+b[i])%p。合計の並べ替えでΣout=Σa+Σb。
-    入力a,bは同じ人数・順序。zipで同じ位置を組にし、同じ長さの整数リストを返す。
+    入力a,bは同じ人数・順序。zipで同じ位置を組にし、同じ長さの整数列を返す。
     p=7, a=[5,6,0], b=[1,0,2] -> [6,6,2] -> 合計の余り0。"""
     return list(a)
 
 
-def add_constant(shares: list[int], c: int, p: int) -> list[int]:
+def add_constant(shares: list[int], c: int, p: int) -> list[int] | tuple[int, ...]:
     """全員が知っているcを、秘密xへ一度加えたx+cのシェアを返す。
 
-    0番だけ (shares[0]+c)%p、他は shares[i]%p にし、結果のリストを返す。
+    0番だけ (shares[0]+c)%p、他は shares[i]%p にし、結果の整数列を返す。
     一般には、合計の余りがcとなる公開調整値d[i]を加えてよい。
     p=7, shares=[5,6,0], c=2 -> [0,6,0]、合計6。
     全員にcを足すと差は(n-1)c。c=0など差の余り0なら偶然一致するが、
@@ -57,12 +61,12 @@ def add_constant(shares: list[int], c: int, p: int) -> list[int]:
     return [(s + c) % p for s in shares]
 
 
-def mul_constant(shares: list[int], c: int, p: int) -> list[int]:
+def mul_constant(shares: list[int], c: int, p: int) -> list[int] | tuple[int, ...]:
     """全員が知っているcで、各人の持ち分を倍率変更する。
 
     out[i]=(shares[i]*c)%p。分配法則でΣout=c*Σshares。
     p=7, shares=[5,6,0], c=2 -> [3,5,0]、合計の余り1。
-    全員ぶんを同じ長さの整数リストにする。"""
+    全員ぶんを同じ長さの整数列にする。"""
     return list(shares)
 
 

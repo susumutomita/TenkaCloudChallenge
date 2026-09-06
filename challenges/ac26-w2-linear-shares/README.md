@@ -47,7 +47,7 @@ x+y=7 leaves0, 2x=8 leaves1, and x+2=6. Each column recovers the intended result
 | `add_constant(shares,c,p)` | Add c only at index0; keep the other values; normalize all with `%p` | The total gains c once |
 | `communication_rounds(operation)` | Return0 or1 using the table below | Does a local row suffice, or must parties exchange values? |
 
-The first three return integer lists of the original length. Input lists have the same party count and ordering. The last returns one integer; booleans are not accepted as integers.
+The first three return an ordered sequence of integers of the original length: a Python list `[0,6,0]` or tuple `(0,6,0)`. The examples below use lists. Each element must be an integer from 0 through p−1. Input lists have the same party count and ordering. The last returns one integer; booleans are not accepted as integers.
 
 The general way to add a constant is to add agreed public offsets d[i]. The notation `u≡v (mod p)` means their remainders after division by p are equal:
 

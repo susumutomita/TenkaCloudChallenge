@@ -68,25 +68,32 @@ def _sy() -> list[int]:
     return list(PUBLIC["sharesOfY"])
 
 
+def _assert_shares(out, n, p):
+    # The value channel represents both Python lists and tuples as JSON arrays.
+    assert isinstance(out, list) and len(out) == n, 'return one value per participant'
+    assert all(type(value) is int and 0 <= value < p for value in out), 'return integer remainders 0 through p-1'
+
+
 def test_add_shares_reconstructs_to_the_sum() -> None:
     out = linear.add_shares(_sx(), _sy(), CFG["p"])
+    _assert_shares(out, CFG["n"], CFG["p"])
     assert reconstruct(out, CFG["p"]) == (CFG["x"] + CFG["y"]) % CFG["p"]
 
 
 def test_mul_constant_reconstructs_to_the_product() -> None:
     out = linear.mul_constant(_sx(), CFG["c"], CFG["p"])
+    _assert_shares(out, CFG["n"], CFG["p"])
     assert reconstruct(out, CFG["p"]) == (CFG["x"] * CFG["c"]) % CFG["p"]
 
 
 def test_add_constant_returns_one_value_per_party() -> None:
-    assert len(linear.add_constant(_sx(), CFG["c"], CFG["p"])) == CFG["n"]
+    _assert_shares(linear.add_constant(_sx(), CFG["c"], CFG["p"]), CFG["n"], CFG["p"])
 
 
 def test_add_constant_reconstructs_small_example() -> None:
     # 5+6+0 has remainder 4; after adding 2 the total must have remainder 6.
     out = linear.add_constant([5, 6, 0], 2, 7)
-    assert isinstance(out, list) and len(out) == 3, 'return one value per participant'
-    assert all(type(value) is int and 0 <= value < 7 for value in out), 'return remainders 0 through 6'
+    _assert_shares(out, 3, 7)
     assert reconstruct(out, 7) == 6, 'the total after adding 2 must have remainder 6'
 
 

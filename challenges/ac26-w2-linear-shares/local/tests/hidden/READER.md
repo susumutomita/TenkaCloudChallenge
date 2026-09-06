@@ -1,27 +1,64 @@
 # Linear shares: participant reading and runtime evidence (#716)
 
-## Fresh reply identifiers
+## Ordered integer sequences and reply freshness
 
-The review reproduced a function that printed a correct list using predictable call
-numbers and then returned a tuple. The parent accepted the printed frame before the
-wrapper reported the wrong return type. The same unchanged source now fails through
-the actual API: each call uses a fresh 128-bit identifier created after initialization.
-A regression checks that the identifier is absent during initialization, changes per
-call, and that predictable frames cannot override a tuple result. All 17 Linux tests
-pass (22.027 seconds). The retained Portal harness still submits all five original
-answers successfully (one test, 1.13 seconds; total 4.45 seconds).
+At `abd95cf`, the real local API rejected a normal tuple result but accepted the
+same correct sequence printed with the live call ID before that tuple was returned.
+All three arithmetic functions showed this difference in their checkpoint, transfer,
+and public-test routes (18 recorded verdicts). A worker-local Python type check
+cannot authenticate another arbitrary Python function's native return object.
 
-This is freshness, not a protected interpreter-return attestation. All result frames
-are untrusted JSON data. Arbitrary Python can read a live call and implement its
-value protocol; it must still compute values satisfying the trusted parent's
-mathematical checks. The pre-serialization type check catches ordinary invalid
-function returns, but is not claimed to authenticate arbitrary Python execution.
-The before/after probe used the same computed, mathematically correct values; it
-was a result-protocol/type bypass, not permission for the child to decide a grade.
+The repair makes the intended output contract consistent: an ordered integer
+sequence may be represented by a Python list or tuple. Beginner examples still use
+lists. Both become JSON arrays; the trusted parent still requires exactly one element
+per party, integer elements excluding booleans, remainders in 0..p-1, and the required
+reconstruction and composition identities. Communication classification is unchanged.
+The hidden mathematical checker and resource/isolation limits are unchanged.
 
-Logs: `/private/tmp/linear-762-predictable-{before,after}.log`,
-`linear-762-nonce-runtime.log`, `linear-762-nonce-portal.log`.
+This is a correction of a mathematically irrelevant container-type distinction,
+not acceptance of an incorrect calculation or an attempt to obscure the rule.
+The public add/scale examples now also check the existing length, integer and range
+requirements rather than only comparing totals. Decimal and out-of-range values do
+not become acceptable just because they have the right total or residue.
 
+Fresh 128-bit call IDs reject initialization-time and predictable preprinted replies.
+They do not attest native Python returns. Every response remains untrusted JSON data;
+arbitrary Python can read a live call and implement its value protocol, but those
+values must satisfy the parent's mathematical checks. A second writer or descriptor
+alone would not make the native object inside that same arbitrary interpreter trusted.
+
+Regressions separate these properties: ordinary tuples and correct live-ID sequences
+pass; live-ID wrong sums, wrong lengths, booleans, floats and out-of-range elements
+fail. A correct fixed-ID frame cannot replace an incorrect matched response, and an
+incorrect fixed-ID frame cannot invalidate a correct matched response. The distinct
+IDs and their absence during initialization remain checked.
+
+Before/after HTTP probe: `/private/tmp/linear-762-sequence-http.py`; results:
+`/private/tmp/linear-762-sequence-{before,after}.{log,json}`. These are author-side
+regressions, not a new participant reading or an interpreter-return attestation.
+
+## Sequence-contract validation (2026-09-07)
+
+- `make runtime-test FLAG_SEED=linear-shares-reader-716`: 20 Linux tests pass
+  in 19.475 seconds, including the sequence/protocol contrasts and retained
+  isolation, startup diagnostics, bounded execution, and descendant cleanup.
+- `make reference-test FLAG_SEED=linear-shares-reader-716`: reference passes;
+  all seven existing mathematical/communication mutations are killed.
+- `make install` and `make agent-gate`: all 116 catalog entries pass.
+- After rebuilding only the dedicated localhost 18149 Compose stack, the actual
+  `/api/prepare` → `/verify` and `/api/test` routes match all expected verdicts:
+  three arithmetic functions × nine variants × three routes = 81 assertions.
+  Correct tuples and live-ID sequences pass; wrong sum/length/bool/float/range
+  live-ID values fail. Both directions of the fixed-ID contrast pass.
+- The retained real Portal component harness submits the unchanged original
+  reader source and sealed hand calculation through all five checkpoints, with
+  solved rows collapsing. This is component/HTTP evidence, not a physical browser
+  or AWS release.
+
+Logs: `/private/tmp/linear-762-sequence-runtime.log`,
+`linear-762-sequence-mutations.log`, `linear-762-sequence-catalog.log`,
+`linear-762-sequence-compose.log`, `linear-762-sequence-after.log`, and
+`linear-762-sequence-portal.log`.
 
 ## PR #762 review corrections
 
@@ -33,9 +70,9 @@ with EPERM, and the shared-memory/message/semaphore listings remain unchanged.
 
 The lesson now describes the result of adding a public constant without requiring
 input immutability. An in-place implementation is mathematically valid here and still
-passes `add-constant`, `transfer`, and the public tests. Conversely, tuple results are
-rejected before JSON serialization, so they cannot silently become lists and pass the
-Python list contract. Each arithmetic function has public and hidden regressions.
+passes `add-constant`, `transfer`, and the public tests. The earlier list-only check
+has been replaced by the ordered-sequence contract above; both list and tuple results
+are valid when they satisfy the same mathematical conditions.
 
 `make runtime-test FLAG_SEED=linear-shares-reader-716` passes 16 Linux tests;
 `make reference-test` rejects all 7 existing mutations. These include the earlier
