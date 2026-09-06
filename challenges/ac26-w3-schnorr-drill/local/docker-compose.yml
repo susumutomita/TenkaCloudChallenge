@@ -13,6 +13,7 @@
 name: ac26-w3-schnorr-drill
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

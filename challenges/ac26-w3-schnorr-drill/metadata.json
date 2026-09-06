@@ -1,13 +1,13 @@
 {
   "id": "ac26-w3-schnorr-drill",
-  "name": "ec_add は、4 行の計算に場合分けを足しただけ",
+  "name": "秘密を送らずに確かめる — Schnorrの順番を試す",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
   "track": {
     "id": "advanced-cryptography-2026",
     "order": 305,
-    "chapter": "Week 3 / Drill: twelve lines from field to nonce reuse"
+    "chapter": "Week 3 / Drill: point arithmetic and the order of Schnorr"
   },
   "courseAlignment": {
     "courseId": "advanced-cryptography-program",
@@ -38,10 +38,10 @@
   },
   "difficulty": 3,
   "estimatedDuration": "40-60 分",
-  "shortDescription": "手元の Python で 1 行打って、出た値を貼る。12 行で、有限体の逆元 → 曲線の足し算 → 位数 → 公開鍵 → Schnorr の 3 手 → 検証式 → nonce 再利用で秘密が出る → 別の曲線、を自分の手で出した数だけで通す。",
-  "description": "Week 3 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 12 回繰り返す。有限体の負数の正規化と逆元 → 2 点の傾き → G + Q → 2G → 一周して O に戻る回数（位数）→ 公開鍵 → R = r·G → s = r + e·x → 検証式 s·G = R + e·P → nonce を使い回した鍵から秘密を取り出す → 別の曲線で同じこと、の順。\n\n形の根拠: 自習ノート側で、自己チェック問題を 7 問まとめて出したときは理解が止まり、「この 1 行を打って、出た値を貼って、その値を指す 1 文を読む」に変えた瞬間に通った（結果と解説が隣にあるから）。この問題はその形をそのまま checkpoint 列にしたもので、各 checkpoint の label が打つ行、問題文の「この行の意味」「合ったら読む」が解説にあたる。\n\n値はすべて seed 由来（検証済みの素数位数の小曲線 5 本、t・Q・x・r・e・攻撃鍵・転移曲線）。公式課題のテスト値（p = 1009 の TOY 曲線など）は使わない（independent-reimplementation）。答えは 1 行につき 1 つで、手元の Python が出した値だけが通る。Python を開けない人のために、エディタの `schnorr_drill.py` に同じ 12 行を関数として書けば「公開テストを実行」がこの deploy の値を出す。\n\ncheckpoint は 8 個すべて直接回答（predict / construct / trace / counterexample / transfer の 5 種）。12 行のうち 4 行（負数の正規化、λ、P、R）は回答欄を持たない材料の行で、その正否は次の行で表に出る（platform の checkpoint 上限は 8）。ec_add から急に難しくなる、という受講者の指摘に合わせて、ec_add は 3〜5 行目で λ → x₃ → y₃ を手で出してから 6 行目で関数にする。",
-  "instructions": "## 署名を 1 個、手で作って壊す\n\nログインのたびにパスワードを送ると、送った先が漏れれば終わりです。送らずに「私は知っている」とだけ伝えられないか。\n\nできます。それが**電子署名**で、Ethereum のすべての取引と、パスキー（指紋や顔でログインするあれ）が、いまこの瞬間もこれで動いています。秘密の数を 1 度も送らずに、本人だけが作れる数を渡す。受け取った側は、秘密を知らないまま正しさを確かめられます。\n\n## 公式を覚える前に、1 個作ってみる\n\nSchnorr 署名の教科書的な説明は、群だの離散対数だのから始まります。でも実際にやることは、**Python に 12 行打つ**だけです。\n\nこの問題では、曲線の上の足し算から始めて、署名を 1 個作り、それが通ることを確かめます。そして最後に、**作り方をひとつ間違えるだけで秘密がそのまま外に出る**ところまで、自分の手で見ます。\n\n## 前提（知っていれば飛ばしてください）\n\n使う学校の数学は 4 つだけです。「13 を 7 で割ったあまりは 6」（小 5）、「割り算は逆数を掛けること」（小 6）、「2 点を通る直線の傾き」（中 2）、「未知数が 2 つなら式が 2 本要る」（中 2 の連立方程式）。最後の 1 つが、この問題の落ちになります。\n\n`(mod p)` は「p で割ったあまりで考える」。マイナスは 0 以上になるまで p を足しますが、Python の `%` がそのままやってくれます。\n\n**導き方が要らない公式が 3 つ**あります。そういうものとして使ってください。\n\n- **逆元**: p が素数で t ≠ 0 なら、`pow(t, p - 2, p)` が「掛けて 1 になる相手」（フェルマーの小定理）\n- **接線の傾き**: 同じ点どうしは「2 点を通る直線」が引けないので接線を使う。傾きは (3x² + a) ÷ (2y)\n- **3 つ目の交点**: 直線と曲線の 3 交点の x を足すと λ² になる。だから 3 つ目は λ² − x₁ − x₂\n\n有限体そのものが初めてなら、先に `ac26-w3-field-inverse` を解いてください。曲線の足し算の全体像は `ac26-w3-ec-group` にあります。\n\n## 最初の一手\n\nParticipant Portal(この問題文が表示されているサイト)で **「起動」** を押し、**「証拠を確認」** を押してください。この環境の数が、**そのまま Python に貼れる代入文** の形で表示されます。\n\n```\np, a, b = …\nG = (…, …); Gx, Gy = G\nt = …\nQ = (…, …); Qx, Qy = Q\nx, r, e = …, …, …\nP1 = (…, …)\ne1, s1, e2, s2 = …, …, …, …\np2, a2, b2 = …, …, …\nG2 = (…, …)\nx2, r2, e2p = …, …, …\n```\n\nそれぞれの意味も画面に出ます。`t` は 1〜2 行目で使う練習用の数、`Q` は曲線上のもう 1 つの点、`x, r, e` はあなたの秘密鍵・nonce・challenge、`P1` と `(e1, s1), (e2, s2)` は **別の人** が同じ nonce で 2 回署名してしまった記録(その人の秘密は表示されません)、`p2, a2, b2, G2, x2, r2, e2p` は 12 行目で使う 2 つ目の曲線一式です。`e2p` は「2 つ目の曲線の challenge」の名前で、11 行目で使う `e2` とは別の数です。**位数 n は表示されません** — 6 行目で自分で数えます。\n\n**Python の開き方**: Windows なら PowerShell、Mac なら「ターミナル」を開いて `python3` と打つと `>>>` が出ます(Windows で `python3` が見つからないときは `py` か `python`)。Python に付いてくる **IDLE の shell** でも同じです。開いたら、上の代入文をまず全部貼ってください。\n\n**字下げの決まり**: `def` の中の行は、書いてあるとおり **4 個の空白で下げたまま** 貼ります。それ以外の行は、行の先頭に空白を入れないでください(入れると `IndentationError` になります)。`def` のブロックを貼り終えたら、**空の行を 1 回入れて**(Enter をもう 1 回押して)から次の行を打ちます。\n\n**Python を開けないとき**: 問題エディタの `schnorr_drill.py` に、12 行に対応する関数の枠が入っています。中身を埋めて **「公開テストを実行」** を押すと、前半で講義の例(答えも一緒に表示されます)の PASS / FAIL が出て、後半に **あなたの関数がこの環境の数で返した値** が checkpoint 名つきで並びます。その値を回答欄に貼ってください。なお、このファイルの中身は採点されませんが、提出のときに必要なので **空にはしないで** ください。エディタを配られた状態に戻したいときは **「初期状態に戻す」** を押します。\n\n## 解き方 — 12 行\n\n各行の読み方: **打つ行**(コピーして貼る)→ **この行の意味** → Python が出した値を **その checkpoint の回答欄に貼る** → 合ったら **「合ったら読む」** を読んで次へ。回答欄は 1 行の入力欄で、整数はそのまま、点は `[x, y]` の形で書きます(`(x, y)` や `x, y` でも通ります)。値を貼ったら、その checkpoint の **「提出 (+N pt)」** を押すと採点されます。8 つは別々に採点されるので 1 つ詰まっても他は取れますし、まちがえても何度でも出し直せます — ただし 1 回まちがえるごとに −10 点です(合計が 0 点未満になることはありません)。\n\n### 1. 負の数を 0〜p−1 に直す (回答欄なし)\n\n```python\n(-t) % p\n```\n\n- **この行の意味**: Python の `%` は、負の数でも 0〜p−1 の値を返します。−t を「p で割ったあまり」に直しています。\n- **回答欄**: なし — 次の行の材料です。\n- **出たら読む**: −t と p − t は、`(mod p)` の世界では同じ数です。この世界の数は 0〜p−1 の p 個しかなく、どんな整数もこの中の 1 つに落ちます。検算: `p - t` と打って、同じ値になるか見てください。\n\n### 2. 逆元 — 掛けて 1 になる相手 (回答欄 1 / 8)\n\n```python\npow(t, p - 2, p)\n```\n\n- **この行の意味**: 上のフェルマーの小定理から、`t^(p−2)` が t の逆元です。`pow` の 3 つ目の引数は「掛けるたびに p で割ったあまりを取る」という指定です。\n- **回答欄**: 上から **1 番目**「逆元 — 掛けて 1 になる相手」に、整数を 1 つ。\n- **合ったら読む**: 出た値を v として `t * v % p` と打つと 1 になります。「割り算 = 逆数を掛ける」の逆数の役がこれです。このあと出てくる曲線の計算の割り算は、全部この形で消します。\n\n### 3. 2 点を通る直線の傾き (回答欄なし)\n\n```python\nlam = ((Qy - Gy) * pow(Qx - Gx, p - 2, p)) % p; lam\n```\n\n- **この行の意味**: 中 2 の「傾き = y の増え方 ÷ x の増え方」そのままです。÷ は逆元を掛けることに置きかえています。\n- **回答欄**: なし — 次の行の材料です。\n- **出たら読む**: これが 2 点 G, Q を通る直線の傾き λ です。この直線は曲線と、G・Q のほかにもう 1 点で交わります(3 次式なので交点は 3 つ)。その 3 つ目が次の行です。λ が合っているかは次の行で分かります。\n\n### 4. 3 つ目の交点を折り返す = G + Q (回答欄 2 / 8)\n\n```python\nx3 = (lam*lam - Gx - Qx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **この行の意味**: 解と係数の関係から、3 つの交点の x の和は λ²。だから 3 つ目は x₃ = λ² − Gx − Qx。y₃ は直線に x₃ を入れてから符号を反転(x 軸で折り返す)したものです。\n- **回答欄**: 上から **2 番目**「3 つ目の交点を折り返す = G + Q」に、点を `[x, y]` の形で。\n- **合ったら読む**: (x₃, y₃) が G + Q です。「点を足す」とは座標を足すことではなく、この手順で出る点をそう **呼ぶことにした** だけです。検算: `(y3*y3 - (x3**3 + a*x3 + b)) % p` が 0 なら、その点は曲線の上にあります。\n\n### 5. 同じ点を 2 回 = 接線 (回答欄 3 / 8)\n\n```python\nlam = ((3*Gx*Gx + a) * pow(2*Gy, p - 2, p)) % p; x3 = (lam*lam - 2*Gx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **この行の意味**: 同じ点どうしでは直線が引けないので接線を使います。傾きは上の公式 (3x² + a) ÷ (2y)。x₃・y₃ の式は 4 行目と同じで、Qx が Gx に変わるだけです。\n- **回答欄**: 上から **3 番目**「同じ点を 2 回 = 接線」に、点を `[x, y]` の形で。\n- **合ったら読む**: 2G が出ました。弦と接線で λ の作り方だけが違い、あとは同じです。もし Gy = 0 なら接線が垂直になって 2G = O になります — 分母の 2 × 0 に逆元が無いことと同じ話です。\n\n### 6. 一周して O に戻るまでの回数 = 位数 n (回答欄 4 / 8)\n\nまず足し算を関数にします(`def` の中は 4 空白のまま貼り、貼り終えたら空の行を 1 回)。\n\n```python\ndef ec_add(P, Q):\n    if P is None: return Q\n    if Q is None: return P\n    if P[0] == Q[0] and (P[1] + Q[1]) % p == 0: return None\n    lam = ((3*P[0]*P[0] + a) * pow(2*P[1], p - 2, p)) % p if P == Q else ((Q[1] - P[1]) * pow(Q[0] - P[0], p - 2, p)) % p\n    x3 = (lam*lam - P[0] - Q[0]) % p\n    return (x3, (lam*(P[0] - x3) - P[1]) % p)\n\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\nn = k\nk\n```\n\n- **この行の意味**: `ec_add` は 4 行目・5 行目の公式に、O の扱い(`None` が足し算の 0)と「x が同じで y が反対 → O」を足しただけです。ループは G, 2G, 3G, … と進み、O に落ちたときの `k` が位数です。**`n = k` は、このあとの 9・11 行目が使う名前をそろえるための 1 行** です(この 2 つは同じ数です)。\n- **回答欄**: 上から **4 番目**「一周して O に戻るまでの回数 = 位数 n」に、整数を 1 つ。\n- **合ったら読む**: n 回足すと O に戻ります。時計が一周するのと同じで、だから「G を何倍するか」の数は `(mod n)` で考えます。9 行目の s を n で割ったあまりにするのは、この理由です。\n\n### 7. 公開鍵 P = x·G (回答欄なし)\n\n```python\ndef ec_mul(k, P):\n    R = None\n    for _ in range(k): R = ec_add(R, P)\n    return R\n\nP = ec_mul(x, G); P\n```\n\n- **この行の意味**: k 倍 = k 回足す、をそのまま書いています(この曲線は小さいのでこれで足ります)。\n- **回答欄**: なし — 次の行の材料です。\n- **出たら読む**: これが公開鍵 P です。x から P はすぐ出せますが、P から x を戻すには「何倍で P になるか」を 1, 2, 3, … と試すしかありません。この曲線なら n 通りですが、本物は 2 の 256 乗通り。この一方通行が、秘密鍵を公開鍵にしても安全な理由です。P が合っているかは 10 行目で分かります。\n\n### 8. 手 1: 封筒 R = r·G (回答欄なし)\n\n```python\nR = ec_mul(r, G); R\n```\n\n- **この行の意味**: r は署名のたびに新しく引く使い捨ての数です。それを G 倍した点 R を、先に相手へ渡します。\n- **回答欄**: なし — 次の行の材料です。\n- **出たら読む**: R が commitment です。r は見せず R だけ見せる — 「先に封をして、あとから質問を受ける」の封筒にあたります。r も x と同じ一方通行で守られています。次に相手が質問の数 e を出します(ここでは「証拠を確認」に出ていた `e`)。R が合っているかは 10 行目で分かります。\n\n### 9. 手 3: 返事 s = r + e·x (mod n) (回答欄 5 / 8)\n\n```python\ns = (r + e * x) % n; s\n```\n\n- **この行の意味**: s は、乱数 r に e·x を足しただけの一次式です。あまりを取る相手は p ではなく **n**(6 行目で数えた位数)です — s は「G を何倍するか」の数だからです。\n- **回答欄**: 上から **5 番目**「手 3: レスポンス s = r + e·x (mod n)」に、整数を 1 つ。\n- **合ったら読む**: s は、x を e 倍したものを r で覆い隠した値です。r が毎回ちがえば s から x は分かりません。ところが r を 2 回使うと、11 行目のとおり x が出てしまいます。\n\n### 10. 検証式 s·G = R + e·P (回答欄 6 / 8)\n\n```python\nec_mul(s, G)\n```\n\n- **この行の意味**: 相手が持っているのは s, R, e, P だけです。その相手が自分で s·G を計算します。\n- **回答欄**: 上から **6 番目**「検証式 s·G = R + e·P」に、点を `[x, y]` の形で。\n- **合ったら読む**: 続けて `ec_add(R, ec_mul(e, P))` と打つと、同じ点になります(式の右辺)。理由は s·G = (r + e·x)·G = r·G + e·(x·G) = R + e·P — 分配法則を点の足し算に使っただけです。相手は x も r も知らないまま、等式だけで確かめられました。もし一致しなければ、s か R か P のどれかが違っています。\n\n### 11. 同じ封筒を 2 回使った署名から秘密を取り出す (回答欄 7 / 8)\n\n「証拠を確認」に出ていた `e1, s1, e2, s2` は、**別の人** が同じ r で 2 回署名してしまった記録です。その人の秘密は表示されていません。\n\n```python\n((s1 - s2) * pow(e1 - e2, n - 2, n)) % n\n```\n\n- **この行の意味**: s1 = r + e1·x′ と s2 = r + e2·x′ を引き算すると r が消えて (e1 − e2)·x′ が残ります。あとは両辺を (e1 − e2) で割る(= 逆元を掛ける、`(mod n)`)だけ。中 2 の連立方程式そのものです。\n- **回答欄**: 上から **7 番目**「nonce を使い回した鍵から秘密を取り出す」に、整数を 1 つ。\n- **合ったら読む**: 出た値が、その人の秘密 x′ です。`ec_mul(出た値, G)` と打つと、画面の `P1` に一致します。r を 1 回しか使わなければ、未知数 2 つ(r と x′)に式は 1 本だけなので解けません。2 回使うと式が 2 本になり、解けてしまいます。実際に、この作り方の失敗で秘密鍵が外部に割り出された事故が起きています。\n\n### 12. 別の曲線で同じことをする — s を出す (回答欄 8 / 8)\n\n```python\np, a, G = p2, a2, G2\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\n(r2 + e2p * x2) % k\n```\n\n- **この行の意味**: `ec_add` は `p` と `a` を外から見ているので、その 2 つと `G` を差し替えるだけで別の曲線になります。位数は数え直します(曲線が変われば位数も変わるので、ここでの `k` が新しい位数です)。最後は 9 行目と同じ形の式です。\n- **回答欄**: 上から **8 番目**「別の曲線で同じ 12 行 — s を出す」に、整数を 1 つ。\n- **合ったら読む**: 同じ手順が、別の数でも通りました。暗記では出ない数です。本物の曲線でも手順は 1 文字も変わらず、変わるのは p・a・b・G・n の大きさだけです。なお、この行は `p`・`a`・`G` を上書きします。前の行をやり直したくなったら、最初に貼った代入文をもう一度貼り直してください。\n\n## ここで作った署名が、この先どう効くか\n\n12 行すべて通れば終わりです。終わったとき、**電子署名を 1 個、自分の手で作って壊した**ことになります。\n\n最後の 2 行で見た「乱数を 1 回使い回すと秘密が出る」は、教科書の注意書きではありません。2010 年の PlayStation 3 も、2022 年以降に見つかったいくつものウォレットの事故も、これで鍵を失っています。同じ話を実物の署名で追うのが `ac26-w3-nonce-reuse` です。\n\nそして「秘密を見せずに正しさを示す」というこの形は、Week 4 でそのままゼロ知識証明に育ちます。違いは、示す中身が「鍵を知っている」から「この計算をやった」に変わるだけです。\n",
-  "writeup": "## この問題の形\n\n12 行を打ち、8 行に回答欄があります。すべて「1 行打って、出た値を貼る」です。解説は値の後に読む。順番は、有限体（1〜2）→ 曲線の足し算（3〜6）→ 鍵と Schnorr の 3 手（7〜10）→ 攻撃（11）→ 別の曲線（12）。\n\n## 各行が守っているもの\n\n- 1〜2: Python の `%` は負でも 0..p−1。逆元はフェルマー（pow）でも拡張ユークリッドでも同じ 1 つの値。\n- 3〜5: 弦の傾き・解と係数の関係・折り返し・接線。`ec_add` の本体はこの 3 行。\n- 6: O（None）の扱いと「同じ x で逆の y → O」を足して関数にし、一周の回数 = 位数 n。s が mod n である理由。\n- 7〜8: 公開鍵と commitment は「秘密 × G」。逆向き（離散対数）は総当たりしかない。\n- 9〜10: s = r + e·x (mod n)、s·G = R + e·P は分配法則。検証者は x も r も知らない。\n- 11: 同じ r で 2 回 → 2 本の一次式 → 引き算で r が消えて x′ が出る（special soundness の攻撃面）。\n- 12: 同じ 12 行が別の数で通る。暗記は持ち越せない。\n\n## 間違えるとどう壊れるか\n\ns を mod p で取る／接線の a を忘れる／y₃ の折り返しを忘れる／位数を 0 から数える — どれも値が 1 つずれ、その行で止まる。止まった行の「この行の意味」を読み直すのが、この形式の学び方です。\n\n## 次への接続\n\n課題 `schnorr-from-scratch` の `field_inv` / `ec_add` / `ec_scalar_mul` / `schnorr_prove` / `schnorr_verify` / `recover_secret` は、この 12 行をそのまま関数の形にしたもの。ac26-w3-field-inverse 以降の問題は、同じ行を「壊す・直す」側から扱います。",
+  "shortDescription": "小さい数で点を足し、秘密を送らずに返事を確かめます。同じ乱数の再利用で秘密を取り出し、最後は質問を先に知った場合の通る記録を自作します。",
+  "description": "Week 3の非公式・独立した教材。8個の直接回答欄で逆元、点加算、位数、Schnorrの対話、nonce再利用、質問が先に分かる場合の記録構成を扱う。一桁の素数と小さな位数を用い、紙で全欄を進められる。最後のtransferは従来IDを保持し、複数の構成解を公開検証式で採点する。講義の乗法記法を楕円曲線の加法記法へ写し、作者ノートの式・結果・理由を隣接させる進め方を使う。署名のハッシュ処理や実用暗号の安全性は実装しない。",
+  "instructions": "## 前提 — 秘密を送らずに確かめる、その順番を試す\n\nあなたは、秘密の数を相手へ送らない本人確認の仕組みを調べます。**「起動」→「証拠を確認」**を押すと、この問題で使う小さい数が出ます。まずpとtだけを見てください。tに掛けると、pで割った余りが1になる数を探し、最初の `field-inv` 欄へ提出します。**「正解」になれば最初の一歩、8欄すべて正解なら完了です。紙と回答欄だけで進められます。**\n\n今は次の「余りと逆元」だけで始められます。後の説明は対応する欄へ来たときに読みます。各欄のヒントは、仕組み→一桁の見本→画面の名前を使った手順の3段です。同じ式は問題文にも載っています。\n\n## 余りと逆元 — 欄1\n\npは素数（1と自分自身でしか割り切れない2以上の整数）。「pで割った余り」をmod p、Pythonでは `% p` と書きます。負の数はpを足して0以上にし、p以上ならpを引いて0〜p−1へ直します。例: −2を5で考えると3、8なら3です。\nあとで点を足すときに割り算が必要になります。割った余りで計算するときは、小数の代わりに「掛けて余り1になる相手」を使います。その相手を逆元と呼びます。\n\n`inv(t,p)` は `t*v` を p で割った余りが1となる v。1からp−1まで順に試せます。例: p=7,t=3 なら 3×1,3×2,…,3×5=15、15−2×7=1なのでv=5。pが素数、tの余りが0でないときに存在します。Pythonでは `pow(t,p-2,p)` でも同じです。\n\n## 点を足す道具 — 欄2〜4\n\n点は横と縦の2数 `[X,Y]`。画面のp,a,bは、`Y²` と `X³+a*X+b` のpによる余りが同じになる点を選ぶ式を決めます。この点の集まりを楕円曲線と呼びます。Gは繰り返し足す基準点、Qは別の点。Gx,GyはGの横と縦です。以下の公式は与えられた規則として使い、導出は不要です。**O（オー）はゼロの役の特別な点で、座標はなく、PythonではNoneです。** O+A=A。A=(X,Y)に対して−A=(X,−Yの余り)、A+(−A)=Oです。\n\n\n### 2. 違う2点 G と Q を足す\n\n秘密の数を公開の点へ変える準備として、点の足し算を作ります。座標を別々に足す操作ではありません。違う2点を通る直線の傾きから次の点を決め、縦方向の符号を反転する、という規則です。\n\nG=(Gx,Gy), Q=(Qx,Qy)。λ（ラムダ、傾き）=`(Qy−Gy)*inv(Qx−Gx,p)`、X=`λ*λ−Gx−Qx`、Y=`λ*(Gx−X)−Gy`。各結果をpで割った余りにします。見本の曲線はp=5,a=3,b=2、G=(1,1),Q=(2,1)。λ=0×1=0、X=−3→2、Y=−1→4でG+Q=(2,4)。\n\n### 3. 同じ点 G を2回足す\n\n同じ点を2回足せると、何回も足す計算を続けられます。同じ2点では前の傾きの分母がゼロになるため、その点での接線（曲線に沿う直線）用の傾きへ替えます。\n\nλ=`(3*Gx*Gx+a)*inv(2*Gy,p)`。X=`λ*λ−2*Gx`、Y=`λ*(Gx−X)−Gy`、各結果はpで割った余り。見本p=5,a=3,G=(1,1): 2の逆元は3、λ=(3+3)×3=18→3、X=9−2=7→2、Y=3×(1−2)−1=−4→1。2G=(2,1)。Gy=0なら2G=Oとして割りません。\n\n### 4. G を何回足すと O に戻るか\n\n点を足す回数には一周があります。O（オー）は点の足し算でゼロの役をする特別な点です。Gを繰り返し足し、初めてOに戻る回数を位数nと呼びます。あとで返事の数をどの数で割るか、これで決まります。\n\n`T=G,k=1` から `T=T+G,k=k+1` を繰り返し、最初のT=Oのkをnにします。O+点=点。横座標が同じで縦座標の和の余りが0なら、和はO。見本p=5,a=3,G=(1,1): G,(2,1),(2,4),(1,4),O と進みn=5。例えば3Gは欄2、4Gはλ=(4−1)*inv(2−1,5)=3、X=9−1−2=6→1,Y=3×(1−1)−1=−1→4。\n\n### 5. 質問 e への返事 s を作る\n\n公開鍵は秘密の数から作る公開の点です。証明者（秘密を持つ人）は、毎回新しく無作為に選ぶ数rで秘密を覆います。rをnonce（ノンス）と呼びます。rから作った点Rを先に固定し、検証者（確かめる人）の質問の数eを受け取ってから返事sを作る順番です。\n\n`k*G` はGをk回足す意味で、0*G=O。P=x*G、R=r*G、`s=(r+e*x)` をnで割った余り。例n=5,r=2,e=3,x=2なら2+3×2=8→3。座標はp、回数はnで割ります。これは違う役の数で、同じ値になるとは限りません。\n\n### 6. 公開された点だけで返事を確かめる\n\n検証者は秘密や使い捨ての数を知らなくても、返事から作る点と、既に公開された点から作る点を比べられます。ここでは同じ点になることを計算で確かめます。一つの記録が一致しただけで、作り手が秘密を持つと断定することはできません。\n\n`s*G = R + e*P`。理由は `(r+e*x)*G = r*G+e*(x*G)`。欄4の見本でx=2,r=2,e=3ならs=3。P=R=2G=(2,1)、左辺3G=(2,4)。右辺は2G+3*(2G)=8G=3G（5G=Oなので5回分を引ける）で同じです。\n\n### 7. 同じ乱数を使った人の秘密を取り出す\n\n別の人が同じ使い捨ての数で、違う質問に2回答えてしまいました。二つの返事を引くと、共通の使い捨ての数が消えます。残るのは秘密に質問の差を掛けた数なので、最初に学んだ逆元で秘密を取り出せます。\n\n`d=(e1−e2)` のnで割った余り、`z=(s1−s2)` の余りとして、秘密は `z*inv(d,n)` の余り。この教材のGの位数nは素数で、e1とe2は0〜n−1内で異なるためdは0でなく、逆元があります。例n=5,e1=1,s1=0,e2=3,s2=1: d=−2→3,z=−1→4、3の逆元は2、4×2=8→3。秘密3が出ます。\n\n### 8. 質問が先なら通る記録を自作できるか\n\nここは質問を先に見せてしまう失敗を調べます。秘密が示されていない別の公開鍵に対し、返事を自分で決め、検証式が合うよう最初の点を後から作ります。これは正規の順番を守る相手への証明ではなく、受理される一つの会話記録を作る作業です。\n\n点の負号は `−(X,Y)=(X,−Yをpで割った余り)`、−O=O。自分でsを0〜n−1から選び、`R=s*G−ef*P2` とすれば `s*G=R+ef*P2`。この欄では座標のあるRを作ります。R=Oなら別のsを選びます。 見本p=5,a=3,G=(1,1),P2=(2,1),ef=1: s=3を選ぶとsG=(2,4)、−efP2=(2,4)、その和はG=(1,1)。実際G+P2=3Gです。s=4ならR=2Gでも通り、答えは一つではありません。\n\n## 正規の順番と、この練習の限界\n\n証明者が新しいrを無作為に選ぶ → Rを送って固定 → 検証者がその後でeを無作為に選ぶ → 証明者がsを返す、がSchnorrの対話手順です。公開鍵Pはその前から固定されています。本来r,eは0〜n−1から選びます。画面のx,r,eは計算練習向けに選んだ記録で、相手との実際の乱数生成を再現していません。\n\n同じRに対して異なるeの正しい返事を2本得られれば、欄7の式で秘密を取り出せます。一方、欄8ではeを見てからRを決められるので、**通る記録を1本作れることと、正規の順番で秘密を知っていることを示すことは別**です。記録を公開情報だけから作る道具はsimulator（シミュレータ）と呼びます。この課題はその構成を1回試すもので、記録全体の確率分布まで証明する課題ではありません。\n\nこの小さい曲線ではPからxも数えて求められるため、秘密を守る用途には使えません。実用の適切な大きい曲線では、この逆向きの計算が困難だと考えられています。「返事の式に未知数が2個ある」だけで実用の安全性が決まるわけではありません。\n\nこの演習は対話型Schnorrです。Schnorr署名では、メッセージも含む公開データからハッシュ関数（データを一定の長さの値へ変換する関数）で質問を作り、受け手も作り直して確認します。この置き換えをFiat–Shamir変換と呼び、ここでは実装しません。\n\n## 入力と、任意のPythonメモ\n\n整数は1個、点は `[X,Y]`、最後は `[Rx,Ry,s]`。各欄の「提出」で採点します。誤答1回は−10点、ヒントは1段−2点（全24段で最大−48点）。後半の小さい計算用に、欄4で作ったGの倍数表を使い回してください。\n\nエディタの `schnorr_drill.py` は任意の計算メモです。紙で解く場合は配布されたファイルをそのまま残して提出できます。Pythonを使うなら各関数の説明に従って `return None` を置き換え、**「公開テストを実行」**。公開の見本のPASS/FAILと、自分の関数が現在の数で返した値が出ます。テストのPASSだけでは得点にならず、値を回答欄へ提出します。外部のPythonを起動する必要はありません。\n",
+  "writeup": "8欄は逆元→点の加算→同一点→位数→返事→照合→nonce再利用→質問先出しの記録構成へ進む。最後の公開式R=sG−efP2は秘密を用いず、一つの受理記録を作る。これは先にRを固定する通常の対話を破る証拠ではない。同じRに対する異なるeの2応答があれば、差を取り逆元を掛けることで秘密が得られる。実用の安全性には適切な群の選択と乱数・手順が必要で、この小さい教材では保証しない。",
   "tags": [
     "advanced-cryptography-2026",
     "week3",
@@ -60,12 +60,11 @@
     }
   ],
   "learningGoals": [
-    "負の数を 0..p−1 に直し、逆元を「掛けて 1 になる相手」として自分で出せる",
-    "2 点の傾き・接線・折り返しから、曲線の足し算 G + Q と 2G を手で出せる",
-    "O（無限遠点）の扱いを足して ec_add を関数にし、一周の回数として位数 n を数えられる",
-    "公開鍵 P = x·G、commitment R = r·G、response s = r + e·x (mod n) を出し、s·G = R + e·P を両辺で確かめられる",
-    "同じ nonce の 2 署名から秘密を (s1 − s2)/(e1 − e2) で取り出し、公開鍵で確認できる",
-    "同じ 12 行を別の曲線で通し、手順と数を切り離して理解していることを示せる"
+    "余りの逆元と点の足し算を手計算する",
+    "座標のpと、Gを足す回数のnを区別する",
+    "Schnorrの公開検証式を両辺から確かめる",
+    "異なる質問へのnonce再利用から秘密を取り出す",
+    "質問後にRを作る記録構成と、正規手順での知識証明を区別する"
   ],
   "runtime": {
     "provider": "docker",
@@ -81,105 +80,185 @@
     "checks": [
       {
         "id": "field-inv",
-        "label": "逆元 — 掛けて 1 になる相手",
+        "label": "掛けて1になる相手を見つける",
         "points": 15,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "field-inv-hint-1",
-            "content": "`pow(t, p - 2, p)` の 3 つ目の引数が p。出た値 v に対して `t * v % p` が 1 になるか確かめてから貼ってください。",
-            "penalty": 6
+            "content": "あとで点を足すときに割り算が必要になります。割った余りで計算するときは、小数の代わりに「掛けて余り1になる相手」を使います。その相手を逆元と呼びます。",
+            "penalty": 2
+          },
+          {
+            "id": "field-inv-hint-2",
+            "content": "`inv(t,p)` は `t*v` を p で割った余りが1となる v。1からp−1まで順に試せます。例: p=7,t=3 なら 3×1,3×2,…,3×5=15、15−2×7=1なのでv=5。pが素数、tの余りが0でないときに存在します。Pythonでは `pow(t,p-2,p)` でも同じです。",
+            "penalty": 2
+          },
+          {
+            "id": "field-inv-hint-3",
+            "content": "「証拠を確認」のpとtを見る → 1からp−1までの数vについてt×vを計算 → pの倍数を引いて余りを出す → 初めて余り1になるvを `field-inv` へ入力し提出。逆元の値が分かったら次の欄へ進みます。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "add-points",
-        "label": "3 つ目の交点を折り返す = G + Q",
+        "label": "違う2点 G と Q を足す",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "add-points-hint-1",
-            "content": "x₃ = λ² − Gx − Qx、y₃ = λ·(Gx − x₃) − Gy。y₃ の引き算の向き（Gx − x₃、Gy を引く）を確かめて。検算は曲線の式に代入して 0。",
-            "penalty": 6
+            "content": "秘密の数を公開の点へ変える準備として、点の足し算を作ります。座標を別々に足す操作ではありません。違う2点を通る直線の傾きから次の点を決め、縦方向の符号を反転する、という規則です。",
+            "penalty": 2
+          },
+          {
+            "id": "add-points-hint-2",
+            "content": "G=(Gx,Gy), Q=(Qx,Qy)。λ（ラムダ、傾き）=`(Qy−Gy)*inv(Qx−Gx,p)`、X=`λ*λ−Gx−Qx`、Y=`λ*(Gx−X)−Gy`。各結果をpで割った余りにします。見本の曲線はp=5,a=3,b=2、G=(1,1),Q=(2,1)。λ=0×1=0、X=−3→2、Y=−1→4でG+Q=(2,4)。",
+            "penalty": 2
+          },
+          {
+            "id": "add-points-hint-3",
+            "content": "画面のGx,Gy,Qx,Qy,pを見る → Qx−Gxを余りに直し、欄1と同じ方法でその逆元を探す → (Qy−Gy)×逆元を余りにしてλ → λ²−Gx−Qxを余りにしてX → λ×(Gx−X)−Gyを余りにしてY → `[X,Y]` を `add-points` へ提出。画面のGとQは横座標が異なります。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "double",
-        "label": "同じ点を 2 回 = 接線",
+        "label": "同じ点 G を2回足す",
         "points": 20,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "double-hint-1",
-            "content": "接線の傾きは (3·Gx² + a) / (2·Gy)。a を足し忘れる、分母を Gy にする、が定番の間違い。x₃ = λ² − 2·Gx。",
-            "penalty": 6
+            "content": "同じ点を2回足せると、何回も足す計算を続けられます。同じ2点では前の傾きの分母がゼロになるため、その点での接線（曲線に沿う直線）用の傾きへ替えます。",
+            "penalty": 2
+          },
+          {
+            "id": "double-hint-2",
+            "content": "λ=`(3*Gx*Gx+a)*inv(2*Gy,p)`。X=`λ*λ−2*Gx`、Y=`λ*(Gx−X)−Gy`、各結果はpで割った余り。見本p=5,a=3,G=(1,1): 2の逆元は3、λ=(3+3)×3=18→3、X=9−2=7→2、Y=3×(1−2)−1=−4→1。2G=(2,1)。Gy=0なら2G=Oとして割りません。",
+            "penalty": 2
+          },
+          {
+            "id": "double-hint-3",
+            "content": "画面のGx,Gy,a,pを見る → 2×Gyの余りの逆元を探す → (3×Gx×Gx+a)×逆元の余りがλ → λ²−2×Gxの余りがX → λ×(Gx−X)−Gyの余りがY → `[X,Y]` を `double` へ提出。この練習のGではGyは0ではありません。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "order",
-        "label": "一周して O に戻るまでの回数 = 位数 n",
+        "label": "G を何回足すと O に戻るか",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "order-hint-1",
-            "content": "`R, k = G, 1` から始めて、R が None になった時点の k が位数。0 から数えると 1 ずれます。def のあとは空行を 1 つ。",
-            "penalty": 6
+            "content": "点を足す回数には一周があります。O（オー）は点の足し算でゼロの役をする特別な点です。Gを繰り返し足し、初めてOに戻る回数を位数nと呼びます。あとで返事の数をどの数で割るか、これで決まります。",
+            "penalty": 2
+          },
+          {
+            "id": "order-hint-2",
+            "content": "`T=G,k=1` から `T=T+G,k=k+1` を繰り返し、最初のT=Oのkをnにします。O+点=点。横座標が同じで縦座標の和の余りが0なら、和はO。見本p=5,a=3,G=(1,1): G,(2,1),(2,4),(1,4),O と進みn=5。例えば3Gは欄2、4Gはλ=(4−1)*inv(2−1,5)=3、X=9−1−2=6→1,Y=3×(1−1)−1=−1→4。",
+            "penalty": 2
+          },
+          {
+            "id": "order-hint-3",
+            "content": "紙に「1:G、2:欄3の点」と書く → 今の点にGを足す。横が同じで縦の和がpの倍数ならO、同じ点なら欄3、その他は欄2の公式を使う → 初めてOになるまで番号を進める → その番号を `order` へ提出しnとして残す。点と番号の表も後で使います。この教材は7回以内にOへ戻ります。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "response",
-        "label": "手 3: レスポンス s = r + e·x (mod n)",
+        "label": "質問 e への返事 s を作る",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "response-hint-1",
-            "content": "法は n（位数、6 行目で数えた数）であって p ではない。`(r + e * x) % n`。",
-            "penalty": 6
+            "content": "公開鍵は秘密の数から作る公開の点です。証明者（秘密を持つ人）は、毎回新しく無作為に選ぶ数rで秘密を覆います。rをnonce（ノンス）と呼びます。rから作った点Rを先に固定し、検証者（確かめる人）の質問の数eを受け取ってから返事sを作る順番です。",
+            "penalty": 2
+          },
+          {
+            "id": "response-hint-2",
+            "content": "`k*G` はGをk回足す意味で、0*G=O。P=x*G、R=r*G、`s=(r+e*x)` をnで割った余り。例n=5,r=2,e=3,x=2なら2+3×2=8→3。座標はp、回数はnで割ります。これは違う役の数で、同じ値になるとは限りません。",
+            "penalty": 2
+          },
+          {
+            "id": "response-hint-3",
+            "content": "画面のx,r,eと欄4のnを見る → e×x → rを足す → nの倍数を引き0〜n−1にする → そのsを `response` へ提出し保存。画面は練習用の記録なのでx,rも見せています。実際の相手へは渡しません。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "verify",
-        "label": "検証式 s·G = R + e·P",
+        "label": "公開された点だけで返事を確かめる",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "verify-hint-1",
-            "content": "`ec_mul(s, G)` の s は 9 行目の値。右辺 `ec_add(R, ec_mul(e, P))` と同じ点になるはず。違ったら s か R か P のどれかが違う。",
-            "penalty": 6
+            "content": "検証者は秘密や使い捨ての数を知らなくても、返事から作る点と、既に公開された点から作る点を比べられます。ここでは同じ点になることを計算で確かめます。一つの記録が一致しただけで、作り手が秘密を持つと断定することはできません。",
+            "penalty": 2
+          },
+          {
+            "id": "verify-hint-2",
+            "content": "`s*G = R + e*P`。理由は `(r+e*x)*G = r*G+e*(x*G)`。欄4の見本でx=2,r=2,e=3ならs=3。P=R=2G=(2,1)、左辺3G=(2,4)。右辺は2G+3*(2G)=8G=3G（5G=Oなので5回分を引ける）で同じです。",
+            "penalty": 2
+          },
+          {
+            "id": "verify-hint-3",
+            "content": "欄4の表を使い、画面のx,rからxG=P,rG=Rを探す → 欄5のsの行がsG → e×xの余りの行がeP → 欄2/3の公式でR+ePを計算しsGと比べる → 一致した点を `[X,Y]` で `verify` へ提出。表は0行目をOとして、nで割った余りの行を使います。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "nonce-reuse",
-        "label": "nonce を使い回した鍵から秘密を取り出す",
+        "label": "同じ乱数を使った人の秘密を取り出す",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "nonce-reuse-hint-1",
-            "content": "(s1 − s2)/(e1 − e2) を mod n で。逆元は `pow(e1 - e2, n - 2, n)`、最後に `% n`。出た値 v で `ec_mul(v, G) == P1` が True になるか確かめて。",
-            "penalty": 6
+            "content": "別の人が同じ使い捨ての数で、違う質問に2回答えてしまいました。二つの返事を引くと、共通の使い捨ての数が消えます。残るのは秘密に質問の差を掛けた数なので、最初に学んだ逆元で秘密を取り出せます。",
+            "penalty": 2
+          },
+          {
+            "id": "nonce-reuse-hint-2",
+            "content": "`d=(e1−e2)` のnで割った余り、`z=(s1−s2)` の余りとして、秘密は `z*inv(d,n)` の余り。nは素数でe1とe2が異なるためdは0でなく、逆元があります。例n=5,e1=1,s1=0,e2=3,s2=1: d=−2→3,z=−1→4、3の逆元は2、4×2=8→3。秘密3が出ます。",
+            "penalty": 2
+          },
+          {
+            "id": "nonce-reuse-hint-3",
+            "content": "画面のe1,s1,e2,s2と欄4のnを見る → d=(e1−e2)の余り、z=(s1−s2)の余り → d×vの余りが1になるvを1〜n−1で探す → z×vの余りを `nonce-reuse` へ提出。任意の検算として、その回数のGが画面のP1と同じか見ます。別の人の値なので画面の自分用xを転記しません。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "transfer",
-        "label": "別の曲線で同じ 12 行 — s を出す",
+        "label": "質問が先なら通る記録を自作できるか",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "transfer-hint-1",
-            "content": "p, a, G を p2, a2, G2 に差し替えてから位数を数え直す（曲線が変わると n も変わる）。最後は `% k`（新しい位数）。",
-            "penalty": 6
+            "content": "ここは質問を先に見せてしまう失敗を調べます。秘密が示されていない別の公開鍵に対し、返事を自分で決め、検証式が合うよう最初の点を後から作ります。これは正規の順番を守る相手への証明ではなく、受理される一つの会話記録を作る作業です。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "点の負号は `−(X,Y)=(X,−Yをpで割った余り)`、−O=O。自分でsを0〜n−1から選び、`R=s*G−ef*P2` とすれば `s*G=R+ef*P2`。見本p=5,a=3,G=(1,1),P2=(2,1),ef=1: s=3を選ぶとsG=(2,4)、−efP2=(2,4)、その和はG=(1,1)。実際G+P2=3Gです。s=4ならR=2Gでも通り、答えは一つではありません。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "画面のP2,efと欄4のnを見る → 自分でsを0〜n−1から一つ選ぶ → 表でsGを求める → P2をef回足してBを求める → B=(B_x,B_y)なら−B=(B_x,−B_yのpによる余り) → R=sG+(−B)を欄2/3の規則で求める → RがOならsを一つ進めてやり直す（sの候補は有限で、除外されるのは一つだけ） → `[Rの横,Rの縦,s]` を `transfer` へ提出。公開式R+ef*P2=sGを自分でも確かめます。",
+            "penalty": 2
           }
         ]
       }
@@ -187,97 +266,160 @@
   },
   "i18n": {
     "en": {
-      "name": "ec_add is four lines of arithmetic plus the cases",
-      "shortDescription": "Type one line in your own Python, paste the value it prints. Twelve lines: the field inverse → point addition → the order → the public key → Schnorr's three moves → the check → the secret falls out of a reused nonce → another curve — on numbers you produced yourself.",
-      "description": "A Week 3 drill. Not a write-a-function problem: you type one line, paste the value it prints, twelve times. Normalising a negative field element and the inverse → the slope through two points → G + Q → 2G → how many additions return to O (the order) → the public key → R = r·G → s = r + e·x → the check s·G = R + e·P → extracting the secret from a key that reused its nonce → the same thing on another curve.\n\nWhy this shape: in the companion self-study notes, seven self-check questions handed over at once stalled understanding; switching to \"type this one line, paste the value, read the one sentence about that value\" worked immediately, because the result and its explanation sit next to each other. This problem is that shape as a checkpoint sequence: each checkpoint's label is the line to type, and the statement's \"what this line means\" / \"read after it matches\" are the explanation.\n\nEvery number is seed-derived (five verified prime-order toy curves; t, Q, x, r, e, the attack key, the transfer curve). The official assignment's test values (the p = 1009 TOY curve, etc.) are not used (independent reimplementation). There is one right value per line, and only the value your own Python printed passes. For those who cannot open Python, writing the same twelve lines as functions in the editor's `schnorr_drill.py` makes \"run the public tests\" print this deployment's values.\n\nAll eight checkpoints are direct answers (five evidence kinds: predict / construct / trace / counterexample / transfer). Four of the twelve lines (the negative, λ, P, R) have no answer field — they are material for the line after, where a mistake surfaces (the platform caps a problem at eight checkpoints). Following the learner observation that \"it gets hard suddenly at ec_add\", the addition is built by hand on lines 3–5 (λ → x₃ → y₃) before becoming a function on line 6.",
-      "instructions": "## Proving you know it, without sending it\n\nSend your password on every login and one breach at the far end ends it. Could you instead say only \"I know it\" — and send nothing?\n\nYou can. That is a **digital signature**, and it is what every Ethereum transaction and every passkey (the fingerprint or face login) runs on right now. You hand over a number only the holder of the secret could have produced, without the secret ever leaving your side. The other party checks it without ever learning it.\n\n## Make one before learning the formulas\n\nTextbook Schnorr opens with groups and discrete logarithms. What you actually do is **type twelve lines into Python**.\n\nHere you start from addition on a curve, produce one signature, and watch it verify. Then, at the end, you get one step wrong on purpose — and watch **the secret walk straight out**.\n\n## Before you start (skip if you know this)\n\nFour things from school are enough. \"13 divided by 7 leaves 6\" (age 10), \"dividing is multiplying by the reciprocal\" (age 11), \"the slope of a line through two points\" (age 13), and \"two unknowns need two equations\" (age 13, simultaneous equations). That last one is the punchline of this problem.\n\n`(mod p)` means \"work with remainders after dividing by p\". Negatives get p added until they are non-negative — Python's `%` already does this.\n\n**Three formulas you may use without deriving them:**\n\n- **Inverse**: for prime p and t ≠ 0, `pow(t, p - 2, p)` is the number that multiplies with t to give 1 (Fermat's little theorem)\n- **Tangent slope**: a point has no \"line through two points\" with itself, so use the tangent; its slope is (3x² + a) ÷ (2y)\n- **The third intersection**: the three x-values where a line meets the curve sum to λ², so the third is λ² − x₁ − x₂\n\nNew to finite fields? Solve `ac26-w3-field-inverse` first. The full picture of curve addition is in `ac26-w3-ec-group`.\n\n## First move\n\nIn Participant Portal (the site showing this statement), select **起動 (Start)**, then press **Inspect evidence**. This deployment's numbers appear as **Python assignment statements you can paste as they are**.\n\n```\np, a, b = …\nG = (…, …); Gx, Gy = G\nt = …\nQ = (…, …); Qx, Qy = Q\nx, r, e = …, …, …\nP1 = (…, …)\ne1, s1, e2, s2 = …, …, …, …\np2, a2, b2 = …, …, …\nG2 = (…, …)\nx2, r2, e2p = …, …, …\n```\n\nThe screen also says what each name is. `t` is a practice element for lines 1–2, `Q` is another point on the curve, `x, r, e` are your secret key, nonce and challenge, `P1` with `(e1, s1)` and `(e2, s2)` is the record of **a different signer** who reused one nonce for two signatures (their secret is not shown), and `p2, a2, b2, G2, x2, r2, e2p` is the second curve used on line 12. `e2p` means \"the challenge on the second curve\" and is a different number from the `e2` used on line 11. **The order n is not shown** — line 6 is where you count it.\n\n**Opening Python**: on Windows open PowerShell, on a Mac open Terminal, and type `python3` until you see `>>>` (if Windows has no `python3`, try `py` or `python`). The **IDLE shell** that ships with Python works exactly the same way. Once it is open, paste the whole assignment block above.\n\n**About indentation**: inside a `def`, paste the lines with their **four leading spaces exactly as written**. Every other line must start at the left margin with no leading space (a stray one gives `IndentationError`). After pasting a `def` block, **enter one empty line** (press Enter once more) before typing the next line.\n\n**If you cannot open Python**: the problem editor holds `schnorr_drill.py`, which has a function skeleton for each of the twelve lines. Fill them in and press **Run public tests**: the first half reports PASS / FAIL against the lecture example (with its answers printed alongside), and the second half prints **what your functions returned on this deployment's numbers**, labelled by checkpoint. Paste those values into the answer fields. The content of that file is not graded, but submission needs it to be non-empty, so **do not empty it**. **Restore starter** puts the editor back to the file as it shipped.\n\n## How to solve it — twelve lines\n\nEach line reads: **the line to type** (copy and paste it) → **what this line means** → paste the value Python printed **into that checkpoint's answer field** → once it is accepted, read **\"once it is accepted\"** and go on. The answer field is a single-line input: integers as they are, points as `[x, y]` (`(x, y)` and `x, y` are also accepted). Once the value is in, pressing that checkpoint's **提出 (Submit, +N pt)** grades it. The eight are graded separately, so getting stuck on one does not cost the others, and you can resubmit as often as you like — each wrong submission costs 10 points (your total never drops below zero).\n\n### 1. Bring a negative number into 0..p−1 (no answer field)\n\n```python\n(-t) % p\n```\n\n- **What this line means**: Python's `%` returns a value in 0..p−1 even for a negative input. This folds −t into \"the remainder after dividing by p\".\n- **Answer field**: none — this is material for the next line.\n- **Once you see it**: −t and p − t are the same number in the world of `(mod p)`. That world has only the p numbers 0..p−1, and every integer lands on one of them. Check: type `p - t` and see the same value.\n\n### 2. The inverse — the partner that multiplies to 1 (answer field 1 / 8)\n\n```python\npow(t, p - 2, p)\n```\n\n- **What this line means**: by Fermat's little theorem above, `t^(p−2)` is the inverse of t. The third argument of `pow` says \"take the remainder mod p after every multiplication\".\n- **Answer field**: the **first** one, \"The inverse — the partner that multiplies to 1\". One integer.\n- **Once it is accepted**: call the value v and type `t * v % p`; it is 1. This v plays the role of the reciprocal in \"dividing is multiplying by the reciprocal\". Every division in the curve arithmetic below is cleared this way.\n\n### 3. The slope of the line through two points (no answer field)\n\n```python\nlam = ((Qy - Gy) * pow(Qx - Gx, p - 2, p)) % p; lam\n```\n\n- **What this line means**: it is \"slope = rise ÷ run\" exactly, with ÷ replaced by multiplying by the inverse.\n- **Answer field**: none — material for the next line.\n- **Once you see it**: this λ is the slope of the line through G and Q. That line meets the curve at one more point besides G and Q (a cubic has three intersections). The third one is the next line, and whether λ was right shows up there.\n\n### 4. Reflect the third intersection = G + Q (answer field 2 / 8)\n\n```python\nx3 = (lam*lam - Gx - Qx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **What this line means**: by roots and coefficients, the three intersection x-coordinates sum to λ², so the third is x₃ = λ² − Gx − Qx. y₃ is the line's value at x₃ with its sign flipped (reflected in the x-axis).\n- **Answer field**: the **second** one, \"Reflect the third intersection = G + Q\". A point, as `[x, y]`.\n- **Once it is accepted**: (x₃, y₃) is G + Q. \"Adding points\" is not adding coordinates; it is the name we **decided to give** the point this procedure produces. Check: `(y3*y3 - (x3**3 + a*x3 + b)) % p` is 0 when the point is on the curve.\n\n### 5. The same point twice = the tangent (answer field 3 / 8)\n\n```python\nlam = ((3*Gx*Gx + a) * pow(2*Gy, p - 2, p)) % p; x3 = (lam*lam - 2*Gx) % p; y3 = (lam*(Gx - x3) - Gy) % p; (x3, y3)\n```\n\n- **What this line means**: a point has no chord with itself, so the tangent is used, with the slope (3x² + a) ÷ (2y) from above. The x₃ and y₃ formulas are the same as line 4, with Qx replaced by Gx.\n- **Answer field**: the **third** one, \"The same point twice = the tangent\". A point, as `[x, y]`.\n- **Once it is accepted**: that is 2G. Chord and tangent differ only in how λ is built. If Gy were 0 the tangent would be vertical and 2G would be O — the same fact as 2 × 0 having no inverse.\n\n### 6. Additions until you return to O = the order n (answer field 4 / 8)\n\nFirst turn the addition into a function (keep the four-space indentation inside the `def`, and press Enter once more after it).\n\n```python\ndef ec_add(P, Q):\n    if P is None: return Q\n    if Q is None: return P\n    if P[0] == Q[0] and (P[1] + Q[1]) % p == 0: return None\n    lam = ((3*P[0]*P[0] + a) * pow(2*P[1], p - 2, p)) % p if P == Q else ((Q[1] - P[1]) * pow(Q[0] - P[0], p - 2, p)) % p\n    x3 = (lam*lam - P[0] - Q[0]) % p\n    return (x3, (lam*(P[0] - x3) - P[1]) % p)\n\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\nn = k\nk\n```\n\n- **What this line means**: `ec_add` is the formulas from lines 4 and 5 plus the handling of O (`None` is the zero of this addition) and \"same x, opposite y → O\". The loop walks G, 2G, 3G, … and the `k` at which it lands on O is the order. **The `n = k` line just gives that number the name lines 9 and 11 use** — the two are the same value.\n- **Answer field**: the **fourth** one, \"Additions until you return to O = the order n\". One integer.\n- **Once it is accepted**: n additions bring you back to O, the way a clock comes round. That is why \"how many times to multiply G\" is counted `(mod n)`, and why line 9's s is reduced by n.\n\n### 7. The public key P = x·G (no answer field)\n\n```python\ndef ec_mul(k, P):\n    R = None\n    for _ in range(k): R = ec_add(R, P)\n    return R\n\nP = ec_mul(x, G); P\n```\n\n- **What this line means**: k times = adding k times, written out literally (these curves are small enough for that).\n- **Answer field**: none — material for the next line.\n- **Once you see it**: that is the public key P. Getting P from x is instant; getting x back from P means trying 1, 2, 3, … until a multiple hits P. On this curve that is n tries; on a real one it is 2 to the 256. That one-way street is why publishing P is safe. Whether your P is right shows up on line 10.\n\n### 8. Move 1: the envelope R = r·G (no answer field)\n\n```python\nR = ec_mul(r, G); R\n```\n\n- **What this line means**: r is the throwaway number drawn fresh for each signature. The point R = r·G is handed over first.\n- **Answer field**: none — material for the next line.\n- **Once you see it**: R is the commitment. You show R but not r — the sealed envelope handed over before the question is asked. r is protected by the same one-way street as x. The other side then asks with a challenge number e (here, the `e` from Inspect evidence). Whether your R is right shows up on line 10.\n\n### 9. Move 3: the response s = r + e·x (mod n) (answer field 5 / 8)\n\n```python\ns = (r + e * x) % n; s\n```\n\n- **What this line means**: s is the plain linear expression \"r plus e·x\". The number reduced by is **n** (the order counted on line 6), not p — because s counts how many times G is multiplied.\n- **Answer field**: the **fifth** one, \"Move 3: the response s = r + e·x (mod n)\". One integer.\n- **Once it is accepted**: s is x multiplied by e and then covered by r. As long as r differs every time, s reveals nothing about x. Reuse r once, and line 11 pulls x straight out.\n\n### 10. The verification equation s·G = R + e·P (answer field 6 / 8)\n\n```python\nec_mul(s, G)\n```\n\n- **What this line means**: the other side holds only s, R, e and P, and computes s·G for itself.\n- **Answer field**: the **sixth** one, \"The verification equation s·G = R + e·P\". A point, as `[x, y]`.\n- **Once it is accepted**: type `ec_add(R, ec_mul(e, P))` and you get the same point (the right-hand side). Why: s·G = (r + e·x)·G = r·G + e·(x·G) = R + e·P — the distributive law applied to point addition. The other side confirmed the equation while knowing neither x nor r. If the two do not match, one of s, R or P is wrong.\n\n### 11. Pull the secret out of two signatures that reused one envelope (answer field 7 / 8)\n\nThe `e1, s1, e2, s2` from Inspect evidence are the record of **a different signer** who signed twice with the same r. Their secret is not shown.\n\n```python\n((s1 - s2) * pow(e1 - e2, n - 2, n)) % n\n```\n\n- **What this line means**: subtracting s1 = r + e1·x′ from s2 = r + e2·x′ cancels r and leaves (e1 − e2)·x′. Divide both sides by (e1 − e2) — multiply by its inverse, `(mod n)`. It is a pair of simultaneous equations, nothing more.\n- **Answer field**: the **seventh** one, \"Recover the secret from a key that reused its nonce\". One integer.\n- **Once it is accepted**: the value is that signer's secret x′. Type `ec_mul(value, G)` and it matches the `P1` on screen. With r used once, two unknowns (r and x′) share a single equation and cannot be solved. Used twice, there are two equations and it falls apart. Real systems have had private keys extracted exactly this way.\n\n### 12. The same thing on a different curve — produce s (answer field 8 / 8)\n\n```python\np, a, G = p2, a2, G2\nR, k = G, 1\nwhile R is not None: R = ec_add(R, G); k += 1\n\n(r2 + e2p * x2) % k\n```\n\n- **What this line means**: `ec_add` reads `p` and `a` from outside itself, so replacing those two and `G` switches curves. The order is counted again (a different curve has a different order, so this `k` is the new one). The last line is the same shape as line 9.\n- **Answer field**: the **eighth** one, \"The same twelve lines on another curve — produce s\". One integer.\n- **Once it is accepted**: the same procedure went through on different numbers — a value no amount of memorising would have produced. On a real curve not one character of the procedure changes; only the sizes of p, a, b, G and n do. Note that this line overwrites `p`, `a` and `G`: if you want to redo an earlier line, paste the original assignment block again first.\n\n## What this signature unlocks\n\nTwelve lines and you are done — having **built one digital signature by hand, then broken it**.\n\nThe leak in the last two lines is not a textbook footnote. It is how the PlayStation 3 lost its signing key in 2010, and how several wallets have lost keys since 2022. `ac26-w3-nonce-reuse` follows the same failure on a real signature.\n\nAnd this shape — showing something is right without showing the secret — grows directly into zero-knowledge proofs in Week 4. All that changes is what you are proving: from \"I know the key\" to \"I ran this computation\".\n",
-      "writeup": "## The shape of this problem\n\nTwelve lines are typed; eight have an answer field. All of them are \"type one line, paste the value\". The explanation is read after the value. The order: the field (1–2) → point addition (3–6) → keys and Schnorr's three moves (7–10) → the attack (11) → another curve (12).\n\n## What each line protects\n\n- 1–2: Python's `%` lands in 0..p−1 even for negatives. The inverse is one value whether by Fermat (pow) or extended Euclid.\n- 3–5: chord slope, Vieta, reflection, tangent. The body of `ec_add` is these three lines.\n- 6: add the handling of O (None) and \"same x, opposite y → O\" to make the function; the count to O is the order n — the reason s lives mod n.\n- 7–8: public key and commitment are \"secret × G\". The reverse (discrete log) is brute force only.\n- 9–10: s = r + e·x (mod n); s·G = R + e·P is the distributive law. The verifier knows neither x nor r.\n- 11: the same r twice → two linear equations → subtract, r cancels, x′ falls out (the attack side of special soundness).\n- 12: the same twelve lines pass on other numbers. Memorised values do not carry.\n\n## How it breaks\n\ns reduced mod p / the tangent without a / y₃ without the reflection / the order counted from 0 — each shifts one value and stops at that line. Re-reading that line's \"what this line means\" is how this format teaches.\n\n## Where this leads\n\nThe assignment's `field_inv` / `ec_add` / `ec_scalar_mul` / `schnorr_prove` / `schnorr_verify` / `recover_secret` are these twelve lines written as functions. From ac26-w3-field-inverse onward the same lines are handled from the break-and-repair side.",
+      "name": "Check without sending the secret — test the order of Schnorr",
+      "shortDescription": "Add points with small numbers and check a response without sending the secret. Recover a secret after nonce reuse, then construct a passing record when the challenge is known first.",
+      "description": "An independent Week 3 companion with eight direct-answer fields: inverses, point addition, order, interactive Schnorr, nonce reuse and constructing a record when the challenge is known first. Tiny curves permit hand calculation. The legacy transfer ID accepts multiple constructions using the public verification equation. It does not implement signature hashing or practical cryptographic security.",
+      "instructions": "## Before you start — test the order of a proof that does not send its secret\n\nYou are investigating a way to check knowledge of a secret number without sending it. Select **Start → Inspect** to see this instance’s small numbers. Read only p and t first. Find a number that, multiplied by t, leaves remainder 1 after division by p; submit it in `field-inv`. **Correct is your first success; all eight fields correct is completion. Paper and the answer fields are enough.**\n\nStart with the next section and read later sections as you reach their fields. Each field has three hints: mechanism, a small worked formula, then steps using the on-screen names. The same formulas are also included in the statement.\n\n## Remainders and inverses — field 1\n\np is prime: an integer at least 2 divisible only by 1 and itself. “Remainder after division by p” is written mod p, or `% p` in Python. Add p to negative numbers and subtract p from numbers at least p until reaching 0..p−1. For example −2 and 8 both become 3 when dividing by 5.\nPoint addition will need division. With division remainders, replace a fraction by a number that multiplies the denominator to remainder 1. That number is its inverse.\n\n`inv(t,p)` means the v for which t*v has remainder 1 after division by p. Try 1 through p−1. Example p=7,t=3: 3×5=15, and 15−2×7=1, so v=5. It exists when p is prime and t has nonzero remainder. Python also provides `pow(t,p-2,p)`.\n\n## Tools for adding points — fields 2–4\n\nA point is two numbers [X,Y]. The displayed p,a,b select points where Y² and X³+a*X+b have equal remainders by p; this collection is an elliptic curve. G is the base point to add repeatedly, Q another point, and Gx,Gy its coordinates. Use the supplied rules; no derivation is required. **O is a special point acting as zero. It has no coordinates and is None in Python.** O+A=A. For A=(X,Y), −A=(X,−Y reduced by p), and A+(−A)=O.\n\n\n### 2. Add two different points G and Q\n\nPoint addition prepares the operation that turns a secret number into a public point. It does not add the coordinates separately. Use the slope through two different points to find the next point and reverse its vertical sign.\n\nWrite G=(Gx,Gy), Q=(Qx,Qy). The slope λ is `(Qy−Gy)*inv(Qx−Gx,p)`. Then X=`λ*λ−Gx−Qx`, Y=`λ*(Gx−X)−Gy`. Reduce each result by p. Example curve p=5,a=3,b=2,G=(1,1),Q=(2,1): λ=0, X=−3→2,Y=−1→4, giving (2,4).\n\n### 3. Add G to itself\n\nTo keep adding a point, we also need to add it to itself. The previous slope would divide by zero, so use the supplied tangent slope: the slope of the line following the curve at that point.\n\nλ=`(3*Gx*Gx+a)*inv(2*Gy,p)`, X=`λ*λ−2*Gx`, Y=`λ*(Gx−X)−Gy`, reducing by p. Example p=5,a=3,G=(1,1): inverse of 2 is 3, λ=6×3=18→3,X=9−2=7→2,Y=3×(1−2)−1=−4→1. Thus 2G=(2,1). If Gy=0, return O without dividing.\n\n### 4. Count additions of G until O\n\nO is the special point acting as zero for point addition. Repeatedly add G and count the first return to O. This count, the order n, determines which number to use for response remainders.\n\nStart T=G,k=1; repeat T=T+G,k=k+1 until T=O. That first k is n. O+point=point; equal horizontal coordinates and vertical coordinates summing to remainder zero give O. Example p=5,a=3,G=(1,1): G,(2,1),(2,4),(1,4),O, so n=5. The third point is field 2’s example. For the fourth, λ=(4−1)*inv(2−1,5)=3, X=9−1−2=6→1,Y=3×(1−1)−1=−1→4.\n\n### 5. Make the response s to challenge e\n\nA public key is a public point made from a secret number. The prover, who holds the secret, masks it with a freshly and randomly selected number r, called a nonce. Fix its point R first, receive the verifier’s challenge number e, then make response s. The verifier is the person checking the claim.\n\n`k*G` means add G k times; 0*G=O. Set P=x*G,R=r*G,s=(r+e*x) reduced by n. Example n=5,r=2,e=3,x=2: 2+3×2=8→3. Coordinates use p, counts use n: these numbers serve different roles and need not be equal.\n\n### 6. Check the response using public points\n\nThe verifier can compare a point made from the response with a point made from the public information, without receiving the secret or nonce. One matching record alone does not establish that its maker knows the secret.\n\n`s*G=R+e*P` follows from `(r+e*x)*G=r*G+e*(x*G)`. With field 4’s example, x=2,r=2,e=3 give s=3,P=R=2G=(2,1). The left is 3G=(2,4). The right is 2G+3*(2G)=8G=3G since 5G=O.\n\n### 7. Recover a secret after nonce reuse\n\nAnother person answered two different challenges using the same nonce. Subtracting their responses cancels that nonce. The remaining value is the secret times the challenge difference, so an inverse recovers the secret.\n\nReduce d=e1−e2 and z=s1−s2 by n. The secret is z*inv(d,n), reduced by n. Here these exercises use a prime order n, and e1 and e2 are distinct numbers in 0..n−1, so d is nonzero and invertible. Example n=5,e1=1,s1=0,e2=3,s2=1: d=−2→3,z=−1→4,inverse of 3 is 2,4×2=8→3. The recovered secret is 3.\n\n### 8. Construct a passing record when the challenge comes first\n\nNow investigate a broken order of messages: the challenge is visible first. For another public key whose secret is not supplied, choose a response and construct the first point afterward to satisfy the equation. This makes one passing record; it is not a proof to a verifier following the normal order.\n\nNegate a point by −(X,Y)=(X,−Y reduced by p); −O=O. Choose s in 0..n−1 and set `R=s*G−ef*P2`; then `s*G=R+ef*P2`. For this field use an R with coordinates; choose another s if R=O. Example p=5,a=3,G=(1,1),P2=(2,1),ef=1: choose s=3. sG=(2,4) and −efP2=(2,4); their sum is G=(1,1). Indeed G+P2=3G. Choosing s=4 gives R=2G instead; both records pass.\n\n## Normal order and limits of this exercise\n\nThe prover randomly chooses a fresh r, sends and fixes R; only then does the verifier randomly choose e, and the prover returns s. P was already fixed. The full protocol chooses r,e from 0..n−1. The displayed x,r,e are selected practice records, not a live random exchange.\n\nTwo valid responses to different e with the same R let us extract the secret with field 7’s formula. Field 8 instead lets us choose R after seeing e. **Making one passing record differs from demonstrating knowledge in the normal message order.** A tool producing records from public information is called a simulator. Here we construct one record; we do not prove equality of probability distributions.\n\nOn these tiny curves, counting also recovers x from P, so they provide no practical secrecy. Suitable large curves are believed to make that reverse calculation hard. Merely counting two unknowns in the response equation does not establish practical security.\n\nThis exercise covers interactive Schnorr. A Schnorr signature instead derives the challenge using a hash function, which maps data to a fixed-length value, including the message in that data. The receiver recomputes it. This replacement is the Fiat–Shamir transform; we do not implement it here.\n\n## Answers and optional Python scratchpad\n\nEnter one integer, a point [X,Y], or [Rx,Ry,s] for the final field. Submit each field separately. A wrong answer costs 10 points; each hint costs 2 (24 total, maximum 48). Reuse your table of multiples of G from field 4.\n\nThe editor’s schnorr_drill.py is optional. Paper solvers can leave the supplied file unchanged and submit. To calculate with Python, replace return None according to the function’s description and select Run public tests. It shows PASS/FAIL for public examples and the values your functions return for the current instance. A public-test PASS is not checkpoint credit: submit the value in the answer field. No external Python installation is required.\n",
+      "writeup": "The eight fields progress from inverses and point arithmetic to the order, response, verification, nonce reuse and constructing a record after learning the challenge. R=sG−efP2 uses no secret to make one passing record. This does not break a normal interaction with R fixed first. Two responses to distinct challenges under the same R permit secret extraction. Practical security also needs suitable groups, randomness and protocol handling; this tiny exercise does not provide it.",
       "learningGoals": [
-        "Bring a negative number into 0..p−1 and produce the inverse as \"the partner that multiplies to 1\"",
-        "Produce G + Q and 2G by hand from the slope through two points, the tangent, and the reflection",
-        "Add the handling of O (the point at infinity) to make ec_add a function, and count the order n as the number of steps back to O",
-        "Produce P = x·G, R = r·G, s = r + e·x (mod n), and confirm s·G = R + e·P on both sides",
-        "Extract the secret from two signatures with the same nonce via (s1 − s2)/(e1 − e2) and confirm it against the public key",
-        "Run the same twelve lines on another curve, showing the procedure is understood apart from the numbers"
+        "Calculate remainder inverses and point addition by hand",
+        "Distinguish coordinate modulus p from count modulus n",
+        "Check both sides of the public Schnorr equation",
+        "Recover a secret from nonce reuse with distinct challenges",
+        "Distinguish a constructed record from knowledge demonstrated in the normal message order"
       ],
       "checks": [
         {
           "id": "field-inv",
-          "label": "The inverse — the partner that multiplies to 1",
+          "label": "Find the partner that multiplies to 1",
           "hints": [
             {
               "id": "field-inv-hint-1",
-              "content": "The third argument of `pow(t, p - 2, p)` is p. Before pasting, check `t * v % p` is 1 for your value v."
+              "content": "Point addition will need division. With division remainders, replace a fraction by a number that multiplies the denominator to remainder 1. That number is its inverse."
+            },
+            {
+              "id": "field-inv-hint-2",
+              "content": "`inv(t,p)` means the v for which t*v has remainder 1 after division by p. Try 1 through p−1. Example p=7,t=3: 3×5=15, and 15−2×7=1, so v=5. It exists when p is prime and t has nonzero remainder. Python also provides `pow(t,p-2,p)`."
+            },
+            {
+              "id": "field-inv-hint-3",
+              "content": "Read p,t in Inspect. For v=1 through p−1, multiply t*v and subtract multiples of p. Enter the first v with remainder 1 in field-inv and submit."
             }
           ]
         },
         {
           "id": "add-points",
-          "label": "Reflect the third intersection = G + Q",
+          "label": "Add two different points G and Q",
           "hints": [
             {
               "id": "add-points-hint-1",
-              "content": "x₃ = λ² − Gx − Qx and y₃ = λ·(Gx − x₃) − Gy. Check the direction of the subtractions (Gx − x₃, minus Gy). Substitute into the curve equation: it must give 0."
+              "content": "Point addition prepares the operation that turns a secret number into a public point. It does not add the coordinates separately. Use the slope through two different points to find the next point and reverse its vertical sign."
+            },
+            {
+              "id": "add-points-hint-2",
+              "content": "Write G=(Gx,Gy), Q=(Qx,Qy). The slope λ is `(Qy−Gy)*inv(Qx−Gx,p)`. Then X=`λ*λ−Gx−Qx`, Y=`λ*(Gx−X)−Gy`. Reduce each result by p. Example curve p=5,a=3,b=2,G=(1,1),Q=(2,1): λ=0, X=−3→2,Y=−1→4, giving (2,4)."
+            },
+            {
+              "id": "add-points-hint-3",
+              "content": "Read Gx,Gy,Qx,Qy,p. Reduce Qx−Gx and find its inverse as in field 1. Reduce (Qy−Gy)*inverse to get λ, then λ²−Gx−Qx to get X, then λ*(Gx−X)−Gy to get Y. Submit [X,Y] to add-points. The displayed G and Q have different horizontal coordinates."
             }
           ]
         },
         {
           "id": "double",
-          "label": "The same point twice = tangent",
+          "label": "Add G to itself",
           "hints": [
             {
               "id": "double-hint-1",
-              "content": "The tangent slope is (3·Gx² + a) / (2·Gy). Forgetting the `+ a` or using Gy instead of 2·Gy are the usual slips. x₃ = λ² − 2·Gx."
+              "content": "To keep adding a point, we also need to add it to itself. The previous slope would divide by zero, so use the supplied tangent slope: the slope of the line following the curve at that point."
+            },
+            {
+              "id": "double-hint-2",
+              "content": "λ=`(3*Gx*Gx+a)*inv(2*Gy,p)`, X=`λ*λ−2*Gx`, Y=`λ*(Gx−X)−Gy`, reducing by p. Example p=5,a=3,G=(1,1): inverse of 2 is 3, λ=6×3=18→3,X=9−2=7→2,Y=3×(1−2)−1=−4→1. Thus 2G=(2,1). If Gy=0, return O without dividing."
+            },
+            {
+              "id": "double-hint-3",
+              "content": "Read Gx,Gy,a,p. Find the inverse of 2*Gy reduced by p. Reduce (3*Gx*Gx+a)*inverse to get λ; reduce λ²−2*Gx to get X and λ*(Gx−X)−Gy to get Y. Submit [X,Y] to double. This exercise’s G has nonzero Gy."
             }
           ]
         },
         {
           "id": "order",
-          "label": "How many steps until O = the order n",
+          "label": "Count additions of G until O",
           "hints": [
             {
               "id": "order-hint-1",
-              "content": "Start at `R, k = G, 1`; the order is k at the moment R becomes None. Counting from 0 is off by one. One blank line after the def."
+              "content": "O is the special point acting as zero for point addition. Repeatedly add G and count the first return to O. This count, the order n, determines which number to use for response remainders."
+            },
+            {
+              "id": "order-hint-2",
+              "content": "Start T=G,k=1; repeat T=T+G,k=k+1 until T=O. That first k is n. O+point=point; equal horizontal coordinates and vertical coordinates summing to remainder zero give O. Example p=5,a=3,G=(1,1): G,(2,1),(2,4),(1,4),O, so n=5. The third point is field 2’s example. For the fourth, λ=(4−1)*inv(2−1,5)=3, X=9−1−2=6→1,Y=3×(1−1)−1=−1→4."
+            },
+            {
+              "id": "order-hint-3",
+              "content": "Write rows “1:G,2:field 3’s point”. Add G to the current point: equal horizontal coordinates and vertical sum divisible by p give O; equal points use field 3; otherwise use field 2. Stop at the first O. Submit that row number to order and keep it as n. Keep the point table too. These exercises return to O within seven additions."
             }
           ]
         },
         {
           "id": "response",
-          "label": "Move 3: response s = r + e·x (mod n)",
+          "label": "Make the response s to challenge e",
           "hints": [
             {
               "id": "response-hint-1",
-              "content": "Reduce by n (the order you counted on line 6), not by p: `(r + e * x) % n`."
+              "content": "A public key is a public point made from a secret number. The prover, who holds the secret, masks it with a freshly and randomly selected number r, called a nonce. Fix its point R first, receive the verifier’s challenge number e, then make response s. The verifier is the person checking the claim."
+            },
+            {
+              "id": "response-hint-2",
+              "content": "`k*G` means add G k times; 0*G=O. Set P=x*G,R=r*G,s=(r+e*x) reduced by n. Example n=5,r=2,e=3,x=2: 2+3×2=8→3. Coordinates use p, counts use n: these numbers serve different roles and need not be equal."
+            },
+            {
+              "id": "response-hint-3",
+              "content": "Read x,r,e and your n from field 4. Multiply e*x, add r, then subtract multiples of n to reach 0..n−1. Submit s to response and keep it. The exercise exposes x,r for practice; a real prover would not send them."
             }
           ]
         },
         {
           "id": "verify",
-          "label": "The check s·G = R + e·P",
+          "label": "Check the response using public points",
           "hints": [
             {
               "id": "verify-hint-1",
-              "content": "s in `ec_mul(s, G)` is line 9's value. It must equal the right side `ec_add(R, ec_mul(e, P))`; if not, one of s, R, P is off."
+              "content": "The verifier can compare a point made from the response with a point made from the public information, without receiving the secret or nonce. One matching record alone does not establish that its maker knows the secret."
+            },
+            {
+              "id": "verify-hint-2",
+              "content": "`s*G=R+e*P` follows from `(r+e*x)*G=r*G+e*(x*G)`. With field 4’s example, x=2,r=2,e=3 give s=3,P=R=2G=(2,1). The left is 3G=(2,4). The right is 2G+3*(2G)=8G=3G since 5G=O."
+            },
+            {
+              "id": "verify-hint-3",
+              "content": "Using your field 4 table, read xG=P and rG=R. Row s is sG; row (e*x reduced by n) is eP. Compute R+eP by the point rules and compare it with sG. Submit the matching point [X,Y] to verify. Row zero is O; reduce row indices by n."
             }
           ]
         },
         {
           "id": "nonce-reuse",
-          "label": "Extract the secret from a key that reused its nonce",
+          "label": "Recover a secret after nonce reuse",
           "hints": [
             {
               "id": "nonce-reuse-hint-1",
-              "content": "(s1 − s2)/(e1 − e2) mod n: the inverse is `pow(e1 - e2, n - 2, n)`, then `% n`. Check `ec_mul(v, G) == P1` for your value v."
+              "content": "Another person answered two different challenges using the same nonce. Subtracting their responses cancels that nonce. The remaining value is the secret times the challenge difference, so an inverse recovers the secret."
+            },
+            {
+              "id": "nonce-reuse-hint-2",
+              "content": "Reduce d=e1−e2 and z=s1−s2 by n. The secret is z*inv(d,n), reduced by n. Here n is prime and e1 differs from e2, so d is nonzero and invertible. Example n=5,e1=1,s1=0,e2=3,s2=1: d=−2→3,z=−1→4,inverse of 3 is 2,4×2=8→3. The recovered secret is 3."
+            },
+            {
+              "id": "nonce-reuse-hint-3",
+              "content": "Read e1,s1,e2,s2 and your n. Reduce d=e1−e2,z=s1−s2. Find v in 1..n−1 for which d*v has remainder 1. Submit z*v reduced by n to nonce-reuse. Optionally check that this multiple of G equals P1. These are another person’s records, so your displayed x is not the answer to copy."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "The same 12 lines on another curve — produce s",
+          "label": "Construct a passing record when the challenge comes first",
           "hints": [
             {
               "id": "transfer-hint-1",
-              "content": "Rebind p, a, G to p2, a2, G2, then recount the order (a different curve has a different n). Reduce by the new order."
+              "content": "Now investigate a broken order of messages: the challenge is visible first. For another public key whose secret is not supplied, choose a response and construct the first point afterward to satisfy the equation. This makes one passing record; it is not a proof to a verifier following the normal order."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "Negate a point by −(X,Y)=(X,−Y reduced by p); −O=O. Choose s in 0..n−1 and set `R=s*G−ef*P2`; then `s*G=R+ef*P2`. Example p=5,a=3,G=(1,1),P2=(2,1),ef=1: choose s=3. sG=(2,4) and −efP2=(2,4); their sum is G=(1,1). Indeed G+P2=3G. Choosing s=4 gives R=2G instead; both records pass."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Read P2,ef and your n. Choose s in 0..n−1; use your table for sG. Add P2 ef times to get B. Negate B’s vertical coordinate by p (−O=O), then add it to sG using the point rules to get R. If R=O, advance s and retry; the finite list has only one excluded choice. Submit [R horizontal,R vertical,s] to transfer. Check the public equation R+ef*P2=sG yourself."
             }
           ]
         }

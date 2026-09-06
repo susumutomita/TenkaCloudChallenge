@@ -29,6 +29,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-schnorr-drill"
@@ -60,6 +61,7 @@ CHECKPOINTS = (
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -71,12 +73,12 @@ _WORKBENCH = PortalEditorSupport(
     root=ROOT,
     seed=SEED,
     problem_id='ac26-w3-schnorr-drill',
-    problem_name='ec_add は、4 行の計算に場合分けを足しただけ',
-    problem_name_en='ec_add is four lines of arithmetic plus the cases',
-    description='手元の Python で 1 行打って、出た値を貼る。12 行で、有限体の逆元 → 曲線の足し算 → 位数 → 公開鍵 → Schnorr の 3 手 → 検証式 → nonce 再利用で秘密が出る → 別の曲線、を自分の手で出した数だけで通す。',
-    description_en="Type one line in your own Python, paste the value it prints. Twelve lines: the field inverse → point addition → the order → the public key → Schnorr's three moves → the check → the secret falls out of a reused nonce → another curve — on numbers you produced yourself.",
-    checkpoint_labels={'field-inv': '逆元 — 掛けて 1 になる相手', 'add-points': '3 つ目の交点を折り返す = G + Q', 'double': '同じ点を 2 回 = 接線', 'order': '一周して O に戻るまでの回数 = 位数 n', 'response': '手 3: レスポンス s = r + e·x (mod n)', 'verify': '検証式 s·G = R + e·P', 'nonce-reuse': 'nonce を使い回した鍵から秘密を取り出す', 'transfer': '別の曲線で同じ 12 行 — s を出す'},
-    checkpoint_labels_en={'field-inv': 'The inverse — the partner that multiplies to 1', 'add-points': 'Reflect the third intersection = G + Q', 'double': 'The same point twice = tangent', 'order': 'How many steps until O = the order n', 'response': 'Move 3: response s = r + e·x (mod n)', 'verify': 'The check s·G = R + e·P', 'nonce-reuse': 'Extract the secret from a key that reused its nonce', 'transfer': 'The same 12 lines on another curve — produce s'},
+    problem_name='秘密を送らずに確かめる — Schnorrの順番を試す',
+    problem_name_en='Check without sending the secret — test the order of Schnorr',
+    description='小さい数で点を足し、秘密を送らずに返事を確かめます。同じ乱数の再利用で秘密を取り出し、最後は質問を先に知った場合の通る記録を自作します。',
+    description_en='Add points with small numbers and check a response without sending the secret. Recover a secret after nonce reuse, then construct a passing record when the challenge is known first.',
+    checkpoint_labels={'field-inv': '掛けて1になる相手を見つける', 'add-points': '違う2点 G と Q を足す', 'double': '同じ点 G を2回足す', 'order': 'G を何回足すと O に戻るか', 'response': '質問 e への返事 s を作る', 'verify': '公開された点だけで返事を確かめる', 'nonce-reuse': '同じ乱数を使った人の秘密を取り出す', 'transfer': '質問が先なら通る記録を自作できるか'},
+    checkpoint_labels_en={'field-inv': 'Find the partner that multiplies to 1', 'add-points': 'Add two different points G and Q', 'double': 'Add G to itself', 'order': 'Count additions of G until O', 'response': 'Make the response s to challenge e', 'verify': 'Check the response using public points', 'nonce-reuse': 'Recover a secret after nonce reuse', 'transfer': 'Construct a passing record when the challenge comes first'},
     submitted_files=('schnorr_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,
@@ -218,7 +220,24 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 
+def load_public_snapshot() -> dict[str, object]:
+    """Trusted supervisor fetch; learner subprocesses receive only these public fields."""
+    url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if not url:
+        raise RuntimeError("VERIFIER_PUBLIC_URL is required")
+    with urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        raw = response.read(MAX_BODY_BYTES + 1)
+    if len(raw) > MAX_BODY_BYTES:
+        raise RuntimeError("public evidence exceeds the size limit")
+    payload = json.loads(raw)
+    if not isinstance(payload, dict) or not isinstance(payload.get("public"), dict):
+        raise RuntimeError("invalid public evidence")
+    return {key: payload[key] for key in ("public", "pointKeys", "assignments", "lines")}
+
+
 def main() -> None:
+    protect_supervisor()
+    _WORKBENCH.public_payload = load_public_snapshot()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

@@ -1,7 +1,6 @@
 """Public tests — readable, and deliberately not the grader.
 
-Two parts. Part 1 checks the twelve functions on the LECTURE example (the curve
-y^2 = x^3 + x + 6 mod 11 and the one-digit Schnorr numbers from the statement), whose
+Two parts. Part 1 checks the scratchpad functions on the one-digit example from the free statement, whose
 answers are printed in the statement — so it can say PASS / FAIL. Part 2 prints what
 your functions return on THIS deployment's numbers, which is exactly what your own
 python3 would print for each drill line. Those are the values you paste into the answer
@@ -55,7 +54,7 @@ def _public_payload() -> dict:
 
 
 def _points_restored(payload: dict) -> dict:
-    """The payload's public dict with `G`, `Q`, `P1`, `G2` back as tuples (JSON has no
+    """The payload's public dict with `G`, `Q`, `P1`, `P2` back as tuples (JSON has no
     tuple, and the drill's own functions compare and print points)."""
     point_keys = frozenset(payload.get("pointKeys", ()))
     return {
@@ -64,8 +63,8 @@ def _points_restored(payload: dict) -> dict:
     }
 
 
-# The lecture's curve, y^2 = x^3 + x + 6 (mod 11), generator P = (2, 7) of order 13.
-LECTURE = dict(p=11, a=1, b=6, G=(2, 7), n=13)
+# Independent one-digit example from the free statement (not a deployment answer).
+EXAMPLE = dict(p=5, a=3, b=2, G=(1, 1), n=5)
 
 
 def _only(name: str) -> bool:
@@ -85,20 +84,23 @@ def _check(name: str, got, expected) -> bool:
 
 
 def part1() -> bool:
-    p, a, G, n = LECTURE["p"], LECTURE["a"], LECTURE["G"], LECTURE["n"]
+    p, a, G, n = EXAMPLE["p"], EXAMPLE["a"], EXAMPLE["G"], EXAMPLE["n"]
     ok = True
-    ok &= _check("field_neg(3, 7)", drill.field_neg(3, 7), 4)
+    ok &= _check("field_neg(2, 5)", drill.field_neg(2, 5), 3)
     ok &= _check("field_inv(3, 7)", drill.field_inv(3, 7), 5)
-    ok &= _check("lambda_chord((2,7),(5,2), 11)", drill.lambda_chord((2, 7), (5, 2), 11), 2)
-    ok &= _check("add_points((2,7),(5,2), 11) = 3P", drill.add_points((2, 7), (5, 2), 11), (8, 3))
-    ok &= _check("double((2,7), 11, 1) = 2P", drill.double(G, p, a), (5, 2))
-    ok &= _check("order((2,7), 11, 1)", drill.order(G, p, a), n)
-    ok &= _check("pubkey(4, P) = 4P", drill.pubkey(4, G, p, a), (10, 2))
-    ok &= _check("commit(3, P) = 3P", drill.commit(3, G, p, a), (8, 3))
-    ok &= _check("response(r=3, e=2, x=4, n=13)", drill.response(3, 2, 4, 13), 11)
-    ok &= _check("verify_left(11, P) = 11P", drill.verify_left(11, G, p, a), (5, 9))
-    ok &= _check("nonce_reuse(s1=11, s2=5, e1=2, e2=7, n=13) -> x=4", drill.nonce_reuse(11, 5, 2, 7, 13), 4)
-    ok &= _check("transfer(x2=4, r2=3, e2p=2 on the same curve)", drill.transfer(4, 3, 2, G, p, a), 11)
+    ok &= _check("lambda_chord((1,1),(2,1), 5)", drill.lambda_chord(G, (2, 1), p), 0)
+    ok &= _check("add_points((1,1),(2,1), 5)", drill.add_points(G, (2, 1), p), (2, 4))
+    ok &= _check("double((1,1), 5, 3)", drill.double(G, p, a), (2, 1))
+    ok &= _check("order((1,1), 5, 3)", drill.order(G, p, a), n)
+    ok &= _check("pubkey(2, G)", drill.pubkey(2, G, p, a), (2, 1))
+    ok &= _check("commit(2, G)", drill.commit(2, G, p, a), (2, 1))
+    ok &= _check("response(r=2, e=3, x=2, n=5)", drill.response(2, 3, 2, n), 3)
+    ok &= _check("verify_left(3, G)", drill.verify_left(3, G, p, a), (2, 4))
+    ok &= _check("nonce_reuse(s1=0,s2=1,e1=1,e2=3,n=5)", drill.nonce_reuse(0, 1, 1, 3, n), 3)
+    record = drill.transfer((2, 1), 1, G, p, a)
+    # Four possible records for this PUBLIC example, from R=(s-2)*G.
+    passes = isinstance(record, (list, tuple)) and tuple(record) in {(2, 4, 0), (1, 4, 1), (1, 1, 3), (2, 1, 4)}
+    ok &= _check("transfer: public example equation", passes, True)
     return bool(ok)
 
 
@@ -124,7 +126,7 @@ def part2() -> None:
             pub["s1"], pub["s2"], pub["e1"], pub["e2"], drill.order(G, p, a)
         ),
         "transfer": lambda: drill.transfer(
-            pub["x2"], pub["r2"], pub["e2p"], pub["G2"], pub["p2"], pub["a2"]
+            pub["P2"], pub["ef"], G, p, a
         ),
     }
     print()
@@ -140,7 +142,7 @@ def part2() -> None:
 
 
 def main() -> int:
-    print("== part 1: the lecture example (mod 11, P = (2, 7), n = 13) ==")
+    print("== part 1: the public example (p=5, a=3, b=2, G=(1,1), n=5) ==")
     ok = part1()
     part2()
     print()

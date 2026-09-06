@@ -54,7 +54,8 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import GRADED, LINES, normalize_answer, public_payload
-from verifier.expected import expected_for
+from verifier.expected import expected_for, valid_construction
+from fixtures.generate import setting
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-schnorr-drill"
@@ -95,12 +96,14 @@ def _limits() -> None:
 def _check_line(line: str, submission: object) -> bool:
     """The value the learner pasted for one drill line, against this deployment's value.
 
-    A tuple may arrive as `[a, b, c]`, `(a, b, c)` or `a, b, c`; an integer as a number
-    or a digit string. The comparison is exact: there is one right value per line per
-    seed, and it is the value the line prints when typed against this seed's numbers.
+    The first seven fields compare their computed integer or point with the expected
+    value. The final field instead accepts every canonical point/response triple that
+    satisfies the public verification equation.
     """
     if line not in GRADED or line not in LINES:
         return False
+    if line == "transfer":
+        return valid_construction(setting(SEED)["public"], submission)
     answer = submission
     if isinstance(answer, str):
         try:

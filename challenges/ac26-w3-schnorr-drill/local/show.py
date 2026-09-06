@@ -1,7 +1,6 @@
 """`make inspect` / the Portal's inspect button — this deployment's numbers, as Python.
 
-Everything is printed as assignment statements so the learner can paste the whole block
-into `python3` and start typing the twelve lines. The expected values are NOT printed:
+Assignments support an optional Python scratchpad. Paper solvers read the same numbers. The expected values are NOT printed:
 they are what the learner's own lines produce. The secret of the attack key is not
 printed either — extracting it is line 11.
 """
@@ -51,7 +50,7 @@ def _points_restored(payload: dict) -> dict:
     """The payload's public dict with its curve points back as tuples.
 
     JSON has no tuple, so a payload fetched over `GET /public` hands `G`, `Q`, `P1` and
-    `G2` back as lists. Which keys those are is carried by the payload itself rather
+    `P2` back as lists. Which keys those are is carried by the payload itself rather
     than restated here.
     """
     point_keys = frozenset(payload.get("pointKeys", ()))
@@ -64,23 +63,22 @@ def _points_restored(payload: dict) -> dict:
 def main() -> None:
     payload = _public_payload()
     pub = _points_restored(payload)
-    print("== この deploy の数（そのまま Python に貼る） ==")
-    print("== paste this block into python3 first ==")
+    print("== この問題の公開値 / Public values for this problem ==")
+    print("紙で計算できます。Pythonを使う場合だけ、この代入文をコピーできます。 / Copy these assignments only if using Python.")
     print()
     print(payload["assignments"])
     print()
-    print("== what each name is ==")
-    print(f"  curve      : y^2 = x^3 + {pub['a']}x + {pub['b']}  (mod {pub['p']}),  G = {pub['G']}")
-    print("  t          : a trial field element for lines 1-2")
-    print(f"  Q          : another point on the curve, {pub['Q']}, for lines 3-4")
-    print("  x, r, e    : your secret key, your nonce, the verifier's challenge (lines 7-10)")
-    print("  P1         : a DIFFERENT signer's public key, who reused one nonce for two")
-    print("               challenges: (e1, s1) and (e2, s2). Its secret is not shown (line 11).")
-    print("  p2, a2, b2, G2, x2, r2, e2p : the transfer curve and its key/nonce/challenge (line 12)")
-    print()
-    print("== what is NOT shown ==")
-    print("  the order n of G (line 6 counts it), the attack signer's secret (line 11),")
-    print("  and the value any line prints — those are yours to produce.")
+    print("== 名前 / Names ==")
+    print("p,a,b: Y² と X³+aX+b の余りを一致させる点の式 / curve parameters")
+    print("G: 繰り返し足す基準点 / base point; Gx,Gy: 横と縦 / coordinates")
+    print("t: 逆元を探す数 / number whose inverse you find")
+    print("Q: 違う点の足し算に使う点 / second point for addition")
+    print("x,r,e: 練習する人の秘密・使い捨ての数・質問 / practice secret, nonce, challenge")
+    print("P1,e1,s1,e2,s2: 別の人が同じrで違う質問へ返した2応答 / nonce-reuse records")
+    print("P2,ef: 最後の別の公開鍵・先に見える質問 / final public key and early challenge")
+    print("欄4でGの倍数表を作り、nを求めて後の欄でも使います。")
+    print("Keep the multiples-of-G table and order n you calculate in field 4.")
+
 
 
 if __name__ == "__main__":
