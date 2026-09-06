@@ -1,4 +1,4 @@
-/** Predictions use public misuse evidence and settle only after simultaneous publication. */
+/** Predictions use public repeated-r records and settle only after simultaneous publication. */
 import { isHand } from "./commitment.ts";
 import { huntKey, storedHuntKey, pruneRetiredHuntAttempts, predictionKey, predictionTeam } from "./hunt-key.ts";
 import { decodeArtifact } from "./ledger-codec.ts";
@@ -27,7 +27,9 @@ function canPredict(state: CryptoBattleState, c: Contract): boolean {
   if (c.task.kind !== "rps-duel") return false;
   const duelId = c.task.duelId;
   return c.status === "open" && c.expiresAtMs > (state.nowMs ?? 0)
-    && c.rps?.commitment !== undefined && c.rps.opening === undefined
+    // A hand held privately by the judge has not been published. The final
+    // opening completes both Orders in the same state transition as publication.
+    && c.rps?.commitment !== undefined
     && state.contracts.some(other => other.task.kind === "rps-duel" && other.task.duelId === duelId && other.teamId !== c.teamId && other.status === "open");
 }
 
@@ -37,7 +39,7 @@ export function validateRpsHunt(state: CryptoBattleState, attacker: string, op: 
   if (!state.teams[attacker] || !state.teams[op.targetTeamId] || op.targetTeamId === attacker) return { ok: false, error: "Choose another team for the prediction." };
   if (!isHand(op.predictedHand)) return { ok: false, error: "The predicted hand must be 1, 2 or 3." };
   const order = targetOrder(state, op.targetTeamId, op.duelId);
-  if (!order || !canPredict(state, order)) return { ok: false, error: "Predict after the target seals a number and before they open it." };
+  if (!order || !canPredict(state, order)) return { ok: false, error: "Predict after the target seals a number and before both hands become public." };
   if (order.rps?.predictions?.[predictionKey(state, attacker)]) return { ok: false, error: "Your prediction for this duel was already submitted; it cannot be replaced." };
   if (rpsReuseEvidence(state, op.targetTeamId).length < 2) return { ok: false, error: "Two public openings from different duels must show the same hiding number." };
   const key = storedHuntKey(state, huntKey(attacker, op.targetTeamId, state.teams[op.targetTeamId]!.generation));
@@ -107,7 +109,7 @@ export function projectRpsHunt(state: CryptoBattleState, reader: string): RpsHun
     let evidence = evidenceByTeam.get(c.teamId);
     if (!evidence) { evidence = rpsReuseEvidence(state, c.teamId); evidenceByTeam.set(c.teamId, evidence); }
     if (evidence.length < 2) continue;
-    targets.push({ targetTeamId: c.teamId, duelId: c.task.duelId, generation: state.teams[c.teamId]!.generation, commitment: c.rps!.commitment!, remainingMs: c.expiresAtMs - state.nowMs!, evidence });
+    targets.push({ targetTeamId: c.teamId, duelId: c.task.duelId, generation: state.teams[c.teamId]!.generation, commitment: c.rps!.commitment!, openingHeld: c.rps?.opening !== undefined, remainingMs: c.expiresAtMs - state.nowMs!, evidence });
   }
   const lastResult = state.teams[reader]!.lastRpsHunt;
   return { targets, pending, winPoints: state.config.scores.huntBonus, ...(lastResult ? { lastResult } : {}) };

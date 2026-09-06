@@ -157,6 +157,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
       && typeof (x as Record<string, unknown>).generation === "number";
     for (const t of h.targets) {
       if (!identified(t) || typeof t.commitment !== "number" || typeof t.remainingMs !== "number" || !Array.isArray(t.evidence)) return false;
+      if (t.openingHeld !== undefined && typeof t.openingHeld !== "boolean") return false;
       for (const a of t.evidence) if (!a || a.kind !== "rps-open" || typeof a.contractId !== "string" || typeof a.id !== "string" || !hand(a.hand) || typeof a.randomness !== "number" || typeof a.commitment !== "number") return false;
     }
     for (const p of h.pending) if (!identified(p) || !hand(p.predictedHand)) return false;

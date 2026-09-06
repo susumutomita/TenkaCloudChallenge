@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { handWork, HANDS, isHand, isRandomness, RPS_RANDOMNESS } from "../game/src/commitment.ts";
 import type { ContractProjection, CryptoBattleOp, CryptoBattleProjection } from "../game/src/types.ts";
 import ConceptExplanation from "./ConceptExplanation.tsx";
@@ -9,9 +9,10 @@ export const POWER_NINES = RPS_RANDOMNESS.map(r => ({ r, value: handWork(1, r).f
 const names = { ja: ["グー", "チョキ", "パー"], en: ["Rock", "Scissors", "Paper"] } as const;
 const inputStyle = { width: 80, padding: 8, border: "1px solid #8298b3", borderRadius: 6, background: "#fff", color: "#16212e", fontSize: 16 } as const;
 
-export default function RpsDuel({ order, opponentName, locale, submitting, onSubmit }: {
+export default function RpsDuel({ order, opponentName, locale, submitting, onSubmit, prediction }: {
   readonly order: ContractProjection; readonly opponentName: string; readonly locale: Locale;
   readonly submitting: boolean; readonly onSubmit: (op: CryptoBattleOp) => Promise<void>;
+  readonly prediction?: ReactNode;
 }) {
   const [handText, setHand] = useState("");
   const [randomText, setRandom] = useState("");
@@ -28,7 +29,7 @@ export default function RpsDuel({ order, opponentName, locale, submitting, onSub
     <p className="tc-card-hint">{ja ? `対戦相手：${opponentName}。勝ち +${order.points}、引き分け +${task.drawPoints}、負け 0。必要な操作が残ったまま期限切れ：${task.expiryPenalty} 点。先に手を見せると相手に勝つ手を選ばれるので、数字に隠してから同時に開きます。` : `Opponent: ${opponentName}. Win +${order.points}, draw +${task.drawPoints}, loss 0; expiry with an action outstanding: ${task.expiryPenalty}. Hide your hand in a number first, then open together so nobody can counter a hand they have already seen.`}</p>
     <strong>{opened ? (ja ? "手を預けました。相手の開封待ちです" : "Opening accepted. Waiting for your opponent") : bothSealed ? (ja ? "開封できます。② 控えた手と隠す数を、審判へ渡す" : "2. Give the judge the hand and hiding number from your notes") : sealed ? (ja ? "相手が封じるのを待っています" : "Number sealed. Waiting for your opponent's number") : (ja ? "① 手を選び、隠した数字を 1 つ出す" : "1. Choose a hand and send one sealed number")}</strong>
     {!opened && <>
-      <p className="tc-card-hint">{ja ? "手の番号 m は 1〜3。隠す数 r は 0〜10 のくじで毎回引き直してください（0〜10 の紙を 1 枚ずつ用意し、毎回戻して引きます）。同じ r の使い回しは手を読まれる原因になります。手と r は開くときに必要なので、紙にも控えてください。" : "Hand m is 1–3. Draw r from eleven slips marked 0–10, returning the slip each time; reuse makes hands predictable. Write both down: you need them to open."}</p>
+      <p className="tc-card-hint">{ja ? "手の番号 m は 1〜3。隠す数 r は 0〜10 のくじで毎回引き直してください（0〜10 の紙を 1 枚ずつ用意し、毎回戻して引きます）。同じ r を使い続けると予測されますが、くじで偶然同じ数が出ただけでは、次の手は分かりません。手と r は開くときに必要なので、紙にも控えてください。" : "Hand m is 1–3. Draw r from eleven slips marked 0–10, returning the slip each time. Continuing to use one r permits predictions; a chance repeat does not reveal the next hand. Write both down: you need them to open."}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 18, margin: "12px 0" }}>
         <label>{ja ? "手の番号" : "Hand number"} <select aria-label={ja ? "手の番号" : "Hand number"} value={handText} onChange={e => setHand(e.target.value)} style={{ ...inputStyle, width: 140 }}>
           <option value="">{ja ? "選んでください" : "Choose a hand"}</option>
@@ -52,6 +53,7 @@ export default function RpsDuel({ order, opponentName, locale, submitting, onSub
       <button type="button" className="tc-submit-small" disabled={submitting || !validChoice || !/^\d{1,2}$/.test(sealedText.trim())} onClick={() => void onSubmit({ kind: "rps-commit", contractId: order.id, commitment: Number(sealedText) })}>{ja ? "数字を封じる" : "Seal the number"}</button>
     </>}
     {sealed && <p className="tc-card-hint">{ja ? `自分の c=${task.myCommitment}。相手：${task.opponentCommitment === undefined ? "まだです" : `c=${task.opponentCommitment}`}。` : `Your c=${task.myCommitment}. Opponent: ${task.opponentCommitment === undefined ? "pending" : `c=${task.opponentCommitment}`}.`}</p>}
+    {prediction}
     {sealed && !opened && <>
       <p className="tc-card-hint">{ja ? "上の 2 つの欄を紙の控えと照らしてから押してください。審判は同じ計算で c を確かめ、両者の手がそろってから公開します。不一致なら減点なしで修正できます。開封した手と r が受理された後は、その開封内容を変更できません。" : "Check the two fields against your notes. The judge recomputes c and publishes only after both hands arrive. A mismatch can be corrected without a penalty. Once the hand and r are accepted, that opening cannot be replaced."}</p>
       <button type="button" className="tc-submit-small" disabled={submitting || !validChoice || !bothSealed} onClick={() => void onSubmit({ kind: "rps-open", contractId: order.id, hand, randomness })}>{ja ? "手を審判へ渡す" : "Give my opening to the judge"}</button>
@@ -85,7 +87,8 @@ export function rpsRejection(error: string, locale: Locale): string {
     "RPS prediction requires a running match.": "予測は試合の開始後、終了前に送ってください。",
     "Choose another team for the prediction.": "自分以外のチームを予測の対象にしてください。",
     "The predicted hand must be 1, 2 or 3.": "予測した手をグー・チョキ・パーから選んでください。",
-    "Predict after the target seals a number and before they open it.": "相手が数字を封じたあと、手を審判に渡す前に予測してください。この対戦は受付を終了した可能性があります。",
+    "Predict after the target seals a number and before they open it.": "相手が数字を封じたあとに予測してください。この対戦は受付を終了した可能性があります。",
+    "Predict after the target seals a number and before both hands become public.": "相手が数字を封じてから、両者の手が公開される前まで予測できます。公開済みか期限切れの対戦は受付終了です。",
     "Your prediction for this duel was already submitted; it cannot be replaced.": "この対戦の予測は受け付け済みです。変更はできません。",
     "Two public openings from different duels must show the same hiding number.": "異なる2回の公開記録で、相手の隠す数が同じという証拠が必要です。",
     "No shared HUNT attempts remain for this target generation.": "この相手・世代へのHUNTの試行回数は残っていません。かけらのHUNTと共通です。",

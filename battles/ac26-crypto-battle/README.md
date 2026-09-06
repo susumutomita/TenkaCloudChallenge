@@ -198,16 +198,20 @@ connect the calculation to its purpose.
 ## Predict an opponent's sealed hand
 
 This tactic becomes available when two different past public rounds show the same
-hiding number r. Open “NEXT TACTIC FROM THE PUBLIC RECORD” to compare those records,
-the current sealed c, and the free calculation tables. Assume the same r again,
+hiding number r. The current RPS answer area shows an optional prediction form beside
+your opening control, with those public records, the current sealed c and calculation tables. Assume the same r again,
 calculate c for rock, scissors and paper, and submit the matching hand to the judge.
-Past reuse does not guarantee reuse in the current round.
+Past repetition does not guarantee the same r in this round. Drawing r uniformly
+with replacement can repeat a value by chance. If both hand and r are chosen
+independently and uniformly each round, matching a candidate still has only a one-in-three hit rate.
 
 Example: for r=1 the table gives 9. Rock gives 4×9=36→13, scissors
 16×9=144→6, and paper 18×9=162→1, taking remainders after division by 23.
 For c=6, predict scissors.
 
-Submit once per duel before the target opens. Predictions are immutable and private.
+Submit once per duel before both hands become public, including while the judge
+privately holds only the opponent's opening. You can predict, then give your own
+opening; prediction is optional. No held hand or r is shown. Predictions are immutable and private.
 After both hands become public, a hit earns 25 points and a miss costs 8 (score floor 0).
 The three-attempt limit per opponent generation is shared with share-recovery HUNT.
 A timeout without publication cancels the prediction and refunds its attempt.

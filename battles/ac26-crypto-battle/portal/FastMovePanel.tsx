@@ -13,7 +13,7 @@ import {
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import ConceptExplanation from "./ConceptExplanation.tsx";
-import { RpsHuntStatus } from "./RpsHunt.tsx";
+import { RpsHuntStatus, RpsOrderPrediction } from "./RpsHunt.tsx";
 import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
 import HuntPanel from "./HuntPanel.tsx";
@@ -1414,6 +1414,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "rps-duel" && selectedOrder.allowedMethods.includes("duel") && <RpsDuel
         key={`${projection.vault.teamId}:${selectedOrder.id}`} order={selectedOrder} locale={locale} submitting={submitting}
         opponentName={projection.teams[selectedOrder.task.opponentTeamId]?.teamName ?? selectedOrder.task.opponentTeamId}
+        prediction={<RpsOrderPrediction order={selectedOrder} projection={projection} locale={locale} submitting={submitting}
+          onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
         onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
       {selectedOrder?.task.kind === "masked-total" && (

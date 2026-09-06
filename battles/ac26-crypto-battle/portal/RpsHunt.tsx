@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget } from "../game/src/types.ts";
+import type { ContractProjection, CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget } from "../game/src/types.ts";
 import { HANDS, isHand } from "../game/src/commitment.ts";
 import { POWER_FOURS, POWER_NINES } from "./RpsDuel.tsx";
 
@@ -16,8 +16,11 @@ export function RpsHuntCandidate({ target, projection, locale, submitting, onSub
   const left = budget?.generation === target.generation ? Math.max(0, budget.max - budget.spent) : 0;
   const hand = Number(choice);
   const name = projection.teams[target.targetTeamId]?.teamName ?? target.targetTeamId;
+  const pastR = target.evidence[0]?.randomness;
+  const hidingFactor = POWER_NINES.find(a => a.r === pastR)?.value;
   return <section className="tc-hunt-card" aria-label={ja ? `${name}の手を予測` : `Predict ${name}'s hand`}>
-    <h3 style={{ fontSize: 17, margin: "4px 0" }}>{ja ? `${name}の手を、開く前に予測する` : `Predict ${name}'s hand before it opens`}</h3>
+    <h3 style={{ fontSize: 17, margin: "4px 0" }}>{ja ? `${name}の手を予測 · 受付中` : `Predict ${name}'s hand · accepting predictions`}</h3>
+    <p className="tc-card-hint" role="status">{ja ? `${target.openingHeld ? "相手の手は審判が預かっています。" : "相手の手は未公開です。"}両者の手がそろって公開されるまで受付中（期限まであと ${Math.ceil(target.remainingMs / 1000)} 秒）。預かり中の手や r は見えません。` : `${target.openingHeld ? "The judge privately holds the opponent's opening." : "The opponent's hand is unpublished."} Predictions remain open until both hands are published (${Math.ceil(target.remainingMs / 1000)}s to deadline). The held hand and r are not visible.`}</p>
     <p className="tc-card-hint">{ja ? `HUNT · じゃんけん。的中 +${projection.rpsHunt!.winPoints}、外れ −${projection.wrongHuntCost}。かけらの HUNT と共通で、あと ${left} 回（相手の世代 ${target.generation}）。同じ対戦への予測は 1 回だけです。` : `HUNT · RPS. Hit +${projection.rpsHunt!.winPoints}, miss −${projection.wrongHuntCost}. ${left} attempts left, shared with share HUNT for target generation ${target.generation}. One prediction per duel.`}</p>
     <p className="tc-card-hint">{ja ? "c は手を隠して先に出した数字、m は手の番号、r はその手を隠すために混ぜた数です。" : "c is the sealed number, m is the hand number, and r is the number mixed in to hide the hand."}</p>
     <strong>{ja ? "① 過去の 2 回で、隠す数 r が同じか見る" : "1. Compare the hiding numbers r in two past rounds"}</strong>
@@ -26,6 +29,12 @@ export function RpsHuntCandidate({ target, projection, locale, submitting, onSub
       <tbody>{target.evidence.map((a, i) => <tr key={a.id}><td>{ja ? `過去 ${i + 1}（ORDER #${a.contractId.split("-c").pop()}）` : `Past ${i + 1} (ORDER #${a.contractId.split("-c").pop()})`}</td><td>{a.commitment}</td><td>{handName(a.hand, locale)}</td><td>{a.randomness}</td></tr>)}</tbody>
     </table>
     <p>{ja ? `今回、相手が封じた数字は c=${target.commitment}。まだ手は公開されていません。` : `The target has now sealed c=${target.commitment}. Their hand is still unpublished.`}</p>
+    <p className="tc-card-hint">{ja ? `今回も過去の r=${pastR} を使ったと仮定します。c = 4^m × 9^r を 23 で割った余り。下の積を計算して23で割り、今回の c と照合します（m は手の番号）。` : `Assume the past r=${pastR} was used again. c is the remainder of 4^m × 9^r after division by 23. Calculate each product, take its remainder, and compare it with the current c; m is the hand number.`}</p>
+    <table style={{ width: "100%", textAlign: "left", fontSize: 13 }}>
+      <thead><tr><th>{ja ? "予測する手" : "Possible hand"}</th><th>{ja ? "計算する積" : "Product to calculate"}</th></tr></thead>
+      <tbody>{POWER_FOURS.map(a => <tr key={a.m}><td>{handName(a.m, locale)}</td><td>{a.value} × {hidingFactor}</td></tr>)}</tbody>
+    </table>
+    <p className="tc-card-hint">{ja ? "どの手も一致しなければ、この r では今回の c を説明できません。一致しても的中保証はありません。今回の r は未公開です。相手が手と r を毎回独立に等確率で選ぶ場合、照合後の的中率も3分の1です。" : "If none match, this r cannot explain the current c. A match does not guarantee a hit: the current r is unpublished. If the opponent chooses both hand and r independently and uniformly each time, the chance of a hit after this comparison is still one in three."}</p>
     <details>
       <summary style={{ cursor: "pointer", fontWeight: 600 }}>{ja ? "手を予測する計算のしかた" : "How to calculate the predicted hand"}</summary>
     <strong>{ja ? "② 今回も同じ r を使ったと仮定し、3 つの手を試す" : "2. Assume r was reused again and try all three hands"}</strong>
@@ -39,8 +48,25 @@ export function RpsHuntCandidate({ target, projection, locale, submitting, onSub
       <option value="">{ja ? "選んでください" : "Choose a hand"}</option>{HANDS.map(m => <option key={m} value={m}>{handName(m, locale)}</option>)}
     </select></label>
     <button type="button" className="tc-submit-small" disabled={submitting || !choice || !isHand(hand) || left === 0 || target.remainingMs <= 0} onClick={() => void onSubmit({ kind: "hunt-rps", targetTeamId: target.targetTeamId, duelId: target.duelId, predictedHand: hand })}>{ja ? "予測を審判へ預ける" : "Submit prediction to the judge"}</button>
-    <p className="tc-card-hint">{ja ? "予測は非公開・変更不可。相手の開封前に送信。両者の公開後に採点し、時間切れなら回数を返します。" : "Private, final prediction. Submit before the target opens. Score after both openings; timeout refunds the attempt."}</p>
+    <p className="tc-card-hint">{ja ? "予測は非公開・変更不可。両者の手が公開される前に送信し、公開後に採点します。未公開のまま時間切れなら回数を返します。" : "Private, final prediction. Submit before both hands become public; scoring follows publication. Timeout without publication refunds the attempt."}</p>
   </section>;
+}
+
+/** Keep the active duel's attack beside its opening control, without moving its inputs. */
+export function RpsOrderPrediction({ order, ...props }: {
+  readonly order: ContractProjection; readonly projection: CryptoBattleProjection; readonly locale: Locale;
+  readonly submitting: boolean; readonly onSubmit: (op: CryptoBattleOp) => Promise<void>;
+}) {
+  if (order.task.kind !== "rps-duel") return null;
+  const task = order.task, ja = props.locale === "ja";
+  const pending = props.projection.rpsHunt?.pending.find(p => p.duelId === task.duelId && p.targetTeamId === task.opponentTeamId);
+  if (pending) return <p className="tc-card-hint" role="status">{ja ? `予測を受け付けました。まだ採点していません。${task.myOpening ? "自分の手は審判が預かっています。両者の公開を待ちます。" : "自分の手を審判へ渡し、両者の公開を待ちます。"}` : `Prediction accepted, not scored yet. ${task.myOpening ? "The judge already holds your opening. Wait for both hands to become public." : "Give your opening to the judge and wait for both hands to become public."}`}</p>;
+  const target = props.projection.rpsHunt?.targets.find(t => t.duelId === task.duelId && t.targetTeamId === task.opponentTeamId);
+  if (!target || target.remainingMs <= 0) return null;
+  return <div aria-label={ja ? "この対戦の予測" : "Prediction for this duel"}>
+    <p className="tc-card-hint">{ja ? `相手の手を予測できます。${task.myOpening ? "自分の手は審判が預かっています。両者の公開前なら予測できます。" : "攻撃するなら、予測を預けてから自分の手を開きましょう。"}予測せず、通常の回答を続けてもかまいません。` : `You can predict the opponent's hand. ${task.myOpening ? "The judge already holds your opening. You can predict until both hands become public." : "To attack, submit a prediction before giving your own opening."} You may also continue without predicting.`}</p>
+    <RpsHuntCandidate {...props} target={target} />
+  </div>;
 }
 
 export default function RpsHunt({ projection, locale, submitting, onSubmit }: {
