@@ -1,74 +1,85 @@
-"""Scratchpad for the eleven lines — optional, for when you cannot open Python.
+"""Optional scratchpad / 任意の計算メモ。
 
-The drill is meant to be typed into your own `python3`, one line at a time, after
-pasting the numbers from "Inspect evidence". If you cannot open Python, fill in these
-functions in the Portal editor instead and press "Run public tests": the test prints
-what YOUR functions return on THIS deployment's numbers — exactly what the REPL would
-have printed. Paste those values into the answer fields. Each answer field is a
-single-line input.
+紙で計算して回答欄へ直接提出しても構いません。コードで確かめる場合は、
+問題文に示した式を使って return None を埋め、「公開テストを実行」。
+前半は公開例の PASS/FAIL、後半の your values on THIS deployment は自分の値です。
+後半を表示しただけでは正解ではないので、同じ ID の欄へ提出してください。
+各関数は独立です。Python の別の画面で作った c1 や held はここにはありません。
 
-Each function is one drill line, with the line's names replaced by parameters. a and b
-are the two numbers being added for you, x the small cover laid over each of them,
-huge the fifteen-digit cover of line 5, n the size of the candidate range in line 8.
+You may calculate on paper and submit directly. For a code check, use the
+statement formulas to replace return None, then Run public tests. The first part
+checks a published example; the second prints YOUR outputs. Submit those outputs
+to the matching answer fields for grading. Functions are independent: c1 or held
+created in another Python prompt do not exist here.
+
+Example inputs / 小さい例: a=3, b=2, x=1. The covered pair is (4,3), its sum 7,
+and the original sum 7-2=5. / 覆った組(4,3)、合計7、覆いを外すと7-2=5。
 """
-
 from __future__ import annotations
 
 
 def covered(a: int, b: int, x: int) -> tuple:
-    """Line 1 — the two covered numbers (a + x, b + x), in this order."""
+    """covered: 元の各数に覆いを足す / Return (a+x,b+x), in that order."""
     return None
 
 
 def sum_covered(a: int, b: int, x: int) -> int:
-    """Line 2 — what the holder of the two covered numbers gets by adding them."""
+    """sum-covered: 覆ったまま足す / Return (a+x)+(b+x)."""
     return None
 
 
 def sum_plain(a: int, b: int, x: int) -> int:
-    """Line 3 — the same total written by someone who knows everything: (a + b) + 2x."""
+    """確認用、採点欄なし / Optional comparison: return (a+b)+2*x."""
     return None
 
 
 def same(a: int, b: int, x: int) -> bool:
-    """Line 4 — are lines 2 and 3 the same number?"""
+    """確認用 / Is (a+x)+(b+x) == (a+b)+2*x? No answer field."""
     return None
 
 
 def huge_gap(a: int, b: int, huge: int) -> int:
-    """Line 5 — the same comparison with the fifteen-digit cover, as a difference."""
+    """huge: ((a+huge)+(b+huge))-((a+b)+2*huge) の差 / Return the difference."""
     return None
 
 
 def held(a: int, b: int, x: int) -> tuple:
-    """Line 6 — (the sum the holder returns, the total amount of cover inside it)."""
+    """held: 返事、覆いの総量 / Return ((a+x)+(b+x),2*x)."""
     return None
 
 
 def recover(a: int, b: int, x: int) -> int:
-    """Line 7 — take the cover back off the returned sum."""
+    """recover: 返事から覆いを2個外す / Return (a+x)+(b+x)-2*x."""
     return None
 
 
 def guesses(a: int, x: int, n: int) -> int:
-    """Line 8 — how many candidates for a (0..n-1) stay possible after seeing a + x.
+    """guesses: ここだけ0..n-1の全候補を許す余りの実験 / Separate remainder model.
 
-    A candidate ca stays possible when some cover cx in 0..n-1 lands it on the
-    observed number, counting on a wheel of n ("% n" wraps past n back to 0).
+    observed=(a+x)%n. For each ca in range(n), construct cx=(observed-ca)%n
+    and count the ca for which (ca+cx)%n == observed. % means division remainder.
+    caごとに対応するcxを作り、足し戻せる候補の個数を返します。
+    n=5,observed=2: ca=0,1,2,3,4 match cx=2,1,0,4,3; all five survive.
+    元の生成範囲による絞り込みとは別モデルです / Ignore the generator's narrower ranges.
     """
     return None
 
 
 def gap(a: int, b: int, x: int) -> int:
-    """Line 9 — the difference of the two covered numbers: (a + x) - (b + x)."""
+    """gap: 普通の整数へ戻る / Return (a+x)-(b+x), keeping the sign."""
     return None
 
 
 def product(a: int, b: int, x: int) -> tuple:
-    """Line 10 — (the covered product, every term except x*x, their difference)."""
+    """product: 全値を知る人の分析 / Analysis with all values known.
+
+    p=(a+x)*(b+x), without_square=a*b+(a+b)*x.
+    Return (p,without_square,p-without_square). / 積、x²以外、差の順。
+    Removing only x*x still leaves (a+b)*x. / x²を引くだけでは元の積になりません。
+    """
     return None
 
 
 def wall(a: int, b: int, x: int) -> bool:
-    """Line 11 — is the leftover of line 10 exactly x * x?"""
+    """確認用 / Is (a+x)*(b+x)-(a*b+(a+b)*x) == x*x? No answer field."""
     return None

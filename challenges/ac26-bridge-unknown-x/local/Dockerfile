@@ -3,6 +3,8 @@
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
 RUN useradd --create-home --uid 10001 lab
+# Fail at build time if the pinned image lacks the kernel-filter library.
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
 
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -47,6 +49,9 @@ CMD ["python", "verifier/server.py"]
 # verification for whoever controls Docker -- the stage split prevents accidental
 # answer delivery, not inspection by somebody who builds this stage on purpose.
 FROM participant AS author
+
+# The author-only bootstrap test validates the service environment boundary.
+COPY --chown=lab:lab docker-compose.yml ./docker-compose.yml
 
 COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/

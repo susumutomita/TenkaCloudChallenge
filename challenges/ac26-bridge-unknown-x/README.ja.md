@@ -1,105 +1,93 @@
-# 1 行打って、出た値を貼る — x を知らないまま済む足し算
+# 覆った数で計算し、その限界を試す
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+> Advanced Cryptography Program 2026 の非公式・独立した companion です。講座や
+> 運営者との提携・承認はありません。問題文と実装は独自作成です。質問は講座運営
+> ではなく TenkaCloud リポジトリへお願いします。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 12 · **Chapter:** Bridge 0 /
-Computing Under a Cover · **Role:** `diagnostic` · **想定時間:** 20〜30 分 · **配点:** 100
-· **Status:** draft — 新規 companion は人間のプレイ証拠（#465）が揃うまで draft
+Track `advanced-cryptography-2026`、order 12、難易度 1、20〜30 分、100 点。
 
-## これは何か
+## 参加者の導線
 
-カタログの入口に置く難易度 1 の 1 段目です。関数を書く問題ではありません。自分の `python3` を
-開き、Portal の「証拠を確認」に出た数を貼り、**1 行打って、出た値を貼る**を 11 回繰り返します。
-主題は中学 1 年の文字式 1 行 — `(a + x) + (b + x) = (a + b) + 2x` — コースの全部が立つ、
-「x を知らないまま済む足し算」です。
+起動して**「証拠を確認」**。紙や電卓、任意の `unknown_x_drill.py` エディタで計算し、
+最初の覆った組を提出して「解答済み」を確認します。端末の準備は必須ではありません。
+8 欄は、覆う・足す・大きい覆いで比較・覆いの量を記録・戻す・別モデルの余りで候補を
+数える・差の漏れを観測・積を展開する、という一続きの実験です。
 
+日英の本文に必要な式と小さい具体例を置き、各欄に「仕組み → 小さい例 → 実画面名の
+手順」の 3 ヒントを置きます。ヒント合計 28 点、誤答は 1 回 5 点減点です。最後は
+採点外で、共通の覆いを異なる u/v に替え、合計・差・積の何が変わるか考えます。
+
+任意の公開テストは、まず公開された小さい例を検査し、後半に現在の公開入力に対する
+参加者自身の計算値を表示します。後半の表示はその値の採点ではありません。8 欄とも
+手入力の値を採点し、ソースの提出や公開テスト PASS だけでは加点しません。
+
+| Checkpoint | 配点 | 採点する証拠 |
+|---|---:|---|
+| covered | 10 | 覆った 2 数の順序付きの組 |
+| sum-covered | 10 | その整数の合計 |
+| huge | 15 | 大きい覆いでの 2 式の差 |
+| held | 10 | 返事と覆いの総量、この順の組 |
+| recover | 10 | 覆いを 2 個外した元の合計 |
+| guesses | 15 | 余りの全範囲での候補数 |
+| gap | 15 | 覆った 2 数の符号付きの差 |
+| product | 15 | 積、x² 以外の項、その差 |
+
+候補実験は双方の候補に `0..n−1` 全体を許す別モデルです。生成器の狭い整数範囲の
+秘密性を証明しません。候補が残ることと観測確率が同じことも区別します。積の実験は
+足し算の補正 `2*x` をそのまま使えないことを示し、x² だけを除いても `(a+b)*x` が
+残ると説明します。乗算不可能性やブートストラップの導出とは主張しません。別の
+実験でも同じ数値の正答になる欄があるため、他人の数値が必ず不正解とも言いません。
+
+## 実行構成と採点権限
+
+Compose は参加者 Workbench と、host に公開しない verifier を作ります。`fixtures/`
+と期待値の導出は verifier image にだけ入り、`reference/` と `mutation.py` は author
+stage の追加です。verifier が実行ごとの `FLAG_SEED` を受け、`/public` から公開入力
+だけを返します。
+
+Workbench の container 環境には fixture seed を渡しません。PID 1 や healthcheck も
+同じです。Python supervisor は待受開始前に自身の process を保護し、固定した内部
+経路から署名用の派生 key と公開入力の snapshot を取得します。公開 API は key を
+返しません。既存の `tcw1` 形式で値を小問・実行に結び付け、verifier は値自体も比較
+します。未署名・改変・別欄・別実行の署名済み提出は拒否します。組の各要素も整数
+として正確に比較し、小数を切り捨てて正答にしません。
+
+**「公開テストを実行」**の子 process には公開データだけを渡します。固定 Linux
+image の libseccomp で通信と、保護した supervisor の読取り・妨害を制限します。
+制限の導入に失敗した場合は実行を中止します。起動時に継承 descriptor を閉じ、終了・
+timeout 時に process group を停止します。これは追加の process 制限であり、任意の
+kernel 攻撃に対する完全な sandbox の主張ではありません。
+
+Docker を管理する本人に対しては自習用です。その人は verifier image や stack を
+調べて変更できるので、管理者自身を相手にした競技順位・試験・修了認定の権限には
+なりません。Workbench launcher を経由しない CLI 直接実行には、この process 制限は
+適用しません。
+
+host port は Workbench の `127.0.0.1:18140` だけで、verifier にはありません。両方
+non-root、read-only root filesystem、capability なし、no-new-privileges、メモリ・
+PID・CPU 制限付きです。AWS resource や cloud account は不要です。ローカル Docker
+の CPU、メモリ、image、disk は停止や image 削除まで使用します。
+
+## 作問者の検証と片付け
+
+問題ディレクトリから、作問専用の synthetic `FLAG_SEED` で実行します。
+
+```sh
+make reference-test
+make test
+make inspect
+make verifier-down
 ```
-1  c1, c2 = a + x, b + x       覆いをかぶせる                     covered
-2  c1 + c2                     知らないまま足す                   sum-covered
-3  (a + b) + 2 * x             全部知っている人の式               （回答欄なし）
-4  c1 + c2 == ...              一致の確認                        （回答欄なし）
-5  x の代わりに huge           15 桁の覆いを、差 1 本で           huge
-6  held = c1 + c2; (held, 2x)  相手の手元にあるもの               held
-7  held - 2 * x                覆いを外す                        recover
-8  候補を数える                 1 つも絞れない                    guesses
-9  c1 - c2                     共通の覆いが漏らす差               gap
-10 (c1*c2, ab+(a+b)x, 差)      掛け算は x² を残す                product
-11 差 == x * x                 名前のつく前の壁                  （回答欄なし）
-```
 
-各行に「この行の意味」が付き、値が合うと「合ったら読む」が開きます。11 行のうち回答欄があるのは
-8 行（platform の 1 問あたりの上限）。残り 3 行のうち 2 行は直前の行が内容を担う True を見るだけの行、
-3 行目は 2 行目と同じ数が出るのを見る行です。
+`reference-test` は既存の 25 mutation に加え、bootstrap・厳密な整数回答・Linux の
+process 境界を author image で検査します。`test` と `inspect` は非公開 verifier から
+公開入力を取得します。starter は埋めるまで意図的に失敗します。実 Workbench の境界
+検証は専用 loopback URL を `UNKNOWN_X_WORKBENCH_URL` に指定し、
+`local/tests/hidden/test_isolation.py` を実行します。seed 検査は有無の boolean だけを
+返します。
 
-## なぜ数が小さく、seed 由来なのか
-
-a と b は 1 桁、小さい覆いは高々 2 桁、8 行目の候補の数も 60 未満 — どの行も手か目で確かめられる
-大きさです。huge だけが 15 桁なのは「目で確かめられないこと」自体がその行の主題だからです。
-数はすべてこの deploy の `FLAG_SEED` から決まり、問題文の例（a = 5, b = 3, x = 2, huge = 10⁶,
-n = 13）は生成範囲外（x は 3 以上、huge は常に 15 桁、n は 17 以上）なので、問題文を写すだけ
-では解けません。1 行につき正解は 1 つ、通るのは自分の Python が出した値だけです。
-
-mod はこの問題では主題にしません: 8 行目の `% n` はインラインの 1 文注だけで済ませます。
-時計の世界そのものは次の問題（`ac26-bridge-clock`）が教えます。
-
-## Participant Portal での進め方
-
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが出る。
-2. **「証拠を確認」**を押す。数が Python の代入文で出るので、まず `python3` に貼る。
-3. 1 行目を打ち、出た値を 1 番目の回答欄に貼って提出。その値の 1 文を読む。11 行目まで続ける。
-   **回答欄は 1 行の入力欄です。**
-4. Python を開けないとき: エディタの `unknown_x_drill.py` の関数を埋めて**「公開テストを実行」**。
-   この deploy の数での自分の関数の値が出る — REPL が出すのと同じ値です。
-
-直接回答は現在の deploy seed に結び付くため、別 deploy からコピーした値は拒否されます。
-
-## 採点
-
-8 つの checkpoint を独立に採点します。誤答は 1 回 5 点減点です。
-
-| Checkpoint | 配点 | 証拠の種類 | 何を検査するか |
-|---|---:|---|---|
-| `covered` | 10 | construct | 組 (a + x, b + x) — 相手が受け取る全部 |
-| `sum-covered` | 10 | construct | c1 + c2。x を知らないままの足し算 |
-| `huge` | 15 | predict | 覆いを 15 桁にしたときの両辺の差 |
-| `held` | 10 | construct | 返ってくる数と、覆いの総量 2x の組 |
-| `recover` | 10 | construct | 覆いを外した a + b — 誰にも見せていない合計 |
-| `guesses` | 15 | trace | 候補の数え上げ: 1 つも絞れない |
-| `gap` | 15 | counterexample | c1 − c2。同じ覆いの 2 つの値が漏らす差 |
-| `product` | 15 | counterexample | 掛け算の余りもの — ちょうど x² |
-
-hint は各 checkpoint に 1 つ（減点 3〜5）。その行で起きやすい打ち間違いを名指しします。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも compose stack の
-全 image もあなたの管理下にあるので、その人物に対して中身を秘匿することはできません。ここでの
-境界は誤配防止であり、その人物に対する秘匿ではありません。参加者用 Workbench image に入るのは
-Portal editor API・starter・公開 test だけです。この問題の `fixtures/generate.py` は期待値を
-公開値と同じ関数で導くため、module ごと別の非公開 verifier image にだけ載せます（Issue 537/543
-option B2）。Workbench はこの deploy の公開値を Compose 内部 network 上の verifier の
-`GET /public` から取得します。`reference/` と `mutation.py` は `author` stage にだけ追加します。
-
-host の `127.0.0.1:18140` に公開するのは Workbench だけで、verifier に host port はありません。
-両 service は non-root、read-only filesystem、capabilities なし、no-new-privileges、
-メモリ・PID 上限つきで動きます。checkpoint は echo した id しか加点できません。結果は期待値を
-漏らしません。fixture はこの deploy の seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が一切管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した reference 11 種類（覆いをかぶせ
-忘れる、覆いを 1 回しか数えない×3 か所、候補の数え上げで折り返しを忘れる、展開の交差項を
-落とす、壁を 2x と比べる、…）を hidden suite が落とすこと、verifier を狙った near-miss 14 種類
-（素の組、開けていない合計、「1 つに絞れるはず」、長さの違う組、真偽値、別 deploy の答え）を
-値の採点器が拒否することを確かめます。participant image に `fixtures/` が無いため、`make test`
-と `make inspect` は Compose 経由で動き、公開値は verifier の `GET /public` から来ます。
+リポジトリ root の `make install && make agent-gate` は catalog 検査で、HTTP や runtime
+境界の証拠ではありません。読者の発見、講義・ノートの根拠、参加者経路の確認は
+[local/tests/hidden/READER.md](local/tests/hidden/READER.md) に記録します。片付けは自分の
+Compose project だけを対象にします。`make verifier-down` はこの問題の default
+project を停止します。release、cloud deploy、共有環境の変更は不要です。
