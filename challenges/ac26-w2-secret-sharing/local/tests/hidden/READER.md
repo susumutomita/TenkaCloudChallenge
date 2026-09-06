@@ -252,3 +252,18 @@ stdout-boundary-before.json,threshold-api-before.json,threshold-api-after.json}`
 `/private/tmp/secret-sharing-716-real-portal-component.log`.
 
 No live AWS, physical-device or independent human rehearsal was performed.
+
+
+## Final supervisor scheduling regression
+
+The same-UID learner can no longer change scheduler policy, scheduling parameters,
+CPU affinity, nice priority or I/O priority. The local policy now denies
+`sched_setscheduler`, `sched_setparam`, `sched_setattr`, `sched_setaffinity`,
+`setpriority` and `ioprio_set`. The Linux worker regression checks EPERM for the
+libc scheduling/affinity/nice calls and verifies the parent state stays unchanged.
+No production deadline or mathematical acceptance condition changed.
+
+The final Linux suite passed 18 tests in 23.594 seconds. After rebuilding
+both dedicated services, the retained Portal harness passed all five submissions
+and solved-row transitions (one test, 11.93 seconds including setup). This is
+actual component-to-local-API evidence, not a physical browser or AWS deployment.

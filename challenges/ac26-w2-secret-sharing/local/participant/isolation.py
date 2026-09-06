@@ -43,6 +43,9 @@ def restrict_learner():
                  'open','openat','openat2','creat','open_by_handle_at','execve','execveat',
                  'socketcall','io_uring_setup','pidfd_getfd','ptrace',
                  'process_vm_readv','process_vm_writev',
+                 # A same-UID learner must not degrade later supervisor requests.
+                 'sched_setscheduler','sched_setparam','sched_setattr','sched_setaffinity',
+                 'setpriority','ioprio_set',
                  'kill','tkill','tgkill','pidfd_send_signal',
                  'rt_sigqueueinfo','rt_tgsigqueueinfo','setsid','setpgid',
                  # SysV objects otherwise survive the learner process and can exhaust
