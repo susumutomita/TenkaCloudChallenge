@@ -3,10 +3,10 @@
 The interesting checks are not the round trip -- that is arithmetic. They are:
 
   * `complete_shares` works for EVERY secret in the field given the same n-1 shares.
-    That is the executable form of "n-1 shares reveal nothing": if every secret is
-    consistent with what you hold, what you hold is not evidence.
-  * `rerandomize` preserves the secret while moving every share, checked as a
-    metamorphic property rather than against a fixed expected list.
+    This demonstrates compatibility. The secrecy probability claim additionally
+    requires independent uniform full-range randomness, as the statement explains.
+  * `rerandomize` preserves the secret while changing the list on nonzero adjustments,
+    checked as a metamorphic property rather than against a fixed expected list.
   * The all-shares-equal-secret degenerate split (the starter's) is rejected, because
     it satisfies the round trip while leaking the secret to party 0 outright.
   * `share_line` / `reconstruct_line` (two-of-three) are graded as a pair of
@@ -20,15 +20,16 @@ The interesting checks are not the round trip -- that is arithmetic. They are:
     must give a party different y values -- on every slope 0..p-1 for two
     secrets, so the large cases are graded on both halves.
 
-Every reconstruction (`reconstruct`, `reconstruct_line`) runs in a separate
-interpreter (`_reconstruct_in_child`) that receives nothing but the submission's
-source and the JSON-serialised arguments. `share` / `share_line` and their
-reconstruction partner are graded as pairs, and whatever the sharing half stores --
-a module global, an attribute on `builtins`, an entry in `sys.modules`, the state of
-an imported module -- is not there in the interpreter that reconstructs. What stays
-open is the container's filesystem: both interpreters share it, so a submission that
-writes the secret under an absolute path and reads it back would need a mount
-namespace to stop, which this verifier (non-root, no capabilities) cannot create.
+The actual /verify route never imports submitted source here. It uses the trusted
+Values adapter: separate restricted Linux workers return JSON values, and these
+properties compare them in the supervisor. Reconstruction starts a fresh worker with
+only shares/divisor; file opens, /proc access, exec and network are denied before
+learner code starts. No split-time storage crosses that boundary.
+
+The legacy _reconstruct_in_child driver below is retained solely for the author-owned
+mutation suite, which directly loads known test modules. That direct author path is
+not the deployed isolation boundary. The execution-boundary tests separately exercise
+the actual verifier, including file/process access and descendant reaping.
 
 Failure messages name the property, never the expected value.
 """
@@ -155,6 +156,13 @@ def _reconstruct_in_child(
     All the calls of one check go in one interpreter, so a hidden run pays the
     interpreter start-up a fixed number of times, not once per call.
     """
+    if callable(getattr(module, 'reconstruct_values', None)):
+        try:
+            results = module.reconstruct_values(calls)
+            # Hidden exception text is generic, never worker-authored strings.
+            return [{'raised': 'ExecutionFailed'} if 'raised' in r else r for r in results]
+        except Exception:
+            return None
     request = json.dumps(
         {
             "source": _source_of(module),
@@ -263,24 +271,25 @@ def check_roundtrip(module, seed: str) -> list[str]:
 
 
 def check_no_trivial_split(module, seed: str) -> list[str]:
-    """A split that hands the secret to one party is not a secret sharing."""
-    failures: list[str] = []
+    """Check the documented random-prefix construction, including valid zero draws.
+
+    A particular output with n-1 zeros is not a secrecy test: it can occur under
+    uniform randomness. Reject ignoring the supplied randomness, not that output.
+    """
     for label in LABELS:
         cfg = setting(seed, label)
-        p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
-        if n < 2 or secret == 0:
-            continue
-        try:
-            shares = module.share(
-                secret, n, p, share_randomness(seed, label, n - 1, p, secret)
-            )
-        except Exception:  # noqa: BLE001 - covered by check_roundtrip
-            return []
-        if not isinstance(shares, list) or len(shares) != n:
-            continue
-        if sum(1 for s in shares if s % p == 0) >= n - 1:
-            failures.append("all but one share is zero, so one party holds the secret outright")
-    return failures
+        p,n,secret = cfg["p"],cfg["n"],cfg["secret"]
+        for draw in (share_randomness(seed,label,n-1,p,secret), [0]*(n-1)):
+            try:
+                actual = module.share(secret,n,p,list(draw))
+            except Exception:
+                return ["share could not use the supplied randomness"]
+            head = [value % p for value in draw]
+            expected = head + [(secret-sum(head)) % p]
+            if (not isinstance(actual,list) or any(not _is_int(v) for v in actual)
+                    or actual != expected):
+                return ["share must use the supplied randomness and adjust the last share"]
+    return []
 
 
 def check_completion(module, seed: str) -> list[str]:
@@ -310,32 +319,35 @@ def check_completion(module, seed: str) -> list[str]:
 
 
 def check_rerandomize(module, seed: str) -> list[str]:
-    """The secret is read back by this test (sum of the shares), never by the
-    submission's reconstruct, so a stash from `share` would gain nothing here."""
+    """Preserve the sum for both nonzero and legal all-zero adjustments."""
     failures: list[str] = []
     for label in LABELS:
         cfg = setting(seed, label)
-        p, n, secret = cfg["p"], cfg["n"], cfg["secret"]
+        p, n, secret = cfg['p'], cfg['n'], cfg['secret']
         try:
-            shares = module.share(
-                secret, n, p, share_randomness(seed, label, n - 1, p, secret)
-            )
-            fresh = module.rerandomize(
-                list(shares),
-                p,
-                rerandomization_randomness(seed, f"{label}-rr", n - 1, p),
-            )
-        except Exception as error:  # noqa: BLE001
-            return [f"rerandomize raised {type(error).__name__}"]
-        if not isinstance(fresh, list) or len(fresh) != n:
-            failures.append("rerandomize did not return one value per party")
-            continue
-        if any(not isinstance(s, int) or not 0 <= s < p for s in fresh):
-            failures.append("a rerandomized share is outside [0, modulus)")
-        if sum(fresh) % p != secret % p:
-            failures.append("rerandomizing changed the secret")
-        if fresh == list(shares):
-            failures.append("rerandomize returned the same shares, so nothing was refreshed")
+            shares = module.share(secret, n, p,
+                                  share_randomness(seed, label, n - 1, p, secret))
+        except Exception as error:
+            return [f'share raised {type(error).__name__}']
+        draws = (rerandomization_randomness(seed, f'{label}-rr', n - 1, p), [0] * (n - 1))
+        for draw in draws:
+            try:
+                fresh = module.rerandomize(list(shares), p, list(draw))
+            except Exception as error:
+                return [f'rerandomize raised {type(error).__name__}']
+            if not isinstance(fresh, list) or len(fresh) != n:
+                failures.append('rerandomize did not return one value per party')
+                continue
+            if any(not _is_int(s) or not 0 <= s < p for s in fresh):
+                failures.append('a rerandomized share is outside [0, modulus)')
+                continue
+            if sum(fresh) % p != secret % p:
+                failures.append('rerandomizing changed the secret')
+            if any(r % p for r in draw):
+                if fresh == list(shares):
+                    failures.append('rerandomize returned the same shares, so nothing was refreshed')
+            elif fresh != list(shares):
+                failures.append('zero adjustments must leave the shares unchanged')
     return failures
 
 
@@ -395,14 +407,17 @@ def check_line_pairs(module, seed: str) -> list[str]:
     expected: list[tuple[int, int]] = []
     for case in line_cases(seed):
         p, secret = case["p"], case["secret"]
-        points, failure = _line_points(module, secret, p, case["slope"])
-        if failure is not None or points is None:
-            failures.append(failure or "share_line did not return three points")
-            continue
-        for i, j in ((0, 1), (0, 2), (1, 2)):
-            for pair in ([points[i], points[j]], [points[j], points[i]]):
-                calls.append(("reconstruct_line", [[list(point) for point in pair], p]))
-                expected.append((p, secret))
+        # Every random draw includes zero in its domain. A flat reference line
+        # still reconstructs its (possibly nonzero) secret from any two points.
+        for slope in (case['slope'], 0):
+            points, failure = _line_points(module, secret, p, slope)
+            if failure is not None or points is None:
+                failures.append(failure or "share_line did not return three points")
+                continue
+            for i, j in ((0, 1), (0, 2), (1, 2)):
+                for pair in ([points[i], points[j]], [points[j], points[i]]):
+                    calls.append(("reconstruct_line", [[list(point) for point in pair], p]))
+                    expected.append((p, secret))
     if not calls:
         return failures
     # reconstruct_line never sees what share_line stored: it runs in another
