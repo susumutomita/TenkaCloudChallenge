@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -26,7 +27,7 @@ class PortalEditorSupport:
         self,
         *,
         root: Path,
-        seed: str,
+        seed: str | None,
         problem_id: str,
         problem_name: str,
         description: str,
@@ -41,9 +42,16 @@ class PortalEditorSupport:
         problem_name_en: str | None = None,
         description_en: str | None = None,
         checkpoint_labels_en: dict[str, str] | None = None,
+        public_payload: dict[str, object] | None = None,
     ) -> None:
         self.root = root
-        self.seed = seed
+        # Author callers may derive a key locally. The live Workbench receives
+        # only the derived key after protecting its supervisor process.
+        self.sealing_key = (
+            hashlib.sha256((problem_id + "\0" + seed).encode("utf-8")).digest()
+            if seed is not None else None
+        )
+        self.public_payload = public_payload
         self.problem_id = problem_id
         self.problem_name = problem_name
         self.description = description
@@ -103,25 +111,10 @@ class PortalEditorSupport:
         }
 
     def _child_env(self, **extra: str) -> dict[str, str]:
-        """The fixed environment `show.py` and the public tests run under.
-
-        Deliberately built from nothing rather than inherited, so a Portal run cannot
-        pick up whatever the server process happens to carry. The one value forwarded
-        from this process is `VERIFIER_PUBLIC_URL`, and only when it is set: a problem
-        whose `fixtures/` no longer ships in the participant image (Issue 543/537) has
-        no local way to derive this deployment's public evidence, and fetches it from
-        its own Compose-internal verifier's `GET /public` instead. Problems that still
-        carry `fixtures/` never set it and see exactly the environment they saw before.
-        """
-        env = {
-            "PATH": "/usr/local/bin:/usr/bin:/bin",
-            "FLAG_SEED": self.seed,
-            "PYTHONDONTWRITEBYTECODE": "1",
-            **extra,
-        }
-        verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
-        if verifier_public_url:
-            env["VERIFIER_PUBLIC_URL"] = verifier_public_url
+        """Pass only the public snapshot; never the sealing seed or verifier URLs."""
+        env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1", **extra}
+        if self.public_payload is not None:
+            env["PUBLIC_EVIDENCE_JSON"] = json.dumps(self.public_payload)
         return env
 
     def inspect_payload(self) -> dict[str, object]:
@@ -295,16 +288,15 @@ class PortalEditorSupport:
         return base64.urlsafe_b64decode(value + padding)
 
     def _seal_manual(self, checkpoint_id: str, answer: object) -> str:
+        if self.sealing_key is None:
+            raise RuntimeError("workbench sealing key is unavailable")
         payload = json.dumps(
             {"v": 1, "checkpointId": checkpoint_id, "answer": answer},
             ensure_ascii=False,
             separators=(",", ":"),
             sort_keys=True,
         ).encode("utf-8")
-        key = hashlib.sha256(
-            (self.problem_id + "\0" + self.seed).encode("utf-8")
-        ).digest()
-        signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+        signature = hmac.new(self.sealing_key, payload, hashlib.sha256).digest()[:16]
         return f"tcw1.{self._b64encode(payload)}.{self._b64encode(signature)}"
 
     def unwrap_submission(self, checkpoint_id: str, submission: object) -> object:
@@ -319,10 +311,9 @@ class PortalEditorSupport:
                 return None
             payload = self._b64decode(encoded_payload)
             signature = self._b64decode(encoded_signature)
-            key = hashlib.sha256(
-                (self.problem_id + "\0" + self.seed).encode("utf-8")
-            ).digest()
-            expected = hmac.new(key, payload, hashlib.sha256).digest()[:16]
+            if self.sealing_key is None:
+                return None
+            expected = hmac.new(self.sealing_key, payload, hashlib.sha256).digest()[:16]
             if not hmac.compare_digest(signature, expected):
                 return None
             decoded = json.loads(payload.decode("utf-8"))
@@ -346,18 +337,30 @@ class PortalEditorSupport:
             transcript = Path(transcript_directory) / "stdout"
             try:
                 with transcript.open("w", encoding="utf-8") as sink:
-                    completed = subprocess.run(  # noqa: S603 - fixed argv, shell=False
+                    process = subprocess.Popen(  # noqa: S603 - fixed argv, shell=False
                         command,
                         cwd=cwd,
                         env=env,
+                        stdin=subprocess.DEVNULL,
+                        close_fds=True,
                         stdout=sink,
                         stderr=subprocess.STDOUT,
                         text=True,
-                        timeout=timeout,
                         preexec_fn=self.limit_fn,
-                        check=False,
+                        start_new_session=True,
                     )
+                    try:
+                        returncode = process.wait(timeout=timeout)
+                    finally:
+                        # The child cannot leave this process group: setsid/setpgid
+                        # are blocked after Popen creates the session. Clean up its
+                        # descendants on both normal exit and timeout.
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        process.wait()
                 output = transcript.read_text(encoding="utf-8", errors="replace")
-            except (subprocess.TimeoutExpired, OSError, ValueError):
+            except (subprocess.SubprocessError, OSError, ValueError):
                 return None
-        return completed.returncode, output[-self.max_output_bytes :]
+        return returncode, output[-self.max_output_bytes :]
