@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget } from "../game/src/types.ts";
 import { ALL_CIPHER_RUNGS, rungSpec, type CipherRung } from "../game/src/ladder.ts";
-import { CONSTRAINT_GROUPS, recoverableSolutions } from "../game/src/sudoku.ts";
+import { CONSTRAINT_GROUPS } from "../game/src/sudoku.ts";
 import { cipherHuntCandidates, huntBudgetFor, ledgerTargets, sudokuHuntCandidates, type CipherHuntCandidate, type SudokuHuntCandidate } from "./hunt-targets.ts";
 import HuntGuide from "./HuntGuide.tsx";
 import { RpsHuntCandidate } from "./RpsHunt.tsx";
@@ -22,7 +22,7 @@ const labels = {
   en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", rps: "RPS prediction", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings" },
 };
 
-/** Public evidence determines readiness; options never include a recovered answer. */
+/** Public records open a worksheet; no solver or verdict is run for the participant. */
 export function huntOptions(projection: CryptoBattleProjection): readonly HuntOption[] {
   const shares = ledgerTargets(projection), sudokus = sudokuHuntCandidates(projection), ciphers = cipherHuntCandidates(projection);
   return Object.values(projection.teams).filter(team => team.teamId !== projection.vault.teamId).flatMap(team => {
@@ -47,10 +47,10 @@ export function huntOptions(projection: CryptoBattleProjection): readonly HuntOp
     const tags = new Map<string, SudokuHuntCandidate["reveals"]>();
     for (const reveal of sudoku?.reveals ?? []) tags.set(reveal.tag, [...(tags.get(reveal.tag) ?? []), reveal]);
     const reused = [...tags.values()].filter(group => group.length >= 2);
-    const readyGroups = sudoku ? reused.find(group => recoverableSolutions(sudoku.puzzle, group).length === 1) : undefined;
-    const sudokuOption: HuntOption = { ...entry("sudoku"), sudoku: readyGroups && sudoku ? { ...sudoku, reveals: readyGroups } : sudoku, left: sudokuLeft, points: projection.huntWinPoints, status: status("sudoku", !!readyGroups, sudokuLeft), detail: {
-      ja: `公開グループ ${sudoku?.reveals.length ?? 0} 件。${readyGroups ? "同じ印の再利用があり、公開問題と合わせると解が1つです。" : reused.length ? "同じ印の再利用はありますが、解はまだ1つに絞れません。同じ印で別のマスが公開されるのを待ちます。" : "同じ印で2回以上の公開が必要です。相手が同じ付け替え表で証明すると増えます。"} 必要な総数は固定ではありません。`,
-      en: `${sudoku?.reveals.length ?? 0} opened groups. ${readyGroups ? "A reused tag and the public puzzle pin one solution." : reused.length ? "A tag is reused but the solution is not unique yet. Wait for new cells under that tag." : "Need two openings with one tag, from an opponent reusing a relabelling."} There is no fixed total required.`,
+    const hasRepeatedTag = reused.length > 0;
+    const sudokuOption: HuntOption = { ...entry("sudoku"), sudoku, left: sudokuLeft, points: projection.huntWinPoints, status: status("sudoku", hasRepeatedTag, sudokuLeft), detail: {
+      ja: `公開グループ ${sudoku?.reveals.length ?? 0} 件。${hasRepeatedTag ? "同じ印の公開マスを公開問題と照合して解きます。解を一つに決められない間は提出せず、別のマスの公開を待ちます。" : "同じ印で2回以上の公開が必要です。相手が同じ付け替え表で証明すると増えます。"} 必要な総数は固定ではありません。`,
+      en: `${sudoku?.reveals.length ?? 0} opened groups. ${hasRepeatedTag ? "Compare cells with the same tag against the public puzzle. If you cannot determine one solution, wait for more opened cells before submitting." : "Need two openings with one tag, from an opponent reusing a relabelling."} There is no fixed total required.`,
     }};
     const cipherOptions = ALL_CIPHER_RUNGS.map((rung): HuntOption => {
       const cipher = ciphers.find(c => c.teamId === teamId && c.generation === generation && c.rung === rung);
@@ -88,12 +88,12 @@ export default function HuntPanel(props: Props) {
   return <section className="tc-hunt-entry" aria-label={ja ? "相手を攻撃する HUNT" : "Attack an opponent with HUNT"}>
     <h2>{ja ? "相手を攻撃する（HUNT）" : "Attack an opponent (HUNT)"}</h2>
     <p className="tc-card-hint">{ja ? "相手の公開情報から秘密や手を計算する攻撃です。方式ごとに材料が異なります。材料待ちなら別のお題を進めましょう。" : "Recover secrets or predict hands from public information. Each method needs different evidence. Work on other Orders while waiting."}</p>
-    <p className="tc-hunt-notice" role="status" aria-live="polite">{ready.length ? (ja ? `攻撃できる：${ready.map(o => `${name(o.teamId)}の${copy[o.mode]}`).join("、")}` : `Ready: ${ready.map(o => `${name(o.teamId)} · ${copy[o.mode]}`).join(", ")}`) : (ja ? "現在、攻撃できる材料はそろっていません。状態は約30秒ごとに更新されます。" : "No ready targets. Status refreshes about every 30 seconds.")}</p>
+    <p className="tc-hunt-notice" role="status" aria-live="polite">{ready.length ? (ja ? `材料・計算へ進める：${ready.map(o => `${name(o.teamId)}の${copy[o.mode]}`).join("、")}` : `Worksheets available: ${ready.map(o => `${name(o.teamId)} · ${copy[o.mode]}`).join(", ")}`) : (ja ? "現在、攻撃できる材料はそろっていません。状態は約30秒ごとに更新されます。" : "No ready targets. Status refreshes about every 30 seconds.")}</p>
     <div className="tc-hunt-opponents">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(team => <article key={team.teamId} className="tc-hunt-opponent">
       <h3>{name(team.teamId)} <small>{ja ? "世代" : "Generation"} {team.generation} · {team.score} {ja ? "点" : "pt"}</small></h3>
       {options.filter(o => o.teamId === team.teamId).map(option => <div key={option.key} className={`tc-hunt-method tc-hunt-${option.status}`}>
-        <div><strong>{copy[option.mode]}</strong><span className="tc-hunt-state">{copy[option.status]}</span></div><p>{option.detail[locale]}</p>
-        {option.status === "ready" && <button type="button" className="tc-target-chip" aria-pressed={selected === option.key} onClick={() => setSelected(option.key)}>{ja ? `${copy[option.mode]}の材料・計算へ →` : `Open ${copy[option.mode]} worksheet →`}</button>}
+        <div><strong>{copy[option.mode]}</strong><span className="tc-hunt-state">{option.mode === "sudoku" && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</span></div><p>{option.detail[locale]}</p>
+        {option.status === "ready" && <button type="button" className="tc-target-chip" aria-pressed={selected === option.key} onClick={() => setSelected(option.key)}>{ja ? (option.mode === "sudoku" ? "数独の材料を確認して解く →" : `${copy[option.mode]}の材料・計算へ →`) : `Open ${copy[option.mode]} worksheet →`}</button>}
         {(option.status === "completed" || option.status === "exhausted") && <p>{option.mode === "rps" && option.status === "completed" ? (ja ? "次の対戦の受付を待ちます。" : "Wait for the next duel's prediction window.") : (ja ? "相手の世代が変わると、次の攻撃を準備できます。" : "Prepare a new attack when the opponent's generation changes.")}</p>}
       </div>)}
     </article>)}</div>
@@ -143,6 +143,14 @@ function CipherHuntGuide({ target, locale }: { readonly target: CipherHuntCandid
 }
 
 function SudokuHuntGuide({ target, locale }: { readonly target: SudokuHuntCandidate; readonly locale: Locale }) {
+  const tags = [...new Set(target.reveals.map(reveal => reveal.tag))];
+  return <>{tags.map(tag => {
+    const reveals = target.reveals.filter(reveal => reveal.tag === tag);
+    return reveals.length >= 2 ? <SudokuHuntGroup key={tag} target={{ ...target, reveals }} locale={locale} /> : null;
+  })}</>;
+}
+
+function SudokuHuntGroup({ target, locale }: { readonly target: SudokuHuntCandidate; readonly locale: Locale }) {
   const ja = locale === "ja", opened = new Array<number>(16).fill(0);
   for (const reveal of target.reveals) CONSTRAINT_GROUPS[reveal.group]?.forEach((cell, i) => { opened[cell] = reveal.cells[i] ?? 0; });
   return <div className="tc-hunt-worksheet">

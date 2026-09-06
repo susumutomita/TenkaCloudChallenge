@@ -269,6 +269,20 @@ function capturingClient(outcome: PortalCoordinationOutcome = { kind: "ok", proj
 }
 
 describe("portal/coordination.ts isCryptoBattleProjection", () => {
+  it("accepts omitted or valid completed HUNTs, but rejects malformed present records", () => {
+    const { completedHunts: _old, ...legacy } = fixtureProjection();
+    expect(isCryptoBattleProjection(legacy)).toBe(true);
+    for (const completedHunts of [[], [{ targetTeamId: "red", generation: 1, via: "share" }], [{ targetTeamId: "red", generation: 2, via: "sudoku" }], [{ targetTeamId: "red", generation: 2, via: "caesar" }]]) {
+      expect(isCryptoBattleProjection({ ...legacy, completedHunts })).toBe(true);
+    }
+    const valid = { targetTeamId: "red", generation: 1, via: "share" };
+    for (const completedHunts of [null, {}, "nope", 1, [null], [false], [{}], [{ ...valid, targetTeamId: 9 }], [{ ...valid, targetTeamId: "" }], [{ ...valid, generation: "1" }], [{ ...valid, generation: 0 }], [{ ...valid, generation: 1.5 }], [{ ...valid, generation: Infinity }], [{ ...valid, via: "rps" }], [{ ...valid, via: "toString" }], [{ ...valid, via: null }]]) {
+      expect(isCryptoBattleProjection({ ...legacy, completedHunts })).toBe(false);
+    }
+    expect(isCryptoBattleProjection({ ...legacy, huntWinPoints: "25" })).toBe(false);
+    expect(isCryptoBattleProjection({ ...legacy, lastHunt: { ...valid, outcome: "hit", points: {} } })).toBe(false);
+  });
+
   it("accepts a well-formed CryptoBattleProjection", () => {
     expect(isCryptoBattleProjection(fixtureProjection())).toBe(true);
   });

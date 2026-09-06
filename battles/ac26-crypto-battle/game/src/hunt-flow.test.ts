@@ -39,6 +39,8 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
     const option = huntOptions(p).find(o => o.mode === "share")!;
     expect(option.status).toBe("ready");
     expect(render(p)).toContain("秘密のかけらの材料・計算へ");
+    const { completedHunts: _newField, ...legacy } = p;
+    expect(render(legacy)).toContain("秘密のかけらの材料・計算へ");
     const html = workspace(p, "share");
     expect(html).toContain("fast-hunt-secret");
     expect(html).toContain("+25 点");
@@ -86,9 +88,11 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
     expect(workspace(view(state), "share")).toBe("");
     expect(validateOp(state, "bravo", wrong).ok).toBe(false);
   });
-  test("sudoku workspace uses reuse plus uniqueness, and its public answer is adjudicated", () => {
+  test("sudoku worksheet uses public tag reuse, and a participant-computed answer is adjudicated", () => {
     const state = buildScenario("pi-reuse").host.state, p = view(state);
     expect(huntOptions(p).find(o => o.mode === "sudoku")?.status).toBe("ready");
+    expect(render(p)).toContain("材料を確認して解く");
+    expect(render(p)).not.toContain("解が1つです");
     const html = workspace(p, "sudoku");
     expect(html).toContain("元の公開問題 A");
     expect(html).toContain("同じ印の公開マス B");

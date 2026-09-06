@@ -88,8 +88,8 @@ faking it.
 | `ended` | Match over; every op is rejected and the surface is read-only. |
 
 The participant HUNT cards now report readiness from public evidence (Issue #742).
-Shamir needs distinct current-generation indices; sudoku needs a reused tag and
-one solution consistent with its public puzzle; Caesar uses its rung-specific
+Shamir needs distinct current-generation indices; sudoku opens a worksheet for a repeated public tag
+without testing whether a solution is unique; Caesar uses its rung-specific
 pair threshold; RPS requires past reuse and a currently sealed target. The
 worksheet never fills a recovered answer. ROTATE is a separate defence card.
 

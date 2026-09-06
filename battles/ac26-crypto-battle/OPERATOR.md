@@ -62,7 +62,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (4 for compact budgets and Order IDs) and a
+The plugin declares `stateSchemaVersion` (5, including recorded HUNT score deltas) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and

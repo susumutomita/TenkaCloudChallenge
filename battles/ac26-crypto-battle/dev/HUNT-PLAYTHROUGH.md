@@ -22,7 +22,8 @@ beyond the narrow viewport; this is not evidence about the production host.
 from real scenario states and calls the actual validator/reducer. It covers zero,
 insufficient and sufficient evidence, duplicate indices, retired generations,
 real hits/misses and exhausted attempts, per-reader completed status, sudoku
-reuse/unique recovery and RPS pending predictions. Existing `pi-reuse.test.ts`
+tag reuse and RPS pending predictions. The worksheet does not compute Sudoku
+solutions or expose the validator's eligibility result. Existing `pi-reuse.test.ts`
 checks that repeated groups which do not pin a unique solution remain rejected;
 `rps.test.ts` checks every private first opening is redacted until settlement.
 Schema 5 adds `lastHunt.points` for the actual attack delta including the score
@@ -32,11 +33,13 @@ The only new target projection data is the reader's own completed attack types;
 no recovered secret, solution, key, or private opponent opening is added.
 
 Readiness is a UI preparation rule for Shamir/Caesar; it does not replace the
-trusted validator. Sudoku uses the existing `recoverableSolutions`, whose search
-space is the 288 valid 4×4 grids, not the field modulus or a secret search. A
-99-team / 294-public-record synthetic projection took 1.88ms median and 5.27ms
-maximum over 20 local Bun calls. This is a computation check, not a browser or
-production latency guarantee.
+trusted validator. Sudoku worksheets use only repeated public tags and displayed
+reveals. Participants compare those with the public puzzle and wait for more
+evidence if they cannot determine a solution; the UI never runs a Sudoku solver.
+Review follow-up: a dedicated headless browser on port 5674 confirmed the
+`pi-reuse` worksheet opens from “材料を確認して解く”, shows the two public boards,
+and does not announce a solution count or a passed eligibility check. This was
+a headless local check, not an unlocked-Mac or deployed-Portal verification.
 
 Not performed: AWS deployment, production event play, independent human playtest,
 full keyboard-only completion, or screen-reader audit. These remain optional
