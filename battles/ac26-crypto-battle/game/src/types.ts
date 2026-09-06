@@ -1160,6 +1160,8 @@ export interface ContractProjection {
    */
   readonly task: OrderTaskProjection;
   readonly status: ContractStatus;
+  /** Public reason a terminal Order ended; absence supports older projections. */
+  readonly expiryCause?: "deadline" | "rotate";
   /** [Issue #645] The stated rule -- what the Order will not have published. */
   readonly privacyConstraint: PrivacyConstraint;
   /** [Issue #645] The methods that satisfy it. One entry = a required method. */

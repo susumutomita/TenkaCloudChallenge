@@ -236,11 +236,15 @@ export function OrderBelt({
   locale,
   selectedId,
   onSelect,
+  compact = false,
+  newIds = [],
 }: {
   readonly projection: CryptoBattleProjection;
   readonly locale: Locale;
   readonly selectedId?: string;
   readonly onSelect?: (id: string) => void;
+  readonly compact?: boolean;
+  readonly newIds?: readonly string[];
 }) {
   const copy = COPY[locale];
   // [Issue #659] Deadline order, soonest first.
@@ -254,8 +258,8 @@ export function OrderBelt({
     .slice()
     .sort((a, b) => a.remainingMs - b.remainingMs);
   return (
-    <section className="tc-game-card tc-order-belt" aria-label="crypto-battle-order-belt">
-      <div className="tc-section-label">{copy.orderBelt}</div>
+    <section className={`tc-game-card tc-order-belt${compact ? " tc-order-belt-compact" : ""}`} aria-label={locale === "ja" ? "進行中のお題" : "Open Orders"}>
+      <div className="tc-section-label">{compact ? (locale === "ja" ? `未処理 ${openOrders.length} 件 · 締切が近い順` : `${openOrders.length} open · earliest deadline first`) : copy.orderBelt}</div>
       {openOrders.length === 0 ? (
         <div className="tc-empty">{copy.noOrders}</div>
       ) : (
@@ -275,6 +279,7 @@ export function OrderBelt({
                   selectedId === order.id ? " tc-order-selected" : ""
                 }${onSelect ? " tc-order-clickable" : ""}`}
                 key={order.id}
+                data-order-id={order.id}
                 {...(onSelect
                   ? {
                       role: "button",
@@ -293,7 +298,7 @@ export function OrderBelt({
                 <div className="tc-order-top">
                   <strong>
                     {order.id.replace(/^.*-c/, "ORDER #")}
-                    {isNext ? <span className="tc-next-chip">{copy.nextUp}</span> : null}
+                    {isNext && !compact ? <span className="tc-next-chip">{copy.nextUp}</span> : null}
                   </strong>
                   {/*
                     [Issue #659] Both rates on the card. Computing this Order
@@ -312,8 +317,12 @@ export function OrderBelt({
                   </span>
                 </div>
                 <div className="tc-order-meta">
-                  <span>{copy.time} {formatDuration(order.remainingMs)}</span>
-                  <span>{taskLabel(order.task, locale)} · {taskDetail(order.task, locale)}</span>
+                  <span className="tc-order-deadline">{urgency ? (locale === "ja" ? "締切間近 · " : "Due soon · ") : ""}{copy.time} {formatDuration(order.remainingMs)}</span>
+                  <span>{taskLabel(order.task, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
+                  {compact && <span className="tc-order-state">
+                    {selectedId === order.id ? (locale === "ja" ? "✓ 選択中" : "✓ Selected") : (locale === "ja" ? "未回答" : "Unanswered")}
+                    {newIds.includes(order.id) && <b className="tc-order-arrived">{locale === "ja" ? "到着" : "New"}</b>}
+                  </span>}
                 </div>
                 {/*
                   [Issue #645] Which methods THIS Order accepts, on the card
@@ -331,7 +340,7 @@ export function OrderBelt({
                   A method list is only ever true of ONE Order, so it lives on
                   that Order and nowhere else.
                 */}
-                <div className="tc-order-methods">
+                <div className="tc-order-methods" hidden={compact}>
                   {order.allowedMethods.map((method) => (
                     <span className={`tc-method tc-method-${method}`} key={method}>
                       {copy[method]}
@@ -554,7 +563,7 @@ ${SUDOKU_CSS}
 .tc-order-meta{display:grid;gap:2px;font-size:11px;color:#5f6b7a;margin-top:6px}
 .tc-timer-track{height:5px;background:#eaeded;border-radius:999px;overflow:hidden;margin-top:8px}
 .tc-timer-fill{height:100%;background:currentColor;transition:width .25s linear}
-.tc-urgent{animation:tc-order-in .28s ease-out both,tc-urgent 1s ease-in-out infinite}
+.tc-urgent{border-color:#c34723;background:#fff7f2}.tc-urgent .tc-order-deadline{color:#a22f12;font-weight:800}
 .tc-order-methods{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .tc-method{font-size:10px;font-weight:800;letter-spacing:.04em;border-radius:6px;padding:2px 6px;border:1px solid #cfd8e3}
 .tc-method-leak{background:#fff7e8;border-color:#e0b36a}
@@ -589,7 +598,6 @@ ${SUDOKU_CSS}
 .tc-ledger-title span{flex:none;white-space:nowrap}
 .tc-empty{padding:12px;border:1px dashed #cfd8e3;border-radius:8px;text-align:center;color:#687078;font-size:12px}
 @keyframes tc-order-in{from{transform:translateX(16px);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes tc-urgent{50%{box-shadow:0 0 0 3px rgba(209,50,18,.15)}}
 @keyframes tc-public-pop{0%{transform:translateY(-8px) scale(.92);opacity:.2}55%{transform:translateY(0) scale(1.08)}100%{transform:scale(1);opacity:1}}
 @media(max-width:720px){.tc-board-grid{grid-template-columns:1fr}.tc-choice{flex-direction:column;gap:2px}}
 @media(prefers-reduced-motion:reduce){.tc-order-card,.tc-urgent,.tc-new-public{animation:none!important}.tc-timer-fill{transition:none!important}}

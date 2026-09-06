@@ -35,12 +35,12 @@
         flex-wrap: wrap;
         gap: 12px;
         align-items: center;
-        position: sticky;
-        top: 0;
-        z-index: 10;
+        /* Keep dev controls from covering the real panel's sticky Order list. */
       }
       .dev-chrome label {
         display: inline-flex;
+        flex-wrap: wrap;
+        max-width: 100%;
         gap: 6px;
         align-items: center;
         font-size: 12px;
@@ -57,6 +57,10 @@
         background: rgba(255, 255, 255, 0.1);
         color: inherit;
         cursor: pointer;
+      }
+      .dev-chrome select {
+        min-width: 0;
+        max-width: 100%;
       }
       .dev-banner {
         background: #4a1a1a;
