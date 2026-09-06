@@ -1,5 +1,20 @@
 # #716 participant reading and runtime evidence
 
+## Persistent IPC follow-up
+
+Review of the same isolation boundary in #762 reproduced a SysV object surviving
+worker termination. This problem now denies SysV and POSIX persistent IPC operations
+as well. The Linux suite checks 16 repeated sessions with EPERM and unchanged
+`/proc/sysvipc/{shm,msg,sem}` tables. No scoring or participant text changed.
+
+`make reference-test FLAG_SEED=underconstraint-reader-716` passed all 7 mutations and
+22 Linux tests (20.212 seconds for the boundary suite). The dedicated HTTP rerun still
+rejects old/fixed/wrong/reused result identifiers and unfinished required functions;
+valid independent functions and public/private requests pass. Sixty-four forked HTTP
+submissions again reaped all 256 descendants, with process counts 3/3/3 before/after/max.
+Logs: `/private/tmp/underconstraint-761-ipc-{reference,http,compose}.log`.
+
+
 ## PR #761: reject queued startup results (follow-up to 990f85b)
 
 The reported path was reproduced against the actual dedicated API before editing:

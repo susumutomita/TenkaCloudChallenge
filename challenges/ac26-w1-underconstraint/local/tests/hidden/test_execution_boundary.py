@@ -53,6 +53,27 @@ class WorkerBoundary(unittest.TestCase):
             for checkpoint in server.CODE_CHECKPOINTS:
                 self.assertFalse(server.evaluate(checkpoint, source)[0], checkpoint)
 
+    def test_persistent_ipc_is_denied_without_remaining_objects(self):
+        paths=[Path('/proc/sysvipc')/name for name in ('shm','msg','sem')]
+        before=[path.read_text() for path in paths]
+        source='''import ctypes
+def probe():
+    libc=ctypes.CDLL(None,use_errno=True)
+    calls=[('shmget',(0,4096,0o1600)),('shmat',(-1,None,0)),
+           ('shmctl',(-1,0,None)),('msgget',(0,0o1600)),('msgctl',(-1,0,None)),
+           ('semget',(0,1,0o1600)),('semctl',(-1,0,0)),('semop',(-1,None,0))]
+    results=[]
+    for name,args in calls:
+        ctypes.set_errno(0)
+        result=getattr(libc,name)(*args)
+        results.append([result,ctypes.get_errno()])
+    return results
+'''
+        for _ in range(16):
+            result=execution.run_functions({'policy.py':source},[{'function':'probe','args':[]}])
+            self.assertEqual(result['values'],[{'returned':[[-1,1]]*8}])
+        self.assertEqual([path.read_text() for path in paths],before)
+
     def test_correct_static_batch_without_functions_is_rejected(self):
         # These are the five publicly documented dictionaries, not secret fixtures.
         namespace = {}
