@@ -2,6 +2,8 @@
 import json
 import os
 import sys
+import subprocess
+import signal
 import time
 import unittest
 from pathlib import Path
@@ -33,8 +35,85 @@ class DiagnosisValues(unittest.TestCase):
                     self.assertTrue(server._check_root_cause(answer))
 
 
+SCHEDULING_HELPER = r'''
+"""Disposable parent; only its forked child can target this PID, then both exit."""
+import ctypes,json,os,sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from participant.isolation import restrict_learner,protect_supervisor
+protect_supervisor()
+libc=ctypes.CDLL(None,use_errno=True)
+seccomp=ctypes.CDLL('libseccomp.so.2')
+numbers={name:seccomp.seccomp_syscall_resolve_name(name.encode()) for name in ('sched_setattr','ioprio_set','ioprio_get')}
+assert all(number>=0 for number in numbers.values())
+def snapshot():
+    return {'policy':os.sched_getscheduler(0),'priority':os.sched_getparam(0).sched_priority,
+            'nice':os.getpriority(os.PRIO_PROCESS,0),'affinity':sorted(os.sched_getaffinity(0)),
+            'ioprio':libc.syscall(numbers['ioprio_get'],1,0)}
+before=snapshot();parent=os.getpid();readfd,writefd=os.pipe()
+pid=os.fork()
+if pid==0:
+    os.close(readfd)
+    try:
+        restrict_learner()
+        class Param(ctypes.Structure):_fields_=[('priority',ctypes.c_int)]
+        class Attr(ctypes.Structure):
+            _fields_=[('size',ctypes.c_uint32),('policy',ctypes.c_uint32),('flags',ctypes.c_uint64),
+                      ('nice',ctypes.c_int32),('priority',ctypes.c_uint32),('runtime',ctypes.c_uint64),
+                      ('deadline',ctypes.c_uint64),('period',ctypes.c_uint64)]
+        attr=Attr(ctypes.sizeof(Attr),5,0,19,0,0,0,0)
+        param=Param(0)
+        cpus=before['affinity'];size=max(cpus)//8+1
+        mask=(ctypes.c_ubyte*size)();mask[cpus[0]//8]=1<<(cpus[0]%8)
+        calls=[('sched_setscheduler',(parent,5,ctypes.byref(param))),
+               ('sched_setparam',(parent,ctypes.byref(param))),
+               ('syscall',(numbers['sched_setattr'],parent,ctypes.byref(attr),0)),
+               ('sched_setaffinity',(parent,size,ctypes.byref(mask))),
+               ('setpriority',(0,parent,19)),('syscall',(numbers['ioprio_set'],1,parent,3<<13))]
+        results=[]
+        for name,args in calls:
+            ctypes.set_errno(0);result=getattr(libc,name)(*args)
+            results.append([result,ctypes.get_errno()])
+        read_allowed=(os.sched_getscheduler(parent)>=0 and os.sched_getparam(parent).sched_priority>=0
+                      and os.getpriority(os.PRIO_PROCESS,parent)>=-20 and bool(os.sched_getaffinity(parent))
+                      and libc.syscall(numbers['ioprio_get'],1,parent)>=0)
+        os.write(writefd,json.dumps({'results':results,'read_allowed':read_allowed}).encode())
+    finally:os._exit(0)
+os.close(writefd)
+data=b''
+while True:
+    block=os.read(readfd,4096)
+    if not block:break
+    data+=block
+os.close(readfd);os.waitpid(pid,0)
+print(json.dumps({'before':before,'after':snapshot(),'child':json.loads(data),'child_reaped':not Path('/proc',str(pid)).exists()}))
+'''
+
 @unittest.skipUnless(sys.platform == 'linux', 'deployed worker uses Linux process isolation')
 class WorkerBoundary(unittest.TestCase):
+    def test_same_uid_child_cannot_change_disposable_parent_scheduling(self):
+        process = subprocess.Popen(
+            [sys.executable, '-I', '-c', SCHEDULING_HELPER, str(ROOT)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={'PATH':'/usr/local/bin:/usr/bin:/bin','PYTHONDONTWRITEBYTECODE':'1'},
+            start_new_session=True,
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=10)
+            self.assertEqual(process.returncode, 0, stderr.decode())
+            result = json.loads(stdout)
+            self.assertEqual(result['child']['results'], [[-1,1]] * 6)
+            self.assertTrue(result['child']['read_allowed'])
+            self.assertEqual(result['before'], result['after'])
+            self.assertTrue(result['child_reaped'])
+        finally:
+            # Even a failing legacy-policy replay never targets the test runner
+            # or a live HTTP server, and the entire disposable group is removed.
+            try:os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:pass
+            process.wait()
+        self.assertFalse(Path('/proc',str(process.pid)).exists())
+
     @classmethod
     def setUpClass(cls):
         protect_supervisor()

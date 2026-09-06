@@ -122,3 +122,52 @@ Final review inspected parent Portal commit 2994bbfcd64197b75b48652381a42f00f20b
 All five catalog inputs now declare the existing multiline/editor contract, and the Workbench config declares code for the same five fields. No parent product implementation or scoring format changed. With both independent reader files above unchanged, clicking each next unsolved Submit control called real /api/prepare then /verify, produced five correct verdicts, and folded each solved row. The two component cases passed in 2.90 seconds. Harness: /private/tmp/properties-716-portal-harness.test.tsx; log: /private/tmp/properties-716-real-portal-component.log. The temporary harness was removed from the parent checkout after verification. This exercises component interaction and the local runtime, not a full authenticated browser or physical device layout.
 
 The root reran all 29 HTTP checks after this input-contract fix: /private/tmp/properties-716-http-root-final.log. Initial harness corrections were limited to reproducing clicks rather than asserting a disabled attribute, restoring the same synthetic fixture as the independent reading, and choosing the next unsolved button after solved rows collapsed. Reader source hashes and mathematical answers did not change.
+
+## 2026-09-07 follow-up: persistent IPC and same-UID scheduling
+
+This follow-up is based on main `d444d3b1954e7f1cdf6ebe0a186b09ce81e15fee`.
+It changes the local syscall deny policy and regression tests only; participant
+copy, formulas, checkpoint IDs, scoring, and production time limits are unchanged.
+The three confirmed consumers are constraint-lab, bridge-properties and
+underconstraint. Their helpers remain problem-local.
+
+A legacy constraint worker created one tiny System V shared-memory segment,
+message queue, semaphore and POSIX message queue. All four survived learner exit.
+The trusted probe parent removed every object in `finally` and verified the original
+namespace state. `/private/tmp/constraint-ipc-716-evidence/baseline-ipc.log` records
+creation/survival booleans and successful cleanup. POSIX `mq_open` is its own syscall;
+blocking file opens alone does not prevent it. Existing open/openat restrictions
+already block POSIX shared-memory and named-semaphore creation. System V and `mq_*`
+entry points are now denied where missing.
+
+A second isolated reproduction targeted only a disposable Linux helper parent.
+Its same-UID child changed scheduler policy0→5 (SCHED_IDLE), nice0→19,
+affinity4CPUs→1CPU, and I/O priority0→24576. All six mutating calls succeeded with
+the legacy filter. The child was reaped and the helper then exited. No host process,
+existing HTTP parent or shared deployment was targeted. The final tests launch a
+fresh helper, verify all six changes return EPERM, verify scheduling/priority reads
+still succeed, compare the parent's complete before/after snapshot, and remove the
+whole helper group even on failure. `sched_setscheduler`, `sched_setparam`,
+`sched_setattr`, `sched_setaffinity`, `setpriority` and `ioprio_set` are denied.
+The baseline is `/private/tmp/constraint-ipc-716-evidence/baseline-scheduling.log`.
+
+For libc `mq_unlink`, the exact public error is EACCES: glibc deliberately converts
+kernel EPERM. The test checks that mapping and separately checks raw `mq_unlink`
+returns EPERM; no assertion was weakened to accept arbitrary failures.
+[glibc mq_unlink implementation](https://codebrowser.dev/glibc/glibc/sysdeps/unix/sysv/linux/mq_unlink.c.html).
+
+Final Linux checks used dedicated author images, `--init --network none --read-only`,
+a64MiB writable /tmp, dropped capabilities, no-new-privileges,1GiB memory and128PIDs.
+All scheduling reproductions stayed inside these disposable containers.
+
+- `properties-linux.log`:11 tests PASS, including the new disposable-parent
+  scheduler test, System V/mqueue operations and POSIX shm/sem creation across
+  64 iterations each with no residual objects, plus all existing grading checks.
+- `properties-mutations.log`:8 existing mutations killed.
+- This older filter also lacked IPC denials, so both persistent IPC and the six
+  scheduler/I/O-priority writers are covered in this problem.
+
+Logs are under `/private/tmp/constraint-ipc-716-evidence/`. The shared catalog gate
+`make install && make agent-gate` validates116 metadata files separately. Each
+problem’s existing `make reference-test` runs its own mutation and Linux suites;
+recorded runs used equivalent commands with dedicated image names.
