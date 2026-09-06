@@ -1,5 +1,36 @@
 # #716 participant reading and runtime evidence
 
+## PR #761 review corrections
+
+Review of `237fff3` found that checking only honest cases and known forgeries
+accepted an incomplete two-dictionary build, and that repair accepted the missing
+expression under a different ID. The trusted checker now requires all five
+documented dictionaries for build and the exact missing dictionary for repair,
+while preserving the supplied dictionaries. List order is not graded. Regression
+cases cover each omitted dictionary, changed IDs and signal bindings, a duplicate,
+and a valid reversed list.
+
+Function-call failures now say that the named function did not return a value.
+They no longer attribute the value-channel wrapper's `ValueError` to an unfinished
+participant function; private exception messages remain excluded. Fork cleanup
+requires the child PID to disappear, rather than treating a zombie as reaped.
+
+Verification after these changes:
+
+- Existing 7 author mutations killed and 15 Linux boundary tests passed.
+- Unchanged independent reader passed the existing 38-check actual HTTP suite,
+  including all six checkpoints and the manually calculated diagnosis.
+- Actual `/verify` rejected the two-dictionary build and renamed repair in their
+  individual checkpoints and transfer. An unfinished audit returned
+  `audit did not return a value`, without a fabricated exception type or the
+  private exception marker.
+- Compilation, diff validation and catalog validation (116 entries) passed.
+
+Local logs: `/private/tmp/underconstraint-761-reference-test.log` and
+`/private/tmp/underconstraint-761-http-acceptance.log`. Tests used the same dedicated
+port 18147 and synthetic `underconstraint-reader-716` seed. This follow-up is local
+runtime verification, not a new independent reading or production deployment.
+
 Scope: only `ac26-w1-underconstraint`, based on `7bec128`. No shared runtime, scoring contract, cloud resources, release or other problem changed. The learner-facing problem still has six checkpoints worth 300 points and 15-point wrong-answer penalties. All six now have three hints, totalling 80 points.
 
 ## Read before looking at answers

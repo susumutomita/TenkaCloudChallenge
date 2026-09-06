@@ -38,6 +38,16 @@ _ISZERO_GADGET = (
     {"kind": "iszero_b", "value": "revoked", "out": "ok"},
 )
 
+# Authoritative dictionaries implementing the five publicly specified checks.
+# These stay in the trusted checker; the worker receives only function inputs.
+_INTENDED = (
+    {"id": "c-issuer-bool", "kind": "boolean", "signal": "issuer_ok"},
+    {"id": "c-ok-bool", "kind": "boolean", "signal": "ok"},
+    {"id": "c-iszero-a", **_ISZERO_GADGET[0]},
+    {"id": "c-iszero-b", **_ISZERO_GADGET[1]},
+    {"id": "c-grant", "kind": "mul", "left": "ok", "right": "issuer_ok", "out": "granted"},
+)
+
 
 def _normalized(circuit: object) -> list[dict] | None:
     if not isinstance(circuit, list) or not circuit:
@@ -74,10 +84,12 @@ def check_build(module, seed: str) -> list[str]:
     failures: list[str] = []
     try:
         built = _normalized(module.intended_circuit())
-    except Exception as error:  # noqa: BLE001
-        return [f"intended_circuit raised {type(error).__name__}"]
+    except Exception:  # noqa: BLE001
+        return ["intended_circuit did not return a value"]
     if built is None:
         return ["intended_circuit did not return a list of constraint dicts"]
+    if len(built) != len(_INTENDED) or any(c not in built for c in _INTENDED):
+        return ["intended_circuit must contain the five documented dictionaries with their IDs and signal names"]
 
     for label in LABELS:
         prm = params(seed, label)
@@ -108,8 +120,8 @@ def check_audit(module, seed: str) -> list[str]:
         expected = [_missing_id(circuit)]
         try:
             actual = module.audit(circuit)
-        except Exception as error:  # noqa: BLE001
-            return [f"audit raised {type(error).__name__}"]
+        except Exception:  # noqa: BLE001
+            return ["audit did not return a value"]
         if not isinstance(actual, list) or sorted(str(a) for a in actual) != sorted(
             str(e) for e in expected if e is not None
         ):
@@ -121,8 +133,8 @@ def check_audit(module, seed: str) -> list[str]:
         try:
             if module.audit(module.intended_circuit()) != []:
                 failures.append("audit reports a gap in the complete circuit")
-        except Exception as error:  # noqa: BLE001
-            failures.append(f"audit raised {type(error).__name__} on a complete circuit")
+        except Exception:  # noqa: BLE001
+            failures.append("audit did not return a value on a complete circuit")
     return failures
 
 
@@ -134,8 +146,8 @@ def check_exploit(module, seed: str) -> list[str]:
         circuit = vulnerable_circuit(seed, label)
         try:
             forged = module.forge_witness(circuit, dict(prm))
-        except Exception as error:  # noqa: BLE001
-            return [f"forge_witness raised {type(error).__name__}"]
+        except Exception:  # noqa: BLE001
+            return ["forge_witness did not return a value"]
         if not isinstance(forged, dict):
             failures.append("forge_witness did not return a witness")
             continue
@@ -167,16 +179,21 @@ def check_repair(module, seed: str) -> list[str]:
         circuit = vulnerable_circuit(seed, label)
         try:
             repaired = _normalized(module.repair([dict(c) for c in circuit]))
-        except Exception as error:  # noqa: BLE001
-            return [f"repair raised {type(error).__name__}"]
+        except Exception:  # noqa: BLE001
+            return ["repair did not return a value"]
         if repaired is None:
             failures.append("repair did not return a list of constraint dicts")
+            continue
+        dropped = _missing_id(circuit)
+        missing = next((c for c in _INTENDED if c["id"] == dropped), None)
+        if (len(repaired) != len(circuit) + 1 or missing not in repaired
+                or any(c not in repaired for c in circuit)):
+            failures.append("repair must keep the supplied dictionaries and restore the missing dictionary with its documented ID and signal names")
             continue
         if not satisfies(repaired, honest_witness(prm), p):
             failures.append("the repaired circuit rejects an honest revoked credential")
         if not satisfies(repaired, clean_witness(prm), p):
             failures.append("the repaired circuit rejects an honest clean credential")
-        dropped = _missing_id(circuit)
         for forged in _known_forgeries(prm, dropped) if dropped is not None else []:
             if satisfies(repaired, forged, p):
                 failures.append("the repaired circuit still accepts the forged witness")

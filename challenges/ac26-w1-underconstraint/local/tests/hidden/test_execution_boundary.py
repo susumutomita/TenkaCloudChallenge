@@ -58,6 +58,48 @@ class WorkerBoundary(unittest.TestCase):
         self.assertTrue(server.evaluate('exploit', REFERENCE + '\ndef repair(circuit): raise NotImplementedError()\n')[0])
         self.assertFalse(server.evaluate('audit', source)[0])
 
+    def test_build_requires_every_documented_dictionary(self):
+        # A and B alone accept both honest fixtures and reject known forgeries,
+        # but leave the independent boolean and grant checks unconstrained.
+        for index in range(5):
+            source = REFERENCE + f'\ndef intended_circuit(): return [dict(c) for i,c in enumerate(INTENDED) if i != {index}]\n'
+            self.assertFalse(server.evaluate('build', source)[0], index)
+        for replacement in (
+            "result[2]['id']='different-id'",
+            "result[0]['signal']='ok'",
+            "result[0]=dict(result[1])",
+        ):
+            source = REFERENCE + '\ndef intended_circuit():\n    result=[dict(c) for c in INTENDED]\n    ' + replacement + '\n    return result\n'
+            self.assertFalse(server.evaluate('build', source)[0], replacement)
+        self.assertTrue(server.evaluate('build', REFERENCE + '\ndef intended_circuit(): return [dict(c) for c in reversed(INTENDED)]\n')[0])
+
+    def test_repair_restores_the_actual_missing_dictionary(self):
+        for change in ("added['id']='not-the-missing-id'", "added['out']='granted'"):
+            source = REFERENCE + '''
+def repair(circuit):
+    present=[c['id'] for c in circuit]
+    added=next(dict(c) for c in INTENDED if c['id'] not in present)
+    ''' + change + '''
+    return [dict(c) for c in circuit]+[added]
+'''
+            for checkpoint in ('repair','mutation-transfer'):
+                self.assertFalse(server.evaluate(checkpoint,source)[0], (change,checkpoint))
+        # The API accepts a list in any order; the identity of the restored check matters.
+        source = REFERENCE + '\n_original_repair=repair\ndef repair(circuit): return list(reversed(_original_repair(circuit)))\n'
+        self.assertTrue(server.evaluate('repair',source)[0])
+
+    def test_unfinished_functions_are_not_reported_as_wrapper_errors(self):
+        for checkpoint,function,args in (
+            ('build','intended_circuit',''),('audit','audit','circuit'),
+            ('exploit','forge_witness','circuit, params'),('repair','repair','circuit'),
+        ):
+            source=REFERENCE+f'\ndef {function}({args}): raise NotImplementedError("hidden marker")\n'
+            correct,message=server.evaluate(checkpoint,source)
+            self.assertFalse(correct)
+            self.assertIn(f'{function} did not return a value',message)
+            self.assertNotIn('ValueError',message)
+            self.assertNotIn('hidden marker',message)
+
     def test_unused_looping_function_does_not_block_an_independent_checkpoint(self):
         source = REFERENCE + '\ndef repair(circuit):\n    while True: pass\n'
         with patch.object(execution, 'RUN_TIMEOUT_SECONDS', .5):
@@ -145,11 +187,11 @@ def intended_circuit():
         pid = result['values'][0]['returned']
         for _ in range(50):
             status = Path(f'/proc/{pid}/stat')
-            if not status.exists() or status.read_text().split()[2] == 'Z':
+            if not status.exists():
                 break
             time.sleep(.02)
         else:
-            self.fail('forked learner remains running after successful response')
+            self.fail('forked learner was not reaped after successful response')
 
 
 if __name__ == '__main__':
