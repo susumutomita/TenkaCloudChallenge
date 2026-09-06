@@ -1,8 +1,7 @@
 """`make inspect` / the Portal's inspect button — this deployment's numbers, as Python.
 
 Assignments support an optional Python scratchpad. Paper solvers read the same numbers. The expected values are NOT printed:
-they are what the learner's own lines produce. The secret of the attack key is not
-printed either — extracting it is line 11.
+they are what the learner calculates. The other person's secret is not printed.
 """
 
 from __future__ import annotations
@@ -69,15 +68,15 @@ def main() -> None:
     print(payload["assignments"])
     print()
     print("== 名前 / Names ==")
-    print("p,a,b: Y² と X³+aX+b の余りを一致させる点の式 / curve parameters")
-    print("G: 繰り返し足す基準点 / base point; Gx,Gy: 横と縦 / coordinates")
-    print("t: 逆元を探す数 / number whose inverse you find")
+    print("p,a,b: Y² と X³+aX+b をpで割った余りが等しい点を使います / points where Y² and X³+aX+b have the same remainder after division by p")
+    print("G: 繰り返し足す点 / point to add repeatedly; Gx,Gy: 横と縦 / horizontal and vertical values")
+    print("t: 掛けてpで割ると1余る相手を探す数 / find a number that multiplies with t to leave remainder 1 after division by p")
     print("Q: 違う点の足し算に使う点 / second point for addition")
-    print("x,r,e: 練習する人の秘密・使い捨ての数・質問 / practice secret, nonce, challenge")
-    print("P1,e1,s1,e2,s2: 別の人が同じrで違う質問へ返した2応答 / nonce-reuse records")
-    print("P2,ef: 最後の別の公開鍵・先に見える質問 / final public key and early challenge")
+    print("x,r,e: 練習する人の秘密・使い捨ての数・質問 / practice secret, one-time random number, question number")
+    print("P1,e1,s1,e2,s2: 別の人が同じrで違う質問へ返した2応答 / two responses to different questions using the same random number r")
+    print("P2,ef: 別の秘密から作った公開する点・先に見える質問 / a public point made from another secret, and the question number shown early")
     print("欄4でGの倍数表を作り、nを求めて後の欄でも使います。")
-    print("Keep the multiples-of-G table and order n you calculate in field 4.")
+    print("O is the special point acting as zero. In field 4, count additions of G until O; call the count n and keep that table.")
 
 
 

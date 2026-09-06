@@ -138,3 +138,16 @@ Logs: `/private/tmp/schnorr-750-output-unit.log`, `schnorr-750-output-reference.
 `schnorr-750-output-catalog.log`, `schnorr-750-output-cleanup.log`, and
 `schnorr-750-output-remaining.log`. The earlier `schnorr-750-output-http.log` records
 the host sandbox's localhost `EPERM`; the explicitly authorized rerun above passed.
+
+
+## Inspect vocabulary follow-up
+
+Review 3944249306 found that Inspect still named nonce/challenge before their
+definition, despite the prior summary/config fix. The English Inspect legend now
+uses one-time random number and question number, and explains p, the repeated
+point G, and the inverse operation directly. Both languages describe P2 as a
+public point made from a different secret. The optional starter defines its own
+nonce/tangent/mod names at first use. No field values or grading changed.
+The actual show.py entrypoint was exercised with an injected synthetic public
+snapshot; output is /private/tmp/schnorr-750-inspect-vocabulary.log. This is a
+public-output check, not a new live HTTP claim. The catalog gate passed.
