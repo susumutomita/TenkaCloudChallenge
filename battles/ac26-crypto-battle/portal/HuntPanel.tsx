@@ -10,7 +10,7 @@ import { DieRow } from "./DieFace.tsx";
 
 type Locale = "ja" | "en";
 type Mode = "share" | "sudoku" | CipherRung | "rps";
-type Status = "waiting" | "ready" | "completed" | "exhausted" | "pending";
+type Status = "waiting" | "ready" | "completed" | "exhausted" | "pending" | "unknown";
 export interface HuntOption {
   readonly key: string; readonly teamId: string; readonly generation: number; readonly mode: Mode;
   readonly status: Status; readonly detail: { readonly ja: string; readonly en: string };
@@ -18,8 +18,8 @@ export interface HuntOption {
   readonly sudoku?: SudokuHuntCandidate; readonly cipher?: CipherHuntCandidate; readonly rps?: RpsHuntTarget;
 }
 const labels = {
-  ja: { share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", rps: "じゃんけんの予測", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち" },
-  en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", rps: "RPS prediction", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings" },
+  ja: { share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", rps: "じゃんけんの予測", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
+  en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", rps: "RPS prediction", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
 };
 
 /** Public records open a worksheet; no solver or verdict is run for the participant. */
@@ -31,6 +31,7 @@ export function huntOptions(projection: CryptoBattleProjection): readonly HuntOp
     const left = budget ? Math.max(0, budget.max - budget.spent) : undefined;
     const sudokuLeft = sudokuBudget?.generation === generation ? Math.max(0, sudokuBudget.max - sudokuBudget.spent) : undefined;
     const status = (mode: Mode, ready: boolean, remaining?: number): Status => {
+      if (mode !== "rps" && projection.completedHunts === undefined) return "unknown";
       if (projection.completedHunts?.some(h => h.targetTeamId === teamId && h.generation === generation && h.via === mode)) return "completed";
       if (remaining === 0) return "exhausted";
       return ready ? "ready" : "waiting";
@@ -84,15 +85,16 @@ export default function HuntPanel(props: Props) {
   useEffect(() => { if (target) { work.current?.focus({ preventScroll: true }); work.current?.scrollIntoView({ block: "nearest" }); } }, [selected]);
   const ready = options.filter(o => o.status === "ready");
   const ja = locale === "ja", copy = labels[locale];
+  const refreshing = ja ? "攻撃済み状態を更新中です。次の更新まで操作を待ってください。" : "Refreshing completed attacks. Wait for an updated response before acting.";
   const name = (id: string) => projection.teams[id]?.teamName || id;
   return <section className="tc-hunt-entry" aria-label={ja ? "相手を攻撃する HUNT" : "Attack an opponent with HUNT"}>
     <h2>{ja ? "相手を攻撃する（HUNT）" : "Attack an opponent (HUNT)"}</h2>
     <p className="tc-card-hint">{ja ? "相手の公開情報から秘密や手を計算する攻撃です。方式ごとに材料が異なります。材料待ちなら別のお題を進めましょう。" : "Recover secrets or predict hands from public information. Each method needs different evidence. Work on other Orders while waiting."}</p>
-    <p className="tc-hunt-notice" role="status" aria-live="polite">{ready.length ? (ja ? `材料・計算へ進める：${ready.map(o => `${name(o.teamId)}の${copy[o.mode]}`).join("、")}` : `Worksheets available: ${ready.map(o => `${name(o.teamId)} · ${copy[o.mode]}`).join(", ")}`) : (ja ? "現在、攻撃できる材料はそろっていません。状態は約30秒ごとに更新されます。" : "No ready targets. Status refreshes about every 30 seconds.")}</p>
+    <p className="tc-hunt-notice" role="status" aria-live="polite">{ready.length ? (ja ? `材料・計算へ進める：${ready.map(o => `${name(o.teamId)}の${copy[o.mode]}`).join("、")}` : `Worksheets available: ${ready.map(o => `${name(o.teamId)} · ${copy[o.mode]}`).join(", ")}`) : (options.some(o => o.status === "unknown") ? refreshing : (ja ? "現在、攻撃できる材料はそろっていません。状態は約30秒ごとに更新されます。" : "No ready targets. Status refreshes about every 30 seconds."))}</p>
     <div className="tc-hunt-opponents">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(team => <article key={team.teamId} className="tc-hunt-opponent">
       <h3>{name(team.teamId)} <small>{ja ? "世代" : "Generation"} {team.generation} · {team.score} {ja ? "点" : "pt"}</small></h3>
       {options.filter(o => o.teamId === team.teamId).map(option => <div key={option.key} className={`tc-hunt-method tc-hunt-${option.status}`}>
-        <div><strong>{copy[option.mode]}</strong><span className="tc-hunt-state">{option.mode === "sudoku" && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</span></div><p>{option.detail[locale]}</p>
+        <div><strong>{copy[option.mode]}</strong><span className="tc-hunt-state">{option.mode === "sudoku" && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</span></div><p>{option.status === "unknown" ? refreshing : option.detail[locale]}</p>
         {option.status === "ready" && <button type="button" className="tc-target-chip" aria-pressed={selected === option.key} onClick={() => setSelected(option.key)}>{ja ? (option.mode === "sudoku" ? "数独の材料を確認して解く →" : `${copy[option.mode]}の材料・計算へ →`) : `Open ${copy[option.mode]} worksheet →`}</button>}
         {(option.status === "completed" || option.status === "exhausted") && <p>{option.mode === "rps" && option.status === "completed" ? (ja ? "次の対戦の受付を待ちます。" : "Wait for the next duel's prediction window.") : (ja ? "相手の世代が変わると、次の攻撃を準備できます。" : "Prepare a new attack when the opponent's generation changes.")}</p>}
       </div>)}

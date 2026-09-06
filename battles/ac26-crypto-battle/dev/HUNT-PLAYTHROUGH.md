@@ -29,6 +29,12 @@ checks that repeated groups which do not pin a unique solution remain rejected;
 Schema 5 adds `lastHunt.points` for the actual attack delta including the score
 floor. Schemas 1–4 migrate without inventing missing historical deltas; old
 results display their known outcome and say the score change was not recorded.
+`hunt-migration.test.ts` upgrades nonempty v4 Shamir/Sudoku counters and RPS
+reservations, retaining numeric ledger IDs and prediction keys. Projections,
+the next attack, both openings and settlement match the unmodified source row.
+Malformed compact keys fail migration without rewriting the row. A response
+without completion history displays “状態を更新中” and withholds those attack
+controls until a response with completion history arrives.
 The only new target projection data is the reader's own completed attack types;
 no recovered secret, solution, key, or private opponent opening is added.
 

@@ -64,7 +64,7 @@ import {
   type FieldConfig,
 } from "./fixtures.ts";
 import { applyRpsHunt, projectRpsHunt, validateRpsHunt } from "./rps-hunt.ts";
-import { huntKey, storedHuntKey, compactHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
+import { huntKey, storedHuntKey, compactHuntAttempts, validateStoredHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
 import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
@@ -612,7 +612,8 @@ export const STATE_SCHEMA_VERSION = 5;
  * A legacy `proof` ledger entry is kept: it still decodes and renders.
  * v4 -> v5 preserves old `lastHunt` records without `points`: the actual
  * historical delta cannot be recovered from a current score or price, so it
- * stays unknown. Only a new HUNT writes the field.
+ * stays unknown. Only a new HUNT writes the field. v4's numeric roster budget
+ * keys are validated and retained, not compacted again as logical team IDs.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
   if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4) {
@@ -651,7 +652,7 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   return {
     ...lifted,
     publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a))),
-    huntAttempts: compactHuntAttempts(lifted),
+    huntAttempts: fromVersion === 4 ? validateStoredHuntAttempts(lifted) : compactHuntAttempts(lifted),
     contracts: lifted.contracts.map((contract) => {
       const { proveCommitment: _c, proveChallenge: _e, ...kept } = contract as Contract & {
         readonly proveCommitment?: unknown;

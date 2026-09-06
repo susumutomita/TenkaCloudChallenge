@@ -40,7 +40,9 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
     expect(option.status).toBe("ready");
     expect(render(p)).toContain("秘密のかけらの材料・計算へ");
     const { completedHunts: _newField, ...legacy } = p;
-    expect(render(legacy)).toContain("秘密のかけらの材料・計算へ");
+    expect(render(legacy)).toContain("攻撃済み状態を更新中");
+    expect(render(legacy)).not.toContain("秘密のかけらの材料・計算へ");
+    expect(workspace(legacy, "share")).toBe("");
     const html = workspace(p, "share");
     expect(html).toContain("fast-hunt-secret");
     expect(html).toContain("+25 点");
@@ -87,6 +89,22 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
     expect(render(view(state))).toContain("回数切れ");
     expect(workspace(view(state), "share")).toBe("");
     expect(validateOp(state, "bravo", wrong).ok).toBe(false);
+  });
+  test("older projections never reopen a successful share, sudoku or cipher attack", () => {
+    for (const mode of ["share", "sudoku", "caesar"] as const) {
+      const state = buildScenario(mode === "sudoku" ? "pi-reuse" : "hunt-reachable").host.state;
+      const p = view(state);
+      const pair = huntOptions(p).find(o => o.mode === "caesar")?.cipher?.pairs[0];
+      const op = mode === "sudoku" ? buildSudokuHuntOp(p, "alpha") : mode === "share" ? buildHuntOp(p, "alpha", { prime: state.config.prime, threshold: state.config.threshold })
+        : pair ? { kind: "hunt-cipher" as const, targetTeamId: "alpha", generation: 1, rung: "caesar" as const, recoveredKey: (pair.ciphertext[0]! - pair.plaintext[0]! + 6) % 6 } : undefined;
+      if (!op) throw new Error(`missing ${mode} fixture`);
+      const after = view(run(state, "bravo", op));
+      expect(huntOptions(after).find(o => o.mode === mode)?.status).toBe("completed");
+      const { completedHunts: _missingFromOlderDispatcher, ...legacy } = after;
+      expect(huntOptions(legacy).find(o => o.mode === mode)?.status).toBe("unknown");
+      expect(workspace(legacy, mode)).toBe("");
+      expect(render(legacy)).toContain("攻撃済み状態を更新中");
+    }
   });
   test("sudoku worksheet uses public tag reuse, and a participant-computed answer is adjudicated", () => {
     const state = buildScenario("pi-reuse").host.state, p = view(state);
