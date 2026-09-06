@@ -70,9 +70,9 @@ const COPY = {
     fheShort: "復号せずに足す",
     mpc: "MPC",
     mpcShort: "覆面つき小計を出す",
-    vault: "MY VAULT",
+    vault: "自分だけの保管庫",
     generation: "世代",
-    ledger: "PUBLIC LEDGER",
+    ledger: "全員に見える公開記録",
     ledgerSelf: "あなた",
     emptyLedger: "まだ公開情報はありません。",
     raw: "生データ",
@@ -366,6 +366,7 @@ export function Vault({ projection, locale }: { readonly projection: CryptoBattl
           <div>
             <div className="tc-section-label">{copy.vault}</div>
             <strong>{copy.generation} {projection.vault.generation}</strong>
+            <p className="tc-terms-note">{locale === "ja" ? "秘密とシェアを置く場所です。他チームには見えません。世代は同じ秘密から作った一組です。" : "Your private secret and shares. A generation is one set made from one secret."}</p>
           </div>
           <span className="tc-score-chip">{copy.vaultOpen}</span>
         </summary>
@@ -399,6 +400,7 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
   return (
     <section className="tc-game-card">
       <div className="tc-section-label">{copy.ledger}</div>
+      <p className="tc-terms-note">{locale === "ja" ? "各チームが公開した数字の記録です。相手の秘密を見破る材料になります。英語では Ledger（台帳）と呼びます。" : "A ledger records numbers each team has published. Use an opponent’s records as evidence for an attack."}</p>
       {groups.length === 0 ? (
         <div className="tc-empty">{copy.emptyLedger}</div>
       ) : (

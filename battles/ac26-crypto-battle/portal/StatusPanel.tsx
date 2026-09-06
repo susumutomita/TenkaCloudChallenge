@@ -39,7 +39,7 @@ export default function StatusPanel(props: PortalSlotProps) {
     <>
       <section style={{ maxWidth: 1080, margin: "0 auto 10px", padding: "14px 18px", background: "#fff", color: "#16212e", border: "1px solid #dce3ec", borderRadius: 12 }}>
         <h1 style={{ margin: "0 0 6px", fontSize: 20 }}>{locale === "ja" ? "暗号バトル" : "Cryptography Battle"}</h1>
-        <p style={{ margin: "0 0 10px", fontSize: 13 }}>{locale === "ja" ? "暗号のお題に答えて得点。公開情報から相手の秘密を復元すると、追加で得点できます。" : "Score by answering cryptography tasks. Recover an opponent’s secret from public evidence to earn more."}</p>
+        <p style={{ margin: "0 0 10px", fontSize: 13 }}>{locale === "ja" ? "秘密を守って得点し、相手の公開情報から秘密を見破る。終了時に得点が高いチームの勝ちです。" : "Score by answering cryptography tasks. Recover an opponent’s secret from public evidence to earn more."}</p>
         <details>
           <summary style={{ cursor: "pointer", fontSize: 13, color: "#315f91", padding: "4px 0" }}>
             {locale === "ja" ? "この問題の解説・練習（任意）" : "How to play and practice (optional)"}
@@ -48,7 +48,7 @@ export default function StatusPanel(props: PortalSlotProps) {
             <QuickRules locale={locale} />
             <TutorialWalkthrough key={tutorialKey} locale={locale} />
             <details style={{ marginTop: 8 }}>
-              <summary style={{ cursor: "pointer", fontSize: 13, color: "#315f91" }}>{locale === "ja" ? "知りたい仕組みから読む（無料）" : "Choose a cryptography topic (free)"}</summary>
+              <summary style={{ cursor: "pointer", fontSize: 13, color: "#315f91" }}>{locale === "ja" ? "暗号の仕組みを図で見る" : "Explore cryptography diagrams"}</summary>
               <div style={{ marginTop: 12 }}>
                 <ConceptExplanation locale={locale} />
               </div>

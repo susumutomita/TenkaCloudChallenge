@@ -126,7 +126,7 @@ is something you can read off the board.
 ROTATE moves your key to a new generation too, and every pair published before it
 stops being worth anything.
 
-The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE is the 4x4 sudoku relabelling the drawer walks through by hand; share reconstruction matches `ac26-w2-secret-sharing`.
+The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE is the 4x4 sudoku relabelling the drawer walks through by hand; share reconstruction uses Shamir threshold sharing (distinct from the additive sharing exercise in `ac26-w2-secret-sharing`).
 
 ## Reading the screen
 
@@ -136,7 +136,7 @@ The complete Portal reference contains the formulas, constants, and runnable Pyt
 4. **Exposure, records and vault** — read the summary and expand what you need
 5. **How to play and practice (optional)** — open the disclosure above the board to choose rules, guided scenes or a topic
 
-HUNT, reused-relabelling HUNT, and ROTATE stay off the fresh first screen until relevant public material exists.
+The collapsed HUNT entry is always visible. It explains the attack and counts each opponent’s distinct public shares in their current generation. Once enough exist, select an opponent and use the displayed factors to calculate the secret; the answer is still entered by the player. Other attacks and ROTATE appear when relevant.
 
 ## Data boundary
 
@@ -220,3 +220,5 @@ After both hands become public, a hit earns 25 points and a miss costs 8 (score 
 The three-attempt limit per opponent generation is shared with share-recovery HUNT.
 A timeout without publication cancels the prediction and refunds its attempt.
 ROTATE keeps the public RPS history and already submitted predictions.
+
+Confirmed scored Order answers show a short celebration, earned points and the current total; the result remains after the animation ends. Reduced-motion preferences suppress the animation. Incorrect PROVE answers show the penalty. Renaming diagrams connect the selected table to the two sudoku grids; optional concept diagrams distinguish the ZK concept from this trusted-judge teaching model.
