@@ -1,196 +1,92 @@
-"""This deployment's numbers for the SumCheck drill.
-
-Everything the learner types is decided here from FLAG_SEED: a small prime field, the
-four circuit inputs, the verifier's two random points, the honest prover's two messages
-(as coefficients — what actually travels in the protocol), and the lying prover's two
-fudge parameters. The learner never sees the expected values — they see the assignment
-statements (``show.py``) and produce every value with their own Python, one line at a
-time. The twelve lines' expected values live only in ``verifier/expected.py``, which is
-never copied into the participant Docker stage.
-
-The circuit is the two-gate toy from the Week 4 lecture's GKR section — y₀ = x₁ + x₂,
-y₁ = x₃·x₄, output y₀ + y₁ — but the inputs, the field, and the verifier's randomness
-are this deployment's own (the independent-reimplementation rule): the procedure is the
-lecture's, the numbers are not.
-
-Nothing here is cryptographic. Toy parameters are for observability.
-
-History (#537/#543): this module used to compute and return the twelve lines' expected
-values directly, so `setting(FLAG_SEED)["expected"]` handed back every graded answer
-with one import. A first pass moved that computation into ``verifier/expected.py`` but
-left it in the same single, participant-runnable Docker stage as everything else, so the
-answer stayed reachable one import away. This problem's ``local/`` now splits into a
-public ``participant/`` Workbench stage (this module, ``tests/public/``, ``starter/``)
-and a separate, unpublished ``verifier`` stage that alone carries
-``verifier/expected.py`` and ``tests/hidden/`` — see ``../Dockerfile`` and
-``../docker-compose.yml``.
-"""
-
-from __future__ import annotations
-
-import hashlib
-
-PRIMES = (11, 13, 17, 19, 23)
-
-# The line ids, in drill order. server.py, show.py, the tests and metadata.json all read
-# these tuples, so the drill's order and its graded subset are defined in one place.
-LINES = (
-    "circuit",
-    "mle",
-    "grid",
-    "grid-total",
-    "p1-sum",
-    "p1-check",
-    "round1",
-    "p2-sum",
-    "final-check",
-    "lie",
-    "lie-caught",
-    "miss-points",
-)
-
-# The lines that have an answer field. The platform allows at most eight checkpoints per
-# problem, so four lines (the four-term sum, the two sum checks, the all-points check)
-# are ungraded material: each equals a value the learner already produced, or feeds the
-# line after it, where a mistake surfaces.
-GRADED = (
-    "circuit",
-    "mle",
-    "grid",
-    "round1",
-    "final-check",
-    "lie",
-    "lie-caught",
-    "miss-points",
-)
-
-#: Expected-value shapes: every graded line is an int or a tuple of ints of fixed length.
-TUPLE_LINES = {
-    "circuit": 3,
-    "mle": 3,
-    "grid": 4,
-    "final-check": 2,
-    "lie": 2,
-    "lie-caught": 3,
-    "miss-points": 2,
-}
+"""Private small fixtures and independent validation of false-message constructions."""
+import ast,hashlib,itertools
+LINES=GRADED=('circuit','mle','grid','round1','final-check','lie','lie-caught','miss-points')
+PRIMES=(5,7)
 
 
-def _draw(seed: str, label: str, low: int, high: int) -> int:
-    digest = hashlib.sha256(f"{seed}:{label}".encode("utf-8")).digest()
-    return low + int.from_bytes(digest[:8], "big") % (high - low + 1)
+def draw(seed,label,low,high):
+    return low+int.from_bytes(hashlib.sha256(f'{seed}:{label}'.encode()).digest()[:8],'big')%(high-low+1)
 
 
-def setting(seed: str) -> dict:
-    """Everything public: the assignment statements `show.py` prints.
-
-    The twelve lines' expected values are NOT computed here. They live in
-    `verifier/expected.py`, which the participant Docker stage never copies in (Issue
-    543/537): a single file that both defined this deployment's numbers *and* the
-    values a graded line must equal is exactly what let `docker exec` into the
-    participant image import the answer directly.
-    """
-    p = PRIMES[_draw(seed, "field", 0, len(PRIMES) - 1)]
-
-    x1 = _draw(seed, "x1", 1, p - 1)
-    x2 = _draw(seed, "x2", 1, p - 1)
-    x3 = _draw(seed, "x3", 1, p - 1)
-    x4 = _draw(seed, "x4", 1, p - 1)
-    # The drill needs a non-degenerate instance: both layer values non-zero (the wiring
-    # polynomial visibly carries something), distinct (the MLE is a real line, and the
-    # swapped-MLE mistake is distinguishable), and a non-zero output (the claim is not
-    # the sentinel 0). Bumping x2 / x4 preserves seed-determinism.
-    while (x1 + x2) % p == 0 or (x1 + x2) % p == (x3 * x4) % p:
-        x2 = x2 % (p - 1) + 1
-    while (x3 * x4) % p == 0 or (x1 + x2) % p == (x3 * x4) % p or ((x1 + x2) + x3 * x4) % p == 0:
-        x4 = x4 % (p - 1) + 1
-    y0 = (x1 + x2) % p
-    y1 = (x3 * x4) % p
-    out = (y0 + y1) % p
-
-    def w1(z: int) -> int:
-        return (y0 * (1 - z) + y1 * z) % p
-
-    # The honest prover's messages, as the coefficients that travel in the protocol.
-    # p1(t) = sum_b g0(t, b) = (1 - t)(W1(t) + y1) expands to:
-    c0, c1, c2 = out, (-2 * y0) % p, (y0 - y1) % p
-    # p2(t) = g0(r1, t) = (1 - r1)·t·(W1(r1) + W1(t)) expands to b1·t + b2·t²:
-    r1 = _draw(seed, "r1", 2, p - 1)
-    # p1(r1) must not equal the shown coefficient c0 (that happens exactly at the one
-    # r1 with c1 + c2·r1 ≡ 0), so the pasted value is never a number already on screen.
-    while (c1 + c2 * r1) % p == 0:
-        r1 = r1 % (p - 2) + 2
-    b1 = ((1 - r1) * (w1(r1) + y0)) % p
-    b2 = ((1 - r1) * (y1 - y0)) % p
-
-    # The lying prover: inflate the claim by d, cover round 2 with sh·(1−t) + m·t·(1−t).
-    d = _draw(seed, "d", 1, p - 1)
-    sh = (d * (1 - r1)) % p
-    m = _draw(seed, "m", 1, p - 1)
-    if m == (-sh) % p:  # a double root at t = 1 would leave only one miss point
-        m = m % (p - 1) + 1
-        if m == (-sh) % p:
-            m = m % (p - 1) + 1
-    t_star = ((-sh) * pow(m, p - 2, p)) % p
-
-    # The verifier's second point must actually catch the lie (not land on a miss point).
-    r2 = _draw(seed, "r2", 2, p - 1)
-    while r2 in (1, t_star):
-        r2 = r2 % (p - 2) + 2
-
-    public = {
-        "p": p, "x1": x1, "x2": x2, "x3": x3, "x4": x4,
-        "r1": r1, "r2": r2,
-        "c0": c0, "c1": c1, "c2": c2, "b1": b1, "b2": b2,
-        "d": d, "m": m,
-    }
-    return {"public": public}
+def evaluate(p,c,t):
+    return (c[0]+c[1]*t+c[2]*t**2)%p
 
 
-def assignments(seed: str) -> str:
-    """The public values as Python assignment statements, ready to paste into a REPL."""
-    pub = setting(seed)["public"]
-    return "\n".join(
-        [
-            f"p = {pub['p']}",
-            f"x1, x2, x3, x4 = {pub['x1']}, {pub['x2']}, {pub['x3']}, {pub['x4']}",
-            f"r1, r2 = {pub['r1']}, {pub['r2']}",
-            f"c0, c1, c2 = {pub['c0']}, {pub['c1']}, {pub['c2']}",
-            f"b1, b2 = {pub['b1']}, {pub['b2']}",
-            f"d, m = {pub['d']}, {pub['m']}",
-        ]
-    )
+def required_sum(public):
+    return (evaluate(public['p'],public['first'],public['r1'])+public['d']*(1-public['r1']))%public['p']
 
 
-def normalize_answer(line: str, raw: object):
-    """Turn whatever the learner pasted into the shape the expected value has.
+def valid_coefficients(p,c):
+    return isinstance(c,(list,tuple)) and len(c)==3 and all(type(x) is int and 0<=x<p for x in c)
 
-    Integers may arrive as int or as a digit string. Tuples may arrive as a JSON list,
-    a tuple-looking string "(a, b, c)", or "a, b, c" — the length must match the line's
-    shape exactly. Anything else is simply wrong.
-    """
-    width = TUPLE_LINES.get(line)
-    if width is not None:
-        if isinstance(raw, str):
-            cleaned = raw.strip().strip("()[]")
-            parts = [part.strip() for part in cleaned.split(",") if part.strip() != ""]
-        elif isinstance(raw, (list, tuple)):
-            parts = list(raw)
-        else:
-            return None
-        if len(parts) != width:
-            return None
-        try:
-            return tuple(int(part) for part in parts)
-        except (TypeError, ValueError):
-            return None
-    if isinstance(raw, bool):
-        return None
-    if isinstance(raw, int):
-        return raw
-    if isinstance(raw, str):
-        try:
-            return int(raw.strip())
-        except ValueError:
-            return None
-    return None
+
+def valid_spoof(public,candidate):
+    p=public['p']
+    if not valid_coefficients(p,candidate):return False
+    return (2*candidate[0]+candidate[1]+candidate[2])%p==required_sum(public) and evaluate(p,candidate,public['r2'])==evaluate(p,public['second'],public['r2'])
+
+
+def valid_pair(public,pair):
+    p=public['p']
+    if not isinstance(pair,(list,tuple)) or len(pair)!=2 or not all(valid_coefficients(p,c) for c in pair):return False
+    matches=[]
+    for c in pair:
+        if (2*c[0]+c[1]+c[2])%p!=required_sum(public):return False
+        hits=[t for t in range(p) if evaluate(p,c,t)==evaluate(p,public['second'],t)]
+        if len(hits)!=2:return False
+        matches.append(hits)
+    return all(t not in matches[1] for t in matches[0])
+
+
+def setting(seed):
+    p=PRIMES[draw(seed,'p',0,1)]
+    for retry in range(128):
+        x=[draw(seed,f'x-{retry}-{i}',1,p-1) for i in range(4)]
+        y0=(x[0]+x[1])%p;y1=x[2]*x[3]%p;out=(y0+y1)%p
+        if y0 and y1 and y0!=y1 and out:break
+    else:raise RuntimeError('no nondegenerate small circuit')
+    first=[out,(-2*y0)%p,(y0-y1)%p]
+    choices=[r for r in range(2,p) if evaluate(p,first,r)!=out]
+    r1=choices[draw(seed,'r1',0,len(choices)-1)];r2=draw(seed,'r2',0,p-1)
+    w=lambda z:(y0*(1-z)+y1*z)%p
+    second=[0,((1-r1)*(w(r1)+y0))%p,((1-r1)*(y1-y0))%p]
+    d=draw(seed,'d',1,p-1)
+    public={'p':p,'x':x,'first':first,'r1':r1,'second':second,'r2':r2,'d':d}
+    spoof=next((c for c in itertools.product(range(p),repeat=3) if valid_spoof(public,c)),None)
+    candidates=[];pair=None
+    for c in itertools.product(range(p),repeat=3):
+        if (2*c[0]+c[1]+c[2])%p!=required_sum(public):continue
+        hits=[t for t in range(p) if evaluate(p,c,t)==evaluate(p,second,t)]
+        if len(hits)!=2:continue
+        for previous in candidates:
+            if valid_pair(public,[previous,c]):pair=(tuple(previous),tuple(c));break
+        if pair is not None:break
+        candidates.append(c)
+    if spoof is None or pair is None:raise RuntimeError('construction has no witness')
+    expected={'circuit':(y0,y1,out),'mle':(y0,y1,w(2)),
+      'grid':(0,out,0,0),'round1':((evaluate(p,first,0)+evaluate(p,first,1))%p,evaluate(p,first,r1)),
+      'final-check':((evaluate(p,second,0)+evaluate(p,second,1))%p,evaluate(p,second,r2),((1-r1)*r2*(w(r1)+w(r2)))%p),
+      'lie':((out+d)%p,required_sum(public)),'lie-caught':tuple(spoof),'miss-points':pair}
+    return {'public':public,'expected':expected}
+
+
+def assignments(seed):
+    return '\n'.join(f'{key} = {value!r}' for key,value in setting(seed)['public'].items())
+
+
+def submission_binding(seed):
+    return hashlib.sha256(('ac26-w4-sumcheck-drill:submission:v2\0'+seed).encode()).hexdigest()
+
+
+def normalize_answer(line,raw):
+    if line not in GRADED:return None
+    if isinstance(raw,str):
+        try:raw=ast.literal_eval(raw.strip())
+        except (ValueError,SyntaxError,TypeError,RecursionError):return None
+    if line=='miss-points':
+        if not isinstance(raw,(list,tuple)) or len(raw)!=2:return None
+        if any(not isinstance(c,(list,tuple)) or len(c)!=3 or any(type(v) is not int for v in c) for c in raw):return None
+        return tuple(tuple(c) for c in raw)
+    width={'circuit':3,'mle':3,'grid':4,'round1':2,'final-check':3,'lie':2,'lie-caught':3}[line]
+    if not isinstance(raw,(list,tuple)) or len(raw)!=width or any(type(x) is not int for x in raw):return None
+    return tuple(raw)
