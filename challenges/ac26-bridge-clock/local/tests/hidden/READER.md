@@ -65,3 +65,5 @@ Root independently ran the HTTP route again: `/private/tmp/bridge-clock-716-root
 - Logs: `/private/tmp/bridge-clock-716-{reference,pure,catalog,http-final,live-isolation-final}.log`. API regression script: `/private/tmp/bridge-clock-716-http.py`.
 
 The real participant API route was exercised. The full parent Portal, browser layout, physical devices, AWS and third-party human play were not exercised for this increment. No time-to-completion claim is based on the agent's speed. Root reviewed the final diff and owns commit, push and PR.
+
+Root stopped the dedicated ac26-bridge-clock-live-check containers and networks after verification; no project containers remained. The cleanup log is /private/tmp/bridge-clock-716-cleanup.log.

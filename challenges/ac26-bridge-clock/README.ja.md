@@ -55,7 +55,7 @@ CLOCK_WORKBENCH_URL=http://127.0.0.1:18141 python3 -m unittest discover -s local
 FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-bridge-clock-live-check down
 ```
 
-親Portalの実コンポーネントでの操作証拠と、作者による内部テストは区別して記録します。AWS・第三者のプレイは必須の開発gateではありません。
+参加者用の実APIを通した確認結果は local/tests/hidden/READER.md に記録しています。親Portal全体、ブラウザ配置、実機、AWSは未確認です。第三者によるプレイは任意のリハーサルです。
 
 ## リソースとコスト
 
