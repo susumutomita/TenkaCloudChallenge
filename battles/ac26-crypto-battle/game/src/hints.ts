@@ -151,15 +151,18 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
   "reveal-share": [
     {
       id: "reveal-share/1",
+      // [Issue #740] A disclosure Order accepts LEAK alone. Its rungs must not
+      // sell a PROVE route the button row does not offer: the last paragraph of
+      // rung 1 and the whole of rung 3 branch on what the Order accepts.
       text: (ctx) => ({
         ja: `Order (= あなたのチームに届いた依頼) が、かけらを求めています。かけら (share) は秘密の数を ${ctx.shareCount} 個に分けたうちの 1 個。MY VAULT の #1〜#${ctx.shareCount} がそれです。
 作り方は、秘密と内緒で選んだ数を入れた式に、かけらの番号を入れて計算する方法です。番号 0 の値が秘密で、番号 1 以降の値がかけらになります。すべて ${ctx.prime} で割った余りで扱います。
 この試合では、同じ世代 (= 同じ秘密から作った一組) の異なる番号が ${ctx.threshold} 個あれば式が決まり、番号 0 の秘密を戻せます。${ctx.threshold - 1} 個では、0 から ${BigInt(ctx.prime) - 1n} までの秘密がどれも候補に残ります。無限の曲線ではなく、割った余りの範囲にある全 ${ctx.prime} 通りの秘密が残る、という意味です。
-LEAK はかけらを公開記録に載せる操作。必要な個数を集めて秘密を戻す攻撃を HUNT と呼びます。PROVE は別の秘密である数独の解を持つことを示し、このかけらを出さずに Order に答えます。`,
+LEAK はかけらを公開記録に載せる操作。必要な個数を集めて秘密を戻す攻撃を HUNT と呼びます。${ctx.allowedMethods.includes("prove") ? "PROVE は別の秘密である数独の解を持つことを示し、このかけらを出さずに Order に答えます。" : "この Order は「公開が条件」です。依頼主がかけらそのものを買うので、答え方は LEAK だけ、得点は計算して答えたときと同じ満額です。代わりに、あなたの公開済みのかけらが 1 個増えます。"}`,
         en: `An Order (= a request sent to your team) asks for a share. A share is one of ${ctx.shareCount} pieces of your secret number: #1 to #${ctx.shareCount} in MY VAULT.
 A formula combines the secret with privately chosen numbers. Put a share index into that formula: index 0 gives the secret, and later indices give shares. Keep remainders after dividing by ${ctx.prime}.
 Here ${ctx.threshold} distinct indices from one generation (= one set made from the same secret) fix the formula and recover its value at 0. With ${ctx.threshold - 1} shares, every candidate secret from 0 to ${BigInt(ctx.prime) - 1n} remains possible. This is a finite set of ${ctx.prime} possible secrets, not infinitely many ordinary curves.
-LEAK publishes a share. Recovering a secret from enough shares is the HUNT attack. PROVE instead demonstrates that you hold your separate sudoku solution, completing the Order without publishing its requested share.`,
+LEAK publishes a share. Recovering a secret from enough shares is the HUNT attack. ${ctx.allowedMethods.includes("prove") ? "PROVE instead demonstrates that you hold your separate sudoku solution, completing the Order without publishing its requested share." : "This Order requires publication: the client is buying the share itself, so LEAK is the only answer and it pays the full computing rate. The cost is one more public share of yours."}`,
       }),
     },
     {
@@ -194,6 +197,22 @@ Why not two shares? Secret 2 with coefficients 2 and 5 gives #1: 2 + 2 + 5 = 9 �
         const after = exposed.size + added;
         const canLeak = ctx.allowedMethods.includes("leak");
         const canProve = ctx.allowedMethods.includes("prove");
+        // [Issue #740] The disclosure Order: LEAK alone, so rung 3 walks that
+        // one action and the choice around it (ROTATE first, or not), instead
+        // of a PROVE procedure the button row does not offer.
+        if (canLeak && !canProve) {
+          const reaches = after >= ctx.threshold;
+          return {
+            ja: `この Order は公開が条件です。求められているかけらは ${cards}（世代 ${ctx.vault.generation}）。
+① 「公開して答える (LEAK)」を押す。得点は表示どおりの満額で、公開記録にこの値が載ります。
+② 公開数を数える：${exposed.size} + ${added} = ${after} 個（公開済み + 新しい番号。同じ番号は重ねて数えない）。${reaches ? `必要な ${ctx.threshold} 個に達し、相手はあなたの秘密を戻せるようになります。` : `秘密を戻す ${ctx.threshold} 個にはまだ届きません。`}
+③ ${reaches ? "届かせたくなければ、押す前に ROTATE で世代を変えます（開いている依頼は無効になり、その分の減点があります）。届かせて相手より先に相手を読み解く、という選び方もあります。" : "届く前の Order が来たら、ROTATE で世代を変えるか、届かせて相手より先に読み解くかを決めます。"}`,
+            en: `This Order requires publication. Requested shares: ${cards} (generation ${ctx.vault.generation}).
+(1) Press "Publish to answer (LEAK)". It pays the full rate shown, and this value goes on the public record.
+(2) Count your public shares: ${exposed.size} + ${added} = ${after} distinct indices (already public + new; duplicates count once). ${reaches ? `That reaches the ${ctx.threshold} an opponent needs to recover your secret.` : `Still below the ${ctx.threshold} needed for recovery.`}
+(3) ${reaches ? "To avoid that, ROTATE to a new generation before pressing (open Orders are voided and charged). Or let it happen and read the opponent first -- that is also a choice." : "When the Order that would reach it arrives, decide: ROTATE first, or let it happen and read the opponent first."}`,
+          };
+        }
         return {
           ja: `選んだこの1題を終えてから、次のお題のヒントへ進みます。
 求められているかけらは ${cards}（世代 ${ctx.vault.generation}）。

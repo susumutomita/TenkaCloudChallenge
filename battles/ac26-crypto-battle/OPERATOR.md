@@ -162,7 +162,12 @@ six-slot Order rotation is therefore a `must-disclose` share Order: LEAK is
 its only method and it pays `scores.contract`, so the exposure is the rules'
 schedule, not a mistake, and every team carries it equally. Consecutive
 disclosures name distinct indices, so three of them on one generation reach
-`threshold`. `game/src/interaction.test.ts` plays two competent bots for the
+`threshold`. The slot is one of six, and a duel replaces a raw slot only for
+teams that are paired that round, so an odd roster's bye team advances its
+ordinary plan a slot faster: disclosure timing is per team, not synchronized,
+and the participant copy says so. What every team shares is that the Orders
+keep coming; exposure is read off the public record, not predicted from one's
+own belt. `game/src/interaction.test.ts` plays two competent bots for the
 full match on the defaults and pins that HUNTs land in both directions; a bot
 that ROTATEs ahead of its third disclosure is never hunted and ends lower.
 Re-run that file after changing `contract`, `contractLeak`, `threshold`,

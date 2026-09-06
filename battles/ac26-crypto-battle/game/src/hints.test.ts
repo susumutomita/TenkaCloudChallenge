@@ -347,3 +347,57 @@ describe("a match persisted before hints existed", () => {
     expect(projected.hints[1]?.text).toBeUndefined();
   });
 });
+
+/**
+ * [Issue #740] A disclosure Order accepts LEAK alone. Paid hints have to walk
+ * THAT action: a rung that describes the PROVE route sells a procedure the
+ * button row does not offer, which is what a participant paid points for.
+ */
+describe("the disclosure Order's hints walk the only method it accepts", () => {
+  function disclosureOrder(): { projection: CryptoBattleProjection; order: ContractProjection } {
+    let state = startedMatch();
+    for (let round = 0; round < 12; round += 1) {
+      const projection = projectForTeam(state, "teamA");
+      const order = projection.myContracts.find((c) => c.privacyConstraint === "must-disclose");
+      if (order) return { projection, order };
+      state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+    }
+    throw new Error("test setup: expected a disclosure Order on the belt");
+  }
+
+  test("every rung names LEAK and none of them offers PROVE", () => {
+    const { projection, order } = disclosureOrder();
+    expect(order.allowedMethods).toEqual(["leak"]);
+    const ctx = ctxFor(projection, order);
+    const rungs = (HINT_LADDER["reveal-share"] ?? []).map((rung) => rung.text(ctx));
+    expect(rungs).toHaveLength(HINT_LEVELS);
+    for (const locale of ["ja", "en"] as const) {
+      // The last rung is the procedure: it walks LEAK, and the escape (ROTATE).
+      const last = rungs[rungs.length - 1]?.[locale] ?? "";
+      expect(last).toContain("LEAK");
+      expect(last).toContain("ROTATE");
+      expect(last).not.toContain("PROVE");
+      // And the opening rung does not promise the route this Order refuses.
+      expect(rungs[0]?.[locale] ?? "").not.toContain("PROVE");
+    }
+  });
+
+  test("a free share Order still gets the PROVE walkthrough", () => {
+    let state = startedMatch();
+    for (let round = 0; round < 12; round += 1) {
+      const projection = projectForTeam(state, "teamA");
+      const order = projection.myContracts.find(
+        (c) => c.task.kind === "reveal-share" && c.allowedMethods.includes("prove"),
+      );
+      if (order) {
+        const rungs = (HINT_LADDER["reveal-share"] ?? []).map((rung) => rung.text(ctxFor(projection, order)));
+        for (const locale of ["ja", "en"] as const) {
+          expect(rungs[rungs.length - 1]?.[locale] ?? "").toContain("PROVE");
+        }
+        return;
+      }
+      state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+    }
+    throw new Error("test setup: expected a free share Order on the belt");
+  });
+});
