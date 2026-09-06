@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import OrderQueue, { orderChanges, orderDisplayState } from "../../portal/OrderQueue.tsx";
+import OrderQueue, { orderChanges, orderDisplayState, orderResultLabel, updateOrderAnnouncement } from "../../portal/OrderQueue.tsx";
 import { applyOp, initialState, projectForTeam, tick } from "./reducer.ts";
 import type { ContractProjection } from "./types.ts";
 
@@ -47,5 +47,31 @@ describe("always-visible Order queue", () => {
     const confirmed = { ...localExpiry, status: "expired" as const };
     expect(orderChanges(states([localExpiry]), [confirmed])).toEqual({ arrived: [], finished: [] });
     expect(orderChanges(new Map(), [confirmed])).toEqual({ arrived: [], finished: [] });
+  });
+
+  test("projects the real ROTATE cause and distinguishes it from a clock deadline in both languages", () => {
+    const first = started();
+    const before = projectForTeam(first, "a").myContracts;
+    const rotated = projectForTeam(applyOp(first, "a", { kind: "rotate" }), "a").myContracts;
+    const voided = rotated.find(order => order.id === "a-c0")!;
+    expect(voided.expiryCause).toBe("rotate");
+    expect(orderDisplayState(voided)).toBe("voided");
+    expect(orderChanges(states(before), rotated).finished).toContainEqual(voided);
+    expect(orderResultLabel(voided, "ja")).toBe("↻ ROTATEで無効");
+    expect(orderResultLabel(voided, "en")).toBe("↻ Voided by ROTATE");
+    const expired = projectForTeam(tick(first, 300_000), "a").myContracts.find(order => order.id === "a-c0")!;
+    expect(expired.expiryCause).toBe("deadline");
+    expect(orderDisplayState(expired)).toBe("expired");
+    expect(orderResultLabel(expired, "ja")).toBe("⌛ 期限切れ");
+    expect(orderResultLabel(expired, "en")).toBe("⌛ Expired");
+  });
+
+  test("an identical second completion gets a new live event and survives the first event's clear timer", () => {
+    const first = updateOrderAnnouncement({ version: 0, text: "" }, { text: "1 completed." });
+    const second = updateOrderAnnouncement(first, { text: "1 completed." });
+    expect(second.text).toBe(first.text);
+    expect(second.version).toBe(first.version + 1);
+    expect(updateOrderAnnouncement(second, { clearVersion: first.version })).toBe(second);
+    expect(updateOrderAnnouncement(second, { clearVersion: second.version })).toEqual({ version: second.version, text: "" });
   });
 });

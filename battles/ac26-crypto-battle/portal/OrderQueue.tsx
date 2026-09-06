@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import type { ContractProjection, CryptoBattleProjection } from "../game/src/types.ts";
 import { OrderBelt } from "./GameBoard.tsx";
 import { taskLabel } from "./orderTask.ts";
@@ -7,8 +7,23 @@ export interface OrderReceipt { readonly id: string; readonly points: number }
 type Locale = "ja" | "en";
 
 /** A deadline may end between server polls; do not leave it actionable at 0:00. */
-export function orderDisplayState(order: ContractProjection): "open" | "completed" | "expired" {
+export function orderDisplayState(order: ContractProjection): "open" | "completed" | "expired" | "voided" {
+  if (order.status === "expired" && order.expiryCause === "rotate") return "voided";
   return order.status === "open" && order.remainingMs <= 0 ? "expired" : order.status;
+}
+
+export function orderResultLabel(order: ContractProjection, locale: Locale): string {
+  if (orderDisplayState(order) === "completed") return locale === "ja" ? "✓ 完了" : "✓ Completed";
+  if (orderDisplayState(order) === "voided") return locale === "ja" ? "↻ ROTATEで無効" : "↻ Voided by ROTATE";
+  return locale === "ja" ? "⌛ 期限切れ" : "⌛ Expired";
+}
+
+interface OrderAnnouncement { readonly version: number; readonly text: string }
+type AnnouncementAction = { readonly text: string } | { readonly clearVersion: number };
+/** A repeated message is a new event; an older timer cannot erase that event. */
+export function updateOrderAnnouncement(current: OrderAnnouncement, action: AnnouncementAction): OrderAnnouncement {
+  if ("text" in action) return { version: current.version + 1, text: action.text };
+  return action.clearVersion === current.version ? { ...current, text: "" } : current;
 }
 
 /** Changes only, not countdown ticks: the live region must never read every second. */
@@ -29,7 +44,7 @@ export default function OrderQueue({ projection, locale, selectedId, onSelect, r
 }) {
   const previous = useRef<ReadonlyMap<string, string> | null>(null);
   const [newIds, setNewIds] = useState<readonly string[]>([]);
-  const [announcement, setAnnouncement] = useState("");
+  const [announcement, announce] = useReducer(updateOrderAnnouncement, { version: 0, text: "" });
   const [recent, setRecent] = useState<readonly ContractProjection[]>([]);
   const [receipts, setReceipts] = useState<Readonly<Record<string, number>>>({});
 
@@ -44,10 +59,12 @@ export default function OrderQueue({ projection, locale, selectedId, onSelect, r
           messages.push(locale === "ja" ? `新しいお題が${changes.arrived.length}件到着。「到着」のカードを追加しました。` : `${changes.arrived.length} new Order(s) arrived. Look for the New cards.`);
         }
         const completed = changes.finished.filter(order => orderDisplayState(order) === "completed").length;
-        const expired = changes.finished.length - completed;
+        const expired = changes.finished.filter(order => orderDisplayState(order) === "expired").length;
+        const voided = changes.finished.filter(order => orderDisplayState(order) === "voided").length;
         if (completed) messages.push(locale === "ja" ? `${completed}件完了。` : `${completed} completed.`);
         if (expired) messages.push(locale === "ja" ? `${expired}件が期限切れ。` : `${expired} expired.`);
-        setAnnouncement(messages.join(" "));
+        if (voided) messages.push(locale === "ja" ? `${voided}件がROTATEで無効になりました。` : `${voided} voided by ROTATE.`);
+        announce({ text: messages.join(" ") });
         if (changes.finished.length) setRecent(current => [
           ...changes.finished.slice().reverse(),
           ...current.filter(order => !changes.finished.some(changed => changed.id === order.id)),
@@ -68,20 +85,20 @@ export default function OrderQueue({ projection, locale, selectedId, onSelect, r
   }, [receipt]);
 
   useEffect(() => {
-    if (!announcement) return;
-    const timer = setTimeout(() => setAnnouncement(""), 15_000);
+    if (!announcement.text) return;
+    const timer = setTimeout(() => announce({ clearVersion: announcement.version }), 15_000);
     return () => clearTimeout(timer);
   }, [announcement]);
 
   return <aside className="tc-order-queue" aria-label={locale === "ja" ? "お題一覧と締切" : "Orders and deadlines"}>
     <style>{ORDER_QUEUE_CSS}</style>
-    <div className="tc-order-notice" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
+    <div className="tc-order-notice" role="status" aria-live="polite" aria-atomic="true">{announcement.text && <span key={announcement.version} data-announcement-version={announcement.version}>{announcement.text}</span>}</div>
     <div className="tc-order-open">
       <OrderBelt projection={projection} locale={locale} selectedId={selectedId} onSelect={onSelect} compact newIds={newIds} />
     </div>
     {recent.length > 0 && <ul className="tc-order-recent" aria-label={locale === "ja" ? "直近のお題の結果" : "Recent Order results"}>
       {recent.map(order => <li key={order.id} data-order-result={orderDisplayState(order)}>
-        <strong>{orderDisplayState(order) === "completed" ? (locale === "ja" ? "✓ 完了" : "✓ Completed") : (locale === "ja" ? "⌛ 期限切れ" : "⌛ Expired")}</strong>
+        <strong>{orderResultLabel(order, locale)}</strong>
         <span>{order.id.replace(/^.*-c/, "ORDER #")} · {taskLabel(order.task, locale)}</span>
         {receipts[order.id] !== undefined && <b>+{receipts[order.id]} {locale === "ja" ? "点" : "pt"}</b>}
       </li>)}
@@ -107,6 +124,7 @@ export const ORDER_QUEUE_CSS = `
 .tc-order-recent{flex:none;list-style:none;margin:0;padding:5px 10px;display:flex;gap:6px;flex-wrap:wrap;font-size:12px}
 .tc-order-recent li{display:flex;gap:5px;flex-wrap:wrap;align-items:center;padding:4px 6px;border:1px solid #a7cbb7;border-radius:6px;background:#f0fbf4}
 .tc-order-recent li[data-order-result="expired"]{border-color:#d0b7a4;background:#fff7ef}.tc-order-recent li>span{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc-order-recent li[data-order-result="voided"]{border-color:#a8bdd4;background:#eef4fc}
 @media(max-width:600px){.tc-order-queue{top:0;max-height:42vh}.tc-workspace,.tc-result-anchor{scroll-margin-top:calc(42vh + 24px)}.tc-order-belt-compact .tc-order-row{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-order-belt-compact{padding:6px}.tc-order-belt-compact .tc-order-card{padding:6px}.tc-order-belt-compact .tc-order-meta{font-size:11px}.tc-order-belt-compact .tc-order-deadline{font-size:13px}}
 @media(prefers-reduced-motion:reduce){.tc-order-queue *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 `;

@@ -2566,6 +2566,7 @@ export function projectForTeam(
         // total without an unsafe assertion.
         remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
         hints: projectHints(state, c, task, vault, exposedShareIndices),
+        ...(c.expiryCause ? { expiryCause: c.expiryCause } : {}),
       };
     });
 
