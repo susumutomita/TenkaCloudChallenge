@@ -2073,6 +2073,8 @@ it("the last PROVE hint leaves the same four answer cells blank", () => {
     projection, order: projection.myContracts[0]!, table: [3, 1, 4, 2], locale: "ja", onOpenProof: () => {},
   }));
   expect(html.match(/tc-sudoku-blank/g)).toHaveLength(4);
+  const highlighted = [...html.matchAll(/class="tc-sudoku-cell tc-sudoku-lit"[^>]*>([^<]*)</g)].map(match => match[1]);
+  expect(highlighted).toEqual(["2", "1"]);
   expect(html).toContain('aria-label=". 1 4 2 4 2 3 . 1 3 2 . . 4 1 3"');
   expect(html).not.toContain('aria-label="3 1 4 2 4 2 3 1 1 3 2 4 2 4 1 3"');
 });

@@ -1742,7 +1742,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </details>
 
       <details className="tc-tactics tc-hunt-entry">
-        <summary>{locale === "ja" ? "相手の秘密を見破って攻撃する（HUNT）" : "Recover an opponent’s secret to attack (HUNT)"}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
+        <summary>{locale === "ja" ? "相手の秘密を見破って攻撃する（HUNT）" : "Recover an opponent’s secret to attack (HUNT)"}{tactics.rotate ? (locale === "ja" ? " / 秘密を作り直して守る（ROTATE）" : " / Replace your secrets to defend (ROTATE)") : ""}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
         <HuntIntro projection={projection} locale={locale} />
         {tactics.rpsHunt && <RpsHunt projection={projection} locale={locale} submitting={submitting}
