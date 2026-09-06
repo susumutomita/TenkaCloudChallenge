@@ -93,7 +93,7 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
     case "masked-total":
       return locale === "ja" ? `${task.partyCount} 拠点` : `${task.partyCount} offices`;
     case "caesar-shift":
-      if (task.rung === "vigenere") return locale === "ja" ? `Vigenère · 周期3 · 今回は鍵${(task.keyPosition ?? 0) + 1}` : `Vigenère · period 3 · key ${(task.keyPosition ?? 0) + 1}`;
+      if (task.rung === "vigenere") return locale === "ja" ? `Vigenère · 3個の鍵を繰り返す · 今回は鍵${(task.keyPosition ?? 0) + 1}` : `Vigenère · repeat three keys · use key ${(task.keyPosition ?? 0) + 1}`;
       // A COUNT, not the symbols. The symbols are drawn on the card by
       // `DieRow` (see DieFace.tsx on why they are drawn and not typed), so
       // repeating them here as text would print the tofu this replaced.
