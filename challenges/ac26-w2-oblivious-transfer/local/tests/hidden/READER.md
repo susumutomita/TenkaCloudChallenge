@@ -91,7 +91,7 @@ from the preserved correct frozen answer.
 
 The existing endpoints, checkpoint IDs, scores, phase composition and tcw1 preparation
 contract remain. The suite wall limit remains20 seconds; memory512MiB, processes64,
-and bounded64KiB value/log output remain. The worker has an additional CPU limit and
+and bounded64KiB value/log output remain. The worker has a20/21-second CPU soft/hard limit and
 inherits no server environment or descriptors. Both HTTP supervisors protect their
 process memory/FDs. Both Compose services use non-root users and init to reap orphaned
 descendants. Problem-local seccomp blocks files/network/exec, SysV/POSIX persistent
@@ -102,7 +102,8 @@ Fresh 128-bit IDs prevent initialization-time/predictable replies from matching
 future calls. They do not authenticate native Python return objects: arbitrary Python
 can read a live call and implement the same value protocol. Every value still must
 satisfy the trusted parent's shape and mathematical checks. The public helper
-`participant.ot.derive_key` is loaded before restriction and remains available;
+`participant.ot.derive_key` and the14 documented computation modules are loaded
+before restriction and remain available;
 private fixture modules and FLAG_SEED do not enter the learner. Workbench alone keeps
 the existing seed needed by the unchanged preparation contract.
 
@@ -139,7 +140,7 @@ This run's dedicated stack is `ac26-oblivious-transfer-reader-716`, published on
 localhost18154, using `/private/tmp/oblivious-transfer-716-compose.yml` and synthetic
 seed `oblivious-transfer-reader-716`. It remains running for the root review.
 
-## Final results (2026-09-07)
+## Initial PR results (2026-09-07, before allowance review)
 
 | Verification | Result |
 |---|---|
@@ -161,3 +162,76 @@ host port and bind-mounts the unfinished starter, was not used in this dedicated
 No real browser, AWS, release, commit or push was performed by the implementing agent.
 
 Root final verification: the retained six-field Portal harness was rerun on the unchanged final service and passed (9.49s total, 3.85s test); see `/private/tmp/oblivious-transfer-716-root-portal.log`. The root reviewed the parent value protocol, finite distribution checks, isolation and the revised participant packet before committing.
+
+## PR767 allowance review and final verification
+
+Reviews3944930773 and3944930776 identified two unintended restrictions: a new
+5-second CPU cap despite the original20-second suite allowance, and standard
+computation imports requiring a file read after seccomp. CPU soft/hard limits now
+match20/21 seconds, and14 documented computation modules are preloaded before the
+learner starts. Japanese/English instructions, READMEs and the starter list them.
+File, process, IPC and network restrictions are retained; this does not promise
+that arbitrary additional Python modules can be loaded.
+
+The first CPU/import correction exposed a separate existing forwarding mismatch:
+`proxy_verdict` reused the15-second untrusted-body deadline for the verifier response.
+The outbound wait is now `RUN_TIMEOUT_SECONDS + 5` (25 seconds), while the body
+deadline remains15 and the evaluator wall deadline remains20. A delayed verdict
+still needs the matching checkpoint and a strict boolean; timeout, missing and
+mismatched verdicts still fail closed. Two real loopback transport regressions use
+scaled deadlines to distinguish an input deadline from an outbound deadline.
+
+The frozen source hash above remains unchanged. Slow variants append only a sleep
+or a CPU loop after that source; they do not replace its functions or bypass prepare.
+
+| Observation | Before | Final |
+|---|---|---|
+| `fractions` / `statistics` / `random` correct source, actual prepare→verify | false | true,0.34s |
+| Correct source with5.25 CPU seconds of startup, same actual HTTP script | false at15.27s after the first CPU fix | true,8.82s |
+| Correct source with16-second startup sleep | false at15.706s | true at16.330s |
+| Correct source with21-second startup sleep | Not used for the original reproduction | false at20.094s, the unchanged evaluator wall limit |
+| Separate clean learner measurement of the5.25 CPU loop | Not recorded | child CPU5.559s, wall8.425s; expected returned value preserved |
+
+CPU time and elapsed time are different under load. The last row is a separate
+measurement, not a claim about the original failed run's CPU scheduling. The
+16-second sleep contrast independently demonstrates the forwarding defect.
+Before/after evidence remains at `/private/tmp/ot-767-allowance-{before,after}.log`,
+`ot-767-forward-before.json`, `ot-767-forward-http.log`,
+`ot-767-allowance-forward-after.log` and `ot-767-cpu-wall.log`.
+
+Final checks after the runtime correction:
+
+- Existing `make runtime-test`: all23 Linux tests pass in92.207s, including the
+  original boundary suite, frozen/reference answers, the two allowance regressions
+  and the two delayed-response transport regressions.
+- Existing `make reference-test`: reference passes and all13 mutations are killed.
+- Actual public API: the frozen answer passes10 public examples and all6 private
+  checkpoints through prepare→verify. The import and16/21-second contrasts above
+  use this same dedicated API. `check_allowance_http.py` retains that route.
+- Retained real Portal component/API test: all6 submitted fields pass, source stays
+  unchanged and solved rows fold. One test passes in28.73s total /12.91s test time.
+- Catalog `make agent-gate`:116 valid entries; `git diff --check` passes.
+
+The first allowance Portal rerun failed the Inspect assertion within Testing
+Library's default one-second DOM polling window during a loaded run. A subsequent
+direct Inspect returned the expected `== your group ==` output in0.780s. The test
+now awaits the real Inspect/public-test transport promises inside React `act`
+before asserting the rendered output. It keeps the original60-second whole-test
+limit and still fails for a rejected response or missing output; no API or evaluator
+timeout was raised to address that test failure. The original failure is retained
+in `/private/tmp/ot-767-allowance-portal.log`; final evidence is
+`/private/tmp/ot-767-forward-portal.log`. This is a component/API test, not a browser.
+
+To repeat the real allowance and six-field tests against an already running
+dedicated deployment, from this problem directory:
+
+```sh
+python3 local/tests/hidden/check_allowance_http.py --base-url http://127.0.0.1:18154
+AC26_WORKBENCH_URL=http://127.0.0.1:18154 \
+  local/tests/hidden/portal/run.sh /private/tmp/tenkacloud-score-history-20260906
+```
+
+The launcher requires the explicitly supplied parent's installed dependencies and
+removes its temporary test file afterward. The dedicated project/seed are recorded
+above. It remains running on18154 for root review; no other live service, production
+environment, endpoint contract, score, commit or push was changed by this follow-up.

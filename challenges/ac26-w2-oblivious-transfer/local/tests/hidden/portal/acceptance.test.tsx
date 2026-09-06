@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -67,8 +67,12 @@ it('edits the real starter, runs public examples, submits all six fields and col
   await user.paste(source);
   expect(editor).toHaveValue(source);
   await user.click(screen.getByRole('button', { name: 'Inspect evidence' }));
+  // Await the actual transport before checking the render. Testing Library's
+  // default one-second DOM polling window is not this API's execution deadline.
+  await act(async () => { await mocks.inspectWorkbench.mock.results.at(-1)!.value; });
   await screen.findByText(/== your group ==/);
   await user.click(screen.getByRole('button', { name: 'Run public tests' }));
+  await act(async () => { await mocks.testWorkbench.mock.results.at(-1)!.value; });
   await screen.findByText('Public tests passed');
   const codeMessage = 'This checkpoint submits the current source from the editors above.';
   expect(screen.getAllByText(codeMessage)).toHaveLength(6);

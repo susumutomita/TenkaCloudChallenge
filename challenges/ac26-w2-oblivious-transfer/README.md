@@ -119,9 +119,15 @@ Return pairs as Python tuples `(u,v)` or lists `[u,v]`. Numbers are integers; bi
 
 `unseen` does not count numeric literals in the source. Apply the same argument-based method to other inputs. Public tests check small calculations and formats; they do not replace all privacy checks. Once all six fields pass, use your tables to explain the difference between reconstructing correctly and having indistinguishable observations.
 
+## Python helpers
+
+The computation helpers `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`, and the supplied `participant.ot.derive_key` can be imported. They are loaded before your code runs. Loading other modules or accessing files/network is unsupported. Public and submitted runs each allow up to20 seconds.
+
 ## Local author verification
 
 The participant route is the Portal editor; no new endpoint or command-line submission contract is added. This problem's own Compose pair exposes the Workbench on localhost18310 and keeps verifier18311 on its internal network. Both run as non-root with init for descendant reaping. The scoring parent validates values from a restricted worker; a printed success message is not a grade.
+
+The evaluator keeps its20-second wall limit and the worker's CPU soft/hard limits are20/21 seconds. The Workbench still allows15 seconds to receive a request body; its separate25-second wait for the verifier lets that evaluator finish and return its verdict.
 
 ```sh
 FLAG_SEED=local-dev-seed docker compose -p ac26-w2-oblivious-transfer -f local/docker-compose.yml up -d --build --wait

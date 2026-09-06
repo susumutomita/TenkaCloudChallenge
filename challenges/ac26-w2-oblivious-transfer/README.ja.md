@@ -118,9 +118,15 @@ y0=1なら、0番は `x1=z0^x0` で相手の持ち分を読めます。
 
 `unseen` はソースの数字の個数を数える検査ではありません。引数から計算する同じ方法を別の入力に適用します。公開テストは小さい計算と形式を確認し、秘密性の全検査を代行しません。6欄の合格を確認したら、次は「正しく戻ること」と「観測から区別できないこと」の違いを、自分の表で説明してみてください。
 
+## Pythonで使える補助
+
+計算に使う標準ライブラリは `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing` と、配布済みの `participant.ot.derive_key` を読み込めます。これらは実行前に用意されます。他のモジュールの追加読み込みやファイル・ネットワークへのアクセスには対応しません。計算の時間は公開・提出とも1回20秒以内です。
+
 ## 作者向けのローカル検証
 
 参加者はPortalのエディタを使います。新しい提出APIやCLI契約は追加しません。この問題専用のComposeはWorkbenchをlocalhost18310へ公開し、採点器18311は内部ネットワークだけで動かします。両サービスは非rootとinitを使い、採点する親が制限された子の返却値を検査します。提出コードが印字した「成功」は採点根拠にしません。
+
+採点の経過時間上限は20秒、子のCPU時間のソフト／ハード上限は20／21秒です。Workbenchの本文受信は15秒のまま、採点器からの結果を待つ時間だけを25秒に分け、採点器の終了と結果返却を待てるようにしています。
 
 ```sh
 FLAG_SEED=local-dev-seed docker compose -p ac26-w2-oblivious-transfer -f local/docker-compose.yml up -d --build --wait

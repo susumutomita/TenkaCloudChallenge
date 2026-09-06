@@ -49,6 +49,9 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
+#: The verifier owns a 20-second suite; allow its verdict and cleanup to return.
+#: This outbound wait is separate from the untrusted client's body-read deadline.
+VERIFIER_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -118,7 +121,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
