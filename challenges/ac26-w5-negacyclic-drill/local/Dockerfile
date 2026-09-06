@@ -3,20 +3,15 @@
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
 RUN useradd --create-home --uid 10001 lab
+# Fail the build if the pinned base stops supplying the native filter library.
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
 
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
-# Participant Workbench: the Portal editor API, the starter, the public tests and the
-# inspect script -- and NOT fixtures/, unlike the Week 4 drills.
-#
-# Issue 537/543 option B2: this problem's fixtures/generate.py computes the twelve
-# lines' expected values inside setting(seed), in the same function as the public
-# numbers -- `setting(FLAG_SEED)["expected"]` is every graded answer with one import.
-# The Week 4 drills could ship their fixtures because their generators return public
-# values only; this one cannot, so the module ships only in the verifier and author
-# stages, and show.py / tests/public/ read the public half from the verifier's
-# `GET /public` over the Compose-internal network (see participant/evidence.py).
+# Only starter files, public tests and the Portal API reach the participant image.
+# Expected-value generation stays in the verifier; public evidence is fetched over
+# the Compose-internal network by participant/evidence.py.
 FROM base AS participant
 COPY --chown=lab:lab tests/public/ ./tests/public/
 COPY --chown=lab:lab participant/ ./participant/

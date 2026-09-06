@@ -11,8 +11,7 @@ Security contract:
     expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
 
-Issue 537/543 (option B2): this problem's `fixtures/generate.py` computes the twelve
-lines' expected values inside `setting(seed)`, in the same function as the public
+This problem's `fixtures/generate.py` computes all eight rows' expected values inside `setting(seed)`, in the same function as the public
 numbers. That module therefore ships only in this verifier image (and the author
 stage), never in the participant Workbench image a learner's own `make build`
 produces. The participant side reads this deployment's public half — the assignment
@@ -35,7 +34,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import GRADED, LINES, assignments, normalize_answer, setting
+from fixtures.generate import GRADED, LINES, assignments, normalize_answer, setting, submission_binding, valid_failure, valid_repair
 from verifier.expected import expected_for
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,8 +46,7 @@ MAX_BODY_BYTES = 256 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
 #: No checkpoint runs learner code. The editor file is a scratchpad whose public test
-#: prints the learner's own values; the grade is the pasted value, nothing else. Eight
-#: of the twelve drill lines have an answer field (the platform's maximum per problem).
+#: prints the learner's own values; grading checks the eight pasted values.
 CHECKPOINTS = GRADED
 MANUAL_CHECKPOINTS = GRADED
 
@@ -57,8 +55,8 @@ def _check_line(line: str, submission: object) -> bool:
     """The value the learner pasted for one drill line, against this deployment's value.
 
     A tuple may arrive as `[a, b, c]`, `(a, b, c)` or `a, b, c`; an integer as a number
-    or a digit string. The comparison is exact: there is one right value per line per
-    seed, and it is the value the line prints when typed against this seed's numbers.
+    or a digit string. The first six rows compare computed values. The closing two rows accept any
+    construction satisfying the published conditions.
     """
     if line not in GRADED or line not in LINES:
         return False
@@ -73,6 +71,8 @@ def _check_line(line: str, submission: object) -> bool:
     got = normalize_answer(line, answer)
     if got is None:
         return False
+    if line in ("constants","margin"):
+        return (valid_failure if line=="constants" else valid_repair)(setting(SEED)["public"], got)
     expected = expected_for(SEED)[line]
     return got == expected
 
@@ -91,7 +91,7 @@ def public_payload(seed: str) -> dict[str, object]:
     the same numbers as a dict. The expected values `setting` also returns stay
     behind — only the `public` key travels.
     """
-    return {"assignments": assignments(seed), "public": setting(seed)["public"]}
+    return {"assignments": assignments(seed), "public": setting(seed)["public"], "submissionBinding": submission_binding(seed)}
 
 
 def _b64decode(value: str) -> bytes:
@@ -102,7 +102,7 @@ def _b64decode(value: str) -> bytes:
 def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
     """Undo the Workbench's `tcw1.` seal and check it against this deployment.
 
-    A direct-answer submission is HMAC-bound to `PROBLEM_ID` and `SEED` by
+    A direct-answer submission is HMAC-bound to `PROBLEM_ID` and the public deployment binding by
     `participant/workbench.py`'s `PortalEditorSupport._seal_manual` — the same
     derivation, duplicated here rather than imported, because that module lives only
     in the participant image (see ../Dockerfile) and this process must not trust an
@@ -116,7 +116,7 @@ def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
             return None
         payload = _b64decode(encoded_payload)
         signature = _b64decode(encoded_signature)
-        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        key = hashlib.sha256((PROBLEM_ID + "\0" + submission_binding(SEED)).encode("utf-8")).digest()
         expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
         if not hmac.compare_digest(signature, expected_signature):
             return None

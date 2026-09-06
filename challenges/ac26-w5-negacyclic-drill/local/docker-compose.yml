@@ -13,6 +13,7 @@
 name: ac26-w5-negacyclic-drill
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -20,7 +21,6 @@ services:
       # stage -- `author` -- which carries fixtures/, reference/ and mutation.py.
       target: participant
     environment:
-      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18136"
       VERIFIER_URL: http://verifier:18137/verify
       VERIFIER_PUBLIC_URL: http://verifier:18137/public
