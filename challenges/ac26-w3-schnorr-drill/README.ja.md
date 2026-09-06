@@ -1,108 +1,63 @@
-# 1 行打って、出た値を貼る — 有限体から nonce 再利用まで 12 行
+# 秘密を送らずに確かめる — Schnorrの順番を試す
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+Advanced Cryptography Program 2026 の非公式・独立した自習教材です。講義運営者の承認・提携を示すものではありません。文章・例・実装は独自に作成しています。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 305 · **Chapter:** Week 3 / Drill: twelve lines
-from field to nonce reuse · **Role:** `mechanism` · **想定時間:** 40〜60 分 · **配点:** 200
-· **Status:** draft — 新規 companion は人間のプレイ証拠（#465）が揃うまで draft
+Week 3 / order 305、8欄、200点、40〜60分を想定。status は draft のままです。
 
-## これは何か
+## 参加者の道筋
 
-関数を書く問題ではありません。自分の `python3` を開き、Portal の「証拠を調べる」に出た数を貼り、
-**1 行打って、出た値を貼る**を 12 回繰り返します。
+Participant Portal で「起動」→「証拠を確認」。最初はpとtだけを見て、tに掛けるとpで割った余りが1になる整数を探し、`field-inv` へ提出します。正解表示が最初の成功、全8欄の正解が完了です。紙とPortalの入力欄で解けます。
 
+| 欄 | 入力 | 点数 | 役割 |
+|---|---|---:|---|
+| field-inv | 整数 | 15 | 余りによる割り算の道具 |
+| add-points | [X,Y] | 25 | 異なる2点を足す |
+| double | [X,Y] | 20 | 同じ点を足す |
+| order | 整数 | 25 | Gの倍数表と一周の回数を作る |
+| response | 整数 | 25 | 質問に答える |
+| verify | [X,Y] | 30 | 公開の点で両辺を照合 |
+| nonce-reuse | 整数 | 30 | 異なる質問への2応答から秘密を取り出す |
+| transfer | [Rx,Ry,s] | 30 | 質問が先に分かる場合の記録を構成 |
+
+各欄に仕組み→一般式と一桁例→Inspect名を使う手順の3段ヒント。1段2点、24段合計48点。誤答1回10点。必要な式と例は無料本文にもあります。従来の最後のID `transfer` は維持し、別曲線での応答計算から、公開式に合う複数の構成解を受理する課題へ変更しました。
+
+任意の `schnorr_drill.py` は計算メモです。紙で解く場合は配布時のファイルを残したまま提出できます。関数を埋めて「公開テストを実行」すると見本のPASS/FAILと、その関数が今回の数で計算した値が出ます。点と記録は、関数がPythonのtupleを返してもJSON配列で表示するので、矢印の後の文字列をそのまま回答欄へ写せます。テスト成功と採点は別で、回答欄へ提出して得点を確認します。外部Pythonは不要です。
+
+## 数と意味
+
+座標の素数は5または7、Gの位数も5または7です。点の加算を7回以内で一周でき、その表を後の計算で再利用します。数が小さいため、別環境の答えが偶然一致することもあります。値の由来でなく、その環境の数学に合っているかを検査します。
+
+最後は `R=sG−efP2` を使い、秘密が与えられていない公開鍵の受理記録を構成します。これは質問を見てからRを決める実験であり、Rを先に固定する正規の対話で秘密を知っていることを示す証拠ではありません。実際の署名のハッシュ処理や確率分布の証明は含みません。この極小の曲線は総当たりで逆算でき、実用の秘密を守りません。
+
+講義 Week 3 のスライド54〜60（乗法記法の対話・抽出・simulator）と61〜62（署名化との区別）、公式課題 `schnorr-from-scratch` の点加算を確認しました。作者ノート `advanced-cryptography-note/week3/index.html` の `ec_add`、`sigma_response`、`sigma_verify`、simulatorの説明を併せて確認し、式・小例・理由を隣接させる形式へ写しています。講義の公式課題の大きい固定テスト値は利用しません。
+
+## Runtime と検証の境界
+
+Composeは参加者Workbenchと非公開verifierを別コンテナで起動します。ホストへ公開するのは `127.0.0.1:18132` のWorkbenchだけ。参加者イメージはstarter・公開テスト・表示処理で、生成器、期待値、非公開チェック、referenceは含みません。seedを渡すのはverifierコンテナだけです。Workbenchは子プロセスから親を読めないよう保護してから、verifierの内部 `/workbench-key` で派生した封印鍵と、公開値を取得します。子へ渡すのは公開値のスナップショットだけで、鍵やverifier接続先は渡しません。公開proxyには鍵の取得経路がなく、Tiniやhealthcheckの環境にもseedや鍵を残しません。Linuxのsyscall制限で提出コードのネットワーク接続を拒否します。最後の構成はverifierが公開検証式で独立に確認し、一つの参考解との一致にはしません。
+
+各回答は `/api/prepare` で問題・採点欄に結び付けた提出を作り、`/verify` へ送ります。verifierは問題・欄・署名を照合します。コンテナはnon-root、read-only、capability削除、CPU/メモリ/PID上限、内部ネットワークを使います。Docker管理者自身からの秘密保護は保証しません。
+
+AWSリソースは作りません。ローカルDockerはホストのCPU・メモリ・ディスクを消費します。`make verifier-down` でこの問題のComposeを停止します。イベント環境の削除はプラットフォームの責任です。
+
+## 作者の確認
+
+このディレクトリで:
+
+```sh
+make reference-test
+make test STARTER_FILE=local/reference/schnorr_drill.py
 ```
-1  (-t) % p                 負の数は 0..p-1 に住む                （回答欄なし）
-2  pow(t, p - 2, p)         逆元 — 掛けて 1 になる相手              field-inv
-3  lam = ...                G と Q を通る直線の傾き               （回答欄なし）
-4  (x3, y3)                 G + Q — 3 つ目の交点を折り返す          add-points
-5  (x3, y3)                 2G — 接線                             double
-6  def ec_add ... ; k       G を足し続けて O に戻る回数 = 位数 n    order
-7  P = ec_mul(x, G)         公開鍵                                （回答欄なし）
-8  R = ec_mul(r, G)         commitment                            （回答欄なし）
-9  s = (r + e*x) % n        response                              response
-10 ec_mul(s, G)             検証式 s*G = R + e*P の左辺            verify
-11 (s1-s2)/(e1-e2) mod n    同じ nonce の 2 署名から秘密            nonce-reuse
-12 同じことを曲線 2 で        転移                                  transfer
+
+`reference-test` は誤った実装のmutationと、2曲線の手計算表・構成解の全探索・不正入力の回帰、鍵の起動時取得、Linuxのseed・親プロセス・ネットワーク隔離を実行します。
+
+`make test` は一時的なCLI用コンテナで、Workbenchのサーバーは公開しません。実Composeの検査は、18132番ポートが空いている状態で、次の順に両サービスを起動・検査・停止します。
+
+```sh
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check up -d --build --wait
+SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_isolation.py -v
+SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_public_output.py -v
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check down
+make verifier-down
 ```
 
-各行に「この行の意味」が付き、値が合うと「合ったら読む」が開きます。結果と解説が隣にある — それが
-この形式の狙いで、この問題がある理由です（`metadata.json` の description を参照）。12 行のうち
-回答欄があるのは 8 行（platform の 1 問あたりの上限）。残り 4 行は次の行の材料で、間違いはそこで
-表に出ます（λ の間違いは 4 行目で、P や R の間違いは 10 行目で）。
-
-## なぜ数が小さく、seed 由来なのか
-
-曲線は検証済みの素数位数の小曲線（p ≤ 31、n ≤ 43）なので、どの行も 1 画面の計算で、`ec_mul` は
-素朴なループで済みます。曲線・t・Q・x・r・e・攻撃鍵・転移曲線はすべてこの deploy の `FLAG_SEED`
-から決まります。1 行につき正解は 1 つ、通るのは自分の Python が出した値だけで、別 deploy から
-写した値は拒否されます。公式課題のテスト値は使いません。
-
-## Participant Portal での進め方
-
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが出る。
-2. **「証拠を調べる」**を押す。数が Python の代入文で出るので、まず `python3` に貼る。
-3. 1 行目を打ち、出た値を `field-neg` の回答欄に貼って提出。その値の 1 文を読む。12 行目まで続ける。
-   **回答欄は 1 行の入力欄です。**
-4. Python を開けないとき: エディタの `schnorr_drill.py` の 12 関数を埋めて**「公開テストを実行」**。
-   この deploy の数での自分の関数の値が出る — REPL が出すのと同じ値です。
-
-checkout・ターミナル（自分の Python 以外）・ローカルエディタ・画面間のコピペは不要です。直接回答は
-現在の deploy seed に結び付くため、別 deploy からコピーした値は拒否されます。
-
-## 採点
-
-8 つの checkpoint を独立に採点します。誤答は 1 回 10 点減点です。
-
-| Checkpoint | 配点 | 証拠の種類 | 何を検査するか |
-|---|---:|---|---|
-| `field-inv` | 15 | predict | t の逆元 |
-| `add-points` | 25 | construct | G + Q（3 行目の λ の間違いはここで出る） |
-| `double` | 20 | construct | 2G |
-| `order` | 25 | trace | O に戻るまで足して数えた位数 n |
-| `response` | 25 | predict | s = r + e·x mod n |
-| `verify` | 30 | trace | 検証式の左辺 s·G（7〜8 行目の P・R の間違いはここで出る） |
-| `nonce-reuse` | 30 | counterexample | 同じ nonce の 2 署名から取り出した秘密 |
-| `transfer` | 30 | transfer | 位数を数え直した 2 本目の曲線での s |
-
-hint は各 checkpoint に 1 つ（減点 6）。その行で起きやすい打ち間違いを名指しします。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも compose stack の
-全 image もあなたの管理下にあるので、その人物に対して中身を秘匿することはできません。ここでの
-境界は誤配防止であり、その人物に対する秘匿ではありません。参加者用 Workbench image に入るのは
-公開 test・starter・Workbench だけです。8 行の期待値導出（`verifier/expected.py`）と hidden
-suite は、Compose 内部 network 上でしか到達できない別の verifier image に置きます。`reference/`
-と `mutation.py` は `author` stage にだけ追加します。
-
-fixture の生成コード（`fixtures/generate.py`）も verifier 側です（Issue #543 の option B2）。
-このデプロイの公開値を作るには動く `ec_add` / `ec_mul` / `order_of` が要りますが、それは
-starter があなたに書かせる関数そのものなので、参加者 image に置くと `add-points` / `double` /
-`order` が import 1 行で取れてしまいます。`make inspect` と公開 test は、代わりに verifier の
-`GET /public` からこのデプロイの公開値だけを取得します（そのため両者は Compose 経由で動きます）。
-
-host の `127.0.0.1:18132` に公開するのは Workbench だけで、verifier に host port はありません。
-両 service は non-root、read-only filesystem、capabilities なし、no-new-privileges、
-メモリ・PID 上限つきで動きます。提出コードは verifier をハングさせたりクラッシュさせたりできません。
-checkpoint は echo した id しか加点できません。結果は期待値を漏らしません。fixture はこのデプロイの
-seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が一切管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した reference 9 種類（s を mod p で取る、
-接線の a を忘れる、折り返しを忘れる、位数を 0 から数える、…）を hidden suite が落とすこと、
-verifier を狙った near-miss 10 種類（画面に出ている値、別の行の値、折り返す前の点、mod p で
-取った s、真偽値、別 deploy の答え）を値の採点器が拒否することを確かめます。
-`scripts/solvability/expected/ac26-w3-schnorr-drill.py` が採点する 8 行の答えを solvability sweep
-用に写しています。
+Tiniやhealthcheckを含む全プロセスの環境を検査し、値は出力しません。公開出力の回帰は、tuple/listを返す実公開テストの表示をprepare・verifyへそのまま渡します。この確認で使うreferenceは作者のruntime検査であり、独立した参加者役の解答とは区別します。Linux専用の子プロセス検査は `make reference-test` 内で実行します。macOSで上のコマンドを使った場合はその部分だけスキップされます。metadataはカタログrootの `make install && make agent-gate` で検証します。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。

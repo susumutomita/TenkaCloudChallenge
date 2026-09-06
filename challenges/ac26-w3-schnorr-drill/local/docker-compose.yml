@@ -13,6 +13,7 @@
 name: ac26-w3-schnorr-drill
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -20,13 +21,12 @@ services:
       # stage -- `author` -- which carries reference/ and mutation.py.
       target: participant
     environment:
-      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18132"
       VERIFIER_URL: http://verifier:18138/verify
-      # Issue 543 option B2: `fixtures/` is not in the participant image any more, so
-      # `show.py` and the public tests read this deployment's public numbers from the
-      # verifier instead. PortalEditorSupport forwards this one variable (and only this
-      # one) into those subprocesses.
+      # The supervisor loads the public snapshot and a derived sealing key over
+      # the internal network. No seed/key is injected into this container, so
+      # Tini and healthcheck processes cannot expose it through /proc/*/environ.
+      # Learner processes receive only the public snapshot, never these URLs.
       VERIFIER_PUBLIC_URL: http://verifier:18138/public
     ports:
       - "127.0.0.1:18132:18132"

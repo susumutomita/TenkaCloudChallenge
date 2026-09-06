@@ -54,7 +54,8 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import GRADED, LINES, normalize_answer, public_payload
-from verifier.expected import expected_for
+from verifier.expected import expected_for, valid_construction
+from fixtures.generate import setting
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-schnorr-drill"
@@ -95,12 +96,14 @@ def _limits() -> None:
 def _check_line(line: str, submission: object) -> bool:
     """The value the learner pasted for one drill line, against this deployment's value.
 
-    A tuple may arrive as `[a, b, c]`, `(a, b, c)` or `a, b, c`; an integer as a number
-    or a digit string. The comparison is exact: there is one right value per line per
-    seed, and it is the value the line prints when typed against this seed's numbers.
+    The first seven fields compare their computed integer or point with the expected
+    value. The final field instead accepts every canonical point/response triple that
+    satisfies the public verification equation.
     """
     if line not in GRADED or line not in LINES:
         return False
+    if line == "transfer":
+        return valid_construction(setting(SEED)["public"], submission)
     answer = submission
     if isinstance(answer, str):
         try:
@@ -217,6 +220,10 @@ def _b64decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + padding)
 
 
+def workbench_sealing_key() -> bytes:
+    return hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+
+
 def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
     """Undo the Workbench's `tcw1.` seal and check it against this deployment.
 
@@ -234,7 +241,7 @@ def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
             return None
         payload = _b64decode(encoded_payload)
         signature = _b64decode(encoded_signature)
-        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        key = workbench_sealing_key()
         expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
         if not hmac.compare_digest(signature, expected_signature):
             return None
@@ -255,6 +262,12 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/healthz":
             self._respond(200, {"ok": True})
+            return
+        if path == "/workbench-key":
+            # Internal supervisor bootstrap only. The verifier has no host port,
+            # the participant proxy relays only /verify, and learner processes
+            # cannot create network sockets. Never add this key to /public.
+            self._respond(200, {"key": workbench_sealing_key().hex()})
             return
         if path == "/public":
             # The public half of the deployment, and only that: the numbers a learner is

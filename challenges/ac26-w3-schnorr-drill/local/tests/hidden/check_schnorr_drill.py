@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fixtures.generate import LINES, order_of, setting  # noqa: E402
-from verifier.expected import expected_for  # noqa: E402
+from verifier.expected import expected_for, valid_construction  # noqa: E402
 
 
 def _call(module, name, *args):
@@ -84,11 +84,11 @@ def check_schnorr(module, seed: str) -> list[str]:
 
 
 def check_transfer(module, seed: str) -> list[str]:
-    pub, exp, _n = _expected(seed)
-    got, err = _call(
-        module, "transfer", pub["x2"], pub["r2"], pub["e2p"], pub["G2"], pub["p2"], pub["a2"]
-    )
-    return [err] if err else _compare("transfer", got, exp["transfer"])
+    pub, _exp, _n = _expected(seed)
+    got, err = _call(module, "transfer", pub["P2"], pub["ef"], pub["G"], pub["p"], pub["a"])
+    if err:
+        return [err]
+    return [] if valid_construction(pub, got) else ["transfer: constructed record does not satisfy the public equation"]
 
 
 def run(module, seed: str) -> list[str]:

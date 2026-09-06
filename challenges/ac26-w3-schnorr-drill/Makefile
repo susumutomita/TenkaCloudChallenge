@@ -10,6 +10,7 @@
 # author can run the problem straight out of a checkout.
 FLAG_SEED ?= local-dev-seed
 IMAGE := ac26-w3-schnorr-drill
+STARTER_FILE ?= local/starter/schnorr_drill.py
 COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p $(IMAGE)
 
 # starter/ is bind-mounted read-only: the learner edits their checkout, the container
@@ -25,7 +26,7 @@ COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p 
 # verifier as a health-gated dependency, rather than a single `docker run` against a
 # standalone image.
 RUN := $(COMPOSE) run --rm \
-	-v $(CURDIR)/local/starter:/problem/starter:ro workbench
+	-v $(abspath $(STARTER_FILE)):/problem/starter/schnorr_drill.py:ro workbench
 
 .PHONY: build test test-one inspect reset reference-test verifier-up verifier-down
 
@@ -42,11 +43,11 @@ verifier-down:
 	$(COMPOSE) down
 
 test: build verifier-up
-	$(RUN) python tests/public/test_schnorr_drill.py
+	$(RUN) python participant/cli_test.py
 
 test-one: build verifier-up
 	@test -n "$(ID)" || (echo "usage: make test-one ID=<test name substring>" && exit 1)
-	$(RUN) python tests/public/test_schnorr_drill.py --only $(ID)
+	$(RUN) python participant/cli_test.py --only $(ID)
 
 inspect: build verifier-up
 	$(RUN) python show.py
@@ -61,3 +62,7 @@ reset:
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_learning.py" -v
+	docker run --rm $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_public_output.py" -v
+	docker run --rm $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_bootstrap.py" -v
+	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_isolation.py" -v
