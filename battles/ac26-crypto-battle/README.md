@@ -121,6 +121,8 @@ The complete Portal reference contains the formulas, constants, and runnable Pyt
 
 ## Reading the screen
 
+Press “I'M READY”. The match starts and Orders arrive when every team is ready.
+
 1. **Current Order** — the request and its remaining time
 2. **Answer methods and inputs** — compare score and disclosure cost, then answer in the same card
 3. **Result** — score and outcome above the answer area

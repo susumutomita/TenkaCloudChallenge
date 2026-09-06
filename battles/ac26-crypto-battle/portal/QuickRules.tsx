@@ -19,14 +19,14 @@ export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
     // player told to pick an Order from an empty belt has been sent to a screen
     // that cannot answer them.
     summary:
-      "Start the match. Read the current Order, then use the answer area directly below it. Choose another Order from the list whenever you like.",
+      "Press “I'M READY”. The match starts when every team is ready. Choose an incoming Order, answer below it, and check your result and points.",
     choice: "LEAK scores immediately by publishing the indicated information. Everyone can read it in the public record. Your vault contains information only you can see.",
   },
   ja: {
     title: "お題を解いて得点する",
     explanation: "お題に答えて得点を競い、終了時にいちばん点が高いチームが勝ちます。自分の秘密の数字は守ります。公開した情報から相手に秘密を読み解かれると、相手も得点するからです。",
     summary:
-      "「試合を始める」を押し、届いたお題から一つ選びます。お題の下で答えを入力し、結果と得点を確かめます。",
+      "「準備完了」を押します。全チームが準備完了になると試合が始まります。届いたお題を選び、その下で答え、結果と得点を確かめます。",
     choice: "公開して答える LEAK は速く得点できますが、表示された情報を相手へ渡します。相手も読める場所が「公開記録」です。自分だけの情報は「自分の保管庫」にあります。",
   },
 };
