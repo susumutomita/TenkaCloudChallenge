@@ -1,9 +1,11 @@
+import Lightning from "./Lightning.tsx";
 import VigenereMaterials from "./VigenereMaterials.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
 import {
   submitCipher,
+  submitDeclareLightning,
   submitFhe,
   submitLeak,
   submitMpc,
@@ -564,6 +566,7 @@ export function proveFeedback(
 ): FeedbackDraft {
   const copy = FAST_MOVE_COPY[locale];
   const outcome = next?.lastProve;
+  points = outcome?.points ?? points;
   if (next !== undefined && outcome?.contractId === contractId && outcome.outcome === "hit") {
     const reveal = next.publicLedger.find(
       (a): a is SudokuRevealArtifact => a.kind === "sudoku-reveal" && a.contractId === contractId,
@@ -990,6 +993,10 @@ export function ageProjection(
     matchRemainingMs:
       projection.matchRemainingMs === undefined ? undefined : drop(projection.matchRemainingMs),
     ...ageHintBooster(projection, elapsedMs),
+    ...(projection.lightning ? { lightning: { ...projection.lightning,
+      remainingMs: drop(projection.lightning.remainingMs),
+      startsInMs: projection.lightning.startsInMs === undefined ? undefined : drop(projection.lightning.startsInMs),
+    } } : {}),
     vault: {
       ...projection.vault,
       rotateCooldownRemainingMs: drop(projection.vault.rotateCooldownRemainingMs),
@@ -1255,6 +1262,16 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
+      <Lightning projection={projection} order={selectedOrder} locale={locale} busy={submitting}
+        onSelect={id => { setSelectedOrderId(id); setProveOpen(false); }}
+        onDeclare={id => void run(() => submitDeclareLightning(client, id), next => ({
+          kind: next?.lightning?.status === "armed" && next.lightning.contractId === id ? "hint" : "error",
+          title: locale === "ja" ? "ライトニングの指定" : "Lightning declaration",
+          body: next?.lightning?.status === "armed" && next.lightning.contractId === id
+            ? locale === "ja" ? `このお題の計算正解で +${next.lightning.points} 点。続けて解答してください。` : `A correct calculation on this Order earns +${next.lightning.points}. Continue to your answer.`
+            : locale === "ja" ? "指定結果を読み取れませんでした。お題とカードの状態を確認してください。" : "Could not read the declaration result. Check the Order and card.",
+        }))} />
+
       {primaryActionsVisible && selectedOrder?.task.kind !== "zk-sudoku" && (
       <div>
         {proveOpen ? <div className="tc-chosen-method">
@@ -1369,7 +1386,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !fheR.trim() || !fheY.trim()}
             onClick={() => void run(
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
-              () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points), reward: selectedOrder.points, lesson: copy.fheLesson }),
+              (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.fheSuccess, body: copy.fheBody(points), reward: points, lesson: copy.fheLesson }; },
             )}
           >{submitting ? copy.running : `${copy.fhe} · +${selectedOrder.points}`}</button>
         </div>
@@ -1459,7 +1476,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !mpcPartial.trim()}
             onClick={() => void run(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
-              () => ({ kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(selectedOrder.points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: selectedOrder.points, lesson: copy.mpcLesson }),
+              (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: points, lesson: copy.mpcLesson }; },
             )}
           >{submitting ? copy.running : `${copy.mpc} · +${selectedOrder.points}`}</button>
           <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />

@@ -77,6 +77,15 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     if (!Array.isArray(v.myContracts) || v.myContracts.some(c => !c || !Array.isArray(c.hints)
       || c.hints.some((h: { regularCost?: unknown }) => !h || !duration(h.regularCost)))) return false;
   }
+  if (v.lightning !== undefined) {
+    const card = v.lightning as Record<string, unknown>;
+    const duration = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+    if (!card || typeof card !== "object" || !["waiting", "scheduled", "unavailable", "ineligible", "available", "armed", "spent", "unused-expired"].includes(String(card.status))
+      || !duration(card.startAfterMs) || !duration(card.remainingMs)
+      || (card.startsInMs !== undefined && !duration(card.startsInMs))) return false;
+    if ((card.status === "armed" || card.status === "spent") && (typeof card.contractId !== "string" || card.contractId.length === 0 || !duration(card.points))) return false;
+    if (card.status === "spent" && !["hit", "leak", "deadline", "rotate", "ended"].includes(String(card.outcome))) return false;
+  }
   // [Issue #645] The modulus is required, not optional. The FHE and MPC panels
   // cannot state a solvable problem without it, and a payload from a
   // pre-#645 dispatcher (a mixed-version rollout) would otherwise be accepted
@@ -120,6 +129,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // closed to "unknown data format" rather than render `NaN`/`undefined`
   // arithmetic as a silently wrong countdown.
   if (v.myContracts.some((c) => typeof (c as { remainingMs?: unknown }).remainingMs !== "number")) return false;
+  if (v.myContracts.some(c => c.lightningEligible !== undefined && typeof c.lightningEligible !== "boolean")) return false;
   if (!Array.isArray(v.publicLedger)) return false;
 
   if (typeof v.teams !== "object" || v.teams === null) return false;
@@ -184,6 +194,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     const last = v.lastProve as Record<string, unknown> | null;
     if (typeof last !== "object" || last === null) return false;
     if (last.outcome !== "hit" && last.outcome !== "miss") return false;
+    if (last.points !== undefined && (typeof last.points !== "number" || !Number.isFinite(last.points) || last.points < 0)) return false;
   }
 
   return true;

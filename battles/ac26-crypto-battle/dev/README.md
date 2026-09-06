@@ -81,6 +81,7 @@ faking it.
 | Scenario | Position |
 | --- | --- |
 | `fresh` | Match just started, first Orders issued, empty Ledger. |
+| `lightning` | Normal minute 61: alpha has one endgame card; choose a calculation Order, declare, then answer for its doubled reward. |
 | `vigenere` | Standard five-minute TTL: bravo has exposed all three distinct key positions, alpha has an open cipher Order. |
 | `ledger-filling` | A LEAKed share and a PROVE transcript side by side. |
 | `rps-reuse` | Two public bravo openings reuse r; the next sealed hand can be predicted through the real participant controls. |

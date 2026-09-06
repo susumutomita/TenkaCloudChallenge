@@ -69,6 +69,7 @@ import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.t
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import { awardBooster, boosterStartAt, projectBooster, storedBooster } from "./booster.ts";
+import { awardLightning, storedLightning, settleLightning, projectLightning, lightningEligible, lightningBonus, armLightning } from "./lightning.ts";
 import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
@@ -281,6 +282,7 @@ export function initialState(
     phase: "waiting",
     readyTeamIds: [],
     endgameBooster: { status: "pending" },
+    endgameLightning: { status: "pending" },
     nowMs: undefined,
     startedAtMs: undefined,
     nextContractAtMs: undefined,
@@ -598,13 +600,14 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *   6  endgame booster distribution, fixed once at the phase boundary
  *   7  Vigenère rung and public key-position offsets (old Caesar rows keep scalar keys)
  *   8  Vigenère wrong-answer reward forfeiture and own lastCipher adjudication
+ *   9  private lightning distribution, targeted card, and accepted-answer history
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 8;
+export const STATE_SCHEMA_VERSION = 9;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -629,11 +632,14 @@ export const STATE_SCHEMA_VERSION = 8;
  * v7 -> v8 preserves existing Vigenère rows and reservations. Only a newly
  * adjudicated incorrect CIPHER writes cipherFailed/lastCipher; absent means no
  * previously charged failure. Existing true flags survive every migration.
+ * v8 -> v9 adds pending/unavailable lightning distribution, preserving all
+ * Vigenère and compact reservations. Legacy Orders have unknown accepted-answer history
+ * and cannot be targeted; the next issued Orders record answerAttempted=false.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6 and v7 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7 and v8 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -709,8 +715,9 @@ function unspentNonceExposure(
 
 function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleState {
   const endgameBooster = storedBooster(persistedState);
-  const state = endgameBooster === persistedState.endgameBooster ? persistedState
-    : { ...persistedState, endgameBooster };
+  const endgameLightning = storedLightning(persistedState);
+  const state = endgameBooster === persistedState.endgameBooster && endgameLightning === persistedState.endgameLightning ? persistedState
+    : { ...persistedState, endgameBooster, endgameLightning };
   const config = needsConfigMigration(state.config) ? mergeConfig(state.config) : state.config;
   const teams = needsTeamMigration(state.teams)
     ? migrateTeams(state.teams, state.contracts)
@@ -741,15 +748,18 @@ function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleS
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   const boundary = boosterStartAt(state);
-  if (state.endgameBooster?.status === "pending" && boundary !== undefined && eventNowMs >= boundary) {
+  if ((state.endgameBooster?.status === "pending" || state.endgameLightning?.status === "pending") && boundary !== undefined && eventNowMs >= boundary) {
     // Only read the boundary ranking. Carrying this intermediate tick forward
     // would issue unseen Orders and then charge them on a delayed tick, breaking
     // the existing no-catch-up-penalty rule. The actual transition stays intact.
     const atBoundary = tickAtTime(state, boundary);
     const advanced = eventNowMs === boundary ? atBoundary : tickAtTime(state, eventNowMs);
-    return { ...advanced, endgameBooster: awardBooster(atBoundary) };
+    return settleLightning({ ...advanced,
+      endgameBooster: state.endgameBooster?.status === "pending" ? awardBooster(atBoundary) : state.endgameBooster,
+      endgameLightning: state.endgameLightning?.status === "pending" ? awardLightning(atBoundary) : state.endgameLightning,
+    });
   }
-  return tickAtTime(state, eventNowMs);
+  return settleLightning(tickAtTime(state, eventNowMs));
 }
 
 function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -875,6 +885,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         issuedAtMs: nextContractAtMs,
         expiresAtMs,
         status: "open",
+        answerAttempted: false,
         // [Issue #645] The Order states its rule, and the method list follows
         // from it and the task -- never the other way round, so a method added
         // in a later phase is offered on exactly the Orders it legitimately
@@ -1238,6 +1249,15 @@ export function validateOp(
   }
 
   switch (op.kind) {
+    case "declare-lightning": {
+      const contract = state.contracts.find(c => c.id === op.contractId && c.teamId === teamId);
+      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc"].includes(m));
+      if (!contract || !method) return { ok: false, error: "lightning requires your own calculation Order; duel outcomes do not qualify" };
+      const gate = validateOrderSubmission(state, teamId, op.contractId, method);
+      if (!gate.ok) return gate;
+      return lightningEligible(state, contract) ? { ok: true }
+        : { ok: false, error: "lightning is unavailable or this Order has a recorded answer attempt" };
+    }
     case "hunt-rps": return validateRpsHunt(state, teamId, op);
     case "rps-commit":
     case "rps-open": {
@@ -1832,7 +1852,7 @@ function applyCipher(
       } },
     };
   }
-  const points = contract.cipherFailed === true ? 0 : contract.points;
+  const points = contract.cipherFailed === true ? 0 : contract.points + lightningBonus(state, contract);
   return {
     ...state,
     contracts: state.contracts.map((c) =>
@@ -2069,7 +2089,7 @@ function completeOrder(
       ...state.teams,
       [teamId]: {
         ...team,
-        score: team.score + contract.points,
+        score: team.score + contract.points + lightningBonus(state, contract),
         completedContractIds: [...team.completedContractIds, contract.id],
       },
     },
@@ -2373,6 +2393,7 @@ function applyProveSudoku(
   if (pi === undefined || !isValidSolution(op.grid) || samePermutation(pi, IDENTITY_PERMUTATION)) {
     return {
       ...state,
+      contracts: state.contracts.map(c => c.id === contract.id ? { ...c, answerAttempted: true } : c),
       teams: {
         ...state.teams,
         [teamId]: {
@@ -2405,6 +2426,7 @@ function applyProveSudoku(
     tag,
     postedAtMs: nowMs,
   };
+  const points = contract.points + lightningBonus(state, contract);
   const completed = completeOrder(state, teamId, contract, artifact, "prove");
   const provingTeam = completed.teams[teamId];
   if (!provingTeam) throw new Error("applyOp(prove-sudoku): team vanished while completing the Order");
@@ -2412,7 +2434,7 @@ function applyProveSudoku(
     ...completed,
     teams: {
       ...completed.teams,
-      [teamId]: { ...provingTeam, lastProve: { contractId: contract.id, outcome: "hit" } },
+      [teamId]: { ...provingTeam, lastProve: { contractId: contract.id, outcome: "hit", points } },
     },
   };
 }
@@ -2521,13 +2543,19 @@ function applyStart(state: CryptoBattleState): CryptoBattleState {
   return tick({ ...state, startedAtMs, nextContractAtMs: startedAtMs, phase: "build" }, startedAtMs);
 }
 
-export function applyOp(
+/** A declaration and its terminal result persist in the same operation/state write. */
+export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): CryptoBattleState {
+  return settleLightning(applyMethodOp(state, teamId, op));
+}
+
+function applyMethodOp(
   persistedState: CryptoBattleState,
   teamId: string,
   op: CryptoBattleOp,
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "declare-lightning": return armLightning(state, teamId, op.contractId);
     case "hunt-rps": return applyRpsHunt(state, teamId, op);
     case "rps-commit":
     case "rps-open":
@@ -2617,8 +2645,9 @@ export function projectForTeam(
       return {
         id: c.id,
         kind: c.kind,
-        points: c.cipherFailed === true ? 0 : c.points,
+        points: c.cipherFailed === true ? 0 : c.points + lightningBonus(state, c),
         ...(c.cipherFailed === undefined ? {} : { cipherFailed: c.cipherFailed }),
+        lightningEligible: lightningEligible(state, c),
         leakPoints: c.leakPoints,
         task,
         status: c.status,
@@ -2715,6 +2744,7 @@ export function projectForTeam(
     sudokuHuntAttempts,
     huntWinPoints: state.config.scores.huntBonus,
     hintBooster: projectBooster(state, teamId),
+    lightning: projectLightning(state, teamId),
     completedHunts: Object.values(state.teams).filter(other => other.teamId !== teamId).flatMap(other =>
       (["share", "sudoku", ...ALL_CIPHER_RUNGS] as const).flatMap(via => {
         const key = via === "share" ? huntKey(teamId, other.teamId, other.generation)
