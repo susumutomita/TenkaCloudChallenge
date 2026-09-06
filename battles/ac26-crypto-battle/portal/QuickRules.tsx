@@ -13,21 +13,21 @@ interface QuickRulesCopy {
 
 export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
   en: {
-    title: "How this problem works",
+    title: "Solve Orders to score",
     explanation: "Answer each task (ORDER) to earn points. Protect your secret numbers: other teams can score by recovering them from what you publish. The highest score at the end wins.",
     // [Issue #677] Press START first. Nothing arrives until someone does, and a
     // player told to pick an Order from an empty belt has been sent to a screen
     // that cannot answer them.
     summary:
       "Start the match. Read the current Order, then use the answer area directly below it. Choose another Order from the list whenever you like.",
-    choice: "For the first Order, “Publish to answer” earns points immediately and shows one secret share. “Prove while protecting the secret” uses your separate sudoku solution. Choose a digit table and fill four cells so the judge can check that you hold that solution, earning points without publishing the share.",
+    choice: "LEAK scores immediately by publishing the indicated information. Everyone can read it in the public record. Your vault contains information only you can see.",
   },
   ja: {
-    title: "この問題の解説",
+    title: "お題を解いて得点する",
     explanation: "お題に答えて得点を競い、終了時にいちばん点が高いチームが勝ちます。自分の秘密の数字は守ります。公開した情報から相手に秘密を読み解かれると、相手も得点するからです。",
     summary:
-      "試合を始めたら「いまのお題」を読み、その直下で答えます。別のお題には「ほかのお題を選ぶ」から切り替えられます。",
-    choice: "最初のお題は「公開して答える」ならすぐ得点し、秘密から作った数（かけら）を1個公開します。「秘密を守って証明する」なら、別に持っている数独の正しい解を使います。表を選んで4マスを埋め、審判に「その解を持っている」と確かめてもらうことで、かけらを公開せずに得点します。",
+      "「試合を始める」を押し、届いたお題から一つ選びます。お題の下で答えを入力し、結果と得点を確かめます。",
+    choice: "公開して答える LEAK は速く得点できますが、表示された情報を相手へ渡します。相手も読める場所が「公開記録」です。自分だけの情報は「自分の保管庫」にあります。",
   },
 };
 
@@ -36,9 +36,9 @@ export const QUICK_RULES_COPY: Record<Locale, QuickRulesCopy> = {
 // a dark host is white -- white on a pale blue card. The same omission has now
 // been fixed three times in this problem's portal; see BOARD_CSS's header.
 const panelStyle = {
-  border: "1px solid #dce3ec",
+  border: "none",
   borderRadius: "8px",
-  padding: "10px",
+  padding: "0",
   marginBottom: "8px",
   background: "#fff",
   color: "#16212e",
@@ -51,7 +51,12 @@ export default function QuickRules({ locale }: Pick<PortalSlotProps, "locale">) 
       <strong>{copy.title}</strong>
       <p style={{ margin: "4px 0", fontSize: "13px" }}>{copy.explanation}</p>
       <p style={{ margin: "4px 0", fontSize: "13px" }}>{copy.summary}</p>
-      <details style={{ fontSize: 13 }}><summary style={{ cursor: "pointer", color: "#315f91" }}>{locale === "ja" ? "最初のお題の選び方" : "Your first Order’s two options"}</summary><p>{copy.choice}</p></details>
+      <ol style={{ paddingLeft: 22, fontSize: 14, lineHeight: 1.8 }}>
+        {(locale === "ja" ? ["届いたお題を見る。残り時間を見て、どれから解くか選ぶ。", "そのお題の入力欄で計算し、答えを送る。", "正解・得点を確かめ、次のお題へ進む。"] : ["Read the incoming Orders and choose using their deadlines.", "Calculate in the selected Order’s answer area and submit.", "Check the result and points, then choose the next Order."]).map(line => <li key={line}>{line}</li>)}
+      </ol>
+      <p style={{ fontSize: 13, lineHeight: 1.8 }}>{copy.choice}</p>
+      <h3 style={{ fontSize: 16 }}>{locale === "ja" ? "相手の公開情報は、攻撃の材料" : "Public evidence gives you an attack"}</h3>
+      <p style={{ fontSize: 13, lineHeight: 1.8 }}>{locale === "ja" ? "HUNT は、相手の公開情報から秘密を計算して当てる攻撃です。相手を選び、材料があといくつ必要かを確認します。材料がそろったら、式で計算して答えを送ります。ROTATE は自分の秘密を作り直す操作です。秘密に紐づく未回答のお題は無効・減点になり、じゃんけんは続きます。表示された影響を見てから使います。" : "HUNT is an attack that recovers a secret from an opponent’s public evidence. Choose the opponent and check what evidence is missing. When it is ready, calculate using the formula and submit. ROTATE replaces your own secrets and voids unanswered secret-bound Orders with a penalty. Rock-paper-scissors continues. Check the displayed consequences first."}</p>
     </section>
   );
 }

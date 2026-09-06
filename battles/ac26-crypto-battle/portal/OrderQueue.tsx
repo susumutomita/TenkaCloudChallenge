@@ -118,6 +118,7 @@ export const ORDER_QUEUE_CSS = `
 .tc-order-belt-compact .tc-order-top{gap:4px;flex-wrap:wrap;font-size:12px}.tc-order-belt-compact .tc-points{font-size:12px}.tc-order-belt-compact .tc-points-pass{font-size:11px}
 .tc-order-belt-compact .tc-order-meta{font-size:12px;line-height:1.35;gap:3px;margin-top:3px}
 .tc-order-belt-compact .tc-order-deadline{font-size:15px;font-weight:750;font-variant-numeric:tabular-nums}
+.tc-order-belt-compact .tc-order-clock-state{display:flex;align-items:center;justify-content:space-between;gap:4px;flex-wrap:wrap}
 .tc-order-belt-compact .tc-order-methods{display:none}.tc-order-belt-compact .tc-timer-track{height:3px;margin-top:5px}
 .tc-order-belt-compact .tc-order-selected{background:#edf5ff;box-shadow:none}.tc-order-belt-compact .tc-order-clickable:focus-visible{outline:3px solid #245ea0;outline-offset:2px}
 .tc-order-state{display:flex;align-items:center;gap:8px;font-size:11px}.tc-order-arrived{color:#174e78;background:#dceeff;border:1px solid #7aadd3;border-radius:4px;padding:0 5px}
@@ -126,5 +127,7 @@ export const ORDER_QUEUE_CSS = `
 .tc-order-recent li[data-order-result="expired"]{border-color:#d0b7a4;background:#fff7ef}.tc-order-recent li>span{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tc-order-recent li[data-order-result="voided"]{border-color:#a8bdd4;background:#eef4fc}
 @media(max-width:600px){.tc-order-queue{top:0;max-height:42vh}.tc-workspace,.tc-result-anchor{scroll-margin-top:calc(42vh + 24px)}.tc-order-belt-compact .tc-order-row{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-order-belt-compact{padding:6px}.tc-order-belt-compact .tc-order-card{padding:6px}.tc-order-belt-compact .tc-order-meta{font-size:11px}.tc-order-belt-compact .tc-order-deadline{font-size:13px}}
+@media(max-width:1023px){.tc-order-queue{top:40px}}
+@media(max-height:520px){.tc-order-queue{max-height:28vh}.tc-workspace,.tc-result-anchor{scroll-margin-top:calc(28vh + 64px)}}
 @media(prefers-reduced-motion:reduce){.tc-order-queue *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 `;

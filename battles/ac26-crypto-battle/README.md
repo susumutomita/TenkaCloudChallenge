@@ -2,54 +2,44 @@
 
 For hint-assisted play, finish one selected Order before opening the next Order's hints. The Caesar ladder and share procedure are kept to that route; the normal five-minute deadline and hint costs are unchanged. See [the reading check](dev/HINT-READING.md) for its measured scope and limitations.
 
-A short introduction and “How to play and practice (optional)” appear above the board. Detailed guidance starts collapsed so the current Order and answer controls appear first. Open the disclosure, then choose “Read the guided explanation (optional)”. Read results without answering, advance freely, or close at any point. Its ten scenes connect remainders, additive shares, indexed sharing, why reconstruction works, publication risk, MPC, ZK, FHE, Caesar and commit-reveal. Optional one-digit checks never change the match score or state. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
+Four optional entries appear above the game: “How to play”, “Cryptography in diagrams and formulas”, “One-digit practice”, and “Rules reference”. They open on a separate scroll surface. Closing returns to the original Order, unfinished answer and page position. An ongoing match keeps running. Practice connects remainders, sharing, reconstruction, publication risk, MPC, ZK, FHE, Caesar and commit-reveal with small numbers. Reading without answering is allowed.
 Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
 
-The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers, free of charge. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
+The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
 
 The Order list stays visible while answering, with the pending count, task, deadline and selection. Cards appear in deadline order and can be selected directly by click or Tab and Enter / Space. New Orders receive a short arrival notice and a New badge without changing the selected Order or unfinished input. Due soon, Expired and Completed also appear as text. Recent results remain below the list, including earned points for answers confirmed in this screen. Narrow screens and larger queues scroll within the list.
 
-Free “How it works” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
+“Cryptography in diagrams and formulas” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
-HUNT starts with one card per opponent, showing waiting, ready, completed, or exhausted status for each method. A ready method opens public evidence, free formulas and diagrams, answer input, and the attack confirmation. Shares use distinct current-generation indices; sudoku opens a worksheet for reused public tags, leaving the solution to the participant; Caesar uses the rung's pair threshold; RPS needs reuse across two past duels and a current sealed target. ROTATE appears separately as a defence, with the affected open-Order count beside its control. RPS explicitly distinguishes waiting for the opponent to seal from ready to open, disabling the opening button while waiting.
+HUNT starts with one card per opponent, showing waiting, ready, completed, or exhausted status for each method. A ready method opens public evidence, formulas and diagrams, answer input, and the attack confirmation. Shares use distinct current-generation indices; sudoku opens a worksheet for reused public tags, leaving the solution to the participant; Caesar uses the rung's pair threshold; RPS needs reuse across two past duels and a current sealed target. ROTATE appears separately as a defence, with the affected open-Order count beside its control. RPS explicitly distinguishes waiting for the opponent to seal from ready to open, disabling the opening button while waiting.
 
 ## What is going on
 
-Your team holds one secret. It is split into five pieces, and **any three of
-them rebuild it. Two tell you nothing.**
+Solve Orders for points and compete for the highest final total. Each Order shows its inputs, accepted methods, points and deadline. Orders requesting a share or encryption also offer an instant answer that publishes information.
 
-Work (Orders) arrives six at a time every five minutes, and ignoring one costs
-you points. There are two ways to finish one — **hand over a piece and answer
-instantly**, or **compute, and keep the piece**. Hand over three and someone
-rebuilds your secret.
-
-That is the whole bet.
+A share is an index-and-value pair used in secret sharing. This game creates five shares of a secret; three distinct shares from one generation reconstruct it. Two alone cannot identify it. A generation groups shares made from the same secret.
 
 ## The moves
 
 | | What it does | What it costs |
 | --- | --- | --- |
-| **LEAK** | Hand over one piece and answer instantly | Fast — but the piece never comes back |
-| **PROVE** | Compute, and answer without handing anything over | The piece stays safe — but it costs a calculation |
-| **HUNT** | When someone has three pieces exposed, take their points | A wrong secret costs points and one of a few attempts per team and generation |
-| **ROTATE** | Remake your pieces. Everything published stops counting | — |
+| **LEAK** | Publish a share, or an original/encrypted pair, to answer instantly | Public records can supply an opponent's attack |
+| **PROVE** | Relabel a sudoku grid and fill four cells | Requires calculation; wrong submissions cost points |
+| **HUNT** | Recover a secret, key or hand from public information and attack | Secret, sudoku and hand misses cost points and attempts; an incorrect cipher key is rejected without a charge |
+| **ROTATE** | Replace the secret and key with a new generation | Unanswered secret-bound Orders become void and cost points; rock-paper-scissors continues |
 | **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
 
-The order is **do nothing < LEAK and get hunted < LEAK and get away with it <
-PROVE**. Every Order card shows both rates side by side, so you compare before
-you commit.
+An ordinary correct calculation earns +30, LEAK earns +10, and expiry costs −15. Check each card for its accepted methods and actual points.
 
-## These are real things
+## Cryptographic techniques and the calculation taught here
 
-| Order | Technique | Where it runs |
+| Order | Technique | Part explored in this model |
 | --- | --- | --- |
-| add without decrypting | **Homomorphic encryption** | confidential smart contracts, sealed-bid voting |
-| masked subtotal | **Secure computation (MPC)** | MPC wallets, threshold signatures |
-| PROVE | **Zero-knowledge proofs** | zkRollups, private transfers |
+| add without decrypting | **Homomorphic encryption** | How ciphertext addition relates to the decrypted result |
+| masked subtotal | **Secure computation (MPC)** | Adding masks to private inputs and cancelling them in the total |
+| PROVE | **Zero-knowledge proofs (ZK)** | Sudoku relabelling and properties demonstrated by partial checks |
 
-You will have performed all three by hand by the time the match ends. Caesar
-shows up too, but as the way in — **meeting a breakable cipher first is what
-makes an unbreakable one worth something.**
+ZK demonstrates correctness while hiding a secret answer. Sudoku is a teaching example; this game's trusted judge knows the original solution. FHE supports computations built from addition and multiplication. This Order explores addition using small numbers. The diagram-and-formula explanations describe the difference from practical systems.
 
 ## Goal
 
@@ -63,12 +53,7 @@ Repeating one share index still counts as one distinct share. Shares from differ
 
 ## Orders arrive six at a time, every five minutes
 
-A batch of six Orders arrives every five minutes and expires after five. **There
-is no stockpiling** -- you cannot take next batch's work early, and you cannot
-carry this batch's leftovers forward.
-
-More arrive than a team can compute. Which ones you compute, which you pass on,
-and what you do with the time left over -- that is the game.
+The opening has one Order. The first batch of six arrives one minute later; further batches arrive every five minutes. Ordinary Orders expire after five minutes and rush Orders after two and a half. Choose which calculations, disclosures and attacks to attempt before their deadlines.
 
 ## ORDER types
 
@@ -140,9 +125,9 @@ The complete Portal reference contains the formulas, constants, and runnable Pyt
 2. **Answer methods and inputs** — compare score and disclosure cost, then answer in the same card
 3. **Result** — score and outcome above the answer area
 4. **Exposure, records and vault** — read the summary and expand what you need
-5. **How to play and practice (optional)** — open the disclosure above the board to choose rules, guided scenes or a topic
+5. **Play, diagrams and formulas, practice, rules** — choose one purpose above the board
 
-The collapsed HUNT entry is always visible. It explains the attack and counts each opponent’s distinct public shares in their current generation. Once enough exist, select an opponent and use the displayed factors to calculate the secret; the answer is still entered by the player. Other attacks and ROTATE appear when relevant.
+HUNT always shows each opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer. ROTATE is a separate defence control.
 
 ## Data boundary
 

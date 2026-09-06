@@ -133,7 +133,7 @@ export const FAST_MOVE_COPY = {
       than none.
     */
     scoreLabel: "SCORE",
-    scoreHint: "Answer an Order to gain. Let one expire and you lose points.",
+    scoreHint: "Unanswered at deadline → lose points",
     leakBlocked: "This Order does not accept LEAK.",
     proveBlocked: "This Order does not accept PROVE.",
     hunt: "HUNT FROM LEDGER",
@@ -312,7 +312,7 @@ export const FAST_MOVE_COPY = {
     constraintNoRaw: (methods: readonly string[]) =>
       `${methods.join(" / ").toUpperCase()} のみ — 生の値を公開してはいけない`,
     scoreLabel: "スコア",
-    scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
+    scoreHint: "未回答のまま締切 → 減点",
     leakBlocked: "この Order は LEAK を受け付けません。",
     proveBlocked: "この Order は PROVE を受け付けません。",
     hunt: "公開されたシェアから秘密を計算する",
@@ -907,19 +907,20 @@ ${SUCCESS_CSS}
 .tc-chosen-method{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:#315f91}
 .tc-chosen-method button{border:1px solid #b9cbe0;border-radius:6px;color:#42536a;background:#fff;font-size:12px;padding:6px 10px;cursor:pointer}
 .tc-why{font-size:12px;color:#42536a}.tc-why>summary{cursor:pointer}.tc-why[open]>summary{margin-bottom:8px}
-.tc-move-shell{max-width:1080px;margin:0 auto;padding:20px;gap:12px;border:1px solid #dce3ec;background:#f6f8fb}
+.tc-move-shell{max-width:1080px;margin:0 auto;padding:0;gap:12px;border:0;background:transparent}
 .tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
+.tc-scoreline{justify-content:space-between}.tc-scoreline .tc-rival-score{margin:0;display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
 .tc-records{font-size:13px;color:#42536a}
 .tc-records>summary{padding:8px 0;cursor:pointer}
 .tc-result-anchor:empty{display:none}.tc-result-anchor:focus{outline:2px solid #2563a6;outline-offset:3px;border-radius:10px}
-.tc-workspace{display:grid;gap:16px;background:#fff;border:1px solid #b9cbe0;border-top:4px solid #315f91;border-radius:12px;padding:22px;box-shadow:0 3px 10px #1e3a5f08}
+.tc-workspace{display:grid;gap:12px;background:#fff;border:1px solid #b9cbe0;border-top:4px solid #315f91;border-radius:12px;padding:16px;box-shadow:0 3px 10px #1e3a5f08}
 .tc-ticket{border:0;border-radius:0;padding:0;margin:0;background:transparent}
 .tc-ticket-head{align-items:center}.tc-ticket-head>span{font-size:12px;color:#556579}
-.tc-ticket-head .tc-ticket-clock{font-size:14px}.tc-order-heading{margin:8px 0 12px;font-size:24px;line-height:1.45;font-weight:800;letter-spacing:0}
+.tc-ticket-head .tc-ticket-clock{font-size:14px}.tc-order-heading{margin:6px 0 8px;font-size:24px;line-height:1.45;font-weight:800;letter-spacing:0}
 .tc-ticket-track{height:3px;margin-top:0}.tc-ticket-fill{background:#7995b4}
 .tc-ticket-urgent .tc-ticket-clock{color:#b52815}.tc-ticket-urgent{background:transparent}
 .tc-card-title{font-size:13px;letter-spacing:0}.tc-share-primer{padding:0;border:0;background:transparent;margin:6px 0 8px;font-size:13px;line-height:1.65}
-.tc-primary-actions{margin-top:12px;gap:14px}.tc-action{align-items:stretch;text-align:left;padding:17px;font-size:16px;font-weight:750;gap:8px;border:1px solid #b6c8dc;border-radius:10px;box-shadow:none;line-height:1.5}
+.tc-primary-actions{margin-top:8px;gap:12px}.tc-action{align-items:stretch;text-align:left;padding:12px;font-size:16px;font-weight:750;gap:6px;border:1px solid #b6c8dc;border-radius:10px;box-shadow:none;line-height:1.5}
 .tc-action-heading{display:flex;align-items:baseline;justify-content:space-between;gap:10px}.tc-action-heading b{white-space:nowrap;font-size:18px}
 .tc-action small{font-size:12px;font-weight:500;letter-spacing:0}.tc-action-risk{font-size:12px;font-weight:500;line-height:1.65}
 .tc-leak-button{background:#fffbf3;border-color:#decba7}.tc-prove-button{background:#edf5ff;border-color:#8badd3}
@@ -928,13 +929,14 @@ ${SUCCESS_CSS}
 .tc-action:focus-visible,.tc-submit-small:focus-visible,summary:focus-visible{outline:3px solid #3372b5;outline-offset:3px}
 .tc-input-panel{border:0;border-top:1px solid #e2e8f0;border-radius:0;padding:16px 0 0;gap:10px}
 .tc-input-panel>.tc-submit-small{justify-self:start;min-width:180px;padding:11px 18px;background:#315f91;font-size:14px}
+.tc-input-panel input[aria-label="fast-cipher-answer"]{scroll-margin-top:calc(48vh + 24px);scroll-margin-bottom:64px}
 .tc-input-panel>strong{font-size:16px!important}.tc-card-hint,.tc-lesson-use,.tc-lesson-why{font-size:12px;line-height:1.65}
 .tc-hints{border-top:1px solid #e2e8f0;margin:0;padding-top:12px}.tc-hints>summary{font-size:13px;color:#42536a;cursor:pointer}.tc-hints[open]>summary{margin-bottom:10px}
 .tc-hint-text{white-space:pre-line;line-height:1.85}.tc-hint-button{width:auto;font-size:12px;font-weight:600;border:1px solid #a1b5cf;letter-spacing:0;padding:8px 12px}
 .tc-exposure{margin:0;padding:12px;border-color:#dce3ec;background:transparent;font-size:12px}.tc-exposure>summary{cursor:pointer;font-weight:650}.tc-exposure>summary>span{margin-left:16px;color:#556579;font-weight:500}
 .tc-tactics{background:transparent;border-color:#dce3ec}.tc-tactics>summary{font-weight:650}.tc-tactics>summary span{display:none}.tc-tactics[open]>summary span{display:block}
 .tc-records>.tc-board-grid{margin-top:8px}
-@media(max-width:720px){.tc-move-shell{padding:10px}.tc-workspace{padding:15px;gap:12px}.tc-order-heading{font-size:20px}.tc-primary-actions{grid-template-columns:1fr}.tc-action{padding:14px}.tc-exposure>summary>span{display:block;margin:5px 0 0}.tc-scoreline{gap:6px}}
+@media(max-width:720px){.tc-workspace{padding:15px;gap:12px}.tc-order-heading{font-size:20px}.tc-primary-actions{grid-template-columns:1fr}.tc-action{padding:14px}.tc-exposure>summary>span{display:block;margin:5px 0 0}.tc-scoreline{gap:6px}}
 
 @media(prefers-reduced-motion:reduce){.tc-feedback{animation:none!important}}
 `;
@@ -996,6 +998,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [orderReceipt, setOrderReceipt] = useState<OrderReceipt | undefined>();
   const workspaceRef = useRef<HTMLElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
+  const cipherInputRef = useRef<HTMLInputElement>(null);
   // [Issue #645] One box per component of an FHE answer, one for an MPC
   // subtotal. Keep decimal strings through the wire boundary: the default
   // field is 97, but a configured larger field must not be rounded by Number().
@@ -1195,11 +1198,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
             {projection.teams[projection.vault.teamId]?.score ?? 0}
           </strong>
         </div>
-        <div className="tc-scoreline-hint">{copy.scoreHint}</div>
+        <span className="tc-scoreline-hint">{copy.scoreHint}</span>
+        <div className="tc-rival-score">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(t => <span key={t.teamId}>{locale === "ja" ? "相手" : "Opponent"} · {t.teamName || t.teamId} <strong>{t.score} {locale === "ja" ? "点" : "pt"}</strong></span>)}</div>
       </div>
-
-
-      <div className="tc-rival-score">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(t => <span key={t.teamId}>{locale === "ja" ? "相手" : "Opponent"} · {t.teamName || t.teamId} <strong>{t.score} {locale === "ja" ? "点" : "pt"}</strong></span>)}</div>
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
       <OrderQueue key={`${props.team.eventId}:${projection.vault.teamId}`} projection={projection} locale={locale}
@@ -1249,12 +1250,24 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {selectedOrder?.task.kind === "reveal-share" && (
           <p className="tc-share-primer">
             <span>{locale === "ja"
-              ? `秘密を複数の数に分けて持つ方法を「秘密分散」、その数1個を「シェア（share）」と呼びます。この試合では ${projection.vault.shares.length} 個のうち ${projection.threshold} 個で元の秘密を戻せます。`
-              : `A share is one of ${projection.vault.shares.length} numbers made from your secret. Choose to publish it or prove without handing it over.`}</span>
+              ? `秘密分散：秘密を複数の数（シェア）に分けて保管。${projection.vault.shares.length} 個中 ${projection.threshold} 個で元の秘密を復元できます。`
+              : `Secret sharing splits a secret into numbers called shares. Any ${projection.threshold} of ${projection.vault.shares.length} shares recover it.`}</span>
           </p>
         )}
-        {selectedOrder?.task.kind === "reveal-share" && <ConceptExplanation key={selectedOrder.id} locale={locale} topic="sharing" task={selectedOrder.task} prime={projection.prime} />}
         <div className="tc-primary-actions">
+          {selectedOrder?.task.kind === "caesar-shift" && selectedOrder.allowedMethods.includes("cipher") && <button
+            type="button"
+            className="tc-action tc-prove-button"
+            aria-controls="tc-cipher-answer"
+            onClick={() => {
+              cipherInputRef.current?.focus({ preventScroll: true });
+              cipherInputRef.current?.scrollIntoView({ block: "center" });
+            }}
+          >
+            <span className="tc-action-heading"><span>{locale === "ja" ? "計算して暗号化する" : "Calculate the encrypted row"}</span><b>+{selectedOrder.points} {locale === "ja" ? "点" : "pt"}</b></span>
+            <small>{locale === "ja" ? "CIPHER · 各数字に鍵を足す" : "CIPHER · Add the key to each value"}</small>
+            <span className="tc-action-risk">{locale === "ja" ? "元の列と暗号の組は公開しません。" : "The plaintext/ciphertext pair stays private."}</span>
+          </button>}
           {leakAllowed && <button
             type="button"
             className="tc-action tc-leak-button"
@@ -1298,11 +1311,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <span className="tc-action-risk">{locale === "ja" ? "かけらの公開は増えません。付け替えた数字の一列などを公開します。" : "No extra share is published. One relabelled row, column or box becomes public."}</span>
           </button>}
         </div>
-        {selectedOrder && (!leakAllowed || !proveAllowed) && (
-          <div className="tc-card-hint">
-            {!leakAllowed ? copy.leakBlocked : copy.proveBlocked}
-          </div>
-        )}
+        {selectedOrder?.task.kind === "reveal-share" && <ConceptExplanation key={selectedOrder.id} locale={locale} topic="sharing" task={selectedOrder.task} prime={projection.prime} />}
         </>}
       </div>
       )}
@@ -1355,7 +1364,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         the LEAK button, because this is the moment the choice is actually made.
       */}
       {selectedOrder?.task.kind === "caesar-shift" && (
-        <div className="tc-input-panel">
+        <div id="tc-cipher-answer" className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
           <div className="tc-lesson">
             <div className="tc-lesson-use">{copy.cipherUse}</div>
@@ -1380,6 +1389,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </ul>
           <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
           <input
+            ref={cipherInputRef}
             aria-label="fast-cipher-answer"
             value={cipherAnswer}
             onChange={(event) => setCipherAnswer(event.target.value)}

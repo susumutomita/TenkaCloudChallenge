@@ -118,8 +118,8 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
 export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "commit": "なぜ手を先に封じる？"}, "en": {"remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "commit": "Why seal a hand first?"}};
 
 const button = { cursor: "pointer", border: "1px solid #a4b5c6", borderRadius: 5, padding: "5px 9px", color: "#24476d", background: "#fff", fontSize: 12 } as const;
-export default function ConceptExplanation({ locale, topic, task, prime }: {
-  readonly locale: Locale; readonly topic?: Concept; readonly task?: OrderTaskProjection; readonly prime?: string;
+export default function ConceptExplanation({ locale, topic, task, prime, embedded = false }: {
+  readonly locale: Locale; readonly topic?: Concept; readonly task?: OrderTaskProjection; readonly prime?: string; readonly embedded?: boolean;
 }) {
   const [selected, setSelected] = useState<Concept | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
@@ -129,7 +129,7 @@ export default function ConceptExplanation({ locale, topic, task, prime }: {
   const step = lesson?.steps[stepIndex];
   const ja = locale === "ja";
   return (
-    <section aria-label="crypto-concept-explanation" style={{ color: "#16212e", background: "#fff", border: "1px solid #d6e0eb", borderRadius: 6, padding: 8, margin: "8px 0", fontSize: 13 }}>
+    <section aria-label="crypto-concept-explanation" style={{ color: "#16212e", background: "#fff", border: embedded ? undefined : "1px solid #d6e0eb", borderRadius: 6, padding: embedded ? 0 : 8, margin: embedded ? 0 : "8px 0", fontSize: 13 }}>
       <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
 
         {topics.map((item) => <button key={item} type="button" style={button} aria-expanded={selected === item}
@@ -138,7 +138,7 @@ export default function ConceptExplanation({ locale, topic, task, prime }: {
       {lesson && step && <div style={{ border: "1px solid #bad1e8", borderRadius: 6, background: "#f5f9fe", padding: 12, marginTop: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
           <strong>{lesson.name} · {stepIndex + 1} / {lesson.steps.length} — {step.title}</strong>
-          <button type="button" style={button} onClick={() => setSelected(null)}>{ja ? "解説を閉じる" : "Close explanation"}</button>
+          <button type="button" style={button} onClick={() => setSelected(null)}>{embedded ? (ja ? "テーマを選び直す" : "Choose another topic") : (ja ? "解説を閉じる" : "Close explanation")}</button>
         </div>
         <div aria-live="polite">
           {step.diagram && <ConceptDiagram key={`${selected}:${stepIndex}`} kind={step.diagram} locale={locale} />}
@@ -157,7 +157,7 @@ export default function ConceptExplanation({ locale, topic, task, prime }: {
           <span>{stepIndex + 1} / {lesson.steps.length}</span>
           {stepIndex < lesson.steps.length - 1
             ? <button type="button" style={button} onClick={() => setStepIndex((n) => n + 1)}>{ja ? "次へ" : "Next"}</button>
-            : <button type="button" style={button} onClick={() => setSelected(null)}>{ja ? "問題に戻る" : "Back to the problem"}</button>}
+            : <button type="button" style={button} onClick={() => setSelected(null)}>{embedded ? (ja ? "テーマを選び直す" : "Choose another topic") : (ja ? "問題に戻る" : "Back to the problem")}</button>}
         </nav>
       </div>}
     </section>
