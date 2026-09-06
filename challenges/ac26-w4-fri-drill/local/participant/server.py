@@ -1,17 +1,13 @@
 """Public Participant Workbench and fail-closed verifier proxy.
 
-This process carries public evidence, starter material, and public tests only. It
-never grades a checkpoint locally: every `/verify` request is forwarded to the
-Compose-internal verifier, and any missing or invalid verifier response becomes a
-canonical `correct: false` verdict.
+This process carries starter material and public tests only. It never grades a
+checkpoint locally: every `/verify` request is forwarded to the Compose-internal
+verifier, and any missing or invalid verifier response becomes a canonical
+`correct: false` verdict.
 
-Issue 543/537: the Portal editor API below used to live in `verifier/server.py`, in the
-same Docker stage and process that also compared a submission against this
-deployment's expected values -- so the expected-value derivation (then a plain function
-in `fixtures/generate.py`) shipped in the one image a learner's own `make build`
-produced. That grading logic and its `verifier/expected.py` import now live only in the
-separate `verifier` image (see ../Dockerfile), which this container never builds and
-cannot import from.
+The fixture generator and expected-value implementation do not ship in this image. The inspect output and the public tests
+read this deployment's public half from the verifier's `GET /public` over the
+Compose-internal network instead (see participant/evidence.py and ../Dockerfile).
 """
 
 from __future__ import annotations
@@ -29,10 +25,16 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.evidence import public_evidence
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w4-fri-drill"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+PUBLIC_SNAPSHOT = public_evidence()
+DEPLOYMENT_BINDING = PUBLIC_SNAPSHOT["submissionBinding"]
+protect_supervisor()
+if not isinstance(DEPLOYMENT_BINDING, str) or not DEPLOYMENT_BINDING:
+    raise RuntimeError("verifier did not provide a deployment binding")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18135"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -43,23 +45,12 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
-#: No checkpoint of this drill routes a learner's file through code execution; every
-#: graded line is a pasted value. `code_checkpoints=()` below tells the Workbench
-#: adapter every checkpoint is manual, so `prepare_submissions` seals every one of them
-#: the same way.
-CHECKPOINTS = (
-    "poly",
-    "fold",
-    "fold2",
-    "query",
-    "recover",
-    "consistency",
-    "cheat-caught",
-    "miss-points",
-)
+# Each checkpoint grades a pasted value, never learner code.
+CHECKPOINTS = ('poly', 'fold', 'fold2', 'query', 'recover', 'consistency', 'cheat-caught', 'miss-points')
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -69,14 +60,15 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    deployment_binding=DEPLOYMENT_BINDING,
+    public_payload={key:PUBLIC_SNAPSHOT[key] for key in ("assignments","public")},
     problem_id='ac26-w4-fri-drill',
-    problem_name='2 点開ければ、折り畳みが本物か分かる',
-    problem_name_en='Open two points and the fold gives itself away',
-    description='手元の Python で 1 行打って、出た値を貼る。12 行で、コミット済み Q₀ の偶奇分解 → β で折って次数半分 → 定数まで → x と −x の開示から両半分を復元 → クエリ検査 → 同じ次数のすり替えが捕まる → 見逃しは ±x の 1 組だけ、を自分の手で出した数だけで通す。',
-    description_en='Type one line in your own Python, paste the value it prints. Twelve lines: split the committed Q₀ even/odd → fold with β, halving the degree → down to a constant → recover both halves from the openings at x and −x → the query check → a same-degree swap gets caught → the misses are one ±x pair — on numbers you produced yourself.',
-    checkpoint_labels={'poly': 'コミット済みの多項式 Q₀', 'fold': '折り畳み — 検証者の β で 1 本に混ぜる', 'fold2': 'もう 1 回折ると定数', 'query': 'クエリ — x と −x の 2 点を開かせる', 'recover': '2 点から偶数部分と奇数部分を復元', 'consistency': 'クエリ検査 — 復元した材料と Q₁ の開示を突き合わせる', 'cheat-caught': 'クエリ検査が嘘を捕まえる', 'miss-points': 'どの x なら見逃したか — 数える'},
-    checkpoint_labels_en={'poly': 'The committed polynomial Q₀', 'fold': "Fold — mix into one with the verifier's β", 'fold2': 'Fold once more — a constant', 'query': 'Query — open the pair x and −x', 'recover': 'Recover the even and odd parts from the two openings', 'consistency': 'The query check — recovered material vs the opening of Q₁', 'cheat-caught': 'The query check catches the lie', 'miss-points': 'Count the x that would have missed'},
+    problem_name='折り畳んだ式のすり替えを見つける',
+    problem_name_en='Catch an altered polynomial fold',
+    description='短くした式が、元の式とつながっているかを調べる8問。5か7で割った余りを使い、最後は検査をすり抜ける位置を探します。',
+    description_en='Eight steps check whether a shorter expression matches its original. Work with remainders by 5 or 7, then find positions where a false fold slips through.',
+    checkpoint_labels={'poly': '元の式を3か所で計算する', 'fold': '式を折って短くする', 'fold2': 'もう一度折って一つの数にする', 'query': '左右の2点を読む', 'recover': '和と差で偶数・奇数の成分を戻す', 'consistency': '折る前後を照合する', 'cheat-caught': '短い式のすり替えを見つける', 'miss-points': 'すり替えを見逃す位置を探す'},
+    checkpoint_labels_en={'poly': 'Evaluate the original at three positions', 'fold': 'Fold to a shorter expression', 'fold2': 'Fold again to one number', 'query': 'Read two opposite positions', 'recover': 'Recover the even and odd values', 'consistency': 'Check the first fold', 'cheat-caught': 'Detect an altered short expression', 'miss-points': 'Find the blind spots of the alteration'},
     submitted_files=('fri_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,

@@ -1,67 +1,19 @@
-"""This deployment's numbers, and the twelve values the FRI drill expects.
+"""Private fixture generator: small arithmetic records, never a full FRI proof.
 
-Everything the learner types is decided here from FLAG_SEED: a small odd prime field,
-the four coefficients of the committed polynomial Q₀ (degree exactly 3), the verifier's
-two folding challenges β and β₂, the query point x, and the dishonest fold's difference
-d0 + d1·Y. The learner never sees the expected values — they see the assignment
-statements (``show.py``) and produce every value with their own Python, one line at a
-time.
-
-The procedure — even/odd split, fold with β, the x/−x query, recovering both halves,
-the consistency check — is the Week 4 lecture's FRI section; the numbers are this
-deployment's own (the independent-reimplementation rule).
-
-Nothing here is cryptographic. Toy parameters are for observability.
-
-This module hands back the PUBLIC state only (what ``show.py`` prints). It no longer
-computes or exports the twelve lines' expected values as their own callable result:
-before #537, that dict shipped here and could be read back with one import, which was
-the entire drill for free. ``verifier/expected.py`` recomputes each checkpoint's value
-from this public state at grading time instead -- but read that module's own docstring
-before assuming this closes the leak: it does not. This module and the participant-
-facing tests no longer point at the answer by accident; a participant who deliberately
-imports ``verifier.expected`` instead still gets it, because this single-stage drill
-template has no isolated verifier container to keep it out of. See #537 and
-scripts/ac26-w4-fri-drill.test.ts for the regression
-test pinning the values this move must not change.
+The first fold is nonconstant; the fixed alteration has exactly two nonzero
+blind spots, and the displayed check point detects it. These teaching conditions
+are public. This is not an independently random protocol execution.
 """
-
 from __future__ import annotations
 
+import ast
 import hashlib
 
-PRIMES = (17, 19, 23, 29, 31)
+PRIMES = (5, 7)
 
-# The line ids, in drill order. server.py, show.py, the tests and metadata.json all read
-# these tuples, so the drill's order and its graded subset are defined in one place.
-LINES = (
-    "poly",
-    "split",
-    "identity",
-    "fold",
-    "fold2",
-    "query",
-    "recover",
-    "consistency",
-    "cheat",
-    "cheat-caught",
-    "miss-points",
-    "honest-all",
-)
-
-# The lines that have an answer field. The platform allows at most eight checkpoints per
-# problem, so four lines (the split, the all-points identity, the cheat's setup, and the
-# closing completeness sweep) are ungraded material whose correctness surfaces in the
-# lines that follow them.
-GRADED = (
-    "poly",
-    "fold",
-    "fold2",
-    "query",
-    "recover",
-    "consistency",
-    "cheat-caught",
-    "miss-points",
+# The eight answer fields, in participant order.
+LINES = GRADED = (
+    "poly", "fold", "fold2", "query", "recover", "consistency", "cheat-caught", "miss-points",
 )
 
 #: Expected-value shapes: every graded line is an int or a tuple of ints of fixed length.
@@ -82,9 +34,7 @@ def _draw(seed: str, label: str, low: int, high: int) -> int:
 
 
 def setting(seed: str) -> dict:
-    """Everything public — what show.py prints. See the module docstring: the expected
-    value of each graded line is computed only by verifier/expected.py, from this
-    return value, and is not part of it."""
+    """Public numbers only. Expected values are computed by the separate verifier."""
     p = PRIMES[_draw(seed, "field", 0, len(PRIMES) - 1)]
 
     q0 = _draw(seed, "q0", 0, p - 1)
@@ -132,35 +82,22 @@ def assignments(seed: str) -> str:
     )
 
 
-def normalize_answer(line: str, raw: object):
-    """Turn whatever the learner pasted into the shape the expected value has.
+def submission_binding(seed: str) -> str:
+    return hashlib.sha256(("ac26-w4-fri-drill:submission:v2\0"+seed).encode()).hexdigest()
 
-    Integers may arrive as int or as a digit string. Tuples may arrive as a JSON list,
-    a tuple-looking string "(a, b, c)", or "a, b, c" — the length must match the line's
-    shape exactly. Anything else is simply wrong.
-    """
-    width = TUPLE_LINES.get(line)
-    if width is not None:
-        if isinstance(raw, str):
-            cleaned = raw.strip().strip("()[]")
-            parts = [part.strip() for part in cleaned.split(",") if part.strip() != ""]
-        elif isinstance(raw, (list, tuple)):
-            parts = list(raw)
-        else:
-            return None
-        if len(parts) != width:
-            return None
-        try:
-            return tuple(int(part) for part in parts)
-        except (TypeError, ValueError):
-            return None
-    if isinstance(raw, bool):
+
+def normalize_answer(line: str, raw: object):
+    """Accept only actual integers, never bools/floats coerced into an answer."""
+    if line not in GRADED:
         return None
-    if isinstance(raw, int):
-        return raw
     if isinstance(raw, str):
         try:
-            return int(raw.strip())
-        except ValueError:
+            raw = ast.literal_eval(raw.strip())
+        except (ValueError, SyntaxError, TypeError, RecursionError):
             return None
-    return None
+    if line == "fold2":
+        return raw if type(raw) is int else None
+    width = TUPLE_LINES[line]
+    if not isinstance(raw, (list, tuple)) or len(raw) != width:
+        return None
+    return tuple(raw) if all(type(value) is int for value in raw) else None
