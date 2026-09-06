@@ -145,13 +145,17 @@ def run_public_tests(files: object) -> dict[str, object]:
     public = fetch_public()
     if public is None:
         return {"passed": False, "output": "Public evidence unavailable; is the verifier running?"}
+    learner = LearnerSession(sources)
     try:
-        with LearnerSession(sources) as learner:
+        with learner:
             result = run_cases(*learner.modules(), public)
             result['output'] = (learner.log + result['output'])[-MAX_OUTPUT_BYTES:]
             return result
     except Exception:
-        return {"passed": False, "output": "The functions did not return values within the execution limits."}
+        # Only the public-test surface shows source startup diagnostics. Grading
+        # continues to report generic failures, without hidden-call input values.
+        return {"passed": False, "output": learner.initialization_diagnostic
+                or "The functions did not return values within the execution limits."}
 
 
 def prepare_submissions(files: object) -> dict[str, object]:

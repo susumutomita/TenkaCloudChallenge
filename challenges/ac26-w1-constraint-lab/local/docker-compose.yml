@@ -66,6 +66,8 @@ services:
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       VERIFY_PORT: "18094"
+    # Reap orphaned learner descendants after the launcher kills their group.
+    init: true
     read_only: true
     tmpfs:
       - "/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"

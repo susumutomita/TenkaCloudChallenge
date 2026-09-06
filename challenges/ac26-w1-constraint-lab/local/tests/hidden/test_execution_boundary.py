@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from participant.execution import LearnerError, LearnerSession
 from participant.isolation import protect_supervisor
+from participant import server as public_server
 from verifier import server
 
 
@@ -114,9 +115,9 @@ class ExecutionBoundary(unittest.TestCase):
             pid=learner.call('field','normalize',[0],97)
         for _ in range(50):
             status=Path(f'/proc/{pid}/stat')
-            if not status.exists() or status.read_text().split()[2]=='Z':break
+            if not status.exists():break
             time.sleep(.02)
-        else:self.fail('forked learner still running after completion')
+        else:self.fail('forked learner was not reaped after completion')
 
     def test_outer_grade_timeout_removes_nested_worker_group(self):
         # This synthetic trusted-runner stub reproduces a hung nested worker without
@@ -140,9 +141,53 @@ while True:time.sleep(1)
             pid=int((Path(directory)/'child').read_text())
             for _ in range(50):
                 status=Path(f'/proc/{pid}/stat')
-                if not status.exists() or status.read_text().split()[2]=='Z':break
+                if not status.exists():break
                 time.sleep(.02)
-            else:self.fail('nested child survived outer grader timeout')
+            else:self.fail('nested child was not reaped after outer grader timeout')
+
+    def test_repeated_fork_submissions_leave_no_zombies(self):
+        def zombies():
+            found = []
+            for path in Path('/proc').glob('[0-9]*/stat'):
+                try:
+                    if path.read_text().rsplit(')', 1)[1].split()[0] == 'Z':
+                        found.append(path.parent.name)
+                except FileNotFoundError:
+                    pass
+            return found
+        files=reference_sources()
+        files['field.py']+='\nimport os\nfor _ in range(4):\n    if os.fork()==0: os._exit(0)\n'
+        for attempt in range(64):
+            self.assertTrue(server.evaluate('residuals',files)[0], attempt)
+            for _ in range(100):
+                if not zombies():
+                    break
+                time.sleep(.01)
+            self.assertEqual(zombies(), [], f'zombies accumulated after submission {attempt+1}')
+
+    def test_public_startup_errors_identify_source_file_line_and_type(self):
+        for filename,source,kind,line in (
+            ('field.py','class Field(:\n','SyntaxError',1),
+            ('circuit.py','# first line\nimport missing_participant_module\n','ModuleNotFoundError',2),
+            ('gadgets.py','# first line\nraise ValueError("bad\\nsetup\\x1b[31m")\n','ValueError',2),
+        ):
+            files=reference_sources();files[filename]=source
+            with self.subTest(filename=filename):
+                result=public_server.run_public_tests(files)
+                self.assertFalse(result['passed'])
+                self.assertIn(f'{filename}:{line}: {kind}',result['output'])
+                self.assertNotIn('/problem/',result['output'])
+                self.assertNotIn('\x1b',result['output'])
+                self.assertLess(len(result['output']), 400)
+                self.assertNotIn('bad setup',server.evaluate('residuals',files)[1])
+
+    def test_untrusted_startup_diagnostic_fields_are_bounded(self):
+        with LearnerSession(reference_sources()) as learner:
+            for value in ({'file':[], 'line':1, 'type':'Error'},
+                          {'file':'/private/hidden.py','line':1,'type':'Error'},
+                          {'file':'field.py','line':True,'type':'Error'},
+                          {'file':'field.py','line':1,'type':'Error\nSpoof'}):
+                self.assertEqual(learner._initialization_diagnostic(value), '')
 
     def test_hidden_input_prints_never_reach_grading_feedback(self):
         files=reference_sources()

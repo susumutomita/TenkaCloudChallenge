@@ -15,13 +15,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from isolation import restrict_learner
 
 
+def initialization_error(error, filename):
+    """Report only source locations; the receiver validates these untrusted fields."""
+    line = None
+    if isinstance(error, SyntaxError) and error.filename == filename:
+        line = error.lineno
+    else:
+        tb = error.__traceback__
+        while tb is not None:
+            if tb.tb_frame.f_code.co_filename in ('field.py', 'circuit.py', 'gadgets.py'):
+                filename, line = tb.tb_frame.f_code.co_filename, tb.tb_lineno
+            tb = tb.tb_next
+    return {'file': filename, 'line': line, 'type': type(error).__name__,
+            'message': str(error)[:240]}
+
+
 def main():
     initial = json.loads(sys.stdin.readline())
     restrict_learner()
     modules = {name: types.ModuleType(name) for name in ('field', 'circuit', 'gadgets')}
     sys.modules.update(modules)
     for name, module in modules.items():
-        exec(compile(initial['sources'][name+'.py'], name+'.py', 'exec'), module.__dict__)
+        filename = name+'.py'
+        try:
+            exec(compile(initial['sources'][filename], filename, 'exec'), module.__dict__)
+        except BaseException as error:
+            print(json.dumps({'initializationError': initialization_error(error, filename)}), flush=True)
+            return
+    print('{"ready":true}', flush=True)
     for line in sys.stdin:
         call = json.loads(line)
         try:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import resource
 import select
 import signal
@@ -41,6 +42,7 @@ class LearnerSession:
         self.pending = b''
         self.log = ''
         self.sequence = 0
+        self.initialization_diagnostic = ''
 
     def __enter__(self):
         if sys.platform != 'linux':
@@ -56,10 +58,42 @@ class LearnerSession:
         os.set_blocking(self.process.stdin.fileno(), False)
         try:
             self._send({'sources': self.sources})
+            while True:
+                line = self._line()
+                try:
+                    value = json.loads(line)
+                except ValueError:
+                    value = None
+                if isinstance(value, dict):
+                    if 'initializationError' in value:
+                        self.initialization_diagnostic = self._initialization_diagnostic(value['initializationError'])
+                        raise LearnerError('The submitted files could not be initialized.')
+                    if value.get('ready') is True:
+                        break
+                self._log_line(line)
         except (OSError, ValueError, LearnerError):
             self.__exit__(None, None, None)
             raise LearnerError('Source could not start.') from None
         return self
+
+    def _initialization_diagnostic(self, value):
+        if not isinstance(value, dict):
+            return ''
+        filename, line, kind = value.get('file'), value.get('line'), value.get('type')
+        if not isinstance(filename, str) or filename not in self.sources or type(line) is not int or not 1 <= line <= len(self.sources[filename].splitlines()) + 1:
+            return ''
+        if not isinstance(kind, str) or re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]{0,79}', kind) is None:
+            return ''
+        message = value.get('message')
+        # Source-only startup diagnostics never contain function-call inputs. Strip
+        # control/format characters so arbitrary exception text cannot alter the UI.
+        detail = ''.join(c if c.isprintable() else ' ' for c in message[:240]) if isinstance(message, str) else ''
+        return f'{filename}:{line}: {kind}' + (f': {detail}' if detail else '')
+
+    def _log_line(self, line):
+        self.log += line+'\n'
+        if len(self.log.encode()) > MAX_LOG_BYTES:
+            raise LearnerError('Function output exceeded the limit.')
 
     def _send(self, payload):
         data = (json.dumps(payload)+'\n').encode()
@@ -118,9 +152,7 @@ class LearnerSession:
                     raise LearnerError('The submitted function raised an error.')
                 if 'value' in value:
                     return value['value']  # untrusted JSON data, checked by the caller
-            self.log += line+'\n'
-            if len(self.log.encode()) > MAX_LOG_BYTES:
-                raise LearnerError('Function output exceeded the limit.')
+            self._log_line(line)
 
     def modules(self):
         session = self

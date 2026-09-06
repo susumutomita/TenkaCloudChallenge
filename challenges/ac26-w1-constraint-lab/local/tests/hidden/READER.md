@@ -141,3 +141,51 @@ and both project networks were removed; project-filtered listings were empty. Lo
 `constraint-716-remaining-networks.log`. Images/build cache remain; no broad Docker cleanup
 was performed. The initial final-HTTP attempt met sandbox localhost EPERM before any
 request; the same scoped test passed after normal approval review, without an approval rejection.
+
+## PR #760 review follow-up at 5410fdd
+
+Two review findings were fixed without changing the exercises, scoring, range search or
+platform contract:
+
+- **Descendant reaping:** the verifier service had no `init: true`, although the
+  Workbench and author test containers did. Killing a process group stops computation
+  but does not reap orphaned zombies. The verifier now also runs with Docker's init.
+  Cleanup tests require the child PID to disappear from `/proc`; a `Z` state no longer
+  counts as success.
+- **Public startup diagnostics:** source compilation and module initialization now
+  complete before the function-call channel starts. The worker reports a structured
+  startup error; the public controller validates an editable filename, line number and
+  exception type, removes control characters and bounds its message. For example,
+  `field.py:1: SyntaxError: invalid syntax (field.py, line 1)` tells the participant
+  what to edit. Module import and initialization errors similarly identify their
+  source line. Hidden grading still reports only its generic/property-level failure;
+  exceptions from hidden function calls do not expose their inputs.
+
+Verification used the same dedicated `ac26-constraint-reader-716` project, local port
+18146 and synthetic seed `constraint-reader-716`. Both the repository Compose file
+and the dedicated Compose copy include the verifier init setting.
+
+- **Actual Compose HTTP stress:** 64 successive correct residual submissions each
+  forked four descendants, for 256 total. Trusted `/proc` observations after every
+  submission found **zero zombies**. Process count was 3 before and 3 after (maximum
+  sampled 4 while a health check ran); PID 1 was `docker-init`. A valid public test
+  still passed after the stress run.
+- **Actual public diagnostics:** SyntaxError at `field.py:1`, ModuleNotFoundError at
+  `circuit.py:2`, and ValueError at `gadgets.py:2` were displayed with filename, line
+  and type. Messages were single-line, bounded, and contained no worker path or escape
+  control characters. The corresponding `/verify` calls failed without echoing the
+  initialization marker.
+- `make reference-test IMAGE=constraint-760 FLAG_SEED=constraint-boundary-synthetic`:
+  **25 mutation cases and 13 Linux boundary tests passed**. The latter include another
+  64 × 4 descendant run, exact PID disappearance after success and timeout, malformed
+  diagnostic fields, and private-input suppression.
+- The unchanged independent reader's existing actual HTTP acceptance suite passed
+  again, with **34 checks** over all five checkpoints and the existing negative cases.
+- Python compilation, `git diff --check` and the final catalog gate passed;
+  **116 metadata entries** remain valid.
+
+Logs: `/private/tmp/constraint-760-http-regressions.log`,
+`/private/tmp/constraint-760-http-acceptance.log`,
+`/private/tmp/constraint-760-reference-test.log`, and
+`/private/tmp/constraint-760-catalog.log`. These are local API/process observations,
+not a new browser, production or AWS claim.
