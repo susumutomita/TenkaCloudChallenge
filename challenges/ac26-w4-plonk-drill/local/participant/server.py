@@ -1,17 +1,13 @@
 """Public Participant Workbench and fail-closed verifier proxy.
 
-This process carries public evidence, starter material, and public tests only. It
-never grades a checkpoint locally: every `/verify` request is forwarded to the
-Compose-internal verifier, and any missing or invalid verifier response becomes a
-canonical `correct: false` verdict.
+This process carries starter material and public tests only. It never grades a
+checkpoint locally: every `/verify` request is forwarded to the Compose-internal
+verifier, and any missing or invalid verifier response becomes a canonical
+`correct: false` verdict.
 
-Issue 543/537: the Portal editor API below used to live in `verifier/server.py`, in the
-same Docker stage and process that also compared a submission against this
-deployment's expected values -- so the expected-value derivation (then a plain function
-in `fixtures/generate.py`) shipped in the one image a learner's own `make build`
-produced. That grading logic and its `verifier/expected.py` import now live only in the
-separate `verifier` image (see ../Dockerfile), which this container never builds and
-cannot import from.
+The fixture generator and expected-value implementation do not ship in this image. The inspect output and the public tests
+read this deployment's public half from the verifier's `GET /public` over the
+Compose-internal network instead (see participant/evidence.py and ../Dockerfile).
 """
 
 from __future__ import annotations
@@ -29,10 +25,16 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.evidence import public_evidence
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w4-plonk-drill"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+PUBLIC_SNAPSHOT = public_evidence()
+DEPLOYMENT_BINDING = PUBLIC_SNAPSHOT["submissionBinding"]
+protect_supervisor()
+if not isinstance(DEPLOYMENT_BINDING, str) or not DEPLOYMENT_BINDING:
+    raise RuntimeError("verifier did not provide a deployment binding")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18134"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -43,23 +45,12 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
-#: No checkpoint of this drill routes a learner's file through code execution; every
-#: graded line is a pasted value. `code_checkpoints=()` below tells the Workbench
-#: adapter every checkpoint is manual, so `prepare_submissions` seals every one of them
-#: the same way.
-CHECKPOINTS = (
-    "outputs",
-    "bad-row",
-    "addresses",
-    "sigma-addresses",
-    "marks",
-    "grand-product",
-    "bad-product",
-    "miss-count",
-)
+# Each checkpoint grades a pasted value, never learner code.
+CHECKPOINTS = ('outputs', 'bad-row', 'addresses', 'sigma-addresses', 'marks', 'grand-product', 'bad-product', 'miss-count')
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -69,14 +60,15 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    deployment_binding=DEPLOYMENT_BINDING,
+    public_payload={key:PUBLIC_SNAPSHOT[key] for key in ("assignments","public")},
     problem_id='ac26-w4-plonk-drill',
     problem_name='ゲートは全部通る。配線が違う',
-    problem_name_en='Every gate passes. The wiring does not',
-    description='手元の Python で 1 行打って、出た値を貼る。12 行で、ゲート表 → ゲート方程式 → ゲートだけ守る嘘の表 → 番地と σ → 指紋の大積が正直な表で一致・嘘の表で不一致 → どの (β, γ) なら見逃したか、を自分の手で出した数だけで通す。',
-    description_en='Type one line in your own Python, paste the value it prints. Twelve lines: the gate table → the gate equation → a lying table that satisfies only the gates → addresses and σ → the grand product of fingerprints agreeing on the honest table and splitting on the lying one → which (β, γ) would have missed — on numbers you produced yourself.',
-    checkpoint_labels={'outputs': '回路をゲート表にする — 3 ゲートの出力', 'bad-row': '嘘の witness — ゲート制約だけ守る', 'addresses': '大積の準備 — 9 マス全部に番地を振る', 'sigma-addresses': '配線 σ — 同じ値のはずのマスどうしで番地を交換', 'marks': '指紋 — マスごとに (値 + β·番地 + γ)', 'grand-product': '大積 — 正しい表では両辺が一致する', 'bad-product': '嘘の表の大積 — 配線の破れが積に出る', 'miss-count': 'どの (β, γ) なら見逃したか — 数える'},
-    checkpoint_labels_en={'outputs': 'The circuit as a gate table — three outputs', 'bad-row': 'A lying witness — gates satisfied, wiring broken', 'addresses': 'Setting up the grand product — an address for all nine cells', 'sigma-addresses': 'The wiring σ — swap addresses between cells that must agree', 'marks': 'Fingerprints — (value + β·address + γ) per cell', 'grand-product': 'The grand product — equal on the honest table', 'bad-product': "The lying table's grand product — the broken wire shows up", 'miss-count': 'Count the (β, γ) that would have missed'},
+    problem_name_en='The gates pass, but the wires are wrong',
+    description='足し算から掛け算へ値を渡す2行の表を、7の余りで検査する8問。最後は、計算は正しいのに配線が違い、それでも積の検査を通る行を自分で作ります。',
+    description_en='Eight checks use remainders by 7 to trace addition into multiplication. Finish by constructing a row that preserves multiplication, breaks both copied inputs, and still passes the product check.',
+    checkpoint_labels={'outputs': '足し算と掛け算の出力を求める', 'bad-row': '配線を一つ破った行を作る', 'addresses': '6マスに番地を付ける', 'sigma-addresses': '配線の先の番地へ入れ替える', 'marks': '値と番地を一つの数に混ぜる', 'grand-product': '正しい表の積を比べる', 'bad-product': '配線が違う表の積を比べる', 'miss-count': '積だけでは通る偽の行を作る'},
+    checkpoint_labels_en={'outputs': 'Compute the addition and multiplication outputs', 'bad-row': 'Change one copied input while preserving multiplication', 'addresses': 'Give six cells distinct addresses', 'sigma-addresses': 'Replace each address with its wired partner', 'marks': 'Mix each value with its address', 'grand-product': 'Compare products of the honest table', 'bad-product': 'Compare products after changing one copied input', 'miss-count': 'Construct a false row that passes the product check'},
     submitted_files=('plonk_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,

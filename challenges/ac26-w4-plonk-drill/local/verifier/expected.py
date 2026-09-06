@@ -1,100 +1,32 @@
-"""The PLONK drill's ground truth for the twelve lines, computed from public state alone.
+"""Independent verifier arithmetic; no participant code is imported or executed."""
+from fixtures.generate import setting
 
-`fixtures/generate.py` hands back only what `show.py` prints: `setting(seed)["public"]`.
-This module is the only place that turns those public numbers into the value each
-graded line is checked against. It is not exported from `fixtures/generate.py` and
-nothing on the participant's reading path (`show.py`, the public tests) imports it —
-see #537 and docs/curricula/advanced-cryptography-2026/TEMPLATE.md "Assurance scope".
+def context(seed):
+    v=setting(seed)['public'];p=v['p'];w=v['w'];u=(v['a0']+v['b0'])%p
+    rows=((v['a0'],v['b0'],u),(u,u,u*u%p))
+    tags=tuple(v[k] for k in ('k0','k1','k2'))
+    addr=tags+tuple(w*k%p for k in tags)
+    return v,rows,addr,(addr[0],addr[1],addr[3],addr[4],addr[2],addr[5])
 
-Before #537, `fixtures/generate.py::setting()` returned this same dict directly, so
-`from fixtures.generate import setting; setting(FLAG_SEED)["expected"]` handed back
-every graded answer with no cryptography at all. Every value below is a pure function
-of the public dict (gate inputs, the shift g, the address base w, and beta/gamma) plus
-the fixed SIGMA/gate wiring, using the same construction `fixtures/generate.py` used to
-pick w, beta and gamma in the first place — so recomputing it here, instead of shipping
-a precomputed table, costs nothing except the one-import shortcut.
+def product_pair(rows,addr,swapped,v):
+    values=list(rows[0])+list(rows[1]);result=[]
+    for labels in (addr,swapped):
+        product=1
+        for i,value in enumerate(values):product=product*(value+v['beta']*labels[i]+v['gamma'])%v['p']
+        result.append(product)
+    return tuple(result)
 
-Same standing as `verifier/server.py` itself, and this residual is real, not closed:
-this module still ships inside the SAME participant-runnable image as everything else in
-this drill template, because the template has no isolated verifier container to exclude
-it from (single stage, by design — "no network surface to attack"; see the AC26
-template's Assurance scope). A participant who deliberately imports `verifier.expected`
-instead of `fixtures.generate` gets the identical dict from an equally simple one-call,
-one-argument import, and that argument (FLAG_SEED) is already sitting in their own
-container's environment. That path is NOT closed by this file's existence, and closing
-it would need splitting this template into an isolated participant/verifier container
-pair (see `cs-async-result-binding`'s two-stage split for the pattern) — a template-wide
-change out of scope for #537's four confirmed drills, tracked separately.
+def expected_for(seed):
+    v,rows,addr,swapped=context(seed);p=v['p'];u=rows[0][2];l=(u+v['g'])%p
+    bad=(rows[0],(l,u,l*u%p))
+    return {'outputs':(u,u*u%p),'bad-row':bad[1],'addresses':addr,'sigma-addresses':swapped,
+    'marks':tuple((n+v['beta']*a+v['gamma'])%p for n,a in zip(rows[0],addr[:3])),
+    'grand-product':product_pair(rows,addr,swapped,v),'bad-product':product_pair(bad,addr,swapped,v)}
 
-What #537 did fix here: the answer is no longer exported from `fixtures/generate.py`
-(the module `show.py` and the public tests point a participant toward — the module that
-falsely claimed "the learner never sees the expected values" while doing exactly that),
-and `tests/hidden/check_*.py` (documented as non-confidential by the AC26 template, but
-not a module a participant has any ordinary reason to read) no longer imports it either.
-Both were *accidental*-discovery paths. Deliberate extraction from the verifier's own
-grading internals remains possible, exactly as it always was for `verifier/server.py`.
-"""
-
-from __future__ import annotations
-
-import math
-
-from fixtures.generate import SIGMA, setting
-
-
-def expected_for(seed: str) -> dict[str, object]:
-    """Every drill line's value, recomputed from `setting(seed)["public"]`."""
-    pub = setting(seed)["public"]
-    p, q, w = pub["p"], pub["q"], pub["w"]
-    a0, b0, a1, b1, g = pub["a0"], pub["b0"], pub["a1"], pub["b1"], pub["g"]
-    beta, gamma = pub["beta"], pub["gamma"]
-
-    o0 = (a0 + b0) % p
-    o1 = (a1 * b1) % p
-    o2 = (o0 + o1) % p
-
-    rows = ((a0, b0, o0), (a1, b1, o1), (o0, o1, o2))
-    bad2 = ((o0 + g) % p, o1, (o0 + g + o1) % p)
-    bad = (rows[0], rows[1], bad2)
-
-    def address_list(base: int) -> list[int]:
-        return [(pow(base, r, q) * (c + 1)) % q for r in range(3) for c in range(3)]
-
-    addr = address_list(w)
-    saddr = [
-        (pow(w, SIGMA[(c, r)][1], q) * (SIGMA[(c, r)][0] + 1)) % q
-        for r in range(3)
-        for c in range(3)
-    ]
-
-    vals = [v for row in rows for v in row]
-    vb = [v for row in bad for v in row]
-
-    def product(values: list[int], addresses: list[int], b: int, c: int) -> int:
-        return math.prod((v + b * a + c) % q for v, a in zip(values, addresses)) % q
-
-    marks = [(v + beta * a + gamma) % q for v, a in zip(vals, addr)]
-    f = product(vals, addr, beta, gamma)
-    fs = product(vals, saddr, beta, gamma)
-    fb = product(vb, addr, beta, gamma)
-    gb = product(vb, saddr, beta, gamma)
-
-    # The miss count. fb == gb exactly when some fingerprint SHARED by both products is 0.
-    # Count, per b, the distinct c that zero a shared (value, address) pair.
-    shared = [pair for i, pair in enumerate(zip(vb, addr)) if i not in (2, 6)]
-    miss = sum(len({(-(v + b * a)) % q for v, a in shared}) for b in range(1, q))
-
-    return {
-        "outputs": (o0, o1, o2),
-        "gate-eq": (0, 0, 0),
-        "copy": (True, True),
-        "bad-row": bad2,
-        "bad-passes": ((0, 0, 0), (False, True)),
-        "addresses": tuple(addr),
-        "sigma-addresses": tuple(saddr),
-        "marks": tuple(marks[:3]),
-        "grand-product": (f, fs),
-        "bad-product": (fb, gb),
-        "multiset": (True, False),
-        "miss-count": miss,
-    }
+def valid_construction(seed,answer):
+    v,rows,addr,swapped=context(seed);p=v['p']
+    if len(answer)!=3 or any(type(n) is not int or not 0<=n<p for n in answer):return False
+    l,r,o=answer
+    if l==rows[0][2] or r==rows[0][2] or l*r%p!=o:return False
+    a,b=product_pair((rows[0],tuple(answer)),addr,swapped,v)
+    return a==b and a!=0

@@ -13,6 +13,7 @@
 name: ac26-w4-plonk-drill
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -20,9 +21,9 @@ services:
       # stage -- `author` -- which carries reference/ and mutation.py.
       target: participant
     environment:
-      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18134"
       VERIFIER_URL: http://verifier:18138/verify
+      VERIFIER_PUBLIC_URL: http://verifier:18138/public
     ports:
       - "127.0.0.1:18134:18134"
     depends_on:

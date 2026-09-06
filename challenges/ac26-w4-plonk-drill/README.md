@@ -1,112 +1,72 @@
-# Type one line, paste the value — PLONK's two constraints and the grand product
+# The gates pass, but the wires are wrong
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+An independent, unofficial companion to Advanced Cryptography Program 2026. This material is not affiliated with or endorsed by the course. Statements, examples, code and diagrams are independently written.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 435 · **Chapter:** Week 4 / Drill: PLONK's
-two constraints · **Role:** `mechanism` · **Time:** 40–60 minutes · **Points:** 200
-· **Status:** draft — new companions need human play evidence (#465) before leaving draft
+Track `advanced-cryptography-2026`, Week 4, order 435. Eight checkpoints, 200 points, approximately 40–60 minutes. The public statement and hints assume junior-high mathematics and define additional notation when introduced.
 
-## What this is
+## Participant route
 
-Not a write-a-function problem. You open your own `python3`, paste the numbers the Portal's
-inspect shows you, and then **type one line, paste the value it prints**, twelve times —
-first on an honest gate table, then on a lying one you build yourself.
+Start the problem in the Participant Portal and select **Inspect**. Add the two displayed inputs, then square the result, taking remainders by 7. Enter the two answers in `outputs` and submit. **Paper and the Portal answer fields are sufficient. No terminal or local Python installation is required.**
 
+The optional Portal editor holds `plonk_drill.py`. Replace the corresponding `return None` with your calculation and run public tests. Helpers implement the supplied formulas. A public-test PASS is feedback, not checkpoint credit: prepare and submit the answer using the Portal. The eight functions match the eight fields.
+
+## One table throughout
+
+| Row | Left | Right | Output |
+|---|---|---|---|
+| Addition | a0 | b0 | u = a0 + b0 |
+| Multiplication | u | u | o = u × u |
+
+All arithmetic uses **the same prime 7**. The three copied cells are O0, L1 and R1. Each row can satisfy its arithmetic while those cells disagree: that is the distinction between a gate constraint and a copy constraint.
+
+Six distinct addresses identify the cells. The three copied cells form a permutation cycle. A fingerprint mixes a value and its address; multiplying six fingerprints compares the original addresses with the wired addresses. The honest table has equal products. A displayed false table is selected to have unequal, nonzero products.
+
+The final task constructs a **different** false multiplication row: both copied inputs must be wrong, multiplication must hold, and the full products must match and be nonzero. Any row satisfying these conditions passes. The legacy checkpoint ID `miss-count` is retained for catalog identity; the answer is three values, not a count.
+
+## Checks and scoring
+
+| Field | Values | Points | Work |
+|---|---:|---:|---|
+| outputs | 2 | 20 | Addition output and its square |
+| bad-row | 3 | 20 | Change one copied input and preserve multiplication |
+| addresses | 6 | 25 | Distinct addresses of all cells |
+| sigma-addresses | 6 | 25 | Addresses after following the copy cycle |
+| marks | 3 | 25 | First-row fingerprints |
+| grand-product | 2 | 25 | Two products of the honest table |
+| bad-product | 2 | 30 | Two products of the displayed false table |
+| miss-count | 3 | 30 | Construct a false row passing the product check |
+
+A wrong answer costs 10 points. Each field has three hints: mechanism, formula with a small example, then actions using the displayed names. Each hint costs 2 points: 24 hints total, maximum penalty 48. All necessary formulas are in the statement before any paid hint.
+
+The final construction is accessible by a supplied linear equation for the second changed input. The statement also connects the table to selector equations, interpolation at Y=1 and Y=6, divisibility by Y²−1, and a product accumulator with a closing boundary. These are mathematical explanations, not additional answer fields.
+
+## What the model establishes
+
+This is a small model of the gate/copy and permutation-product ideas used in PLONK. It does not implement polynomial commitments or a zero-knowledge proof. The learner sees the tiny mixing challenges before constructing a false row; this illustrates why fixing the witness before unpredictable challenges and controlling collision probability matter. It is not an attack on practical PLONK.
+
+The examples adapt two source inputs: the seminar's Week 4 slides (printed slides 27 and 29; PDF pages 31 and 33), and the author's Week 4 `derivations.md` §§3.1–3.2. The lecture uses a larger gate table; this independent two-gate example fits six distinct addresses in one field of size 7. The public text presents both concrete calculations and the associated equations.
+
+## Runtime and trust boundary
+
+Compose builds a participant Workbench and an internal verifier. Only the Workbench is published at `127.0.0.1:18134`; the verifier has no host port. The verifier owns the seed, fixture generation, expected values and construction predicate. The participant image contains supplied formulas, starter and public tests, and fetches only public inputs from the verifier before running learner code. It does not contain the fixture generator, hidden tests, reference answer or seed.
+
+Paper answers and optional editor answers use the same deployment-bound prepared submission envelope. The verifier independently checks the first seven values and the final construction; malformed, wrong-row, wrong-deployment and unprepared submissions fail without revealing expected values.
+
+Both services run non-root with read-only filesystems, dropped capabilities, bounded memory/PIDs and internal networking. Learner execution has Linux syscall restrictions and process/time/output limits. Public tests check a small worked example before printing the learner's values for the current instance. The learner code cannot ask the internal verifier for hidden answers.
+
+Local users who administer Docker can inspect their own containers. This deployment is a self-study environment, not a security boundary against the Docker administrator. A competitive verifier must be operated outside participant control.
+
+## Author verification and lifecycle
+
+No AWS resources are created by this Docker problem. Local Docker consumes host CPU, memory and disk. The verifier can remain running between optional author `make test` calls; `make verifier-down` stops that problem's Compose project. The platform owns deployed-instance teardown.
+
+From this problem directory:
+
+```sh
+make reference-test
+make test STARTER_FILE=local/reference/plonk_drill.py
 ```
-1  (o0, o1, o2)               the three gate outputs                  outputs
-2  gate equation on 3 rows    [0, 0, 0] — every row fits its type    (no answer field)
-3  the two wires              (True, True)                           (no answer field)
-4  bad2 = (o0+g, o1, ...)     a lying row: gates pass, wire breaks    bad-row
-5  gates + wires on the lie   ([0,0,0], (False, True))               (no answer field)
-6  addresses of 9 cells       ω^row · (col+1)                         addresses
-7  the same, through σ        two pairs swapped                       sigma-addresses
-8  fingerprints               (value + β·addr + γ), first three       marks
-9  the grand product          equal on the honest table               grand-product
-10 the lying table's product  the broken wire shows up                bad-product
-11 the sets, side by side     (True, False)                          (no answer field)
-12 count the misses           only a zeroed fingerprint escapes       miss-count
-```
 
-Every line comes with "what this line means"; every matching value unlocks "read after it
-matches". Eight of the twelve lines have an answer field — the platform's per-problem maximum;
-the other four are constants of the construction, explained in place.
+`reference-test` runs 10 mutants, 8 learning-contract tests and 5 execution-isolation tests. The learning suite checks the two-gate construction across fixtures, all valid final rows against independent predicates, zero-product rejection, the supplied linear equation, interpolation/accumulator identities, first editor action, submission binding and hint/score shape.
 
-## Why the numbers are small and seed-derived
-
-The gate field is a small prime (11–23) and the grand-product field a three-digit one
-(101–113), so every line is a one-screen computation and the exhaustive miss count is a few
-seconds. The table, σ, and grand-product procedure follow the lecture's PLONK example; the
-inputs, both fields, the address base, β, γ, and the lie's shift g all come from this
-deployment's `FLAG_SEED`. There is one right value per line per seed; only the value your own
-Python printed passes, and the miss count changes per deployment.
-
-## Participant Portal
-
-1. Start the problem in the Participant Portal. The problem editor appears on the same page.
-2. Press **inspect**: the numbers are printed as Python assignment statements. Paste them into
-   `python3` first.
-3. Type line 1, paste the value into the `outputs` answer field, submit. Read the sentence for
-   that value. Continue to line 12. **Each answer field is a single-line input.**
-4. If you cannot open Python: fill in the twelve functions of `plonk_drill.py` in the editor
-   and press **run the public tests** — it prints your functions' values on this deployment's
-   numbers, which is exactly what the REPL would print.
-
-Direct answers are bound to the current deployment seed, so values copied from another
-deployment are rejected.
-
-## Scoring
-
-Eight checkpoints, graded independently. A wrong answer costs 10 points.
-
-| Checkpoint | Points | Evidence kind | What it checks |
-|---|---:|---|---|
-| `outputs` | 20 | construct | the three gate outputs |
-| `bad-row` | 20 | counterexample | the lying gate-2 row: gates pass, the wire breaks |
-| `addresses` | 25 | construct | ω^row · (col + 1) for all nine cells |
-| `sigma-addresses` | 25 | predict | the addresses re-attached through σ |
-| `marks` | 25 | predict | the first three fingerprints (value + β·addr + γ) |
-| `grand-product` | 25 | trace | the two products, equal on the honest table |
-| `bad-product` | 30 | counterexample | the two products, split by the broken wire |
-| `miss-count` | 30 | trace | how many (β, γ) pairs would have missed |
-
-One hint per checkpoint (penalty 6), naming the usual slip on that line.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
-and every image in the compose stack cannot be prevented from inspecting hidden material.
-The boundary here is misdelivery, not confidentiality against that person: the participant
-Workbench image contains public fixtures, tests, and starter material only. The eight lines'
-expected-value derivation (`verifier/expected.py`) and the hidden suite live in a separate,
-unpublished verifier image, reachable only over the Compose-internal network; `reference/`
-and `mutation.py` are added only to the `author` stage.
-
-Only the Workbench is published, at host `127.0.0.1:18134`; the verifier has no host port.
-Both services run non-root with a read-only root filesystem, no capabilities, `no-new-
-privileges`, and bounded memory/PIDs. A submission cannot hang or crash the verifier, a
-checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer at all, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: eight broken references (the multiplication
-gate as an addition, the address factor off by one, a forgotten σ swap, a dropped reduction,
-the miss count starting at β = 0, …) that the hidden suite must kill, plus twelve
-verifier-level near-misses — the un-permuted address list, the honest products offered for
-the lying line, a swapped pair, a truncated tuple, a boolean, another deployment's answer —
-that the value grader must refuse. The server counts misses by factoring (a miss needs a
-shared fingerprint to zero both products) and the per-problem test proves the fast count
-equals the exhaustive loop the learner types.
-`scripts/solvability/expected/ac26-w4-plonk-drill.py` mirrors the eight graded answers for
-the solvability sweep.
+From the catalog root, run `make install && make agent-gate`. See [READER.md](READER.md) for the independent hand calculation and actual runtime evidence, including explicit verification limits. A live AWS event or a third-party session is optional rehearsal, not a development merge gate.
