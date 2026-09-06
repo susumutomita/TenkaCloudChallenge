@@ -188,3 +188,28 @@ attestation, unique-owner requirement, actual-latency guarantee or current-unpub
 Week2 claim remains in those explanations. The course pin/status itself is preserved.
 
 Root final review inspected the parent opening-event record, value validation, bounded worker and preserved protocol checks. The retained real Portal/API harness was rerun on the final18153 services and passed all eight fields; see `/private/tmp/private-aggregate-716-root-portal.log`.
+
+
+## Computation imports and the Portal response window
+
+Root reproduced two failures using the unchanged frozen reader against the old
+18153 deployment: importing fractions/statistics/random failed in 0.67s, and a
+correct answer with a16-second startup was cut off after15.33s. The worker now
+preloads the14 documented computation libraries before file isolation. The proxy
+wait is30s, covering the unchanged25s evaluator; request-body reads stay15s.
+
+The original26 Linux tests passed in154.610s, including the new helper-import
+positive control (`/private/tmp/aggregate-768-imports-runtime.log`). After separating
+the forward timeout, the additional two actual-loopback tests passed in0.177s
+(`/private/tmp/aggregate-768-forward-tests.log`). They preserve failure for an
+expired response or a mismatched checkpoint, and assert the25s/15s contracts.
+The existing nine mutants were killed and catalog116 passed.
+
+The retained `check_allowance_http.py --base-url http://127.0.0.1:18153` runs only
+against an explicitly supplied deployment. Final actual public examples and all8
+sealed submissions passed. Helper imports pass; the16s answer passes in16.593s;
+a26s startup fails in25.103s (`/private/tmp/aggregate-768-final-http.log`). The
+computation deadline was not extended. No token or sealed submission is logged.
+The real Portal component/API harness was rerun against the rebuilt services:
+all8 fields pass,1 test/12.69s total/4.84s test
+(`/private/tmp/aggregate-768-allowance-portal.log`). This is not a live AWS test.

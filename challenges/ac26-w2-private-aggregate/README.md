@@ -54,3 +54,7 @@ This local problem creates no AWS resources. Docker CPU, memory, images and cont
 ## Course evidence
 
 The existing metadata alignment/status pin is retained. It records the earlier course snapshot, not a claim that Week 2 remains unpublished. This revision read the current official `week2/problems/toy-mpc/README.md` and the author's Week 2 notes on additive sharing, fresh Beaver triples, opening choices and communication cost. Exact paths, commits and hashes are recorded in `local/tests/hidden/source-readings.json`. Boolean MPC, OT and a real distributed deployment are outside this arithmetic synthesis problem.
+
+## Python helpers
+
+The computation helpers `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing` can be imported. They are loaded before your code runs. Loading other modules or accessing files/network is unsupported. Public and submitted runs each allow up to25 seconds.

@@ -1,4 +1,7 @@
 """aggregate.py — 4関数を育て、同じファイルを8欄へ提出 / one file, eight checkpoints.
+計算用標準ライブラリ（math, fractions, statistics, random 等）は事前読み込み済み。
+使用可能一覧は問題文の Python 補助欄。追加ファイル/ネットワーク読み込みは不可。
+
 
 起動 → 証拠を確認 → planを編集 → 公開テスト → planを提出。
 Start → Inspect evidence → edit plan → Run public tests → submit plan.

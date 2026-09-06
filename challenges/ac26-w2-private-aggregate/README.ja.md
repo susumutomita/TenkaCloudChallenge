@@ -54,3 +54,7 @@ AWS資源は作成しません。DockerはローカルCPU・メモリ・image・
 ## 講義との対応
 
 metadataの既存alignment/status pinは維持しました。過去のsnapshotを示すもので、現在もWeek2が未公開だという主張ではありません。今回は講義の`week2/problems/toy-mpc/README.md`と作者Week2ノートの加法的分散・使い捨て三つ組・開示の選択・通信コストを読み直しました。正確なpath・commit・hashは`local/tests/hidden/source-readings.json`に記録しています。Boolean MPC、OT、実分散システムへの展開はこの算術の総合問題の範囲外です。
+
+## Pythonで使える補助
+
+計算用の標準ライブラリ `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing` を読み込めます。これらは実行前に用意されます。他のモジュールの追加読み込みやファイル・ネットワークへのアクセスには対応しません。公開・提出とも1回25秒以内です。

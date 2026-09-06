@@ -7,6 +7,9 @@ import os
 import sys
 import time
 import unittest
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[2]
@@ -15,6 +18,7 @@ from participant.execution import LearnerError,LearnerSession
 from participant.isolation import protect_supervisor
 from participant.protocol import Protocol
 from participant.server import _WORKBENCH
+from participant import server as workbench_server
 from tests.public.test_aggregate import run
 from fixtures import generate
 from verifier import server
@@ -26,6 +30,9 @@ def reader():return (ROOT/'tests/hidden/portal/reader-aggregate.py').read_text()
 SCHEDULING_HELPER = r'''
 """Disposable parent; only its forked child can target this PID, then both exit."""
 import ctypes,json,os,sys
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from pathlib import Path
 sys.path.insert(0,sys.argv[1])
 from participant.isolation import restrict_learner,protect_supervisor
@@ -81,10 +88,69 @@ def opening_source(body, function):
     body=textwrap.dedent(body).replace("def normalize(self,", "def "+function+"(",1)
     return {"aggregate.py":"import ctypes,os,sys\n"+body}
 
+@contextmanager
+def delayed_verifier(delay, verdict):
+    """A real loopback response, with no learner or external network involved."""
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers['Content-Length']))
+            time.sleep(delay)
+            body = json.dumps(verdict).encode()
+            try:
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # Expected when exercising the outbound timeout.
+
+        def log_message(self, *_args):
+            pass
+
+    http = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = Thread(target=http.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
+    thread.start()
+    try:
+        yield f'http://127.0.0.1:{http.server_port}/verify'
+    finally:
+        http.shutdown()
+        http.server_close()
+        thread.join()
+
+
+class VerifierForwarding(unittest.TestCase):
+    def test_suite_verdict_outlives_the_client_body_deadline(self):
+        body = {'checkpointId': 'plan', 'submission': 'synthetic-test'}
+        verdict = {'checkpointId': 'plan', 'correct': True}
+        # Scale only this transport test. A real response arrives after the old
+        # body-read timeout but before the separate outbound deadline.
+        with delayed_verifier(.1, verdict) as url, \
+                patch.object(workbench_server, 'REQUEST_TIMEOUT_SECONDS', .02), \
+                patch.object(workbench_server, 'VERIFIER_TIMEOUT_SECONDS', 1):
+            self.assertEqual(workbench_server.proxy_verdict(body, url), verdict)
+        self.assertEqual(workbench_server.Handler.timeout, 15)
+        self.assertEqual(workbench_server.RUN_TIMEOUT_SECONDS, 25)
+        self.assertGreater(workbench_server.VERIFIER_TIMEOUT_SECONDS, server.RUN_TIMEOUT_SECONDS)
+
+    def test_missing_or_mismatched_forwarded_verdict_still_fails_closed(self):
+        body = {'checkpointId': 'plan', 'submission': 'synthetic-test'}
+        failed = {'checkpointId': 'plan', 'correct': False}
+        with delayed_verifier(.1, {'checkpointId': 'plan', 'correct': True}) as url, \
+                patch.object(workbench_server, 'VERIFIER_TIMEOUT_SECONDS', .02):
+            self.assertEqual(workbench_server.proxy_verdict(body, url), failed)
+        with delayed_verifier(0, {'checkpointId': 'transfer', 'correct': True}) as url:
+            self.assertEqual(workbench_server.proxy_verdict(body, url), failed)
+
 @unittest.skipUnless(sys.platform=='linux','requires the deployed Linux boundary')
 class ExecutionBoundary(unittest.TestCase):
     @classmethod
     def setUpClass(cls):protect_supervisor()
+
+    def test_documented_computation_helpers_are_available(self):
+        source = reader() + "\nimport decimal,fractions,functools,hashlib,hmac,operator,random,statistics,time\nassert fractions.Fraction(2,4)==fractions.Fraction(1,2)\nassert statistics.mean([1,3])==2\nassert random.Random(7).randrange(1)==0\n"
+        for checkpoint in server.CHECKPOINTS:
+            self.assertTrue(server.evaluate(checkpoint,source),checkpoint)
+        self.assertTrue(_WORKBENCH.run_public_tests({'aggregate.py':source})['passed'])
 
     def test_filesystem_metadata_cannot_persist_or_change_parent_fixtures(self):
         source='''import os
