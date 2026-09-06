@@ -20,9 +20,7 @@ SUBMISSION_DIR = os.environ.get("SUBMISSION_DIR")
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, SUBMISSION_DIR or str(ROOT / "starter"))
 
-import circuit as circuit_module  # noqa: E402
-import field as field_module  # noqa: E402
-import gadgets as gadgets_module  # noqa: E402
+circuit_module = field_module = gadgets_module = None
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -36,9 +34,8 @@ def _load_public_evidence() -> dict[str, object]:
     ../../Dockerfile) -- keeping the seed-keyed generators reachable here is what let a
     learner skip straight past `first-broken` with nothing but their own container's
     `FLAG_SEED`. This deployment's own verifier is the only source for this evidence
-    now: `PUBLIC_EVIDENCE_JSON` when `participant/server.py` has already fetched it
-    (the Portal path, and the sandboxed run `make test` also uses), or
-    `VERIFIER_PUBLIC_URL` fetched directly when neither is true.
+    now. CLI runs fetch `VERIFIER_PUBLIC_URL`; an author harness may instead inject
+    `PUBLIC_EVIDENCE_JSON`. The Portal passes its fetched evidence to run_cases directly.
     """
     injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
     if injected:
@@ -50,8 +47,7 @@ def _load_public_evidence() -> dict[str, object]:
         with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
             return json.loads(response.read().decode("utf-8"))
     # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
-    # true for a checkout (this file run directly, e.g. by
-    # scripts/ac26-w1-constraint-lab.test.ts) or the verifier/author Docker stage, and
+    # true for an author checkout or the verifier/author Docker stage, and
     # never true inside a built `participant` image -- so this branch existing does not
     # reopen Issue 543/537's leak.
     from fixtures.generate import public_payload
@@ -59,7 +55,7 @@ def _load_public_evidence() -> dict[str, object]:
     return public_payload(SEED)
 
 
-PUBLIC = _load_public_evidence()
+PUBLIC = None
 
 
 def _field():
@@ -171,10 +167,8 @@ def test_workbench_starter_returns_all_editable_files() -> None:
 # `starter_payload()` reads whatever is on disk under `starter/` right now, and `make
 # test` bind-mounts the learner's own working copy over that path. A self-check built
 # on `starter_payload()` therefore inverts into a false failure the instant a learner
-# solves the problem correctly (Issue #526). The author-time version of this
-# invariant -- the checked-out, as-shipped `starter/field.py` must fail the public
-# suite -- lives in `scripts/ac26-w1-constraint-lab.test.ts`, which reads the real
-# repository file directly instead of going through the workbench server.
+# solves the problem correctly (Issue #526). Test invalid synthetic source below,
+# independently of the current editor contents.
 
 
 def test_workbench_public_tests_report_invalid_browser_source() -> None:
@@ -215,39 +209,54 @@ def test_portal_editor_replaces_static_assets() -> None:
         assert endpoint in server
 
 
+def run_cases(field, circuit, gadgets, public, *, include_workbench=False, only=""):
+    """The same public assertions run against value-channel proxies, never source imports."""
+    global field_module, circuit_module, gadgets_module, PUBLIC
+    old = field_module, circuit_module, gadgets_module, PUBLIC
+    field_module, circuit_module, gadgets_module, PUBLIC = field, circuit, gadgets, public
+    output = []
+    failures = selected = 0
+    try:
+        for name, fn in sorted(globals().items()):
+            if not name.startswith("test_") or not callable(fn):
+                continue
+            if not include_workbench and name.startswith("test_workbench_"):
+                continue
+            if only and only not in name:
+                continue
+            selected += 1
+            try:
+                fn()
+                output.append(f"PASS {name}")
+            except AssertionError as error:
+                failures += 1
+                output.append(f"FAIL {name}: {error or 'assertion failed'}")
+            except Exception as error:
+                failures += 1
+                output.append(f"FAIL {name}: raised {type(error).__name__}")
+    finally:
+        field_module, circuit_module, gadgets_module, PUBLIC = old
+    if not selected:
+        return {"passed": False, "output": f"no public test matched --only {only!r}"}
+    output.append("public tests: " + ("all passed" if not failures else f"{failures} failed"))
+    return {"passed": failures == 0, "output": "\n".join(output)}
+
+
 def main() -> int:
+    from participant.execution import LearnerSession
+    from participant.isolation import protect_supervisor
     only = ""
     if "--only" in sys.argv:
         index = sys.argv.index("--only")
-        only = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
-
-    failures = 0
-    selected = 0
-    for name, fn in sorted(globals().items()):
-        if not name.startswith("test_") or not callable(fn):
-            continue
-        if os.environ.get("BROWSER_PUBLIC_TESTS") == "1" and name.startswith("test_workbench_"):
-            continue
-        if only and only not in name:
-            continue
-        selected += 1
-        try:
-            fn()
-            print(f"PASS {name}")
-        except AssertionError as error:
-            failures += 1
-            print(f"FAIL {name}: {error or 'assertion failed'}")
-        except Exception as error:  # noqa: BLE001 - an exception is a failing test here
-            failures += 1
-            print(f"FAIL {name}: raised {type(error).__name__}")
-    print()
-    if selected == 0:
-        print(f"no public test matched --only {only!r}")
-        return 1
-    print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
-    print()
-    print("One prime, one circuit. The hidden verifier uses several of each.")
-    return 1 if failures else 0
+        only = sys.argv[index+1] if index+1 < len(sys.argv) else ""
+    public = _load_public_evidence()
+    directory = Path(SUBMISSION_DIR) if SUBMISSION_DIR else ROOT / "starter"
+    sources = {name: (directory/name).read_text() for name in ('field.py','circuit.py','gadgets.py')}
+    protect_supervisor()
+    with LearnerSession(sources) as learner:
+        result = run_cases(*learner.modules(), public, include_workbench=True, only=only)
+        print(learner.log + result['output'])
+    return 0 if result['passed'] else 1
 
 
 if __name__ == "__main__":

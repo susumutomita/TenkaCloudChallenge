@@ -1,35 +1,16 @@
-"""Public Participant Workbench: the Portal editor API, a fail-closed verifier proxy,
-and nothing that can derive an answer.
+"""Participant editor API with public-only function inputs and a fixed verifier proxy.
 
-This process never grades a checkpoint locally -- every `/verify` request is forwarded
-to the Compose-internal verifier, and any missing or invalid verifier response becomes
-a canonical `correct: false` verdict (see `proxy_verdict`). It also carries no seed-
-derived fixtures of its own: `GET /api/inspect` and the public-test run both need this
-deployment's public evidence, fetched from the verifier's `GET /public` at runtime (see
-`fetch_public`) rather than computed here. `POST /api/prepare` needs none of that -- it
-only bundles the learner's own three files as JSON -- so it stays fully local.
-
-Issue 543/537: `fixtures/generate.py` used to ship in this same Docker stage, because
-`show.py` and the public tests need the field, the circuit and the honest/broken
-witnesses it derives. That alone was enough to leak `first-broken`'s answer even after
-the checkpoint's own comparison moved into (or stayed in) `verifier/server.py` --
-`broken_witness` and `broken_diagnosis` are plain, seed-keyed functions, and a learner
-already has the seed (`FLAG_SEED`, their own container's environment), so keeping the
-generator reachable here left the answer one `import` away regardless of where the
-comparison itself lived. `fixtures/` is not copied into the `participant` Docker stage
-at all any more (see ../Dockerfile); this file has no way to reconstruct that
-deployment's evidence except by asking the verifier for it, which is the same thing
-the Portal and `show.py` ask for.
+The Workbench receives no deployment seed, fixture generator or hidden checker.
+Preparing code bundles copies the learner's three files; first-broken remains the
+participant's manual JSON answer. The published tests run in the controller against
+untrusted function values from a separate Linux-restricted worker.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -38,8 +19,12 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from participant.execution import LearnerSession
+from participant.isolation import protect_supervisor
+from tests.public.test_circuit import run_cases
+
 ROOT = Path(__file__).resolve().parents[1]
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+SEED = "local-dev-seed"  # author-only fallback; live evidence comes from verifier
 PORT = int(os.environ.get("WORKBENCH_PORT", "18093"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 #: Derived from VERIFIER_URL (which points at /verify) rather than a second required
@@ -49,9 +34,6 @@ VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 VERIFIER_PUBLIC_URL = VERIFIER_URL.rsplit("/", 1)[0] + "/public" if VERIFIER_URL else ""
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 20
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
 
@@ -59,20 +41,7 @@ SUBMITTED_FILES = ("field.py", "circuit.py", "gadgets.py")
 FILE_CHECKPOINTS = ("residuals", "boolean", "membership", "range")
 CODE_CHECKPOINTS_FOR_PORTAL = frozenset(FILE_CHECKPOINTS)
 CHECKPOINTS = ("residuals", "first-broken", "boolean", "membership", "range")
-CHECKPOINT_LABELS = {
-    "residuals": "residual を計算して trace を出す",
-    "first-broken": "最初の違反箇所と residual を言う",
-    "boolean": "signal を 0 か 1 だけに縛る",
-    "membership": "許可された値だけを通す",
-    "range": "列挙できない範囲を、0/1 への分解で縛る",
-}
-
-
-def _limits() -> None:
-    if sys.platform.startswith("linux"):
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
+CHECKPOINT_LABELS = {'residuals': '各行の残りを計算する', 'first-broken': '最初に破れた行と残りを答える', 'boolean': '0と1だけを許す条件を作る', 'membership': '許可リストの値だけを通す', 'range': '0/1の桁で範囲を縛る'}
 
 
 def fetch_public(verifier_public_url: str = VERIFIER_PUBLIC_URL) -> dict[str, object] | None:
@@ -102,15 +71,7 @@ def fetch_public(verifier_public_url: str = VERIFIER_PUBLIC_URL) -> dict[str, ob
             json.JSONDecodeError,
         ):
             pass
-    # Falls through when VERIFIER_URL is unset or the verifier could not be reached --
-    # which `docker-compose.yml`'s `depends_on: verifier: condition: service_healthy`
-    # means never happens for a real deployment. The one place this fallback resolves
-    # is a checkout with `fixtures/` still on disk (the repository itself, or someone
-    # running this file straight from the verifier or author Docker stage): it can
-    # never resolve inside a built `participant` image, where `fixtures/` is not copied
-    # in at all (see ../Dockerfile) -- so this branch existing does not reopen Issue
-    # 543/537's leak. `scripts/ac26-w1-constraint-lab.test.ts` exercises this file
-    # without a live verifier and relies on exactly this fallback.
+    # Author checkout fallback only; the participant image has no fixtures package.
     try:
         from fixtures.generate import public_payload
     except ImportError:
@@ -130,7 +91,7 @@ def config_payload() -> dict[str, object]:
     return {
         "id": "ac26-w1-constraint-lab",
         "name": "0 になるべき式の集まり",
-        "description": "constraint の residual と最初の破綻を読み、gadget を完成させる。",
+        "description": '「不合格」しか返さない検査道具を直す。条件の式に値を入れ、最初の違反を見つける。最後は0/1の桁を使い、範囲外を通さない条件を組み立てる。',
         "submittedFiles": list(SUBMITTED_FILES),
         "checkpoints": [
             {
@@ -140,14 +101,12 @@ def config_payload() -> dict[str, object]:
             }
             for checkpoint in CHECKPOINTS
         ],
-        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
+        # Portal selects the locale. Keep labels/descriptions aligned by ID with metadata.json.
         "i18n": {
             "en": {
                 "name": 'A set of things that must be zero',
-                "description": 'The new policy engine expresses access decisions as an arithmetic circuit instead of if-statements. The monitor only prints pass or fail. Make the residuals visible so a witness can be diagnosed.',
-                "checkpointLabels": {'residuals': 'Compute residuals and emit a trace', 'first-broken': 'Name the first violation and its residual', 'boolean': 'Bind a signal to 0 or 1 only', 'membership': 'Admit only the allowed values', 'range': 'Bind a range too big to list, by splitting it into 0/1 digits'},
+                "description": 'Repair a checker that only says rejected. Substitute values, find the first broken condition, then build digit constraints that reject values outside a range.',
+                "checkpointLabels": {'residuals': 'Calculate each row’s remainder', 'first-broken': 'Identify the first broken row and its remainder', 'boolean': 'Build a condition allowing only zero and one', 'membership': 'Allow only the listed values', 'range': 'Constrain a range using zero/one digits'},
             }
         },
     }
@@ -157,9 +116,8 @@ def inspect_payload() -> dict[str, object]:
     """This deployment's public evidence, as fetched from the verifier.
 
     Same fields `show.py` prints. The id of the first violated constraint stays out
-    of it -- it is the answer to `first-broken` -- and this process has no way to
-    produce it anyway: only `verifier/server.py`'s `broken_diagnosis` import, which
-    never ships here, holds it.
+    of it: that is the answer participants derive from the visible witness.
+    The verifier alone imports the answer helper; this route only relays evidence.
     """
     payload = fetch_public()
     if payload is None:
@@ -179,69 +137,21 @@ def _submission_sources(files: object) -> dict[str, str] | None:
     return normalized
 
 
-def _run_script(script: str) -> tuple[int, str] | None:
-    """Run a fully-built Python script (no learner file needed on disk) with the
-    process's resource limits, in a throwaway workspace."""
-    with tempfile.TemporaryDirectory() as workspace:
-        transcript = Path(workspace) / "stdout"
-        try:
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
-
-
-def _public_test_script(sources: dict[str, str], public: dict[str, object]) -> str:
-    """Build the sandboxed script that runs the public suite against `sources`.
-
-    The learner's files and this deployment's already-fetched public evidence are both
-    embedded as literals (`repr`/`json.dumps`, never interpolated into anything that
-    runs as a shell command) rather than written where the submission's own imports
-    could reach them: the child process never touches the network or the verifier
-    itself, only the values this process already fetched on its behalf.
-    """
-    writes = "\n".join(
-        f"open(workspace + '/{name}', 'w', encoding='utf-8').write({text!r})"
-        for name, text in sources.items()
-    )
-    return "\n".join(
-        [
-            "import os, runpy, tempfile",
-            f"os.environ['FLAG_SEED'] = {SEED!r}",
-            f"os.environ['PUBLIC_EVIDENCE_JSON'] = {json.dumps(public)!r}",
-            "os.environ['BROWSER_PUBLIC_TESTS'] = '1'",
-            "workspace = tempfile.mkdtemp()",
-            writes,
-            "os.environ['SUBMISSION_DIR'] = workspace",
-            f"runpy.run_path({str(ROOT)!r} + '/tests/public/test_circuit.py', run_name='__main__')",
-        ]
-    )
-
-
 def run_public_tests(files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the Portal-edited sources."""
+    """Run the published assertions on learner values, with public inputs only."""
     sources = _submission_sources(files)
     if sources is None:
         return {"passed": False, "output": "All three editable Python files are required."}
     public = fetch_public()
     if public is None:
         return {"passed": False, "output": "Public evidence unavailable; is the verifier running?"}
-    result = _run_script(_public_test_script(sources, public))
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
+    try:
+        with LearnerSession(sources) as learner:
+            result = run_cases(*learner.modules(), public)
+            result['output'] = (learner.log + result['output'])[-MAX_OUTPUT_BYTES:]
+            return result
+    except Exception:
+        return {"passed": False, "output": "The functions did not return values within the execution limits."}
 
 
 def prepare_submissions(files: object) -> dict[str, object]:
@@ -397,6 +307,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

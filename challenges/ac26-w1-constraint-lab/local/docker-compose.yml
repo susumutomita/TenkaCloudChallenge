@@ -20,7 +20,6 @@ services:
       # stage -- `author` -- which carries reference/ and mutation.py.
       target: participant
     environment:
-      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18093"
       VERIFIER_URL: http://verifier:18094/verify
       # Public evidence for show.py and the public tests, which do not go through
@@ -31,6 +30,7 @@ services:
     depends_on:
       verifier:
         condition: service_healthy
+    init: true
     read_only: true
     tmpfs:
       - "/tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001"
