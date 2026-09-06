@@ -1,6 +1,6 @@
 """`make inspect` — your statement, the three verifiers, and a public transcript.
 
-Everything here comes from FLAG_SEED, so these numbers are yours alone.
+Values are public evidence for this deployment; restarting need not change them.
 """
 
 from __future__ import annotations

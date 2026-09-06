@@ -18,9 +18,9 @@
   },
   "difficulty": 3,
   "estimatedDuration": "30-45 分",
-  "shortDescription": "テストが通ることと、性質が守られていることは別だ。正しさを判定する練習用の係(verifier)が 3 つ、検査に持ち込まれた。ふつうの正しい入力はどれも通してしまう。壊れ方が違うだけ。反例を作って、それぞれが何を満たし何を破るのかを分類する。",
+  "shortDescription": "3 つの検証者（入力を受理・拒否するプログラム）を監査する。証拠を確認し、正しい入力・範囲外の入力・記録を比べ、反例を作るコードで 3 つの性質を確かめる。",
   "description": "Bridge 0 の 2 問目。 Week 1 以降で completeness / soundness / privacy / zero-knowledge が暗黙の前提になる前に、定義の暗記ではなく反例で区別できる状態にする。\n\n題材は a*w + b == c (mod p) かつ lo <= w <= hi という小さな整数関係だけで、本物の ZKP は実装しない。3 つの verifier はそれぞれ、range 下限を strict にして completeness を、range check を省いて soundness を、transcript へ witness を記録して privacy を破る。公開名は deploy seed 由来の中立 alias で、名前と順序は deploy ごとに変わる。\n\n採点の要は「ラベルだけでは通さない」こと。matrix で False と書いた性質は、対応する checkpoint で実際に成立する反例を提出しない限り閉じられない。transfer checkpoint は participant 自身の classify.py / counterexamples.py を hidden seed の別 instance に対して実行する。\n\n不完全性は witness が range の内側にある instance では観測できない。そのため incompleteness checkpoint は witness が lo に一致する hidden boundary instance で提出生成器を評価する。boundary の答えは inspect に表示しない。反例が到達可能でなければ、その性質は学習者に示せない。",
-  "instructions": "## 講義より前に解く 2 問目です\n\nこの問題は、ここに書いてあることと画面に出るものだけで解けます。暗号の予備知識は要りません。\n\n## テストが通ることと、性質が守られることは別\n\nテストが通ることと、性質が守られていることは、別のことです。監査に持ち込まれた 3 つの練習用の係(verifier)は、どれも、ふつうの正しい入力を入れるテストは通ってしまいます。壊れ方が違うだけ。「テストが通った」だけでは、3 つを区別できません。\n\nだから、**満たす性質と破る性質を、両方名指しします**。3 つの性質(正しいものを通す・偽物を通さない・秘密を漏らさない)は別々で、どれか 1 つを満たすことは、他の 2 つを保証しません。\n\n## 反例が 1 個あれば、主張は崩れる\n\n「すべての場合に成り立つ」という主張を崩すには、成り立たない例を 1 つ見せれば足ります。「全部の偶数は 4 で割り切れる」は、6 という 1 個の反例で崩れます。\n\n1 桁で見ます(7 で割ったあまり)。主張「3w + 1 を 7 で割ったあまりが 3、かつ 2 ≤ w ≤ 4」の正しい答えは w = 3(3 × 3 + 1 = 10、あまり 3、範囲内)。**何でも受理する係**は w = 3 を通しますが(complete)、偽の w = 0(あまり 1)も通してしまう(sound でない)。**何でも拒否する係**は偽を絶対に通しませんが(sound)、正しい w = 3 も拒否する(complete でない)。同じ w = 3 を正しく受理する係でも、やりとりの記録に w = 3 とそのまま書けば、正誤とは無関係に秘密が漏れる(private でない)。\n\n## 前提（知っていれば飛ばしてください）\n\n**completeness** = 正しいものをちゃんと通す性質。**soundness** = 偽物を通さない性質。**privacy** = やりとりの記録(transcript)から秘密(witness)が読めない性質。**verifier** = 受理・拒否を判定する係。**statement** = 「その条件を満たす秘密の数 w がある」という主張で、起動すると、あなた専用の statement(w が満たすべき式と範囲)が出ます。**witness** = その statement を成り立たせる w の値。「割ったあまりが決まった値になる w」は方程式のようには解けないので、statement に付いた範囲の整数を小さい方から 1 つずつ試してください(範囲は必ず有限です)。\n\n## 満たす性質と、破る性質を、両方名指す\n\n**満たす性質と破る性質を、両方名指しする。** 3 つの verifier について、それぞれが 3 つの性質のうち何を満たし何を破るのかを分類し、False と書いた性質には、それが本当に破れていることを示す反例を、実際の数で作ります。名前の暗記では通りません。\n\n## 最初の一手\n\nParticipant Portal(この問題文が表示されているサイト)で **「起動」** を押すと、問題文と同じ画面に **問題エディタ** が出ます。\n\n問題エディタの **「証拠を確認」** を押すと、次の 3 つが表示されます。\n\n1. **あなたの statement** — w が満たすべき式と範囲。\n2. **3 つの verifier が検査している項目** — それぞれの係が、何を確かめて受理・拒否を決めているか。名前は機械的に付けた記号で、名前から性質は分かりません。表示された「検査している項目」を読んで判断してください。\n3. **秘密が漏れている transcript** — 3 つのうち 1 つの verifier がやりとりの記録に残してしまったもの。\n\nホスト側のターミナルやファイル操作は不要です。\n\n## 答えるもの — checkpoint は 5 つ\n\n答えはすべて、問題エディタの 2 つのファイルに **コードとして** 書きます。回答欄に数字を直接打つ checkpoint はありません。各 checkpoint の **「提出 (+点数)」** を押すと、いまの 2 ファイルからその checkpoint の提出値が自動で作られて採点されます。\n\n`classify.py` に 1 つ:\n\n- **property-matrix** — `classify(protocol_id)` を書く。この関数は 3 つの verifier について 1 回ずつ呼ばれ、`protocol_id` には「証拠を確認」に出ている verifier の名前がそのまま入ります。名前ごとに if で分けて、その verifier の `{\"complete\": True か False, \"sound\": ..., \"private\": ...}` を返してください。決めるのは verifier 3 つ × 性質 3 つ = 9 個の True / False です。starter は常に全部 True を返していて、これは「ふつうのテストが全部通った」だけの間違った答えです。9 個とも自分の判断に置き換えます。\n\n`counterexamples.py` に 3 つ。関数に渡ってくる `statement` は辞書で、キーは p(割る数)・a・b・c(式の数)・lo・hi(範囲の下限と上限)です — 意味は「証拠を確認」に表示されるあなたの statement と同じです。上の 1 桁の例なら p = 7、a = 3、b = 1、c = 3(あまりの目標値)、lo = 2、hi = 4 です。`transcript` も辞書で、やりとりの記録がそのまま入っています。\n\n- **incompleteness** — `incompleteness_witness(statement)` を書く。**正しいのに拒否されてしまう** w を、statement から計算して整数で返します。\n- **unsoundness** — `unsoundness_witness(statement)` を書く。**偽物なのに受理されてしまう** w を返します。\n- **privacy-leak** — `extract_witness(transcript)` を書く。渡された transcript(やりとりの記録)から、**漏れている秘密の w** を読み取って返します。\n\n最後の 1 つは自動です:\n\n- **transfer** — いまの 2 ファイルがそのまま提出され、**見たことのない statement** でもう一度実行されます。画面に出た数をそのままコードに書き写した答えは、ここで落ちます。statement から計算する形で書いてください。\n\n**「公開テストを実行」** は答えの形(型と範囲)だけを確認します。正しいかどうかは、提出後に採点側の verifier が判定します。\n\n## この見方が、Week 3 以降ずっと問われる\n\n5 つの checkpoint がすべて正解になったら終わりです(誤答 1 回につき 10 点の減点。書き直して再提出できます)。名前の暗記では通りません — False と書いた性質には、それが本当に破れていることを示す反例が対応します: `\"complete\": False` → `incompleteness_witness`、`\"sound\": False` → `unsoundness_witness`、`\"private\": False` → `extract_witness`。3 つの verifier は、3 つの性質を 1 つずつ、違う形で破っています。この「性質を名指して、反例で確かめる」見方は、Week 3 以降のゼロ知識証明で毎回問われます。\n",
+  "instructions": "## 前提 — 「通った」の中身を調べる\n\nあなたは、入力を受理・拒否するプログラム **verifier（検証者）** の監査役です。3 つとも普通の正しい入力は通しますが、端の値・範囲外の値・記録の残し方を調べると違いが見つかります。\n\n**「起動」→ 問題エディタの「証拠を確認」** を押してください。`statement`（入力が満たす条件）、`verifiers`（各検証者の検査項目）、`transcript`（やりとりの記録）が出ます。まず下の小さい例と、画面の検査項目を比べましょう。2 ファイルに関数を書き、各欄の「提出」で採点します。ターミナルは不要です。\n\n### 3 つの問いを分ける\n\n**witness（証拠となる値）** は、条件を満たす数 `w` のことです。この問題では次の性質を別々に確認します。\n\n| キー | 性質 | 破れていると分かる例 |\n| --- | --- | --- |\n| `complete` | 完全性：条件を満たすすべての入力を通す | 正しい入力が 1 つでも拒否される |\n| `sound` | 健全性：条件を満たさない入力を通さない | 条件違反の入力が 1 つでも受理される |\n| `private` | この教材での記録の秘匿：記録だけから `w` を読み出せない | 記録から `w` が取り出せる |\n\n**反例**は「すべての場合に成り立つ」という主張を崩す例です。「偶数はすべて 4 で割り切れる」は 6 で崩れます。一方、成功例を 1 個見ただけでは「すべて」は確認できません。\n\nここでは小さい数の入力検査と記録を扱います。公開された条件から `w` を探せるので、数そのものの秘匿を保証する暗号ではありません。ここでの sound は無効な入力値を拒否する条件です。本物の証明でいう「偽の主張を受理しない」という健全性を、この小さな検査だけで証明するものではありません。本物のゼロ知識（公開情報から分かる以上のことを証明の記録が明かさない性質）の証明とも区別してください。\n\n### 条件の読み方と、必要な計算\n\n`statement` の `p` は割る数、`a,b,c` は式の数、`lo,hi` は範囲の下端・上端です。「割った余り」を Python では `%` と書きます。`*` は掛け算、`==` は等しいかの比較です。\n\n**正しい入力の条件：`(a*w + b) % p == c` かつ `lo <= w <= hi`。**\n\n検査項目の名前は次の意味です。列挙された条件をすべて満たすと受理されます。\n\n| Inspect の名前 | 検査する条件 |\n| --- | --- |\n| `relation` | `(a*w + b) % p == c` |\n| `range` | `lo <= w <= hi`（両端を含む） |\n| `range(strict-lo)` | `lo < w <= hi`（下端だけ含まない） |\n\nたとえば `p=7, a=3, b=1, c=0, lo=2, hi=4` の候補を比べます。\n\n| `w` | `3*w+1` の 7 で割った余り | 正しい範囲 2〜4 に入る？ | 下端を含まない範囲 2より大きく4以下に入る？ |\n| --- | --- | --- | --- |\n| 2 | 7 の余り 0 | はい | いいえ |\n| 3 | 10 の余り 3 | はい | はい |\n| 4 | 13 の余り 6 | はい | はい |\n\n正しい `w` は `lo` から `hi` まで順番に試して探せます。Python の `range(lo, hi + 1)` は上端を含む繰り返しです。各候補で余りを計算し、`c` と一致したらその候補を返します。渡される各条件には、範囲内の正しい整数が 1 つあります。\n\nもう 1 つ使う性質は、**`w` に `p` を足すと式の余りが変わらない**ことです。式が `a*p` だけ増え、それは `p` で割り切れるからです。例の `w=2` に `p=7` を足した 9 は、`3*9+1=28` の余りも 0 ですが、範囲 2〜4 の外です。一般には、正しい `w` から始めて `w > hi` になるまで `p` を足せば、式は満たすが範囲外の候補を作れます。\n\n### どこに書き、何を確かめるか\n\n数字を採点欄へ直接入力する必要はありません。**問題エディタの 2 ファイルを編集**すると「提出」が関数を実行し、その戻り値を送ります。数値の関数は `True` / `False` ではなく整数を返します。\n\n| 採点欄 | 編集する関数 | 何を示すか |\n| --- | --- | --- |\n| `incompleteness` | `counterexamples.py` の `incompleteness_witness(statement)` | 正しいのに拒否される入力 |\n| `unsoundness` | 同ファイルの `unsoundness_witness(statement)` | 範囲外なのに受理される入力 |\n| `privacy-leak` | 同ファイルの `extract_witness(transcript)` | 記録に残った `w` |\n| `property-matrix` | `classify.py` の `classify(protocol_id)` | 各検証者が 3 性質を満たすか |\n| `transfer` | 同じ 2 ファイル | 別の数値でも同じ考え方が通るか |\n\n`incompleteness` の提出時には、**画面とは別の条件**が関数へ渡ります。画面の普通の正しい値では拒否の違いが出ないため、下端が正しい値になる条件で試します。受け取った辞書から探す関数にしてください。小表の下端の例で、何が正しく、どの検査が拒否するかを先に説明してみましょう。\n\n`privacy-leak` では式を解き直すのでなく、`transcript` の記録を読みます。辞書の中の辞書は、たとえば `record={\"box\":{\"number\":3}}` なら `record[\"box\"][\"number\"]` が 3 です。画面で `w` を記録している項目を見つけ、同じ形で読みます。\n\n`property-matrix` では、`protocol_id` に **Inspect の検証者の名前**が入ります。名前ごとに `if` で分け、`{\"complete\": True, \"sound\": False, \"private\": True}` のような辞書を返します（この例は記法であり、特定の検証者の答えではありません）。検査項目と記録から 3 つの問いに答え、各 `False` をどの反例で確かめたか対応させてください。名前や表示順から推測する必要はありません。\n\n**「公開テストを実行」は戻り値の形の確認です。starter も通ります。** 性質の正しさは各欄の提出後に判定されます。全 5 欄が正解になれば完了です。誤答 1 回につき 10 点の減点があり、修正して再提出できます。\n\n### 最後は、数が変わっても説明できるか\n\n`transfer` は、同じ起動の検証者の名前を使い、未見の条件・記録で 3 つの関数を再実行します。画面の数字を固定して返すのでなく、関数の引数から計算してください。`classify` の名前の対応はこの起動のままで構いません。新しく配置し直した場合は「証拠を確認」で名前を読み直します。同じ配置の単なる再起動で数が変わるとは限りません。\n\n採点後の問い：範囲の検査を正しく足し戻すと、どの反例が使えなくなりますか。記録の `w` だけを消すと、入力の受理・拒否は変わりますか。「安全になった」の一言でまとめず、どの性質を直したのか説明してみましょう。\n",
   "writeup": "## 3 つの性質は独立している\n\ncompleteness は「正しい statement が受理される」、soundness は「偽の statement が受理されない」、privacy は「transcript から witness が漏れない」。3 つは互いに独立で、protocol は任意の部分集合を満たしうる。この問題の 3 つはそれぞれ 1 つだけを破っている。\n\n## なぜラベルだけでは足りないか\n\nrange を検査しない verifier を unsound と書くだけでなく、範囲外で accept される witness を実際に作れて初めて理解したと言える。hidden test は matrix の False と反例を突き合わせる。公開 alias と順序も seed ごとに変わるため、固定表は使えない。\n\n## security property と implementation bug\n\n3 つはどれもバグだが、壊している性質が違う。正しい入力を弾くバグでも soundness は無傷であり得る。性質の言葉で言えるようになると、Week 1 の underconstraint と Week 2 の over-opening が別の話だと分かる。\n\n## 反例が到達可能であること\n\n不完全性は witness が range の内側にある instance では観測できない。hidden boundary instance を用意して初めて示せる。性質が壊れていることと、それを示せることは別問題で、後者は作問側の責任になる。",
   "tags": [
     "advanced-cryptography-2026",
@@ -60,56 +60,119 @@
         "id": "incompleteness",
         "label": "正しい入力が弾かれる場面を作る",
         "points": 40,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "incompleteness-hint-1",
+            "content": "完全性は、正しい入力を取りこぼさない性質です。下端を含むはずの範囲から下端だけを除くと、正しい値がそこにある場合だけ拒否してしまいます。誤った値を返して拒否されても、完全性の反例にはなりません。",
+            "penalty": 3
+          },
+          {
+            "id": "incompleteness-hint-2",
+            "content": "p=7,a=3,b=1,c=0,lo=2,hi=4 なら w=2 は (3*2+1)%7=0、2<=2<=4 で正しい入力です。しかし 2<2 は成り立ちません。一般には lo から hi まで試し、(a*w+b)%p==c となる w を探します。",
+            "penalty": 3
+          },
+          {
+            "id": "incompleteness-hint-3",
+            "content": "「証拠を確認」の range(strict-lo) と本文の小表を比べます。counterexamples.py の incompleteness_witness(statement) で、引数の lo,hi,a,b,p,c を使い候補を調べ、余りが c と一致する整数を返します。「正しい入力が弾かれる場面を作る」を提出。採点時には画面とは別の、下端で違いが出る条件が渡ります。",
+            "penalty": 4
+          }
+        ],
+        "input": "multiline"
       },
       {
         "id": "unsoundness",
-        "label": "主張の範囲外を通してしまう例を作る",
+        "label": "範囲外の入力が通る例を作る",
         "points": 45,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "unsoundness-hint-1",
-            "content": "range を検査しない verifier が見ているのは合同式だけだ。その合同式は p を法とする。法が同じなら、解はひとつではない。",
-            "penalty": 15
+            "content": "健全性は、この教材では条件違反の入力を通さないことです。式だけ確認して範囲を確認しない検証者には、式は満たすが範囲外の値を出します。「受理された」と「本来の条件を満たす」を別々に確かめます。",
+            "penalty": 3
+          },
+          {
+            "id": "unsoundness-hint-2",
+            "content": "w に p を足すと a*w+b は a*p だけ増え、p で割った余りは同じです。p=7,a=3,b=1,c=0、範囲2〜4の正しい値2から、2+7=9へ動かすと (3*9+1)%7=0 のまま範囲外になります。一般には hi を超えるまで p を足します。",
+            "penalty": 3
+          },
+          {
+            "id": "unsoundness-hint-3",
+            "content": "「証拠を確認」の statement と、range がない検査項目を見ます。counterexamples.py の unsoundness_witness(statement) で正しい候補を探し、statement[\"hi\"] を超えるまで statement[\"p\"] を足して返します。「範囲外の入力が通る例を作る」を提出。範囲内の値を返すだけでは反例になりません。",
+            "penalty": 4
           }
-        ]
+        ],
+        "input": "multiline"
       },
       {
         "id": "privacy-leak",
-        "label": "transcript から秘密を取り出す",
+        "label": "記録から証拠の値を読み取る",
         "points": 40,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "privacy-hint-1",
-            "content": "transcript を公開する verifier の accept/reject は正しい。見るべきは判定ではなく、判定のついでに記録されている内容のほうだ。",
-            "penalty": 15
+            "content": "記録の秘匿は、受理・拒否の正しさとは別です。正しく判定できても、記録に証拠の値を残すと観察者が読み出せます。この欄では入力の式を解くのでなく、記録だけから値を取り出します。",
+            "penalty": 3
+          },
+          {
+            "id": "privacy-hint-2",
+            "content": "辞書の中に辞書があるときはキーを順に使います。record={\"box\":{\"number\":3}} なら record[\"box\"][\"number\"] は3です。外側のキーで内側の辞書を選び、その中のキーで整数を選びます。",
+            "penalty": 3
+          },
+          {
+            "id": "privacy-hint-3",
+            "content": "「証拠を確認」の transcript → opening → value をたどります。counterexamples.py の extract_witness(transcript) でも同じキーの順番で整数を読み、return します。「記録から証拠の値を読み取る」を提出。画面の数を固定して返すと、最後の別の記録では使えません。",
+            "penalty": 4
           }
-        ]
+        ],
+        "input": "multiline"
       },
       {
         "id": "property-matrix",
-        "label": "3 つの verifier を性質で分類する",
+        "label": "3 つの検証者を性質で分類する",
         "points": 35,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "property-matrix-hint-1",
+            "content": "分類は成功例の数ではなく、検査の内容と記録から決めます。「正しい入力を必ず通すか」「無効な入力を通さないか」「記録から値を取り出せないか」を別々に問い、破れる場合には前の反例を対応させます。",
+            "penalty": 3
+          },
+          {
+            "id": "property-matrix-hint-2",
+            "content": "正しい条件が式と2<=w<=4なら、2<w<=4は下端2を落とします。式だけなら、余りの同じ範囲外の9も通り得ます。正しく判定しても {\"box\":{\"number\":2}} に値を書けば読めます。各例で complete,sound,private のどの問いに答えたか分けます。",
+            "penalty": 3
+          },
+          {
+            "id": "property-matrix-hint-3",
+            "content": "「証拠を確認」で verifiers の各名前と検査項目、privacyProtocol と transcript を読みます。classify.py の classify(protocol_id) を名前ごとに if で分け、complete,sound,private の3キーに True/False を返します。「3 つの検証者を性質で分類する」を提出。別の数値での検査も名前はこの起動の3つを使います。",
+            "penalty": 4
+          }
+        ],
+        "input": "multiline"
       },
       {
         "id": "transfer",
         "input": "multiline",
-        "label": "見たことのない instance でも成立させる",
+        "label": "別の数値でも成立させる",
         "points": 40,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "transfer-hint-1",
-            "content": "statement から witness を求める式は、 3 つの checkpoint すべてで同じものが使える。 固定値ではなく式で書く。",
-            "penalty": 12
+            "content": "最後は数値の暗記と手順の理解を区別します。同じ関数に別の条件や記録を渡したときも、受け取ったものから反例を作れる必要があります。検証者の名前の対応はこの起動のものを使います。",
+            "penalty": 3
           },
           {
             "id": "transfer-hint-2",
-            "content": "incompleteness の instance は witness が range の端にある。 端であることを利用せず、 合同式から解いて構わない。",
-            "penalty": 8
+            "content": "範囲2〜4で3*w+1の7で割った余りを0にする値は2です。別の条件「範囲1〜3、2*w+1の5で割った余りが2」なら値は3です。常に2を返す関数は後者で失敗します。両方とも範囲を順に試す同じ手順で探せます。",
+            "penalty": 3
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "2ファイルを読み直します。counterexamples.py の数値計算は statement から、記録の読出しは transcript から行い、画面の数字を固定していないか確認。「公開テストを実行」で型を確認してから「別の数値でも成立させる」を提出します。失敗時は示された性質の条件を本文の式・小表と比べて直します。",
+            "penalty": 4
           }
         ]
       }
@@ -118,9 +181,9 @@
   "i18n": {
     "en": {
       "name": "What it holds, what it breaks",
-      "shortDescription": "A test passing and a property holding are two different things. Three practice verifiers — programs that judge whether an answer is right — arrive for inspection. Every one passes ordinary correct inputs; they are just broken in different ways. Build counterexamples and classify what each one holds and what it breaks.",
+      "shortDescription": "Audit three verifiers: programs that accept or reject an input. Inspect their checks and records, then write counterexamples to distinguish three properties.",
       "description": "Second problem of Bridge 0. Before completeness / soundness / privacy / zero-knowledge become silent assumptions from Week 1 onward, get to where you can tell them apart by counterexample, not by memorised definition.\n\nThe material is one small integer relation — a*w + b == c (mod p) with lo <= w <= hi — and no real ZKP is implemented. Each of the three verifiers breaks one property: a strict lower bound on the range breaks completeness, an omitted range check breaks soundness, and a transcript that records the witness breaks privacy. The public names are neutral aliases derived from the deploy seed; names and order change per deploy.\n\nThe heart of the scoring is that a label alone never passes. A property marked False in the matrix cannot be closed until a counterexample that actually holds is submitted at the corresponding checkpoint. The transfer checkpoint runs the participant's own classify.py / counterexamples.py against a different hidden-seed instance.\n\nIncompleteness cannot be observed on an instance whose witness sits inside the range, so the incompleteness checkpoint evaluates the submission generator on a hidden boundary instance whose witness equals lo. The boundary's answer is never shown in inspect. If a counterexample is unreachable, the property cannot be demonstrated to the learner.",
-      "instructions": "## The second problem, before the lectures\n\nThis problem is solvable from what is written here and what the screen shows — nothing else. No prior knowledge of cryptography is needed.\n\n## A test passing and a property holding are different\n\nA test passing and a property holding are two different things. Three practice verifiers arrive for an audit, and every one of them passes the ordinary happy-path tests. They just break differently. \"The tests passed\" cannot separate the three.\n\nSo you **name both what each one holds and what each one breaks**. The three properties — accept the honest, reject the fake, leak no secret — are independent, and having one guarantees nothing about the other two.\n\n## One counterexample breaks a claim\n\nTo break a claim of the form \"this holds in every case\", one counterexample is enough. \"Every even number is divisible by 4\" dies to the single example 6.\n\nOne digit (remainders mod 7): for the claim \"3w + 1 leaves remainder 3 after dividing by 7, and 2 ≤ w ≤ 4\", the honest answer is w = 3 (3 × 3 + 1 = 10, remainder 3, inside the range). A **verifier that accepts everything** passes w = 3 (complete) but also passes the fake w = 0 (remainder 1), so it is not sound. A **verifier that rejects everything** never passes a fake (sound) but rejects the honest w = 3 too (not complete). And a verifier that judges w = 3 correctly can still write w = 3 into the record of the exchange — the secret leaks regardless of the verdict (not private).\n\n## Before you start (skip if you know this)\n\n**completeness** = honest inputs get accepted. **soundness** = fakes do not get accepted. **privacy** = the record of the exchange (transcript) does not reveal the secret (witness). **verifier** = the party deciding accept/reject. **statement** = the claim \"a secret number w satisfying this condition exists\"; starting the problem shows your own statement (the equation and range w must satisfy). **witness** = the value of w that makes it true. \"A w whose remainder comes out right\" cannot be solved like an equation, so try the integers in the statement's range from the bottom (the range is always finite).\n\n## Name both the property held and the one broken\n\n**Name both the property held and the property broken.** For the three verifiers, classify which of the three properties each holds and each breaks, and for every property you mark False, build the counterexample — with real numbers — that proves it really is broken. Memorised names do not pass.\n\n## First move\n\nIn Participant Portal (the site showing this statement), select **起動 (Start)**; the problem editor appears on the same page.\n\nPress **Inspect evidence** in the editor. Three things are shown:\n\n1. **Your statement** — the equation and range w must satisfy.\n2. **What each of the three verifiers checks** — how each decides accept/reject. Their names are mechanically generated and reveal nothing; judge from the listed checks.\n3. **A leaking transcript** — the exchange record one of the three verifiers left behind.\n\nNo host-side terminal or file juggling is needed.\n\n## What you answer — five checkpoints\n\nEvery answer is written **as code** in the editor's two files; no checkpoint takes a typed-in number. Pressing a checkpoint's **Submit (+points)** builds that checkpoint's submission from your current files and grades it.\n\nOne in `classify.py`:\n\n- **property-matrix** — write `classify(protocol_id)`. It is called once per verifier, with `protocol_id` carrying the verifier's name exactly as **Inspect evidence** shows it. Branch on the name and return that verifier's `{\"complete\": True or False, \"sound\": ..., \"private\": ...}` — 3 verifiers × 3 properties = 9 booleans to decide. The starter always returns all True, the answer \"all the happy-path tests passed\" would give. Replace all nine with your own judgement.\n\nThree in `counterexamples.py`. The `statement` your functions receive is a dict with keys p (the divisor), a, b, c (the equation's numbers), lo and hi (the range bounds) — the same content **Inspect evidence** displays as your statement. In the one-digit example above, p = 7, a = 3, b = 1, c = 3 (the target remainder), lo = 2, hi = 4. `transcript` is also a dict, carrying the exchange record as-is.\n\n- **incompleteness** — write `incompleteness_witness(statement)`: return, as an integer computed from the statement, a w that is **honest yet gets rejected**.\n- **unsoundness** — write `unsoundness_witness(statement)`: return a w that is **fake yet gets accepted**.\n- **privacy-leak** — write `extract_witness(transcript)`: read the **leaked secret w** out of the given transcript and return it.\n\nThe last one is automatic:\n\n- **transfer** — your two files are submitted as-is and re-run on a **statement you have never seen**. An answer that hard-codes the numbers from your screen fails here; compute from the statement instead.\n\n**Run public tests** checks only the shape of your answers (types and ranges). Whether they are right is judged after submission by the grading-side verifier.\n\n## This lens is asked of you from Week 3 on\n\nDone means all five checkpoints pass (each wrong try costs 10 points; corrected answers can be resubmitted). Memorised names do not pass — every property you mark False pairs with the counterexample that proves it: `\"complete\": False` → `incompleteness_witness`, `\"sound\": False` → `unsoundness_witness`, `\"private\": False` → `extract_witness`. The three verifiers break the three properties one each, in three different ways. This habit — name a property, then confirm it with a counterexample — is asked of you in every zero-knowledge problem from Week 3 on.\n",
+      "instructions": "## Before you start — inspect what “accepted” means\n\nYou are auditing three **verifiers: programs that accept or reject an input**. All three accept ordinary valid inputs. Boundary values, out-of-range values, and the records they leave reveal their differences.\n\nSelect **Start → Inspect evidence** in the problem editor. You will see a `statement` (the input conditions), `verifiers` (the checks each performs), and a `transcript` (the exchange record). Compare the small example below with those checks first. Write functions in two editor files and use each checkpoint's **Submit** button. No terminal is needed.\n\n### Keep three questions separate\n\nA **witness** is a value `w` satisfying the conditions. This exercise asks separate questions:\n\n| Key | Property | A counterexample |\n| --- | --- | --- |\n| `complete` | Completeness: every valid input is accepted | One valid input is rejected |\n| `sound` | Soundness: invalid inputs are never accepted | One invalid input is accepted |\n| `private` | Record privacy in this exercise: `w` cannot be read from the record alone | The record lets you extract `w` |\n\nA **counterexample** disproves “this holds in every case.” The number 6 disproves “every even number is divisible by 4.” One successful example, however, does not establish “every.”\n\nThis is a small-number input-checking and record exercise. You can search for `w` from the public conditions; this is not cryptography that keeps the number secret. Here, sound means rejecting an invalid input value; this small check does not prove the formal soundness requirement of rejecting false statements. Distinguish this exercise from a proof of real zero knowledge: a proof record reveals no more than the public information already permits.\n\n### Read the conditions and use these calculations\n\nIn `statement`, `p` is the divisor, `a,b,c` are the equation's numbers, and `lo,hi` are the range bounds. Python writes the **remainder after division** as `%`, multiplication as `*`, and an equality comparison as `==`.\n\n**A valid input satisfies `(a*w + b) % p == c` and `lo <= w <= hi`.**\n\nThe displayed checks mean the following. Every listed condition must hold for acceptance.\n\n| Inspect name | Condition checked |\n| --- | --- |\n| `relation` | `(a*w + b) % p == c` |\n| `range` | `lo <= w <= hi`, including both ends |\n| `range(strict-lo)` | `lo < w <= hi`, excluding only the lower end |\n\nTry `p=7, a=3, b=1, c=0, lo=2, hi=4`:\n\n| `w` | Remainder of `3*w+1` after division by 7 | In the correct range 2 through 4? | Greater than 2 and at most 4? |\n| --- | --- | --- | --- |\n| 2 | 7 leaves 0 | Yes | No |\n| 3 | 10 leaves 3 | Yes | Yes |\n| 4 | 13 leaves 6 | Yes | Yes |\n\nFind a valid `w` by trying the integers from `lo` through `hi`. Python's `range(lo, hi + 1)` includes the upper bound. Calculate each candidate's remainder and return the candidate when it equals `c`. Every supplied statement has one valid integer in its range.\n\nYou also need this fact: **adding `p` to `w` preserves the equation's remainder**. The expression grows by `a*p`, which is divisible by `p`. In the example, add `p=7` to `w=2` to get 9. `3*9+1=28` also leaves 0, but 9 is outside 2 through 4. In general, start with a valid `w` and keep adding `p` until `w > hi`. You now have an out-of-range candidate that still satisfies the equation.\n\n### Where to write and what to demonstrate\n\nYou do not need to type numbers into checkpoint fields. **Edit the two files in the problem editor**; **Submit** runs your functions and sends their returned values. Numeric functions return integers, not `True` or `False`.\n\n| Checkpoint | Function to edit | What it demonstrates |\n| --- | --- | --- |\n| `incompleteness` | `incompleteness_witness(statement)` in `counterexamples.py` | A valid input that gets rejected |\n| `unsoundness` | `unsoundness_witness(statement)` in the same file | An out-of-range input that gets accepted |\n| `privacy-leak` | `extract_witness(transcript)` in the same file | The recorded `w` |\n| `property-matrix` | `classify(protocol_id)` in `classify.py` | Whether each verifier holds each property |\n| `transfer` | The same two files | Whether your reasoning survives different numbers |\n\nSubmitting `incompleteness` passes **a different statement from the one displayed** to your function. Ordinary valid values on screen do not reveal this rejection, so this case makes the lower bound the valid value. Write a function that searches the dictionary it receives. First explain what is valid in the small table's lower-bound case and which check rejects it.\n\nFor `privacy-leak`, read `transcript` rather than solving the equation again. To read a dictionary inside another dictionary, for example, `record={\"box\":{\"number\":3}}` gives `record[\"box\"][\"number\"] == 3`. Find where the screen's record stores `w`, and read it in the same way.\n\nFor `property-matrix`, `protocol_id` is **one of the verifier names in Inspect**. Branch on those names with `if` and return a dictionary such as `{\"complete\": True, \"sound\": False, \"private\": True}`. This illustrates the syntax, not any particular verifier's answer. Use the listed checks and the record to answer all three questions, and pair each `False` with the counterexample that establishes it. Do not guess from the names or display order.\n\n**Run public tests checks return-value shapes. The starter passes it too.** Submitting each checkpoint checks correctness. All five correct completes the exercise. Each wrong attempt costs 10 points; edit and resubmit when needed.\n\n### Finally, can you explain it when the numbers change?\n\n`transfer` uses the same deployment's verifier names and re-runs the three functions on unseen statements and records. Calculate from function arguments instead of returning the screen's numbers as constants. The name mapping in `classify` may stay fixed for this deployment. Read Inspect again after a new deployment; merely restarting the same deployment need not change its numbers.\n\nAfter grading, ask: if you restore the correct range check, which counterexample stops working? If you remove only the recorded `w`, do acceptance and rejection change? Explain which property you repaired instead of saying only “it is secure now.”\n",
       "writeup": "## The three properties are independent\n\nCompleteness means a true statement is accepted; soundness means a false statement is not; privacy means the transcript does not reveal the witness. A protocol can satisfy any subset. Each of the three here breaks exactly one.\n\n## Why a label is not enough\n\nYou have understood the verifier without a range check when you can produce an out-of-range witness it accepts. Hidden tests cross-check every False against its counterexample, while neutral aliases and their order vary by deployment, so a fixed table cannot pass.\n\n## Security property versus implementation bug\n\nAll three are bugs, but they break different properties. A bug that rejects valid input need not damage soundness. Property terms separate Week 1's underconstraint from Week 2's over-opening.\n\n## Counterexamples have to be reachable\n\nIncompleteness cannot be observed when the witness lies strictly inside the range. A hidden boundary instance makes it demonstrable without printing its answer. A property being broken and being demonstrable are different things, and the second is the author's responsibility.",
       "learningGoals": [
         "Confirm by experiment the property that honest inputs are accepted (completeness)",
@@ -132,43 +195,91 @@
       "checks": [
         {
           "id": "incompleteness",
-          "label": "Make a valid input get rejected"
+          "label": "Make a valid input get rejected",
+          "hints": [
+            {
+              "id": "incompleteness-hint-1",
+              "content": "Completeness means no valid input is missed. Excluding the lower end of an inclusive range rejects a valid value when it lies exactly there. Rejection of an invalid value does not demonstrate incompleteness."
+            },
+            {
+              "id": "incompleteness-hint-2",
+              "content": "For p=7,a=3,b=1,c=0,lo=2,hi=4, w=2 satisfies (3*2+1)%7=0 and 2<=2<=4. But 2<2 is false. In general, try lo through hi and find w satisfying (a*w+b)%p==c."
+            },
+            {
+              "id": "incompleteness-hint-3",
+              "content": "Compare range(strict-lo) in Inspect evidence with the small table. In counterexamples.py, make incompleteness_witness(statement) search using its argument’s lo,hi,a,b,p,c and return the integer whose remainder equals c. Submit “Make a valid input get rejected.” Grading passes a different statement that exposes the lower-bound difference."
+            }
+          ]
         },
         {
           "id": "unsoundness",
-          "label": "Get something outside the claim accepted",
+          "label": "Make an out-of-range input get accepted",
           "hints": [
             {
               "id": "unsoundness-hint-1",
-              "content": "The verifier without a range check only checks the congruence, and the congruence is modulo p. Same modulus, more than one solution."
+              "content": "Soundness here means rejecting invalid inputs. A verifier that checks the equation but omits the range can accept a value that satisfies the equation outside the range. Check acceptance and the intended conditions separately."
+            },
+            {
+              "id": "unsoundness-hint-2",
+              "content": "Adding p to w adds a*p to a*w+b and preserves its remainder after division by p. With p=7,a=3,b=1,c=0 and range 2 through 4, move from valid 2 to 2+7=9: (3*9+1)%7 is still 0, outside the range. In general, keep adding p until you exceed hi."
+            },
+            {
+              "id": "unsoundness-hint-3",
+              "content": "Read statement and the checks that omit range in Inspect evidence. In counterexamples.py, make unsoundness_witness(statement) find a valid candidate, add statement[\"p\"] until it exceeds statement[\"hi\"], and return it. Submit “Make an out-of-range input get accepted.” Returning an in-range value does not demonstrate the flaw."
             }
           ]
         },
         {
           "id": "privacy-leak",
-          "label": "Pull the secret out of a transcript",
+          "label": "Read the witness from the record",
           "hints": [
             {
               "id": "privacy-hint-1",
-              "content": "The transcript-producing verifier's accept/reject is correct. Look not at the verdict but at what gets recorded alongside it."
+              "content": "Record privacy is separate from correct acceptance and rejection. A correct verdict can still leave the witness in the record for an observer to read. This checkpoint extracts from the record alone instead of solving the input equation."
+            },
+            {
+              "id": "privacy-hint-2",
+              "content": "Use keys in order for a dictionary inside another dictionary. For record={\"box\":{\"number\":3}}, record[\"box\"][\"number\"] is 3. The outer key selects the inner dictionary; the next key selects the integer."
+            },
+            {
+              "id": "privacy-hint-3",
+              "content": "Follow transcript → opening → value in Inspect evidence. In counterexamples.py, make extract_witness(transcript) read those keys in the same order and return the integer. Submit “Read the witness from the record.” Hard-coding the displayed number will not work on the later records."
             }
           ]
         },
         {
           "id": "property-matrix",
-          "label": "Classify the three verifiers by property"
+          "label": "Classify the three verifiers by property",
+          "hints": [
+            {
+              "id": "property-matrix-hint-1",
+              "content": "Classify the checks and records, not the number of successful examples. Ask separately whether every valid input passes, invalid inputs never pass, and the record does not disclose the value. Pair a broken property with its counterexample."
+            },
+            {
+              "id": "property-matrix-hint-2",
+              "content": "If the intended conditions are an equation and 2<=w<=4, using 2<w<=4 loses the lower bound 2. Checking only the equation can allow out-of-range 9 with the same remainder. Correct checking can still record the value in {\"box\":{\"number\":2}}. Identify which of complete,sound,private each example addresses."
+            },
+            {
+              "id": "property-matrix-hint-3",
+              "content": "Read each name and its checks under verifiers, plus privacyProtocol and transcript in Inspect evidence. In classify.py, branch on protocol_id with if and return booleans under complete,sound,private. Submit “Classify the three verifiers by property.” Tests with different numbers retain this deployment’s three names."
+            }
+          ]
         },
         {
           "id": "transfer",
-          "label": "Hold up on instances you have not seen",
+          "label": "Make the same code work on different numbers",
           "hints": [
             {
               "id": "transfer-hint-1",
-              "content": "The expression that solves the statement for its witness is the same in all three checkpoints. Write the expression, not the value."
+              "content": "The final step distinguishes memorized numbers from a reusable procedure. The same functions must construct counterexamples from different conditions and records they receive. Keep the verifier-name mapping for this deployment."
             },
             {
               "id": "transfer-hint-2",
-              "content": "The incompleteness instance has its witness at the edge of the range. You do not need to exploit that — solving the congruence is enough."
+              "content": "In range 2 through 4, w=2 makes 3*w+1 leave remainder 0 after division by 7. In a different case, range 1 through 3 and remainder 2 for 2*w+1 after division by 5, w=3 works. Always returning 2 fails the second case; the same range-search procedure finds both."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Read both files again. In counterexamples.py, calculate from statement and read from transcript, rather than returning the screen’s numbers. Run public tests for shapes, then submit “Make the same code work on different numbers.” If it fails, compare the reported property with the statement’s formulas and small table."
             }
           ]
         }
