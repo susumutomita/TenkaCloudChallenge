@@ -1,0 +1,28 @@
+{
+  "recorded": "2026-09-07",
+  "sources": [
+    {
+      "repository": "zk-tokyo/advanced-cryptography-2026",
+      "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+      "path": "week2/README.md",
+      "sha256": "aedc5057d9bfc916f7776caaaff9e736b12493439521e55c29ec1f80ec529de6",
+      "read": "Week 2 lecture scope"
+    },
+    {
+      "repository": "zk-tokyo/advanced-cryptography-2026",
+      "ref": "a3aa4b56fa88fbe803b57d320fbc87c1a203b480",
+      "path": "week2/problems/toy-mpc/README.md",
+      "sha256": "02ae4b6e86355fcb25687b4197bec82cf5e24c1471643c38df5a96e7e06a28bb",
+      "read": "Part A functions, canonical residues, one-use triples, two masked openings"
+    },
+    {
+      "repository": "susumutomita/advanced-cryptography-note",
+      "ref": "58344a29ea39c25839475ba9a594c115ed89989b",
+      "path": "week2/index.html",
+      "sha256": "b9a332b1f7aecfc0dd578ef138ab9cd679a63c567529bc234bee7ee740edd1c5",
+      "read": "slides25–28 / lines603–649; model and protocol / lines651–679; Beaver mutation audit / lines1567–1640"
+    }
+  ],
+  "originalReaderSha256": "c534d93bccdba05e443926d69c363585de095b1c3c8726b552cb47a524b48e19",
+  "limitation": "Initial metadata tool output included writeup before reader code was written. This is not a writeup-blind acceptance answer."
+}

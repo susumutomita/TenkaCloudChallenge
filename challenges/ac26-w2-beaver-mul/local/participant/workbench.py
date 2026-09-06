@@ -13,12 +13,14 @@ import hashlib
 import hmac
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Callable
+
+from participant.execution import LearnerError, LearnerSession
+from tests.public.test_beaver import run as run_public_checks, load_public_evidence
 
 
 class PortalEditorSupport:
@@ -103,19 +105,12 @@ class PortalEditorSupport:
         }
 
     def _child_env(self, **extra: str) -> dict[str, str]:
-        """The fixed environment `show.py` and the public tests run under.
-
-        Deliberately built from nothing rather than inherited, so a Portal run cannot
-        pick up whatever the server process happens to carry. The one value forwarded
-        from this process is `VERIFIER_PUBLIC_URL`, and only when it is set: a problem
-        whose `fixtures/` no longer ships in the participant image (Issue 543/537) has
-        no local way to derive this deployment's public evidence, and fetches it from
-        its own Compose-internal verifier's `GET /public` instead. Problems that still
-        carry `fixtures/` never set it and see exactly the environment they saw before.
+        """Only trusted show.py uses this environment; learner execution has its own
+        empty-by-construction environment in execution.py. The fixed public-evidence
+        URL belongs to this deployment's verifier. The seed stays in the parent.
         """
         env = {
             "PATH": "/usr/local/bin:/usr/bin:/bin",
-            "FLAG_SEED": self.seed,
             "PYTHONDONTWRITEBYTECODE": "1",
             **extra,
         }
@@ -187,46 +182,16 @@ class PortalEditorSupport:
         sources = self._normalize_files(files)
         if isinstance(sources, str):
             return {"passed": False, "output": sources}
-        with tempfile.TemporaryDirectory() as temp_directory:
-            copied_root = Path(temp_directory) / "problem"
-            shutil.copytree(
-                self.root,
-                copied_root,
-                ignore=shutil.ignore_patterns(
-                    "__pycache__", "*.pyc", "reference", "mutation.py"
-                ),
-            )
-            for name, source in sources.items():
-                destination = copied_root / "starter" / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_text(source, encoding="utf-8")
-
-            test_files = sorted((copied_root / "tests" / "public").glob("test_*.py"))
-            if not test_files:
-                return {"passed": False, "output": "No public tests were found."}
-
-            transcript: list[str] = []
-            all_passed = True
-            for test_file in test_files:
-                result = self._run_process(
-                    [sys.executable, "-I", str(test_file)],
-                    cwd=copied_root,
-                    env=self._child_env(BROWSER_PUBLIC_TESTS="1"),
-                    timeout=self.run_timeout_seconds,
-                )
-                transcript.append(f"== {test_file.name} ==")
-                if result is None:
-                    all_passed = False
-                    transcript.append("timed out or could not start")
-                    continue
-                status, output = result
-                transcript.append(output.rstrip())
-                if status != 0:
-                    all_passed = False
-            return {
-                "passed": all_passed,
-                "output": "\n".join(transcript)[-self.max_output_bytes :],
-            }
+        learner = LearnerSession(sources, timeout=self.run_timeout_seconds)
+        try:
+            evidence = load_public_evidence()
+            with learner:
+                failures, transcript = run_public_checks(learner.module(), evidence)
+        except (LearnerError, OSError, ValueError):
+            detail = learner.initialization_diagnostic
+            return {"passed": False, "output": detail or "Public functions could not be evaluated; check the submitted source."}
+        # Learner stdout is not a PASS channel. Only checks run here decide this flag.
+        return {"passed": not failures, "output": transcript}
 
     def prepare_submissions(self, files: object, manual: object) -> dict[str, object]:
         sources = self._normalize_files(files)

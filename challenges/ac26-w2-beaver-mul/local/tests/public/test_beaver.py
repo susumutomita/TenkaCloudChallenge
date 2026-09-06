@@ -1,9 +1,4 @@
-"""Public tests: shape, and the masking round trip on one setting.
-
-They never check what `combine` reconstructs to. Read that sentence again before
-deciding you are done.
-"""
-
+"""Parent-owned checks using only published evidence and the statement's p=7 example."""
 from __future__ import annotations
 
 import json
@@ -13,103 +8,96 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "starter"))
-
-import beaver  # noqa: E402
-
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+from participant.execution import LearnerError, LearnerSession
 
 
-def _load_public_evidence() -> dict:
-    """This deployment's modulus, party count, triple shares and shares of x -- what
-    `show.py` prints, plus the two values this file has always compared `mask` against.
-
-    Issue 537/538 (Issue 543 option B2): this file used to import `fixtures.generate`
-    directly. That module's `setting()` returns x, y, a, b and c in the clear, and it
-    shipped in the same image as `tests/hidden/check_beaver.py`, so it does not ship in
-    the `participant` Docker stage at all any more (see ../../Dockerfile). This
-    deployment's own verifier is the only source for the public half now:
-    `PUBLIC_EVIDENCE_JSON` when the Portal has already fetched it, or
-    `VERIFIER_PUBLIC_URL` fetched directly when it has not.
-    """
+def load_public_evidence() -> dict:
     injected = os.environ.get("PUBLIC_EVIDENCE_JSON")
     if injected:
         return json.loads(injected)
-    verifier_public_url = os.environ.get("VERIFIER_PUBLIC_URL")
-    if verifier_public_url:
+    url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if url:
         from urllib.request import urlopen
-
-        with urlopen(verifier_public_url, timeout=10) as response:  # noqa: S310
+        with urlopen(url, timeout=5) as response:
             return json.loads(response.read().decode("utf-8"))
-    # Neither is set: this only resolves when `fixtures/` is actually on disk, which is
-    # true for a checkout (this file run directly, e.g. by
-    # scripts/ac26-w2-beaver-mul.test.ts) and the verifier/author Docker stages, and
-    # never inside a built `participant` image -- so this branch does not reopen the
-    # leak above.
+    # Author/check-out only: fixtures are absent from the participant image.
     from fixtures.generate import public_payload
-
-    return public_payload(SEED)
-
-
-PUBLIC = _load_public_evidence()
-TRIPLE = PUBLIC["triple"]
+    return public_payload(os.environ.get("FLAG_SEED", "local-dev-seed"))
 
 
-def _sx() -> list[int]:
-    return list(PUBLIC["xShares"])
+def valid_shares(value, n, p):
+    return type(value) is list and len(value) == n and all(type(v) is int and 0 <= v < p for v in value)
 
 
-def test_mask_reconstructs_to_value_minus_mask() -> None:
-    p = PUBLIC["params"]["p"]
-    out = beaver.mask(_sx(), TRIPLE["a"], p)
-    assert sum(out) % p == (PUBLIC["x"] - PUBLIC["a"]) % p
+def run(module, public, only=""):
+    p, n = public["params"]["p"], public["params"]["n"]
+    triple, sx = public["triple"], public["xShares"]
+
+    def mask():
+        out = module.mask(sx, triple["a"], p)
+        assert valid_shares(out, n, p), "mask must return n integers in 0..p-1"
+        assert sum(out) % p == (public["x"] - public["a"]) % p, "mask must reconstruct to value minus mask"
+
+    def opening():
+        out = module.open_value(sx, p)
+        assert type(out) is int and 0 <= out < p, "open_value must return one integer in 0..p-1"
+        assert out == public["x"] % p, "open_value must reconstruct the shares"
+
+    def combine():
+        out = module.combine([4, 2, 6], [1, 2, 6], [2, 3, 1], 3, 4, 7)
+        assert valid_shares(out, 3, 7), "combine must return n integers in 0..p-1"
+        assert sum(out) % 7 == 1, "the statement's p=7 example must reconstruct to 1"
+
+    def protocol():
+        d = module.open_value(module.mask([3, 4, 5], [1, 2, 6], 7), 7)
+        e = module.open_value(module.mask([1, 5, 4], [2, 3, 1], 7), 7)
+        assert type(d) is int and d == 3 and type(e) is int and e == 4, "the statement's openings are d=3, e=4"
+        out = module.combine([4, 2, 6], [1, 2, 6], [2, 3, 1], d, e, 7)
+        assert valid_shares(out, 3, 7) and sum(out) % 7 == 1, "the composed p=7 example must reconstruct to 1"
+
+    def rounds():
+        value = module.rounds()
+        assert type(value) is int and value == 1, "rounds must report the minimum batched opening count, 1"
+
+    checks = [("mask_reconstructs_to_value_minus_mask", mask),
+              ("open_value_returns_the_shared_value", opening),
+              ("combine_reconstructs_the_public_example", combine),
+              ("protocol_composes_the_public_example", protocol),
+              ("rounds_reports_the_minimum", rounds)]
+    failures, lines = [], []
+    selected = [(name, fn) for name, fn in checks if not only or only in name]
+    for name, fn in selected:
+        try:
+            fn()
+            lines.append("PASS " + name)
+        except AssertionError as error:
+            failures.append(name)
+            lines.append("FAIL " + name + ": " + str(error))  # parent-authored public assertions only
+        except (LearnerError, OSError, ValueError, TypeError):
+            failures.append(name)
+            lines.append("FAIL " + name + ": function could not return the required values")
+    if not selected:
+        failures.append("no matching public check")
+    lines.append("public tests: " + ("all passed" if not failures else str(len(failures)) + " failed"))
+    lines.append("Published examples only; submit each checkpoint to test other settings.")
+    return failures, "\n".join(lines)
 
 
-def test_open_value_returns_the_shared_value() -> None:
-    p = PUBLIC["params"]["p"]
-    assert beaver.open_value(_sx(), p) == PUBLIC["x"] % p
-
-
-def test_combine_returns_one_value_per_party() -> None:
-    par = PUBLIC["params"]
-    out = beaver.combine(TRIPLE["c"], TRIPLE["a"], TRIPLE["b"], 1, 1, par["p"])
-    assert len(out) == par["n"]
-
-
-def test_rounds_is_an_integer() -> None:
-    assert isinstance(beaver.rounds(), int)
-
-
-def main() -> int:
+def main():
     only = ""
     if "--only" in sys.argv:
         index = sys.argv.index("--only")
-        only = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
-    failures = 0
-    selected = 0
-    for name, fn in sorted(globals().items()):
-        if not name.startswith("test_") or not callable(fn):
-            continue
-        if only and only not in name:
-            continue
-        selected += 1
-        try:
-            fn()
-            print(f"PASS {name}")
-        except AssertionError as error:
-            failures += 1
-            print(f"FAIL {name}: {error or 'assertion failed'}")
-        except Exception as error:  # noqa: BLE001
-            failures += 1
-            print(f"FAIL {name}: raised {type(error).__name__}")
-    print()
-    if selected == 0:
-        print(f"no public test matched --only {only!r}")
+        only = sys.argv[index+1] if index+1 < len(sys.argv) else ""
+    learner = LearnerSession({"beaver.py": (ROOT / "starter/beaver.py").read_text()})
+    try:
+        public = load_public_evidence()
+        with learner:
+            failures, output = run(learner.module(), public, only)
+        print(output)
+        return int(bool(failures))
+    except (LearnerError, OSError, ValueError):
+        print(learner.initialization_diagnostic or "The submitted functions could not be evaluated.")
         return 1
-    print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
-    print()
-    print("Note what is absent: nothing here checks what combine reconstructs to.")
-    return 1 if failures else 0
 
 
 if __name__ == "__main__":

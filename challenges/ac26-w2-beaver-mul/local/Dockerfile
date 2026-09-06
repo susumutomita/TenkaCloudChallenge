@@ -2,6 +2,9 @@
 # because a base image moved underneath them.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN useradd --create-home --uid 10001 lab
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -21,22 +24,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # `GET /public` over the Compose-internal network instead (see participant/server.py,
 # show.py, and tests/public/test_beaver.py).
 FROM base AS participant
-COPY tests/public/ ./tests/public/
-COPY participant/ ./participant/
-COPY starter/ ./starter/
-COPY show.py ./show.py
+COPY --chown=lab:lab tests/public/ ./tests/public/
+COPY --chown=lab:lab participant/ ./participant/
+COPY --chown=lab:lab starter/ ./starter/
+COPY --chown=lab:lab show.py ./show.py
 
+USER lab
 CMD ["python", "participant/server.py"]
 
 # Hidden grading runs in a separate, unpublished image reachable only over the
 # Compose-internal network (see docker-compose.yml). The Workbench above has the public
-# tests and the starter, but no seed derivation, no hidden checker, and no process that
-# can decide a checkpoint.
+# tests and the starter, but no fixture generator or hidden checker. It retains the
+# existing parent-owned seed/tcw1 preparation contract.
 FROM base AS verifier
-COPY fixtures/ ./fixtures/
-COPY tests/hidden/ ./tests/hidden/
-COPY verifier/ ./verifier/
+COPY --chown=lab:lab participant/execution.py participant/isolation.py participant/worker.py ./participant/
+COPY --chown=lab:lab fixtures/ ./fixtures/
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
+COPY --chown=lab:lab verifier/ ./verifier/
 
+USER lab
 CMD ["python", "verifier/server.py"]
 
 # Author-only target. Local mode remains honor-system verification for whoever controls
@@ -49,8 +55,8 @@ CMD ["python", "verifier/server.py"]
 # reference all need it.
 FROM participant AS author
 
-COPY fixtures/ ./fixtures/
-COPY tests/hidden/ ./tests/hidden/
-COPY verifier/ ./verifier/
-COPY reference/ ./reference/
-COPY mutation.py ./mutation.py
+COPY --chown=lab:lab fixtures/ ./fixtures/
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
+COPY --chown=lab:lab verifier/ ./verifier/
+COPY --chown=lab:lab reference/ ./reference/
+COPY --chown=lab:lab mutation.py ./mutation.py

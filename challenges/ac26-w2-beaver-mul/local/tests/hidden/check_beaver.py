@@ -140,8 +140,8 @@ def check_rounds(module, _seed: str) -> list[str]:
         actual = module.rounds()
     except Exception as error:  # noqa: BLE001
         return [f"rounds raised {type(error).__name__}"]
-    if not isinstance(actual, int) or isinstance(actual, bool) or actual < 1:
-        return ["a Beaver multiplication is classified as needing no communication"]
+    if not isinstance(actual, int) or isinstance(actual, bool) or actual != 1:
+        return ["rounds must report the minimum number of batched opening rounds"]
     return []
 
 

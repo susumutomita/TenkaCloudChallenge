@@ -17,6 +17,7 @@ _COMBINE_TAIL = """    out[0] = (out[0] + d * e) % p
     return out"""
 
 MUTATIONS: list[tuple[str, str]] = [
+    ("reports two instead of the minimum batched round", REFERENCE.replace("    return 1", "    return 2")),
     (
         "public product folded into every share, giving x*y + (n-1)*d*e",
         REFERENCE.replace(
