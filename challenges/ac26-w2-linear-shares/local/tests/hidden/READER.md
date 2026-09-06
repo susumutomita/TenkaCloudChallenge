@@ -283,3 +283,5 @@ and solved-row transitions (one test, 6.88 seconds including setup). This is
 actual component-to-local-API evidence, not a physical browser or AWS deployment.
 
 The final classification review removed the complete operation-to-grade map and the filled four-key answer from participant statements and starter. The operation-name glossary, local-row criterion, necessary equations and worked arithmetic remain. The reader must apply those equations to the displayed operations; no checkpoint or grading predicate changed.
+
+The comparison explanation was completed with a four-case local-output contradiction: at p7, y shares are0, a0 is0/1 and a1 is0/6. Required comparison bits form[[0,1],[1,0]], whose diagonal sums0 and2 cannot both equal the same reordered sum of arbitrary local output shares. Replacing6 by p-1 proves the stated odd-prime case; fixing other parties' shares handles n>2. The completed classification map remains absent.

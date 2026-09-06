@@ -84,7 +84,21 @@ For two parties:
 
 Party0 lacks a1,b1; party1 lacks a0,b0. Adding local products omits the cross terms. Squaring also leaves the middle term in `(a0+a1)²=a0²+2a0a1+a1²` (hence the odd-prime condition).
 
-Rowwise comparison also fails. With p=7, a=[6,6], b=[1,1], each row has a>b and the totals give5>2. But a=[4,4], b=[2,2] still has a>b in each row, while the totals give1<4. Reduction wraps around. This is a counterexample to simple rowwise comparison, not an impossibility proof for every cryptographic method.
+Consider comparison as the bit1 when x>y, otherwise0. With two parties and p=7, fix both shares of y to0. Vary the shares a0,a1 of x:
+
+| Party0 a0 / Party1 a1 | 0 | 6 |
+|---|---:|---:|
+| 0 | x=0 → comparison0 | x=6 → comparison1 |
+| 1 | x=1 → comparison1 | x=0 → comparison0 |
+
+Whatever local algorithms the parties choose, party0 returns a number F(a0) from its own share and party1 returns G(a1). F and G name arbitrary local calculations, not specific formulas. Their output-share sum must recover the comparison bit.
+
+```text
+top-left + bottom-right outputs = F(0)+G(0)+F(1)+G(6)
+top-right + bottom-left outputs = F(0)+G(6)+F(1)+G(0)
+```
+
+Both right-hand sides contain the same four numbers, so their remainders must agree. But the table requires0+0=0 versus1+1=2, which differ modulo7. **No choice of local algorithms can satisfy all four cases.** Comparison therefore needs communication in this model. For any odd prime p, replace6 by p−1: the table is unchanged and0 and2 still differ. With more parties, fix their shares to0; their constant outputs occur equally on both sides and cancel. This argument concerns the stated additive-sharing model, not every cryptographic construction.
 
 ## Where to submit
 
