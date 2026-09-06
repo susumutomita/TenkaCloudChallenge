@@ -18,6 +18,9 @@ from __future__ import annotations
 def advance(start: int, step: int, rounds: int, modulus: int) -> list[int]:
     """Return the number you are on after each of the `rounds` additions of `step`.
 
+    日本語: 足すたびに (value + step) % modulus で余りへ戻し、
+    結果をリストへ追加します。startそのものは入れず、0回なら空リストです。
+
     What the answer has to satisfy:
       - The list has exactly `rounds` numbers in it.
       - The number in position i is where you are after i+1 additions.
@@ -38,6 +41,10 @@ def advance(start: int, step: int, rounds: int, modulus: int) -> list[int]:
 
 def count_no_walkback(step: int, low: int, high: int) -> int:
     """How many ring sizes from low to high (inclusive) cannot undo `step`.
+
+    日本語: stepと1より大きい公約数を持つ整数をlow〜highで数えます。
+    本文の「異なる素因数の倍数を数えて重複を直す規則」を実装します。
+    下の遅い版は、小さい範囲で速い版と比べる見本にできます。
 
     A ring size m cannot undo step when m and step share a factor bigger than 1 --
     the no-walkback field asked for one such m; this asks how many there are.

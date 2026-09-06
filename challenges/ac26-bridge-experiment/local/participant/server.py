@@ -124,60 +124,35 @@ def starter_payload() -> dict[str, str]:
 
 
 def config_payload() -> dict[str, object]:
-    """Declare the generic editor contract consumed by the Participant Portal."""
-    return {
-        "id": "ac26-bridge-experiment",
-        "name": "予測してから走らせる",
-        "description": "剰余カウンタを紙で予測し、壊れた trace を読み、実装を一般化する。",
-        "submittedFiles": list(SUBMISSION_FILES),
-        "checkpoints": [
-            {
-                "id": "environment",
-                "label": "environment — 「提出」を押すだけ (合言葉は自動で送られる)",
-                "kind": "answer",
-            },
-            {
-                "id": "predict",
-                "label": "predict — 走らせる前に紙で出した、最後にいる数 (数はひとつ)",
-                "kind": "answer",
-            },
-            {
-                "id": "first-broken",
-                "label": "first-broken — 並んだ数のうち、はみ出しているのは左から何番目？ (左端が 0)",
-                "kind": "answer",
-            },
-            {
-                "id": "generalize",
-                "label": "generalize — 書き上げた counter.py の中身を、全部",
-                "kind": "code",
-            },
-            {
-                "id": "walkback",
-                "label": "walkback — 最後にいる数から、進んだ回数を取り戻す (数はひとつ)",
-                "kind": "answer",
-            },
-            {
-                "id": "no-walkback",
-                "label": "no-walkback — 同じ「1 回に進む数」で、取り戻せなくなる輪の大きさをひとつ",
-                "kind": "answer",
-            },
-            {
-                "id": "count-no-walkback",
-                "label": "count-no-walkback — 取り戻せない輪の大きさが、範囲の中にいくつあるか数える関数 (counter.py)",
-                "kind": "code",
-            },
-        ],
-        # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
-        "i18n": {
-            "en": {
-                "name": 'Predict, then run',
-                "description": 'A clock goes from 12 back to 1. Write the same kind of counting for a different number, work out the answer on paper before running it, and find the one number in a list that does not belong. Why cryptography counts like this, and why this much is still not cryptography -- using nothing but arithmetic.',
-                "checkpointLabels": {'environment': 'environment - press Submit; the pass phrase is sent for you', 'predict': 'predict - the number you end on, worked out on paper before running (one number)', 'first-broken': 'first-broken - one number in the list does not belong: which position is it? (leftmost is 0)', 'generalize': 'generalize - your finished counter.py, all of it', 'walkback': 'walkback - from the final number, recover how many times it was added (one number)', 'no-walkback': 'no-walkback - keeping the same step, one ring size on which it cannot be undone', 'count-no-walkback': 'count-no-walkback - a function counting how many ring sizes in a range cannot undo the step (counter.py)'},
-            }
-        },
-    }
+    """The participant editor contract; copy stays aligned with metadata.json."""
+    return {'id': 'ac26-bridge-experiment',
+     'name': '予測してから走らせる',
+     'description': '同じ数を足して余りに戻る計算を、紙で予測してからPythonで確かめます。途中の誤りを見つけ、回数を逆算し、最後は逆算できない条件を大量の候補で数えます。',
+     'submittedFiles': ['counter.py'],
+     'checkpoints': [{'id': 'environment', 'label': 'environment — 実行の準備を確かめる', 'kind': 'answer'},
+                     {'id': 'predict', 'label': 'predict — 最後の数を予測する', 'kind': 'answer'},
+                     {'id': 'first-broken', 'label': 'first-broken — 規則から外れた位置を見つける', 'kind': 'answer'},
+                     {'id': 'generalize', 'label': 'generalize — 別の数でも動くadvanceを書く', 'kind': 'code'},
+                     {'id': 'walkback', 'label': 'walkback — 回数を取り戻す', 'kind': 'answer'},
+                     {'id': 'no-walkback', 'label': 'no-walkback — 戻せなくなる輪を作る', 'kind': 'answer'},
+                     {'id': 'count-no-walkback',
+                      'label': 'count-no-walkback — 範囲の個数を速く数える',
+                      'kind': 'code'}],
+     'i18n': {'en': {'name': 'Predict, then run',
+                     'description': 'Predict repeated additions and remainders on paper, then check '
+                                    'them with Python. Find an intermediate error, recover a round '
+                                    'count, and finally count many cases where that recovery fails.',
+                     'checkpointLabels': {'environment': 'environment — Check that the setup responds',
+                                          'predict': 'predict — Predict the final number',
+                                          'first-broken': 'first-broken — Locate the out-of-range '
+                                                          'result',
+                                          'generalize': 'generalize — Make advance work on other '
+                                                        'inputs',
+                                          'walkback': 'walkback — Recover the round count',
+                                          'no-walkback': 'no-walkback — Construct a ring where '
+                                                         'recovery fails',
+                                          'count-no-walkback': 'count-no-walkback — Count a large '
+                                                               'range efficiently'}}}}
 
 
 def inspect_payload() -> dict[str, object]:
@@ -235,9 +210,9 @@ def _public_test_script(source: str, public: dict[str, object]) -> str:
 
     The learner's file and this deployment's already-fetched public evidence are both
     embedded as literals (`repr`/`json.dumps`, never interpolated into anything that
-    runs as a shell command) rather than written where the submission's own imports
-    could reach them: the child process never touches the network or the verifier
-    itself, only the values this process already fetched on its behalf.
+    runs as a shell command). The test harness receives a public snapshot instead
+    of needing its own verifier fetch. This is not a network filter on learner
+    code; the documented local honor-system boundary still applies.
     """
     # `tests/public/test_counter.py` reads FLAG_SEED / SUBMISSION_DIR / PUBLIC_EVIDENCE_JSON
     # / BROWSER_PUBLIC_TESTS from the environment and inserts ROOT and SUBMISSION_DIR onto
@@ -247,7 +222,6 @@ def _public_test_script(source: str, public: dict[str, object]) -> str:
     return "\n".join(
         [
             "import os, runpy, tempfile",
-            f"os.environ['FLAG_SEED'] = {SEED!r}",
             f"os.environ['PUBLIC_EVIDENCE_JSON'] = {json.dumps(public)!r}",
             "os.environ['BROWSER_PUBLIC_TESTS'] = '1'",
             "workspace = tempfile.mkdtemp()",

@@ -18,10 +18,10 @@
   },
   "difficulty": 1,
   "estimatedDuration": "40-60 分",
-  "shortDescription": "走らせてから考えると、何が確かめられたのか分からなくなる。時計は 12 の次が 1 に戻る — 同じ足し算を別の数で自分で書き、走らせる前に答えを紙で出し、1 個だけはみ出した数を見つける。暗号がこの計算をする理由と、それでもまだ暗号にならない理由を、四則演算だけで見にいく。",
-  "description": "AC26 companion track の入口。 暗号 primitive は実装しないが、 題材は暗号と無関係ではない。 剰余カウンタ (`start` に `step` を `rounds` 回足して毎回 mod) は Z_m 上を歩く操作そのもので、 Week 3 の楕円曲線の `k·G` と構造が同じ。 違いは逆算のコストだけで、 Z_m では `step` の逆元を 掛ければ `rounds` が戻る。 だから Z_m では署名が立たず、 Week 3 で歩く対象が置き換わる。 problem statement と `inspect` 出力はこの一点を動機として前面に置いている (walkback checkpoint で参加者自身が歩数を復元し、 no-walkback で戻せない輪を作る)。 参加者フィードバック (2026-08、 1 問目で 『なぜこれをやるのかの理由がない』 『剰余カウンタと暗号が結びつかない』) を受けた構成。\n\n採点は 4 checkpoint 独立。 environment (20) は container が実際に起動したことの確認、 predict (25) は実行前に紙で解いた値、 first-broken (25) は 1 round だけ剰余適用が抜けた trace の 最初の破綻位置、 generalize (30) は participant の counter.py を hidden seed の複数 modulus・負の step・zero step・start >= modulus・zero rounds に対して検証する。 checkpoint id は `inspect` ではなく `first-broken`: Portal editor と Makefile の `inspect` コマンドと 名前が衝突し、 問題文中で同じものに読めていた (`ac26-w1-constraint-lab` の同種 checkpoint と同じ語彙)。\n\ncorrupted_trace は 「剰余を飛ばす round」 を wrap する round の中から選ぶ。 以前は無条件に選んでいたため、 飛ばした round で `value + step < modulus` なら壊れた trace が clean な trace と一致し、 範囲を外れる entry が 1 つも無い状態で出荷されていた (seed のおよそ半数)。 その seed を引いた参加者にとって first-broken は答えの無い設問だった。\n\n公開 test は正の step の 1 fixture しか使わないので、 剰余を最後に 1 回だけ適用する実装でも通る。 hidden test はそこを落とす。 これが misconception.public-tests-are-complete の実演であり、 この問題の第二の目的。\n\nmutation suite (local/mutation.py) が hidden test の有効性を CI で担保する。 等価変異 (末尾一括剰余 / start 未正規化) は Python の floored % の下で数学的に同値なため意図的に 除外してある — 詳細は mutation.py の冒頭コメント。",
-  "instructions": "## いちばん最初の問題です\n\nこれは講義より前に解く 1 問目です。暗号の名前はまだ覚えなくて大丈夫。ここで練習する「輪の上の足し算」は、あとの週に出てくる本物の暗号の計算と、形がそっくりです。四則演算だけで、その入り口を見にいきます。\n\n## 走らせてから考えると、何を確かめたのか分からない\n\n走らせてから考えると、何が確かめられたのか分からなくなります。この計算は、間違えても答えがやっぱり輪の中のどれかになるので、**正しい答えと間違った答えが同じ見た目**をしている。出てきた数を眺めても、正しいかどうか分かりません。\n\nだから逆にします。**予測してから走らせる。** こうなるはずだ、と先に決めておいて、それを確かめる。外れたときにだけ、学びがあります。この後の問題は全部これを要求するので、間違えても安いここで一度練習します。\n\n## 時計は、12 の次が 1 に戻る\n\n10 時の 3 時間後は 13 時ではなく 1 時。「割り算のあまり」も同じ形で、12 を 10 で割ったあまりは 2。\n\n```\n        0\n    9       1\n  8           2     ← 0 から 9 の 10 個しかない輪\n  7           3\n    6       4\n        5\n```\n\n「10 以上になったら 10 を引いて戻す」規則で見ます。6 から 3 進むと 9、9 からさらに 3 進むと 12 ではなく、0 を通り越して 2 に着く。答えは必ず 0 から 9 のどれかです。この 10 は説明のための例で、あなたが使う数は「証拠を確認」が出します。\n\n## なぜこれをやるのか\n\n普通の足し算は、答えの大きさが手がかりになります。5000 になったと聞けば、何回足したのかの見当がつく。輪の上を回る足し算なら、答えは必ず 0 から 9 のどれかで、大きさからは何も分かりません。暗号が数をこう閉じ込めるのは、この手がかりを消すためです。\n\nただし、これだけでは暗号になりません。この輪の上では、足した回数のほうは掛け算ひとつで取り戻せてしまう。その戻し方は、あとの walkback の欄で、あなた自身の数でやってもらいます(手順は本文に書いてあります。なぜ戻るのかの理屈は、今は分からなくて大丈夫です)。そして最後の no-walkback の欄では、逆に **戻せなくなる輪** を自分で作ります。あとの週では、足す相手を楕円曲線というもの(今は名前だけで大丈夫)に替えて、その戻し方が本当に効かないようにします。\n\n## 前提(用語だけ)\n\n**剰余** = 割り算のあまり。**mod** = 「〜で割ったあまりを取る」こと。Python では「割ったあまり」を `%` で書きます(`12 % 10` は 2、`(-2) % 7` は 5 — マイナスの数でも 0 以上に直してくれます)。**カウンタ** = 何かを繰り返し足していく仕組み。**歩数** = 何回足したか。本物の暗号ではこの歩数を隠して「秘密」と呼びますが、この問題は練習なので、歩数も「証拠を確認」があなたに教えてくれます。**コンテナ** = あなた専用に用意される、プログラムを動かす小さなコンピュータ(画面の中にあるので、何もインストールしません)。checkpoint = 採点される小問。この問題には 7 つあります。\n\n## 最初の一手\n\nParticipant Portal(この問題文が表示されているサイト)で **「起動」** を押すと、 あなた専用の実行環境(コンテナ)が立ち上がり、 問題文と同じ画面に **問題エディタ** が出ます。\n\n問題エディタの **「証拠を確認」** を押してください。 ボタンの中で `inspect` というコマンドが実行されるので、 自分で何かを打ち込む必要はありません。 表示されるのは次の 4 つです。\n\n1. **合言葉** — コンテナが本当に動いた証拠の文字列。 自分でコピーする必要はありません。 environment の「提出」を押すと自動で取得されて提出されます。\n2. **あなたの 4 つの数** — 輪の大きさ(`modulus`)、 出発する数(`start`)、 1 回に進む数(`step`)、 進む回数(`rounds`)。\n3. **もう 1 本の歩き** — 別の出発する数・1 回に進む数・輪の大きさと、 その歩きが **最後にいる数**(`final`)。 進んだ回数だけが伏せてあります。 walkback と no-walkback の欄で使います。\n4. **1 個だけはみ出した並び** — first-broken の欄で使う数の列。\n\n画面では、 この 4 つがそれぞれ `environment` / `predict` / `walkback` / `firstBroken` という名前の枠で出ます。\n\n数は起動するたびに変わるので、 他の人の数値は使えません。\n\n**紙での練習**(あなたの数でやる前に、 この例で 1 回): 輪の大きさ 10、 出発する数 6、 1 回に進む数 3、 進む回数 2 なら — 6 → 6 + 3 = 9(10 未満なのでそのまま) → 9 + 3 = 12(10 以上なので 10 を引いて 2)。 最後にいる数は **2** です。\n\n## 書く欄は 7 つ\n\n7 つの欄は別々に採点されるので、 1 つ詰まっても他は取れます。 **environment・generalize・count-no-walkback** は何も書き写す必要がありません — その checkpoint の「提出」を押すと、 合言葉といまのエディタ内容が自動で送られます。 **predict・first-broken・walkback・no-walkback** は自分で答えを出して、 同じ名前の欄に書いてから「提出」を押します。\n\n- **environment** — 「提出」を押すだけです。 合言葉は自動で送られるので、 自分で打ち直さないでください。\n- **predict** — あなたの 4 つの数を紙で追い、 **最後にいる数** をひとつだけ書く。 途中の数を全部並べるのではありません。 上の「紙での練習」と同じことを、 あなたの数でやります。 進む回数は多くても 10 回ほどなので、 1 回ずつ足して大丈夫です。\n- **first-broken** — 「1 個だけはみ出した並び」の中で、 はみ出している数が **左から何番目** かを書く。 左端が 0 番です。 ここで **はみ出している** とは、 輪の中(0 から 輪の大きさ − 1 まで)に収まっていない数のことです。 ちょうど 1 個あります。\n- **generalize** — 問題エディタで `counter.py` の `advance` を書き上げ、 エディタのいまの中身を提出する。 `advance(start, step, rounds, modulus)` は、 start から step を rounds 回足しながら、 1 回足すごとに「いまいる数」を順に並べたリストを返す関数です。 足すたびに必ず輪の中(0 以上、 輪の大きさ未満)へ直します — 前提に書いた `%` の出番です。 試される数には、 1 回に進む数がマイナスのものや、 出発する数が輪の大きさ以上のものも含まれます。 返すリストの長さは rounds 個で、 出発する数そのものは入れません — 紙での練習の例(輪 10、 出発 6、 1 回に 3、 2 回)なら `[9, 2]` を返します。 細かい条件は `counter.py` の説明(docstring)に書いてあります。 見たことのない数でも試されます。\n- **walkback** — 「もう 1 本の歩き」の数で、 **進んだ回数** を取り戻して、 数をひとつ書く。 手順は 2 段です。 (1) **戻す数を探す**: 1 回に進む数に掛けて、 輪の大きさで割ったあまりが 1 になる数を、 1 から順に試して見つけます(輪の大きさは 31 以下なので、 手でも for 文でも試し切れます)。 (2) **回数を出す**: 「最後にいる数 − 出発する数」を求め(マイナスなら輪の大きさを足して 0 以上にする)、 それに戻す数を掛けて、 輪の大きさで割ったあまりを取ります。 それが進んだ回数です。 答えは 0 以上、 輪の大きさ未満の数で書きます(輪を何周か余計に回った数え方ではなく、 この手順が出す数そのものです)。 **1 桁の例**: 輪 7、 出発 2、 1 回に 3、 最後にいる数 4 なら — (1) 3 × 1 = 3、 3 × 2 = 6、 3 × 3 = 9 → 7 で割ってあまり 2、 3 × 4 = 12 → あまり 5、 3 × 5 = 15 → あまり **1**。 戻す数は 5。 (2) 4 − 2 = 2、 2 × 5 = 10、 10 を 7 で割ってあまり **3** — 進んだ回数は 3。 実際に 2 から 3 を 3 回足すと 5 → 1 → 4 で、 たしかに 4 に着きます。\n- **no-walkback** — 「もう 1 本の歩き」の **1 回に進む数はそのまま** に、 輪の大きさだけを取り替えて、 上の (1) の手順が **どこまで試しても 1 にならない** 輪の大きさをひとつ書く(1 回に進む数より大きく、 100 以下の整数)。 そういう輪は本当にあります — 輪の大きさをいくつか変えて、 (1) を for 文で回してみてください。 なぜそこで戻せなくなるのかに気づけたら、 それがこの問題のいちばんの収穫です。\n- **count-no-walkback** — `counter.py` に、 もうひとつの関数 `count_no_walkback(step, low, high)` を書く。 low 以上 high 以下の整数のうち、 **step と 1 より大きい公約数を持つもの**(= no-walkback で答えたような、 戻す数が存在しない輪の大きさ)の **個数** を返します。 範囲は 10^12(1 兆)まであるので、 1 個ずつ試す方法では時間切れ(制限 10 秒)になります。 step は 10^6(100 万)以下なので、 素因数分解は「2 から順に割ってみる」で間に合います。 数え方の規則は与えます: step を素因数分解して **異なる素因数** を取り出し(12 = 2 × 2 × 3 なら 2 と 3 の 2 つ。 同じ素因数は 1 回だけ数えます)、 **各素因数の倍数の個数を足し、 2 つの素因数の積の倍数の個数を引き、 3 つの積の倍数の個数を足し、 4 つの積なら引き……** と交互に続けます。 「1 から n までにある a の倍数の個数」は n を a で割った商(切り捨て)です。 low 以上 high 以下の個数は、 「1 から high まで」の個数から「1 から low − 1 まで」の個数を引きます。 **1 桁の例**: step = 6 = 2 × 3、 1 から 10 まで。 2 の倍数は 10 ÷ 2 = 5 個、 3 の倍数は 10 ÷ 3 = 3 個(切り捨て)、 2 × 3 = 6 の倍数は 10 ÷ 6 = 1 個。 5 + 3 − 1 = **7** 個(実際に 2, 3, 4, 6, 8, 9, 10 の 7 個)。 素因数が 3 個なら、 3 つの積の倍数を最後に足し戻します。 step の素因数がいくつあるかは前もって分からないので、 **何個でも動くように書く** のがこの欄の仕事です。 starter に入っている版は正しいけれど遅い版で、 小さい範囲なら自分の速い版の検算に使えます(比べる範囲の上端は step より大きく取ってください — 範囲が狭いと、 間違った版でもたまたま一致することがあります)。\n\n**提出のしかた**: 各 checkpoint には **「提出 (+点数)」** ボタンが付いています。 押すとその checkpoint だけが採点され、 間違っていれば書き直して再提出できます(誤答 1 回につき 5 点の減点。 合計が 0 点未満になることはありません)。 7 つとも正解になればこの問題は終わりです。\n\n**「公開テストを実行」** を押すと、 答え合わせの一部を手元で先に試せます。 **「初期状態に戻す」** を押すとエディタが最初の状態に戻ります。\n\n## 予測だけが、間違いを見つけさせる\n\n7 つのうち、走らせる前に自分で答えを決めておく必要があるのは predict だけです。理由は上のとおり — 正しい答えと間違った答えが同じ見た目をしていて、出てきた数を眺めても区別がつかないから。「走らせる前に、こうなるはずだと決めておいて、それを確かめる」以外に、間違いを見つける方法がありません。この後の問題は全部これを要求します。間違えても安いここで、一度練習しておいてください。\n\nwalkback と no-walkback は、この輪が「数の大きさは隠せても、足した回数は隠せない」こと、そして輪の大きさと進む数の組み合わせによっては **戻す数そのものが存在しない** ことを、自分の手で確かめる欄です。暗号がこの先で何を変えなければならないかは、その 2 つをやった人にだけ見えます。\n",
-  "writeup": "## なぜ剰余カウンタだったのか\n\n`start` から `step` を `rounds` 回足して毎回 mod を取る、 という操作は Week 3 で 楕円曲線上の `k·G` として再び現れる。 構造は同じで、 違うのは逆算のコストだけ。 この問題の Z_m では `step` に掛けると 1 になる数を求めて掛け直せば歩数が戻ってしまう (walkback checkpoint で参加者が自分の数で実演し、 no-walkback で戻す数の無い輪を作る)。 楕円曲線ではその一手が現実的に効かない。 署名も鍵交換も、 突き詰めればこの一点の差の上に立っている。\n\n剰余そのものの役割も、 ここで一度見ておく価値がある。 有限の範囲に閉じ込めることで 「値の大きさ」 という手がかりが消える。 消せるのはそこまでで、 歩数は別の経路で漏れる。 「何を隠せていて、 何を隠せていないか」 を分けて言えることが、 この先ずっと効く。\n\n## 何を確認したか\n\npublic test は 「形」 を教えるが 「正しさ」 は証明しない。 この問題の公開テストは負の step と start >= modulus を 1 fixture ずつしか試さないため、 見えている組み合わせにだけ合わせた実装は通ってしまう。\n\nhidden test が落とすのはこの 2 つ。 複数 modulus・負の step・zero step・start >= modulus・zero rounds を回し、 さらに metamorphic property (start や step を modulus の整数倍だけずらしても trace は変わらない) を検査する。 固定の期待値ではなく関係を検査するので、 1 回の出力を丸暗記しても通らない。\n\n## mutation suite\n\nhidden test 自体が有効かは、 reference をわざと壊して各欠陥が検出されることで担保する (`make reference-test`)。 ここで学ぶべきは 「通ったテスト」 ではなく 「落とせるテスト」。\n\n等価変異には注意が要る。 末尾で一括剰余を取る実装と start を事前正規化しない実装は、 Python の floored `%` の下で round ごとの剰余と数学的に同値であり、 正しいテストでは区別できない。 これらを mutation 一覧に入れると永久に survived が出て、 suite 自体が無視されるようになる。\n\n## 後続問題への接続\n\n以降の全 AC26 問題は `concept.experimental-method` を前提に置く。 予測してから走らせる、 trace の最初の破綻位置を言う、 見えないパラメータで一般化する — この 3 つは Week 1 の constraint residual、 Week 3 の group law 境界、 Week 5 の noise budget でそのまま使う。",
+  "shortDescription": "同じ数を足して余りに戻る計算を、紙で予測してからPythonで確かめます。途中の誤りを見つけ、回数を逆算し、最後は逆算できない条件を大量の候補で数えます。",
+  "description": "AC26の独立した入口教材。余りの反復計算を予測し、途中の範囲条件を確認してPython実装を一般化する。逆元がある場合の回数復元と、公約数により複数の回数が同じ結果になる場合を区別し、最後に包除原理を一般の素因数集合へ実装する。7欄、100点。暗号の安全性や楕円曲線上の計算困難性をこの小さな輪だけで保証する教材ではない。",
+  "instructions": "## 前提 — 予測を、動くプログラムと比べる\n\nあなたは、同じ数を足す計算を調べる係です。**「起動」→「証拠を確認」→ environment の「提出」**で準備を確かめます。次に predict の数を紙で追い、答えを一つ提出してください。「正解」が最初の計算の到達点です。7欄すべて正解なら完了です。\n\n使うのは割り算の余りと、短いPythonです。最初から全部を読む必要はありません。各欄へ来たときに、その説明と3段のヒントを開いてください。\n\n## 時計のように戻る足し算\n\n輪の大きさを `modulus` と呼び、答えを **0以上、modulus未満**に直します。「modulusで割った余り」を取る操作で、Pythonでは `% modulus` と書きます。例: `9 % 7 = 2`、`(-2) % 7 = 5`。紙では、大きすぎたらmodulusを何度でも引き、負なら何度でも足してこの範囲に戻します。\n\n`start` は出発する数、`step` は1回に足す数、`rounds` は足す回数です。輪7、出発5、1回に3、2回なら **5 → 1 → 4**。5+3=8は7を引いて1、1+3=4です。「最後の数」は4、「毎回の結果のリスト」は `[1,4]` で、出発の5は入れません。\n\n余りだけでは元の整数は一つに決まりません。たとえば2、9、16は7で割ると同じ余り2です。ただし、**余りを使っただけで秘密になるわけではありません**。後半では、条件が分かると逆算できる場合と、複数の回数が同じ結果になる場合を比べます。\n\n## 1. environment — 実行の準備を確かめる\n\n「証拠を確認」は、いま起動した環境の公開データを表示します。environment の `python` は実行するPythonの版、`healthToken` はその環境から返った合言葉です。合言葉を手入力する必要はありません。**environment の「提出」**が自動で送ります。未起動なら起動してから再度試してください。\n\n## 2. predict — 最後にいる数を先に予測する\n\n証拠の **predict 枠**にある start / step / rounds / modulus を使います。紙で start から始め、stepを足して余りに戻すことをrounds回繰り返します。**最後の数を一つだけ** predict 欄へ書きます。上の輪7の例なら4です。実行後に出力を写すのでなく、先に予測を残すと、プログラムと食い違った箇所を調べられます。\n\n## 3. first-broken — 規則から外れた位置を見つける\n\n証拠の **firstBroken 枠**は別の計算の記録です。`trace` は毎回の結果のリストで、正解の見本ではありません。0以上modulus未満という規則から外れた数が、ちょうど一つあります。\n\n左端を0番として、その**位置**を first-broken 欄へ書きます。輪7で `[1,4,7,3]` なら、7は0〜6に入らず、位置は2。答えは数の7ではなく2です。使う輪の大きさも firstBroken の modulus です。\n\n## 4. generalize — 見ていない数でも動くようにする\n\nエディタの `counter.py` にある **advance(start, step, rounds, modulus)** を直します。startを余りに直してから、`value = (value + step) % modulus` をrounds回行い、毎回のvalueをリストに追加して返します。この規則は、負のstepや大きなstartにも同じように使えます。\n\n輪7、出発1、step=-3、2回なら **1 → 5 → 2** なので `[5,2]`。rounds=0なら何も足さず `[]` を返します。modulusは2以上です。リストの長さはroundsと同じで、出発の数は含めません。\n\n「公開テストを実行」で例と境界のPASS/FAILを見て、**generalize の「提出」**で今のファイルを送ります。公開テストの成功は採点欄の正解とは別です。表示されなかった数の組合せでも同じ規則を守ってください。\n\n## 5. walkback — 最後の数から回数を取り戻す\n\n今度は **walkback 枠**を使います。start / step / modulus と、最後の数 `final` が見えます。回数だけが伏せられ、**0以上modulus未満**の回数を答えます。余分な一周を足した回数は数えません。\n\nstepに掛けて、modulusで割った余りが1になる数を `u` とします。この「掛け算を元に戻す相手」を**逆元**と呼びます。1からmodulus−1まで順に試せば探せます。この枠ではmodulusが素数（1と自分自身でしか割り切れない2以上の整数）で、stepは2以上modulus未満なので、uは必ずあります。\n\n回数をkと書くと、順方向は **`final = (start + step*k) % modulus`** です。step*uの余りが1なので、出発を引いてuを掛けるとkの余りが残ります。逆方向の規則は **`回数 = ((final - start) * u) % modulus`**。final−startが「stepを何回か足した分」で、それにuを掛けると、step×uの代わりに1を掛けた回数が残ります。\n\n例: 輪7、start=2、step=3、final=4。3×5=15の余りは1なのでu=5。(4−2)×5=10の余りは3で、回数は3。実際に **2 → 5 → 1 → 4** と進みます。自分のwalkback枠で計算し、回数を一つ提出してください。\n\n## 6. no-walkback — 戻す相手がない輪を作る\n\nwalkback の **stepを変えず**、輪の大きさmだけを変えます。**stepより大きく100以下**で、stepの逆元が存在しない整数mを一つ提出してください。\n\n二つの整数を両方割り切る数が**公約数**です。stepとmに1より大きい公約数があると、step×uの余りを1にはできません。例: step=2、m=6。2を掛けた数の余りは0、2、4だけで、1は出ません。さらに0回でも3回でも出発点に戻るので、最後の数だけから回数を一つに決められません。\n\n一つ作る方法として、**m=2×step** を考えられます。同じstepで割り切れるからです。提出前に、mが指定範囲にあることを確かめてください。他の正しいmでも採点されます。この曖昧さは、暗号の安全性の証明ではありません。\n\n## 7. count-no-walkback — 全部試さずに個数を数える\n\n最後は同じ答えをもう一度写すのでなく、**count_no_walkback(step, low, high)** を速くします。low以上high以下の整数mのうち、stepと1より大きい公約数を持つものの**個数**を返す関数です。mはstep以下でも数えます。たとえばstep=6、low=1、high=9なら、2,3,4,6,8,9の6個。low=4なら4,6,8,9の4個です。\n\nstepは2以上100万以下、1≤low≤high≤1兆です。一つずつmを調べると10秒の制限を超えます。starterの遅い版は、小さい範囲で比べる見本として残してください。速い版に必要な規則は次です。\n\n**素因数**は、その整数を割り切る素数です。12=2×2×3なら、異なる素因数は2と3。同じ素因数を何度使っても数える対象は同じなので、一度だけ使います。2から順に割り、割り切れたらその素数を記録し、割り切れる間ずっと割って取り除きます。試す数の二乗が残りの数を超えたら、残りが1より大きい場合だけ最後の素因数として記録できます。\n\n**1からnまでのdの倍数は `n // d` 個**です。`//` は割った商の小数部分を切り捨てるPythonの書き方。step=6の例では、2の倍数は9//2=4個、3の倍数は9//3=3個です。両方で数えた6の倍数9//6=1個を引き、4+3−1=6個になります。\n\n素因数が何個あっても、**1個を選んだ積の倍数を足す→2個を選んだ積の倍数を引く→3個なら足す→4個なら引く…** と続けます。3種類すべてで数えたmは、最初に3回足され、組合せ3通りで3回引かれるため、最後に1回足し戻します。この重複を直す数え方を**包除原理**と呼びます。\n\n| そのmを割り切る素因数の種類 | 1個ずつで足す回数 | 2個ずつで引く回数 | 3個で足す回数 | 最後の回数 |\n|---|---:|---:|---:|---:|\n| 1種類 | 1 | 0 | 0 | 1 |\n| 2種類 | 2 | 1 | 0 | 1 |\n| 3種類 | 3 | 3 | 1 | 1 |\n\n組合せは、空の選び方を表す `(積1, 個数0)` のリストから作れます。素因数pを一つ見るたび、**いまのリストをコピーして**、その各組 `(積,個数)` から `(積×p,個数+1)` を追加します。元の組は「pを選ばない」、追加する組は「選ぶ」です。例: p=2を見た後は `(1,0),(2,1)`、次に3を見た後は `(1,0),(2,1),(3,1),(6,2)`。空の組を除き、個数が奇数なら足し、偶数なら引きます。\n\n1からnまでの答えをF(n)と呼ぶと、返す値は **F(high)−F(low−1)**。F(0)=0です。素因数が何個でも、lowが1でも動くよう実装し、まず小さい範囲で遅い版と比べます。**count-no-walkback の「提出」**で今のcounter.pyが送られます。\n\n## ここで確かめたこと\n\n予測、途中の規則、見ていない入力を使うと、「動いた」と「正しい」を区別しやすくなります。逆元がある計算では回数を戻せました。ない計算では同じ結果になる回数がありました。後の講義では、余りの計算を土台に、さらに別の条件を調べます。この小さな輪だけで暗号の安全性は得られません。\n\n誤答は1回5点、ヒントは最初の3欄の1段目が各1点、その他が各2点（全21個で合計39点）。「初期状態に戻す」はエディタを最初の内容に戻すので、残したいコードは先に保存してください。\n",
+  "writeup": "## 予測と条件を、出力に照らす\n\nadvanceは足すたびの余りをリストに残します。負のstep、大きなstart、0回でも同じ規則です。最初の予測と出力を比べることに加え、途中の値の範囲やリストの長さも確認できます。公開テストは例といくつかの境界を扱い、採点では別の数の組合せも扱います。\n\nwalkbackではstepとmodulusが互いに素（公約数が1だけ）なので、stepの逆元uがあり、((final-start)*u)%modulusで範囲内の回数を復元できます。no-walkbackでは1より大きい公約数を持つmを作りました。このとき逆元がなく、複数の回数が同じ結果になります。これは情報の曖昧さであり、暗号の計算困難性と同じではありません。\n\n最後の集計は、素因数のどれかの倍数になる整数を数える問題です。重複を包除原理で直し、F(high)-F(low-1)で端を含む範囲にします。異なる素因数の個数を固定せず扱うことが、転記から実装へ進む最後の仕事です。\n\nmake reference-testは正しい実装に加えて14個の誤った実装・採点経路を拒否できることを確認します。リストの全要素を最後に一括して余りに直す等、観測結果が同じになる書き方は誤りとして扱いません。\n",
   "tags": [
     "advanced-cryptography-2026",
     "bridge",
@@ -37,7 +37,7 @@
     }
   ],
   "learningGoals": [
-    "輪の上をまわる足し算で、隠せること(答えの大きさ)と隠せないこと(足した回数)を分けて言える",
+    "余りだけでは元の整数が一つに決まらないことと、条件付きで回数を逆算できることを区別できる",
     "問題のコンテナを起動・停止し、書きかけのコードを最初の状態へ戻せる",
     "誰でも読める公開テストと、採点用の見えないテストの役割の違いを説明できる",
     "走らせる前に答えを紙で出し、実際に出た答えと見比べられる",
@@ -60,100 +60,164 @@
     "checks": [
       {
         "id": "environment",
-        "label": "environment — 「提出」を押すだけ (合言葉は自動で送られる)",
+        "label": "environment — 実行の準備を確かめる",
         "points": 10,
-        "wrongAnswerPenalty": 5
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "environment-hint-1",
+            "content": "合言葉は、起動した環境が応答したことを確かめるための文字列です。計算問題ではなく、これから実験する準備の確認です。",
+            "penalty": 1
+          },
+          {
+            "id": "environment-hint-2",
+            "content": "未起動 → 起動 → 証拠にpythonとhealthTokenが表示 → environmentを提出して正解、という変化を確かめます。合言葉が仮にabcでも、自分で打ち直す必要はありません。",
+            "penalty": 2
+          },
+          {
+            "id": "environment-hint-3",
+            "content": "「起動」後に「証拠を確認」を押し、environment枠のpythonとhealthTokenを見ます。environmentの「提出」を押すと同じ環境の合言葉が送られます。未起動なら先に起動し直してください。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "predict",
-        "label": "predict — 走らせる前に紙で出した、最後にいる数 (数はひとつ)",
+        "label": "predict — 最後の数を予測する",
         "points": 10,
-        "wrongAnswerPenalty": 5
+        "wrongAnswerPenalty": 5,
+        "hints": [
+          {
+            "id": "predict-hint-1",
+            "content": "プログラムの結果と比べるため、先に紙で予測を残します。足すたび輪の中へ戻るので、普通に足し続けた数とは違います。",
+            "penalty": 1
+          },
+          {
+            "id": "predict-hint-2",
+            "content": "輪7、出発5、step=3、rounds=2なら、5+3=8→余り1、1+3=4。最後の数は4です。式はvalue=(value+step)%modulusです。",
+            "penalty": 2
+          },
+          {
+            "id": "predict-hint-3",
+            "content": "証拠のpredict枠からstart・step・rounds・modulusを紙へ写します。startから、足す→余りに戻すをrounds回行い、回数に印を付けます。最後の数一つをpredict欄へ書いて提出します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "first-broken",
-        "label": "first-broken — 並んだ数のうち、はみ出しているのは左から何番目？ (左端が 0)",
+        "label": "first-broken — 規則から外れた位置を見つける",
         "points": 10,
         "wrongAnswerPenalty": 5,
         "hints": [
           {
             "id": "first-broken-hint-1",
-            "content": "答えるのは、 はみ出した数そのものではなく **何番目か** です。 左端を 0 番と数えます(1 番ではありません)。 はみ出した数とは、 輪の大きさと同じか、 それより大きい数のことです。",
-            "penalty": 5
+            "content": "毎回の結果は輪の中に収まるはずです。途中の記録をこの規則と比べると、最後の答えだけでは見落とす誤りを見つけられます。",
+            "penalty": 1
+          },
+          {
+            "id": "first-broken-hint-2",
+            "content": "輪7で許されるのは0〜6。[1,4,7,3]なら、左から0,1,2,3番なので、外れた7の位置は2。答えるのは値でなく位置です。",
+            "penalty": 2
+          },
+          {
+            "id": "first-broken-hint-3",
+            "content": "firstBroken枠のmodulusを見て、0〜modulus−1を許される範囲とします。同じ枠のtraceを左から0番で数え、範囲外の一つが何番かをfirst-broken欄へ提出します。predict枠のmodulusとは混ぜません。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "generalize",
-        "label": "generalize — 書き上げた counter.py の中身を、全部",
+        "label": "generalize — 別の数でも動くadvanceを書く",
         "points": 20,
         "wrongAnswerPenalty": 5,
         "input": "multiline",
         "hints": [
           {
             "id": "generalize-hint-1",
-            "content": "1 回引くだけ(`if value >= modulus: value -= modulus`)では、 進む数がマイナスのときに 0 未満のまま残り、 進む数が輪の大きさの 2 倍以上のときははみ出したまま残ります。 前提に書いた `%` は、 どちらの場合も 1 回で輪の中に直します。",
-            "penalty": 5
+            "content": "紙の一例で使った規則を関数にすると、違う入力も同じ方法で扱えます。毎回の結果を残せば、途中で余りへ戻し忘れたことも分かります。",
+            "penalty": 2
           },
           {
             "id": "generalize-hint-2",
-            "content": "あまりを取るのは毎回です。 最後に 1 回だけではありません。 start も、 くりかえしに入る前に一度あまりにしておくと、 start が modulus 以上のときも同じ道で扱えます。",
-            "penalty": 5
+            "content": "輪7、start=1、step=-3を2回なら、1−3=-2→5、5−3=2で[5,2]。rounds=0なら[]。value=(value+step)%modulusは負や大きな数も範囲へ戻します。",
+            "penalty": 2
+          },
+          {
+            "id": "generalize-hint-3",
+            "content": "counter.pyのadvanceでvalueをstartの余り、traceを空リストから始めます。rounds回、stepを足して余りに戻し、traceへappendします。traceをreturnし、公開テストのPASS/FAILを確認してgeneralizeを提出します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "walkback",
-        "label": "walkback — 最後にいる数から、進んだ回数を取り戻す (数はひとつ)",
+        "label": "walkback — 回数を取り戻す",
         "points": 15,
         "wrongAnswerPenalty": 5,
         "hints": [
           {
             "id": "walkback-hint-1",
-            "content": "戻す数は必ず見つかります: この歩きの輪の大きさは素数なので、 1 から 輪の大きさ − 1 までのどれかが、 掛けてあまり 1 になります。 見つからないときは、 掛けたあとで輪の大きさで割ったあまりを取っているか確かめてください。",
-            "penalty": 4
+            "content": "最後と出発の差には、stepを何回か足した分が残っています。stepの逆元を掛けると一回分が1になるため、範囲内の回数を取り戻せます。",
+            "penalty": 2
           },
           {
             "id": "walkback-hint-2",
-            "content": "「最後にいる数 − 出発する数」がマイナスのときは、 輪の大きさを足して 0 以上にしてから戻す数を掛けます。 掛けた結果も、 輪の大きさで割ったあまりにするのを忘れずに。",
-            "penalty": 3
+            "content": "輪7、step=3なら3×5=15の余り1なので逆元u=5。start=2、final=4なら((4−2)×5)%7=3回。2→5→1→4で確かめられます。",
+            "penalty": 2
+          },
+          {
+            "id": "walkback-hint-3",
+            "content": "walkback枠のstepとmodulusで、uを1からmodulus−1まで試し、step*uの余りが1のuを探します。同じ枠のfinal−startにuを掛けて余りを取り、その数一つをwalkback欄へ提出します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "no-walkback",
-        "label": "no-walkback — 同じ「1 回に進む数」で、取り戻せなくなる輪の大きさをひとつ",
+        "label": "no-walkback — 戻せなくなる輪を作る",
         "points": 15,
         "wrongAnswerPenalty": 5,
         "hints": [
           {
             "id": "no-walkback-hint-1",
-            "content": "輪の大きさを 4 から順に増やしながら、 (1) の手順を for 文で回し、 「あまり 1 が出たか」を表にしてみてください。 出ない輪の大きさが、 飛び飛びに現れます。",
-            "penalty": 4
+            "content": "stepと輪の大きさが1より大きい共通の数で割り切れると、出発点との差がその数の倍数になる位置だけを巡り、掛けて余り1になる相手を作れません。元へ戻る回数も一つに決まりません。",
+            "penalty": 2
           },
           {
             "id": "no-walkback-hint-2",
-            "content": "あまり 1 が出ない輪の大きさを、 1 回に進む数といっしょに素因数分解して、 見比べてください。",
-            "penalty": 3
+            "content": "step=2、輪6では、2×1,2×2,2×3の余りは2,4,0で繰り返します。1は出ません。2と6の公約数2が原因で、0回と3回は同じ場所です。",
+            "penalty": 2
+          },
+          {
+            "id": "no-walkback-hint-3",
+            "content": "walkback枠のstepを読み、m=2*stepを候補にします。mがstepより大きく100以下で、両方がstepで割り切れることを確認します。m一つをno-walkback欄へ提出してください。別の1より大きい公約数を共有するmでも構いません。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "count-no-walkback",
-        "label": "count-no-walkback — 取り戻せない輪の大きさが、範囲の中にいくつあるか数える関数 (counter.py)",
+        "label": "count-no-walkback — 範囲の個数を速く数える",
         "points": 20,
         "wrongAnswerPenalty": 5,
         "input": "multiline",
         "hints": [
           {
             "id": "count-no-walkback-hint-1",
-            "penalty": 5,
-            "content": "速い版が合っているかは、 小さい範囲で確かめられます: for 文で step・low・high を何百組も変えながら、 starter に入っている遅い版と自分の版の答えを比べてください。 端 (low) のずれや、 同じ素因数を 2 回数える間違いは、 この比べ方ですぐ見つかります。"
+            "content": "数えるのは、stepの素因数のどれかで割り切れる整数です。倍数をまとめて数え、複数の素因数で数えた重複を直せば、範囲を一つずつ歩かずに済みます。",
+            "penalty": 2
           },
           {
             "id": "count-no-walkback-hint-2",
-            "penalty": 5,
-            "content": "素因数の「掛ける / 掛けない」の全組み合わせは、 for 文を素因数の個数だけ入れ子にしなくても作れます: 「積と、 掛けた個数」の組を入れたリストを (1, 0) から始め、 素因数を 1 つ見るたびに、 いまのリストの各要素にその素因数を掛けた要素を追加していく(リストが 2 倍ずつ増える)。 掛けた個数が奇数なら足し、 偶数なら引きます。"
+            "content": "step=6=2×3、1〜9なら9//2+9//3−9//6=4+3−1=6個。4〜9は、1〜3の3//2+3//3−3//6=2個を引いて4個。素因数が3種類なら3つの積の倍数を足し戻します。",
+            "penalty": 2
+          },
+          {
+            "id": "count-no-walkback-hint-3",
+            "content": "counter.pyのcount_no_walkbackでstepの異なる素因数を作ります。本文の(積,個数)リストをコピーしながら全組合せを作り、空の組を除いてn//積を奇数個なら加算、偶数個なら減算します。この計算をhighとlow−1で行い差をreturnします。小範囲で遅い版と比較後、count-no-walkbackを提出します。",
+            "penalty": 2
           }
         ]
       }
@@ -162,12 +226,12 @@
   "i18n": {
     "en": {
       "name": "Predict, then run",
-      "shortDescription": "Think only after running and you lose track of what you confirmed. A clock passes 12 back to 1 — write the same counting for a different number yourself, work the answer out on paper before running, and find the one number in a list that does not belong. Why cryptography counts like this, and why this much is still not cryptography — using nothing but arithmetic.",
-      "description": "The entrance to the AC26 companion track. No cryptographic primitive is implemented, but the subject is not unrelated to cryptography: a modular counter (add `step` to `start` `rounds` times, reducing mod each time) is exactly a walk over Z_m, the same structure as Week 3's elliptic-curve `k·G`. The only difference is the cost of walking back — in Z_m, multiplying by the inverse of `step` recovers `rounds`. That is why no signature can stand on Z_m, and why Week 3 swaps out what is being walked on. The problem statement and the `inspect` output put that single point front and centre (fixtures.generate.walkback_case actually recovers the step count and shows it). The framing responds to participant feedback (2026-08, on problem one: \"no reason why we are doing this\" and \"the modular counter never connects to cryptography\").\n\nScoring is four independent checkpoints. environment (20) confirms the container actually started; predict (25) is a value worked out on paper before running anything; first-broken (25) is the first breakdown position in a trace where the modular reduction was skipped for exactly one round; generalize (30) verifies the participant's counter.py against hidden seeds across multiple moduli, negative step, zero step, start >= modulus and zero rounds. The checkpoint id is `first-broken`, not `inspect`: the latter collided with the Portal editor's and the Makefile's `inspect` command and read as the same thing in the problem text (the same vocabulary as the analogous checkpoint in `ac26-w1-constraint-lab`).\n\ncorrupted_trace picks the round that skips the reduction from among the rounds that wrap. It used to pick unconditionally, so when `value + step < modulus` on the skipped round, the broken trace matched the clean one and shipped with no out-of-range entry at all (roughly half of all seeds). For a participant who drew such a seed, first-broken was a question with no answer.\n\nThe public tests use one positive-step fixture only, so an implementation that applies the reduction once at the end still passes. The hidden tests catch it. That is the live demonstration of misconception.public-tests-are-complete — this problem's second purpose.\n\nThe mutation suite (local/mutation.py) guarantees the hidden tests' effectiveness in CI. The equivalent mutants (single trailing reduction / unnormalised start) are excluded on purpose, being mathematically identical under Python's floored % — details in the comment at the top of mutation.py.",
-      "instructions": "## The very first problem\n\nThis is the first problem, placed before the lectures. You do not need to learn any cryptographic names yet. The \"walking around a ring\" you practise here has exactly the shape of the real cryptographic computation in later weeks. Using nothing but arithmetic, we go and look at its doorway.\n\n## Think after running and you lose what you confirmed\n\nThink only after running, and you lose track of what you actually confirmed. Even a wrong version of this computation still lands on some number inside the ring, so **a right answer and a wrong one look identical**. Staring at the output cannot tell you which it is.\n\nSo reverse it. **Predict, then run.** Decide beforehand what should happen, then check it. There is something to learn only when the prediction misses. Every later problem demands exactly this, so you practise it here, where mistakes are cheap.\n\n## A clock passes 12 back to 1\n\nThree hours after 10 o'clock is 1, not 13. \"Division remainders\" are the same shape: 12 divided by 10 leaves remainder 2.\n\n```\n        0\n    9       1\n  8           2     <- a ring with only the ten numbers 0..9\n  7           3\n    6       4\n        5\n```\n\nWith the rule \"at 10 or more, subtract 10\": stepping from 6 by 3 gives 9, then 9 → 12, which wraps past 0 to land on 2. The answer is always one of 0 through 9. This 10 is only for explanation; your own numbers come from **Inspect evidence**.\n\n## Why do this\n\nIn ordinary addition, the size of the answer is a clue: hear \"it reached 5000\" and you can estimate how many additions happened. On the ring, the answer is always one of 0..9 and its size tells you nothing. Cryptography boxes numbers in like this precisely to erase that clue.\n\nBut this alone is not cryptography. On this ring, the number of additions can be recovered with a single multiplication — and in the walkback field below you will do exactly that with your own numbers (the recipe is in the statement; you do not need to understand why it works yet). Then, in the final no-walkback field, you build the opposite: **a ring on which it cannot be undone**. In a later week, the thing being added is replaced by an elliptic curve (just a name for now), so that the recovery truly fails.\n\n## Before you start (just the words)\n\n**remainder** = what is left after division. **mod** = \"take the remainder after dividing by\". In Python, \"the remainder after dividing\" is written `%` (`12 % 10` is 2, `(-2) % 7` is 5 — it lands on 0 or more even for a negative number). **counter** = something that adds the same number over and over. **step count** = how many times it added. In real cryptography that value is kept hidden and called the \"secret\"; this problem is practice, so **Inspect evidence** tells you the step count too. **container** = a small computer set up just for you, living inside the page (nothing to install). checkpoint = one small graded question; this problem has seven.\n\n## First move\n\nIn Participant Portal (the site showing this problem statement), select **起動 (Start)**. Your own private runtime (a container) starts, and the problem editor appears on the same page as the statement.\n\nPress **Inspect evidence** in the problem editor. The button runs a command called `inspect` for you — there is nothing to type. It shows four things:\n\n1. **The pass phrase** — a string proving your container really ran. You never copy it yourself: pressing environment's **Submit** fetches and submits it automatically.\n2. **Your four numbers** — the ring size (`modulus`), the starting number (`start`), the amount added per step (`step`), and the number of steps (`rounds`).\n3. **A second walk** — another start, step and ring size, and **the number that walk finishes on** (`final`). Only its number of rounds is withheld. Used by the walkback and no-walkback fields.\n4. **A sequence with exactly one number sticking out** — the list used by the first-broken field.\n\nOn screen these four appear as blocks named `environment` / `predict` / `walkback` / `firstBroken`.\n\nThe numbers change on every start, so nobody else's values will work.\n\n**Paper practice** (once with this example before using your own numbers): ring size 10, start 6, step 3, 2 rounds — 6 → 6 + 3 = 9 (below 10, stays) → 9 + 3 = 12 (10 or more, subtract 10 → 2). The final number is **2**.\n\n## The seven fields\n\nThe seven fields are graded separately, so getting stuck on one does not cost you the others. **environment, generalize and count-no-walkback** need nothing copied anywhere — pressing that checkpoint's **Submit** sends the pass phrase and your current editor content automatically. **predict, first-broken, walkback and no-walkback** you work out yourself, type into the fields of the same name, then press **Submit**.\n\n- **environment** — just press **Submit**. The pass phrase is sent automatically; do not retype it.\n- **predict** — follow your four numbers on paper and write **the final number**, one number only, not the whole path. It is the paper practice above, done with your numbers. The number of steps is at most ten or so, so adding one step at a time is fine.\n- **first-broken** — in the \"one number sticking out\" sequence, write **the position, counting from the left,** of the number that sticks out. The leftmost is position 0. Here **sticking out** means: not inside the ring (0 up to ring size − 1). There is exactly one such number.\n- **generalize** — finish `advance` in `counter.py` in the editor and submit the file's current content. `advance(start, step, rounds, modulus)` returns the list of \"where you are now\" after each of the `rounds` additions of `step`, reducing into the ring (0 or more, below the ring size) after every addition — this is where the `%` from the premise comes in. The numbers it is tested with include a negative step and a start already at or beyond the ring size. The returned list has `rounds` entries and does not include the starting number itself — for the paper-practice example (ring 10, start 6, step 3, 2 rounds) it returns `[9, 2]`. The precise conditions are in `counter.py`'s docstring. It is tested with numbers you have not been shown.\n- **walkback** — from the second walk's numbers, recover **how many rounds it took** and write that one number. Two steps. (1) **Find the undo number**: the number which, multiplied by the step, leaves remainder 1 after dividing by the ring size — try 1, 2, 3, … in turn (the ring size is at most 31, so by hand or with a `for` loop). (2) **Get the count**: take \"final − start\" (if negative, add the ring size to make it 0 or more), multiply by the undo number, and take the remainder after dividing by the ring size. That is the number of rounds. Write it as a number from 0 up to ring size − 1 — the number this recipe produces, not a count with extra full laps added. **One-digit example**: ring 7, start 2, step 3, final 4 — (1) 3 × 1 = 3, 3 × 2 = 6, 3 × 3 = 9 → remainder 2 after dividing by 7, 3 × 4 = 12 → remainder 5, 3 × 5 = 15 → remainder **1**. The undo number is 5. (2) 4 − 2 = 2, 2 × 5 = 10, 10 divided by 7 leaves **3** — three rounds. Check: adding 3 to 2 three times gives 5 → 1 → 4, which does land on 4.\n- **no-walkback** — keep the second walk's **step exactly as it is**, change only the ring size, and write one ring size for which step (1) above **never reaches remainder 1 no matter how far you try** (an integer larger than the step and at most 100). Such rings really exist — vary the ring size and run step (1) in a `for` loop. If you can see *why* the undo number disappears there, that is the best thing this problem has to give.\n- **count-no-walkback** — write one more function in `counter.py`, `count_no_walkback(step, low, high)`: the **number** of integers m with low ≤ m ≤ high that **share a factor bigger than 1 with step** (the ring sizes on which the step cannot be undone — the kind of size no-walkback asked for one of). The ranges go up to 10^12, so trying each m in turn runs out of time (10-second limit). step itself is at most 10^6, so factorising it by trying divisors from 2 upward is fast enough. The counting rule is given: factorise step and take its **distinct** primes (12 = 2 × 2 × 3 gives just 2 and 3; a repeated prime counts once), then **add the multiples of each prime, subtract the multiples of each product of two primes, add each product of three, subtract each product of four, …** alternating. \"How many multiples of a lie in 1..n\" is n divided by a, rounded down. The count over low..high is the count over 1..high minus the count over 1..low − 1. **One-digit example**: step = 6 = 2 × 3, range 1..10. Multiples of 2: 10 ÷ 2 = 5; of 3: 10 ÷ 3 = 3 (rounded down); of 2 × 3 = 6: 10 ÷ 6 = 1. 5 + 3 − 1 = **7** (indeed 2, 3, 4, 6, 8, 9, 10). With three primes, the multiples of the product of all three are added back at the end. You are not told in advance how many prime factors step has, so **writing it to work for any number of them** is the job of this field. The version in the starter is correct but slow — handy for checking your fast version on small ranges (let the range reach past step itself: on a range that is too narrow a wrong version can agree by accident).\n\n**Submitting**: each checkpoint has its own **Submit (+points)** button. Pressing it grades that checkpoint alone; a wrong answer can be corrected and resubmitted (each wrong try costs 5 points, and the total never goes below zero). The problem is done when all seven are correct.\n\n**Run public tests** tries part of the checking locally first. **Restore starter** returns the editor to its initial state.\n\n## Only a prediction lets you catch a mistake\n\nOf the seven fields, only predict requires you to **fix your answer before running anything**. The reason is above: a right answer and a wrong one look identical, and staring at the output cannot tell them apart. \"Decide beforehand what should happen, then check it\" is the only way to catch a mistake — and every later problem demands exactly this. Practise it here, where mistakes are cheap.\n\nwalkback and no-walkback are where you confirm, with your own hands, that this ring hides the *size* of a number but not *how many times* something was added — and that for some combinations of ring size and step, **the undo number does not exist at all**. What cryptography has to change from here on is visible only to someone who has done those two.\n",
-      "writeup": "## Why it was a modular counter\n\nAdding `step` to `start` `rounds` times, reducing every round, is the same operation Week 3 writes as `k·G` on an elliptic curve. Same structure; the only thing that differs is the cost of running it backwards. In this problem's world you find the number that multiplies `step` to 1, multiply, and the step count is back — `inspect` demonstrated it on every run. On the curve that one move has no practical answer, and signatures and key exchange both rest on that gap.\n\nThe modulus itself is worth one look too. Confining values to a finite range removes one clue, the size of the number. It removes only that one; the step count leaks by another route. Being able to say what is hidden and what merely looks hidden is the habit that carries.\n\n## What this checked\n\nPublic tests show you the shape of an answer; they do not prove it correct. The public tests here use one fixture with a positive step, so an implementation that reduces only at the end, or one that never normalizes a negative step, sails straight through.\n\nThe hidden tests are what catch those. They run several moduli, a negative step, a zero step, start >= modulus, and zero rounds, and they check metamorphic properties rather than fixed expected values: shifting start or step by a whole multiple of the modulus must leave the trace unchanged. Memorizing one run's output cannot satisfy a relation.\n\n## The mutation suite\n\nWhether the hidden tests are any good is itself checked, by breaking the reference on purpose and asserting each defect is caught (`make reference-test`). The thing worth learning is not \"the tests passed\" but \"the tests can fail the wrong answer\".\n\nEquivalent mutants need care. Reducing once at the end, and leaving `start` unnormalized before the loop, are mathematically identical to round-by-round reduction under Python's floored `%` — no correct test can tell them apart. Listing them as mutations would produce a permanent \"survived\" and train everyone to ignore the suite.\n\n## What carries forward\n\nEvery later AC26 problem assumes `concept.experimental-method`. Predict before running, name where a trace first breaks, generalize past the parameters you were shown — you will use all three on Week 1's constraint residuals, Week 3's group-law edge cases, and Week 5's noise budget.",
+      "shortDescription": "Predict repeated additions and remainders on paper, then check them with Python. Find an intermediate error, recover a round count, and finally count many cases where that recovery fails.",
+      "description": "An independent AC26 entry exercise: predict repeated remainder arithmetic, locate an intermediate range error, and generalize the Python implementation. Distinguish recovery with an inverse from multiple round counts sharing an output, then implement inclusion–exclusion for any number of distinct prime factors. Seven checkpoints, 100 points. The tiny ring does not establish cryptographic security or elliptic-curve computational hardness.",
+      "instructions": "## Before you start — Predict a result, then compare it with a running program\n\nYou are investigating a program that keeps adding the same number. Select **Start → Inspect evidence → Submit on environment** to check the setup. Then follow the predict numbers on paper and submit one result. A correct verdict is your first calculation milestone; all seven correct fields complete the problem.\n\nYou need division remainders and a little Python. Read each section when you reach that field. Its three hints explain the mechanism, a small example, and the steps using your screen's names.\n\n## Addition that wraps around\n\nCall the ring size `modulus`. Keep each result **at least 0 and below modulus** by taking the remainder after division by modulus, written `% modulus` in Python. For example, `9 % 7 = 2` and `(-2) % 7 = 5`. On paper, subtract modulus repeatedly from a number that is too large, or add it repeatedly to a negative number, until it is in range.\n\n`start` is the initial number, `step` is what you add each time, and `rounds` is the number of additions. With ring size 7, start 5, step 3 and two rounds, **5 → 1 → 4**: 5+3=8 reduces to 1; 1+3=4. The final number is 4; the list of results is `[1,4]`, without the initial 5.\n\nA remainder does not uniquely determine the original integer: 2, 9 and 16 all have remainder 2 after division by 7. But **using remainders alone does not make a secret safe**. Later you will compare a case whose round count can be recovered with a case where several counts have the same result.\n\n## 1. environment — Check that the setup responds\n\nInspect evidence shows this running environment's public data. In environment, `python` is the Python version and `healthToken` is the returned pass phrase. You do not type the phrase: **Submit on environment** sends it automatically. If the environment is stopped, start it and try again.\n\n## 2. predict — Predict the final number first\n\nUse start / step / rounds / modulus from the **predict section** of the evidence. Begin at start on paper; add step and reduce the remainder, rounds times. Put **one final number** in predict, not the whole list. The ring-7 example above gives 4. Keeping your prediction before running makes a disagreement something you can investigate.\n\n## 3. first-broken — Locate a result outside the rule\n\nThe **firstBroken section** records a different run. `trace` is its list of results, deliberately containing an error. Exactly one number violates the rule: at least 0 and below modulus.\n\nCount from position 0 at the left and submit that **position** in first-broken. On a ring of 7, `[1,4,7,3]` has an out-of-range 7 at position 2: submit 2, not 7. Use modulus from firstBroken too.\n\n## 4. generalize — Make the rule work on other inputs\n\nEdit **advance(start, step, rounds, modulus)** in `counter.py`. Reduce start, then perform `value = (value + step) % modulus` rounds times, appending each value to a list that you return. The same rule handles negative steps and large starts.\n\nWith ring size 7, start 1, step -3 and two rounds, **1 → 5 → 2**, so return `[5,2]`. If rounds=0, return `[]`. Modulus is at least 2. The list contains rounds entries and excludes the initial number.\n\nSelect Run public tests to see PASS/FAIL for examples and boundaries, then **Submit on generalize** to send the current file. Public-test success and checkpoint credit are separate. Keep the same rule on combinations you have not seen.\n\n## 5. walkback — Recover the number of additions\n\nUse the **walkback section**: start / step / modulus and the final number, `final`. Only the round count is hidden. Submit a count **at least 0 and below modulus**, without adding extra full laps.\n\nFind a number `u` such that step*u has remainder 1 after division by modulus. This multiplication-undoing partner is called an **inverse**. Try u from 1 through modulus−1. Here modulus is prime (an integer at least 2 divisible only by 1 and itself), and 2≤step<modulus, so u exists.\n\nWriting the count as k, the forward rule is **`final = (start + step*k) % modulus`**. Since step*u has remainder 1, subtracting the start and multiplying by u leaves the remainder of k. The reverse rule is **`round count = ((final - start) * u) % modulus`**. The difference final−start represents repeated additions of step. Multiplying by u replaces each step*u with 1, leaving the count.\n\nExample: ring 7, start=2, step=3, final=4. Since 3×5=15 has remainder 1, u=5. (4−2)×5=10 has remainder 3, so the count is 3. Check **2 → 5 → 1 → 4**. Apply the rule to your walkback section and submit one count.\n\n## 6. no-walkback — Construct a ring with no inverse\n\nKeep **step from walkback** and change only the ring size m. Submit an integer **greater than step and at most 100** for which step has no inverse.\n\nA **common divisor** divides both integers without a remainder. If step and m share a divisor greater than 1, step*u cannot have remainder 1. For step=2 and m=6, the possible remainders are only 0, 2 and 4. Also, zero rounds and three rounds both return to the start: the final number cannot identify a unique count.\n\nOne construction to consider is **m=2×step**, because both are divisible by step. Check the required range before submitting. Other valid m values also pass. This ambiguity is not a proof of cryptographic security.\n\n## 7. count-no-walkback — Count without trying every candidate\n\nNow improve **count_no_walkback(step, low, high)** instead of copying another answer. Return how many integers m, from low through high inclusive, share a divisor greater than 1 with step. Here m may be at most step too. With step=6 and range 1..9, the six integers are 2,3,4,6,8,9. Starting at low=4 leaves four: 4,6,8,9.\n\nStep is from 2 to one million; 1≤low≤high≤one trillion. Trying each m exceeds the ten-second limit. Keep the slow starter version as a comparison on small ranges. The rules for a faster version follow.\n\nA **prime factor** is a prime that divides a number. Since 12=2×2×3, its distinct prime factors are 2 and 3. Repeating a factor does not change which m values qualify, so keep it only once. Try divisors from 2 upward; when one divides the remaining number, record it and divide it out repeatedly. When the trial divisor squared exceeds the remaining number, record that remaining number as the final prime factor only if it is greater than 1.\n\nThere are **`n // d` multiples of d from 1 through n**. Python's `//` discards the fractional part of the quotient. For step=6 up to 9: 9//2=4 multiples of 2 and 9//3=3 multiples of 3. The 9//6=1 multiple of both was counted twice. Subtract it: 4+3−1=6.\n\nFor any number of distinct prime factors, **add the multiples of products selecting one factor, subtract those selecting two, add those selecting three, subtract four, and continue**. A number divisible by three selected factors was added three times and subtracted three times, so add it back once. This correction for overlapping counts is called **inclusion–exclusion**.\n\n| Prime factors that divide this m | Added as singles | Subtracted as pairs | Added as a triple | Final count |\n|---|---:|---:|---:|---:|\n| 1 factor | 1 | 0 | 0 | 1 |\n| 2 factors | 2 | 1 | 0 | 1 |\n| 3 factors | 3 | 3 | 1 | 1 |\n\nBuild the selections from a list containing `(product 1, count 0)`, the empty selection. For each prime p, **copy the current list**, then append `(product*p, count+1)` for every pair in that copy. Existing pairs omit p; new pairs include it. After p=2 the list is `(1,0),(2,1)`; after p=3 it is `(1,0),(2,1),(3,1),(6,2)`. Skip the empty pair. Add for an odd count and subtract for an even count.\n\nCall the count from 1 through n F(n). Return **F(high)−F(low−1)**, with F(0)=0. Handle any number of prime factors and low=1. First compare against the slow version on small ranges. **Submit on count-no-walkback** sends your current counter.py.\n\n## What you checked\n\nA prediction, an intermediate rule and unseen inputs help distinguish “it ran” from “it is correct.” When an inverse existed, you recovered the count. Without one, several counts could have the same result. Later lectures build on remainder arithmetic and examine further conditions; this small ring alone does not provide cryptographic security.\n\nEach wrong answer costs 5 points. The first hint of each of the first three fields costs 1 point; the other hints cost 2, or 39 for all 21. Reset to starter replaces the editor contents, so save any code you want to keep first.\n",
+      "writeup": "## Compare predictions and rules with outputs\n\nadvance records the remainder after every addition. The same rule handles negative steps, large starts and zero rounds. Compare the prediction with the output, and check intermediate ranges and list length. Public tests cover examples and several boundaries; grading adds other combinations.\n\nIn walkback, step and modulus are coprime, meaning their only common divisor is 1. The inverse u recovers the count in range through ((final-start)*u)%modulus. In no-walkback, the new m shares a divisor greater than 1 with step. There is no inverse, and multiple counts have the same result. This ambiguity is different from cryptographic computational difficulty.\n\nThe final task counts integers divisible by any prime factor of step, corrects overlaps by inclusion–exclusion, and uses F(high)-F(low-1) for inclusive endpoints. Handling any number of distinct factors is the final move from copying an example to implementing a rule.\n\nmake reference-test checks the reference and rejects 14 defective implementations or verifier paths. Equivalent implementations, such as reducing every entry together after building a list, are not treated as errors.\n",
       "learningGoals": [
-        "Say what this kind of counting hides (the size of the answer) and what it does not (how many times you added)",
+        "Distinguish a remainder having many possible original integers from recovering a count under known conditions",
         "Start and stop the problem's container and put a half-finished file back to how it started",
         "Say how the public tests you can read differ from the hidden ones used for marking",
         "Work out the answer on paper before running, then compare it with what came out",
@@ -179,75 +243,127 @@
       "checks": [
         {
           "id": "environment",
-          "label": "environment - press Submit; the pass phrase is sent for you"
+          "label": "environment — Check that the setup responds",
+          "hints": [
+            {
+              "id": "environment-hint-1",
+              "content": "The pass phrase checks that the running environment responds. This is a setup check for the experiment, not a calculation."
+            },
+            {
+              "id": "environment-hint-2",
+              "content": "Follow the change: stopped → started → python and healthToken appear → environment receives a correct verdict. Even if the phrase were abc, you would not need to retype it."
+            },
+            {
+              "id": "environment-hint-3",
+              "content": "After Start, select Inspect evidence and find python and healthToken in environment. Submit on environment sends that environment’s phrase automatically. Start it first if it is stopped."
+            }
+          ]
         },
         {
           "id": "predict",
-          "label": "predict - the number you end on, worked out on paper before running (one number)"
+          "label": "predict — Predict the final number",
+          "hints": [
+            {
+              "id": "predict-hint-1",
+              "content": "Keep a paper prediction to compare with the program. Reducing after each addition makes the result different from ordinary unbounded addition."
+            },
+            {
+              "id": "predict-hint-2",
+              "content": "Ring 7, start 5, step 3, two rounds: 5+3=8 reduces to 1; 1+3=4. Submit the final 4. The update rule is value=(value+step)%modulus."
+            },
+            {
+              "id": "predict-hint-3",
+              "content": "Copy start, step, rounds and modulus from predict. Starting at start, add and reduce rounds times, marking each round. Submit only the final number in predict."
+            }
+          ]
         },
         {
           "id": "first-broken",
-          "label": "first-broken - one number in the list does not belong: which position is it? (leftmost is 0)",
+          "label": "first-broken — Locate the out-of-range result",
           "hints": [
             {
               "id": "first-broken-hint-1",
-              "content": "The answer is the **position**, not the number that sticks out. Count the leftmost as position 0 (not 1). The number that sticks out is one equal to the ring size or bigger."
+              "content": "Every recorded result should stay in the ring. Comparing the intermediate list with this rule can reveal an error that looking only at the final answer would miss."
+            },
+            {
+              "id": "first-broken-hint-2",
+              "content": "On ring 7 the allowed numbers are 0..6. For [1,4,7,3], positions are 0,1,2,3. The out-of-range 7 is at position 2: submit the position, not the value."
+            },
+            {
+              "id": "first-broken-hint-3",
+              "content": "Read modulus from firstBroken and use the range 0..modulus−1. In that same section, count trace positions from 0 on the left. Submit the position of its one out-of-range entry in first-broken. Do not use predict’s modulus."
             }
           ]
         },
         {
           "id": "generalize",
-          "label": "generalize - your finished counter.py, all of it",
+          "label": "generalize — Make advance work on other inputs",
           "hints": [
             {
               "id": "generalize-hint-1",
-              "content": "Subtracting once (`if value >= modulus: value -= modulus`) leaves a negative step below 0 and a step of twice the ring size or more still sticking out. The `%` from the premise fixes both in one go."
+              "content": "Turn the paper rule into a function to handle other inputs. Keeping every intermediate result exposes a missed reduction as well as a wrong final result."
             },
             {
               "id": "generalize-hint-2",
-              "content": "Take the remainder every time round, not once at the end. Taking it on `start` before the loop starts lets a start that is bigger than modulus go down the same path."
+              "content": "Ring 7, start 1, step -3, two rounds: 1−3=-2 reduces to 5; 5−3=2, giving [5,2]. Zero rounds gives []. The update (value+step)%modulus handles negative and large values."
+            },
+            {
+              "id": "generalize-hint-3",
+              "content": "In counter.py, initialize advance’s value with the remainder of start and trace with an empty list. Repeat rounds times: add step, reduce, and append the result to trace. Return trace, check public PASS/FAIL, then submit generalize."
             }
           ]
         },
         {
           "id": "walkback",
-          "label": "walkback - from the final number, recover how many times it was added (one number)",
+          "label": "walkback — Recover the round count",
           "hints": [
             {
               "id": "walkback-hint-1",
-              "content": "The undo number always exists here: this walk's ring size is prime, so some number from 1 to ring size − 1 multiplies the step to remainder 1. If you cannot find it, check that you are taking the remainder after each multiplication."
+              "content": "The difference between final and start represents repeated additions of step. Multiplying by step’s inverse makes each addition contribute 1, recovering the count within the required range."
             },
             {
               "id": "walkback-hint-2",
-              "content": "If \"final − start\" is negative, add the ring size to make it 0 or more before multiplying by the undo number. Remember to take the remainder of the product too."
+              "content": "On ring 7, 3×5=15 has remainder 1, so step 3 has inverse u=5. From start 2 to final 4, ((4−2)*5)%7=3 rounds. Check 2→5→1→4."
+            },
+            {
+              "id": "walkback-hint-3",
+              "content": "Use step and modulus from walkback. Try u from 1 through modulus−1 until step*u has remainder 1. Multiply final−start from the same section by u, reduce, and submit that one count in walkback."
             }
           ]
         },
         {
           "id": "no-walkback",
-          "label": "no-walkback - keeping the same step, one ring size on which it cannot be undone",
+          "label": "no-walkback — Construct a ring where recovery fails",
           "hints": [
             {
               "id": "no-walkback-hint-1",
-              "content": "Increase the ring size from 4 upward, run step (1) in a `for` loop for each, and tabulate whether remainder 1 ever appeared. The ring sizes where it never does show up at regular gaps."
+              "content": "If step and the ring size share a divisor greater than 1, the walk visits only multiples of that divisor away from its start. No multiplier produces remainder 1, and the final position can correspond to several counts."
             },
             {
               "id": "no-walkback-hint-2",
-              "content": "Factorise the ring sizes where remainder 1 never appears, together with the step, into primes and compare them."
+              "content": "For step 2 on ring 6, 2×1, 2×2 and 2×3 have remainders 2,4,0, then repeat. There is no 1. The common divisor 2 causes this, and both zero rounds and three rounds return to the start."
+            },
+            {
+              "id": "no-walkback-hint-3",
+              "content": "Read step from walkback and consider m=2*step. Check that m is greater than step, at most 100, and shares step, which is greater than 1, as a divisor. Submit m in no-walkback. Other m values sharing a divisor greater than 1 also qualify."
             }
           ]
         },
         {
           "id": "count-no-walkback",
-          "label": "count-no-walkback - a function counting how many ring sizes in a range cannot undo the step (counter.py)",
+          "label": "count-no-walkback — Count a large range efficiently",
           "hints": [
             {
               "id": "count-no-walkback-hint-1",
-              "content": "You can check the fast version on small ranges: loop over a few hundred combinations of step, low and high and compare your answer with the slow version shipped in the starter. An off-by-one at the low end, or a prime counted twice, shows up immediately that way."
+              "content": "Qualifying integers are divisible by at least one prime factor of step. Count multiples together, then correct overlaps instead of trying every integer in the range."
             },
             {
               "id": "count-no-walkback-hint-2",
-              "content": "Every combination of \"multiply by this prime or not\" can be built without nesting a loop per prime: start a list of (product, how many primes multiplied) pairs at (1, 0), and for each prime append, for every pair already in the list, the pair with that prime multiplied in (the list doubles each time). Add when the count of primes is odd, subtract when it is even."
+              "content": "For step 6=2×3 up to 9: 9//2+9//3−9//6=4+3−1=6. For 4..9, subtract the 3//2+3//3−3//6=2 qualifying integers up to 3, leaving 4. With three prime factors, add multiples of their triple product back."
+            },
+            {
+              "id": "count-no-walkback-hint-3",
+              "content": "In counter.py, obtain the distinct prime factors of step. Use the statement’s copied list of (product,count) pairs to generate selections. Skip the empty one; add n//product for odd counts and subtract for even counts. Do this for high and low−1 and return their difference. Compare small ranges with the slow version, then submit count-no-walkback."
             }
           ]
         }

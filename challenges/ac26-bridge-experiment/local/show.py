@@ -84,8 +84,8 @@ def main() -> None:
     print("== what goes in the environment box ==")
     print(f"  python       {evidence['environment']['python']}")
     print(f"  pass phrase  {evidence['environment']['healthToken']}")
-    print("  Paste that phrase into the environment box in the Portal, exactly as printed.")
-    print("  It is only proof that this container really ran.")
+    print("  Select Submit on environment; the Portal sends this phrase automatically.")
+    print("  This checks that the running environment responds; no manual transcription is needed.")
     print()
 
     modulus = case["modulus"]
@@ -118,8 +118,8 @@ def main() -> None:
     print("== what goes in the walkback box ==")
     print(f"  A second run, shown with its end but not its length: start at {walk['start']}, add {walk['step']} each")
     print(f"  time, take {walk['modulus']} off whenever a number reaches it. It finishes on {walk['final']}.")
-    print(f"  Looking at {walk['final']} alone tells you nothing about how many times {walk['step']} was added --")
-    print(f"  every answer is one of 0 to {walk['modulus'] - 1}, so the size of it gives nothing away.")
+    print(f"  Several unrestricted round counts can lead to the same final number.")
+    print(f"  Here the answer is restricted to 0 through {walk['modulus'] - 1}; use that range.")
     print("  The number of times comes back out anyway. The statement gives the recipe: find the")
     print(f"  number that undoes {walk['step']} (multiply, take {walk['modulus']} off until the remainder is 1),")
     print(f"  then multiply it by how far {walk['start']} moved to reach {walk['final']}. That count is the")
@@ -129,8 +129,8 @@ def main() -> None:
     print(f"  Keep {walk['step']} as the number being added and change the ring size. On some sizes no")
     print(f"  number undoes {walk['step']} at all -- the recipe above never reaches a remainder of 1.")
     print("  One such ring size, bigger than the step and at most 100, is the no-walkback box.")
-    print("  That gap is why Week 3 changes what gets added -- to a thing called an elliptic")
-    print("  curve -- so that the walk-back has no practical answer on purpose.")
+    print("  Several round counts then have the same result. This ambiguity alone does not")
+    print("  establish cryptographic security; this is a small arithmetic experiment.")
     print()
 
     bad_case = evidence["firstBroken"]

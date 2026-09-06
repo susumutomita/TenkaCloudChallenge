@@ -24,7 +24,6 @@ services:
       # stage -- `author` -- which carries reference/ and mutation.py.
       target: participant
     environment:
-      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18091"
       VERIFIER_URL: http://verifier:18092/verify
       # Public evidence for show.py and the public tests, which do not go through
