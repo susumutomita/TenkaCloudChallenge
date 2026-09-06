@@ -103,3 +103,23 @@ FLAG_SEED=privacy-audit-reader-716 docker compose -f local/docker-compose.yml do
 ```
 
 The development rehearsal uses an isolated copy of the same Compose file with absolute build context and host port **18151**, project **ac26-privacy-audit-reader-716**, synthetic seed **privacy-audit-reader-716**, at `/private/tmp/privacy-audit-716-compose.yml`. It is left running for the root's final review; it must not be rebuilt while another reviewer is using it. No commit, push, release or AWS action was performed by this subtask.
+
+## Filesystem metadata backport, 2026-09-07
+
+At base 6416dab5af5805211b020f03c218a8827d66a201, this problem's own unchanged `restrict_learner` allowed mkdir, symlink, hardlink and FIFO creation. All four entries remained in a parent-owned TemporaryDirectory after the filtered child exited. `filesystem-before.json` records the policy hash and actual results; the fixture was then removed. The original log is `/private/tmp/filesystem-716-before.log`. No live Workbench, participant environment, external network or host folder was targeted.
+
+The fix copies the proven native metadata-operation deny rules from linear 2444001 into this problem only. It does not share a runtime, change the loader or add an endpoint. The new `FilesystemMetadataBoundary` test in `test_execution_boundary.py` loads this consumer's actual filter in 16 disposable Linux children, requires EPERM for all 19 operations, and checks the parent's fixture content, directory listing, mode, uid/gid, mtime and extended attributes after each child exits. The TemporaryDirectory is also removed. This is an actual-filter regression, not a new participant playthrough or an attestation of all filesystem/kernel behavior.
+
+Validation uses a dedicated `ac26-filesystem-716-w2-privacy-audit-author` image with `docker run --rm --init --network none`, read-only root, private /tmp, dropped capabilities and no-new-privileges. The unchanged reference/mutation and complete existing runtime/public-check suite are run, together with the new regression. Logs are `/private/tmp/filesystem-716-w2-privacy-audit.log`. No Compose project or listening service is started.
+
+Reproduce from this problem's directory (the commands of `reference-test`, with explicit network and container isolation):
+
+```sh
+docker build --target author -t ac26-filesystem-716-w2-privacy-audit-author local
+docker run --rm --init --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=67108864 --cap-drop ALL --security-opt no-new-privileges:true --memory 1g --pids-limit 128 -e FLAG_SEED=filesystem-reader-716 ac26-filesystem-716-w2-privacy-audit-author python mutation.py
+docker run --rm --init --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=67108864 --cap-drop ALL --security-opt no-new-privileges:true --memory 1g --pids-limit 128 -e FLAG_SEED=filesystem-reader-716 ac26-filesystem-716-w2-privacy-audit-author python -m unittest discover -s tests/hidden -p test_execution_boundary.py -v
+```
+
+`make agent-gate` at the catalog root checks all 116 entries. This follow-up adds no new HTTP/UI flow; the existing suite exercises the unchanged positive/public-check paths with synthetic data. The prior live/API evidence above remains historical rather than being claimed as a new playthrough.
+
+Final result: 8 existing mutations killed; 17 complete runtime tests pass in 71.672s, including the new filesystem case. Existing reference and public positive checks pass without changing their sources.

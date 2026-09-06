@@ -133,3 +133,7 @@ the corresponding local images when no longer needed. Do not use another event's
 [Reader and runtime evidence](local/tests/hidden/READER.md) records the original eight
 reading gaps, the unchanged participant-written solution, and actual prepare → verify
 results. The work was limited to this problem in #716; other problems remain separate.
+
+## Filesystem metadata boundary follow-up
+
+The learner's Linux filter also denies file/directory creation, links, renames, removal and metadata writes. Blocking file opens alone did not stop those operations from persisting after a worker exited. The problem-local regression applies the actual filter in 16 disposable children, checks 19 operations return EPERM, and verifies unchanged parent-owned fixture contents, directory entries, permissions, ownership, timestamps and extended attributes. Its temporary fixture is removed afterward. This adds no API, scoring, mathematical rule or execution deadline; existing positive sources and suites remain the acceptance baseline. See `local/tests/hidden/READER.md` for before/after scope and commands.

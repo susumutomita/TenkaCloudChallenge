@@ -1,0 +1,33 @@
+{
+  "base": "6416dab5af5805211b020f03c218a8827d66a201",
+  "scope": "ac26-w1-constraint-lab",
+  "probe": "actual restrict_learner in isolated network-none Linux child; only parent TemporaryDirectory",
+  "results": [
+    {
+      "problem": "ac26-w1-constraint-lab",
+      "policy_sha256": "3ed93d243dcfa96cfd039986afe79f84062ca03f4d1fe278489aed310c4f2ee7",
+      "created_after_child_exit": [
+        [
+          "directory",
+          0
+        ],
+        [
+          "symlink",
+          0
+        ],
+        [
+          "hardlink",
+          0
+        ],
+        [
+          "fifo",
+          0
+        ]
+      ]
+    },
+    {
+      "problem": "ac26-w1-constraint-lab",
+      "owned_temporary_directory_removed": true
+    }
+  ]
+}

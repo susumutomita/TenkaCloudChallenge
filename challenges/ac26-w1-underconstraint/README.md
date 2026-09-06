@@ -68,3 +68,7 @@ make verifier-down        # stop this problem's local containers
 The six checks retain 300 total points and 15-point wrong-answer penalties. Each has three hints; all 18 hints total 80 points. Actual reader, API, isolation and mutation evidence is recorded in `local/tests/hidden/READER.md`. No live AWS event or independent human timing is claimed.
 
 No AWS resources are created by this local runtime. Docker consumes local CPU, memory and storage; stop its containers after use. No cloud pricing estimate is needed. The official Week 1 proof-of-exploit exercise and the owner's Week 1 notes informed the teaching sequence. This companion uses its own policy and signal names; it does not reproduce the official assignment solution.
+
+## Filesystem metadata boundary follow-up
+
+The learner's Linux filter also denies file/directory creation, links, renames, removal and metadata writes. Blocking file opens alone did not stop those operations from persisting after a worker exited. The problem-local regression applies the actual filter in 16 disposable children, checks 19 operations return EPERM, and verifies unchanged parent-owned fixture contents, directory entries, permissions, ownership, timestamps and extended attributes. Its temporary fixture is removed afterward. This adds no API, scoring, mathematical rule or execution deadline; existing positive sources and suites remain the acceptance baseline. See `local/tests/hidden/READER.md` for before/after scope and commands.
