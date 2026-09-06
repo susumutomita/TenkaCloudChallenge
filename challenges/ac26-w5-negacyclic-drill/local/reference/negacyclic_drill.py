@@ -32,24 +32,24 @@ def hazard(n, lo):
     position = lo + n
     return (position, read(n, position))
 
-def rotations(p, n, noise_a, noise_b):
+def rotations(p, n, noise_a, noise_b, encoding):
     noise = noise_a + noise_b
-    return rotate(p, n, noise)
+    return rotate(p, n, noise, encoding)
 
-def constants(p,n,dmax,repair_noise):
+def constants(p,n,dmax,repair_noise,encoding):
     for a in (0,1):
         for b in (0,1):
             for noise in range(dmax+1,repair_noise+1):
                 wanted=-1 if a==b==1 else 1
-                if read(n,rotate(p,n,noise)[2*a+b])!=wanted:
+                if read(n,rotate(p,n,noise,encoding)[2*a+b])!=wanted:
                     return [a,b,noise]
     raise ValueError('no failure witness')
 
 
-def margin(p,n,repair_noise):
-    for bias in range(p):
-        for wa in range(p):
-            for wb in range(p):
-                if all([read(n,i) for i in rotate(p,n,noise,[bias,wa,wb])]==[1,1,1,-1] for noise in range(repair_noise+1)):
+def margin(p,n,repair_noise,encoding):
+    for bias in range(-3,4):
+        for wa in range(-3,4):
+            for wb in range(-3,4):
+                if all([read(n,i) for i in rotate(p,n,noise,encoding,[bias,wa,wb])]==[1,1,1,-1] for noise in range(repair_noise+1)):
                     return [bias,wa,wb]
     raise ValueError('no repair witness')

@@ -14,18 +14,22 @@ def main():
     seeds=['reader-negacyclic']+[f'mutation-{i}' for i in range(10)]
     for seed in seeds:assert not run(reference,seed),run(reference,seed)
     mutations=[
+        ('replays fixed params','params',lambda p,n:(16,16,8,1)),
+        ('replays fixed boundary','boundary',lambda n:8),
+        ('replays fixed counterexample','constants',lambda p,n,d,r,e:[0,1,2]),
+        ('replays fixed repair','margin',lambda p,n,r,e:[3,2,2]),
         ('uses one sign-flipped lap as cycle','params',lambda p,n:(p,n,n,n//p)),
         ('discards wrap sign','wrap',lambda lo,hi,n:((lo+hi)%n,1,lo+hi)),
         ('every removed lap stays negative','wrap',lambda lo,hi,n:((lo+hi)%n,-1,lo+hi)),
         ('reduces signs by n','signs',lambda n,probes:[1]*6),
         ('boundary off by one','boundary',lambda n:n-1),
         ('extra lap does not flip','hazard',lambda n,lo:(lo+n,1)),
-        ('adds instead of subtracting noise','rotations',lambda p,n,a,b:rotations(p,n,-a-b)),
-        ('ignores second noise','rotations',lambda p,n,a,b:rotations(p,n,a)),
-        ('safe-noise failure claim','constants',lambda p,n,d,r:[0,1,d]),
-        ('wrong-input failure claim','constants',lambda p,n,d,r:[0,0,d+1]),
-        ('keeps fragile original coefficients','margin',lambda p,n,r:[1,1,1]),
-        ('out-of-range coefficients','margin',lambda p,n,r:[p,2,2]),
+        ('adds instead of subtracting noise','rotations',lambda p,n,a,b,e:rotations(p,n,-a-b,e)),
+        ('ignores second noise','rotations',lambda p,n,a,b,e:rotations(p,n,a,e)),
+        ('safe-noise failure claim','constants',lambda p,n,d,r,e:[0,1,d]),
+        ('wrong-input failure claim','constants',lambda p,n,d,r,e:[0,0,d+1]),
+        ('keeps fragile original coefficients','margin',lambda p,n,r,e:[1,1,1]),
+        ('out-of-range coefficients','margin',lambda p,n,r,e:[p,2,2]),
     ]
     for label,row,bad in mutations:
         mutant=types.SimpleNamespace(**{k:getattr(reference,k) for k in GRADED})

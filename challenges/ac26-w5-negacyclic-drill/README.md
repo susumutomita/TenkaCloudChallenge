@@ -40,18 +40,22 @@ searches with explicit candidate ranges, checks and termination.
 ## Model and boundaries
 
 The device is a visible arithmetic model, not encrypted TFHE or ciphertext refresh.
-It reads an all-ones table, reversing sign after n positions. Bits 0/1 encode as
-p-1/1. The original phase is `(1-m1-m2)%p`; multiply by D and subtract total noise
-before taking the cycle remainder. Only the two-one input reads a negative value
-under the original bound. This is NAND when signs +1/-1 decode as bits 1/0.
+It reads an all-ones table, reversing sign after n positions. The public encoding
+maps bits 0/1 to either -1/1 or 1/-1. The original arithmetic compensates for that
+choice; only input (1,1) reads a negative value under the original noise bound.
+Signs +1/-1 decode as bits 1/0, giving NAND.
 
-Parameters are p=16,n=8,q=16,D=1. Individual input displacements sum to at most one;
-probes vary and include negative or wrapped positions. The repair must tolerate total
-noise up to two or three. Unlike the old n−3D distance claim, the actual first failure
-is a mixed input wrapping below zero when total noise reaches two. The repair changes
-three coefficients and is checked against all inputs and all allowed noise values.
-The final model supplies displacement after the weighted calculation; it does not
-claim to model how weights amplify noise from separate real input ciphertexts.
+Deployment parameters vary: p=16, n=8 or 16, q=2n, D=q/p. Individual input
+displacements sum to at most D. The repair must tolerate total noise through a
+chosen value from D+1 to 3D. Probes and encoding also vary. Fixed parameters,
+counterexamples and coefficient triples therefore cannot be reused across every
+run. Coefficients are integers from -3 through 3, keeping the construction search
+finite and small. The actual first failure is a mixed input wrapping below zero
+at total noise D+1; n-3D is not the noise tolerance.
+
+The repair is checked against all inputs and all allowed noise values. The final
+model supplies displacement after the weighted calculation; it does not model
+how weights amplify noise from separate real input ciphertexts.
 
 The participant image contains starter, public tests, helpers and Portal API. The
 seed, generator, hidden checks and reference answers exist only in verifier/author

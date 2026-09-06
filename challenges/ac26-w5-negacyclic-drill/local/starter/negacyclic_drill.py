@@ -34,24 +34,24 @@ def hazard(n,lo):
     return None
 
 
-def rotations(p,n,noise_a,noise_b):
-    """Return rotate(p,n,noise_a+noise_b) in order (0,0),(0,1),(1,0),(1,1)."""
+def rotations(p,n,noise_a,noise_b,encoding):
+    """Return rotate(p,n,noise_a+noise_b,encoding) in order (0,0),(0,1),(1,0),(1,1)."""
     return None
 
 
-def constants(p,n,dmax,repair_noise):
+def constants(p,n,dmax,repair_noise,encoding):
     """Construct [bit_a,bit_b,total_noise] that makes the original NAND rule fail.
     Both bits are 0 or 1; noise is an integer from dmax+1 through repair_noise.
-    Original phase=(1-enc[bit_a]-enc[bit_b])%p, with enc={0:p-1,1:1}.
+    Original phase=(1-encoding[1]*encoding[bit_a]-encoding[1]*encoding[bit_b])%p.
     Position=((2*n//p)*phase-noise)%(2*n). read(n,position) must differ
     from -1 for inputs (1,1), +1 otherwise. Any satisfying triple is accepted.
     """
     return None
 
 
-def margin(p,n,repair_noise):
-    """Construct [bias,weight_a,weight_b], integers from 0 through p-1.
-    Use phase=(bias-weight_a*enc[a]-weight_b*enc[b])%p, enc={0:p-1,1:1}.
+def margin(p,n,repair_noise,encoding):
+    """Construct [bias,weight_a,weight_b], each integer from -3 through 3.
+    Use phase=(bias-weight_a*encoding[a]-weight_b*encoding[b])%p.
     For every input pair and every total noise 0..repair_noise, the signed table
     read at ((2*n//p)*phase-noise)%(2*n) must implement NAND:
     +1,+1,+1,-1 in order (0,0),(0,1),(1,0),(1,1).
