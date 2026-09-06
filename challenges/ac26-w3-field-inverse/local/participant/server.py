@@ -34,6 +34,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-field-inverse"
@@ -47,6 +48,8 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# Allow the verifier its computation budget plus transport overhead.
+VERIFIER_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -76,10 +79,10 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w3-field-inverse',
     problem_name='曲線の前に、体を作る',
     problem_name_en='Build the field before the curve',
-    description='楕円曲線の式に入る前に、その下の有限体を手で作る。正規化、四則、そして拡張 Euclid による逆元。素数でない法では逆元が存在しない要素があり、それを見落とす実装がある。',
-    description_en='Before the curve equation, the field underneath it: normalization, arithmetic, and the inverse from the extended Euclidean algorithm. Over a composite modulus some elements have no inverse at all, and one popular implementation never notices.',
-    checkpoint_labels={'normalize': '整数を体の元にする', 'arithmetic': '加減乗算と体の公理', 'egcd-trace': '拡張 Euclid の各ステップを出す', 'inverse': '逆元と除算', 'errors': '存在しないものを存在しないと言う', 'composite': '素数でない法で反例を作る', 'units': '見たことのない合成数の法で、逆元の有無を全元で言い分ける'},
-    checkpoint_labels_en={'normalize': 'Turn an integer into a field element', 'arithmetic': 'Arithmetic, and the axioms it must satisfy', 'egcd-trace': 'Show every step of the extended algorithm', 'inverse': 'Inverse and division', 'errors': 'Say that something does not exist', 'composite': 'Build a counterexample over a non-prime modulus', 'units': 'Sort every element of an unseen composite modulus: inverse, or none'},
+    description='余りの計算で「割る」を作る。掛けて余りが 1 になる相手を逆元と呼びます。まず −2 を法 7 の余り 5 に直し、表を使って逆元がある数とない数を見分けます。',
+    description_en='Build division using remainders. An inverse is a partner whose product leaves remainder1. Start by normalizing −2 to remainder5 modulo7, then use a table to decide which numbers have inverses.',
+    checkpoint_labels={'normalize': '余りを 0 以上にそろえる', 'arithmetic': '足し算・引き算・掛け算', 'egcd-trace': '最大公約数を求める表', 'inverse': '掛けて 1 になる相手と割り算', 'errors': '割れない・法が違うときのエラー', 'composite': '逆元がない最小の数', 'units': '別の法でも、逆元の有無を判断'},
+    checkpoint_labels_en={'normalize': 'Normalize the remainder', 'arithmetic': 'Add, subtract and multiply', 'egcd-trace': 'Trace the greatest common divisor', 'inverse': 'Inverse and division', 'errors': 'Reject missing inverses and mixed moduli', 'composite': 'Find the smallest non-invertible value', 'units': 'Decide invertibility under unseen moduli'},
     submitted_files=('field.py',),
     code_checkpoints=('normalize', 'arithmetic', 'egcd-trace', 'inverse', 'errors', 'composite', 'units'),
     checkpoints=('normalize', 'arithmetic', 'egcd-trace', 'inverse', 'errors', 'composite', 'units'),
@@ -114,7 +117,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -232,6 +235,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

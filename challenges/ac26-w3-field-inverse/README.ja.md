@@ -1,132 +1,145 @@
 # 曲線の前に、体を作る
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+> Advanced Cryptography Program 2026 の非公式・独立した補助教材です。講座運営者による提供・公認ではありません。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 310 · **Chapter:** Week 3 / Finite Fields
-· **Role:** `mechanism` · **想定時間:** 45〜60 分 · **配点:** 200
+## まず、−2 を「余り 5」に直す
 
-## ストーリー
+あなたは暗号の計算に使う「割り算」の部品を作ります。整数をそのまま割る代わりに、**掛けて余りが 1 になる相手（逆元）**を使います。
 
-楕円曲線のスライドはどれも `F_p` 上の方程式から始まり、1 分で先へ進みます。体は前提だからです。この
-問題はその 1 分を真面目にやります。正規化から `F_p` を組み上げ、最後の乗法逆元だけが本当の中身を
-持っています。
+`FieldElement` は法と余りをまとめる型、`__init__` は元を作るときに動くメソッド（型の中の関数）です。
 
-## 何を実装するのか
+**起動 → 証拠を確認 → `field.py` の `FieldElement.__init__` を編集 → 公開テストを実行 →「余りを 0 以上にそろえる」の提出**。まず `self.value` に、`value` を `field.modulus` で割った余りを入れてみてください。負の数を含む公開テストで結果を確認できます。
 
-```python
-class Field:
-    modulus: int
-    def element(self, value: int) -> FieldElement: ...
+## 前提
 
-class FieldElement:
-    def __add__, __sub__, __mul__, __truediv__
-    def inverse(self) -> FieldElement: ...
+- 割る数 `m` を **法** と呼びます。この問題では整数 `m > 1` です。整数 `v` を `m` で割った余りは Python の `v % m`。`v = m × q + r` と書ける `0 ≤ r < m` を取ります。例：`−2 = 7 × (−1) + 5` なので `(-2) % 7 = 5`。
+- この範囲の余りにそろえる操作が **正規化**。法と余りの組が、このプログラムの **元（element）** です。`Field(m)` が法を保管し、`.element(v)` が元を作ります。`self` は「この元自身」、`self.value` は余り、`self.field.modulus` は法です。クラス内の関数を **メソッド** と呼びます。
+- `u ≡ v (mod m)` は「`u` と `v` を `m` で割った余りが同じ」。`≡` はこの意味の記号です。`gcd(a,m)` は `a` と `m` の最大公約数。
+- 法が素数 `p` なら、0 以外の全ての元に逆元があります。この余りの計算は **有限体**（有限個の元で四則ができ、0 以外で割れる仕組み）の一例です。合成数の法も同じコードで扱いますが、全ての非零の元では割れません。
 
-def egcd(a, b) -> (g, s, t)          # a*s + b*t == g == gcd(a, b)
-def egcd_trace(a, b) -> [ {q, r, s, t}, ... ]
-def non_invertible_element(modulus) -> int
+## 足す・引く・掛ける → 余りへ戻す
+
+| 操作 | 一般の式 | 法 7、a=5、b=4 |
+|---|---|---|
+| `a + b` | `(a+b) % m` | `9 % 7 = 2` |
+| `a - b` | `(a-b) % m` | `1 % 7 = 1` |
+| `a * b` | `(a*b) % m` | `20 % 7 = 6` |
+
+`__add__`・`__sub__`・`__mul__` に対応します。整数ではなく、同じ法の `FieldElement` を返します。元を作るたびに正規化すると、途中の答えも範囲に収まります。
+
+**等しいとは、法も余りも同じこと。** 法 7 の −2 と 5 は等しく、法 6 の 5 とは違います。`__eq__` がこの比較です。`__hash__` は辞書や集合が元を整理するための整数を返すメソッドで、等しい元なら同じ値が必要です。`hash((self.field.modulus, self.value))` が使えます。違う元のハッシュがたまたま同じでも構いません。
+
+足す順番や括弧で答えが変わらず、`x+0=x`、`x*1=x`、`x-x=0`、`x*(y+z)=x*y+x*z` も成り立ちます。たとえば法 7 で `2*(3+4)` と `2*3+2*4` は、どちらも余り 0 です。
+
+## 割る →「掛けて 1 になる相手」を掛ける
+
+`a` の逆元を `x` とすると **`a*x ≡ 1 (mod m)`**。法 7 では `3*5=15=7*2+1` なので 3 の逆元は 5。`4 / 3` は `4*5 % 7 = 6` です。
+
+どうやって相手を探すのでしょう。`a*s + m*t = g` の整数 `s,t` と最大公約数 `g` を同時に求める **拡張ユークリッドの互除法**を使います。`g=1` なら `m*t` は余り 0 なので **逆元は `s % m`**。`g>1` なら、`a` と `m` のどんな整数倍の和も `g` の倍数で、1 にはなりません。
+
+```text
+3 × (−2) + 7 × 1 = 1  →  3 の逆元は (−2) % 7 = 5
+2 × 1    + 6 × 0 = 2  →  2 と 6 の最大公約数は 2。逆元なし
 ```
 
-異なる法の元同士は、黙って演算されてはいけません。
+### 表の作り方：同じ等式を壊さず引き算する
 
-## Participant Portal での進め方
+各行を `(r,s,t)` とし、常に `a*s + m*t = r` を保ちます。
 
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
-2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
-3. Portal のエディタで starter のソースを編集する。
-4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
-5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
+1. 上の行を `(a,1,0)`、下の行を `(m,0,1)` にする。
+2. 下の `r` が 0 でなければ、商 `q = 上のr // 下のr` を求める。`//` は整数の商です。
+3. **いまの下の行**を `{"q":q,"r":r,"s":s,"t":t}` として記録。
+4. 新しい行の各数を `上 − q × 下` にする。上を古い下へ、下を新しい行へ移して繰り返す。
+5. 下の `r` が 0 なら終了。上の `(r,s,t)` が `egcd` の返す `(g,s,t)`。
 
-checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
-エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
-値は拒否されます。
+なぜ等式が保たれる？ 上下の等式を引くと `a*(上s−q*下s) + m*(上t−q*下t) = 上r−q*下r`。3 列とも同じ引き算だからです。`r` の列は割り算の余りを順に取り、最後の 0 でない余りが最大公約数になります。
 
-## 採点
+| a=3、m=7 | 上 (r,s,t) | 下 (r,s,t)：記録する行 | q | 次の下 |
+|---|---|---|---|---|
+| 1 | (3,1,0) | (7,0,1) | 0 | (3,1,0) |
+| 2 | (7,0,1) | (3,1,0) | 2 | (1,−2,1) |
+| 3 | (3,1,0) | (1,−2,1) | 3 | (0,7,−3) |
 
-7 つの checkpoint を独立に採点します。誤答は 1 回 10 点減点です。
+`egcd(3,7)` は `(1,-2,1)`。`egcd_trace(3,7)` は順番通りの 3 行：
+`[{"q":0,"r":7,"s":0,"t":1}, {"q":2,"r":3,"s":1,"t":0}, {"q":3,"r":1,"s":-2,"t":1}]`。
+`egcd` の 3 数、trace の行の列は list / tuple のどちらでも構いません。各行は `q,r,s,t` を持つ dict、各数は整数（`True` や小数は不可）。`s,t` の負号はそのまま残し、逆元を元として返すときに正規化します。
 
-| Checkpoint | 配点 | 何を検査するか |
-|---|---:|---|
-| `normalize` | 25 | 負値、法以上の値、冪等性、等価判定 |
-| `arithmetic` | 30 | 加減乗、単位元、分配、可換、結合 |
-| `egcd-trace` | 35 | step 列を 1 行ずつアルゴリズム自身のものと突き合わせ |
-| `inverse` | 35 | 素体の全非零元と、`a / b * b == a` |
-| `errors` | 25 | zero、零除算、法の混在 |
-| `composite` | 25 | 最小の非可逆元。素数法では存在しないこと |
-| `units` | 25 | 見たことのない合成数の法の全元: 掛けて 1 になる相手か `NotInvertible` か。`/` も同じ規則。1 対 1 と閉性 — 続けて未知の素数でも同じ |
+`egcd` と `egcd_trace` の提出テストの入力は `1 ≤ a < m`。`inverse()` 内からは正規化した `.value` を渡せます。0 の逆元は先に例外にして構いません。
 
-hint は 7 つ中 5 つにあり、いずれもその checkpoint の 50% 上限内です。本文の再掲は 1 つも無く、どれも 1 桁の数での検算か、見落としやすい場合分けを持っています。
+## 逆元がないときに、数を返さない
 
-## この問題が譲らない 2 つの区別
+0 は何を掛けても 0 なので逆元なし。合成数の法でも、最大公約数が 1 かで判断できます。
 
-**integer は field element ではありません。** `-5` と `p - 5` は同じ元を指しますが、`-5` は正規形では
-ありません。element を作る時点で正規化しておけば、負の入力も法以上の入力も以降は同じ経路を通ります。
+| 法 m | 0 以外で逆元がある元 → 相手 | 0 以外で逆元なし | 最小の逆元なしを返す関数 |
+|---|---|---|---|
+| 6 | 1→1、5→5 | 2、3、4 | `non_invertible_element(6) = 2` |
+| 9 | 1→1、2→5、4→7、5→2、7→4、8→8 | 3、6 | `non_invertible_element(9) = 3` |
+| 7 | 1→1、2→4、3→5、4→2、5→3、6→6 | なし | `non_invertible_element(7) = 0` |
 
-**`pow(a, p - 2, p)` は「逆元」ではありません。** `p` が素数のときは逆元です。合成数 `n` では
-`pow(a, n - 2, n)` も数を返しますが、それは逆元ではなく、検算しない限り気づけません。拡張 Euclid は
-係数と一緒に gcd を返すので、**逆元が存在しない**と言えます。この問題の mutation suite の 1 つ目は
-まさに Fermat 版で、素数の checkpoint を全部通り、合成数の checkpoint だけで落ちます。その前に gcd の
-見張りを置くと `composite` も通り、`units` 以外の全部を通ります。`units` は参加者が一度も見ない合成数の法を
-全元回します。合成数 `m` で `a^(m-2)` が `a` の逆元になるのは `a^(m-1) ≡ 1` の元だけで、単元の一部に
-過ぎません(`m = 91` なら 72 個中 36 個)。表は `m` が素数かどうかを知らずに全元を正しく扱います。
+この関数の 0 は「該当する **0 以外の**元なし」の印です。2 から法未満を順に調べ、`gcd(a,m)>1` の最初の `a` を返し、なければ 0。1 は自分が逆元です。
 
-## なぜ trace を 1 行ずつ突き合わせるのか
+`inverse()` と `/` は、逆元がなければ `raise NotInvertible("no inverse")`。異なる法の元を `+ - * /` で組み合わせるなら、計算前に `raise FieldMismatch("different moduli")`。例外のクラスは用意済みで、説明文字列は自由です。
 
-trace checkpoint は当初、各行が `a*s + p*t = r` を満たすことと、最終行が gcd と逆元に一致すること
-だけを見ていました。**最終行だけを返す**変異がそれを生き延びました。1 行だけの表は、その条件を
-すべて満たすからです。
+素数 `p` で非零の `a` なら、`a` の `p−1` 乗の余りが 1 になる性質（Fermat の小定理）があり、`pow(a,p-2,p)` でも逆元が求まります。しかし一般の合成数での保証はありません。法 6 の 5 は逆元を持つのに `pow(5,4,6)=1`、`5*1 % 6=5` で失敗。互除法なら、素数か合成数かを先に決めずに判断できます。
 
-現在は step 数と各行の `(q, r, s, t)` を参照実装の列と突き合わせます。floor 除算なので列は一意に
-決まり、正解はちょうど 1 つです。
+## 7 つの提出欄と、編集する場所
 
-## 標本ではなく全数
+| 欄 | 直す場所 | 確認したいこと |
+|---|---|---|
+| normalize | `FieldElement.__init__`, `__eq__`, `__hash__` | 負の数も余りへ。同じ法・余りなら等しく同じハッシュ |
+| arithmetic | `__add__`, `__sub__`, `__mul__` | 足し引き掛け算とその途中でも正しい余り |
+| egcd-trace | `egcd`, `egcd_trace` | 表の全行と最大公約数・係数が一致 |
+| inverse | `inverse`, `__truediv__` | 素数の法で 0 以外全てに逆元。割って掛けると元へ戻る |
+| errors | 逆元・4 演算の例外分岐 | 0 で割れず、異なる法を混ぜない |
+| composite | `non_invertible_element`, `inverse` | 最小の逆元なしを見つけ、それを逆元として返さない |
+| units | 同じ `inverse`, `__truediv__` | 未見の素数・合成数でも全ての非零の元を判断 |
 
-`inverse` は素体の全非零元を回します。標本ではないので、一部の値を特別扱いする戦略は成立しません。
-`units` は同じことを、どの deploy も画面に出さない族(`UNIT_COMPOSITES`: 3 桁の、相異なる 2 つの奇素数の積と
-奇素数の 2 乗。Carmichael 数は無し)から引いた合成数の法で行い、続けて未知の素数でも行います。法と共通の
-約数を持たない元には掛けて 1 になる相手を、それ以外には `NotInvertible` を、`/` にも同じ規則を要求し、
-逆元写像が「逆元を持つ元」の上で**1 対 1**であること(旧 `axioms` が素数上で見ていた性質)も見ます。
-`pow(a, -1, m)` は正しい逆元なので通ります。表を要求するのは `egcd-trace` の仕事で、この checkpoint の
-仕事ではありません。
+`field.py` のメソッド・関数の中は、条件分岐やループを追加して編集できます。枠の名前と引数は保ちます。**全欄コード提出で、数字や JSON を別入力しません。** 各欄の「提出 (+N pt)」が現在のファイルを送ります。7 欄は独立採点、誤答は各 −10 点です。
 
-## trace は constant-time ではありません
+「証拠を確認」は今回の法・表・逆元と検算を表示します。上の小例を計算してから、その表の `a` と `modulus` でも同じ手順を追ってください。「公開テストを実行」は小例と表示された素数を確認する下見で、全ての未見の法は検査しません。「初期状態に戻す」は編集を取り消します。
 
-Workbench の `inspect` が出す trace は入力に依存して分岐し、step 数も入力で変わります。実際の鍵を扱うコード
-では、その性質そのものが side-channel です。これはアルゴリズムを読むためのものであり、production
-実装の手本ではありません。
+この部品は、次の楕円曲線（暗号で使う曲線上の点の計算）の傾きの式にも使われます。点の特殊な場合分けを含む、曲線演算や署名全体をここで実装するわけではありません。
 
-## 保証範囲
+計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。自分のコード内で import できます。追加のパッケージ導入、ファイルの読み書き、ネットワーク通信はこの実行環境では使いません。必要な整数計算は組み込みの演算だけでも実装できます。
 
-ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
-Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
-秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナには starter と公開テスト
-しか入っておらず、fixture も hidden test も参照解答も verifier 本体も入っていません。
-それらは Workbench がネットワーク越しに話す、公開されていない second container と、
-`make reference-test` が build する author 専用 image にだけあります。そのため
-`make inspect` と `make test` は second container を必要とし、両 target が呼ぶ
-`make verifier-up` が起動し、`make verifier-down` が停止します。
+## Local runtime and author verification
 
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
+The participant image contains the editor, public examples and worker, but no hidden
+checks, fixtures or reference answer. A second, unpublished verifier derives public
+parameters and holds the mathematical checker. Both services use nonroot users,
+`init: true`, read-only filesystems and a loopback-only host port.
 
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
+Source initializes in a fresh worker without the seed or checker. After readiness,
+requests carry fresh identifiers. The parent validates integer values, moduli,
+operations, equality/hash consistency and expected exceptions. A printed failures list
+is not a verdict. Fresh identifiers reject preprinted results; they do not attest
+native Python returns. A participant who implements the live value protocol must still
+satisfy the same mathematical checks. The finite tested cases are not a proof about
+all possible inputs or implementations.
 
-## コスト
+The per-run limits remain 25 seconds, 512 MiB address space, 64 processes and 64 KiB
+output frames / accumulated non-result output. Linux restrictions deny file/network,
+persistent IPC, filesystem metadata changes and changes to supervisor scheduling.
+Worker process groups are removed and init reaps exited descendants. Public source
+initialization errors expose only a validated filename/line/type; private failure
+messages contain public rule names, never hidden operands or expected answers.
 
-ゼロです。クラウドアカウントも AWS リソースも使いません。
+The local Docker owner can inspect containers; these controls do not protect secrets
+from that owner. Production deployment and real-world cryptographic safety are not
+claimed. The Euclidean table branches on input and is not a constant-time secret-key
+implementation. This local exercise creates no AWS resources; it uses local Docker
+CPU, memory and disk. `make verifier-down` removes the local Compose environment.
 
-## 作問者向け
+```sh
+make test                         # public suite against your edited local starter
+make test-one ID=small-seven       # matching public examples
+make inspect                      # public evidence; optional A=3 P=7
+make reference-test               # author reference + 14 existing mutants
+make runtime-test                 # author Linux boundary regressions
+make verifier-down
+```
 
-`make reference-test` が mutation suite を実行します。壊した実装 12 種類を in-process で回し、`units` の
-near-miss 4 種類はさらに `verifier.server.evaluate_with_message` 経由(subprocess、`:units` seed suffix、
-message が性質名だけで数字を含まないこと)でも回します。Fermat 版は素数の checkpoint を全部通り、gcd の
-見張り付き Fermat 版は `units` 以外を全部通ります — suite はそれが本当に `units` でしか落ちないことも
-確かめます(他の checkpoint がすでに落とす near-miss は、ただのバグです)。最終行だけの trace は当初の
-checkpoint を生き延び、それが列全体を突き合わせるようになった理由です。`units` の near-miss は
-`UNIT_COMPOSITES` の 16 法すべてに対しても in-process で回し、どの法でも落ちることを確認済みなので、
-seed がどの法を引くかに verdict は依存しません。
+Run `make install && make agent-gate` at the catalog root. The retained real Portal
+component harness is `local/tests/hidden/portal/run.sh`; its URL is configurable with
+`AC26_WORKBENCH_URL`. Reader provenance, actual commands and observed results are in
+`local/tests/hidden/READER.md`. Browser-on-AWS checks are not part of this local evidence.

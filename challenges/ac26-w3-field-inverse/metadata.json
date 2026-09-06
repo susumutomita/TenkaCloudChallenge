@@ -38,10 +38,10 @@
   },
   "difficulty": 3,
   "estimatedDuration": "45-60 分",
-  "shortDescription": "楕円曲線の計算には割り算が要る。でも「あまりの世界」に分数は無い。かわりに「掛けて 1 になる相手」= 逆元を、拡張互除法で作る。素数でない法には逆元を持たない元があり、よく使う近道はそれを黙って見落とす。",
-  "description": "Week 3 の 1 問目。 楕円曲線の群演算へ進む前に、 F_p 上の正規化・加減乗算・逆元・除算を自分で実装する。 公式課題の template や test 値は一切参照せず、 異なる API と seed 由来 fixture で同じ数学的構造を扱う。\n\n中心にあるのは 2 つの区別。\n\n1. **integer と field element は違う**。 -5 と p-5 は同じ元だが、 -5 は正規形ではない。 hidden test は負値・法以上の値・法の整数倍を含む値の集合を与え、 すべてが [0, p) に落ちることを要求する。\n2. **`pow(a, p-2, p)` は逆元を返すとは限らない**。 p が素数なら返すが、 合成数なら 「何か数」 を返す。 拡張 Euclid は gcd を返すので、 逆元が存在しない場合をそれとして報告できる。 mutation suite の 1 つ目はまさに Fermat 版で、 素数側は全部通り合成数側で落ちる。 gcd guard を付けた Fermat 版は composite も通り、 units だけで落ちる。\n\ncheckpoint は 7 つ。 正規化と等価性、 四則と体の公理 (単位元・逆元・分配・可換・結合)、 拡張 Euclid の trace、 逆元と除算、 zero と非可逆元の error、 合成数法での counterexample 提出、 未知の合成数法 (と未知の素数法) での全元 units 検査。\n\ninverse checkpoint は素体の**全**非零元を検査する。 標本ではなく全数なので、 表を覚える戦略が成立しない。 units checkpoint は、 参加者に一度も見せない 3 桁の合成数法 (相異なる 2 素数の積または素数の 2 乗の族 `UNIT_COMPOSITES`; Carmichael 数は含めない) と未知の素数法の両方で 0 以外の全元を回し、 法と互いに素な元には掛けて 1 になる相手を、 それ以外には NotInvertible を、 `/` にも同じ規則を要求する。 旧 axioms が見ていた閉性と逆元写像の全単射は、 この中で両方の法に対して残した。 天井を置いた理由: `pow(a, m-2, m)` に gcd guard を付けた inverse は他の 6 checkpoint を全部通る (playtest で 2 分満点)。 合成数 m で a^(m-2) が逆元になるのは a^(m-1) ≡ 1 の元だけで、 単元の一部に過ぎないので、 units はこの近道を族のどの法でも落とす (16 法すべてで確認)。 `pow(a, -1, m)` は正しい逆元なので通る — 表を要求するのは egcd-trace の仕事であり、 units の仕事ではない。\n\ntrace checkpoint は Bezout 等式を各行で検査したうえで、 行列そのものを参照実装の step 列と突き合わせる。 最終行だけを持つ表は Bezout を満たしてしまうため、 それだけでは trace の検査にならない (mutation suite で実際に生き残ったので追加した)。\n\nshow.py が出す trace は algorithm 理解用であり、 入力に依存して分岐し実行時間も変わる。 constant-time 実装ではないことを participant 向けにも明記している。",
-  "instructions": "## 割り算をしたい。でも、分数が無い\n\nこのあとの楕円曲線の計算——Ethereum の署名が 1 回ごとにやっている計算——には、**割り算** が出てきます。ところが「あまりの世界」に分数はありません。割り算そのものを部品として作らないと、その先へ進めない。あなたはその土台部品を作る担当です。\n\n分数のかわりに使うのが **「掛けて 1 になる相手」= 逆元** です。あまり 7 の世界で 3 × 5 = 15 ≡ 1 なら(≡ は「7 で割ったあまりが同じ」という記号)、5 が 3 の逆元。だから 3 で割ることは、5 を掛けることになります。\n\n## ただし、近道は黙ってまちがえる\n\n逆元を出す近道として `pow(a, 法 − 2, 法)` がよく使われます。これは **法が素数のときだけ** 正しく、素数でない法では「何か数」を **文句も言わずに** 返します。法 6 で `pow(2, 4, 6)` は 4 ですが、2 × 4 = 8 を 6 で割ったあまりは 2 で、1 ではありません。\n\n下で使う拡張互除法の表なら最大公約数(gcd)が一緒に手に入るので、「この元に逆元は無い」を **無いと言えます**。黙ってまちがえる実装と、無いと言える実装——その差を、自分の手で確かめるのがこの問題です。\n\n## 前提(mod が不安なら、先に constraint-lab へ)\n\n- **法(modulus)**: 割る数のこと。法 7 なら数は 0〜6 だけで、計算のたびにあまりへ直します(正規化。復習は `ac26-w1-constraint-lab`)。マイナスは 0 以上になるまで法を足す(`(-2) % 7` は 5)。\n- **言葉**: 元 = この世界の数ひとつ。**有限体** = 法が素数で、0 以外のどの元にも逆元がある世界。素数の法 / 合成数の法 = 法が素数 / 素数でない(91 = 7 × 13 など)。gcd = 共通の約数のうち一番大きいもの。checkpoint = 採点される小問(7 つ)。\n\n## 逆元は、表を 1 本回すと出る\n\n拡張互除法(高校数学 A の互除法に s・t の列を足したもの。ここでは結果だけ使えば十分)を表で回します。**(r, s, t) の行** を 2 本、上 = (a, 1, 0)、下 = (法, 0, 1) から始め、次を繰り返します。① q = 上の r ÷ 下の r(あまりは切り捨て)。② その q と **いまの下の行** を 1 行として書き出す。③ 新しい行 = 上の行 − q × 下の行(r・s・t それぞれ)。④ 上 ← 下、下 ← 新しい行。下の行の r が 0 になったら終了。書き出した最後の行の r が gcd、その行の s が逆元のもと(マイナスなら法を足す)。検算: 書き出したどの行でも a × s + 法 × t = r になります(下の例の 2 行目なら 3 × 1 + 7 × 0 = 3)。\n\n```\na = 3, 法 = 7:\n上(3,1,0)  下(7,0,1)   q=0 → {q:0,r:7,s:0,t:1}   新=(3,1,0)\n上(7,0,1)  下(3,1,0)   q=2 → {q:2,r:3,s:1,t:0}   新=(1,−2,1)\n上(3,1,0)  下(1,−2,1)  q=3 → {q:3,r:1,s:−2,t:1}  新=(0,7,−3)\n下の r が 0。最後の行は r=1(gcd)、s=−2 → −2+7 = 5 が 3 の逆元。\n```\n\n## 山は、境目が gcd だということ\n\ngcd(a, 法) が 1 なら逆元があり、1 より大きいと無い——**その境目を、表は最大公約数として見せてくれます**。近道の `pow` はこの gcd を計算しないので、無い場合を無いと言えず、黙って何か返す。「割り算ができる元」と「できない元」を分けているのは gcd です。これがこの問題の 1 つの芯です。\n\n合成数の法では、逆元がある元と無い元が **同じ世界に混ざっています**。法 6 なら逆元があるのは 1 と 5 だけ(5 × 5 = 25 → 6 で割ったあまり 1 なので、5 の逆元は 5 自身)。2・3・4 は 6 と共通の約数を持つので無い。表はこの両方を同じ手順で扱います——a = 2 で回すと:\n\n```\na = 2, 法 = 6:\n上(2,1,0)  下(6,0,1)   q=0 → {q:0,r:6,s:0,t:1}   新=(2,1,0)\n上(6,0,1)  下(2,1,0)   q=3 → {q:3,r:2,s:1,t:0}   新=(0,−3,1)\n下の r が 0。最後の行は r=2(gcd)。1 ではないので、2 に逆元は無い。\n```\n\na = 5 で回せば最後の行は r=1、s=−1 → −1+6 = 5 になります。ある元には相手を、無い元には「無い」を、同じ表が言い分ける。\n\n## 最初の一手\n\nParticipant Portal で **「起動」** を押すと、専用環境と **問題エディタ**(`field.py`)が同じ画面に出ます。\n\n**「証拠を確認」** を押すと 4 つ出ます。①health token(確認用、提出しない)②素数の法(3 桁)③合成数の法と、その中で逆元を持たない一番小さい元 ④ある a と法での拡張互除法の表(step / q / r / s / t、gcd、逆元、検算)。\n\n③は画面がもう答えを書いています。だから **先に紙で**——合成数の法を素因数分解し(6 なら 2 × 3 で、6 と共通の約数を持つ一番小さい元は 2)、自分の答えを決めてから画面と見比べてください。手順の正しさを答え合わせできる、最初で最後の場面です(採点は見ていない別の法で行われます)。④の表は素数の法での 1 本だけで、合成数の法での表は画面に出ません。上の a = 2, 法 = 6 を紙で回して、最後の行の r が 1 にならない感触をつかんでおいてください——units で効きます。\n\n## 答えるもの — checkpoint は 7 つ\n\n書き換えるのは `field.py` だけ。エラー名 `NotInvertible`・`FieldMismatch`、`Field`・`FieldElement` のクラス枠、関数枠は最初から入っています。クラスの中身の読み方はこれだけで足ります: `self.value` がその元の数、`self.field.modulus` が法(`self` は「この元自身」を指す決まった名前)。書き換えるのは `self.value = value` の行と、各関数の `return` の中身です。\n\n1. **normalize**(25) — `Field.element(value)` の返す `.value` を必ず 0 以上・法未満に。元を作るところ(`__init__`)で直しておくと、`+` `-` `*` が返す元にも同じ道が効きます。マイナスも法より大きい整数も渡ります。同じ整数から作った元は等しく、法で割ったあまりが違う整数から作った元は等しくないこと(法 7 なら −2 と 5 は同じ元なので等しく、−2 と 4 は違う元です)。\n2. **arithmetic**(30) — `+` `-` `*`。結果も正規化済み。値だけでなく、x+0=x、x×1=x、x−x=0、分配・交換・結合も見られます。\n3. **egcd-trace**(35) — `egcd(a, b)` は `(gcd, s, t)`。`egcd_trace(a, b)` は上の表の行を順に並べたリスト(1 行 = `{\"q\",\"r\",\"s\",\"t\"}`)。**行数も各行の 4 つの数も 1 行ずつ突き合わされます**——最後の行だけ辻褄が合う表は通りません。採点で `egcd_trace(a, 法)` と `egcd(a, 法)` に渡す a は、1 以上・法未満に直した整数だけです(負の数や法以上の数は渡されません)。自分の `inverse()` から呼ぶときも、正規化済みの `.value` を a にすれば同じ表になります。q は Python の `//`(切り捨ての商)で、上の例のとおり a < 法 なら最初の行は q = 0 です。\n4. **inverse**(35) — `FieldElement.inverse()`(掛けて 1 になる相手を元で返す)と `__truediv__`(`a / b` = 逆元を掛ける)。素数の法の 0 以外 **すべての元** で試されるので、表を覚える作戦は不可。\n5. **errors**(25) — 0 の `inverse()` と 0 で割る `/` は `NotInvertible` を投げます。法の違う元どうしを組み合わせたら `FieldMismatch` を投げます — `+` だけでなく `-` `*` `/` も同じ規則にしてください(採点で確かめるのは `+` です)。「投げる」は Python の `raise` 文で書きます。2 つのエラーは `field.py` の先頭にもう定義してあるので、たとえば `raise NotInvertible(\"0 に逆元はありません\")` や `raise FieldMismatch(\"法が違います\")` の 1 行で投げられます(かっこの中の文は自由です)。\n6. **composite**(25) — `non_invertible_element(modulus)`: 0 以外で逆元を持たない **一番小さい** 元を整数で返す。素数の法ならそんな元は無いので 0。合成数の法でその元の `inverse()` が `NotInvertible` になることも見られます。\n7. **units**(25) — `field.py` が **見たことのない合成数の法** で再実行され、0 以外の **全部の元** に `inverse()` と `/` が試されます。逆元がある元(法と共通の約数を持たない元。法 6 なら 1 と 5)には掛けて 1 になる相手を返し、無い元には `NotInvertible` を投げること。返した相手が元ごとに別々か(1 対 1)、全部の元が世界に収まるかも見ます。同じことを見たことのない素数の法でも見ます(素数なら 0 以外の全部に相手があるはず)。`inverse()` の中で上の表を回していれば、新しく書くものはありません。近道の `pow` に gcd の見張りを付けた `inverse()` なら、法 6 の 5 で試してください——`pow(5, 4, 6)` の答えに 5 を掛けて、6 で割ったあまりを見る。\n\n各 checkpoint の **「提出 (+N pt)」** を押すと、そのときの `field.py` が送られて採点されます(打ち込む欄なし)。7 つは独立採点、まちがえるごとに −10 点。**「公開テストを実行」** は下見(素数の法と小さい正の数だけ。マイナスも合成数も混在も試しません)、**「初期状態に戻す」** で元の `field.py` に戻ります。\n\n## ここで書いた逆元が、曲線の割り算そのもの\n\n素数の法では 0 以外すべての元に逆元を作れ、合成数の法では逆元がある元には相手を、無い元には「無い」を同じ表で言い分けられ、その境目が gcd だと示せたら終わりです。次の `ac26-w3-ec-group` に出てくる割り算は、全部ここで書いた `inverse` と同じもの。曲線の点を足すたびに、この部品が 1 回呼ばれます。",
-  "writeup": "## integer と field element\n\n-5 と p-5 は F_p の同じ元を指すが、 -5 は正規形ではない。 element を作った時点で [0, p) に落としておくと、 負の step も法以上の初期値も同じ経路で扱える。 Python の `%` は法が正なら非負を返すので、 これは 1 演算で済む。\n\n剰余を最後にまとめて取る実装は、 この問題の範囲では正しい答えを出す。 落ちるのは中間値そのものを検査されたときで、 hidden test は演算結果が [0, p) にあることを毎回見る。\n\n## 拡張 Euclid が Fermat より多くを語る理由\n\n`pow(a, p-2, p)` は p が素数のときだけ逆元になる。 合成数 n では `pow(a, n-2, n)` も数を返すが、 それは逆元ではない。 検算しなければ気づけない。\n\n拡張 Euclid は a*s + n*t = gcd(a, n) を返す。 gcd が 1 でなければ逆元は存在せず、 アルゴリズムがそれを教えてくれる。 「存在しないことが分かる」 のが Fermat 版との差で、 mutation suite の 1 つ目はこの差だけで落ちる。\n\n## trace を行列ごと突き合わせる理由\n\ntrace checkpoint は当初、 各行が Bezout 等式 a*s + p*t = r を満たすことと、 最終行が gcd と逆元に一致することだけを見ていた。 mutation suite に 「最終行だけを返す」 変異を入れたところ、 生き残った。 1 行だけの表はその条件をすべて満たすからだ。\n\n現在は step 数と各行の (q, r, s, t) を参照実装の列と突き合わせる。 floor 除算なので step 列は一意に決まり、 正解はちょうど 1 つある。\n\n## 全数検査\n\ninverse checkpoint は素体の全非零元 (p-1 個、 p は 3 桁) を回す。 標本ではないので、 一部の値だけ特別扱いする実装は通らない。 units checkpoint は同じ全数検査を、 参加者に見せない合成数法に移す。 gcd が 1 の元には掛けて 1 になる相手、 それ以外には NotInvertible、 `/` も同じ規則。 逆元写像が 「逆元を持つ元」 の上で全単射であること (体では逆元は一意で、 異なる元が同じ逆元を持つことはない) と閉性は、 合成数法と未知の素数法の両方で見る。\n\n## gcd guard 付きの近道が units でだけ落ちる理由\n\n`if gcd(a, m) != 1: raise` の後ろに `pow(a, m-2, m)` を置く実装は、 composite を含む 6 つの checkpoint を全部通る。 落ちるのは units だけで、 理由は Fermat の小定理が素数でしか成り立たないこと。 合成数 m で a^(m-2) が a の逆元になるのは a^(m-1) ≡ 1 (mod m) の元、 つまり m を素数だと誤認させる底だけで、 単元群の真部分群に過ぎない (m = 91 なら 72 個の単元のうち 36 個)。 Carmichael 数 (最小 561) では全単元で成り立ってしまうので、 fixture 族 `UNIT_COMPOSITES` は 3 桁の相異なる 2 素数の積と素数の 2 乗だけにして、 これを外してある。 表 (拡張 Euclid) は法が素数かどうかを知らずに全元を正しく扱う — それがこの問題の主張そのもので、 units はその主張を採点に変えたものだ。 本文は法 6 の 5 で近道を試すよう促すだけで、 結果は書かない。 表を使った参加者には新しい仕事が無く、 近道を使った参加者には §15 の message (「an element times its inverse is not one」) と法 6 の実験が分岐点になる。\n\n## trace は constant-time ではない\n\nshow.py が出す trace は入力に依存して分岐し、 step 数も入力で変わる。 実際の鍵を扱う実装では、 この性質そのものが side-channel になる。 ここでは algorithm を読むためのものであり、 production 実装の参考にはならない。\n\n## 次につながるところ\n\n次の問題で曲線の群演算を作る。 点の加算は分母に体の逆元を持つので、 ここで作った inverse がそのまま使われ、 分母が 0 になる場合分けが群法則の場合分けそのものになる。",
+  "shortDescription": "余りの計算で「割る」を作る。掛けて余りが 1 になる相手を逆元と呼びます。まず −2 を法 7 の余り 5 に直し、表を使って逆元がある数とない数を見分けます。",
+  "description": "余りの計算で「割る」を作る。掛けて余りが 1 になる相手を逆元と呼びます。まず −2 を法 7 の余り 5 に直し、表を使って逆元がある数とない数を見分けます。",
+  "instructions": "## まず、−2 を「余り 5」に直す\n\nあなたは暗号の計算に使う「割り算」の部品を作ります。整数をそのまま割る代わりに、**掛けて余りが 1 になる相手（逆元）**を使います。\n\n`FieldElement` は法と余りをまとめる型、`__init__` は元を作るときに動くメソッド（型の中の関数）です。\n\n**起動 → 証拠を確認 → `field.py` の `FieldElement.__init__` を編集 → 公開テストを実行 →「余りを 0 以上にそろえる」の提出**。まず `self.value` に、`value` を `field.modulus` で割った余りを入れてみてください。負の数を含む公開テストで結果を確認できます。\n\n## 前提\n\n- 割る数 `m` を **法** と呼びます。この問題では整数 `m > 1` です。整数 `v` を `m` で割った余りは Python の `v % m`。`v = m × q + r` と書ける `0 ≤ r < m` を取ります。例：`−2 = 7 × (−1) + 5` なので `(-2) % 7 = 5`。\n- この範囲の余りにそろえる操作が **正規化**。法と余りの組が、このプログラムの **元（element）** です。`Field(m)` が法を保管し、`.element(v)` が元を作ります。`self` は「この元自身」、`self.value` は余り、`self.field.modulus` は法です。クラス内の関数を **メソッド** と呼びます。\n- `u ≡ v (mod m)` は「`u` と `v` を `m` で割った余りが同じ」。`≡` はこの意味の記号です。`gcd(a,m)` は `a` と `m` の最大公約数。\n- 法が素数 `p` なら、0 以外の全ての元に逆元があります。この余りの計算は **有限体**（有限個の元で四則ができ、0 以外で割れる仕組み）の一例です。合成数の法も同じコードで扱いますが、全ての非零の元では割れません。\n\n## 足す・引く・掛ける → 余りへ戻す\n\n| 操作 | 一般の式 | 法 7、a=5、b=4 |\n|---|---|---|\n| `a + b` | `(a+b) % m` | `9 % 7 = 2` |\n| `a - b` | `(a-b) % m` | `1 % 7 = 1` |\n| `a * b` | `(a*b) % m` | `20 % 7 = 6` |\n\n`__add__`・`__sub__`・`__mul__` に対応します。整数ではなく、同じ法の `FieldElement` を返します。元を作るたびに正規化すると、途中の答えも範囲に収まります。\n\n**等しいとは、法も余りも同じこと。** 法 7 の −2 と 5 は等しく、法 6 の 5 とは違います。`__eq__` がこの比較です。`__hash__` は辞書や集合が元を整理するための整数を返すメソッドで、等しい元なら同じ値が必要です。`hash((self.field.modulus, self.value))` が使えます。違う元のハッシュがたまたま同じでも構いません。\n\n足す順番や括弧で答えが変わらず、`x+0=x`、`x*1=x`、`x-x=0`、`x*(y+z)=x*y+x*z` も成り立ちます。たとえば法 7 で `2*(3+4)` と `2*3+2*4` は、どちらも余り 0 です。\n\n## 割る →「掛けて 1 になる相手」を掛ける\n\n`a` の逆元を `x` とすると **`a*x ≡ 1 (mod m)`**。法 7 では `3*5=15=7*2+1` なので 3 の逆元は 5。`4 / 3` は `4*5 % 7 = 6` です。\n\nどうやって相手を探すのでしょう。`a*s + m*t = g` の整数 `s,t` と最大公約数 `g` を同時に求める **拡張ユークリッドの互除法**を使います。`g=1` なら `m*t` は余り 0 なので **逆元は `s % m`**。`g>1` なら、`a` と `m` のどんな整数倍の和も `g` の倍数で、1 にはなりません。\n\n```text\n3 × (−2) + 7 × 1 = 1  →  3 の逆元は (−2) % 7 = 5\n2 × 1    + 6 × 0 = 2  →  2 と 6 の最大公約数は 2。逆元なし\n```\n\n### 表の作り方：同じ等式を壊さず引き算する\n\n各行を `(r,s,t)` とし、常に `a*s + m*t = r` を保ちます。\n\n1. 上の行を `(a,1,0)`、下の行を `(m,0,1)` にする。\n2. 下の `r` が 0 でなければ、商 `q = 上のr // 下のr` を求める。`//` は整数の商です。\n3. **いまの下の行**を `{\"q\":q,\"r\":r,\"s\":s,\"t\":t}` として記録。\n4. 新しい行の各数を `上 − q × 下` にする。上を古い下へ、下を新しい行へ移して繰り返す。\n5. 下の `r` が 0 なら終了。上の `(r,s,t)` が `egcd` の返す `(g,s,t)`。\n\nなぜ等式が保たれる？ 上下の等式を引くと `a*(上s−q*下s) + m*(上t−q*下t) = 上r−q*下r`。3 列とも同じ引き算だからです。`r` の列は割り算の余りを順に取り、最後の 0 でない余りが最大公約数になります。\n\n| a=3、m=7 | 上 (r,s,t) | 下 (r,s,t)：記録する行 | q | 次の下 |\n|---|---|---|---|---|\n| 1 | (3,1,0) | (7,0,1) | 0 | (3,1,0) |\n| 2 | (7,0,1) | (3,1,0) | 2 | (1,−2,1) |\n| 3 | (3,1,0) | (1,−2,1) | 3 | (0,7,−3) |\n\n`egcd(3,7)` は `(1,-2,1)`。`egcd_trace(3,7)` は順番通りの 3 行：\n`[{\"q\":0,\"r\":7,\"s\":0,\"t\":1}, {\"q\":2,\"r\":3,\"s\":1,\"t\":0}, {\"q\":3,\"r\":1,\"s\":-2,\"t\":1}]`。\n`egcd` の 3 数、trace の行の列は list / tuple のどちらでも構いません。各行は `q,r,s,t` を持つ dict、各数は整数（`True` や小数は不可）。`s,t` の負号はそのまま残し、逆元を元として返すときに正規化します。\n\n`egcd` と `egcd_trace` の提出テストの入力は `1 ≤ a < m`。`inverse()` 内からは正規化した `.value` を渡せます。0 の逆元は先に例外にして構いません。\n\n## 逆元がないときに、数を返さない\n\n0 は何を掛けても 0 なので逆元なし。合成数の法でも、最大公約数が 1 かで判断できます。\n\n| 法 m | 0 以外で逆元がある元 → 相手 | 0 以外で逆元なし | 最小の逆元なしを返す関数 |\n|---|---|---|---|\n| 6 | 1→1、5→5 | 2、3、4 | `non_invertible_element(6) = 2` |\n| 9 | 1→1、2→5、4→7、5→2、7→4、8→8 | 3、6 | `non_invertible_element(9) = 3` |\n| 7 | 1→1、2→4、3→5、4→2、5→3、6→6 | なし | `non_invertible_element(7) = 0` |\n\nこの関数の 0 は「該当する **0 以外の**元なし」の印です。2 から法未満を順に調べ、`gcd(a,m)>1` の最初の `a` を返し、なければ 0。1 は自分が逆元です。\n\n`inverse()` と `/` は、逆元がなければ `raise NotInvertible(\"no inverse\")`。異なる法の元を `+ - * /` で組み合わせるなら、計算前に `raise FieldMismatch(\"different moduli\")`。例外のクラスは用意済みで、説明文字列は自由です。\n\n素数 `p` で非零の `a` なら、`a` の `p−1` 乗の余りが 1 になる性質（Fermat の小定理）があり、`pow(a,p-2,p)` でも逆元が求まります。しかし一般の合成数での保証はありません。法 6 の 5 は逆元を持つのに `pow(5,4,6)=1`、`5*1 % 6=5` で失敗。互除法なら、素数か合成数かを先に決めずに判断できます。\n\n## 7 つの提出欄と、編集する場所\n\n| 欄 | 直す場所 | 確認したいこと |\n|---|---|---|\n| normalize | `FieldElement.__init__`, `__eq__`, `__hash__` | 負の数も余りへ。同じ法・余りなら等しく同じハッシュ |\n| arithmetic | `__add__`, `__sub__`, `__mul__` | 足し引き掛け算とその途中でも正しい余り |\n| egcd-trace | `egcd`, `egcd_trace` | 表の全行と最大公約数・係数が一致 |\n| inverse | `inverse`, `__truediv__` | 素数の法で 0 以外全てに逆元。割って掛けると元へ戻る |\n| errors | 逆元・4 演算の例外分岐 | 0 で割れず、異なる法を混ぜない |\n| composite | `non_invertible_element`, `inverse` | 最小の逆元なしを見つけ、それを逆元として返さない |\n| units | 同じ `inverse`, `__truediv__` | 未見の素数・合成数でも全ての非零の元を判断 |\n\n`field.py` のメソッド・関数の中は、条件分岐やループを追加して編集できます。枠の名前と引数は保ちます。**全欄コード提出で、数字や JSON を別入力しません。** 各欄の「提出 (+N pt)」が現在のファイルを送ります。7 欄は独立採点、誤答は各 −10 点です。\n\n「証拠を確認」は今回の法・表・逆元と検算を表示します。上の小例を計算してから、その表の `a` と `modulus` でも同じ手順を追ってください。「公開テストを実行」は小例と表示された素数を確認する下見で、全ての未見の法は検査しません。「初期状態に戻す」は編集を取り消します。\n\nこの部品は、次の楕円曲線（暗号で使う曲線上の点の計算）の傾きの式にも使われます。点の特殊な場合分けを含む、曲線演算や署名全体をここで実装するわけではありません。\n\n計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。自分のコード内で import できます。追加のパッケージ導入、ファイルの読み書き、ネットワーク通信はこの実行環境では使いません。必要な整数計算は組み込みの演算だけでも実装できます。\n",
+  "writeup": "## 正規化から逆元へ\n\n法 m と余り v%m を組にして元を表す。同じ法と余りなら等しいので、hash も同じにする。足し引き掛け算は整数の演算後に同じ法で正規化する。\n\n拡張互除法の各行は a*s+m*t=r を満たす。全列に同じ「上−q×下」を施すのでこの等式が保たれ、最後の非零 r が最大公約数 g になる。g=1 なら s%m が逆元、g>1 なら1を作れず逆元はない。合成数でも同じ判定を使える。\n\nFermat の pow(a,m-2,m) は素数の法の非零元には保証があるが、一般の合成数にはない。法6の5は逆元5を持つが、近道の結果1は逆元ではない。特定の合成数・元で近道が偶然成功することと、全入力に対する保証は別である。\n\n## 検査と保証の範囲\n\n表は指定された整数商の手順と全行を比較する。逆元・除算は、選ばれた素数/合成数の非零元を全て確認する。これは有限の入力での検査であり、任意の実装を数学的に証明したことにはならない。\n\n採点器は値と法を親で検査し、誤った逆元と掛け算が打ち消し合うだけの成功や、失敗なしの印字を採点根拠にしない。新しい呼び出し識別子は事前印字を拒否するが、任意Pythonの関数内部のreturnや例外発生元を証明するものではない。同じ正しい数値を返す実装は同じ数学条件で評価される。\n\n表の分岐と行数は入力に依存するため、実際の秘密鍵を扱う定時間実装の見本ではない。次の曲線問題では一般の場合の傾きの割り算に逆元を用い、特別な点の組は別途場合分けする。\n",
   "tags": [
     "advanced-cryptography-2026",
     "week3",
@@ -80,84 +80,168 @@
       {
         "id": "normalize",
         "input": "multiline",
-        "label": "整数を体の元にする",
+        "label": "余りを 0 以上にそろえる",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "normalize-hint-1",
-            "content": "検算は法 7 で −7・−1・7・14 の 4 つ: `.value` は 0・6・0・0 になるはずです。 `abs()` で符号を消すと −1 が 1 になって外れます。 正規化は `FieldElement` を作るたびに (`__init__` の中で) 行うと、 `+` `-` `*` が返す元にも同じ道が効きます。",
+            "content": "正規化は、同じ余りを持つ整数を一つの表し方にそろえます。元は余りだけでなく法も持つので、比較でも両方を見ます。",
             "penalty": 10
+          },
+          {
+            "id": "normalize-hint-2",
+            "content": "整数 v を m で割った余りは v % m。−2 = 7×(−1)+5 なので法 7 では 5。法 7 の −2 と 5 は等しく、法 6 の 5 は違います。等しい元の hash は同じ整数にします。",
+            "penalty": 0
+          },
+          {
+            "id": "normalize-hint-3",
+            "content": "`field.py` の FieldElement.__init__ で value を field.modulus で割った余りにする → __eq__ で法と余りを比較 → __hash__ はその組を hash に渡す → 公開テストの elements-are-canonical を確認 → この欄で提出。",
+            "penalty": 0
           }
         ]
       },
       {
         "id": "arithmetic",
         "input": "multiline",
-        "label": "加減乗算と体の公理",
+        "label": "足し算・引き算・掛け算",
         "points": 30,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "arithmetic-hint-1",
+            "content": "元の足し引き掛け算は、整数の計算をしたあと、同じ法の余りへ戻す操作です。途中で作った元も同じ規則を通します。",
+            "penalty": 0
+          },
+          {
+            "id": "arithmetic-hint-2",
+            "content": "法 m なら (a+b)%m、(a-b)%m、(a*b)%m。法 7 で 5+4→2、5−4→1、5×4→6。2×(3+4) と 2×3+2×4 も同じ余り 0 です。",
+            "penalty": 0
+          },
+          {
+            "id": "arithmetic-hint-3",
+            "content": "field.py の __add__・__sub__・__mul__ で self.value と other.value を計算し、同じ self.field の FieldElement を返す → 公開テストの arithmetic-on-small-values と small-seven-arithmetic を確認 → この欄で提出。",
+            "penalty": 0
+          }
+        ]
       },
       {
         "id": "egcd-trace",
         "input": "multiline",
-        "label": "拡張 Euclid の各ステップを出す",
+        "label": "最大公約数を求める表",
         "points": 35,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "egcd-hint-1",
-            "content": "`egcd` と `egcd_trace` が返す s・t は表の数そのまま (マイナスもそのまま) です。 法を足して 0 以上にするのは `inverse()` の側で。 検算: `egcd(3, 7)` は `(1, -2, 1)`、 `egcd(2, 6)` は `(2, 1, 0)` — 後者は gcd が 2 なので、 下の r が 0 になった時点で止まります。 r が 1 になるのを待ってはいけません。",
+            "content": "最大公約数を求める割り算の余りに、元の二つの数を何倍したかの列を添えます。表の各行が同じ関係を保つので、最後の行から逆元の有無と、ある場合の相手を取り出せます。",
             "penalty": 15
+          },
+          {
+            "id": "egcd-hint-2",
+            "content": "各行 (r,s,t) は a*s+m*t=r。上−q×下を全列にするとこの等式も保たれます。a=3,m=7 の記録 (q,r,s,t) は (0,7,0,1)→(2,3,1,0)→(3,1,−2,1)。最後は 3×(−2)+7×1=1。",
+            "penalty": 0
+          },
+          {
+            "id": "egcd-hint-3",
+            "content": "egcd/egcd_trace で上=(a,1,0)、下=(b,0,1) → 下rが0になるまで q=上r//下r → いまの下とqをdictに記録 → 全列を上−q×下に更新。egcdは最後の上、traceは記録全行を返す。証拠を確認の表と比較して、この欄で提出。",
+            "penalty": 0
           }
         ]
       },
       {
         "id": "inverse",
         "input": "multiline",
-        "label": "逆元と除算",
+        "label": "掛けて 1 になる相手と割り算",
         "points": 35,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "inverse-hint-1",
-            "content": "検算は全数で: 法 7 で x = 1〜6 を for で回し、 `(x * x.inverse()).value` が全部 1 か見ます。 外れる x があるなら、 その x で表を紙で回し、 最後の行の s と自分の `inverse()` の途中の値を並べて、 どこで分かれるかを探してください。 よくある分かれ目は、 表に渡した a が正規化前の整数だったことと、 上下の行を逆 (上 = 法) に始めて s と t の役が入れ替わったことです。",
+            "content": "逆元は、掛けると余りが一になる相手です。割り算はその相手を掛けること。互除法の最大公約数が一なら相手を取り出せます。",
             "penalty": 15
+          },
+          {
+            "id": "inverse-hint-2",
+            "content": "gcdが1のとき a*s+m*t=1 から逆元=s%m。3×(−2)+7×1=1 なので3の逆元は5、4/3は4×5を7で割った余り6。",
+            "penalty": 0
+          },
+          {
+            "id": "inverse-hint-3",
+            "content": "inverse() で正規化した self.value と self.field.modulus を egcd に渡す → gが1ならsからFieldElementを作る → __truediv__ は相手の inverse() を掛ける → 公開テスト small-seven-inverse を確認 → この欄で提出。",
+            "penalty": 0
           }
         ]
       },
       {
         "id": "errors",
         "input": "multiline",
-        "label": "存在しないものを存在しないと言う",
+        "label": "割れない・法が違うときのエラー",
         "points": 25,
-        "wrongAnswerPenalty": 10
+        "wrongAnswerPenalty": 10,
+        "hints": [
+          {
+            "id": "errors-hint-1",
+            "content": "逆元がないときの答えは数ではなく例外です。また、割る数が違う二つの計算を勝手に混ぜてはいけません。",
+            "penalty": 0
+          },
+          {
+            "id": "errors-hint-2",
+            "content": "0×x はいつも0で余り1にはならないため NotInvertible。法7の3と法6の3を足す・引く・掛ける・割るときは FieldMismatch。法と値は別々に確認します。",
+            "penalty": 0
+          },
+          {
+            "id": "errors-hint-3",
+            "content": "inverse と __truediv__ で逆元なしを raise NotInvertible にする。__add__・__sub__・__mul__・__truediv__ の最初で法を比べ、違えば raise FieldMismatch。例外クラス名は先頭に定義済み。公開テスト zero-and-mixed-moduli を確認して提出。",
+            "penalty": 0
+          }
+        ]
       },
       {
         "id": "composite",
         "input": "multiline",
-        "label": "素数でない法で反例を作る",
+        "label": "逆元がない最小の数",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "composite-hint-1",
-            "content": "検算: 法 6 → 2、 法 9 → 3、 法 15 → 3、 法 7 → 0。 答えはいつも法の一番小さい素因数になります (2 つの素数の積でも、 9 = 3 × 3 のような素数の 2 乗でも)。 1 は自分自身が逆元なので候補に入らず、 2 から始めます。 素数の法では最後まで見つからないので、 for 文を抜けたあとに 0 を返す道を用意してください。",
+            "content": "合成数の法では、法と共通の約数を持つ数に逆元がありません。そのうち最小の、零ではない数を探します。素数なら該当する数はありません。",
             "penalty": 12
+          },
+          {
+            "id": "composite-hint-2",
+            "content": "判定は gcd(a,m)>1。法6では2が最小、法9では3、法7では該当なしの印0。合成数の場合だけ最小の素因数と一致し、素数自体を答えにはしません。",
+            "penalty": 0
+          },
+          {
+            "id": "composite-hint-3",
+            "content": "non_invertible_element の modulus に対し2からmodulus未満まで順に egcd のgを調べる → 最初のg>1でその数を返す → 見つからなければ0。inverseもg>1なら例外にする。証拠を確認の compositeModulus と表の小例を比べ、この欄で提出。",
+            "penalty": 0
           }
         ]
       },
       {
         "id": "units",
         "input": "multiline",
-        "label": "見たことのない合成数の法で、逆元の有無を全元で言い分ける",
+        "label": "別の法でも、逆元の有無を判断",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "units-hint-1",
-            "content": "近道 `pow(a, 法 − 2, 法)` が素数でだけ正しいのは、 素数 p では 0 以外のどの元も p − 1 乗すると 1 になる (Fermat の小定理と呼ばれる性質) からで、 そのとき a の p − 2 乗が逆元になります。 合成数ではこの性質が崩れるので、 逆元がある元でも近道は外れます。 検算: `pow(5, 4, 6)` と `5 * 5 % 6` を比べてください。 表 (`egcd`) を `inverse()` の中で呼び、 gcd が 1 のときだけ s から元を作れば、 素数でも合成数でも同じ道になります。",
+            "content": "逆元がある元を unit と呼びます。最後の欄では新しいコードを増やすより、同じ仕組みが素数でも合成数でも、全ての元を正しく分けるか確かめます。",
             "penalty": 10
+          },
+          {
+            "id": "units-hint-2",
+            "content": "法9では2の逆元5（2×5を9で割った余り1）、3はgcd(3,9)=3でなし。法6の5は逆元5でも pow(5,4,6)=1 は誤り。逆元が存在する ⇔ gcd(a,m)=1（⇔ はどちら向きにも成り立つ意味）。見つけた x は a*x%m=1 で検算します。",
+            "penalty": 0
+          },
+          {
+            "id": "units-hint-3",
+            "content": "inverse と __truediv__ に特定の法だけの分岐がないか確認 → egcdのgが1ならsから元、そうでなければNotInvertible → 本文の法6/9の全ての数で相手と例外を追う → 同じfield.pyをこの欄で提出。未見の法でも同じ規則が検査されます。",
+            "penalty": 0
           }
         ]
       }
@@ -166,10 +250,10 @@
   "i18n": {
     "en": {
       "name": "Build the field before the curve",
-      "shortDescription": "Elliptic-curve arithmetic needs division, but the world of remainders has no fractions. You build the stand-in — the partner that multiplies to 1, the inverse — from the extended Euclidean algorithm. Over a composite modulus some elements have no inverse, and the popular shortcut misses that in silence.",
-      "description": "First problem of Week 3. Before moving on to the elliptic-curve group, implement normalisation, addition, subtraction, multiplication, inversion and division over F_p yourself. No template or test values from the official assignment are referenced; the same mathematical structure is covered with a different API and seed-derived fixtures.\n\nTwo distinctions sit at the centre.\n\n1. **An integer is not a field element.** -5 and p-5 are the same element, but -5 is not in normal form. The hidden tests supply sets including negatives, values above the modulus and integer multiples of it, and require everything to land in [0, p).\n2. **`pow(a, p-2, p)` does not necessarily return an inverse.** It does when p is prime; when p is composite it returns \"some number\". The extended Euclid returns a gcd, so it can report a non-existent inverse as exactly that. The first mutant in the mutation suite is precisely the Fermat version — it passes every prime case and fails on the composites. The Fermat version behind a gcd guard passes the composite one too, and fails only on units.\n\nSeven checkpoints: normalisation and equivalence; the four operations and the field axioms (identity, inverses, distributivity, commutativity, associativity); the extended-Euclid trace; inversion and division; errors for zero and non-invertible elements; a submitted counterexample under a composite modulus; and `units`, every element of an unseen composite modulus (and of an unseen prime).\n\nThe inverse checkpoint checks **every** non-zero element of the prime field — exhaustive, not sampled, so memorising a table is not a strategy. The units checkpoint enumerates every non-zero element of a three-digit composite modulus the participant is never shown (the family `UNIT_COMPOSITES`: products of two distinct odd primes and odd prime squares, no Carmichael number) and of an unseen prime: elements coprime to the modulus must get the partner that multiplies to 1, the rest must raise NotInvertible, and `/` must follow the same rule. The closure and bijection properties the former axioms checkpoint checked are kept inside it, over both moduli. Why the ceiling is there: an inverse that puts a gcd guard in front of `pow(a, m-2, m)` passes the other six checkpoints (a two-minute full score in playtest). Over a composite m, a^(m-2) is the inverse only for elements with a^(m-1) ≡ 1, a minority of the units, so units rejects that shortcut on every modulus of the family (confirmed on all 16). `pow(a, -1, m)` is a correct inverse and passes — demanding the table is egcd-trace's job, not this checkpoint's.\n\nThe trace checkpoint verifies the Bezout identity on every row and then matches the matrix itself against the reference implementation's step sequence. A table holding only the final row satisfies Bezout, so that alone is no trace check (added after it actually survived the mutation suite).\n\nThe trace show.py prints is for understanding the algorithm; it branches on the input and its running time varies. That this is not a constant-time implementation is stated to the participant as well.",
-      "instructions": "## You want to divide — but there are no fractions\n\nThe elliptic-curve arithmetic coming next — the arithmetic an Ethereum signature performs every single time — needs **division**. But the world of remainders has no fractions. Unless you build division itself as a component, nothing past this point moves; that component is your job.\n\nWhat stands in for a fraction is **\"the partner that multiplies to 1\" — the inverse**. In the world mod 7, 3 × 5 = 15 ≡ 1 (≡ means \"leaves the same remainder mod 7\"), so 5 is the inverse of 3, and dividing by 3 is multiplying by 5.\n\n## But the popular shortcut is silently wrong\n\nThe usual shortcut for the inverse is `pow(a, modulus − 2, modulus)`. It is correct **only when the modulus is prime**; for a composite modulus it returns *some number* **without a word of complaint**. With modulus 6, `pow(2, 4, 6)` is 4 — yet 2 × 4 = 8 leaves remainder 2 mod 6, not 1.\n\nThe extended-Euclid table below hands you the greatest common divisor (gcd) alongside the inverse, so it can **say** \"this element has no inverse\" and mean it. Silently wrong versus able-to-say-no — you confirm that gap with your own hands.\n\n## Before you start (shaky on mod? do constraint-lab first)\n\n- **Modulus**: the number you divide by. Mod 7 the numbers are just 0..6, folded back after every step (normalizing; recap in `ac26-w1-constraint-lab`). Negatives get the modulus added until they are 0 or more (`(-2) % 7` is 5).\n- **Words**: element = one number of this world. **finite field** = a world with a prime modulus, where every element but 0 has an inverse. prime / composite modulus = the modulus is / is not prime (91 = 7 × 13). gcd = the largest divisor two numbers share. checkpoint = one graded question (seven here).\n\n## The inverse falls out of one table\n\nRun the extended Euclidean algorithm (the school gcd algorithm with s and t columns added; here you only use the result) as a table. Two rows of **(r, s, t)**, starting upper = (a, 1, 0), lower = (modulus, 0, 1), then repeat: ① q = upper r ÷ lower r (drop the remainder). ② Write out that q with the current **lower row** as one row. ③ New row = upper − q × lower (for r, s, t each). ④ upper ← lower, lower ← new row. Stop when the lower r hits 0. The last written row's r is the gcd, and its s is the inverse before folding (add the modulus if negative). Check: every written row satisfies a × s + modulus × t = r (row 2 of the example below: 3 × 1 + 7 × 0 = 3).\n\n```\na = 3, modulus = 7:\nupper(3,1,0)  lower(7,0,1)   q=0 -> {q:0,r:7,s:0,t:1}   new=(3,1,0)\nupper(7,0,1)  lower(3,1,0)   q=2 -> {q:2,r:3,s:1,t:0}   new=(1,-2,1)\nupper(3,1,0)  lower(1,-2,1)  q=3 -> {q:3,r:1,s:-2,t:1}  new=(0,7,-3)\nlower r is 0. Last row: r=1 (gcd), s=-2 -> -2+7 = 5, the inverse of 3.\n```\n\n## The crux: the boundary is the gcd\n\nIf gcd(a, modulus) is 1 there is an inverse; if it is more than 1 there is none — and **the table shows you that boundary as the greatest common divisor**. The `pow` shortcut never computes that gcd, so it cannot say \"no inverse\" and returns something anyway. What separates an element you can divide by from one you cannot is the gcd. That is the one idea at the centre of this problem.\n\nUnder a composite modulus, elements with an inverse and elements without one **share the same world**. Under modulus 6 only 1 and 5 have one (5 × 5 = 25 leaves remainder 1 mod 6, so 5 is its own inverse); 2, 3 and 4 share a factor with 6 and have none. The table handles both with the same steps — run it for a = 2:\n\n```\na = 2, modulus = 6:\nupper(2,1,0)  lower(6,0,1)   q=0 -> {q:0,r:6,s:0,t:1}   new=(2,1,0)\nupper(6,0,1)  lower(2,1,0)   q=3 -> {q:3,r:2,s:1,t:0}   new=(0,-3,1)\nlower r is 0. Last row: r=2 (gcd). Not 1, so 2 has no inverse.\n```\n\nRun it for a = 5 and the last row has r=1, s=-1 -> -1+6 = 5. One table hands an element its partner, or says there is none.\n\n## First move\n\nIn Participant Portal, select **起動 (Start)**; your runtime and the problem editor (`field.py`) appear on the same page.\n\nPress **Inspect evidence**. Four things: ① a health token (a proof it ran; not submitted), ② the prime modulus (three digits), ③ a composite modulus and the smallest element in it with no inverse, ④ the extended-Euclid table for one a and modulus (step / q / r / s / t, gcd, inverse, check).\n\nItem ③ has already written the answer on screen. So do it **on paper first**: factor the composite modulus (6 = 2 × 3, whose smallest element sharing a factor with it is 2), settle your own answer, then compare. It is the first and last place to check your procedure against a known answer — grading runs on moduli you never see. Item ④ is one table under the prime modulus only; no table under the composite one is shown. Run a = 2, modulus = 6 from above on paper and get a feel for a last row whose r is not 1 — it pays off in units.\n\n## What you answer — seven checkpoints\n\n`field.py` is the only file you edit. The error names `NotInvertible` and `FieldMismatch`, the `Field` and `FieldElement` skeletons, and the function skeletons are all there. Reading the class needs only this: `self.value` is the element's number and `self.field.modulus` is the modulus (`self` is the fixed name for \"this element itself\"). What you change is the `self.value = value` line and the body of each `return`.\n\n1. **normalize** (25) — make the `.value` of `Field.element(value)` always land in 0 up to modulus − 1. Fix it where the element is built (`__init__`) and the elements `+`, `-` and `*` return take the same path. Negatives and integers above the modulus both arrive. Elements built from the same integer are equal; elements built from integers with different remainders mod the modulus are not (with modulus 7, −2 and 5 are the same element and must compare equal; −2 and 4 are different elements).\n2. **arithmetic** (30) — `+`, `-`, `*`, results normalized. Beyond values, it checks x+0=x, x×1=x, x−x=0, distributivity, commutativity and associativity.\n3. **egcd-trace** (35) — `egcd(a, b)` returns `(gcd, s, t)`. `egcd_trace(a, b)` returns the table's rows in order (each `{\"q\",\"r\",\"s\",\"t\"}`). **Row count and all four numbers are compared row by row** — a table that only balances in its last row does not pass. The grader only ever passes `egcd_trace(a, modulus)` and `egcd(a, modulus)` an `a` already folded into 1 .. modulus − 1 (never a negative number or one at or above the modulus). When your own `inverse()` calls them, using the normalized `.value` as `a` gives the same table. q is Python's `//` (the floor quotient), so, as in the example above, the first row has q = 0 whenever a < modulus.\n4. **inverse** (35) — `FieldElement.inverse()` (the partner that multiplies to 1, as an element) and `__truediv__` (`a / b` = multiply by the inverse). Tried on **every** non-zero element of a prime modulus, so memorizing a table is not a plan.\n5. **errors** (25) — `inverse()` of 0 and `/` by 0 raise `NotInvertible`. Combining elements of two different moduli raises `FieldMismatch` — not only for `+` but for `-`, `*` and `/` as well (the grader checks it with `+`). \"Raising\" is written with Python's `raise` statement; both errors are already defined at the top of `field.py`, so one line such as `raise NotInvertible(\"zero has no inverse\")` or `raise FieldMismatch(\"different moduli\")` does it (the text inside the parentheses is yours to choose).\n6. **composite** (25) — `non_invertible_element(modulus)`: return, as an integer, the **smallest** non-zero element with no inverse. For a prime modulus none exists, so return 0. Calling `inverse()` on that element under the composite modulus must raise `NotInvertible`.\n7. **units** (25) — `field.py` re-runs under a **composite modulus you have not seen**, and `inverse()` and `/` are tried on **every** non-zero element. Elements that have an inverse (those sharing no factor with the modulus — under modulus 6, 1 and 5) must get the partner that multiplies to 1; the rest must raise `NotInvertible`. It also checks the partners are distinct per element (one-to-one) and that every element stays inside the world, then repeats all of it under a prime modulus you have not seen (there, every non-zero element should have a partner). If your `inverse()` runs the table above, there is nothing new to write. If it is the `pow` shortcut behind a gcd guard, try it on 5 under modulus 6 — multiply `pow(5, 4, 6)` by 5 and take the remainder mod 6.\n\nEach checkpoint's **提出 (Submit, +N pt)** sends the current `field.py` and grades it (nothing to type). The seven are graded independently; each wrong try costs 10 points. **Run public tests** is a preview (one prime modulus, a few small positives — no negatives, no composite, no mixed moduli); **Restore starter** brings back the original `field.py`.\n\n## The inverse you write here is the curve's division\n\nYou are done when every non-zero element of the prime modulus gets its inverse, the composite modulus gets each element sorted by the same table — a partner, or \"there is no inverse\" said out loud — and that table shows the boundary between them is the gcd. Every division in `ac26-w3-ec-group` next is the same `inverse` you write here — one call of this component each time two curve points are added.",
-      "writeup": "## Integers and field elements\n\n`-5` and `p - 5` name the same element of `F_p`, but `-5` is not a canonical representative of it. Normalizing when the element is constructed means a negative input and an input past the modulus take the same path afterwards. Python's `%` returns a non-negative result for a positive modulus, so that is one operation.\n\nReducing only at the end produces the right final answer for this exercise. What it fails is being asked about an intermediate value, and the hidden tests check that every arithmetic result lands in `[0, p)`.\n\n## Why the extended algorithm says more than Fermat\n\n`pow(a, p - 2, p)` is an inverse only when `p` is prime. Over a composite `n`, `pow(a, n - 2, n)` still returns a number — it just is not an inverse, and nothing tells you unless you check.\n\nThe extended Euclidean algorithm returns `a*s + n*t = gcd(a, n)`. When the gcd is not 1 there is no inverse, and the algorithm has told you so. Knowing the answer does not exist is the difference, and the first mutation in the suite fails on that difference alone.\n\n## Why the trace is compared row by row\n\nThe trace checkpoint originally checked only that each row satisfies `a*s + p*t = r` and that the last row matches the gcd and the inverse. A mutation that returns *only the last row* survived that: a one-row table satisfies every one of those conditions.\n\nIt now compares the step count and each row's `(q, r, s, t)` against the reference sequence. Floor division makes that sequence deterministic, so there is exactly one right answer.\n\n## Exhaustive, not sampled\n\nThe inverse checkpoint runs every non-zero element of the prime field — `p - 1` of them, with `p` in the hundreds. Not a sample, so special-casing a few values is not a strategy. The units checkpoint moves the same exhaustive check to a composite modulus the participant is never shown: elements with gcd 1 get the partner that multiplies to 1, the rest raise NotInvertible, and `/` follows the same rule. That inversion is a bijection on the elements that have an inverse (in a field the inverse is unique, and two different elements never share one) and closure are checked over both the composite and an unseen prime.\n\n## Why the gcd-guarded shortcut fails on units alone\n\nAn implementation that puts `if gcd(a, m) != 1: raise` in front of `pow(a, m-2, m)` passes six checkpoints, composite included. Only units fails it, because Fermat's little theorem holds for primes only. Over a composite m, a^(m-2) is the inverse of a exactly for the elements with a^(m-1) ≡ 1 (mod m) — the bases that make m look prime — and those form a proper subgroup of the units (36 of the 72 units for m = 91). Carmichael numbers (561 is the smallest) satisfy it for every unit, so the fixture family `UNIT_COMPOSITES` holds only three-digit products of two distinct odd primes and odd prime squares, which excludes them. The extended-Euclid table handles every element right without knowing whether the modulus is prime — the problem's claim from the start, and units turns that claim into a grade. The statement only prompts the participant to try the shortcut on 5 under modulus 6; it does not print the result. A participant who used the table has nothing new to write; one who used the shortcut gets the §15 message (\"an element times its inverse is not one\") and the modulus-6 experiment as the fork.\n\n## The trace is not constant-time\n\nThe trace `show.py` prints branches on its inputs, and its step count depends on them. In an implementation handling a real key, that property is itself a side channel. This is here to make the algorithm legible, not as a model for production code.\n\n## Where this leads\n\nThe next problem builds the curve's group law. Point addition has a field inverse in its denominator, so this `inverse` is used directly — and the cases where the denominator is zero turn out to be exactly the group law's case split.",
+      "shortDescription": "Build division using remainders. An inverse is a partner whose product leaves remainder1. Start by normalizing −2 to remainder5 modulo7, then use a table to decide which numbers have inverses.",
+      "description": "Build division using remainders. An inverse is a partner whose product leaves remainder1. Start by normalizing −2 to remainder5 modulo7, then use a table to decide which numbers have inverses.",
+      "instructions": "## Start by turning −2 into remainder 5\n\nYou are building division for cryptographic arithmetic. Instead of ordinary fractions, use an **inverse: a partner whose product leaves remainder 1**.\n\n`FieldElement` is a type storing a modulus and a remainder. Its `__init__` method (a function inside a type) runs when an element is created.\n\n**Start → Inspect evidence → edit `FieldElement.__init__` in `field.py` → Run public tests → submit “Normalize the remainder”.** First make `self.value` hold the remainder of `value` divided by `field.modulus`. The public tests include a negative input.\n\n## Before you start\n\n- The divisor `m` is the **modulus**, an integer greater than 1 here. Python `v % m` gives the remainder `r` in `v = m*q+r`, with `0 ≤ r < m`. Example: `−2 = 7*(−1)+5`, so `(-2) % 7 = 5`.\n- Choosing that remainder is **normalization**. An **element** here stores a modulus and a remainder. `Field(m)` stores the modulus; `.element(v)` creates an element. `self` means this object, `self.value` its remainder, and `self.field.modulus` its modulus. A function inside a class is a **method**.\n- `u ≡ v (mod m)` means that `u` and `v` leave the same remainder when divided by `m`. The symbol `≡` means precisely that. `gcd(a,m)` is their greatest common divisor.\n- With a prime modulus `p`, every element except zero has an inverse. This arithmetic is an example of a **finite field**: finitely many elements with arithmetic including division by nonzero elements. The same code will handle composite moduli, where some nonzero elements cannot be divisors.\n\n## Add, subtract or multiply → take the remainder\n\n| Operation | General formula | Modulus 7, a=5, b=4 |\n|---|---|---|\n| `a + b` | `(a+b) % m` | `9 % 7 = 2` |\n| `a - b` | `(a-b) % m` | `1 % 7 = 1` |\n| `a * b` | `(a*b) % m` | `20 % 7 = 6` |\n\nThese are `__add__`, `__sub__`, `__mul__`. Return a `FieldElement` with the same modulus, not a plain integer. Normalizing on construction also normalizes intermediate results.\n\n**Equality requires both the same modulus and the same remainder.** Modulus 7 with −2 equals modulus 7 with 5, but differs from modulus 6 with 5. `__eq__` performs this comparison. `__hash__` returns an integer used by Python dictionaries and sets: equal elements must have equal hashes. You can use `hash((self.field.modulus, self.value))`. Different elements are allowed to share a hash.\n\nReordering additions or multiplications, or changing their grouping, preserves the answer. Also `x+0=x`, `x*1=x`, `x-x=0` and `x*(y+z)=x*y+x*z`. With modulus 7, `2*(3+4)` and `2*3+2*4` both leave remainder 0.\n\n## Divide → multiply by the partner that makes 1\n\nFor the inverse `x` of `a`, **`a*x ≡ 1 (mod m)`**. With modulus 7, `3*5=15=7*2+1`, so 3 has inverse 5. Thus `4 / 3` means `4*5 % 7 = 6`.\n\nTo find that partner, the **extended Euclidean algorithm** computes integers `s,t` and the greatest common divisor `g` such that `a*s + m*t = g`. If `g=1`, `m*t` leaves remainder zero, so **the inverse is `s % m`**. If `g>1`, every integer combination of `a` and `m` is divisible by `g` and cannot equal 1.\n\n```text\n3 * (−2) + 7 * 1 = 1  →  inverse of 3 is (−2) % 7 = 5\n2 * 1    + 6 * 0 = 2  →  greatest common divisor is 2: no inverse\n```\n\n### Build the table without breaking its equation\n\nEach row `(r,s,t)` maintains `a*s + m*t = r`.\n\n1. Start upper = `(a,1,0)`, lower = `(m,0,1)`.\n2. While lower `r` is not zero, compute quotient `q = upper_r // lower_r`. `//` is integer division.\n3. Record **the current lower row**, as `{\"q\":q,\"r\":r,\"s\":s,\"t\":t}`.\n4. For each column, new = `upper − q*lower`. Move upper to the old lower and lower to new. Repeat.\n5. When lower `r` is zero, return upper `(r,s,t)` as `egcd`'s `(g,s,t)`.\n\nWhy does the equation survive? Subtracting the two equations gives `a*(upper_s−q*lower_s) + m*(upper_t−q*lower_t) = upper_r−q*lower_r`. Each column undergoes the same subtraction. The `r` column repeatedly takes division remainders; its last nonzero remainder is the greatest common divisor.\n\n| a=3, m=7 | Upper (r,s,t) | Lower (r,s,t): the row to record | q | Next lower |\n|---|---|---|---|---|\n| 1 | (3,1,0) | (7,0,1) | 0 | (3,1,0) |\n| 2 | (7,0,1) | (3,1,0) | 2 | (1,−2,1) |\n| 3 | (3,1,0) | (1,−2,1) | 3 | (0,7,−3) |\n\n`egcd(3,7)` returns `(1,-2,1)`. `egcd_trace(3,7)` returns these three rows, in order:\n`[{\"q\":0,\"r\":7,\"s\":0,\"t\":1}, {\"q\":2,\"r\":3,\"s\":1,\"t\":0}, {\"q\":3,\"r\":1,\"s\":-2,\"t\":1}]`.\nThe three numbers of `egcd`, and the ordered rows of the trace, may use a list or tuple. Each row is a dict with `q,r,s,t`; every number is an integer, not a boolean or float. Keep negative `s,t` unchanged. Normalize when returning the inverse as an element.\n\nThe submitted tests call `egcd` and `egcd_trace` with `1 ≤ a < m`. Inside `inverse()`, use normalized `.value`. Zero can be rejected before calling the algorithm.\n\n## When there is no inverse, do not return a number\n\nZero times anything is zero, never one. Under a composite modulus, the greatest common divisor still decides whether an inverse exists.\n\n| Modulus | Nonzero elements with an inverse → partner | Nonzero elements without an inverse | Smallest nonzero element without an inverse |\n|---|---|---|---|\n| 6 | 1→1, 5→5 | 2, 3, 4 | `non_invertible_element(6) = 2` |\n| 9 | 1→1, 2→5, 4→7, 5→2, 7→4, 8→8 | 3, 6 | `non_invertible_element(9) = 3` |\n| 7 | 1→1, 2→4, 3→5, 4→2, 5→3, 6→6 | none | `non_invertible_element(7) = 0` |\n\nThe function's zero means “no such **nonzero** element”. Search from 2 up to modulus−1 and return the first `a` with `gcd(a,m)>1`; return zero if none exists. One is always its own inverse.\n\nIn `inverse()` and `/`, absence of an inverse requires `raise NotInvertible(\"no inverse\")`. Before combining different moduli with `+ - * /`, use `raise FieldMismatch(\"different moduli\")`. Both exception classes are provided; the explanation string is yours.\n\nFor prime `p` and nonzero `a`, `a` to the power `p−1` leaves remainder 1 (Fermat's little theorem), so `pow(a,p-2,p)` gives the inverse. There is no such guarantee for a general composite modulus. Modulus 6 with 5 has inverse 5, yet `pow(5,4,6)=1` and `5*1 % 6=5`, which fails. The Euclidean algorithm handles both without first deciding whether the modulus is prime.\n\n## Seven submission rows and where to edit\n\n| Row | Code to edit | What to establish |\n|---|---|---|\n| normalize | `FieldElement.__init__`, `__eq__`, `__hash__` | Negative inputs normalize too; same modulus/remainder means equality and equal hash |\n| arithmetic | `__add__`, `__sub__`, `__mul__` | Correct remainders, including intermediate results |\n| egcd-trace | `egcd`, `egcd_trace` | Every table row, greatest common divisor and coefficient |\n| inverse | `inverse`, `__truediv__` | Invert every nonzero prime-modulus element; division undoes multiplication |\n| errors | Inverse and four arithmetic methods | Reject zero divisors and mixed moduli |\n| composite | `non_invertible_element`, `inverse` | Find the smallest nonzero element without an inverse and refuse to invert it |\n| units | The same `inverse`, `__truediv__` | Handle every nonzero element under unseen prime and composite moduli |\n\nYou may add branches and loops inside `field.py`'s methods and functions. Keep the names and arguments. **All seven rows submit code: no separate number or JSON answer.** Each “Submit (+N pt)” sends the current file. The rows are independently graded, with a 10-point penalty per wrong answer.\n\n“Inspect evidence” shows this deployment's moduli, table, inverse and verification. After calculating a small example above, follow the same steps with the table's `a` and `modulus`. “Run public tests” checks small examples and the displayed prime; it does not exhaust unseen moduli. “Restore starter” discards your edits.\n\nThis component also supplies division in slope formulas for elliptic curves, the curves whose points are used in cryptography. You are not implementing the curve's special cases or a complete signature scheme here.\n\nAvailable computational standard-library modules (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. You may import them in your code. This environment does not support installing extra packages, file access or network communication. The required integer arithmetic can also use only built-in operations.\n",
+      "writeup": "## From normalization to inversion\n\nAn element stores a modulus m and the remainder v%m. Equality compares both, and equal elements have equal hashes. Addition, subtraction and multiplication normalize integer results under the same modulus.\n\nEvery extended-Euclid row satisfies a*s+m*t=r. Applying upper−q*lower to all columns preserves the equation. The last nonzero r is the greatest common divisor g: g=1 gives inverse s%m, while g>1 makes an integer combination equal to1 impossible. The same rule covers composites.\n\nFermat's pow(a,m-2,m) has a guarantee for every nonzero element under prime m, not under a general composite. Modulus6 with5 has inverse5, but the shortcut returns1. Accidental success on individual composite inputs is different from a general guarantee.\n\n## Checks and limits\n\nThe trace is compared against the stated integer-quotient algorithm row by row. Inverse and division checks enumerate the nonzero elements of selected prime and composite moduli. These finite checks are not a mathematical proof about every possible implementation.\n\nThe parent validates the returned modulus and values mathematically. Wrong inverse and multiplication implementations cannot certify one another, nor can a printed empty failure list decide a grade. Fresh call identifiers reject preprinted replies; they do not attest native Python return statements or exception origins. A different implementation returning the same correct mathematical values is judged by the same rules.\n\nBranches and trace length depend on inputs, so this is not a constant-time secret-key implementation. The next curve exercise uses inverses in ordinary slope formulas and separately handles exceptional point pairs.\n",
       "learningGoals": [
         "Tell an integer apart from a field element",
         "Fold negatives and values past the modulus into 0 up to modulus-1",
@@ -182,25 +266,55 @@
       "checks": [
         {
           "id": "normalize",
-          "label": "Turn an integer into a field element",
+          "label": "Normalize the remainder",
           "hints": [
             {
               "id": "normalize-hint-1",
-              "content": "Check with modulus 7 on −7, −1, 7 and 14: `.value` should come out 0, 6, 0, 0. Dropping the sign with `abs()` turns −1 into 1 and misses. Normalize every time a `FieldElement` is made (inside `__init__`) and the elements `+`, `-` and `*` return take the same path."
+              "content": "Normalization gives integers with the same remainder one representation. Elements store the modulus too, so equality must compare both parts."
+            },
+            {
+              "id": "normalize-hint-2",
+              "content": "For integer v and modulus m, use v % m. −2=7*(−1)+5 gives remainder 5. Modulus 7 with −2 equals modulus 7 with 5, but differs from modulus 6 with 5. Equal elements require equal integer hashes."
+            },
+            {
+              "id": "normalize-hint-3",
+              "content": "Edit FieldElement.__init__ in field.py to store value % field.modulus → compare modulus and value in __eq__ → hash that pair in __hash__ → check elements-are-canonical in Run public tests → submit this row."
             }
           ]
         },
         {
           "id": "arithmetic",
-          "label": "Arithmetic, and the axioms it must satisfy"
+          "label": "Add, subtract and multiply",
+          "hints": [
+            {
+              "id": "arithmetic-hint-1",
+              "content": "Element addition, subtraction and multiplication perform integer arithmetic and return to the same modulus. Intermediate elements must follow this rule too."
+            },
+            {
+              "id": "arithmetic-hint-2",
+              "content": "Use (a+b)%m, (a-b)%m, (a*b)%m. Modulus 7 with 5 and4 gives 2,1,6. Both 2*(3+4) and 2*3+2*4 leave remainder 0."
+            },
+            {
+              "id": "arithmetic-hint-3",
+              "content": "In field.py, __add__, __sub__ and __mul__ calculate with self.value and other.value, then return a FieldElement with self.field → check arithmetic-on-small-values and small-seven-arithmetic in Run public tests → submit this row."
+            }
+          ]
         },
         {
           "id": "egcd-trace",
-          "label": "Show every step of the extended algorithm",
+          "label": "Trace the greatest common divisor",
           "hints": [
             {
               "id": "egcd-hint-1",
-              "content": "`egcd` and `egcd_trace` return s and t exactly as they stand in the table (negatives included). Adding the modulus to make them 0 or more is `inverse()`'s job. Check: `egcd(3, 7)` is `(1, -2, 1)` and `egcd(2, 6)` is `(2, 1, 0)` — the latter has gcd 2, so it stops the moment the lower r hits 0. Do not wait for r to hit 1."
+              "content": "Attach columns tracking multiples of the two original numbers to the division remainders used to find their greatest common divisor. Every row preserves the relationship; the final row decides whether an inverse exists and supplies it when it does."
+            },
+            {
+              "id": "egcd-hint-2",
+              "content": "Each row (r,s,t) satisfies a*s+m*t=r. Subtracting q times the lower row in every column preserves it. For 3 and7 the recorded (q,r,s,t) rows are (0,7,0,1)→(2,3,1,0)→(3,1,−2,1); 3*(−2)+7*1=1."
+            },
+            {
+              "id": "egcd-hint-3",
+              "content": "In egcd/egcd_trace start upper=(a,1,0), lower=(b,0,1) → while lower_r is nonzero compute q=upper_r//lower_r → record q and the current lower as a dict → update every column by upper−q*lower. egcd returns final upper; trace returns all recorded rows. Compare Inspect evidence, then submit this row."
             }
           ]
         },
@@ -210,31 +324,69 @@
           "hints": [
             {
               "id": "inverse-hint-1",
-              "content": "Check exhaustively: with modulus 7, loop x = 1..6 and see that `(x * x.inverse()).value` is 1 every time. If some x misses, run the table on paper for that x and line up its last row's s against the intermediate values of your `inverse()` to find where they part. The usual partings: the a handed to the table was the integer before normalizing, or the rows were started upside down (upper = modulus), which swaps the roles of s and t."
+              "content": "An inverse is a partner whose product leaves remainder one. Division multiplies by that partner. When the greatest common divisor is one, the extended algorithm supplies it."
+            },
+            {
+              "id": "inverse-hint-2",
+              "content": "If a*s+m*t=1, the inverse is s%m. Since3*(−2)+7*1=1, the inverse of 3 is 5 and4/3 leaves the same remainder as4*5:6."
+            },
+            {
+              "id": "inverse-hint-3",
+              "content": "In inverse(), pass normalized self.value and self.field.modulus to egcd → if g is 1 make a FieldElement from s → __truediv__ multiplies by the other element’s inverse() → check small-seven-inverse in Run public tests → submit this row."
             }
           ]
         },
         {
           "id": "errors",
-          "label": "Say that something does not exist"
+          "label": "Reject missing inverses and mixed moduli",
+          "hints": [
+            {
+              "id": "errors-hint-1",
+              "content": "When no inverse exists, the result is an exception rather than a number. Arithmetic must also refuse to mix calculations using different moduli."
+            },
+            {
+              "id": "errors-hint-2",
+              "content": "Zero times x is always zero, never remainder 1: raise NotInvertible. Combining modulus 7 with 3 and modulus 6 with 3 through addition, subtraction, multiplication or division requires FieldMismatch."
+            },
+            {
+              "id": "errors-hint-3",
+              "content": "Make inverse and __truediv__ raise NotInvertible for missing inverses. Check moduli at the start of __add__, __sub__, __mul__, __truediv__; raise FieldMismatch if different. The exception classes are already defined. Check zero-and-mixed-moduli in Run public tests and submit."
+            }
+          ]
         },
         {
           "id": "composite",
-          "label": "Build a counterexample over a non-prime modulus",
+          "label": "Find the smallest non-invertible value",
           "hints": [
             {
               "id": "composite-hint-1",
-              "content": "Check: modulus 6 → 2, 9 → 3, 15 → 3, 7 → 0. The answer is always the modulus's smallest prime factor (a product of two primes or a prime squared such as 9 = 3 × 3 alike). 1 is its own inverse and never a candidate, so start at 2. Under a prime modulus nothing is found, so give the code a path that returns 0 once the `for` loop runs out."
+              "content": "Under a composite modulus, a number sharing a factor with that modulus has no inverse. Find the smallest nonzero such number. For a prime there is none."
+            },
+            {
+              "id": "composite-hint-2",
+              "content": "Test gcd(a,m)>1. Modulus 6 gives 2, modulus 9 gives 3, modulus 7 gives the no-such-number marker0. Only for a composite is the answer its smallest prime factor."
+            },
+            {
+              "id": "composite-hint-3",
+              "content": "In non_invertible_element, search from 2 to modulus−1 using egcd’s g → return the first number with g>1 → return0 if none is found. inverse must also raise when g>1. Compare Inspect evidence’s compositeModulus and the small examples; submit this row."
             }
           ]
         },
         {
           "id": "units",
-          "label": "Sort every element of an unseen composite modulus: inverse, or none",
+          "label": "Decide invertibility under unseen moduli",
           "hints": [
             {
               "id": "units-hint-1",
-              "content": "The shortcut `pow(a, modulus − 2, modulus)` is right only for a prime because under a prime p every non-zero element raised to the power p − 1 is 1 (a property called Fermat's little theorem), which makes a to the power p − 2 the inverse. Under a composite modulus that property breaks, so the shortcut misses even elements that do have an inverse. Check: compare `pow(5, 4, 6)` with `5 * 5 % 6`. Call the table (`egcd`) inside `inverse()` and build the element from s only when the gcd is 1, and prime and composite go down the same path."
+              "content": "An element with an inverse is called a unit. The final row checks that the same mechanism classifies every element, under prime and composite moduli; it does not require a new function."
+            },
+            {
+              "id": "units-hint-2",
+              "content": "Modulus 9:2 has inverse 5 because2*5 leaves remainder 1, but3 has no inverse since gcd(3,9)=3. Modulus 6:5 has inverse 5 even though pow(5,4,6)=1 fails. An inverse exists if and only if gcd(a,m)=1. Check a candidate x using a*x%m=1."
+            },
+            {
+              "id": "units-hint-3",
+              "content": "Check inverse and __truediv__ for special cases tied to particular moduli → if egcd gives g=1 build the element from s, otherwise raise NotInvertible → follow every number in the modulus 6/9 tables → submit the same field.py here. The same rules are checked under unseen moduli."
             }
           ]
         }

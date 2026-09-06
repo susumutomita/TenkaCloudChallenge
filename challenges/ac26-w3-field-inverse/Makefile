@@ -31,7 +31,7 @@ RUN := $(COMPOSE) run --rm \
 RUN_INSPECT := $(COMPOSE) run --rm -e A=$(A) -e P=$(P) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro workbench
 
-.PHONY: build test test-one inspect reset reference-test verifier-up verifier-down
+.PHONY: build test test-one inspect reset reference-test verifier-up verifier-down runtime-test
 
 build:
 	docker build --target participant -t $(IMAGE) local
@@ -65,4 +65,9 @@ reset:
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+
+# Author-only Linux boundary regressions.
+runtime-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python -m unittest tests.hidden.test_execution_boundary -v

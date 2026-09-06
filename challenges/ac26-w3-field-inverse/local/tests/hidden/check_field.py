@@ -1,14 +1,9 @@
-"""Hidden tests. Run by /verify against a copy of the learner's field.py.
+"""Author checks run in the trusted parent against untrusted element data.
 
-Properties rather than expected values, wherever a property will do. `a * a.inverse()`
-must be one for *every* non-zero element of a prime field the learner has never seen;
-that cannot be satisfied by a table, and it cannot be satisfied by an implementation
-that only normalizes at the end. `check_units` repeats that over a composite modulus
-the learner has never seen either, where the elements with an inverse and the ones
-without are mixed -- the one place the shortcut `pow(a, m - 2, m)` fails even behind a
-gcd guard, because over a composite it returns the inverse for only some of the units.
-
-Failure messages name the property, never the modulus or the element (AGENTS.md §15).
+Every selected element is tested; these finite cases do not prove all possible
+implementations correct. The parent also validates every returned modulus and
+arithmetic value via the class-shaped adapter. No child verdict is accepted.
+Failure messages name public rules, not seeded operands or expected values.
 """
 
 from __future__ import annotations
@@ -35,7 +30,7 @@ LABELS = ("h0", "h1", "h2")
 
 def _canonical(element, modulus: int) -> bool:
     value = getattr(element, "value", None)
-    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < modulus
+    return type(value) is int and 0 <= value < modulus and type(getattr(getattr(element, "field", None), "modulus", None)) is int and element.field.modulus == modulus
 
 
 def check_normalize(module, seed: str) -> list[str]:
@@ -61,6 +56,13 @@ def check_normalize(module, seed: str) -> list[str]:
                 break
             if not (element == field.element(raw)):
                 failures.append("two elements built from the same integer are not equal")
+                break
+            equivalent = field.element(raw + p)
+            if element != equivalent or hash(element) != hash(equivalent):
+                failures.append("equal normalized elements must compare equal and have equal hashes")
+                break
+            if element == module.Field(p + 1).element(element.value):
+                failures.append("elements of different moduli must compare unequal")
                 break
             if element == field.element(raw + 1) and p > 1:
                 failures.append("elements built from different integers compare equal")
@@ -128,13 +130,13 @@ def check_egcd_trace(module, seed: str) -> list[str]:
             except Exception as error:  # noqa: BLE001
                 return [f"the extended Euclidean algorithm raised {type(error).__name__}"]
             want_g, want_s, want_t = reference_egcd(a, p)
-            if (g, s, t) != (want_g, want_s, want_t):
+            if any(type(v) is not int for v in (g, s, t)) or (g, s, t) != (want_g, want_s, want_t):
                 failures.append("egcd does not return the algorithm's own coefficients")
                 break
-            if not isinstance(rows, list) or not rows:
+            if not isinstance(rows, (list, tuple)) or not rows:
                 failures.append("the trace has no steps in it")
                 break
-            if any(not isinstance(row, dict) for row in rows):
+            if any(not isinstance(row, dict) or any(type(row.get(k)) is not int for k in ("q", "r", "s", "t")) for row in rows):
                 failures.append("a trace step is not a row of q, r, s and t")
                 break
             if rows[-1]["r"] != want_g:
@@ -180,7 +182,7 @@ def check_inverse(module, seed: str) -> list[str]:
             if not _canonical(inv, p):
                 failures.append("an inverse is not a canonical element")
                 break
-            if (x * inv).value != 1:
+            if raw * inv.value % p != 1 or (x * inv).value != 1:
                 failures.append("an element times its inverse is not one")
                 break
         for raw in sample_values(seed, label, p)[:8]:
@@ -218,13 +220,14 @@ def check_errors(module, seed: str) -> list[str]:
             failures.append(f"dividing by zero raised {type(error).__name__}, not NotInvertible")
 
         other = module.Field(composite_modulus(seed, label))
-        try:
-            field.element(3) + other.element(3)
-            failures.append("elements of different moduli were added without complaint")
-        except module.FieldMismatch:
-            pass
-        except Exception as error:  # noqa: BLE001
-            failures.append(f"mixing moduli raised {type(error).__name__}, not FieldMismatch")
+        for operation in (lambda x,y: x+y, lambda x,y: x-y, lambda x,y: x*y, lambda x,y: x/y):
+            try:
+                operation(field.element(3), other.element(3))
+                failures.append("elements of different moduli were combined without FieldMismatch")
+            except module.FieldMismatch:
+                pass
+            except Exception as error:
+                failures.append(f"mixing moduli raised {type(error).__name__}, not FieldMismatch")
     return failures
 
 
@@ -238,7 +241,7 @@ def check_composite(module, seed: str) -> list[str]:
             witness = module.non_invertible_element(n)
         except Exception as error:  # noqa: BLE001
             return [f"finding a non-invertible element raised {type(error).__name__}"]
-        if witness != non_invertible(seed, n):
+        if type(witness) is not int or witness != non_invertible(seed, n):
             failures.append("that element is not the smallest non-invertible one")
             continue
         try:
@@ -252,7 +255,8 @@ def check_composite(module, seed: str) -> list[str]:
         # And a prime modulus must report no such element, so the answer is not just
         # "always return something".
         p = prime_modulus(seed, label)
-        if module.non_invertible_element(p) != 0:
+        no_witness = module.non_invertible_element(p)
+        if type(no_witness) is not int or no_witness != 0:
             failures.append("a prime modulus was reported to have a non-invertible element")
     return failures
 
@@ -296,7 +300,7 @@ def _check_units_modulus(module, modulus: int) -> list[str]:
             return ["an element sharing a factor with the modulus was given an inverse"]
         if not _canonical(inverse, modulus):
             return ["an inverse is not a canonical element"]
-        if (x * inverse).value != 1:
+        if x.value * inverse.value % modulus != 1 or (x * inverse).value != 1:
             return ["an element times its inverse is not one"]
         partners.add(inverse.value)
     # The inverse is unique, so the partners of the invertible elements are exactly the
