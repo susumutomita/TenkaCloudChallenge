@@ -230,3 +230,37 @@ At the endgame boundary, every team tied for last receives ten minutes without h
 Check “No hint penalty” and its remaining time beside the selected Order's hints, then open a hint and continue the calculation. Order deadlines, issuance and answer scores stay unchanged. If a request arrives after the displayed penalty changes, the hint remains closed and the participant is asked to refresh before opening it.
 
 A legacy match upgraded after the endgame boundary has no saved ranking for that instant. It retains regular hint penalties and displays the reason instead of inventing a past distribution. This increment does not implement lightning or higher cipher rungs.
+
+## Cipher ladder: two implemented rungs
+
+The method changes for newly issued cipher Orders when the existing `pressure`
+phase begins (30 minutes after match start by default). Orders already issued
+keep their method and deadline. Build uses Caesar's single shift; pressure and
+endgame use a three-shift Vigenère cycle. Read the highlighted key position,
+add that private shift to the original value, take the remainder after dividing
+by 6, and submit the one value with **CIPHER**. Its answer stays private to the
+trusted judge; this is not a zero-knowledge proof.
+
+Vigenère repeats keys 1 → 2 → 3 → 1. Each Order here is one position from that
+cycle. LEAK publishes the original, answer and key position. Three *distinct*
+positions reveal all keys; three copies of one position do not. The server requires all three positions from that target, rung and generation.
+The attack panel reports the covered positions and accepts keys 1, 2, 3 separated by spaces.
+A single long known plaintext/ciphertext pair spanning all three positions
+would already reveal all keys. This classical repeated-key cipher is not a
+modern secure encryption scheme.
+
+A first correct CIPHER keeps the Order's normal score (30 for standard Orders;
+existing rush settings still apply). A well-formed wrong Vigenère answer costs
+`wrongProve` (6 by default) and permanently forfeits that Order's CIPHER reward.
+Correct retries complete it for 0, avoiding expiry; malformed inputs do not count.
+The screen states both outcomes before submission. LEAK still pays 10, Vigenère HUNT pays 25 with a 12-point victim
+penalty subject to the score floor. Caesar retains its existing 8-point HUNT
+reward. ROTATE retires old-generation evidence, while the public records remain.
+These changes add no AWS resources, settings, timers or cleanup obligations.
+
+Local verification: `cd game && bun test && bun run typecheck`; `cd dev && bun test
+&& bun run typecheck`. The `vigenere` dev scenario uses the standard five-minute
+TTL and three actual opponent LEAKs. See [the recorded local walkthrough](dev/VIGENERE-READING.md).
+RSA, the rotor/Enigma model, a new homomorphic ladder rung and lightning remain
+outside this increment of #659. Existing Shamir, encrypted addition and the
+endgame hint booster remain available.

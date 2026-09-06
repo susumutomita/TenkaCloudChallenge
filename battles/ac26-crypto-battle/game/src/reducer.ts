@@ -74,6 +74,9 @@ import {
   type CipherRung,
   ALL_CIPHER_RUNGS,
   encryptWithRung,
+  exposedKeyPositions,
+  isCipherRung,
+  validCipherKey,
   parseAnswer,
   rungSpec,
   toSymbols,
@@ -341,7 +344,7 @@ function buildOrderTask(
       // every team knows how the cipher works, and the only thing that decides
       // who survives is who kept their key.
       const rung: CipherRung = plan.rung ?? "caesar";
-      return { kind: "caesar-shift", rung, plaintext: derivePlaintext(seed, contractId, rung) };
+      return { kind: "caesar-shift", rung, plaintext: derivePlaintext(seed, contractId, rung), ...(plan.keyPosition === undefined ? {} : { keyPosition: plan.keyPosition }) };
     }
     case "zk-sudoku":
       // [Issue #709] No payload: the puzzle is already public and the solution
@@ -593,13 +596,15 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *   4  roster-indexed HUNT budget keys and lossless numeric ledger Order IDs
  *   5  `lastHunt.points` records the actual score delta of new HUNT results
  *   6  endgame booster distribution, fixed once at the phase boundary
+ *   7  Vigenère rung and public key-position offsets (old Caesar rows keep scalar keys)
+ *   8  Vigenère wrong-answer reward forfeiture and own lastCipher adjudication
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 6;
+export const STATE_SCHEMA_VERSION = 8;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -619,11 +624,16 @@ export const STATE_SCHEMA_VERSION = 6;
  * keys are validated and retained, not compacted again as logical team IDs.
  * v5 -> v6 records pending distribution before the boundary, or an explicit
  * unavailable result afterward when the old row has no historical ranking.
+ * v6 -> v7 retains existing scalar Caesar Orders, ledgers and reservations.
+ * Only newly issued Vigenère Orders gain public key-position offsets.
+ * v7 -> v8 preserves existing Vigenère rows and reservations. Only a newly
+ * adjudicated incorrect CIPHER writes cipherFailed/lastCipher; absent means no
+ * previously charged failure. Existing true flags survive every migration.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4 and v5 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6 and v7 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -828,7 +838,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
         continue;
       }
-      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig);
+      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig, { elapsedMs: nextContractAtMs - startedAtMs, buildToPressureMs: state.config.phaseBoundaries.buildToPressureMs });
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
       //
@@ -1572,7 +1582,7 @@ export function validateOp(
           error: `answer has ${answer.length} symbols, the Order asks for ${expected.length}`,
         };
       }
-      if (answer.some((value, position) => value !== expected[position])) {
+      if (contract.task.rung !== "vigenere" && answer.some((value, position) => value !== expected[position])) {
         // Deliberately does not say WHICH position is wrong. The Order is a
         // hand calculation with a deadline; turning the judge into a checker
         // that walks a team to the answer would replace the calculation with a
@@ -1582,6 +1592,7 @@ export function validateOp(
       return { ok: true };
     }
     case "hunt-cipher": {
+      if (!isCipherRung(op.rung)) return { ok: false, error: "unknown cipher rung" };
       if (state.nowMs === undefined) {
         return { ok: false, error: "match has not started yet (no tick() has run)" };
       }
@@ -1604,15 +1615,17 @@ export function validateOp(
       if (state.successfulHunts.includes(cipherHuntKey(teamId, op.targetTeamId, op.generation, op.rung))) {
         return { ok: false, error: "this rung was already broken by this team on this generation" };
       }
-      // Untrusted wire input: `recoveredKey` is typed `number` but arrives as
-      // whatever JSON carried. Reject a non-integer or out-of-range value here
-      // rather than comparing NaN, which would always be `false` and read as a
-      // wrong guess instead of a malformed op.
-      const modulus = rungSpec(op.rung).symbols.length;
-      if (!Number.isInteger(op.recoveredKey) || op.recoveredKey < 0 || op.recoveredKey >= modulus) {
-        return { ok: false, error: `recoveredKey must be an integer in 0..${modulus - 1}` };
+      if (op.rung === "vigenere") {
+        const pairs = decodeLedger(state.publicLedger).filter((a): a is CipherPairArtifact =>
+          a.kind === "cipher-pair" && a.teamId === op.targetTeamId && a.generation === op.generation && a.rung === op.rung);
+        if (exposedKeyPositions(pairs, op.rung).length < rungSpec(op.rung).keyLength) {
+          return { ok: false, error: "Vigenere HUNT requires public pairs covering all three key positions in this generation" };
+        }
       }
-      if (op.recoveredKey !== deriveCipherKey(state.seed, op.targetTeamId, op.generation, op.rung)) {
+      if (!validCipherKey(op.recoveredKey, op.rung)) {
+        return { ok: false, error: "recoveredKey must contain this rung's number of shifts, each within its alphabet" };
+      }
+      if (JSON.stringify(op.recoveredKey) !== JSON.stringify(deriveCipherKey(state.seed, op.targetTeamId, op.generation, op.rung))) {
         return { ok: false, error: "that is not this team's key" };
       }
       return { ok: true };
@@ -1640,7 +1653,8 @@ function expectedCipherAnswer(
 ): readonly number[] {
   const generation = state.teams[teamId]?.generation ?? 1;
   const key = deriveCipherKey(state.seed, teamId, generation, rung);
-  return encryptWithRung(derivePlaintext(state.seed, contractId, rung), key, rung);
+  const task = state.contracts.find(c => c.id === contractId)?.task;
+  return encryptWithRung(derivePlaintext(state.seed, contractId, rung), key, rung, task?.kind === "caesar-shift" ? task.keyPosition ?? 0 : 0);
 }
 
 /**
@@ -1764,6 +1778,7 @@ function applyLadderLeak(
     method: "leak",
     contractId: contract.id,
     rung: task.rung,
+    ...(task.keyPosition === undefined ? {} : { keyPosition: task.keyPosition }),
     plaintext: task.plaintext,
     ciphertext: answer,
     postedAtMs: nowMs,
@@ -1801,9 +1816,23 @@ function applyCipher(
 ): CryptoBattleState {
   const contract = state.contracts.find((c) => c.id === op.contractId);
   const team = state.teams[teamId];
-  if (!contract || !team) {
+  if (!contract || !team || contract.task.kind !== "caesar-shift") {
     throw new Error("applyOp(cipher): invalid op reached apply -- call validateOp() first");
   }
+  const answer = parseAnswer(op.answer, contract.task.rung);
+  const expected = expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
+  if (!answer || answer.length !== expected.length) throw new Error("applyOp(cipher): malformed answer reached apply");
+  if (answer.some((value, position) => value !== expected[position])) {
+    if (contract.task.rung !== "vigenere") throw new Error("applyOp(cipher): wrong Caesar answer reached apply");
+    const score = Math.max(0, team.score - state.config.scores.wrongProve);
+    return { ...state,
+      contracts: state.contracts.map(c => c.id === contract.id ? { ...c, cipherFailed: true } : c),
+      teams: { ...state.teams, [teamId]: { ...team, score,
+        lastCipher: { contractId: contract.id, outcome: "miss", points: score - team.score },
+      } },
+    };
+  }
+  const points = contract.cipherFailed === true ? 0 : contract.points;
   return {
     ...state,
     contracts: state.contracts.map((c) =>
@@ -1815,7 +1844,8 @@ function applyCipher(
       ...state.teams,
       [teamId]: {
         ...team,
-        score: team.score + contract.points,
+        score: team.score + points,
+        lastCipher: { contractId: contract.id, outcome: "hit", points },
         completedContractIds: [...team.completedContractIds, contract.id],
       },
     },
@@ -2104,6 +2134,7 @@ function projectTask(
         plaintext: task.plaintext,
         symbols: spec.symbols,
         pairsToBreak: spec.pairsToBreak,
+        ...(task.keyPosition === undefined ? {} : { keyPosition: task.keyPosition }),
         myKey: deriveCipherKey(state.seed, teamId, generation, task.rung),
       };
     }
@@ -2586,7 +2617,8 @@ export function projectForTeam(
       return {
         id: c.id,
         kind: c.kind,
-        points: c.points,
+        points: c.cipherFailed === true ? 0 : c.points,
+        ...(c.cipherFailed === undefined ? {} : { cipherFailed: c.cipherFailed }),
         leakPoints: c.leakPoints,
         task,
         status: c.status,
@@ -2699,5 +2731,6 @@ export function projectForTeam(
     // compares the two).
     ...(team.lastHunt === undefined ? {} : { lastHunt: team.lastHunt }),
     ...(team.lastProve === undefined ? {} : { lastProve: team.lastProve }),
+    ...(team.lastCipher === undefined ? {} : { lastCipher: team.lastCipher }),
   };
 }

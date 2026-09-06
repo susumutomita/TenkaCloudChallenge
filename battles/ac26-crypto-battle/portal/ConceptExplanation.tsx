@@ -1,10 +1,11 @@
+import { cipherKeyAt } from "../game/src/ladder.ts";
 /** Free reading aids. They never submit a move or compute a live answer. */
 import { useState } from "react";
 import ConceptDiagram from "./ConceptDiagram.tsx";
 import type { OrderTaskProjection } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-export type Concept = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "commit";
+export type Concept = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "commit";
 interface Step { readonly diagram?: "zk" | "relabel" | "sharing" | "mpc"; readonly title: string; readonly lines: readonly string[]; readonly table?: { readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] } }
 interface Explanation { readonly name: string; readonly steps: readonly Step[] }
 
@@ -33,6 +34,10 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
       { title: "小さな暗号文を作ってみる", lines: ["説明用にだけ中身と鍵を見せます。割る数は 7。暗号文は（左、右）の組です。左はくじで選ぶ 0 以外の数。右は 中身 + 鍵 × 左 を 7 で割った余り。『鍵 × 左』を隠す数と呼びます。", "1 個目：中身 1、鍵 2、左 2。隠す数は 2 × 2 = 4、右は 1 + 4 = 5。暗号文は（2、5）。", "2 個目：中身 3、鍵 1、左 3。隠す数は 1 × 3 = 3、右は 3 + 3 = 6。暗号文は（3、6）。", "本番で届くのは数の組だけです。違う鍵なら別の中身でも同じ右の数を作れるため、鍵を知らない人は中身を決められません。"] },
       { title: "閉じたまま足して、理由を確かめる", lines: ["あなたの計算：左どうしは 2 + 3 = 5。右どうしは 5 + 6 = 11、余りは 11 − 7 = 4。答えの暗号文は（5、4）です。", "判定側の確認：隠す数の合計は 4 + 3 = 7。答えの右から引くと 4 − 7 = −3。7 を足して余りに直すと 4。中身の合計 1 + 3 = 4 が戻りました。", "右の数を足すと (1 + 4) + (3 + 3) = (1 + 3) + (4 + 3)。順番を替えると、中身の合計と隠す数の合計に分けられます。", "判定側は、元の各入力の左の値と、その入力の鍵を使って隠す数を求めます。答えの左が 2 + 3 = 5 になっているかも別に確認します。答えの組だけから中身を戻すわけではありません。"] },
       { title: "この Order の左右をそれぞれ足す", lines: ["カードの左どうしを足し、p（割る数）で割った余りを『答え：左の値』へ入れます。右どうしも足し、同じ p で割った余りを『答え：右の値』へ入れます。", "両方が 0 以上 p 未満になったら『暗号文を提出』を押します。中身を開けたり、鍵を探したりする必要はありません。", "この体験用モデルで実装しているのは暗号文の足し算です。実用の FHE 全体を実装しているわけではありません。"] },
+    ] },
+    vigenere: { name: "Vigenère（ヴィジュネル）暗号", steps: [
+      { title: "3個の鍵を繰り返す", lines: ["記号を番号0〜5で表し、秘密のずらす数（鍵）を3個用意します。左から鍵1→鍵2→鍵3→鍵1…と繰り返して使います。", "暗号の番号 = (元の番号 + 今回の鍵) を6で割った余り。暗号は中身を隠すために変換したデータです。"] },
+      { title: "別の数で練習する", lines: ["例：鍵1,2,3と元の列2,0,5なら、2+1=3、0+2=2、5+3=8→6を引いて2。暗号は3,2,2です。", "元と暗号の組を公開すると、その位置の鍵は暗号−元から分かります。負なら6を足します。この繰り返す鍵は現代の実用暗号の安全性を持ちません。自分のお題の詳しい手順は、そのお題のヒントで開きます。"] },
     ] },
     caesar: { name: "シーザー暗号", steps: [
       { title: "決まった数だけずらして隠す", lines: ["シーザー暗号は、記号を決まった数だけ先へずらす方法です。ずらす数が『鍵』です。末尾まで来たら先頭に戻ります。"] },
@@ -74,6 +79,10 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
       { title: "Add the closed pairs and check why", lines: ["Your calculation: lefts 2 + 3 = 5; rights 5 + 6 = 11 → 11 − 7 = 4. Answer ciphertext: (5, 4).", "The judge's check: hiding numbers total 4 + 3 = 7. Subtract from the answer's right: 4 − 7 = −3 → −3 + 7 = 4. This matches the content total 1 + 3 = 4.", "The right values add as (1 + 4) + (3 + 3) = (1 + 3) + (4 + 3). Rearranging separates the content total from the hiding total.", "The judge uses each original left value and its own input key to find the hiding numbers. It separately checks that the answer's left is 2 + 3 = 5. The answer pair alone is not enough to decrypt it."] },
       { title: "Add this Order's lefts and rights separately", lines: ["Add the left values; take the remainder after dividing by the card's p and enter your answer: left part. Repeat for the rights and enter your answer: right part.", "Both values must be at least 0 and smaller than p. Press SUBMIT CIPHERTEXT. You never need to open a ciphertext or find a key.", "This teaching model implements ciphertext addition, not a full practical FHE system."] },
     ] },
+    vigenere: { name: "Vigenère cipher", steps: [
+      { title: "Repeat three secret shifts", lines: ["Represent symbols by values 0–5. Prepare three secret shifts, called keys, and repeat key 1 → key 2 → key 3 → key 1 from left to right.", "Encrypted value = (original value + selected key), taking the remainder after dividing by 6. Encryption transforms data to hide its content."] },
+      { title: "Practice with different values", lines: ["Example: keys 1,2,3 and originals 2,0,5 give 2+1=3, 0+2=2, 5+3=8→subtract 6 to get 2. Encrypted row: 3,2,2.", "Publishing an original/answer pair reveals that position’s key: encrypted minus original; add 6 if negative. Repeated keys do not offer modern encryption security. Open your Order’s hints for its detailed procedure."] },
+    ] },
     caesar: { name: "Caesar cipher", steps: [
       { title: "Hide a position by shifting it", lines: ["A Caesar cipher moves every symbol forward by a fixed number called the key. After the last symbol, wrap to the first."] },
       { title: "Try six positions", lines: ["Number symbols 0–5, key 2. Original row 1, 4, 5 becomes 3, 6, 7 after adding 2.", "Take remainders after dividing by 6: answer 3, 0, 1. Position 6 wraps to 0; 7 wraps to 1."] },
@@ -89,7 +98,7 @@ export function conceptForTask(task: OrderTaskProjection): Concept {
     case "homomorphic-sum": return "fhe";
     case "masked-total": return "mpc";
     case "zk-sudoku": return "zk";
-    case "caesar-shift": return "caesar";
+    case "caesar-shift": return task.rung;
     case "reveal-share": return "sharing";
   }
 }
@@ -107,15 +116,15 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
       `${task.myInput} + (${task.incomingMasks.join(" + ") || "0"}) − (${task.outgoingMasks.join(" + ") || "0"}) = ?`,
       ja ? `${prime} で割った余りを、下の小計の欄へ入力します。` : `Take the remainder after dividing by ${prime} and enter the subtotal below.`,
     ];
-    case "caesar-shift": return [
-      ...task.plaintext.map((value) => `${value} + ${task.myKey} = ?`),
+    case "caesar-shift": return task.rung === "vigenere" ? [] : [
+      ...task.plaintext.map((value, i) => `${value} + ${cipherKeyAt(task.myKey, (task.keyPosition ?? 0) + i)} = ?`),
       ja ? `それぞれ ${task.symbols.length} で割った余りを、元の順に入力します。` : `Take remainders after dividing by ${task.symbols.length}; enter them in the original order.`,
     ];
     default: return [];
   }
 }
 
-export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "commit": "なぜ手を先に封じる？"}, "en": {"remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "commit": "Why seal a hand first?"}};
+export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
 
 const button = { cursor: "pointer", border: "1px solid #a4b5c6", borderRadius: 5, padding: "5px 9px", color: "#24476d", background: "#fff", fontSize: 12 } as const;
 export default function ConceptExplanation({ locale, topic, task, prime, embedded = false }: {
@@ -124,7 +133,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
   const [selected, setSelected] = useState<Concept | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const copy = EXPLANATIONS[locale];
-  const topics = topic ? [topic] : (["remainder", "sharing", "zk", "commit", "mpc", "fhe", "caesar"] as Concept[]);
+  const topics = topic ? [topic] : (["remainder", "sharing", "zk", "commit", "mpc", "fhe", "caesar", "vigenere"] as Concept[]);
   const lesson = selected ? copy[selected] : null;
   const step = lesson?.steps[stepIndex];
   const ja = locale === "ja";

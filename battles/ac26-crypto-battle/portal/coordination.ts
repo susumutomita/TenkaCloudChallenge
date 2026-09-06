@@ -139,7 +139,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // reach the HUNT cards' array methods or turn into a fabricated completion.
   if (v.completedHunts !== undefined) {
     if (!Array.isArray(v.completedHunts)) return false;
-    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true };
+    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true, vigenere: true };
     for (const entry of v.completedHunts) {
       if (typeof entry !== "object" || entry === null) return false;
       if (typeof entry.targetTeamId !== "string" || entry.targetTeamId.length === 0) return false;
@@ -172,6 +172,13 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     if (last.outcome !== "hit" && last.outcome !== "miss") return false;
     if (last.points !== undefined && (typeof last.points !== "number" || !Number.isFinite(last.points))) return false;
   }
+  if (v.lastCipher !== undefined) {
+    const last = v.lastCipher as Record<string, unknown>;
+    if (!last || typeof last !== "object" || typeof last.contractId !== "string"
+      || !["hit", "miss"].includes(String(last.outcome))
+      || typeof last.points !== "number" || !Number.isFinite(last.points)) return false;
+  }
+  if (v.myContracts.some(c => c.cipherFailed !== undefined && typeof c.cipherFailed !== "boolean")) return false;
   // [Issue #709] Same shape, same reason: the PROVE banner keys on it.
   if (v.lastProve !== undefined) {
     const last = v.lastProve as Record<string, unknown> | null;

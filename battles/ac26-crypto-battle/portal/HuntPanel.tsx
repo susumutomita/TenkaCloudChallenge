@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget } from "../game/src/types.ts";
-import { ALL_CIPHER_RUNGS, rungSpec, type CipherRung } from "../game/src/ladder.ts";
+import { ALL_CIPHER_RUNGS, exposedKeyPositions, validCipherKey, rungSpec, type CipherRung } from "../game/src/ladder.ts";
 import { CONSTRAINT_GROUPS } from "../game/src/sudoku.ts";
 import { cipherHuntCandidates, huntBudgetFor, ledgerTargets, sudokuHuntCandidates, type CipherHuntCandidate, type SudokuHuntCandidate } from "./hunt-targets.ts";
 import HuntGuide from "./HuntGuide.tsx";
@@ -18,8 +18,8 @@ export interface HuntOption {
   readonly sudoku?: SudokuHuntCandidate; readonly cipher?: CipherHuntCandidate; readonly rps?: RpsHuntTarget;
 }
 const labels = {
-  ja: { share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", rps: "じゃんけんの予測", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
-  en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", rps: "RPS prediction", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
+  ja: { share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", vigenere: "Vigenère暗号", rps: "じゃんけんの予測", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
+  en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", vigenere: "Vigenère cipher", rps: "RPS prediction", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
 };
 
 /** Public records open a worksheet; no solver or verdict is run for the participant. */
@@ -57,7 +57,11 @@ export function huntOptions(projection: CryptoBattleProjection): readonly HuntOp
       const cipher = ciphers.find(c => c.teamId === teamId && c.generation === generation && c.rung === rung);
       const count = new Set(projection.publicLedger.flatMap(a => a.kind === "cipher-pair" && a.teamId === teamId && a.generation === generation && a.rung === rung ? [a.contractId] : [])).size;
       const spec = rungSpec(rung);
-      return { ...entry(rung), cipher, points: spec.huntBonus, status: status(rung, !!cipher), detail: {
+      const positions = exposedKeyPositions(projection.publicLedger.filter(a => a.kind === "cipher-pair" && a.teamId === teamId && a.generation === generation && a.rung === rung).filter(a => a.kind === "cipher-pair"), rung);
+      return { ...entry(rung), cipher, points: spec.huntBonus, status: status(rung, !!cipher), detail: rung === "vigenere" ? {
+        ja: `周期3 · 公開された鍵の位置：${positions.map(p => p + 1).join("・") || "なし"}（${positions.length}/3）。${cipher ? "各位置を引き算し、鍵1・2・3の順で入力します。" : "異なる3位置の公開を待ちます。同じ位置だけ増えても残りの鍵は決まりません。"}`,
+        en: `Period 3 · published key positions: ${positions.map(p => p + 1).join(", ") || "none"} (${positions.length}/3). ${cipher ? "Subtract at each position; enter keys 1, 2, 3 in order." : "Wait for all three distinct positions. Repeating one position does not determine the others."}`,
+      } : {
         ja: `元の列と暗号化した列 ${count}/${spec.pairsToBreak} 組。${cipher ? "同じ位置の数字を引いて鍵を計算できます。" : `あと ${Math.max(0,spec.pairsToBreak-count)} 組。相手がこの方式のお題を公開して答えると増えます。`}`,
         en: `Plaintext/ciphertext pairs ${count}/${spec.pairsToBreak}. ${cipher ? "Subtract matching positions to recover the key." : `${Math.max(0,spec.pairsToBreak-count)} more: wait for the opponent to LEAK this cipher's Order.`}`,
       }};
@@ -82,7 +86,7 @@ export default function HuntPanel(props: Props) {
   const options = useMemo(() => huntOptions(projection), [projection]);
   const target = options.find(o => o.key === selected && o.status === "ready");
   const work = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (target) { work.current?.focus({ preventScroll: true }); work.current?.scrollIntoView({ block: "nearest" }); } }, [selected]);
+  useEffect(() => { if (target) { work.current?.focus({ preventScroll: true }); work.current?.scrollIntoView({ block: "start" }); } }, [selected]);
   const ready = options.filter(o => o.status === "ready");
   const ja = locale === "ja", copy = labels[locale];
   const refreshing = ja ? "攻撃済み状態を更新中です。次の更新まで操作を待ってください。" : "Refreshing completed attacks. Wait for an updated response before acting.";
@@ -114,11 +118,15 @@ export function HuntWorkspace({ target, ...props }: Props & { readonly target: H
   const grid = parseCells(cells);
   const validNumber = /^(0|[1-9]\d*)$/.test(answer) && answer.length <= 100;
   const limit = target.cipher ? BigInt(rungSpec(target.cipher.rung).symbols.length) : BigInt(projection.prime);
-  const valid = target.mode === "sudoku" ? !!grid : validNumber && BigInt(answer) < limit;
+  const keyParts = answer.trim().split(/\s+/);
+  const recoveredKey = target.cipher?.rung === "vigenere" ? keyParts.map(Number) : Number(answer);
+  const valid = target.mode === "sudoku" ? !!grid : target.cipher
+    ? keyParts.every(token => /^(0|[1-9]\d*)$/.test(token)) && validCipherKey(recoveredKey, target.cipher.rung)
+    : validNumber && BigInt(answer) < limit;
   const submit = () => {
     if (!valid || submitting) return;
     const op: CryptoBattleOp = target.mode === "sudoku" && grid ? { kind: "hunt-sudoku", targetTeamId: target.teamId, generation: target.generation, solution: grid }
-      : target.cipher ? { kind: "hunt-cipher", targetTeamId: target.teamId, generation: target.generation, rung: target.cipher.rung, recoveredKey: Number(answer) }
+      : target.cipher ? { kind: "hunt-cipher", targetTeamId: target.teamId, generation: target.generation, rung: target.cipher.rung, recoveredKey }
       : { kind: "hunt", targetTeamId: target.teamId, generation: target.generation, recoveredSecret: answer };
     void onSubmit(op);
   };
@@ -129,18 +137,33 @@ export function HuntWorkspace({ target, ...props }: Props & { readonly target: H
     {target.sudoku && <SudokuHuntGuide target={target.sudoku} locale={locale} />}
     {target.cipher && <CipherHuntGuide target={target.cipher} locale={locale} />}
     <p className="tc-hunt-confirm">{ja ? `攻撃相手：${name}（世代 ${target.generation}）` : `Target: ${name} (generation ${target.generation})`} · {target.points === undefined ? (ja ? "得点情報を更新中" : "Refreshing reward") : `+${target.points} ${ja ? "点" : "pt"}`} · {target.cipher ? (ja ? "不正解は減点0・回数制限なし、成功は1回" : "Wrong key: no deduction or attempt cap; one success") : (ja ? `不正解 −${projection.wrongHuntCost} 点（0点未満にはなりません）・残り ${target.left ?? "?"} 回` : `Miss −${projection.wrongHuntCost} (score floor 0) · ${target.left ?? "?"} attempts left`)}</p>
-    {target.mode === "sudoku" ? <SudokuInput value={cells} onChange={setCells} ariaLabel={ja ? "相手の数独の解" : "Recovered opponent sudoku"} /> : <label className="tc-answer-label">{ja ? (target.cipher ? "計算した鍵" : "計算した秘密の数") : (target.cipher ? "Your recovered key" : "Your recovered secret")}<input data-testid={target.cipher ? "fast-hunt-cipher-key" : "fast-hunt-secret"} inputMode="numeric" value={answer} onChange={e => setAnswer(e.target.value)} /></label>}
+    {target.mode === "sudoku" ? <SudokuInput value={cells} onChange={setCells} ariaLabel={ja ? "相手の数独の解" : "Recovered opponent sudoku"} /> : <label className="tc-answer-label">{ja ? (target.cipher ? "計算した鍵" : "計算した秘密の数") : (target.cipher ? "Your recovered key" : "Your recovered secret")}<input data-testid={target.cipher ? "fast-hunt-cipher-key" : "fast-hunt-secret"} placeholder={target.cipher?.rung === "vigenere" ? (ja ? "鍵1 鍵2 鍵3（空白区切り）" : "key1 key2 key3 (spaces)") : undefined} inputMode="text" value={answer} onChange={e => setAnswer(e.target.value)} /></label>}
     <button type="button" className="tc-submit-small" disabled={submitting || !valid} onClick={submit}>{ja ? `${name}を攻撃する` : `Attack ${name}`}</button>
   </section>;
 }
 
 function CipherHuntGuide({ target, locale }: { readonly target: CipherHuntCandidate; readonly locale: Locale }) {
   const ja = locale === "ja", modulus = rungSpec(target.rung).symbols.length;
+  // One public example per position keeps the worksheet bounded at three rows,
+  // even when a team repeatedly LEAKs a position. A long pair can span a cycle.
+  const samples = target.pairs.flatMap(pair => pair.plaintext.map((a, i) => ({
+    position: ((pair.keyPosition ?? 0) + i) % rungSpec(target.rung).keyLength,
+    a, b: pair.ciphertext[i]!,
+  }))).filter((entry, i, entries) => entries.findIndex(other => other.position === entry.position) === i)
+    .sort((a, b) => a.position - b.position);
   return <div className="tc-hunt-worksheet">
     <p>{ja ? "同じ位置で元の数字 a と暗号の数字 b を比べます。サイコロ1〜6の面を、計算では0〜5で表します。" : "Compare original a with encrypted b at the same position. Die faces 1–6 represent values 0–5."}</p>
-    {target.pairs.slice(0, target.pairsToBreak).map(pair => <div key={pair.id}><strong>a</strong><DieRow values={pair.plaintext} size={22} /><strong>b</strong><DieRow values={pair.ciphertext} size={22} /><code>a: {pair.plaintext.join(" ")}<br />b: {pair.ciphertext.join(" ")}</code></div>)}
+    {target.rung === "vigenere" ? <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0" }}>
+      <thead><tr><th>{ja ? "鍵の位置" : "Key position"}</th><th>{ja ? "元 a" : "Original a"}</th><th>{ja ? "暗号 b" : "Encrypted b"}</th></tr></thead>
+      <tbody>{samples.map(sample => <tr key={sample.position}>
+        <th scope="row">{sample.position + 1}</th>
+        <td style={{ textAlign: "center", padding: 6 }}><DieRow values={[sample.a]} size={22} /><code>{sample.a}</code></td>
+        <td style={{ textAlign: "center", padding: 6 }}><DieRow values={[sample.b]} size={22} /><code>{sample.b}</code></td>
+      </tr>)}</tbody>
+    </table> : target.pairs.slice(0, target.pairsToBreak).map(pair => <div key={pair.id}><strong>a</strong><DieRow values={pair.plaintext} size={22} /><strong>b</strong><DieRow values={pair.ciphertext} size={22} /><code>a: {pair.plaintext.join(" ")}<br />b: {pair.ciphertext.join(" ")}</code></div>)}
     <code className="tc-hunt-formula">a → (a + k) ÷ {modulus} {ja ? "の余り" : "remainder"} = b<br />k = (b − a) ÷ {modulus} {ja ? "の余り" : "remainder"}</code>
-    <p>{ja ? `kが鍵です。b−aが負なら${modulus}を足します。見本：a=4、b=1なら1−4=−3、−3+6=3。鍵は3です。同じ鍵で、列のほかの位置も合うか確かめましょう。` : `k is the key. If b−a is negative, add ${modulus}. Example: a=4, b=1 gives 1−4=−3; −3+6=3, so k=3. Check other positions too.`}</p>
+    {target.rung === "vigenere" && <p>{ja ? "周期は3です。公開された鍵の位置ごとに式を使い、鍵1・鍵2・鍵3の順で空白区切りの3個を入力します。各位置が揃うまでは、他の位置の鍵を決められません。長い1組に3位置全部が含まれる場合は、その1組だけで回収できます。" : "The period is 3. Apply the formula at each published key position; enter keys 1, 2, 3 separated by spaces. Missing positions are undetermined. A single long pair covering all positions would suffice."}</p>}
+    <p>{ja ? `kが鍵です。b−aが負なら${modulus}を足します。見本：a=4、b=1なら1−4=−3、−3+6=3。鍵は3です。同じ鍵の位置を使った、ほかの公開とも合うか確かめましょう。` : `k is the key. If b−a is negative, add ${modulus}. Example: a=4, b=1 gives 1−4=−3; −3+6=3, so k=3. Check other records using the same key position too.`}</p>
   </div>;
 }
 

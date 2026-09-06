@@ -3,7 +3,7 @@ import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
 import { DIE_CSS, DieRow } from "./DieFace.tsx";
 import { describeRevealGroup, SudokuBoard, SUDOKU_CSS } from "./SudokuGrid.tsx";
-import { rungSpec } from "../game/src/ladder.ts";
+import { exposedKeyPositions, rungSpec } from "../game/src/ladder.ts";
 import type {
   CipherPairArtifact,
   CryptoBattleProjection,
@@ -452,7 +452,9 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                     key={pair.id}
                   >
                     <summary>
-                      {pair.rung} {group.pairs.length}/{rungSpec(pair.rung).pairsToBreak}
+                      {pair.rung} {pair.rung === "vigenere"
+                        ? `${locale === "ja" ? "鍵の位置" : "key position"} ${(pair.keyPosition ?? 0) + 1} · ${exposedKeyPositions(group.pairs.filter(p => p.rung === pair.rung), pair.rung).length}/3`
+                        : `${group.pairs.filter(p => p.rung === pair.rung).length}/${rungSpec(pair.rung).pairsToBreak}`}
                     </summary>
                     <div className="tc-pair-rows">
                       <DieRow values={pair.plaintext} size={24} />

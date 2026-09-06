@@ -431,7 +431,7 @@ export function buildCipherOp(contract: ContractProjection): CryptoBattleOp | un
     // Submitted as the pictures a participant would type. `parseAnswer` takes
     // either those or the values; sending the faces exercises the path a human
     // actually uses.
-    answer: [...toSymbols(encryptWithRung(plaintext, myKey, rung), rung)],
+    answer: [...toSymbols(encryptWithRung(plaintext, myKey, rung, contract.task.keyPosition ?? 0), rung)],
   };
 }
 

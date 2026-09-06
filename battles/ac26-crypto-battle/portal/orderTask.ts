@@ -73,7 +73,9 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
 
 /** What this Order asks for, in one participant-readable phrase. */
 export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
-  return TASK_LABELS[locale][task.kind];
+  return task.kind === "caesar-shift" && task.rung === "vigenere"
+    ? locale === "ja" ? "3個の鍵を順に使って暗号にする" : "Encrypt with a repeating three-key cycle"
+    : TASK_LABELS[locale][task.kind];
 }
 
 /**
@@ -91,6 +93,7 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
     case "masked-total":
       return locale === "ja" ? `${task.partyCount} 拠点` : `${task.partyCount} offices`;
     case "caesar-shift":
+      if (task.rung === "vigenere") return locale === "ja" ? `Vigenère · 3個の鍵を繰り返す · 今回は鍵${(task.keyPosition ?? 0) + 1}` : `Vigenère · repeat three keys · use key ${(task.keyPosition ?? 0) + 1}`;
       // A COUNT, not the symbols. The symbols are drawn on the card by
       // `DieRow` (see DieFace.tsx on why they are drawn and not typed), so
       // repeating them here as text would print the tofu this replaced.
@@ -185,7 +188,9 @@ export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string 
       // Values, spelled out. This is the one-line TEXT rendering of a ledger
       // row (a table cell, an operator's log); the board draws the same pair as
       // symbols. Numbers read the same in every language and cannot go tofu.
-      return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
+      return artifact.rung === "vigenere"
+        ? `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} · Vigenère · ${locale === "ja" ? "鍵の位置" : "key position"} ${(artifact.keyPosition ?? 0) + 1}/3`
+        : `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
     case "sudoku-reveal":
       // [Issue #709] Which group was opened, its four digits, and the tag that
       // names the relabelling. The tag is on the row on purpose: two rows

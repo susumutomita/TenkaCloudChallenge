@@ -81,6 +81,7 @@ faking it.
 | Scenario | Position |
 | --- | --- |
 | `fresh` | Match just started, first Orders issued, empty Ledger. |
+| `vigenere` | Standard five-minute TTL: bravo has exposed all three distinct key positions, alpha has an open cipher Order. |
 | `ledger-filling` | A LEAKed share and a PROVE transcript side by side. |
 | `rps-reuse` | Two public bravo openings reuse r; the next sealed hand can be predicted through the real participant controls. |
 | `hunt-reachable` | `alpha` has leaked threshold-many distinct shares of its current generation. |
@@ -90,7 +91,7 @@ faking it.
 The participant HUNT cards now report readiness from public evidence (Issue #742).
 Shamir needs distinct current-generation indices; sudoku opens a worksheet for a repeated public tag
 without testing whether a solution is unique; Caesar uses its rung-specific
-pair threshold; RPS requires past reuse and a currently sealed target. The
+pair threshold and Vigenère requires three distinct public key positions; RPS requires past reuse and a currently sealed target. The
 worksheet never fills a recovered answer. ROTATE is a separate defence card.
 
 ## Participant walkthrough

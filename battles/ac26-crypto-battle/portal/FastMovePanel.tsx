@@ -1,3 +1,4 @@
+import VigenereMaterials from "./VigenereMaterials.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
@@ -576,6 +577,26 @@ export function proveFeedback(
   return { kind: "error", title: copy.proveUnread, body: copy.proveUnreadBody };
 }
 
+/** A well-formed Vigenère miss is accepted and charged, so SDK ok alone is insufficient. */
+export function cipherFeedback(next: CryptoBattleProjection | undefined, contractId: string, locale: Locale): FeedbackDraft {
+  const last = next?.lastCipher;
+  if (!last || last.contractId !== contractId) return { kind: "error", title: locale === "ja" ? "CIPHERを送信しました" : "CIPHER submitted",
+    body: locale === "ja" ? "裁定を読み取れませんでした。お題とスコアを確認してください。" : "Could not read the verdict. Check the Order and score." };
+  if (last.outcome === "miss") return { kind: "error", title: locale === "ja" ? "暗号の答えが違います" : "Incorrect ciphertext",
+    body: locale === "ja" ? `${last.points} 点。このお題は以後0点で再挑戦できます。期限内に正しく完了すれば、期限切れの減点を避けられます。` : `${last.points} pt. Retry this Order for 0 points. Completing it correctly before its deadline avoids the expiry penalty.` };
+  return { kind: "prove", title: FAST_MOVE_COPY[locale].cipherSuccess, reward: last.points,
+    body: last.points === 0 ? locale === "ja" ? "+0 点 · 正しく完了しました。公開せず、期限切れの減点もありません。" : "+0 pt · Correctly completed without publication or an expiry penalty."
+      : FAST_MOVE_COPY[locale].cipherBody(last.points) };
+}
+
+export function CipherScoring({ order, wrongCost, locale }: { readonly order: ContractProjection; readonly wrongCost: number; readonly locale: Locale }) {
+  return <p className="tc-card-warn" data-testid="cipher-scoring">{locale === "ja"
+    ? order.cipherFailed ? `このお題は0点で再挑戦 · 誤答 −${wrongCost} 点。期限内に正しく完了すれば期限切れ減点を避けられます。`
+      : `正解 +${order.points} 点 / 誤答 −${wrongCost} 点、このお題は以後0点で再挑戦。未入力・範囲外は誤答に数えません。`
+    : order.cipherFailed ? `Retry for 0 points · wrong answer −${wrongCost} pt. Correct completion before the deadline avoids expiry penalties.`
+      : `Correct +${order.points} pt / wrong answer −${wrongCost} pt, then retry this Order for 0 points. Empty/out-of-range input is not a wrong answer.`}</p>;
+}
+
 function ownExposedShareCount(projection: CryptoBattleProjection | null): number {
   if (!projection) return 0;
   const indices = new Set<number>();
@@ -843,6 +864,7 @@ ${SUCCESS_CSS}
 .tc-secondary-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
 .tc-tactics{border:1px solid #cfd8e3;border-radius:10px;background:#eef3f8}.tc-tactics>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:900}.tc-tactics>summary span{display:block;margin-top:3px;color:#5f6b7a;font-size:11px;font-weight:500}.tc-tactics-body{display:grid;gap:10px;padding:0 10px 10px}
 .tc-hunt-card,.tc-rotate-card{border:1px solid #cfd8e3;border-radius:10px;padding:10px;background:#fff}
+.tc-hunt-workspace{scroll-margin-top:calc(48vh + 24px)}
 .tc-card-title{font-size:12px;font-weight:900;letter-spacing:.07em}.tc-card-hint{font-size:11px;color:#5f6b7a;margin:3px 0 8px}.tc-card-warn{font-size:11px;font-weight:700;color:#a4341c;margin:0 0 8px}
 .tc-target-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px}
 .tc-target-chip{border:1px solid #b6c2cf;border-radius:999px;background:#fff;padding:6px 9px;cursor:pointer;font-size:11px}
@@ -1285,7 +1307,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 reward: selectedOrder.leakPoints,
                 body:
                   selectedOrder.task.kind === "caesar-shift"
-                    ? copy.leakPairBody(selectedOrder.leakPoints, selectedOrder.task.pairsToBreak)
+                    ? selectedOrder.task.rung === "vigenere"
+                      ? `+${selectedOrder.leakPoints} · ${locale === "ja" ? `鍵の位置${(selectedOrder.task.keyPosition ?? 0) + 1}の元と答えを公開しました。異なる3位置が揃うと全鍵が分かります。` : `Published the original and answer at key position ${(selectedOrder.task.keyPosition ?? 0) + 1}. Three distinct positions reveal all keys.`}`
+                      : copy.leakPairBody(selectedOrder.leakPoints, selectedOrder.task.pairsToBreak)
                     : copy.leakBody(
                         selectedOrder.leakPoints,
                         selectedOrder.task.kind === "reveal-share" ? selectedOrder.task.shareIndices : [],
@@ -1365,6 +1389,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "caesar-shift" && (
         <div id="tc-cipher-answer" className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
+          {selectedOrder.task.rung === "vigenere" && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
+          {selectedOrder.task.rung === "vigenere" ? <VigenereMaterials task={selectedOrder.task} locale={locale} /> : <>
           <div className="tc-lesson">
             <div className="tc-lesson-use">{copy.cipherUse}</div>
             <div className="tc-lesson-why">{copy.cipherWhy}</div>
@@ -1384,9 +1410,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
               </span>
             </li>
             <li><DieRow values={selectedOrder.task.plaintext} size={28} /></li>
-            <li>{copy.cipherKey}: <code>{selectedOrder.task.myKey}</code></li>
+            <li>{copy.cipherKey}: <code>{String(selectedOrder.task.myKey)}</code></li>
           </ul>
           <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
+          </>}
           <input
             ref={cipherInputRef}
             aria-label="fast-cipher-answer"
@@ -1400,7 +1427,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !cipherAnswer.trim()}
             onClick={() => void run(
               () => submitCipher(client, selectedOrder.id, cipherAnswer.trim().split(/\s+/)),
-              () => ({ kind: "prove", title: copy.cipherSuccess, body: copy.cipherBody(selectedOrder.points), reward: selectedOrder.points }),
+              (next) => cipherFeedback(next, selectedOrder.id, locale),
             )}
           >{submitting ? copy.running : `${copy.cipher} · +${selectedOrder.points}`}</button>
         </div>

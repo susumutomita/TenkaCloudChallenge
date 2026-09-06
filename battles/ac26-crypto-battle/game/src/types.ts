@@ -38,7 +38,7 @@
  */
 
 import type { Hand } from "./commitment.ts";
-import type { CipherRung } from "./ladder.ts";
+import type { CipherKey, CipherRung } from "./ladder.ts";
 import type { StoredArtifact } from "./ledger-codec.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
 import type { Permutation, SudokuGrid } from "./sudoku.ts";
@@ -342,6 +342,8 @@ export type OrderTask =
   | {
       readonly kind: "caesar-shift";
       readonly rung: CipherRung;
+      /** Public offset into the repeated key; absent means zero on old Caesar rows. */
+      readonly keyPosition?: number;
       /**
        * The symbols to encrypt, as VALUES — the pictures are added by
        * `projectTask` from the rung's alphabet.
@@ -422,6 +424,8 @@ export interface RpsSubmission {
 }
 
 export interface Contract {
+  /** Vigenère: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
+  readonly cipherFailed?: boolean;
   readonly rps?: RpsSubmission;
   readonly id: string;
   /** The team this Order was issued to (only that team may submit against it). */
@@ -623,7 +627,7 @@ export interface PartialArtifact {
  * reader looking at the public record can count how many pairs a team has out
  * and know whether that team is already broken.
  *
- * `plaintext` and `ciphertext` are the pictures, not the values, so the record
+ * `plaintext` and `ciphertext` are numeric values, rendered as pictures, so the record
  * reads the same to a participant as the Order did (#659 §3).
  */
 export interface CipherPairArtifact {
@@ -634,6 +638,7 @@ export interface CipherPairArtifact {
   readonly method: SubmissionMethod;
   readonly contractId: string;
   readonly rung: CipherRung;
+  readonly keyPosition?: number;
   /**
    * The published pair, as symbol VALUES. Rendered to pictures at the edge
    * (`ledgerPayload`, the board) from the rung's own alphabet — see
@@ -772,6 +777,7 @@ export interface TeamState {
    * can only report what the state remembers.
    */
   readonly lastProve?: LastProve;
+  readonly lastCipher?: LastCipher;
   /**
    * [Issue #696] This team's most recent Shamir HUNT, and whether it landed.
    *
@@ -799,6 +805,14 @@ export interface LastHunt {
   readonly outcome: HuntOutcome;
   /** [Issue #709] Which secret was hunted. Absent means the Shamir secret. */
   readonly via?: "sudoku";
+}
+
+/** The submitting team's own CIPHER verdict. */
+export interface LastCipher {
+  readonly contractId: string;
+  readonly outcome: "hit" | "miss";
+  /** Actual score delta, including floor; zero-reward completion is still a hit. */
+  readonly points: number;
 }
 
 /** [Issue #709] One PROVE, as the proving team's own record of it. */
@@ -1018,8 +1032,8 @@ export type CryptoBattleOp =
       readonly targetTeamId: string;
       readonly generation: number;
       readonly rung: CipherRung;
-      /** The recovered key, as a symbol value. */
-      readonly recoveredKey: number;
+      /** A scalar for Caesar; three ordered shifts for Vigenère. */
+      readonly recoveredKey: CipherKey;
     }
   /**
    * [Issue #659 §9] Open the next hint on one of this team's own open Orders,
@@ -1131,6 +1145,8 @@ export type OrderTaskProjection =
   | {
       readonly kind: "caesar-shift";
       readonly rung: CipherRung;
+      /** Public offset into the repeated key; absent means zero on old Caesar rows. */
+      readonly keyPosition?: number;
       /**
        * The symbols to encrypt, as VALUES.
        *
@@ -1152,7 +1168,7 @@ export type OrderTaskProjection =
       /** How many published pairs recover the key on this rung (#659 §2). */
       readonly pairsToBreak: number;
       /** THIS team's key for the rung, at its current generation. */
-      readonly myKey: number;
+      readonly myKey: CipherKey;
     }
   /**
    * [Issue #709] Nothing to add: the solution is on the vault and the puzzle
@@ -1165,6 +1181,7 @@ export type OrderTaskProjection =
       readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
+  readonly cipherFailed?: boolean;
   readonly id: string;
   readonly kind: ContractKind;
   readonly points: number;
@@ -1343,4 +1360,5 @@ export interface CryptoBattleProjection {
   readonly lastHunt?: LastHunt;
   /** [Issue #709] The reader's most recent PROVE, if any -- see `TeamState.lastProve`. */
   readonly lastProve?: LastProve;
+  readonly lastCipher?: LastCipher;
 }
