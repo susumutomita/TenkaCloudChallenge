@@ -70,6 +70,7 @@ export const SCENARIO_IDS = [
   "waiting",
   "fresh",
   "hint-booster",
+  "lightning",
   "vigenere",
   "ledger-filling",
   "fhe-order",
@@ -98,6 +99,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     en: "Just started — first Orders issued",
   },
   "vigenere": { ja: "Vigenère — bravo の3位置が公開済み・通常5分TTL", en: "Vigenère — bravo exposed three positions; standard five-minute TTL" },
+  "lightning": { ja: "終盤のライトニング — 1題の計算正解を2倍", en: "Endgame lightning — double one calculation reward" },
   "hint-booster": { ja: "終盤のヒント支援 — 通常90分設定で残り10分", en: "Endgame hint support — 10 minutes left, standard 90-minute match" },
   "ledger-filling": {
     ja: "中盤 — LEAK と PROVE が Ledger に並ぶ",
@@ -320,7 +322,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver(id === "hint-booster" || id === "vigenere" ? {} : DEV_CONFIG);
+  const driver = makeDriver(id === "hint-booster" || id === "lightning" || id === "vigenere" ? {} : DEV_CONFIG);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -346,6 +348,7 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
     }
 
+    case "lightning":
     case "hint-booster":
       driver.advance(59 * 60_000);
       serveComputationOrders(driver, "bravo");
@@ -353,6 +356,10 @@ export function buildScenario(id: ScenarioId): Scenario {
       if (projectForTeam(driver.host.state, "alpha").hintBooster?.status !== "active"
         || projectForTeam(driver.host.state, "bravo").hintBooster?.status !== "ineligible") {
         throw new Error("scenario hint-booster must support alpha only");
+      }
+      if (id === "lightning") {
+        driver.advance(60_000);
+        if (projectForTeam(driver.host.state, "alpha").lightning?.status !== "available") throw new Error("lightning scenario must award alpha a card");
       }
       break;
 

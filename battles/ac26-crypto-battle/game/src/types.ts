@@ -426,6 +426,8 @@ export interface RpsSubmission {
 export interface Contract {
   /** Vigenère: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
   readonly cipherFailed?: boolean;
+  /** False only when this version issued the Order; omitted legacy history is unknown. */
+  readonly answerAttempted?: boolean;
   readonly rps?: RpsSubmission;
   readonly id: string;
   /** The team this Order was issued to (only that team may submit against it). */
@@ -817,6 +819,8 @@ export interface LastCipher {
 
 /** [Issue #709] One PROVE, as the proving team's own record of it. */
 export interface LastProve {
+  /** New successful adjudications record their actual reward, including lightning. */
+  readonly points?: number;
   readonly contractId: string;
   readonly outcome: "hit" | "miss";
 }
@@ -832,7 +836,26 @@ export interface HintBoosterProjection {
   readonly remainingMs: number;
 }
 
+export type LightningTarget = { readonly contractId: string; readonly points: number; readonly expiresAtMs: number };
+export type LightningOutcome = "hit" | "leak" | "deadline" | "rotate" | "ended";
+export type LightningCard = { readonly status: "available" } | { readonly status: "unused-expired" }
+  | ({ readonly status: "armed" } & LightningTarget)
+  | ({ readonly status: "spent"; readonly outcome: LightningOutcome } & LightningTarget);
+export type EndgameLightning = { readonly status: "pending" } | { readonly status: "unavailable" }
+  | { readonly status: "awarded"; readonly cards: Readonly<Record<string, LightningCard>> };
+export interface LightningProjection {
+  readonly status: "waiting" | "scheduled" | "unavailable" | "ineligible" | LightningCard["status"];
+  readonly startAfterMs: number;
+  readonly startsInMs?: number;
+  readonly remainingMs: number;
+  readonly contractId?: string;
+  /** Total successful calculation reward (base x 2), not an extra fixed bonus. */
+  readonly points?: number;
+  readonly outcome?: LightningOutcome;
+}
+
 export interface CryptoBattleState {
+  readonly endgameLightning?: EndgameLightning;
   /** #659 §9: immutable endgame distribution; omitted only by older rows. */
   readonly endgameBooster?: EndgameBooster;
   readonly config: CryptoBattleConfig;
@@ -928,6 +951,7 @@ export interface HuntLogEntry {
 }
 
 export type CryptoBattleOp =
+  | { readonly kind: "declare-lightning"; readonly contractId: string }
   | { readonly kind: "hunt-rps"; readonly targetTeamId: string; readonly duelId: string; readonly predictedHand: number }
   | { readonly kind: "rps-commit"; readonly contractId: string; readonly commitment: number }
   | { readonly kind: "rps-open"; readonly contractId: string; readonly hand: number; readonly randomness: number }
@@ -1182,6 +1206,8 @@ export type OrderTaskProjection =
 
 export interface ContractProjection {
   readonly cipherFailed?: boolean;
+  /** Authoritative eligibility before any accepted answer; missing means unknown. */
+  readonly lightningEligible?: boolean;
   readonly id: string;
   readonly kind: ContractKind;
   readonly points: number;
@@ -1265,6 +1291,7 @@ export interface TeamSummaryProjection {
 export interface CryptoBattleProjection {
   /** Own benefit only; the opponent's allocation is never projected. */
   readonly hintBooster?: HintBoosterProjection;
+  readonly lightning?: LightningProjection;
   /** Public scoring rule and this reader's completed attacks; no recovered values. */
   readonly huntWinPoints?: number;
   readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung }[];

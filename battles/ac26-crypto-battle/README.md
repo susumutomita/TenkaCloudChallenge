@@ -229,7 +229,7 @@ At the endgame boundary, every team tied for last receives ten minutes without h
 
 Check “No hint penalty” and its remaining time beside the selected Order's hints, then open a hint and continue the calculation. Order deadlines, issuance and answer scores stay unchanged. If a request arrives after the displayed penalty changes, the hint remains closed and the participant is asked to refresh before opening it.
 
-A legacy match upgraded after the endgame boundary has no saved ranking for that instant. It retains regular hint penalties and displays the reason instead of inventing a past distribution. This increment does not implement lightning or higher cipher rungs.
+A legacy match upgraded after the endgame boundary has no saved ranking for that instant. It retains regular hint penalties and displays the reason instead of inventing a past distribution. Higher cipher rungs remain separate increments. Lightning is described below.
 
 ## Cipher ladder: two implemented rungs
 
@@ -261,6 +261,42 @@ These changes add no AWS resources, settings, timers or cleanup obligations.
 Local verification: `cd game && bun test && bun run typecheck`; `cd dev && bun test
 && bun run typecheck`. The `vigenere` dev scenario uses the standard five-minute
 TTL and three actual opponent LEAKs. See [the recorded local walkthrough](dev/VIGENERE-READING.md).
-RSA, the rotor/Enigma model, a new homomorphic ladder rung and lightning remain
+RSA, the rotor/Enigma model, a new homomorphic ladder rung remain
 outside this increment of #659. Existing Shamir, encrypted addition and the
 endgame hint booster remain available.
+
+
+### Endgame lightning (#659 §9)
+
+At the existing endgame boundary, the bottom two teams receive one card each,
+including ties at the second-lowest team's score. Two-team matches award only
+last place (both if tied); solo practice awards none. Allocation is fixed once,
+using the same boundary snapshot as the hint booster, and survives reload/rank
+changes. The card and its selected Order are private to the receiving team.
+
+Choose an unanswered calculation Order, then declare lightning before submitting
+an answer. A correct PROVE, CIPHER, FHE or MPC pays twice that Order's existing
+reward, including a rush reward. #659's broad PROVE means doing the calculation;
+DUEL win/draw/forfeit points are not calculation-answer rewards and do not qualify.
+No new score constants or timers are introduced. The card is fixed to one Order,
+with no undo or stacking. A rejected input does not create an accepted-answer
+record. A recorded PROVE miss or Vigenère cipher failure prevents later declaration.
+
+After declaration, wrong answers may be retried on the same Order until its
+existing deadline. Existing penalties remain unchanged. Vigenère forfeits its
+base reward after a wrong answer, so its doubled reward is also zero; correct
+completion still avoids expiry. LEAK pays its ordinary reward and spends the
+card. Deadline, ROTATE or match end expires it without multiplying any penalty.
+The UI states target, resulting reward and remaining time together and links
+back to the declared Order when another is selected.
+
+Schema 9 adds allocation/target/result state and accepted-answer history. Older
+matches already past the boundary report unavailable allocation rather than
+invent a historical rank. Older open Orders have unknown answer history and
+cannot receive a card; new Orders can. Existing schema-8 Vigenère failure flags,
+compact HUNT/RPS reservations and hint booster decisions are preserved.
+
+Local evidence: `game/src/lightning.test.ts` uses the real reducer/host and Portal
+component; the `lightning` dev scenario reaches minute 61 through normal ticks
+and opponent calculations. Run game/dev tests and typechecks, then the repository
+catalog gate. See [the local walkthrough](dev/LIGHTNING-PLAYTHROUGH.md).

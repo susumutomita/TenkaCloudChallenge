@@ -41,6 +41,7 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
     case "hunt-rps": return otherTeam ? "hunted" : "hunt";
     case "rotate": return "rotate";
     case "reveal-hint": return "hint";
+    case "declare-lightning":
     case "ready":
     case "start": return "coordination";
   }

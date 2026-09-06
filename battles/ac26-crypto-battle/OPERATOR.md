@@ -63,7 +63,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (8, including Vigenère key-position and failure records) and a
+The plugin declares `stateSchemaVersion` (9, including private lightning allocation and targets) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -388,8 +388,7 @@ exposes relations when a mask repeats. That is related algebra, not a claim
 that Vigenère implements Beaver triples or achieves one-time-pad security.
 No dedicated Vigenère treatment was found in the checked local seminar notes.
 
-Remaining #659 work: RSA, rotor/Enigma teaching model, new homomorphic rung,
-and lightning. This increment must not close #659 or the balance discussion #740.
+Remaining #659 work: RSA, rotor/Enigma teaching model and a new homomorphic rung. This increment must not close #659 or the balance discussion #740.
 
 
 ### Schema 8: Vigenère answer adjudication
@@ -413,3 +412,35 @@ schema-8-compatible plugin. Caesar's existing retry adjudication is unchanged.
 Free Vigenère material carries the problem's own values, a general formula and
 an unrelated small example. The three paid guide texts, including live-value
 instructions at level 3, reach the Portal only through projected purchased hints.
+
+
+### Schema 9: fixed endgame lightning
+
+`endgameLightning` fixes eligible teams once on the same temporary boundary tick
+used by the hint booster. Actual time advancement remains the original single
+tick, so a late poll does not issue/penalize unseen Orders. The host ticks before
+an operation, fixing eligibility before that operation's score changes. Rank
+cutoff is the second-lowest roster entry for 3+ teams, lowest for two, and none
+for solo practice; ties at the cutoff all receive one card.
+
+Each card is available, armed for one Order, or terminal; targeting writes the
+Order ID, reward and existing deadline atomically with the operation. These
+records survive terminal Order pruning. Only the owning projection exposes the
+card. Ordinary calculation completions share the multiplier, including private
+CIPHER, encrypted addition and masked totals. RPS duel outcomes and all LEAK,
+HUNT, hint and penalty paths keep their existing score rules. No extra award
+occurs at declaration, and no zero-delta score history event is needed.
+
+`answerAttempted=false` is written on newly issued calculation Orders. An accepted
+PROVE miss changes it to true; Vigenère uses its existing `cipherFailed` too.
+Legacy absence is unknown and ineligible, not a made-up empty history. Existing
+CIPHER/FHE/MPC validation rejections still do not write attempt state. A wrong
+answer after declaration does not detach the card. Existing Vigenère forfeiture
+makes the multiplier zero and remains visible; the card is spent on correct
+completion, LEAK, deadline, ROTATE or match end. There is no new penalty/timer.
+
+Migration supports v1–v8, preserving compact roster reservations, Vigenère failure
+flags and booster decisions. Missing allocation is pending before the boundary
+and unavailable after it; it is never reconstructed from a later score. Schema-9
+rows require a compatible plugin on rollback. Verify game/dev tests and types,
+`make agent-gate`, and the `lightning` harness scenario; AWS rehearsal is optional.
