@@ -1,7 +1,8 @@
 """A bounded value channel to the learner process, never a channel for grading verdicts.
 
-One process serves the whole suite. Only JSON function results cross this boundary;
-the trusted parent owns the checker and the verdict.
+One process serves the whole suite. Fresh call IDs reject preprinted replies, but
+do not attest native Python returns. All JSON values remain untrusted; the parent
+owns the mathematical checks and the verdict.
 """
 from __future__ import annotations
 
@@ -10,6 +11,7 @@ import os
 import re
 import resource
 import select
+import secrets
 import signal
 import subprocess
 import sys
@@ -41,7 +43,7 @@ class LearnerSession:
         self.process = None
         self.pending = b''
         self.log = ''
-        self.sequence = 0
+        self.sequence = None
         self.initialization_diagnostic = ''
 
     def __enter__(self):
@@ -130,7 +132,7 @@ class LearnerSession:
     def call(self, module, function, args, modulus=None):
         if time.monotonic() >= self.deadline:
             raise LearnerError('Function evaluation timed out.')
-        self.sequence += 1
+        self.sequence = secrets.token_hex(16)
         request = {'callId': self.sequence, 'module': module, 'function': function,
                    'args': args, 'modulus': modulus}
         try:

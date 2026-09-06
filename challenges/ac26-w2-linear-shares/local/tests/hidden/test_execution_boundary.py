@@ -72,6 +72,29 @@ class ExecutionBoundary(unittest.TestCase):
             self.assertFalse(server.evaluate('transfer',source),function)
             self.assertFalse(_WORKBENCH.run_public_tests({'linear.py':source})['passed'],function)
 
+    def test_predictable_reply_cannot_override_a_tuple_result(self):
+        source=reference()+'''
+import json
+reply_number=0
+def add_shares(a,b,p):
+    global reply_number
+    reply_number+=1
+    value=[(x+y)%p for x,y in zip(a,b)]
+    print(json.dumps({'callId':reply_number,'value':value}),flush=True)
+    return tuple(value)
+'''
+        self.assertFalse(server.evaluate('add-shares',source))
+        self.assertFalse(_WORKBENCH.run_public_tests({'linear.py':source})['passed'])
+        source='''import sys
+initial_had_id='callId' in sys._getframe(1).f_locals['initial']
+def probe():return [initial_had_id,sys._getframe(1).f_locals['call']['callId']]
+'''
+        with LearnerSession({'linear.py':source}) as learner:
+            values=[learner.call('linear','probe',[]) for _ in range(3)]
+        self.assertTrue(all(not row[0] for row in values))
+        self.assertEqual(len({row[1] for row in values}),3)
+        for row in values:self.assertRegex(row[1],r'^[0-9a-f]{32}$')
+
     def test_in_place_constant_addition_is_a_valid_result(self):
         source=reference()+'''\ndef add_constant(shares,c,p):
     shares[0]=(shares[0]+c)%p

@@ -1,5 +1,28 @@
 # Linear shares: participant reading and runtime evidence (#716)
 
+## Fresh reply identifiers
+
+The review reproduced a function that printed a correct list using predictable call
+numbers and then returned a tuple. The parent accepted the printed frame before the
+wrapper reported the wrong return type. The same unchanged source now fails through
+the actual API: each call uses a fresh 128-bit identifier created after initialization.
+A regression checks that the identifier is absent during initialization, changes per
+call, and that predictable frames cannot override a tuple result. All 17 Linux tests
+pass (22.027 seconds). The retained Portal harness still submits all five original
+answers successfully (one test, 1.13 seconds; total 4.45 seconds).
+
+This is freshness, not a protected interpreter-return attestation. All result frames
+are untrusted JSON data. Arbitrary Python can read a live call and implement its
+value protocol; it must still compute values satisfying the trusted parent's
+mathematical checks. The pre-serialization type check catches ordinary invalid
+function returns, but is not claimed to authenticate arbitrary Python execution.
+The before/after probe used the same computed, mathematically correct values; it
+was a result-protocol/type bypass, not permission for the child to decide a grade.
+
+Logs: `/private/tmp/linear-762-predictable-{before,after}.log`,
+`linear-762-nonce-runtime.log`, `linear-762-nonce-portal.log`.
+
+
 ## PR #762 review corrections
 
 The old worker could create a SysV shared-memory segment which remained listed in
