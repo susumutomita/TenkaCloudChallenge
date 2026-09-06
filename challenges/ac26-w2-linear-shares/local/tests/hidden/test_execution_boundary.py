@@ -8,6 +8,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 from participant.execution import LearnerError, LearnerSession
 from participant.isolation import protect_supervisor
 from participant.server import _WORKBENCH
+from participant import server as workbench_server
 from tests.public.test_linear import run_cases
 from fixtures.generate import public_payload, OPERATION_ROUNDS, operations
 from verifier import server
@@ -33,11 +37,74 @@ def zombies():
     return found
 
 
+@contextmanager
+def delayed_verifier(delay, verdict):
+    """A real loopback response, with no learner or external network involved."""
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers['Content-Length']))
+            time.sleep(delay)
+            body = json.dumps(verdict).encode()
+            try:
+                self.send_response(200)
+                self.send_header('Content-Length', str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # Expected when exercising the outbound timeout.
+
+        def log_message(self, *_args):
+            pass
+
+    http = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = Thread(target=http.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
+    thread.start()
+    try:
+        yield f'http://127.0.0.1:{http.server_port}/verify'
+    finally:
+        http.shutdown()
+        http.server_close()
+        thread.join()
+
+
+class VerifierForwarding(unittest.TestCase):
+    def test_suite_verdict_outlives_the_client_body_deadline(self):
+        body = {'checkpointId': 'add-shares', 'submission': 'synthetic-test'}
+        verdict = {'checkpointId': 'add-shares', 'correct': True}
+        # Scale only this transport test. A real response arrives after the old
+        # body-read timeout but before the separate outbound deadline.
+        with delayed_verifier(.1, verdict) as url, \
+                patch.object(workbench_server, 'REQUEST_TIMEOUT_SECONDS', .02), \
+                patch.object(workbench_server, 'VERIFIER_TIMEOUT_SECONDS', 1):
+            self.assertEqual(workbench_server.proxy_verdict(body, url), verdict)
+        self.assertEqual(workbench_server.Handler.timeout, 15)
+        self.assertEqual(workbench_server.RUN_TIMEOUT_SECONDS, 20)
+        self.assertGreater(workbench_server.VERIFIER_TIMEOUT_SECONDS, server.RUN_TIMEOUT_SECONDS)
+
+    def test_missing_or_mismatched_forwarded_verdict_still_fails_closed(self):
+        body = {'checkpointId': 'add-shares', 'submission': 'synthetic-test'}
+        failed = {'checkpointId': 'add-shares', 'correct': False}
+        with delayed_verifier(.1, {'checkpointId': 'add-shares', 'correct': True}) as url, \
+                patch.object(workbench_server, 'VERIFIER_TIMEOUT_SECONDS', .02):
+            self.assertEqual(workbench_server.proxy_verdict(body, url), failed)
+        with delayed_verifier(0, {'checkpointId': 'transfer', 'correct': True}) as url:
+            self.assertEqual(workbench_server.proxy_verdict(body, url), failed)
+
 @unittest.skipUnless(sys.platform=='linux','requires deployed Linux isolation')
 class ExecutionBoundary(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         protect_supervisor()
+
+    def test_documented_computation_helpers_can_be_imported(self):
+        source=reference()+"\nimport decimal,fractions,functools,hashlib,hmac,operator,random,statistics,time\nassert fractions.Fraction(2,4)==fractions.Fraction(1,2)\nassert statistics.mean([1,3])==2\nassert random.Random(7).randrange(1)==0\n"
+        for checkpoint in server.CODE_CHECKPOINTS:
+            self.assertTrue(server.evaluate(checkpoint,source),checkpoint)
+        self.assertTrue(_WORKBENCH.run_public_tests({'linear.py':source})['passed'])
+
+    def test_correct_computation_can_use_more_than_five_cpu_seconds(self):
+        source=reference()+"\nimport time\nstarted=time.process_time()\nwhile time.process_time()-started<5.25:sum(range(1000))\n"
+        self.assertTrue(server.evaluate('add-shares',source))
 
     def test_learner_cannot_change_supervisor_scheduling(self):
         before=(os.sched_getscheduler(0),os.getpriority(os.PRIO_PROCESS,0),os.sched_getaffinity(0))
@@ -267,9 +334,12 @@ def hang():
     os.write(1,b'{"callId":')
     while True:pass
 '''
-        start=time.monotonic()
-        with LearnerSession({'linear.py':source},timeout=.3) as learner:
+        with LearnerSession({'linear.py':source}) as learner:
             pid=learner.call('linear','probe',[])
+            # Start this partial-reply deadline after real initialization. A loaded
+            # host taking time to start Python is not the behavior being tested.
+            start=time.monotonic()
+            learner.deadline=start+.3
             with self.assertRaises(LearnerError):learner.call('linear','hang',[])
         self.assertLess(time.monotonic()-start,3)
         for _ in range(100):

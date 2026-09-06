@@ -120,6 +120,10 @@ Use exactly those displayed keys. Values are nonnegative integers;1 or2 both cou
 
 Finally, explain how public offsets other than [c,0,…,0] can still total c. Next, `ac26-w2-beaver-mul` addresses the cross terms of secret multiplication. These local additions alone do not implement a signature protocol or complete MPC.
 
+## Python helpers
+
+The computation helpers `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing` can be imported. They are loaded before your code runs. Loading other modules or accessing files/network is unsupported. Computation in public and submitted runs each allows up to20 seconds.
+
 ## Author scope and verification
 
 This independent companion uses the published Week 2 toy-mpc assignment and the owner's Week 2 notes. courseAlignment points to published lecture/assignment sources; the lesson remains draft. It does not copy the course's signature implementation or solutions.

@@ -45,6 +45,8 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# A completed request may need the entire grading window plus transport overhead.
+VERIFIER_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -109,7 +111,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)

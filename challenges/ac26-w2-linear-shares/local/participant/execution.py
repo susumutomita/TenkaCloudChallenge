@@ -21,7 +21,7 @@ from types import SimpleNamespace
 
 MAX_FRAME_BYTES = 64 * 1024
 MAX_LOG_BYTES = 64 * 1024
-RUN_TIMEOUT_SECONDS = 15
+RUN_TIMEOUT_SECONDS = 20
 
 
 class LearnerError(Exception):
@@ -32,7 +32,7 @@ def _limits():
     resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_LOG_BYTES, MAX_LOG_BYTES))
-    resource.setrlimit(resource.RLIMIT_CPU, (5, 6))
+    resource.setrlimit(resource.RLIMIT_CPU, (RUN_TIMEOUT_SECONDS, RUN_TIMEOUT_SECONDS + 1))
 
 
 class LearnerSession:

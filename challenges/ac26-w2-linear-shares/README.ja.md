@@ -119,6 +119,10 @@ out[i] = (shares[i] + d[i]) % p
 
 最後に、調整値を [c,0,…,0] 以外にしても合計を c にできるか説明してください。次の `ac26-w2-beaver-mul` は、秘密どうしの積の交差項をどう扱うかへ進みます。ここでの足し算だけで署名や完全なMPCが完成するわけではありません。
 
+## Pythonで使える補助
+
+計算用の標準ライブラリ `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing` を読み込めます。これらは実行前に用意されます。他のモジュールの追加読み込みやファイル・ネットワークへのアクセスには対応しません。計算は公開・提出とも1回20秒以内です。
+
 ## 作問者向けの範囲と検証
 
 この問題は講座の公式 Week 2 toy-mpc と作者の Week 2 ノートを参照する独立教材です。courseAlignment は公開済みの講義・演習を指定しています。教材の状態は draft のままです。講座の署名実装や解答を複製していません。

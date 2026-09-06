@@ -285,3 +285,82 @@ actual component-to-local-API evidence, not a physical browser or AWS deployment
 The final classification review removed the complete operation-to-grade map and the filled four-key answer from participant statements and starter. The operation-name glossary, local-row criterion, necessary equations and worked arithmetic remain. The reader must apply those equations to the displayed operations; no checkpoint or grading predicate changed.
 
 The comparison explanation was completed with a four-case local-output contradiction: at p7, y shares are0, a0 is0/1 and a1 is0/6. Required comparison bits form[[0,1],[1,0]], whose diagonal sums0 and2 cannot both equal the same reordered sum of arbitrary local output shares. Replacing6 by p-1 proves the stated odd-prime case; fixing other parties' shares handles n>2. The completed classification map remains absent.
+
+## PR762 final allowance/import/forwarding verification — 2026-09-07
+
+This follow-up starts from `ee116c4`. It retains the lesson changes already reviewed
+and the original frozen source and hand answer in `portal/`. Reader SHA256 remains
+`ff3e4a1dcb3240ec31f141432bcb09d13253d279a54fc619359cd446c1cd421e`.
+No new learner answer or hidden-derived solution was substituted.
+
+Three runtime inconsistencies were corrected without changing mathematical grading:
+
+- The previously introduced worker default15s and CPU5/6s cut the published20s
+  computation allowance. The worker now uses20s wall/CPU with the21s hard CPU limit.
+  The documented512MiB/64process/64KiB bounds and parent-owned mathematical checks remain.
+- Filesystem isolation prevented ordinary computational standard-library imports such
+  as fractions/statistics/random. The14 documented helpers are preloaded before source
+  execution; JA/EN instructions, READMEs and starter list the supported environment.
+  No extra package installation, file access or network permission was added.
+- A submitted calculation could still be running when the Workbench's outbound request
+  hit the15s client-body deadline. `VERIFIER_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5`
+  now bounds that outbound wait. `Handler.timeout` and body reads remain15s.
+
+The old running dedicated18149 environment was measured before rebuilding. The same
+frozen reader was used with only a16s `time.sleep` at initialization, or documented
+helper imports/assertions appended. Actual sealed prepare→verify comparisons:
+
+| Input | Old verify | New verify | Public result |
+|---|---|---|---|
+| Correct reader plus16s startup | false,15.012s | true,16.256s | true before17.764s and after18.248s |
+| Correct reader plus helper imports | false,0.361s | true,0.462s | false before (`linear.py:15: PermissionError`), true after |
+| Correct reader plus21s startup | not needed for baseline | false,20.042s | not claimed |
+
+The old public16s success is intentional evidence: its configured public-session20s
+window was already longer than the private/forwarding deadline. The initial probe
+incorrectly expected public failure too, so that assertion stopped the script. Its
+already-recorded result was retained; only the remaining helper cases were then run.
+No observed success was relabeled a product failure.
+
+Artifacts: `/private/tmp/linear-762-allowance-{before,after}.json`,
+`linear-762-allowance-{before,after}-http.log`,
+`linear-762-allowance-before-initial.log`, and
+`linear-762-allowance-overrun-http.log`. The reusable synthetic HTTP probe is
+`/private/tmp/linear-762-allowance-http.py`.
+
+The problem-local `VerifierForwarding` tests use a real loopback HTTP server. With only
+this test's time scale shortened, the response arrives after the body-read threshold
+but within the outbound threshold and succeeds. A response exceeding the outbound
+threshold and a response with a mismatched checkpoint still fail closed. The tests
+assert the production20s computation window and15s Handler timeout remain unchanged.
+The helper and >5CPU-second correct-computation regressions are retained.
+
+One existing cleanup test failed before reaching its intended operation because its
+0.3s deadline included Python/module initialization on a loaded host. It now initializes
+normally, starts its fork, then sets the0.3s deadline on the intentionally incomplete
+reply. The same timeout and descendant-disappearance assertions remain; no product
+limit was increased for that test.
+
+Final routes:
+
+- `make runtime-test FLAG_SEED=linear-shares-reader-716`:25PASS,70.625s,
+  `/private/tmp/linear-762-allowance-runtime-final25.log`. This includes both real
+  loopback forwarding regressions and the retained mathematical/isolation cases.
+- Frozen source + existing hand JSON: public5PASS, all5 actual sealed prepare→verify
+  correct, including the manual no-communication envelope.
+- Existing retained ContainerWorkbenchPanel harness:1PASS,2.65s test/10.14s total,
+  `/private/tmp/linear-762-allowance-portal.log`. It submits all5 rows and observes
+  solved-row disappearance. No Portal code, test waiting duration or source fixture
+  was changed in this follow-up; no additional act/wait adjustment was necessary.
+- Existing7 mutants killed and reference passes:
+  `/private/tmp/linear-762-allowance-mutations.log`.
+- `make install` and `make agent-gate`:116PASS,
+  `/private/tmp/linear-762-allowance-catalog.log`.
+
+Reproduction uses only dedicated project `ac26-linear-shares-reader-716`,
+`/private/tmp/linear-shares-716-compose.yml`, synthetic seed `linear-shares-reader-716`,
+and localhost18149. From the problem directory run `make runtime-test
+FLAG_SEED=linear-shares-reader-716`, `make reference-test FLAG_SEED=linear-shares-reader-716`,
+and `AC26_WORKBENCH_URL=http://127.0.0.1:18149 sh local/tests/hidden/portal/run.sh
+/Users/susumu/product/TenkaCloud`. This is component+HTTP/Linux evidence, not a physical
+browser or AWS deployment. The dedicated stack is left running for parent review.
