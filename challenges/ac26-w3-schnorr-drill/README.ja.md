@@ -48,4 +48,15 @@ make reference-test
 make test STARTER_FILE=local/reference/schnorr_drill.py
 ```
 
-`reference-test` は誤った実装のmutationと、2曲線の手計算表・構成解の全探索・不正入力の回帰、鍵の起動時取得、Linuxのseed・親プロセス・ネットワーク隔離を実行します。実Composeでは `SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132` を設定し、`python -m unittest discover -s local/tests/hidden -p test_isolation.py -v` でTiniやhealthcheckを含む全プロセスの環境を検査します。値は出力しません。metadataはカタログrootの `make install && make agent-gate` で検証します。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。
+`reference-test` は誤った実装のmutationと、2曲線の手計算表・構成解の全探索・不正入力の回帰、鍵の起動時取得、Linuxのseed・親プロセス・ネットワーク隔離を実行します。
+
+`make test` は一時的なCLI用コンテナで、Workbenchのサーバーは公開しません。実Composeの検査は、18132番ポートが空いている状態で、次の順に両サービスを起動・検査・停止します。
+
+```sh
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check up -d --build --wait
+SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_isolation.py -v
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check down
+make verifier-down
+```
+
+Tiniやhealthcheckを含む全プロセスの環境を検査し、値は出力しません。Linux専用の子プロセス検査は `make reference-test` 内で実行します。macOSで上のコマンドを使った場合はその部分だけスキップされます。metadataはカタログrootの `make install && make agent-gate` で検証します。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。

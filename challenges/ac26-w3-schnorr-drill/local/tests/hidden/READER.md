@@ -85,3 +85,18 @@ Linux author image は新しい鍵取得9件、既存隔離3件、学習回帰8�
 検証後は専用projectの `down` によりコンテナ2つとネットワーク2つを削除し、同projectの `ps -a` が空であることを確認した（`/private/tmp/schnorr-716-cleanup.log`）。最新main上の `make install agent-gate` も116件すべて成功した（`/private/tmp/schnorr-716-final-catalog-gate.log`）。
 
 **実Portalのクリック経路は未確認。** HTTP上の参加者契約の実証と、アプリの画面配置・長文表示の実証は区別する。
+# Review follow-up: reproduce the documented live check
+
+On 2026-09-06, the root reviewer used the README's explicit Compose startup for
+the isolated `ac26-schnorr-live-check` project, then ran the documented
+`SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_isolation.py -v`.
+Both live checks passed; the three Linux-only unit checks were correctly skipped
+on macOS (their prior real-Linux results remain recorded below). Tini and the
+healthcheck processes were readable but contained no seed, and the supervisor
+environment was unreadable. No environment values were printed. The dedicated
+Compose project was stopped afterward. The catalog's 116 metadata files passed.
+
+The final Japanese and English explanation now defines a probability distribution
+as the probabilities with which the different possible records appear. It does
+not claim that constructing one accepted record proves those probabilities equal
+to the normal protocol.

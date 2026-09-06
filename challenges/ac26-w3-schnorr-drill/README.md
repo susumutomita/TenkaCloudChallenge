@@ -48,4 +48,15 @@ make reference-test
 make test STARTER_FILE=local/reference/schnorr_drill.py
 ```
 
-The reference target runs implementation mutants plus regressions for independently calculated point tables, all final constructions, malformed inputs, key bootstrap and Linux seed/parent-process/network isolation. For the live Compose process test, set `SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132` and run `python -m unittest discover -s local/tests/hidden -p test_isolation.py -v`; it checks every visible process environment, including Tini and healthchecks, without printing values. Run make install && make agent-gate at the catalog root. Independent reader and participant API evidence is recorded in local/tests/hidden/READER.md. Live AWS and third-party participant validation remain unrun, separate from local evidence.
+The reference target runs implementation mutants plus regressions for independently calculated point tables, all final constructions, malformed inputs, key bootstrap and Linux seed/parent-process/network isolation.
+
+`make test` starts a temporary CLI container; it does not publish a Workbench server. To check the live Compose processes, start both services explicitly, run the HTTP regression, then remove the dedicated project. Port 18132 must be available.
+
+```sh
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check up -d --build --wait
+SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_isolation.py -v
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check down
+make verifier-down
+```
+
+The live tests inspect every visible process environment, including Tini and healthchecks, without printing values. Linux-only child-process tests run inside `make reference-test`; they are skipped by this command on macOS. Run `make install && make agent-gate` at the catalog root. Independent reader and participant API evidence is recorded in `local/tests/hidden/READER.md`. Live AWS and third-party participant validation remain unrun, separate from local evidence.
