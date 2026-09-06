@@ -14,6 +14,7 @@
 name: ac26-w1-underconstraint
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -21,7 +22,6 @@ services:
       # LAST stage -- `author` -- which carries verifier/, reference/ and mutation.py.
       target: participant
     environment:
-      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       WORKBENCH_PORT: "18094"
       VERIFIER_URL: http://verifier:18095/verify
       # Issue 537/543 option B2: `fixtures/` does not ship in the participant image any
@@ -63,6 +63,7 @@ services:
       - workshop-host
 
   verifier:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

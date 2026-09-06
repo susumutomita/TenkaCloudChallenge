@@ -29,10 +29,7 @@ from __future__ import annotations
 
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -42,17 +39,16 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.evidence import public_evidence
+from participant.execution import run_functions
+from participant.isolation import protect_supervisor
+from participant.evaluator import satisfies
 
 ROOT = Path(__file__).resolve().parents[1]
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+SEED = "local-dev-seed"  # public evidence comes from the internal verifier
 PORT = int(os.environ.get("WORKBENCH_PORT", "18094"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 20
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 
@@ -61,29 +57,7 @@ SUBMISSION_FILES = ("policy.py",)
 #: The five checkpoints whose portal submission is the learner's policy.py source.
 CODE_CHECKPOINT_IDS = ("build", "audit", "exploit", "repair", "mutation-transfer")
 CODE_CHECKPOINTS_FOR_PORTAL = frozenset(CODE_CHECKPOINT_IDS)
-CHECKPOINT_LABELS = {
-    "build": "ポリシーどおりの回路を組む",
-    "audit": "足りない制約を特定する",
-    "exploit": "偽の主張を通す witness を作る",
-    "root-cause": "原因を構造化して提出する",
-    "repair": "正常系を壊さずに塞ぐ",
-    "mutation-transfer": "別の欠落でも成立させる",
-}
-
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
-# aborts the exec, so on a macOS checkout every submission run failed — including
-# the reference. The lab runs on Linux, where the cap does apply, so skipping it on
-# Darwin does not change what participants run.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
+CHECKPOINT_LABELS = {'build': '本来の検査を組む', 'audit': '欠けた検査を見つける', 'exploit': '検査の不足を示す値を作る', 'root-cause': '原因と変更した値を報告する', 'repair': '足りない検査だけを戻す', 'mutation-transfer': '別の欠落と数でも確かめる'}
 
 def starter_payload() -> dict[str, str]:
     """Return the editable file shipped to the Portal editor."""
@@ -97,7 +71,7 @@ def config_payload() -> dict[str, object]:
     return {
         "id": "ac26-w1-underconstraint",
         "name": "通るのに、守れていない",
-        "description": "不足した constraint を監査・悪用し、正常系を保ったまま修復する。",
+        "description": "不足した検査を見つけ、反例を作り、正常な値を通すまま修復します。",
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -113,8 +87,8 @@ def config_payload() -> dict[str, object]:
         "i18n": {
             "en": {
                 "name": 'It passes, but it does not protect',
-                "description": 'A credential circuit was stopped by audit just before production. Ordinary holders are judged correctly. But a forged witness may be able to walk around the condition. Build it, break it, fix it.',
-                "checkpointLabels": {'build': 'Build the circuit the policy intends', 'audit': 'Identify the missing constraint', 'exploit': 'Forge a witness that carries a false claim', 'root-cause': 'Submit the root cause in structured form', 'repair': 'Close the gap without breaking the honest cases', 'mutation-transfer': 'Hold up when a different constraint is missing'},
+                "description": 'Find a missing check, construct a counterexample, and repair it while preserving honest results.',
+                "checkpointLabels": {'build': 'Build the intended checks', 'audit': 'Find the missing check', 'exploit': 'Construct a counterexample', 'root-cause': 'Report the cause and changed values', 'repair': 'Restore only the missing check', 'mutation-transfer': 'Handle another gap and other numbers'},
             }
         },
     }
@@ -144,84 +118,32 @@ def _submission_sources(files: object) -> dict[str, str] | None:
     return normalized
 
 
-def _child_env() -> dict[str, str]:
-    """The fixed environment the public-test child runs under.
-
-    Deliberately built from nothing rather than inherited, so a Portal run cannot pick
-    up whatever this server process happens to carry. The two values forwarded, and
-    only when set, are how the child reaches this deployment's public half: since
-    Issue 543 option B2 the participant image has no `fixtures/` to derive it from, so
-    `tests/public/test_policy.py` fetches it from the Compose-internal verifier the
-    same way `show.py` does (see evidence.py).
-    """
-    env = {"PATH": "/usr/local/bin:/usr/bin:/bin"}
-    for name in ("PUBLIC_EVIDENCE_JSON", "VERIFIER_PUBLIC_URL"):
-        value = os.environ.get(name)
-        if value:
-            env[name] = value
-    return env
-
-
-def _run_submission_script(
-    sources: dict[str, str], script: str, seed: str, **extra: object
-) -> tuple[int, str] | None:
-    """Run Portal-edited Python with the Workbench's resource limits.
-
-    Same shape as the verifier's runner of the same name, deliberately: this one only
-    ever runs the *public* suite, which the learner can run themselves with
-    `make test`, so it never sees a hidden check or an expected value.
-    """
-    with tempfile.TemporaryDirectory() as workspace:
-        for name, text in sources.items():
-            (Path(workspace) / name).write_text(text, encoding="utf-8")
-        transcript = Path(workspace) / "stdout"
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [
-                        sys.executable,
-                        "-I",
-                        "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed, **extra),
-                    ],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env=_child_env(),
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
-
-
-PUBLIC_TEST_SCRIPT = """
-import os, runpy
-os.environ["FLAG_SEED"] = {seed!r}
-os.environ["SUBMISSION_DIR"] = {workspace!r}
-os.environ["BROWSER_PUBLIC_TESTS"] = "1"
-runpy.run_path({root!r} + "/tests/public/test_policy.py", run_name="__main__")
-"""
-
-
 def run_public_tests(seed: str, files: object) -> dict[str, object]:
-    """Run the same checks as `make test` against the Portal-edited source."""
+    """The visible checks: honest assignments and return shapes, no counterexamples."""
+    del seed
     sources = _submission_sources(files)
     if sources is None:
         return {"passed": False, "output": "policy.py must be a non-empty Python file."}
-    result = _run_submission_script(sources, PUBLIC_TEST_SCRIPT, seed)
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
+    evidence = public_evidence()
+    circuit, prm = evidence["deployedCircuit"], evidence["parameters"]
+    result = run_functions(sources, [{"function": "intended_circuit", "args": []},
+                                     {"function": "audit", "args": [circuit]},
+                                     {"function": "repair", "args": [circuit]}])
+    values = result and result.get("values")
+    if not isinstance(values, list) or len(values) != 3:
+        return {"passed": False, "output": (result or {}).get("output") or "Functions did not return values within the execution limits."}
+    if any(not isinstance(value, dict) or set(value) != {"returned"} for value in values):
+        return {"passed": False, "output": "A function raised an exception; check the editor code."}
+    built, audited, repaired = [value["returned"] for value in values]
+    try:
+        passed = (isinstance(built, list) and bool(built)
+                  and all(isinstance(c, dict) and "id" in c for c in built)
+                  and isinstance(audited, list) and isinstance(repaired, list) and bool(repaired)
+                  and all(satisfies(built, witness, prm["p"]) for witness in evidence["honestWitnesses"].values()))
+    except (KeyError, TypeError, ValueError, OverflowError):
+        passed = False
+    return {"passed": passed, "output": "public tests: " + ("all passed" if passed else "failed: check the documented return shapes and honest witnesses")
+            + "\nNo counterexample was tried. This does not establish that the missing check is repaired."}
 
 
 def prepare_submissions(seed: str, files: object) -> dict[str, object]:
@@ -391,6 +313,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Bind every interface *inside the container*, not the container's loopback: a
     # published port is forwarded to the container's bridge address. The loopback
     # restriction that matters is on the host, and it lives in docker-compose.yml.

@@ -4,12 +4,12 @@ The policy: a credential is honoured only when its revocation counter is zero an
 its issuer is recognised. Expressed as constraints, "is this signal zero?" is not a
 comparison — it is a pair of constraints around a claimed inverse:
 
-    A:  revoked * inv + ok - 1 = 0      (if revoked != 0, ok must be 0)
-    B:  revoked * ok         = 0        (if revoked != 0, ok must be 0 -- again)
+    A:  revoked * inv + ok - 1 = 0      (links ok to the claimed inverse)
+    B:  revoked * ok         = 0        (if revoked != 0, ok must be 0)
 
-Both are needed. Each alone is satisfiable with a lie, which is the entire lesson:
-a circuit that computes the right answer for honest inputs can still accept a false
-statement, because a constraint system is not a program.
+Both are needed to enforce the intended assignments. A missing A can accept an
+incorrect helper without changing the access decision; a missing B can change the
+decision. Evaluating these constraints is not itself a zero-knowledge proof.
 
 The vulnerable variant drops exactly one of them. Which one is seed-dependent, so a
 memorised counterexample does not carry.

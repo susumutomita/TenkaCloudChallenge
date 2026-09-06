@@ -90,7 +90,7 @@ def check_build(module, seed: str) -> list[str]:
         for dropped in DROPPABLE:
             for forged in _known_forgeries(prm, dropped):
                 if satisfies(built, forged, p):
-                    failures.append("the built circuit accepts a witness with a false claim")
+                    failures.append("the built circuit accepts values that violate the intended checks")
     return failures
 
 
@@ -139,6 +139,12 @@ def check_exploit(module, seed: str) -> list[str]:
         if not isinstance(forged, dict):
             failures.append("forge_witness did not return a witness")
             continue
+        if set(forged) != {"revoked", "inv", "ok", "issuer_ok", "granted"} or any(type(v) is not int or not 0 <= v < p for v in forged.values()):
+            failures.append("the counterexample must assign all five signals integer remainders")
+            continue
+        if forged["revoked"] != prm["revoked"] or forged["issuer_ok"] != prm["issuer_ok"]:
+            failures.append("the counterexample changes a fixed input parameter")
+            continue
         if not satisfies(circuit, forged, p):
             failures.append("the forged witness does not satisfy the deployed circuit")
         try:
@@ -149,7 +155,7 @@ def check_exploit(module, seed: str) -> list[str]:
             failures.append("the forged witness is missing signals the is-zero gadget needs")
             continue
         if claims_nothing_false:
-            failures.append("the forged witness also satisfies the intended circuit, so it claims nothing false")
+            failures.append("the counterexample also satisfies the intended circuit, so it shows no missing check")
     return failures
 
 
@@ -180,10 +186,11 @@ def check_repair(module, seed: str) -> list[str]:
                 failures.append("the repaired circuit still accepts the learner's own forgery")
         except Exception:  # noqa: BLE001 - forge failures are the exploit checkpoint's problem
             pass
-        if len(repaired) > len(circuit) + 1:
-            # /verify surfaces this string (AGENTS.md §15): state the public "don't overload"
-            # property (README scoring table), not the exact bound, which is hint material.
-            failures.append("the repair adds too many constraints")
+        if any(c not in repaired for c in circuit):
+            failures.append("the repair changes or deletes a supplied constraint")
+        if len(repaired) != len(circuit) + 1:
+            # This requirement is stated in the public scoring table and starter.
+            failures.append("the repair must restore exactly one missing constraint")
     return failures
 
 
