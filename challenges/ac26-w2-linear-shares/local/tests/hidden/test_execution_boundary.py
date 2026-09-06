@@ -38,6 +38,13 @@ class ExecutionBoundary(unittest.TestCase):
     def setUpClass(cls):
         protect_supervisor()
 
+    def test_learner_cannot_change_supervisor_scheduling(self):
+        before=(os.sched_getscheduler(0),os.getpriority(os.PRIO_PROCESS,0),os.sched_getaffinity(0))
+        source="import os,ctypes\ndef probe():\n    libc=ctypes.CDLL(None,use_errno=True)\n    pid=os.getppid()\n    priority=ctypes.c_int(0)\n    calls=[('sched_setscheduler',(pid,5,ctypes.byref(priority))),\n           ('sched_setparam',(pid,ctypes.byref(priority))),\n           ('sched_setaffinity',(pid,0,None)),('setpriority',(0,pid,19))]\n    result=[]\n    for syscall,args in calls:\n        ctypes.set_errno(0)\n        value=getattr(libc,syscall)(*args)\n        result.append(int(value==-1 and ctypes.get_errno()==1))\n    return result\n"
+        with LearnerSession({'linear.py':source}) as learner:
+            self.assertEqual(learner.call('linear','probe',[]),[1,1,1,1])
+        self.assertEqual((os.sched_getscheduler(0),os.getpriority(os.PRIO_PROCESS,0),os.sched_getaffinity(0)),before)
+
     def test_reference_and_public_examples(self):
         for seed in ('boundary-one','boundary-two'):
             with patch.object(server,'SEED',seed):

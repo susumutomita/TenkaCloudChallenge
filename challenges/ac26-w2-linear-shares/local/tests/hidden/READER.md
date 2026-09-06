@@ -217,3 +217,18 @@ prepare envelope, and each solved row collapsed. One harness test passed in
 `/private/tmp/linear-shares-716-real-portal-component.log`. The temporary test was
 removed from the clean parent checkout. This is component-to-HTTP verification,
 not a real browser, physical-device or production claim.
+
+
+## Final supervisor scheduling regression
+
+The same-UID learner can no longer change scheduler policy, scheduling parameters,
+CPU affinity, nice priority or I/O priority. The local policy now denies
+`sched_setscheduler`, `sched_setparam`, `sched_setattr`, `sched_setaffinity`,
+`setpriority` and `ioprio_set`. The Linux worker regression checks EPERM for the
+libc scheduling/affinity/nice calls and verifies the parent state stays unchanged.
+No production deadline or mathematical acceptance condition changed.
+
+The final Linux suite passed 18 tests in 27.571 seconds. After rebuilding
+both dedicated services, the retained Portal harness passed all five submissions
+and solved-row transitions (one test, 6.88 seconds including setup). This is
+actual component-to-local-API evidence, not a physical browser or AWS deployment.
