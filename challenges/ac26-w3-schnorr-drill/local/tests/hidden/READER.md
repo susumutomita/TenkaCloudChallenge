@@ -100,3 +100,41 @@ The final Japanese and English explanation now defines a probability distributio
 as the probabilities with which the different possible records appear. It does
 not claim that constructing one accepted record proves those probabilities equal
 to the normal protocol.
+
+## PR #750 follow-up: copyable public output and first-use English
+
+Reviews 3944167835 and 3944167837 identified two remaining defects. Public `part2()`
+printed a valid tuple as `(Rx, Ry, s)` while telling the reader to paste it, but the
+final answer field requires JSON. Points and records now use `json.dumps`, producing
+`[Rx, Ry, s]` for either tuple or list results. The verifier grammar and mathematical
+conditions are unchanged. English first-screen descriptions and checkpoint labels
+now say “question number”; section 5 first defines its technical name, “challenge.”
+Metadata and Workbench labels/descriptions were checked for exact agreement.
+
+The new author-only `test_public_output.py` runs the actual public `part2()`, copies
+the text after each arrow without decoding or repairing it, prepares those strings,
+and invokes the real verifier handler. Eight synthetic instances cover both curves;
+tuple and list return types both pass all eight fields. Python tuple strings remain
+rejected. The live test follows `/api/test → /api/prepare → /verify` against the
+dedicated `ac26-schnorr-live-check` project on `127.0.0.1:18132`: both return types
+passed all eight fields (16 accepted submissions), and both tuple-string negative
+submissions failed. It also checked the real first-screen English config. Reference
+functions in this transport regression are author evidence, not another independent
+participant read-through or a browser-click claim.
+
+`make reference-test IMAGE=ac26-schnorr-output-check` accepted the reference, rejected
+all 19 mutations, and passed eight learning, nine bootstrap, three Linux isolation
+and one public-output regression. Its three live-only tests were skipped in the
+author container, then all three passed over actual HTTP from the host. The final
+public formatter was rebuilt and checked over HTTP after its serialization was kept
+inside the existing error-display handler. The live process inspection found no
+seed in Tini/healthchecks/learner and could not read the supervisor environment.
+`make install agent-gate` passed all 116 metadata files; `git diff --check` passed.
+The dedicated project's two containers and two networks were removed afterward;
+its project-label container listing was empty. No shared environment was changed.
+
+Logs: `/private/tmp/schnorr-750-output-unit.log`, `schnorr-750-output-reference.log`,
+`schnorr-750-output-http-final.log`, `schnorr-750-output-live-isolation.log`,
+`schnorr-750-output-catalog.log`, `schnorr-750-output-cleanup.log`, and
+`schnorr-750-output-remaining.log`. The earlier `schnorr-750-output-http.log` records
+the host sandbox's localhost `EPERM`; the explicitly authorized rerun above passed.

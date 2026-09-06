@@ -21,7 +21,7 @@ Select Start → Inspect in the Participant Portal. Read p and t first, find the
 
 Every field has three hints: mechanism, a formula with a one-digit example, then steps using Inspect names. Each costs 2 points: 24 hints, maximum 48. A wrong answer costs 10. Required formulas and examples are also free in the statement. The legacy transfer ID now accepts multiple constructed records rather than a response on a second curve.
 
-The optional schnorr_drill.py is a scratchpad. Paper solvers leave the supplied file unchanged. Filling its functions and running public tests shows worked-example PASS/FAIL and the participant function’s current values. Tests do not award checkpoint credit; submit the values separately. No external Python is required.
+The optional schnorr_drill.py is a scratchpad. Paper solvers leave the supplied file unchanged. Filling its functions and running public tests shows worked-example PASS/FAIL and the participant function’s current values. Points and records are printed as JSON arrays, including when a function returns a Python tuple; copy the text after the arrow into its answer field unchanged. Tests do not award checkpoint credit; submit the values separately. No external Python is required.
 
 ## Numbers and meaning
 
@@ -55,8 +55,9 @@ The reference target runs implementation mutants plus regressions for independen
 ```sh
 FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check up -d --build --wait
 SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_isolation.py -v
+SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_public_output.py -v
 FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check down
 make verifier-down
 ```
 
-The live tests inspect every visible process environment, including Tini and healthchecks, without printing values. Linux-only child-process tests run inside `make reference-test`; they are skipped by this command on macOS. Run `make install && make agent-gate` at the catalog root. Independent reader and participant API evidence is recorded in `local/tests/hidden/READER.md`. Live AWS and third-party participant validation remain unrun, separate from local evidence.
+The live tests inspect every visible process environment, including Tini and healthchecks, without printing values. The public-output regression copies the actual runner's output through prepare and verify for tuple and list returns; its reference scratchpad is author runtime evidence, not independent participant solving. Linux-only child-process tests run inside `make reference-test`; they are skipped by this command on macOS. Run `make install && make agent-gate` at the catalog root. Independent reader and participant API evidence is recorded in `local/tests/hidden/READER.md`. Live AWS and third-party participant validation remain unrun, separate from local evidence.

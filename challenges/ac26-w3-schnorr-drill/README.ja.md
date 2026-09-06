@@ -21,7 +21,7 @@ Participant Portal で「起動」→「証拠を確認」。最初はpとtだ�
 
 各欄に仕組み→一般式と一桁例→Inspect名を使う手順の3段ヒント。1段2点、24段合計48点。誤答1回10点。必要な式と例は無料本文にもあります。従来の最後のID `transfer` は維持し、別曲線での応答計算から、公開式に合う複数の構成解を受理する課題へ変更しました。
 
-任意の `schnorr_drill.py` は計算メモです。紙で解く場合は配布時のファイルを残したまま提出できます。関数を埋めて「公開テストを実行」すると見本のPASS/FAILと、その関数が今回の数で計算した値が出ます。テスト成功と採点は別で、回答欄へ提出して得点を確認します。外部Pythonは不要です。
+任意の `schnorr_drill.py` は計算メモです。紙で解く場合は配布時のファイルを残したまま提出できます。関数を埋めて「公開テストを実行」すると見本のPASS/FAILと、その関数が今回の数で計算した値が出ます。点と記録は、関数がPythonのtupleを返してもJSON配列で表示するので、矢印の後の文字列をそのまま回答欄へ写せます。テスト成功と採点は別で、回答欄へ提出して得点を確認します。外部Pythonは不要です。
 
 ## 数と意味
 
@@ -55,8 +55,9 @@ make test STARTER_FILE=local/reference/schnorr_drill.py
 ```sh
 FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check up -d --build --wait
 SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_isolation.py -v
+SCHNORR_WORKBENCH_URL=http://127.0.0.1:18132 python3 -m unittest discover -s local/tests/hidden -p test_public_output.py -v
 FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-schnorr-live-check down
 make verifier-down
 ```
 
-Tiniやhealthcheckを含む全プロセスの環境を検査し、値は出力しません。Linux専用の子プロセス検査は `make reference-test` 内で実行します。macOSで上のコマンドを使った場合はその部分だけスキップされます。metadataはカタログrootの `make install && make agent-gate` で検証します。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。
+Tiniやhealthcheckを含む全プロセスの環境を検査し、値は出力しません。公開出力の回帰は、tuple/listを返す実公開テストの表示をprepare・verifyへそのまま渡します。この確認で使うreferenceは作者のruntime検査であり、独立した参加者役の解答とは区別します。Linux専用の子プロセス検査は `make reference-test` 内で実行します。macOSで上のコマンドを使った場合はその部分だけスキップされます。metadataはカタログrootの `make install && make agent-gate` で検証します。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。

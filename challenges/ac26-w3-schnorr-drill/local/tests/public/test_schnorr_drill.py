@@ -2,9 +2,9 @@
 
 Two parts. Part 1 checks the scratchpad functions on the one-digit example from the free statement, whose
 answers are printed in the statement — so it can say PASS / FAIL. Part 2 prints what
-your functions return on THIS deployment's numbers, which is exactly what your own
-python3 would print for each drill line. Those are the values you paste into the answer
-fields. Nothing here knows whether they are right; the Portal does.
+your functions return on THIS deployment's numbers. Points and records are formatted
+as JSON arrays so you can paste them into the answer fields unchanged. Nothing here
+knows whether they are right; the Portal does.
 
 Run with `make test`, or press "run the public tests" in the Portal editor.
 """
@@ -134,6 +134,8 @@ def part2() -> None:
     for line in lines:
         try:
             value = calls[line]()
+            if isinstance(value, (list, tuple)):
+                value = json.dumps(value)
         except Exception as error:  # noqa: BLE001 - show the learner what broke
             value = f"(error: {type(error).__name__})"
         if value is None:
