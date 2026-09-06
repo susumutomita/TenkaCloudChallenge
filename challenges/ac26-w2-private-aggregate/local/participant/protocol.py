@@ -1,18 +1,8 @@
-"""The supplied half: the opening handle, and how a sharing is put back together.
+"""Trusted record of the modeled opening channel and additive reconstruction.
 
-This problem hands the learner an `io` object and asks them to decide how many times to
-call it. The handle itself is not what is being graded, so it ships in the participant
-image and the public tests import it from here.
-
-Issue 537/538 (Issue 543 option B2): these three names used to live in
-`fixtures/generate.py`, which also carries this deployment's seed derivation -- the
-settings, the secret counts and severities, the triples, and `plain_score`. That file
-does not ship in the `participant` Docker stage any more (see ../Dockerfile), so the
-supplied half moved here rather than leaving with it. `fixtures/generate.py` imports
-these names from this module instead of restating them, so there is one `Protocol` in
-the catalog and the round counting a learner sees is the round counting they are graded
-by. Same shape as ac26-w5-rgsw-external's `participant/ring.py` and
-ac26-w2-oblivious-transfer's `participant/ot.py`.
+The checker and public-test parent own Protocol. Learner code receives a remote
+open_batch handle; it cannot change this object's recorded rounds or sharings.
+This model observes that channel, not all possible Python information flows.
 """
 
 from __future__ import annotations
@@ -25,13 +15,13 @@ def reconstruct(shares: list[int], p: int) -> int:
     return sum(shares) % p
 
 
-class ForbiddenOpen(Exception):
+class ForbiddenOpen(ValueError):
     """Raised when the protocol asks to reveal something it has no business revealing."""
 
 
 @dataclass
 class Protocol:
-    """The only way a submission is allowed to reveal anything.
+    """Record what a submission reveals through the modeled opening channel.
 
     `open_batch` reveals several sharings at once and counts as **one** round. That is
     the entire cost model: a submission that calls it once per multiplication pays `k`
@@ -47,11 +37,11 @@ class Protocol:
     batch_sizes: list[int] = field(default_factory=list)
 
     def open_batch(self, sharings: list[list[int]]) -> list[int]:
-        if not isinstance(sharings, list) or not sharings:
+        if type(sharings) not in (list, tuple) or not sharings:
             raise ForbiddenOpen("an opening round must reveal at least one sharing")
         values = []
         for sharing in sharings:
-            if not isinstance(sharing, list) or not sharing:
+            if type(sharing) not in (list, tuple) or not sharing or any(type(v) is not int or not 0 <= v < self.p for v in sharing):
                 raise ForbiddenOpen("that is not a sharing")
             self.opened.append(list(sharing))
             values.append(sum(sharing) % self.p)

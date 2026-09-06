@@ -1,0 +1,23 @@
+{
+  "readAt": "2026-09-07",
+  "sources": [
+    {
+      "repository": "/Users/susumu/product/advanced-cryptography-2026",
+      "commit": "bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732",
+      "path": "week2/problems/toy-mpc/README.md",
+      "sha256": "02ae4b6e86355fcb25687b4197bec82cf5e24c1471643c38df5a96e7e06a28bb"
+    },
+    {
+      "repository": "/Users/susumu/product/advanced-cryptography-note",
+      "commit": "58344a29ea39c25839475ba9a594c115ed89989b",
+      "path": "week2/index.html",
+      "sha256": "b9a332b1f7aecfc0dd578ef138ab9cd679a63c567529bc234bee7ee740edd1c5"
+    }
+  ],
+  "applied": [
+    "Additive sharing uses a modular sum in this model.",
+    "Public constants enter the combined value once.",
+    "Expand (a+d)*(b+e) to explain Beaver multiplication.",
+    "Fresh masks and value/round counts are distinct; one-process arithmetic is not distributed MPC."
+  ]
+}

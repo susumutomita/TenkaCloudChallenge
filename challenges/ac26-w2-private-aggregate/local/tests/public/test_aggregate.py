@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-import aggregate  # noqa: E402
+from participant.execution import LearnerError, LearnerSession
+
+aggregate = None  # installed by the trusted launcher, never imported from learner source
 
 from participant.protocol import Protocol, reconstruct  # noqa: E402
 
@@ -58,7 +60,7 @@ def _load_public_evidence() -> dict:
     return public_payload(SEED)
 
 
-PUBLIC = _load_public_evidence()
+PUBLIC = {}  # evidence is fetched by the parent when a check is run
 
 
 def _run():
@@ -97,7 +99,7 @@ def check_plan_is_filled_in() -> str:
 
 def check_score_is_right() -> str:
     params, _io, out = _run()
-    if not isinstance(out, list) or len(out) != params["parties"]:
+    if type(out) not in (list, tuple) or len(out) != params["parties"] or any(type(v) is not int or not 0 <= v < params["p"] for v in out):
         return "the protocol did not return one share per party"
     if reconstruct(out, params["p"]) != _plain_score():
         return "the score does not match the plain computation"
@@ -110,25 +112,39 @@ CHECKS = (
 )
 
 
-def main(argv: list[str]) -> int:
-    only = argv[argv.index("--only") + 1] if "--only" in argv else ""
-    failed = 0
-    for name, check in CHECKS:
-        if only and only not in name:
-            continue
+def run(module, public, only=""):
+    global aggregate, PUBLIC
+    aggregate, PUBLIC = module, public
+    selected = [(name, fn) for name, fn in CHECKS if not only or only in name]
+    failures, transcript = [], []
+    for name, check in selected:
         try:
             message = check()
-        except Exception as error:  # noqa: BLE001 - a crash is a failure, reported as one
-            message = f"raised {type(error).__name__}"
+        except (LearnerError, OSError, ValueError, TypeError):
+            message = "function could not return the required values"
         if message:
-            print(f"FAIL {name}: {message}")
-            failed += 1
+            failures.append(name)
+            transcript.append("FAIL " + name + ": " + message)
         else:
-            print(f"ok   {name}")
-    print(f"\npublic tests: {failed} failed" if failed else "\npublic tests: all passed")
-    if not failed:
-        print("\nNothing here measured a round, an opening, or a second party count.")
-    return 1 if failed else 0
+            transcript.append("PASS " + name)
+    if not selected:
+        failures.append("no matching public check")
+    transcript.append("public tests: " + ("all passed" if not failures else str(len(failures)) + " failed"))
+    transcript.append("Public shape/score example only; submit privacy, cost and transfer separately.")
+    return failures, "\n".join(transcript)
+
+
+def main(argv):
+    only = argv[argv.index("--only")+1] if "--only" in argv else ""
+    learner = LearnerSession({"aggregate.py": (ROOT/"starter/aggregate.py").read_text()}, timeout=25)
+    try:
+        with learner:
+            failures, output = run(learner.module(), _load_public_evidence(), only)
+        print(output)
+        return int(bool(failures))
+    except (LearnerError, OSError, ValueError):
+        print(learner.initialization_diagnostic or "The submitted functions could not be evaluated.")
+        return 1
 
 
 if __name__ == "__main__":
