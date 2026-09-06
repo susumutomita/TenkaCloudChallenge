@@ -8,7 +8,7 @@ sys.path.insert(0,str(ROOT))
 METADATA=json.load(sys.stdin) if os.environ.get('READ_METADATA_STDIN')=='1' else json.loads((ROOT.parent/'metadata.json').read_text())
 from fixtures.generate import GRADED,normalize_answer,setting,submission_binding
 from verifier.expected import expected_for
-from participant.exercise import EXAMPLE,EXAMPLE_EXPECTED,call_row
+from participant.exercise import EXAMPLE,EXAMPLE_EXPECTED,call_row,construction_valid
 from participant.workbench import PortalEditorSupport
 from reference import fri_drill as reference
 from verifier import server
@@ -28,7 +28,9 @@ def workspace(seed):
 class LearningContract(unittest.TestCase):
     def test_all_visible_examples_match_the_implemented_formulas(self):
         for row in GRADED:
-            self.assertEqual(normalize_answer(row,call_row(reference,row,EXAMPLE)),EXAMPLE_EXPECTED[row])
+            answer=normalize_answer(row,call_row(reference,row,EXAMPLE))
+            if row=='miss-points':self.assertTrue(construction_valid(answer,EXAMPLE))
+            else:self.assertEqual(answer,EXAMPLE_EXPECTED[row])
 
     def test_small_divisors_and_every_answer_vary(self):
         seen={row:set() for row in GRADED};primes=set()
@@ -38,8 +40,7 @@ class LearningContract(unittest.TestCase):
             self.assertEqual(run(reference,seed),[])
             answers=expected_for(seed)
             self.assertNotEqual(answers['cheat-caught'][0],answers['cheat-caught'][1])
-            self.assertEqual(len(answers['miss-points']),2)
-            self.assertEqual(sum(answers['miss-points']),p)
+            self.assertTrue(construction_valid(answers['miss-points'],v))
             for row in GRADED:seen[row].add(answers[row])
         self.assertEqual(primes,{5,7})
         self.assertTrue(all(len(values)>1 for values in seen.values()),seen)
@@ -53,13 +54,51 @@ class LearningContract(unittest.TestCase):
                 left,right=reference.consistency(qs,v['beta'],t,p)
                 self.assertEqual(left,right)
                 a,b=reference.cheat_caught(qs,v['beta'],t,v['d0'],v['d1'],p)
-                self.assertEqual(a==b,t in expected_for(f'identities-{i}')['miss-points'])
+                self.assertEqual(a==b,(v['d0']+v['d1']*t*t)%p==0)
 
     def test_inverse_definition_without_fermat_or_float_division(self):
         from participant.model import inverse
         for p in (5,7):
             for n in range(1,p):self.assertEqual(n*inverse(n,p)%p,1)
             with self.assertRaises(ValueError):inverse(0,p)
+
+    def test_constructions_accept_independent_scalings_and_reject_missing_constraints(self):
+        # Multiple valid answers must pass both the public test and real scoring predicate.
+        seen=set()
+        for i in range(20):
+            seed=f'construction-{i}';v=setting(seed)['public'];p=v['p'];x=v['x']
+            if p in seen:continue
+            seen.add(p)
+            base=reference.miss_points(x,p)
+            with patch.object(server,'SEED',seed):
+                for scale_a in range(1,p):
+                    for scale_b in range(1,p):
+                        answer=tuple(n*(scale_a if j<2 else scale_b)%p for j,n in enumerate(base))
+                        self.assertTrue(construction_valid(answer,v))
+                        self.assertTrue(server.evaluate('miss-points',answer))
+                        # These are genuinely different polynomials, not the unchanged Q1.
+                        self.assertNotEqual(answer[1],0);self.assertNotEqual(answer[2],0)
+                invalid=[(0,0,*base[2:]),(*base[:2],0,0,0,0),
+                         ((base[0]+1)%p,*base[1:]),(*base[:2],1,0,0,0),
+                         (*base[:2],p,0,0,0)]
+                if p==5:
+                    # Add Y*(Y²-1): still vanishes on all squares and b0 != 0,
+                    # but exceeds the published degree cap.
+                    invalid.append((*base[:2],base[2],p-1,1,1))
+                for answer in invalid:
+                    self.assertFalse(construction_valid(answer,v),answer)
+                    self.assertFalse(server.evaluate('miss-points',answer),answer)
+        self.assertEqual(seen,{5,7})
+
+    def test_construction_handles_every_possible_query_and_does_not_need_q(self):
+        for p in (5,7):
+            for x in range(1,p):
+                answer=reference.miss_points(x,p)
+                self.assertTrue(construction_valid(answer,{'p':p,'x':x}))
+                a0,a1,*b=answer
+                self.assertTrue(any((a0+a1*t*t)%p!=0 for t in range(1,p)))
+                self.assertEqual(sum((a0+a1*t*t)%p==0 for t in range(1,p)),2)
+                self.assertEqual(max(i for i,n in enumerate(b) if n),(p-1)//2)
 
     def test_deployment_binding_and_partial_submission(self):
         seed='current-fri';work=workspace(seed);old=workspace('other-fri')

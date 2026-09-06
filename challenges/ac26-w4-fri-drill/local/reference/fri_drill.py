@@ -60,6 +60,27 @@ def cheat_caught(qs, beta, x, d0, d1, p):
     return (left,(right+d0+d1*x*x)%p)
 
 
-def miss_points(d0, d1, p):
-    """all nonzero t with d0+d1*t*t leaving remainder 0, increasing (all arithmetic uses remainders by p)."""
-    return [t for t in range(1,p) if (d0+d1*t*t)%p==0]
+def miss_points(x, p):
+    """Return a0,a1,b0,b1,b2,b3 (six remainders).
+
+    A(Y)=a0+a1*Y: a1 != 0, A(x*x) % p == 0.
+    B(Y)=b0+b1*Y+b2*Y**2+b3*Y**3: b0 != 0;
+    B(t*t) % p == 0 for EVERY t=1..p-1; b3 must be 0 if p=5.
+    Construct your own pair. Multiple answers pass. Products (Y-r) give chosen zeros;
+    the statement supplies expansion formulas. d0,d1 are not used in this row.
+    検査を通る偽物を2種類作る。本文の条件を満たす6係数なら、どの答えも正解。
+    """
+    # Construct a product over DISTINCT squares, rather than copying a seeded tuple.
+    squares=[]
+    for t in range(1,p):
+        r=t*t%p
+        if r not in squares:squares.append(r)
+    coefficients=[1]
+    for r in squares:
+        product=[0]*(len(coefficients)+1)
+        for i,value in enumerate(coefficients):
+            product[i]=(product[i]-r*value)%p
+            product[i+1]=(product[i+1]+value)%p
+        coefficients=product
+    coefficients += [0]*(4-len(coefficients))
+    return ((-x*x)%p,1,*coefficients)

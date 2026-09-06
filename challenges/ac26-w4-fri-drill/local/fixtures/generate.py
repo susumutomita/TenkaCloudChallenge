@@ -24,7 +24,7 @@ TUPLE_LINES = {
     "recover": 4,
     "consistency": 2,
     "cheat-caught": 2,
-    "miss-points": 2,
+    "miss-points": 6,
 }
 
 
@@ -50,8 +50,8 @@ def setting(seed: str) -> dict:
     beta2 = _draw(seed, "beta2", 1, p - 1)
 
     # The dishonest fold's difference d0 + d1·Y: d1 non-zero, and its vanishing Y is a
-    # square s² so the miss set is exactly one ±x pair — the story of the last graded
-    # line holds on every seed.
+    # square s² so this fixed example has one blind ±x pair. The last checkpoint
+    # separately asks the participant to construct their own alterations.
     d1 = _draw(seed, "d1", 1, p - 1)
     s = _draw(seed, "s", 1, (p - 1) // 2)
     d0 = (-d1 * s * s) % p

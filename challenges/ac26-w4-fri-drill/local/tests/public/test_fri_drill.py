@@ -6,7 +6,7 @@ ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
 sys.path.insert(0,os.environ.get('PARTICIPANT_STARTER_DIR', str(ROOT/'starter')))
 import fri_drill as drill
-from participant.exercise import ROW_ARGS,EXAMPLE,EXAMPLE_EXPECTED,call_row
+from participant.exercise import ROW_ARGS,EXAMPLE,EXAMPLE_EXPECTED,call_row,construction_valid
 from participant.evidence import public_evidence
 
 
@@ -27,6 +27,11 @@ def main():
     for row in rows:
         try:
             got=call_row(drill,row,EXAMPLE)
+            if row=='miss-points':
+                same=construction_valid(got,EXAMPLE)
+                print(f'{"PASS" if same else "FAIL"} {row}: got {got!r}; checks A(x²)=0 and every B(t²)=0, nonzero a1/b0, degree cap')
+                passed &= same
+                continue
             expected=EXAMPLE_EXPECTED[row]
             if isinstance(got, (list, tuple)) and isinstance(expected, (list, tuple)):
                 same = len(got) == len(expected) and all(type(a) is type(b) and a == b for a, b in zip(got, expected))

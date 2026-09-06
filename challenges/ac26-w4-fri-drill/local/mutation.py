@@ -17,7 +17,11 @@ MUTATIONS={
  'divide by x not 2x': ('inverse(2*x,p)','inverse(x,p)'),
  'compare wrong position': ('folded(qs,beta,x*x,p))','folded(qs,beta,x,p))'),
  'omit slope of alteration': ('(right+d0+d1*x*x)%p','(right+d0)%p'),
- 'scan Y instead of t squared': ('(d0+d1*t*t)%p','(d0+d1*t)%p'),
+ 'use positions instead of squares': ('r=t*t%p','r=t%p'),
+ 'allow an honest first expression': ('((-x*x)%p,1,*coefficients)','(0,0,*coefficients)'),
+ 'choose first lie before seeing x': ('((-x*x)%p,1,*coefficients)','(p-1,1,*coefficients)'),
+ 'forget one square constraint': ('for r in squares:','for r in squares[:1]:'),
+ 'zero second expression': ('((-x*x)%p,1,*coefficients)','((-x*x)%p,1,0,0,0,0)'),
 }
 
 
@@ -45,7 +49,7 @@ def main():
         malformed += [float(value),str(float(value))] if type(value) is int else [list(value)+[0],list(value)[:-1],[float(n) for n in value],[str(n) for n in value]]
         for bad in malformed:
             assert not server.evaluate(row,bad),(row,bad)
-    print('PASS 8 arithmetic mutants; all correct shapes and malformed-answer checks')
+    print('PASS 12 arithmetic/construction mutants; all correct shapes and malformed-answer checks')
 
 
 if __name__=='__main__':main()

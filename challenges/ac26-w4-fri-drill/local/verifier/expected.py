@@ -16,4 +16,22 @@ def expected_for(seed):
       'query':(q(x),q(-x)), 'recover':(e,o,e,o),
       'consistency':((e+beta*o)%p,folded(y)),
       'cheat-caught':(folded(y),(folded(y)+v['d0']+v['d1']*y)%p),
-      'miss-points':tuple(t for t in range(1,p) if (v['d0']+v['d1']*t*t)%p==0)}
+      # One author-test witness; the verifier accepts all solutions of the constraints.
+      'miss-points':((-x*x)%p,1,p-1,0,1 if p==5 else 0,0 if p==5 else 1)}
+
+
+def valid_construction(seed, answer):
+    """Independent check of both counterexamples; no exact-solution comparison."""
+    v=setting(seed)['public'];p=v['p'];x=v['x']
+    if len(answer)!=6 or any(type(n) is not int or n<0 or n>=p for n in answer):
+        return False
+    a=answer[:2];b=answer[2:]
+    if a[1]==0 or b[0]==0 or (p==5 and b[3]!=0):
+        return False
+    if (a[0]+a[1]*x*x)%p:
+        return False
+    for t in range(1,p):
+        y=pow(t,2,p)
+        if (((b[3]*y+b[2])*y+b[1])*y+b[0])%p:
+            return False
+    return True

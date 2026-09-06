@@ -4,7 +4,7 @@
 
 Week 4 / order 425 / difficulty 3 / 200 points / draft / 40–60 minutes.
 
-Use remainders by 5 or 7 to connect even/odd folding, reconstruction from two opposite readings, and blind spots.
+Use remainders by 5 or 7 to connect even/odd folding, reconstruction from two opposite readings, and construction of counterexamples.
 The eight answer fields use paper arithmetic. The optional editor has eight functions and supplied arithmetic
 helpers, not twelve drill steps plus four empty prerequisites.
 
@@ -29,7 +29,11 @@ cost 48 total, unchanged from the previous eight one-step hints. Wrong answers c
 | recover | recovered even, recovered odd, direct even, direct odd | 25 |
 | consistency | reconstructed fold, Q1(x²) | 25 |
 | cheat-caught | reconstructed fold, altered Q1(x²) | 30 |
-| miss-points | both nonzero positions where the alteration vanishes, increasing | 30 |
+| miss-points | six coefficients for an adaptive linear alteration and an all-query higher-degree alteration | 30 |
+
+The last checkpoint asks for two constructions: a linear alteration chosen after learning x,
+and a higher-degree alteration passing every nonzero query. Any six coefficients satisfying
+the public constraints pass; scoring does not require one chosen solution.
 
 ## Mathematical scope and inputs
 

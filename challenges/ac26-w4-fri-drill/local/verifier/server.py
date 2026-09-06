@@ -6,7 +6,7 @@ Security contract:
   - No learner code is ever executed here. This problem is a drill: every checkpoint
     is a direct answer — the value one line of Python printed on the learner's own
     screen. The grader for every checkpoint is `_check_line`: the pasted value,
-    normalised, against the value this deployment's seed decides.
+    normalised, against the public arithmetic rule or construction constraints.
   - Responses carry `correct` and nothing else. Never the hidden test names, the
     expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
@@ -35,7 +35,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import GRADED, LINES, assignments, normalize_answer, setting, submission_binding
-from verifier.expected import expected_for
+from verifier.expected import expected_for, valid_construction
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w4-fri-drill"
@@ -55,7 +55,7 @@ def _check_line(line: str, submission: object) -> bool:
     """The value the learner pasted for one drill line, against this deployment's value.
 
     A tuple may arrive as `[a, b, c]`, `(a, b, c)` or `a, b, c`; an integer as a number
-    or a digit string. All eight rows compare computed values.
+    or a digit string. The last row checks construction constraints; the first seven compare values.
     """
     if line not in GRADED or line not in LINES:
         return False
@@ -70,6 +70,8 @@ def _check_line(line: str, submission: object) -> bool:
     got = normalize_answer(line, answer)
     if got is None:
         return False
+    if line == "miss-points":
+        return valid_construction(SEED, got)
     expected = expected_for(SEED)[line]
     return got == expected
 
