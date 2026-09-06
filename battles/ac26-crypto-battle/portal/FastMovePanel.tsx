@@ -23,9 +23,10 @@ import HuntGuide, { HuntIntro, HUNT_GUIDE_CSS } from "./HuntGuide.tsx";
 import SudokuGuide, { RelabelDiagram, GUIDE_CSS } from "./SudokuGuide.tsx";
 import SuccessCelebration, { SUCCESS_CSS } from "./SuccessCelebration.tsx";
 import { taskDetail } from "./orderTask.ts";
+import OrderQueue, { type OrderReceipt } from "./OrderQueue.tsx";
 import { disclosurePreview, orderHeading } from "./OrderFocus.tsx";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
-import { BOARD_CSS, Ledger, OrderBelt, Vault } from "./GameBoard.tsx";
+import { BOARD_CSS, Ledger, Vault } from "./GameBoard.tsx";
 import {
   describeRevealGroup,
   emptyCells,
@@ -1041,9 +1042,8 @@ ${SUCCESS_CSS}
 .tc-why{font-size:12px;color:#42536a}.tc-why>summary{cursor:pointer}.tc-why[open]>summary{margin-bottom:8px}
 .tc-move-shell{max-width:1080px;margin:0 auto;padding:20px;gap:12px;border:1px solid #dce3ec;background:#f6f8fb}
 .tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
-.tc-order-picker,.tc-records{font-size:13px;color:#42536a}
-.tc-order-picker>summary,.tc-records>summary{padding:8px 0;cursor:pointer}
-.tc-order-picker .tc-order-belt{margin:8px 0;border:1px solid #cfd8e3;background:#fff}
+.tc-records{font-size:13px;color:#42536a}
+.tc-records>summary{padding:8px 0;cursor:pointer}
 .tc-result-anchor:empty{display:none}.tc-result-anchor:focus{outline:2px solid #2563a6;outline-offset:3px;border-radius:10px}
 .tc-workspace{display:grid;gap:16px;background:#fff;border:1px solid #b9cbe0;border-top:4px solid #315f91;border-radius:12px;padding:22px;box-shadow:0 3px 10px #1e3a5f08}
 .tc-ticket{border:0;border-radius:0;padding:0;margin:0;background:transparent}
@@ -1127,7 +1127,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
   const [huntCells, setHuntCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
-  const orderPickerRef = useRef<HTMLDetailsElement>(null);
+  const [orderReceipt, setOrderReceipt] = useState<OrderReceipt | undefined>();
+  const workspaceRef = useRef<HTMLElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
   // [Issue #645] One box per component of an FHE answer, one for an MPC
   // subtotal. Keep decimal strings through the wire boundary: the default
@@ -1147,6 +1148,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   useEffect(() => {
     setFeedback(null);
     attemptRef.current = 0;
+    setOrderReceipt(undefined);
   }, [polled.projection?.vault.teamId]);
   useEffect(() => {
     if (feedback && feedback.kind !== "hint") {
@@ -1177,6 +1179,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
 
   const orders = useMemo(() => openOrders(projection), [projection]);
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0];
+  // Pin the initial/fallback choice too: a newly arriving rush Order must not
+  // replace the Order whose answer the participant is typing.
+  useEffect(() => {
+    if (selectedOrder && selectedOrderId !== selectedOrder.id) setSelectedOrderId(selectedOrder.id);
+  }, [selectedOrder?.id, selectedOrderId]);
   // [Issue #645] Read from the Order, never re-derived here: the game rules
   // decide which methods an Order accepts, and a portal that recomputed them
   // would be a second implementation free to disagree with the judge.
@@ -1263,6 +1270,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
         setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
       } else {
         const draft = success(next);
+        if (draft.reward !== undefined && selectedOrder && next?.myContracts.some(order => order.id === selectedOrder.id && order.status === "completed")) {
+          setOrderReceipt({ id: selectedOrder.id, points: draft.reward });
+        }
         setFeedback({ ...draft, attempt });
       }
     } catch {
@@ -1361,21 +1371,20 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <div className="tc-rival-score">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(t => <span key={t.teamId}>{locale === "ja" ? "相手" : "Opponent"} · {t.teamName || t.teamId} <strong>{t.score} {locale === "ja" ? "点" : "pt"}</strong></span>)}</div>
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
-      <details className="tc-order-picker" ref={orderPickerRef}>
-        <summary>{locale === "ja" ? `ほかのお題を選ぶ（残り ${orders.length} 件）` : `Choose another Order (${orders.length} open)`}</summary>
-        <OrderBelt projection={projection} locale={locale} selectedId={selectedOrder?.id}
-          onSelect={(id) => {
-            setSelectedOrderId(id);
-            setProveOpen(false);
-            if (orderPickerRef.current) orderPickerRef.current.open = false;
-          }} />
-      </details>
+      <OrderQueue key={`${props.team.eventId}:${projection.vault.teamId}`} projection={projection} locale={locale}
+        selectedId={selectedOrder?.id} receipt={orderReceipt}
+        onSelect={(id) => {
+          setSelectedOrderId(id);
+          setProveOpen(false);
+          setFeedback(null);
+          workspaceRef.current?.scrollIntoView({ block: "start" });
+        }} />
 
       <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
-        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length ? () => { setFeedback(null); document.querySelector(".tc-workspace")?.scrollIntoView({ block: "start" }); } : undefined} />}
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length ? () => { setFeedback(null); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
       </div>
 
-      <section className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
+      <section ref={workspaceRef} className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
       {selectedOrder && (
         <div className={`tc-ticket${selectedOrder.remainingMs <= 30_000 ? " tc-ticket-urgent" : ""}`}>
           <div className="tc-ticket-head">
