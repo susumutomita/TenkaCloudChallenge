@@ -291,4 +291,70 @@ def reconstruct_line(points,p):
         self.assertEqual(check_sharing.check_no_trivial_split(module,'zero-allowed'),[])
 
 
+
+
+@unittest.skipUnless(sys.platform == 'linux', 'requires the deployed Linux filter')
+class FilesystemMetadataBoundary(unittest.TestCase):
+    def test_filesystem_metadata_cannot_persist_or_change_parent_fixtures(self):
+        import errno
+        import subprocess
+        import tempfile
+
+        # Load this consumer's actual policy, then apply it in a disposable child.
+        # No live Workbench, secret fixtures or host directory is targeted.
+        child = r"""
+import importlib.util,json,os,sys
+spec=importlib.util.spec_from_file_location('policy',sys.argv[1])
+policy=importlib.util.module_from_spec(spec);spec.loader.exec_module(policy)
+root=sys.argv[2]
+policy.restrict_learner()
+calls=[lambda:os.mkdir(root+'/directory'),
+       lambda:os.mkdir(root+'/directory-at',dir_fd=-100),
+       lambda:os.symlink('original',root+'/symlink'),
+       lambda:os.symlink('original',root+'/symlink-at',dir_fd=-100),
+       lambda:os.link(root+'/original',root+'/hardlink'),
+       lambda:os.link(root+'/original',root+'/hardlink-at',src_dir_fd=-100,dst_dir_fd=-100),
+       lambda:os.mkfifo(root+'/fifo'),
+       lambda:os.mkfifo(root+'/fifo-at',dir_fd=-100),
+       lambda:os.rename(root+'/original',root+'/renamed'),
+       lambda:os.rename(root+'/original',root+'/renamed-at',src_dir_fd=-100,dst_dir_fd=-100),
+       lambda:os.unlink(root+'/original'),
+       lambda:os.unlink(root+'/original',dir_fd=-100),
+       lambda:os.rmdir(root+'/empty'),
+       lambda:os.rmdir(root+'/empty',dir_fd=-100),
+       lambda:os.chmod(root+'/original',0o777),
+       lambda:os.chown(root+'/original',os.getuid(),os.getgid()),
+       lambda:os.utime(root+'/original',(1,1)),
+       lambda:os.setxattr(root+'/original','user.probe',b'created'),
+       lambda:os.truncate(root+'/original',0)]
+result=[]
+for call in calls:
+    try:call();result.append(0)
+    except OSError as error:result.append(error.errno)
+print(json.dumps(result))
+"""
+        with tempfile.TemporaryDirectory(prefix='learner-fs-boundary-') as folder:
+            root=Path(folder)
+            original=root/'original'
+            original.write_text('owned parent fixture')
+            (root/'empty').mkdir()
+            before=original.stat()
+            attributes={name:os.getxattr(original,name) for name in os.listxattr(original)}
+            for attempt in range(16):
+                with self.subTest(attempt=attempt):
+                    completed=subprocess.run(
+                        [sys.executable,'-I','-B','-c',child,str(ROOT/'participant/isolation.py'),folder],
+                        capture_output=True,text=True,timeout=5,check=True,
+                        env={'PATH':'/usr/local/bin:/usr/bin:/bin'},close_fds=True,
+                    )
+                    self.assertEqual(json.loads(completed.stdout),[errno.EPERM]*19)
+                    self.assertEqual(sorted(p.name for p in root.iterdir()),['empty','original'])
+                    self.assertEqual(original.read_text(),'owned parent fixture')
+                    after=original.stat()
+                    self.assertEqual((after.st_mode,after.st_uid,after.st_gid,after.st_mtime_ns),
+                                     (before.st_mode,before.st_uid,before.st_gid,before.st_mtime_ns))
+                    self.assertEqual({name:os.getxattr(original,name) for name in os.listxattr(original)},attributes)
+            # Every subprocess.run has waited for its child; no child can later write.
+        self.assertFalse(root.exists(), 'the owned temporary fixture must also be removed')
+
 if __name__=='__main__': unittest.main()

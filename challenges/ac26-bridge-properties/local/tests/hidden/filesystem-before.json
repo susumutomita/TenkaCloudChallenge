@@ -1,0 +1,33 @@
+{
+  "base": "6416dab5af5805211b020f03c218a8827d66a201",
+  "scope": "ac26-bridge-properties",
+  "probe": "actual restrict_learner in isolated network-none Linux child; only parent TemporaryDirectory",
+  "results": [
+    {
+      "problem": "ac26-bridge-properties",
+      "policy_sha256": "da164f63a4b0e80336c70efdf7988253bbdb657a92ec4050b68c1ed6490a316a",
+      "created_after_child_exit": [
+        [
+          "directory",
+          0
+        ],
+        [
+          "symlink",
+          0
+        ],
+        [
+          "hardlink",
+          0
+        ],
+        [
+          "fifo",
+          0
+        ]
+      ]
+    },
+    {
+      "problem": "ac26-bridge-properties",
+      "owned_temporary_directory_removed": true
+    }
+  ]
+}

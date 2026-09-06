@@ -41,6 +41,13 @@ def restrict_learner():
         blocked=('socket','socketpair','connect','bind','listen','accept','accept4',
                  'sendto','sendmsg','sendmmsg','recvfrom','recvmsg','recvmmsg',
                  'open','openat','openat2','creat','open_by_handle_at','execve','execveat',
+                 # Metadata operations need no open FD and can persist in shared /tmp.
+                 'mkdir','mkdirat','mknod','mknodat','symlink','symlinkat','link','linkat',
+                 'rename','renameat','renameat2','unlink','unlinkat','rmdir',
+                 'truncate','ftruncate','chmod','fchmod','fchmodat','fchmodat2',
+                 'chown','fchown','lchown','fchownat',
+                 'utime','utimes','futimesat','utimensat',
+                 'setxattr','lsetxattr','fsetxattr','removexattr','lremovexattr','fremovexattr',
                  'socketcall','io_uring_setup','pidfd_getfd','ptrace',
                  'process_vm_readv','process_vm_writev',
                  # A same-UID learner must not degrade later supervisor requests.

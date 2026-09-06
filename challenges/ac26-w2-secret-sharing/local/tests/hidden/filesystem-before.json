@@ -1,0 +1,33 @@
+{
+  "base": "6416dab5af5805211b020f03c218a8827d66a201",
+  "scope": "ac26-w2-secret-sharing",
+  "probe": "actual restrict_learner in isolated network-none Linux child; only parent TemporaryDirectory",
+  "results": [
+    {
+      "problem": "ac26-w2-secret-sharing",
+      "policy_sha256": "8f262395b6aaaafb0fd790fe3601e4db4d0555036b2461aee54b53e663f14dbc",
+      "created_after_child_exit": [
+        [
+          "directory",
+          0
+        ],
+        [
+          "symlink",
+          0
+        ],
+        [
+          "hardlink",
+          0
+        ],
+        [
+          "fifo",
+          0
+        ]
+      ]
+    },
+    {
+      "problem": "ac26-w2-secret-sharing",
+      "owned_temporary_directory_removed": true
+    }
+  ]
+}

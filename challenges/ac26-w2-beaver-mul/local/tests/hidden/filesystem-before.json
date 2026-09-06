@@ -1,0 +1,33 @@
+{
+  "base": "6416dab5af5805211b020f03c218a8827d66a201",
+  "scope": "ac26-w2-beaver-mul",
+  "probe": "actual restrict_learner in isolated network-none Linux child; only parent TemporaryDirectory",
+  "results": [
+    {
+      "problem": "ac26-w2-beaver-mul",
+      "policy_sha256": "ae91980aa21853919c7e15fee5922bb69f69aa7b1639dd314d599b36766ab5b1",
+      "created_after_child_exit": [
+        [
+          "directory",
+          0
+        ],
+        [
+          "symlink",
+          0
+        ],
+        [
+          "hardlink",
+          0
+        ],
+        [
+          "fifo",
+          0
+        ]
+      ]
+    },
+    {
+      "problem": "ac26-w2-beaver-mul",
+      "owned_temporary_directory_removed": true
+    }
+  ]
+}

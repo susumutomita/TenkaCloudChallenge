@@ -1,0 +1,33 @@
+{
+  "base": "6416dab5af5805211b020f03c218a8827d66a201",
+  "scope": "ac26-w2-privacy-audit",
+  "probe": "actual restrict_learner in isolated network-none Linux child; only parent TemporaryDirectory",
+  "results": [
+    {
+      "problem": "ac26-w2-privacy-audit",
+      "policy_sha256": "bc533f0fbe7482522e218a6ab59937e0d4245f09d8c991626dab652cc3874b8b",
+      "created_after_child_exit": [
+        [
+          "directory",
+          0
+        ],
+        [
+          "symlink",
+          0
+        ],
+        [
+          "hardlink",
+          0
+        ],
+        [
+          "fifo",
+          0
+        ]
+      ]
+    },
+    {
+      "problem": "ac26-w2-privacy-audit",
+      "owned_temporary_directory_removed": true
+    }
+  ]
+}
