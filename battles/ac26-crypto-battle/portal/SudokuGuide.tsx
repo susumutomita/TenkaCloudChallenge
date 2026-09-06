@@ -40,6 +40,7 @@ export default function SudokuGuide({ order, projection, table, locale, onOpenPr
   const indices = order.task.kind === "reveal-share" ? [...new Set(order.task.shareIndices)] : [];
   const added = indices.filter(i => !exposed.has(i)).length;
   const after = exposed.size + added;
+  const givens = table ? sudokuFillInGivens(projection.vault.sudokuSolution, table) : undefined;
   return <div className="tc-visual-hint">
     {order.allowedMethods.includes("prove") && <section>
       <strong>{ja ? "PROVE · 4マスを埋めて証明" : "PROVE · fill four holes"}</strong>
@@ -52,7 +53,7 @@ export default function SudokuGuide({ order, projection, table, locale, onOpenPr
       {table && <div className="tc-hint-grids">
         <div><small>{ja ? "元のマス" : "Original cells"}</small><SudokuBoard cells={projection.vault.sudokuSolution} size={28} lit={[0]} /></div>
         <span aria-hidden="true">→</span>
-        <div><small>{ja ? "同じ表で付け替える" : "Rename with the same table"}</small><SudokuBoard cells={projection.vault.sudokuSolution.map(d => table[d - 1]!)} size={28} lit={[0]} /></div>
+        <div><small>{ja ? "同じ表で付け替える" : "Rename with the same table"}</small><SudokuBoard cells={givens!.map(cell => cell === "" ? 0 : Number(cell))} size={28} lit={[0]} /></div>
       </div>}
       <button type="button" className="tc-submit-small" onClick={onOpenProof}>{ja ? "証明の入力欄へ" : "Go to proof inputs"}</button>
       <p>{ja ? "次回も未使用の表を選びます。同じ表の再利用は解が漏れる原因になります。" : "Choose an unused table next time too. Reuse can expose your solution."}</p>

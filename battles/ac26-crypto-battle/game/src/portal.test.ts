@@ -67,6 +67,7 @@ import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { rungSpec } from "./ladder.ts";
 import { reconstruct } from "./shamir.ts";
 import { huntWorksheet } from "../../portal/HuntGuide.tsx";
+import SudokuGuide from "../../portal/SudokuGuide.tsx";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
 import { ALL_PERMUTATIONS, IDENTITY_PERMUTATION, samePermutation } from "./sudoku.ts";
 import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
@@ -2063,4 +2064,15 @@ describe("scored answer celebration", () => {
       expect(html).not.toContain("tc-feedback-reward");
     }
   });
+});
+
+
+it("the last PROVE hint leaves the same four answer cells blank", () => {
+  const projection = fixtureProjection();
+  const html = renderToStaticMarkup(createElement(SudokuGuide, {
+    projection, order: projection.myContracts[0]!, table: [3, 1, 4, 2], locale: "ja", onOpenProof: () => {},
+  }));
+  expect(html.match(/tc-sudoku-blank/g)).toHaveLength(4);
+  expect(html).toContain('aria-label=". 1 4 2 4 2 3 . 1 3 2 . . 4 1 3"');
+  expect(html).not.toContain('aria-label="3 1 4 2 4 2 3 1 1 3 2 4 2 4 1 3"');
 });

@@ -1189,6 +1189,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // attempts left says so, and the SUBMIT under it is disabled rather than
   // left to be refused by the judge.
   const selectedBudget = selectedTarget === undefined ? undefined : huntBudgetFor(projection, selectedTarget);
+  const huntTargetTeam = selectedTarget?.teamId;
+  const huntTargetGeneration = selectedTarget?.generation;
+  useEffect(() => {
+    setRecoveredSecret("");
+  }, [huntTargetTeam, huntTargetGeneration]);
   const huntExhausted = selectedBudget !== undefined && selectedBudget.spent >= selectedBudget.max;
   const sudokuTargets = useMemo(() => sudokuHuntCandidates(projection), [projection]);
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
@@ -1258,7 +1263,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
       } else {
         const draft = success(next);
-        setFeedback({ ...draft, attempt, total: next?.teams[next.vault.teamId]?.score });
+        setFeedback({ ...draft, attempt });
       }
     } catch {
       setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable, attempt });
@@ -1367,7 +1372,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </details>
 
       <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
-        {feedback && <FeedbackBanner key={feedback.attempt} feedback={feedback} locale={locale} onContinue={orders.length ? () => { setFeedback(null); document.querySelector(".tc-workspace")?.scrollIntoView({ block: "start" }); } : undefined} />}
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length ? () => { setFeedback(null); document.querySelector(".tc-workspace")?.scrollIntoView({ block: "start" }); } : undefined} />}
       </div>
 
       <section className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
