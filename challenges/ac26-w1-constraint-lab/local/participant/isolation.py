@@ -43,8 +43,19 @@ def restrict_learner():
                  'open','openat','openat2','creat','open_by_handle_at','execve','execveat',
                  'socketcall','io_uring_setup','pidfd_getfd','ptrace',
                  'process_vm_readv','process_vm_writev',
+                 # Same-UID children can lower a parent's scheduling/I/O priority
+                 # without a capability, affecting later submissions too.
+                 'sched_setscheduler','sched_setparam','sched_setattr',
+                 'sched_setaffinity','setpriority','ioprio_set',
                  'kill','tkill','tgkill','pidfd_send_signal',
-                 'rt_sigqueueinfo','rt_tgsigqueueinfo','setsid','setpgid')
+                 'rt_sigqueueinfo','rt_tgsigqueueinfo','setsid','setpgid',
+                 # Named IPC objects outlive the process group. POSIX shm/sem
+                 # creation already passes through the denied open/openat calls;
+                 # POSIX message queues have separate mq_* syscalls.
+                 'shmget','shmat','shmdt','shmctl','msgget','msgsnd','msgrcv','msgctl',
+                 'semget','semop','semtimedop','semtimedop_time64','semctl','ipc',
+                 'mq_open','mq_unlink','mq_timedsend','mq_timedsend_time64',
+                 'mq_timedreceive','mq_timedreceive_time64','mq_notify','mq_getsetattr')
         for name in blocked:
             number=lib.seccomp_syscall_resolve_name(name.encode())
             if number < 0:
