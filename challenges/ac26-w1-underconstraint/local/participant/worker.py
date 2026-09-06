@@ -25,20 +25,20 @@ from isolation import restrict_learner
 
 
 def main():
-    payload = json.load(sys.stdin)
-    # Popen closes every unrelated descriptor; close the input once consumed as well.
-    os.close(0)
+    payload = json.loads(sys.stdin.readline())
     restrict_learner()
     module = types.ModuleType('policy')
     sys.modules['policy'] = module
     exec(compile(payload['sources']['policy.py'], 'policy.py', 'exec'), module.__dict__)
-    values = []
-    for call in payload['calls']:
+    print('{"ready":true}', flush=True)
+    for line in sys.stdin:
+        call = json.loads(line)
         try:
-            values.append({'returned': getattr(module, call['function'])(*call['args'])})
+            result = {'returned': getattr(module, call['function'])(*call['args'])}
         except Exception as error:
-            values.append({'raised': type(error).__name__})
-    print(json.dumps({'values': values}, separators=(',', ':')), flush=True)
+            result = {'raised': type(error).__name__}
+        print(json.dumps({'callId': call['callId'], 'result': result},
+                         separators=(',', ':')), flush=True)
 
 
 if __name__ == '__main__':

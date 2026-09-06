@@ -1,5 +1,6 @@
 """Local, synthetic checks for the isolated worker and authoritative parent verdict."""
 import json
+import os
 import sys
 import time
 import unittest
@@ -51,6 +52,81 @@ class WorkerBoundary(unittest.TestCase):
                        'import sys\nsys.modules["tests.hidden.check_policy"].run=lambda *args:[]'):
             for checkpoint in server.CODE_CHECKPOINTS:
                 self.assertFalse(server.evaluate(checkpoint, source)[0], checkpoint)
+
+    def test_correct_static_batch_without_functions_is_rejected(self):
+        # These are the five publicly documented dictionaries, not secret fixtures.
+        namespace = {}
+        exec(compile(REFERENCE, '<trusted reference>', 'exec'), namespace)
+        intended = namespace['intended_circuit']()
+        old_batch = json.dumps({'values': [{'returned': intended}]})
+        source = 'import os\nprint(' + repr(old_batch) + ',flush=True)\nos._exit(0)\n'
+        self.assertFalse(server.evaluate('build', source)[0])
+        fixed_reply = json.dumps({'callId': 1, 'result': {'returned': intended}})
+        source = 'import os\nprint(\'{"ready":true}\',flush=True)\nprint(' + repr(fixed_reply) + ',flush=True)\nos._exit(0)\n'
+        self.assertFalse(server.evaluate('build', source)[0])
+
+    def test_call_ids_are_fresh_and_not_given_during_initialization(self):
+        source = '''import sys
+initial = sys._getframe(1).f_locals['payload']
+initial_had_calls = 'calls' in initial or 'callId' in initial
+
+def intended_circuit():
+    return [initial_had_calls, sys._getframe(1).f_locals['call']['callId']]
+'''
+        calls=[{'function':'intended_circuit','args':[]}] * 3
+        result=execution.run_functions({'policy.py':source},calls)
+        ids=[]
+        for value in result['values']:
+            initial_had_calls,call_id=value['returned']
+            self.assertFalse(initial_had_calls)
+            self.assertRegex(call_id,r'^[0-9a-f]{32}$')
+            ids.append(call_id)
+        self.assertEqual(len(set(ids)),3)
+
+    def test_wrong_or_reused_id_and_partial_eof_never_complete_a_batch(self):
+        for mode in ('wrong','reused','eof'):
+            source = '''import json,os,sys
+print('{"ready":true}',flush=True)
+first=json.loads(sys.stdin.readline())
+'''
+            if mode=='wrong':
+                source += "print(json.dumps({'callId':'0'*32,'result':{'returned':[]}}),flush=True)\nos._exit(0)\n"
+            else:
+                source += "print(json.dumps({'callId':first['callId'],'result':{'returned':[]}}),flush=True)\n"
+                source += 'second=json.loads(sys.stdin.readline())\n'
+                if mode=='reused':
+                    source += "print(json.dumps({'callId':first['callId'],'result':{'returned':[]}}),flush=True)\n"
+                source += 'os._exit(0)\n'
+            result=execution.run_functions({'policy.py':source},[{'function':'intended_circuit','args':[]}] * 2)
+            self.assertTrue(result is None or result['values'] is None,mode)
+
+    def test_unterminated_and_excessive_output_obey_one_deadline(self):
+        for source in ('import os\nos.write(1,b\'{"ready":\')\nwhile True:pass',
+                       'print("x"*70000,flush=True)\nwhile True:pass',
+                       'print("["*2000+"0"+"]"*2000,flush=True)\nwhile True:pass'):
+            with patch.object(execution,'RUN_TIMEOUT_SECONDS',.2):
+                start=time.monotonic()
+                self.assertIsNone(execution.run_functions({'policy.py':source},[]))
+                self.assertLess(time.monotonic()-start,3)
+
+    def test_blocked_input_is_bounded_by_the_same_deadline(self):
+        source = 'print(\'{"ready":true}\',flush=True)\nwhile True:pass'
+        with patch.object(execution,'RUN_TIMEOUT_SECONDS',.2):
+            start=time.monotonic()
+            result=execution.run_functions({'policy.py':source},[{'function':'intended_circuit','args':['x'*200000]}])
+            self.assertIsNone(result)
+            self.assertLess(time.monotonic()-start,3)
+
+    def test_repeated_fork_calls_leave_no_child_or_zombie(self):
+        baseline={p.name for p in Path('/proc').iterdir() if p.name.isdigit()}
+        source = REFERENCE + '\nimport os\nfor _ in range(4):\n    if os.fork()==0:os._exit(0)\n'
+        for attempt in range(64):
+            self.assertTrue(server.evaluate('build',source)[0],attempt)
+            for _ in range(200):
+                extra={p.name for p in Path('/proc').iterdir() if p.name.isdigit()}-baseline
+                if not extra:break
+                time.sleep(.01)
+            self.assertEqual(extra,set(),f'unreaped processes after request {attempt+1}')
 
     def test_checkpoint_independence_survives_unrelated_function_errors(self):
         source = REFERENCE + '\ndef audit(circuit): raise NotImplementedError()\ndef repair(circuit): raise NotImplementedError()\n'

@@ -1,5 +1,66 @@
 # #716 participant reading and runtime evidence
 
+## PR #761: reject queued startup results (follow-up to 990f85b)
+
+The reported path was reproduced against the actual dedicated API before editing:
+a source with no `intended_circuit` function printed the old batch envelope
+`{"values":[{"returned": [the five correct public dictionaries]}]}` and called
+`os._exit(0)`. Build returned `correct: true`. Unlike the earlier empty-`failures`
+exploit, these dictionaries still had to pass the trusted parent's property checks;
+the defect was accepting a queued startup result without a subsequent call.
+
+The same unchanged spoof source now returns `correct: false`. `run_functions`
+keeps its existing `values`/`output` return shape and `check_policy` is unchanged.
+Only the problem-local execution channel changed:
+
+1. Send source files alone; do not send calls or future identifiers at initialization.
+2. Wait for the ready acknowledgement.
+3. Mint a fresh, unpredictable 128-bit identifier in the trusted parent and send one
+   function name and its arguments. Accept only the corresponding returned/raised
+   value with that identifier, then mint another identifier for the next call.
+4. Discard incomplete batches on EOF. A single shared deadline and output budget cover
+   initialization, writes and reads. Completion, early exit, malformed output and
+   timeout all kill the complete process group; Docker init reaps descendants.
+
+The identifier rejects preprinted results, predictable-ID replies and replies from
+older calls. **It is not an attestation that a Python function body executed a return
+statement.** Arbitrary learner Python can read its later function inputs and implement
+the reply protocol itself. Its values remain untrusted and must satisfy the parent's
+actual mathematical/property checks. No additional file descriptor is claimed to
+be protected from that same Python process, and the channel never becomes the source
+of truth for a grade.
+
+Validation of this follow-up (synthetic seed `underconstraint-reader-716` only):
+
+- `make reference-test`: all 7 existing mutations killed, 21 actual Linux boundary
+  tests passed. New cases cover the five-correct-dictionary static spoof, ready plus
+  predictable ID 1, fresh 32-hex-digit identifiers absent at initialization, a wrong
+  identifier, reuse of a previous identifier, EOF after a partial batch, unterminated
+  output, excessive/deep JSON output, blocked input and full descendant reaping.
+- The unchanged independent reader SHA
+  `3e82b86fe00218637d93860a2d9d036e78dab6afcf3706cb16bae5295a39da16`
+  passed the existing 38-check actual HTTP suite: all five code checkpoints and the
+  manually derived inv114→0 JSON still pass; prepare preserves the same source.
+- Additional actual HTTP requests rejected the identical previously accepted static
+  spoof, predictable/wrong identifiers, reused audit replies and partial audit EOF.
+  Repair still passes with a looping forge function; build still passes with looping
+  repair. Transfer correctly fails when its required forge is unfinished.
+- 64 actual HTTP build submissions created 256 forked descendants. Every settled
+  request had zero zombies; process counts before/after/max were 3/3/3, including the
+  measurement process. The Linux suite additionally waits for every extra PID to
+  disappear, not just for a transient zero-Z snapshot.
+- The image-copied participant public CLI still passes all 13 tests. Catalog validation
+  passes all 116 entries. Python compilation and diff validation pass.
+
+Evidence: `/private/tmp/underconstraint-761-static-before.log`,
+`underconstraint-761-static-spoof.py`, `underconstraint-761-interactive-reference.log`,
+`underconstraint-761-interactive-http-acceptance.log`,
+`underconstraint-761-interactive-http.log`, `underconstraint-761-interactive-public.log`
+and `underconstraint-761-interactive-catalog.log` (all under `/private/tmp`). The runtime
+was the dedicated local project `ac26-underconstraint-reader-716`, API port 18147.
+This is an implementation regression check, not a new participant-only reading,
+real browser test or AWS deployment.
+
 ## PR #761 review corrections
 
 Review of `237fff3` found that checking only honest cases and known forgeries
