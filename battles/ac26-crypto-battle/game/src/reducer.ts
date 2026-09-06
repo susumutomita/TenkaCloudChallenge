@@ -68,6 +68,7 @@ import {
 } from "./fixtures.ts";
 import { parseRsaAnswer, rsaEncrypt, rsaFactorsFit } from "./rsa.ts";
 import { applyRpsHunt, projectRpsHunt, validateRpsHunt } from "./rps-hunt.ts";
+import { appendRsaHunt } from "./hunt-log.ts";
 import { huntKey, storedHuntKey, compactHuntAttempts, validateStoredHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
 import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
@@ -101,7 +102,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { HAND_PRIME, mod } from "./field.ts";
-import { decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
+import { compactCompletedContractIds, compactContractId, contractId, decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
 import {
   ALL_PERMUTATIONS,
   CONSTRAINT_GROUPS,
@@ -543,6 +544,7 @@ function migrateTeams(
   for (const [teamId, team] of Object.entries(teams)) {
     next[teamId] = {
       ...team,
+      completedContractIds: compactCompletedContractIds(teamId, team.completedContractIds),
       cipherHuntedGenerations: team.cipherHuntedGenerations ?? {},
       // [Issue #709] Same class: a row written before the sudoku HUNT existed
       // has had no solution recovered, because there was none to recover.
@@ -573,6 +575,7 @@ function highestSequenceFor(contracts: readonly Contract[], teamId: string): num
 function needsTeamMigration(teams: Readonly<Record<string, TeamState>>): boolean {
   return Object.values(teams).some(
     (team) =>
+      compactCompletedContractIds(team.teamId, team.completedContractIds) !== team.completedContractIds ||
       !team.cipherHuntedGenerations ||
       team.issuedOrderCount === undefined ||
       team.sudokuHuntedGenerations === undefined,
@@ -611,7 +614,7 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *   7  Vigenère rung and public key-position offsets (old Caesar rows keep scalar keys)
  *   8  Vigenère wrong-answer reward forfeiture and own lastCipher adjudication
  *   9  private lightning distribution, targeted card, and accepted-answer history
- *  10  normal endgame RSA Orders, public RSA pairs and factor HUNT reservations
+ *  10  RSA Orders/pairs, exact-time factor HUNT logs and compact completed IDs
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
@@ -647,7 +650,9 @@ export const STATE_SCHEMA_VERSION = 10;
  * Vigenère and compact reservations. Legacy Orders have unknown accepted-answer history
  * and cannot be targeted; the next issued Orders record answerAttempted=false.
  * v9 -> v10 preserves existing Orders, cipherFailed and lightning cards exactly.
- * RSA is issued only for future scheduled standard endgame cipher slots.
+ * RSA is issued only for future scheduled standard endgame cipher slots. Completed
+ * exact Order IDs reuse the ledger codec. Legacy hunt-log objects remain unchanged;
+ * no timestamps are invented for pre-patch RSA reservations without a log.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
   if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9) {
@@ -1781,7 +1786,7 @@ function applyLeak(
     // [Issue #659] The leak rate, not the full rate. Paying the same for both
     // made LEAK strictly dominant — no computation, identical payout.
     score: team.score + contract.leakPoints,
-    completedContractIds: [...team.completedContractIds, contract.id],
+    completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
   };
 
   return {
@@ -1839,7 +1844,7 @@ function applyLadderLeak(
       [teamId]: {
         ...team,
         score: team.score + contract.leakPoints,
-        completedContractIds: [...team.completedContractIds, contract.id],
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -1891,7 +1896,7 @@ function applyCipher(
         ...team,
         score: team.score + points,
         lastCipher: { contractId: contract.id, outcome: "hit", points },
-        completedContractIds: [...team.completedContractIds, contract.id],
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -1923,8 +1928,10 @@ function applyHuntCipher(
   const rung = op.kind === "hunt-rsa" ? "rsa" : op.rung;
   const bonus = rung === "rsa" ? state.config.scores.huntBonus : rungSpec(rung).huntBonus;
   const broken = target.cipherHuntedGenerations[rung] ?? [];
+  const huntLog = rung === "rsa" ? appendRsaHunt(state, teamId, op.targetTeamId, op.generation) : state.huntLog;
   return {
     ...state,
+    huntLog,
     teams: {
       ...state.teams,
       [teamId]: { ...attacker, score: attacker.score + bonus },
@@ -2117,7 +2124,7 @@ function completeOrder(
       [teamId]: {
         ...team,
         score: team.score + contract.points + lightningBonus(state, contract),
-        completedContractIds: [...team.completedContractIds, contract.id],
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -2655,7 +2662,7 @@ export function projectForTeam(
     generation: team.generation,
     lastRotateAtMs: team.lastRotateAtMs,
     rotateCooldownRemainingMs,
-    completedContractIds: team.completedContractIds,
+    completedContractIds: team.completedContractIds.map(c => contractId({ tm: teamId, c })),
     huntedGenerations: team.huntedGenerations,
     sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
     usedPermutations: usedPermutationsFor(state, teamId, team.generation),

@@ -90,20 +90,89 @@ within controlled five-minute time. A nonempty actual schema-9 fixture retains
 failed Vigenère, public records, numeric Shamir/sudoku/RPS reservations and an
 armed lightning card through migration and the next real operation.
 
-The capacity fixture includes current RSA all-pairs successes **after ROTATE,
-while the maximum RPS predictions are still unopened**. Independent review
-caught that the earlier order measured these separately. At 99 teams the
-unfixed combination reached 3,143,511 bytes, above the declared 3,042,816-byte
-forecast. RSA success reservations now encode fixed roster pairs compactly and
-retire only obsolete RSA generations. Other attack history and the permanent
-public ledger are retained. The corrected fixture passes the existing forecast,
-Turso 99-team / 25%-headroom budget and DynamoDB's measured 11-team ceiling;
-no resource, capacity declaration or platform limit was enlarged.
+### Review follow-up: complete RSA replay within the existing capacity budget
 
-The independent reviewer reran the final 99-team sequence: peak 3,037,431 bytes,
-maximum 9,604 unopened RPS predictions, below the existing 3,042,816-byte forecast
-and 3,145,728-byte operational budget. The reviewer also reran 19 RSA/reservation
-tests (9,353 assertions); all passed, with no additional P1/P2 finding.
+Review [3944474852](https://github.com/susumutomita/TenkaCloudChallenge/pull/759#discussion_r3944474852)
+identified that a successful RSA HUNT only wrote a current-generation replay
+reservation. No timestamp reached `buildReplay`, and ROTATE removed the old
+reservation. New successes now retain attacker, target, generation and exact
+millisecond time in `huntLog`. `buildReplay` identifies RSA in both languages,
+including after multiple ROTATEs and a serialized checkpoint. Legacy Shamir and
+sudoku log objects remain intact. Earlier schema-10 candidate reservations have
+no historical timestamp: migration preserves their guard and never invents an
+event. Review [3944474854](https://github.com/susumutomita/TenkaCloudChallenge/pull/759#discussion_r3944474854)
+also prompted the small bilingual README correction: RSA is implemented; rotor/
+Enigma and the later homomorphic ladder remain future work.
+
+Historical measurement, superseded by the complete-history bound below: the
+pre-review `7b5c073` candidate measured 3,037,431 bytes at 99 teams, below its
+then-declared 3,042,816-byte forecast. That route included current RSA guards
+beside 9,604 unopened RPS predictions, but did not retain eleven generations of
+timestamped RSA successes. The earlier guard implementation had reached
+3,143,511 bytes before its roster-pair encoding was corrected. Neither older
+figure is the current full-history capacity claim.
+
+Storing a long object for every pair in every generation would exceed the
+existing capacity budget. The new RSA representation uses one row per target/
+generation, the existing sorted roster positions, an exact base timestamp, and
+one fixed-width base-64 offset slot per other team. Zero denotes no success;
+positive values recover `base + value - 1`. Width expands for later timestamps.
+It loses no record and does not rely on attacks sharing a timestamp. Neither
+secret factors nor the recovered private key enter the history. RSA guards,
+other HUNT counters and their existing rules are unchanged.
+
+To pay for permanent history, completed Order IDs reuse the existing ledger
+codec: an exact `teamId-cN` becomes N, and all unfamiliar IDs remain strings.
+All completion writers use it; the participant projection expands full IDs,
+and score-reason comparisons normalize both sides, including an old-string to
+new-number migration during a delayed DUEL forfeit. This introduces no new
+counter encoding, pruning policy or platform resource. The independent reviewer's
+actual 99-team completion route found 10,791 completed IDs (109 per team): their
+arrays occupy 356,103 bytes as strings and 32,373 bytes encoded, a 323,730-byte
+saving. At the unopened-DUEL peak the saving is slightly smaller because the
+last 98 completions have not happened yet.
+
+The capacity test retains the original full-Order route, all purchased hints,
+public LEAK records, other private computations, settled duels, and **9,604
+unopened RPS predictions**. A second actual reducer trace runs all **99 × 98 ×
+11 = 106,722 RSA successes** and verifies every identity, generation and
+millisecond after JSON serialization and roster insertion-order reversal. Its
+clock uses the standard 90-minute match, RSA access from minute 60 and a
+three-minute ROTATE cooldown:
+
+- Twenty legal pre-endgame ROTATEs at minutes 0, 3, …, 57 yield generation 21.
+- The already-active generation can be attacked at minute 60. Ten more ROTATEs
+  fit before minute 90, so eleven attacked generations end at generation 31.
+- Eleven successive attack windows span 7,000; 263,000; 263,000; seven times
+  180,000; and 7,000 milliseconds, totaling 1,800,000. Attacks are spread from
+  the first through the last millisecond of each window. The two 263-second
+  windows require four offset characters, so this includes the legal delayed-
+  ROTATE case that a same-time or exact-cooldown fixture misses.
+- At eleven generations the nine interior cooldown intervals consume at least
+  1,620,000 milliseconds. The remaining 180,000 permits at most two intervals
+  to cross the 262,143 offset boundary; every other interval needs at most
+  three characters. Fewer generations cannot increase that total character
+  budget. All rows retain all generations; the fixture does not prune history.
+
+The test forms a **conservative upper envelope**, not a claim that two independent
+routes are one observed match: it retains the full-Order/RPS peak and all ledger/
+completion fields, substitutes the maximum complete RSA history and current RSA
+guards, and keeps the larger generation and score bookkeeping. The independently
+played RSA history is 377,576 bytes. The resulting 99-team bound is **3,106,689
+bytes**, below the unchanged **3,145,728-byte** budget (4 MiB with 25% headroom),
+with **39,039 bytes** left inside that budget. The declaration is now **31 KiB
+per team + 1,536 bytes**, forecasting **3,144,192 bytes** for 99 teams: at least
+the measured bound and still below the same budget. No platform limit or test
+headroom was relaxed. The measured DynamoDB edge is **305,641 bytes at 12 teams**,
+within the 307,200-byte test budget; **329,207 bytes at 13 teams** crosses it.
+The declaration's preflight ceiling remains 12.
+
+The final game run passed **685 tests across 46 files**, including the full
+99-team measurement. The additional string-ID → numeric-ID / delayed-DUEL
+regression passed in a focused 39-test rerun. Game and dev typechecks passed;
+the dev suite passed 61 tests and catalog validation passed all 116 entries.
+These checks cover the new exact replay and storage boundary; the earlier
+participant/browser evidence above covers the unchanged RSA action surface.
 
 Commands run from this candidate:
 

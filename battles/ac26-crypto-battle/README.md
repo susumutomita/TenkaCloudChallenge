@@ -263,6 +263,7 @@ These changes add no AWS resources, settings, timers or cleanup obligations.
 Local verification: `cd game && bun test && bun run typecheck`; `cd dev && bun test
 && bun run typecheck`. The `vigenere` dev scenario uses the standard five-minute
 TTL and three actual opponent LEAKs. See [the recorded local walkthrough](dev/VIGENERE-READING.md).
+RSA is implemented in standard endgame Orders and public-key HUNT.
 The rotor/Enigma model and a new homomorphic ladder rung remain
 outside this increment of #659. Existing Shamir, encrypted addition and the
 endgame hint booster remain available.

@@ -181,14 +181,28 @@ export type StoredArtifact =
   | StoredSudokuRevealArtifact;
 
 /** Schema 4 preserves unfamiliar IDs verbatim and shortens exact Order IDs. */
-function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
+export function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
   return typeof stored.c === "number" ? `${stored.tm}-c${stored.c}` : stored.c;
 }
 
-function compactContractId(teamId: string, id: string): string | number {
+export function compactContractId(teamId: string, id: string | number): string | number {
+  if (typeof id === "number") return id;
   const prefix = `${teamId}-c`;
   const n = id.startsWith(prefix) ? Number(id.slice(prefix.length)) : NaN;
   return Number.isSafeInteger(n) && n >= 0 && `${prefix}${n}` === id ? n : id;
+}
+
+/** Immutable completion arrays share the ledger codec; cache avoids rescanning a
+ * completed match's whole history on every subsequent HUNT. Unknown IDs stay exact. */
+const completedIdCache = new WeakMap<readonly (string | number)[], { teamId: string; ids: readonly (string | number)[] }>();
+export function compactCompletedContractIds(teamId: string, ids: readonly (string | number)[]): readonly (string | number)[] {
+  const cached = completedIdCache.get(ids);
+  if (cached?.teamId === teamId) return cached.ids;
+  const compact = ids.map(id => compactContractId(teamId, id));
+  const result = compact.every((id, at) => id === ids[at]) ? ids : compact;
+  completedIdCache.set(ids, { teamId, ids: result });
+  completedIdCache.set(result, { teamId, ids: result });
+  return result;
 }
 
 /**

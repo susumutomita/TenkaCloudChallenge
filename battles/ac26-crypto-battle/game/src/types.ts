@@ -758,7 +758,8 @@ export interface TeamState {
   readonly issuedOrderCount: number;
   /** Includes skipped stale duel slots; absent on pre-duel rows means zero. */
   readonly issuedDuelCount?: number;
-  readonly completedContractIds: readonly string[];
+  /** Schema 10 reuses the ledger exact-Order-ID codec; projection expands strings. */
+  readonly completedContractIds: readonly (string | number)[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
   readonly huntedGenerations: readonly number[];
   /**
@@ -936,7 +937,7 @@ export interface CryptoBattleState {
    */
   readonly huntAttempts: Readonly<Record<string, number>>;
   /**
-   * Ordered log of successful HUNTs, WITH a timestamp (Issue #486 PR5,
+   * Successful HUNT history WITH exact timestamps (Issue #486 PR5,
    * `replay.ts`). `successfulHunts` above deliberately carries only the
    * replay-guard KEY, no `atMs` -- it cannot answer "when did this HUNT
    * succeed?" on its own, and every other `PublicArtifact` on the ledger
@@ -946,20 +947,26 @@ export interface CryptoBattleState {
    * / Replay" -- the worked example is literally "58:01 Team B HUNT
    * success") can be honest about hunt timing instead of omitting it or
    * guessing. Purely additive: `validateOp`'s replay guard still reads only
-   * `successfulHunts` above, never this field -- see `applyHunt`.
+   * `successfulHunts` above, never this field -- see `applyHunt`. RSA entries
+   * group timestamps by target/generation; `decodeHuntLog` restores their order.
    */
-  readonly huntLog: readonly HuntLogEntry[];
+  readonly huntLog: readonly StoredHuntLogEntry[];
 }
 
-/** One entry in `CryptoBattleState.huntLog` -- see that field's doc comment. */
+/** One decoded success (also the legacy stored form); see huntLog's comment. */
 export interface HuntLogEntry {
   readonly attackerTeamId: string;
   readonly targetTeamId: string;
   readonly generation: number;
   readonly atMs: number;
   /** [Issue #709] Which secret fell. Absent means the Shamir secret. */
-  readonly via?: "sudoku";
+  readonly via?: "sudoku" | "rsa";
 }
+
+/** RSA successes are losslessly grouped by target/generation; see hunt-log.ts. */
+export type StoredHuntLogEntry = HuntLogEntry | {
+  readonly rsa: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string];
+};
 
 export type CryptoBattleOp =
   | { readonly kind: "declare-lightning"; readonly contractId: string }

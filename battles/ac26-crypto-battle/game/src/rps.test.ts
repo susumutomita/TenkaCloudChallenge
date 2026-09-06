@@ -190,12 +190,20 @@ test("no Order deadline extends beyond the match; unfinished final duels expire 
 });
 
 test("a delayed tick still classifies a forfeit after pruning the completed DUEL", () => {
-  let s = seal(running(), "a", 1, 1);
+  let s = running();
+  const prior = s.contracts.find(order => order.teamId === "a" && order.task.kind === "reveal-share")!;
+  s = dispatch(s, "a", { kind: "leak", contractId: prior.id });
+  s = seal(s, "a", 1, 1);
+  // Persisted pre-upgrade strings cross to numeric IDs in this same tick.
+  s = { ...s, teams: { ...s.teams, a: { ...s.teams.a!, completedContractIds: projectForTeam(s, "a").vault.completedContractIds } } };
+  expect(s.teams.a!.completedContractIds).toContain(prior.id);
   const waiting = duel(s, "a");
   s = {...s, contracts: s.contracts.filter(order => order.task.kind === "rps-duel")};
   const next = tick(s, waiting.expiresAtMs + 11 * 60_000);
   expect(next.contracts.some(order => order.id === waiting.id)).toBe(false);
-  expect(next.teams.a!.completedContractIds).toContain(waiting.id);
+  expect(projectForTeam(next, "a").vault.completedContractIds).toContain(waiting.id);
+  expect(projectForTeam(next, "a").vault.completedContractIds).toContain(prior.id);
+  expect(next.teams.a!.completedContractIds.every(id => typeof id === "number")).toBe(true);
   expect(next.teams.a!.score - s.teams.a!.score).toBe(s.config.scores.duelWin);
   expect(scoreReasons(s, next, {kind:"tick"})).toEqual({a:"duel"});
   const again = tick(next, next.nowMs!);

@@ -236,14 +236,14 @@ schemas 1–4 and keeps older results without a score delta; their outcome remai
 visible, but the Portal reports the delta as unrecorded instead of guessing it
 from today's rules. A schema-4 plugin must not read schema-5 rows after rollback.
 
-`metadata.json` reserves **30 KiB per team + 1,536 bytes**. The platform owns the
+`metadata.json` reserves **31 KiB per team + 1,536 bytes**. The platform owns the
 limits below; this problem does not raise them. The local capacity tests retain
 25% headroom and check both the peak and the final state.
 
 | Backend | Platform policy | Default-match capacity |
 | --- | --- | --- |
 | Turso / libSQL | 4 MiB, environment-overridable | 99 teams with at least 25% headroom in the tested route |
-| DynamoDB | 400 KiB item; platform reserves 16 KiB | 11 teams with 25% headroom in the tested route; declaration preflight limit 12 |
+| DynamoDB | 400 KiB item; platform reserves 16 KiB | 12 teams with 25% headroom in the tested route; declaration preflight limit 12 |
 
 ## Rock-paper-scissors lifecycle
 
@@ -459,9 +459,12 @@ power helper and failure/zero-retry/lightning scoring paths.
 
 Migration from v9 preserves existing Orders, compact Shamir/sudoku/RPS attempt
 reservations, ledger records, Vigenère failure bits and declared lightning cards.
-Only future normal endgame cipher slots become RSA. Rollback must use a plugin
-that understands schema 10; older decoders must not read the new artifact kind.
-No resource, IAM, timer, admission limit or point value is introduced.
+Only future normal endgame cipher slots become RSA. Completed Order IDs reuse
+the ledger's exact `teamId-cN` ↔ numeric N codec, while unfamiliar IDs stay
+verbatim and the participant projection returns full strings. Rollback must use
+a plugin that understands all schema-10 encodings, including the RSA hunt log;
+older decoders must not read these rows. No resource, IAM, timer or point value
+is introduced. The measured capacity declaration is updated above.
 
 RSA success reservations encode `r<pairIndex>:<generation>`, where `pairIndex`
 is attacker roster position × fixed roster length + target roster position, written
@@ -469,6 +472,16 @@ in base 36. This preserves ID separation
 without storing long IDs for every attacker/target pair. ROTATE discards only
 retired RSA reservations, since old-generation submissions are rejected anyway.
 Other HUNT history, public records and per-team attacked-generation lists remain.
+
+Every new successful RSA HUNT also appends its exact millisecond timestamp to
+`huntLog`. One compact row per target/generation stores a sorted-roster slot per
+attacker, with zero for absence and an exact offset from the row's base time.
+ROTATE never removes these rows: replay can still name every attacker, target,
+generation and time. Legacy Shamir/sudoku object entries remain readable.
+Earlier schema-10 candidate rows containing only reservations have no recorded
+RSA timestamps; migration preserves those guards but cannot invent past replay
+events. The 99-team test retains all 106,722 new RSA successes across eleven
+generations, including differently timed attacks that require wider encoding.
 
 The RSA HUNT checks distinct prime factors of the current n in either order.
 It never compares an internal canonical d. See `game/src/rsa.test.ts` for the
