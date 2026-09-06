@@ -1,7 +1,6 @@
-"""Public tests: shape, and one round trip per operation on a single setting.
+"""Public arithmetic examples and return shapes, evaluated by a trusted test parent.
 
-They do not check the composed expression, and they never contrast a right answer
-with the plausible wrong one. The hidden verifier does both.
+The hidden verifier additionally checks other settings and composed operations.
 """
 
 from __future__ import annotations
@@ -13,9 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "starter"))
-
-import linear  # noqa: E402
+from participant.execution import LearnerError, LearnerSession  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -51,9 +48,10 @@ def _load_public_evidence() -> dict[str, object]:
     return public_payload(SEED)
 
 
-PUBLIC = _load_public_evidence()
-CFG = PUBLIC["setting"]
-OPERATIONS = PUBLIC["operations"]
+PUBLIC = {}
+CFG = {}
+OPERATIONS = []
+linear = None
 
 
 def reconstruct(shares: list[int], p: int) -> int:
@@ -84,16 +82,25 @@ def test_add_constant_returns_one_value_per_party() -> None:
     assert len(linear.add_constant(_sx(), CFG["c"], CFG["p"])) == CFG["n"]
 
 
+def test_add_constant_reconstructs_small_example() -> None:
+    # 5+6+0 has remainder 4; after adding 2 the total must have remainder 6.
+    out = linear.add_constant([5, 6, 0], 2, 7)
+    assert isinstance(out, list) and len(out) == 3, 'return one value per participant'
+    assert all(type(value) is int and 0 <= value < 7 for value in out), 'return remainders 0 through 6'
+    assert reconstruct(out, 7) == 6, 'the total after adding 2 must have remainder 6'
+
+
 def test_communication_rounds_answers_every_operation() -> None:
     for operation in OPERATIONS:
-        assert isinstance(linear.communication_rounds(operation), int)
+        result = linear.communication_rounds(operation)
+        assert type(result) is int and result >= 0, "return a nonnegative integer"
 
 
-def main() -> int:
-    only = ""
-    if "--only" in sys.argv:
-        index = sys.argv.index("--only")
-        only = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
+def run_cases(module, public, only=''):
+    global linear, PUBLIC, CFG, OPERATIONS
+    linear, PUBLIC = module, public
+    CFG, OPERATIONS = public['setting'], public['operations']
+    transcript = []
     failures = 0
     selected = 0
     for name, fn in sorted(globals().items()):
@@ -104,22 +111,37 @@ def main() -> int:
         selected += 1
         try:
             fn()
-            print(f"PASS {name}")
+            transcript.append(f"PASS {name}")
         except AssertionError as error:
             failures += 1
-            print(f"FAIL {name}: {error or 'assertion failed'}")
+            transcript.append(f"FAIL {name}: {error or 'assertion failed'}")
         except Exception as error:  # noqa: BLE001
             failures += 1
-            print(f"FAIL {name}: raised {type(error).__name__}")
-    print()
+            transcript.append(f"FAIL {name}: raised {type(error).__name__}")
     if selected == 0:
-        print(f"no public test matched --only {only!r}")
+        return False, f'no public test matched --only {only!r}'
+    transcript.append('public tests: ' + ('all passed' if failures == 0 else f'{failures} failed'))
+    return failures == 0, '\n'.join(transcript)
+
+
+def main() -> int:
+    only = ''
+    if '--only' in sys.argv:
+        index = sys.argv.index('--only')
+        only = sys.argv[index + 1] if index + 1 < len(sys.argv) else ''
+    directory = Path(os.environ.get('SUBMISSION_DIR', str(ROOT / 'starter')))
+    sources = {'linear.py': (directory / 'linear.py').read_text()}
+    learner = LearnerSession(sources)
+    try:
+        public = _load_public_evidence()
+        with learner:
+            passed, output = run_cases(learner.module(), public, only)
+        print(output)
+        return 0 if passed else 1
+    except (LearnerError, OSError, ValueError):
+        print(learner.initialization_diagnostic or 'The submitted functions could not be evaluated.')
         return 1
-    print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
-    print()
-    print("Note what is missing above: nothing checks what add_constant reconstructs to.")
-    return 1 if failures else 0
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

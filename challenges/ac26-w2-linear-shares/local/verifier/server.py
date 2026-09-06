@@ -23,10 +23,7 @@ import hashlib
 import hmac
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -34,6 +31,9 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import OPERATION_ROUNDS, operations, public_payload
+from tests.hidden import check_linear
+from participant.execution import LearnerError, LearnerSession
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w2-linear-shares"
@@ -67,22 +67,6 @@ CHECKPOINTS = (
 #: must arrive sealed by the Workbench's prepare route (see `_unwrap_submission`); the
 #: code checkpoints keep accepting raw source, which is their historical Portal format.
 MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
-# aborts the exec, so on a macOS checkout every submission run failed -- including
-# the reference. The lab runs on Linux, where the cap does apply, so skipping it on
-# Darwin does not change what participants run. See the same note in
-# ac26-bridge-experiment's verifier.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
 def _check_no_communication(submission: object) -> bool:
     """Which of the four operations every party can do alone.
 
@@ -110,42 +94,6 @@ def _check_no_communication(submission: object) -> bool:
     return True
 
 
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_linear
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import linear
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-phases = {phases!r}
-if phases:
-    failures = []
-    for name in phases:
-        failures.extend(getattr(check_linear, name)(linear, {seed!r}))
-else:
-    failures = check_linear.run(linear, {seed!r})
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
 
@@ -167,47 +115,18 @@ def _run_submission(
         return False, None
     if len(source) > MAX_BODY_BYTES:
         return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "linear.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    try:
+        with LearnerSession({'linear.py': source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            module = learner.module()
+            if phases:
+                failures = []
+                for name in phases:
+                    failures.extend(getattr(check_linear, name)(module, seed))
+            else:
+                failures = check_linear.run(module, seed)
+    except (LearnerError, OSError, ValueError):
+        return False, 'The submitted functions could not be evaluated.'
+    return not failures, _failure_message(failures)
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
@@ -362,6 +281,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
+    protect_supervisor()
     port = int(os.environ.get("VERIFY_PORT", "18097"))
     # Bind every interface *inside the container*, not the container's loopback: the
     # Workbench reaches this process over the Compose-internal `lab` network, so a

@@ -7,121 +7,113 @@
 
 **Track:** `advanced-cryptography-2026` · **Order:** 220 · **Chapter:** Week 2 / Local Linear
 Operations · **Role:** `mechanism` · **Time:** 35–50 minutes · **Points:** 200
-· **Required first:** `ac26-w2-secret-sharing` · **Status:** draft — see "Week 2 alignment"
+· **Required first:** `ac26-w2-secret-sharing` · **Status:** draft
 
-## The story
+## Before you start
 
-The auditors' scheme from last time works: numbers get split, nobody sees anyone else's figure.
-Now they actually want to *compute* — sums, weighted totals, a running average.
+You repair a tool that computes without collecting everyone's secret. **Start → Inspect evidence → edit linear.py → Run public tests.** Each checkpoint's Submit button grades it. Begin by fixing the public constant that the starter adds to every share.
 
-The obvious worry is that every step needs a meeting. It does not. Most of what they want, each
-auditor can do alone, on their own slip of paper, and the pieces still add up to the right answer.
-Working out exactly which steps those are is what makes the scheme usable instead of theoretical.
+**Multi-party computation (MPC)** lets several parties compute while hiding their inputs from one another. One ingredient is **secret sharing**: split x into numbers that add back to x. Each party's portion is a **share**. This exercise implements addition and public scaling of those shares.
 
-## The operation catalog
+## Each party uses its own row
+
+There are at least two parties. Arithmetic uses **remainders after division by an odd prime p**. Python `% p` puts even negative results in 0..p−1. `a[i]` is party i's share of x; `b[i]` is the same party's share of y.
 
 ```text
-add-shared      shares of x, shares of y   ->  shares of x + y
-sub-shared      shares of x, shares of y   ->  shares of x - y
-add-constant    shares of x, public c      ->  shares of x + c
-mul-constant    shares of x, public c      ->  shares of x * c
-negate-shared   shares of x                ->  shares of -x
-mul-shared      shares of x, shares of y   ->  shares of x * y
-square-shared   shares of x                ->  shares of x * x
-compare-shared  shares of x, shares of y   ->  a comparison result
+x = (a[0] + … + a[n−1]) % p
+y = (b[0] + … + b[n−1]) % p
+local row calculations → new shares → their total recovers the result
 ```
 
-Each deployment selects and shuffles four of these: two local operations and two that require
-interaction. The classification therefore measures the rule, not one reusable four-entry table.
+Real parties see their own row. **This teaching editor shows all rows together so you can inspect the arithmetic.** Adding the displayed rows recovers the secret; the screen itself is not a confidentiality demonstration.
 
-## Participant Portal workflow
+One-digit example: p=7, x=4 has shares [5,6,0], y=3 has shares [1,0,2], and the public constant c=2 is known to everyone.
 
-1. Start the problem in Participant Portal; the problem editor appears on the same page.
-2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
-3. Edit the starter source in the Portal editor.
-4. Select **Run public tests** and fill any direct-answer fields from the evidence.
-5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
+| Party | Share a of x | Share b of y | x+y: add each row | 2x: double every row | x+2: add2 only to party0 |
+|---|---:|---:|---:|---:|---:|
+| 0 | 5 | 1 | 6 | 3 | 0 |
+| 1 | 6 | 0 | 6 | 5 | 6 |
+| 2 | 0 | 2 | 2 | 0 | 0 |
+| Total remainder | 4 | 3 | 0 | 1 | 6 |
 
-No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
-checkpoints use the current editor source. Direct answers are bound to the current deployment
-seed, so a value copied from another deployment is rejected.
+x+y=7 leaves0, 2x=8 leaves1, and x+2=6. Each column recovers the intended result.
 
-## Scoring
+## Formulas and four functions
 
-Five checkpoints, scored independently. Wrong answers cost 10 points each.
+| Function | Local calculation | Why it works |
+|---|---|---|
+| `add_shares(a,b,p)` | `out[i]=(a[i]+b[i])%p` | Rearranging the total gives x+y |
+| `mul_constant(shares,c,p)` | `out[i]=(shares[i]*c)%p` | Distributivity gives cx |
+| `add_constant(shares,c,p)` | Add c only at index0; copy the other shares; normalize all with `%p` | The total gains c once |
+| `communication_rounds(operation)` | Return0 or1 using the table below | Does a local row suffice, or must parties exchange values? |
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `add-shares` | 40 | Reconstructs to the sum, across four settings |
-| `add-constant` | 50 | Reconstructs to `x + c` — and the classic wrong answer is named |
-| `mul-constant` | 35 | Reconstructs to `x * c` |
-| `no-communication` | 40 | Which four this deployment selected, classified as 0 or non-zero rounds |
-| `transfer` | 35 | All of it, plus a composed expression, on an unseen setting |
+The first three return integer lists of the original length. Input lists have the same party count and ordering. The last returns one integer; booleans are not accepted as integers.
 
-Every one of the 5 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 15 still leaves 106 of 200.
+The general way to add a constant is to add agreed public offsets d[i]. The notation `u≡v (mod p)` means their remainders after division by p are equal:
 
-## The one that is not obvious
+```text
+out[i] = (shares[i] + d[i]) % p
+if (d[0] + … + d[n−1]) % p = c % p, the result totals x+c
+```
 
-If every party adds `c` to its own share, the shares now sum to **`x + n*c`**. Exactly one party
-folds the constant in.
+`d=[c,0,…,0]` is the simplest construction. If everyone adds c, the result totals x+nc; its difference from the target is `(n−1)c`. The example becomes [0,1,2], total3 instead of6. When the difference has remainder0, for example c=0, these happen to agree. **A correct method must also work outside such coincidences.**
 
-This wrong version is worth dwelling on because of how well it hides:
+## See the communication boundary in equations
 
-- at `n = 1` it is **indistinguishable** from correct;
-- for larger `n` it is off only by a multiple of `c`, so a test on one fixed setting can pass it by
-  luck.
+A **communication round** is a stage of exchanging values between parties. This task classifies **0 for unnecessary, a positive integer for necessary**; it does not count an exact protocol. The model starts with each party's additive shares, at least two parties, no extra numbers shared in advance for this computation, arbitrary secret inputs, and output that remains shared.
 
-The hidden tests run four settings, all with `n ≥ 2`, and name the `x + n*c` result explicitly so
-it cannot slip through as a coincidence.
+| Operation name | Meaning | Classification in this model |
+|---|---|---:|
+| `add-shared` | x+y | 0 |
+| `sub-shared` | x−y | 0 |
+| `negate-shared` | −x (everyone scales by−1) | 0 |
+| `add-constant` | x+c | 0 |
+| `mul-constant` | cx | 0 |
+| `mul-shared` | xy | positive |
+| `square-shared` | x² | positive |
+| `compare-shared` | compare x and y as integers in0..p−1 | positive |
 
-The intuition being corrected is "it is linear, so everyone does the same thing". It works for
-share-wise addition, subtraction, negation, and public scaling, but public constant addition needs
-exactly one party to fold the constant in.
+For two parties:
 
-## Why the classification is graded 0-versus-non-zero
+```text
+(a0+a1)(b0+b1) = a0b0 + a0b1 + a1b0 + a1b1
+                       cross terms involve another party's share
+```
 
-`no-communication` does not ask for an exact positive round count. How many rounds multiplication,
-squaring, or comparison takes depends on the protocol; **whether it has to communicate at all**
-does not. The scoring only bets on the part that is settled.
+Party0 lacks a1,b1; party1 lacks a0,b0. Adding local products omits the cross terms. Squaring also leaves the middle term in `(a0+a1)²=a0²+2a0a1+a1²` (hence the odd-prime condition).
 
-## Where this leads
+Rowwise comparison also fails. With p=7, a=[6,6], b=[1,1], each row has a>b and the totals give5>2. But a=[4,4], b=[2,2] still has a>b in each row, while the totals give1<4. Reduction wraps around. This is a counterexample to simple rowwise comparison, not an impossibility proof for every cryptographic method.
 
-The boundary you draw here is the motivation for the next problem. Once non-linear operations need
-interaction, the natural question is whether some of that work can be moved into preprocessing —
-which is exactly what a Beaver triple does for multiplication.
+## Where to submit
 
-## Week 2 alignment
+| Checkpoint | What you supply |
+|---|---|
+| `add-shares` | add_shares in linear.py |
+| `add-constant` | add_constant |
+| `mul-constant` | mul_constant |
+| `no-communication` | JSON with exactly the four displayed operation names |
+| `transfer` | all three arithmetic functions and communication_rounds for all eight names |
 
-Week 2's material was not published upstream at the commit `curriculum.md` records, so
-`courseAlignment` pins `week2/README.md` with `kind: "placeholder"`, and `status` stays `draft`.
-The pin records the *absence* of material at that commit rather than an alignment to it — which is
-what lets `bun run course:drift` report `PUBLISHED` the day the material appears. #219 reconciles
-the row before this leaves draft.
+The four code checkpoints submit the current linear.py. For `no-communication`, classify **your four displayed names** using the table and enter single-line JSON. Only if the names are add-shared, sub-shared, mul-shared and square-shared would it look like this:
 
-## Assurance scope
+```json
+{"add-shared":0,"sub-shared":0,"mul-shared":1,"square-shared":1}
+```
 
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
-no reference solution, no verifier. Those live only in a second, unpublished container the
-Workbench reaches over the compose network, and in the author-only image `make reference-test`
-builds.
+Use exactly those displayed keys. Values are nonnegative integers;1 or2 both count as communication. Check Run public tests before Submit. Wrong answers cost10 points; all15 hints total94 points.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+## What to check next
 
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+`transfer` checks the composition `c(x+y)+c` across other moduli and party counts. These are result-total and format checks, not a proof of every MPC security property. Proper randomness for the original shares and limits on who sees what remain necessary.
 
-## Cost
+Finally, explain how public offsets other than [c,0,…,0] can still total c. Next, `ac26-w2-beaver-mul` addresses the cross terms of secret multiplication. These local additions alone do not implement a signature protocol or complete MPC.
 
-Zero. No cloud account, no AWS resources.
+## Author scope and verification
 
-## For authors
+This independent companion uses the published Week 2 toy-mpc assignment and the owner's Week 2 notes. courseAlignment points to published lecture/assignment sources; the lesson remains draft. It does not copy the course's signature implementation or solutions.
 
-`make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
-verifier. Two of them are the near-miss forms of the constant trap — folding into every share, and
-folding into two shares — because a test that only catches the first would still pass the second.
+`make test` runs public tests; `make reference-test` runs author reference/mutation checks. `make verifier-down` stops that Compose environment. Record participant reading and runtime evidence in local/tests/hidden/READER.md.
+
+Values returned by submitted code are distinct from authoritative grading. Public-test inputs and the grader's additional settings are separate. These checks cover totals, formats and classification, not a proof of full malicious-secure MPC. They do not hide data from a Docker administrator.
+
+Local Compose creates no AWS resources. Containers consume host resources until stopped.

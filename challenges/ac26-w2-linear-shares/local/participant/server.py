@@ -31,6 +31,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w2-linear-shares"
@@ -70,8 +71,8 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w2-linear-shares',
     problem_name='誰とも話さずにできること',
     problem_name_en='What you can do without talking to anyone',
-    description='share に対する操作のうち、いくつかは誰とも話さずに各自の手元だけでできる。どれがそうで、どれが違うのか。1 つだけ、素直にやると間違える。',
-    description_en='Some operations on shares are local and others require interaction. Each deployment selects a different balanced four-operation quiz from the catalog.',
+    description='秘密を、足すと元に戻る数（シェア）へ分けたまま計算します。足し算・定数倍は各自の手元でできるのに、掛け算では何が足りないのでしょうか。',
+    description_en='Compute on shares: numbers whose sum recovers a secret. Addition and public scaling use each party’s own row. What is missing when the secrets must be multiplied?',
     checkpoint_labels={'add-shares': 'share 同士を足す', 'add-constant': '公開された値を足す', 'mul-constant': '公開された値を掛ける', 'no-communication': '誰とも話さずにできる操作を挙げる', 'transfer': '見たことのない設定でも成立させる'},
     checkpoint_labels_en={'add-shares': 'Add two sharings', 'add-constant': 'Add a value everyone already knows', 'mul-constant': 'Scale by a value everyone already knows', 'no-communication': 'Name what needs no talking', 'transfer': 'Hold up in settings you have not seen'},
     submitted_files=('linear.py',),
@@ -224,6 +225,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 
