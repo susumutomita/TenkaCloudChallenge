@@ -9,155 +9,127 @@
 Sharing · **Role:** `mechanism` · **Time:** 60–90 minutes · **Points:** 200
 · **Status:** draft — see "Week 2 alignment" below
 
-## The story
+## Start and repair
 
-Five auditors need to compute a total across their books without any of them learning another's
-figures. The plan on the whiteboard is simple enough: each number gets split into pieces, one per
-auditor, and only the pieces added together mean anything.
+You maintain the split of a confidential number among several holders. The starter
+hands the entire secret to one person. Repair the sharing mechanism, demonstrate
+why a missing share leaves multiple secrets compatible, and then let any two of
+three holders reconstruct when one holder is unavailable.
 
-Somebody has already written the split. It adds up correctly. It is also, as written, useless —
-and the difference between "adds up correctly" and "keeps a secret" is the whole of this problem.
+1. **Start** in Participant Portal and select **Inspect evidence** on the same page.
+2. Note `modulus p`, `parties n`, and the list under `party 0 through n-2`.
+3. Edit the six functions in `sharing.py`; the statement and starter give all needed
+   formulas with one-digit examples.
+4. **Run public tests**, then **Submit** each code checkpoint using the current editor.
+5. For `threshold`, enter the statement's JSON shape on one line using your p and n.
+   Complete all five checkpoint verdicts. No terminal or second screen is needed.
 
-Then the auditors notice the other side of that split: lose one piece and the total is gone for
-good. The last checkpoint asks for a split of a different shape — any two of three pieces bring
-the secret back, and one piece alone still says nothing.
+## Mechanism and its assumptions
 
-## The idea
+A share is one holder's piece. Numbers are remainders after division by prime p,
+written `% p` in Python. Choose n−1 random values and append
+`(secret - sum(first values)) % p`; add all shares and take `% p` to reconstruct.
+For p=7, secret 4, random values [5,6], this gives [5,6,0] and reconstructs to 4.
+A missing last share for any candidate is `(candidate - sum(partial)) % p`.
 
-Additive sharing over `F_p`: a secret `s` becomes `n` values summing to `s`. The arithmetic is
-three lines. What makes it cryptography is that **any n-1 of those values are independent of the
-secret** — and that is a claim you demonstrate, not one you assert.
+Every candidate fitting a partial list proves **compatibility**, not unchanged
+probabilities by itself. The secrecy claim assumes independent uniform randomness
+from all of 0..p−1, independent of the secret, fresh for each sharing. An observer
+sees collected shares, not the missing holders' information or the randomness list.
+Then the same partial observation has the same likelihood for every secret, leaving
+its probabilities from before the observation unchanged. Zero draws are valid; a rule that always copies
+the secret is different from a valid random draw that happens to contain zeros.
 
-## Participant Portal workflow
+Refreshing adds a zero-total sharing. The exercise checks visible change on nonzero
+adjustment inputs; general uniform randomness can leave the original values unchanged.
+Shamir two-of-three uses `y=(secret+r*x) % p` at x=1,2,3 with **prime p>3** and
+uniform independent r, including zero. Two points recover x=0 by the statement's
+inverse procedure; one point has the same likelihood for each secret.
 
-1. Start the problem in Participant Portal; the problem editor appears on the same page.
-2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
-3. Edit the starter source in the Portal editor.
-4. Select **Run public tests** and fill any direct-answer fields from the evidence.
-5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
+This is a component of MPC (several holders computing jointly without revealing
+inputs), not a complete MPC, signature, or wallet protocol. Local addition,
+multiplication, and the rules for revealing an output require further mechanisms.
 
-No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
-checkpoints use the current editor source. Direct answers are bound to the current deployment
-seed, so a value copied from another deployment is rejected.
+## Scoring and feedback
 
-## Scoring
-
-Five checkpoints, scored independently. Wrong answers cost 10 points each.
-
-| Checkpoint | Points | What is checked |
+| Checkpoint | Points | Participant outcome |
 |---|---:|---|
-| `share-and-reconstruct` | 50 | Round trip across four settings, **and** the split is not trivial |
-| `hides-the-secret` | 45 | Your completion works for **every** secret in the field |
-| `threshold` | 45 | How many shares are needed, plus two witnesses |
-| `rerandomize` | 30 | Secret preserved, output not identical to the input |
-| `two-of-three` | 30 | A line split: any 2 of 3 points walk back to the secret (6 orders), each point alone fits every secret, on unseen moduli including two around 10⁴ |
+| `share-and-reconstruct` | 50 | Use the supplied randomness; recover from all shares |
+| `hides-the-secret` | 45 | Construct a missing share for any candidate secret |
+| `threshold` | 45 | Give the required count and two compatible completions |
+| `rerandomize` | 30 | Refresh by zero-total adjustments, preserving the secret |
+| `two-of-three` | 30 | Recover from any pair, while one share hides the secret under the stated assumptions |
 
-Every one of the 5 checkpoints carries three hints (hint 1 = a self-check you can run before submitting, hint 2 = the case that is easy to miss, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 15 still leaves 101 of 200.
+Wrong submissions cost 10 points. Each checkpoint has three hints: mechanism,
+one-digit formula/example, then actions using the on-screen names. IDs, points,
+and penalties are unchanged; opening all 15 hints costs 99 of 200 points.
+Public tests check shapes and reconstruction; passing them does not prove privacy.
+Submitting each checkpoint checks its required properties. A failed code checkpoint
+returns property-level feedback so you can revise and resubmit.
 
-## The three checkpoints that carry the problem
+## Week 2 sources and alignment
 
-**`hides-the-secret`** sweeps the entire field. If, holding the same n-1 shares, you can produce a
-consistent final share for *every* secret, then those n-1 shares are not evidence about the
-secret. That is an executable definition of "it does not leak", and it beats any amount of prose.
+The rewrite was checked against the actual seminar
+[`week2/problems/toy-mpc/README.md`](https://github.com/susumutomita/advanced-cryptography-2026/blob/main/week2/problems/toy-mpc/README.md)
+and the owner's [Week 2 notes, slides 15–23](https://github.com/susumutomita/advanced-cryptography-note/blob/main/week2/index.html).
+The seminar distinguishes sharing, local addition, multiplication, and revealing
+outputs. The notes distinguish additive and Shamir sharing. This problem addresses
+the sharing component only.
 
-**`threshold`** will not accept a number. You submit the count *and* two different secrets that
-are both consistent with the same n-1 shares. Guessing the number is easy; building two witnesses
-is not.
+The catalog's historical `courseAlignment` placeholder still records that Week 2
+material was absent at its pinned commit. Updating that pin and draft status is a
+separate course-sync change; the current source reading is not a claim that the
+historical pin already points to the published material.
 
-**`two-of-three`** is the ceiling. `share_line` / `reconstruct_line` are graded as a *pair*, by
-property rather than against the reference: every choice of two of the three points, in either
-order, must walk back to the secret, and for each party's point every secret in the field must be
-producible at that position by some slope — checked through the participant's own `share_line`,
-so any correct construction passes, not only a line: exhaustively, p × p calls, on the small
-moduli, and on the large ones in the equivalent form that for a fixed secret different slopes
-must give a party different y values, on every slope 0..p−1. The moduli differ from the
-one on screen and two are around 10⁴: the trial search for "the number that multiplies the divisor
-to 1" the statement offers costs ~p steps and fits the 12-second limit, a (secret, slope) brute
-force costs ~p² and does not. The starter ships the tempting fix — a copy of the secret for everyone —
-which passes the public tests and fails the privacy property, the first checkpoint's lesson replayed.
+## Execution and assurance scope
 
-## What the public tests do not tell you
+The Workbench carries the statement's starter and public tests. Fixtures, hidden
+checks, and reference code remain in the unpublished verifier/author images.
+Both Compose services run as non-root with `init: true`, read-only filesystems,
+limited memory/PIDs, dropped capabilities, and no-new-privileges. Only the Workbench
+port is published, on loopback. The existing prepare/manual `tcw1` envelope is unchanged.
 
-They check the round trip, and for the line split they check one pair of points. They never ask
-whether a partial set hides anything — so the trivial split (hand the secret to party 0, give
-everyone else zero) passes them cleanly while party 0 knows everything from the start, and so does
-the starter's copy-to-everyone `share_line`. The hidden tests reject both by property.
+The supervisors retain the deployment seed for public evidence and sealing. Submitted
+Python is never imported into a supervisor. A separate Linux worker receives only
+source and function arguments with a clean environment. Before executing it, the
+problem-local seccomp filter denies file opens (including `/proc`), network and exec,
+and access to the same-UID supervisor. `PR_SET_DUMPABLE=0` protects supervisors.
+Values returned through JSON are untrusted; the original property comparisons run
+in the trusted verifier. Reconstruction starts a different worker containing only
+shares and the divisor, so storage by the splitting function does not transfer.
 
-## Week 2 alignment
+The total grading budget remains 12 seconds. Fixed fixture call sets are batched;
+the bounded, file-backed value transcript allows 16 MiB for the exhaustive Shamir
+checks. Success and timeout clean the worker's process group; Compose init reaps its
+orphaned descendants. A zombie PID does not count as cleanup. Public syntax/import
+or initialization failures show only `sharing.py`, a bounded line number, and an
+allowlisted exception type. Hidden failures expose property-level or generic text,
+never learner stdout, exception messages, expected results, or hidden inputs.
 
-Week 2's material was **not published upstream** at the commit `curriculum.md` records. This
-problem therefore pins `week2/README.md` with `kind: "placeholder"` — a record of the *absence* of
-material at that commit, not an alignment to it. `status` stays `draft`.
+These are exercise boundaries, not a claim of formal security or a complete MPC
+protocol. A person administering Docker still controls both containers and can inspect
+their own verifier. Local mode is self-study; an externally administered verifier is
+needed for ranking or certification ([#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271)).
 
-That pin is what lets `bun run course:drift` report `PUBLISHED` rather than `DRIFT` the day the
-material appears; the Week 2 course-sync issue then reconciles the planned row and this problem's
-alignment before it leaves draft.
+## Cost and teardown
 
-## Assurance scope
+No AWS account or cloud resources are used. Docker uses local CPU and memory while
+running. Stop the problem's own Compose project with `make verifier-down`; remove only
+the corresponding local images when no longer needed. Do not use another event's stack.
 
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
-no reference solution, no verifier. Those live only in a second, unpublished container the
-Workbench reaches over the compose network, and in the author-only image `make reference-test`
-builds.
+## Local verification for authors
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+- `make test` runs the public checks against the starter through the Linux value
+  boundary. The deliberately unfinished starter fails reconstruction; replace only
+  your local editor input when practicing. `make test-one ID=...` filters the visible
+  checks. `make inspect` shows the public example.
+- `make reference-test` builds an author image, runs the existing mutation suite, then
+  the Linux execution-boundary tests under `--init`. It rejects 27 mutations and accepts
+  the reference plus a valid alternative two-of-three construction. Boundary tests
+  cover verdict spoofing, file/environment access, supervisor control, no stored-secret
+  reconstruction, public diagnostics, zero randomness, and actual descendant reaping.
+- From the repository root, `make install && make agent-gate` validates the catalog.
 
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: ten broken additive submissions, thirteen
-self-consistent two-of-three mutants (each one's `share_line` and `reconstruct_line` agree with
-each other, so only a property can reject it), three checks aimed at the verifier — a
-`threshold` answer without witnesses, the starter's copy-to-everyone line split, and a
-`reconstruct_line` that tries every (secret, slope) pair — and one honest control that must
-*pass*: a two-of-three construction that is not the statement's line (party 2 holds the slope
-alone, parties 1 and 3 hold s + r and s + 2r), which keeps the privacy checks scheme-agnostic in
-fact and not only in the statement. The brute-force mutant is correct and waits out the verifier's
-12-second limit on the ~10⁴ moduli, so the suite takes about 16 seconds; the limit is surfaced as
-its §15 message, since the statement documents both the limit and that trying every secret cannot
-meet it. One additive mutant — `reconstruct` forgetting the modulus — **survived the first version
-of the hidden tests**, because `check_roundtrip` was normalizing the learner's answer before
-comparing it. The check now requires the canonical element. That is the mutation suite doing its
-job on the tests rather than on the submission.
-
-Every reconstruction (`reconstruct`, `reconstruct_line`) runs in a separate interpreter —
-`python -I`, an empty working directory, an environment holding only PATH — that receives the
-submission source and the JSON-serialised arguments on stdin and prints JSON results, with all the
-calls of one check batched into one interpreter: a hidden run starts two of them, and the
-reference's whole hidden run measures about 0.2 seconds. Re-executing the source in a fresh module,
-which the first version did, was not enough: both copies still shared `builtins`, `sys.modules` and
-every imported module, and a `share` that stashed the secret there passed with a `reconstruct` that
-never read its shares. Four such stashes (a module global, `builtins`, a `sys.modules` entry, an
-attribute on an imported module) are in the suite and die as `reconstruct raised AttributeError` /
-`KeyError`. The interpreter is started with `PR_SET_PDEATHSIG`, so the verifier's kill on timeout
-takes it down as well instead of leaving a brute force running. What this does not close is the
-container's filesystem: both interpreters share it, and a submission that writes the secret under
-an absolute path and reads it back would need a mount namespace to stop, which a non-root verifier
-with every capability dropped cannot create.
-
-The two-of-three privacy check is deliberately scheme-agnostic. On the small-modulus cases it
-searches all p slopes for each of the p candidate secrets through the participant's own
-`share_line` (about 10⁵ calls, well under a second for the reference). On the ~10⁴ cases that would
-be 10⁸ calls per point, so the same property is checked in its equivalent form: for a fixed secret,
-slope → party i's y must be a bijection on 0..p−1 (then every y is reachable from every secret by
-exactly one slope, and one point rules nothing out), checked on every slope 0..p-1 for two secrets
-per case whose y values must be pairwise distinct (2 × p calls of `share_line` per case, about
-0.2 s) — a `share_line` that folds even one slope onto another collides here; a 300-slope sample
-caught that only when both folded slopes were drawn, about 0.1% of the time. That closes the shortcut the first
-version accepted: build the line only below p = 1000 and hand everyone a copy of the secret above
-it. The large secrets are still drawn from the upper half of the field so that a brute force
-counting up from 0 cannot finish early. Failure messages name the property (which pair check, which
-party's point, small or large modulus) and never a hidden value; the pair message does not say which
-pair, so the paid hint that explains the pair whose x differ by 2 is not pre-empted (AGENTS.md §15).
+[Reader and runtime evidence](local/tests/hidden/READER.md) records the original eight
+reading gaps, the unchanged participant-written solution, and actual prepare → verify
+results. The work was limited to this problem in #716; other problems remain separate.

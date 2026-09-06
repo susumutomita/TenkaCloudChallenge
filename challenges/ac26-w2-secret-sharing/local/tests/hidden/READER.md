@@ -1,0 +1,141 @@
+# #716: one secret-sharing problem, reading and runtime evidence
+
+Date: 2026-09-07. Baseline: `1923ddc54b20d1496b0bd959291fcfd51e0e8719`.
+This is one problem's working increment. It does not complete the remaining #716 catalog.
+No AWS service or shared event was changed. These are agent-role reading and local
+runtime checks, not a timed study with a human beginner.
+
+## Public-only first reading
+
+Before grading/runtime/reference code was read, an independent reader read the Japanese
+and English instructions, all 15 hints in both languages, and the six starter functions.
+The first pass found eight concrete gaps:
+
+1. “At least two nonzero shares” is not a secrecy criterion. Uniform draws include zero;
+   a valid random output can look like `[s,0,0]`. The defective rule is ignoring randomness
+   and always copying the secret, not that one output.
+2. A completion for every candidate proves compatibility, not unchanged probabilities.
+   State independent uniform full-range randomness, fresh draws, the observer's view,
+   and the absence of the missing holder's information. Biased randomness can preserve
+   compatibility while changing likelihoods.
+3. An analogy said that two of three numbers “summing to 10” leave the total unknown,
+   although it had just supplied the total.
+4. The starter withheld the necessary completion formula and opened with undefined
+   `F_p`; most examples used larger numbers rather than one-digit arithmetic.
+5. First hints led with testing/strategy. Refresh inputs conditioned to change the list
+   were presented as though independent random draws always differ.
+6. Shamir at positions 1,2,3 requires prime `p>3`; at p=3, position 3 is the secret's
+   position zero.
+7. Sharing is a component of MPC, not itself a complete secure computation, wallet, or
+   signature protocol. Broad product claims did not follow from these six functions.
+8. The first useful Start/Inspect action appeared after several long concept sections.
+
+The sources were the actual seminar's `week2/problems/toy-mpc/README.md` (additive
+sharing, local addition, multiplication, and output disclosure are distinct operations)
+and the owner's `week2/index.html`, slides 15–23 (additive and Shamir sharing).
+The historical catalog alignment pin remains unchanged; reading current material does
+not change what was available at that older pin.
+
+## Reader implementation and revised packet
+
+The reader wrote the six functions from the public formulas, without reading author
+code. Their source stayed unchanged through the baseline and candidate executions:
+
+`SHA256 657dcad1c86fe04c42b857c8108614a3f339a496ab5eb32f0f318689ffc5a3ca`
+
+The deployment's public Inspect showed p=139, n=3, partial=[7,18]. By hand, the partial
+sum is 25; candidate zero needs last share 114, and candidate one needs 115. The reader
+used that same two-completion JSON through the actual prepare/manual route. All four
+code checkpoints and the manual threshold passed on the baseline. An initial attempt
+to send raw manual JSON directly to `/verify` failed because it skipped the existing
+prepare envelope. That was a harness routing mistake, not a problem defect.
+
+The rewritten participant-only packet was sent to the reader **before** the author
+runtime tests began. It contained only JA/EN statements, all 30 hint texts, and the
+unfinished starter. The second pass requested three compact tables (distribution,
+zero-total refresh, and Shamir x=0 versus holders 1,2,3), a count of why probabilities
+match (1/49 for two observed shares at p=7; 1/7 for one Shamir point), plain wording for
+probabilities before observation, and “arbitrary secret without other information.”
+Those were added. The final packet was read again with no further mathematical or
+procedural gap identified. No ordinary straight line was drawn through wrapped residues.
+
+The starter executable statements were compared as ASTs with docstrings removed and
+remain unchanged. Required formulas are free in the statement/starter. Checkpoint IDs,
+points, wrong-answer penalties, hint IDs and penalties remain unchanged: 200 total
+points, 99 total hint penalties. Labels now use plain “missing piece,” “two completions,”
+and “refresh shares,” with Japanese and English metadata/server values synchronized.
+
+The random-prefix rule is an existing interface contract, not a new arbitrary grader
+restriction: baseline `local/starter/sharing.py:85–97` explicitly says to use the first
+n−1 supplied random values and adjust the last share. The old zero-count rejection was
+replaced with that contract, including all-zero draws. The line checkpoint still accepts
+a correct alternative construction, rather than requiring the reference line.
+
+## Confirmed execution defects and fixes
+
+Only boolean outcomes were recorded when reproducing the boundaries; no hidden values
+were returned or logged.
+
+- In the original actual `/api/prepare` → `/verify` route, source defining no functions
+  but printing `{"failures": []}` and exiting earned all four code checkpoints. After
+  the fix, the identical source is rejected for all four and fails public tests.
+- The original threshold route converted fractions, strings, booleans, negative values,
+  and values at/above p with `int(v) % p`. It also accepted a fractional JSON count such
+  as `3.0`. Before/after API regressions use a canonical public example and 25 malformed
+  variants. The final boundary requires actual JSON integers and canonical ranges; all
+  25 negatives are rejected without a direct-answer failure message.
+
+Submitted code now executes only in a restricted Linux worker, which receives source
+and necessary function arguments, never a seed/checker/expected verdict. Trusted code
+validates returned JSON values. A different worker reconstructs from shares alone.
+Both supervisors protect their process state, and both services use non-root users and
+`init: true`. Cleanup tests require descendant PIDs to disappear entirely; zombies are
+not accepted as cleanup. Public syntax/initialization feedback is bounded to filename,
+line, and an allowlisted exception type. Hidden execution failures remain generic.
+
+## Executed acceptance
+
+Dedicated Compose project: `ac26-secret-sharing-reader-716`, loopback port 18148,
+synthetic seed `secret-sharing-reader-716`. The conventional public port was not used.
+
+- Unchanged reader code: actual prepare → verify for all 5 checkpoints PASS; public
+  checks PASS. On the final pre-label run, the slowest checkpoint took 2.325 seconds
+  while a Docker build ran concurrently, within the unchanged 12-second grading limit.
+- Actual public API error feedback: malformed function syntax reports
+  `sharing.py:1: SyntaxError`; a module initialization exception reports
+  `sharing.py:2: RuntimeError`, without the exception message.
+- The parent Portal's real `ContainerWorkbenchPanel` was exercised in its Vitest DOM
+  harness against the dedicated HTTP runtime. Five checkpoint submissions passed
+  (test execution 3.22 seconds). This is real component/HTTP evidence, not a physical
+  Mac/browser screenshot or a human solve-time measurement.
+  The root repeated this component route after the final bilingual labels and
+  strict threshold validation: all five submissions passed again in 3.02 seconds.
+  The unchanged hand JSON passed through the existing preparation envelope.
+  Final log: `/private/tmp/secret-sharing-716-real-portal-component-final.log`;
+  harness: `/private/tmp/secret-sharing-716-portal-harness.test.tsx`. Its temporary
+  parent test file was removed afterwards, leaving that checkout clean.
+- `make reference-test IMAGE=ac26-secret-sharing-716-validation`: 27 mutants rejected,
+  reference and one different valid two-of-three construction accepted, then 11 Linux
+  execution-boundary tests. The tests cover clean environment, private/proc reads,
+  network/exec denial, same-UID supervisor control, stored-secret shortcuts, stdout
+  verdict forgery, public error bounds, zero draws, strict threshold types/ranges, and
+  complete descendant reaping after success and timeout.
+- `make install && make agent-gate`: all 116 metadata entries valid.
+- `git diff --check` and Python compilation passed.
+
+The documented `make test` was attempted with only the dedicated Compose project and
+image name overridden. This machine's Docker daemon did not see the Mac `/private/tmp`
+bind source, so that invocation stopped at a missing `/problem/starter/sharing.py`.
+This is recorded as an environment-specific CLI limitation. Running the same CLI on
+the shipped in-image starter correctly failed the unfinished `reconstruct` function;
+the reader's completed source passed the actual public API checks. No mount, test or
+checker was weakened to turn the missing bind source into a success.
+
+Evidence produced during the run (local temporary artifacts, not participant inputs):
+`/private/tmp/secret-sharing-716-reader/{first-reading.md,revised-reading.md,final-http.json,
+stdout-boundary-before.json,threshold-api-before.json,threshold-api-after.json}`,
+`/private/tmp/secret-sharing-716-reference.log`,
+`/private/tmp/secret-sharing-716-catalog.log`,
+`/private/tmp/secret-sharing-716-real-portal-component.log`.
+
+No live AWS, physical-device or independent human rehearsal was performed.

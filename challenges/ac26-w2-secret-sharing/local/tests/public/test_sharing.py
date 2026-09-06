@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
-import sharing  # noqa: E402
+from participant.public_checks import check  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -53,98 +53,24 @@ def _load_public_evidence() -> dict:
     return public_payload(SEED)
 
 
-PUBLIC = _load_public_evidence()
-
-
-def _shares() -> list[int]:
-    par = PUBLIC["params"]
-    return sharing.share(
-        PUBLIC["secret"],
-        par["n"],
-        par["p"],
-        PUBLIC["shareRandomness"],
-    )
-
-
-def _line_points() -> list:
-    return sharing.share_line(PUBLIC["secret"], PUBLIC["params"]["p"], PUBLIC["lineRandomness"])
-
-
-def test_share_returns_one_value_per_party() -> None:
-    assert len(_shares()) == PUBLIC["params"]["n"]
-
-
-def test_shares_are_field_elements() -> None:
-    p = PUBLIC["params"]["p"]
-    for value in _shares():
-        assert isinstance(value, int) and 0 <= value < p
-
-
-def test_the_full_set_reconstructs_the_secret() -> None:
-    p = PUBLIC["params"]["p"]
-    assert sharing.reconstruct(_shares(), p) == PUBLIC["secret"] % p
-
-
-def test_rerandomize_returns_one_value_per_party() -> None:
-    par = PUBLIC["params"]
-    fresh = sharing.rerandomize(
-        _shares(),
-        par["p"],
-        PUBLIC["rerandomizationRandomness"],
-    )
-    assert len(fresh) == par["n"]
-
-
-def test_share_line_returns_three_points_at_x_1_2_3() -> None:
-    p = PUBLIC["params"]["p"]
-    points = _line_points()
-    assert isinstance(points, list) and len(points) == 3, "expected three [x, y] points"
-    for party, point in zip((1, 2, 3), points):
-        assert isinstance(point, (list, tuple)) and len(point) == 2, "each point is [x, y]"
-        x, y = point
-        assert x == party, "party 1, 2, 3 hold the points at x = 1, 2, 3, in that order"
-        assert isinstance(y, int) and 0 <= y < p, "y must be inside [0, modulus)"
-
-
-def test_two_points_of_the_line_walk_back_to_the_secret() -> None:
-    p = PUBLIC["params"]["p"]
-    points = _line_points()
-    assert isinstance(points, list) and len(points) == 3, "expected three [x, y] points"
-    recovered = sharing.reconstruct_line([list(points[0]), list(points[1])], p)
-    assert recovered == PUBLIC["secret"] % p, "parties 1 and 2 together should walk back to the secret"
-
-
 def main() -> int:
+    source = (ROOT / "starter/sharing.py").read_text()
+    result = check(source, _load_public_evidence())
     only = ""
     if "--only" in sys.argv:
         index = sys.argv.index("--only")
-        only = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
-    failures = 0
-    selected = 0
-    for name, fn in sorted(globals().items()):
-        if not name.startswith("test_") or not callable(fn):
-            continue
-        if only and only not in name:
-            continue
-        selected += 1
-        try:
-            fn()
-            print(f"PASS {name}")
-        except AssertionError as error:
-            failures += 1
-            print(f"FAIL {name}: {error or 'assertion failed'}")
-        except Exception as error:  # noqa: BLE001
-            failures += 1
-            print(f"FAIL {name}: raised {type(error).__name__}")
-    print()
-    if selected == 0:
-        print(f"no public test matched --only {only!r}")
-        return 1
-    print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
-    print()
-    print("Nothing above asks whether n-1 shares hide the secret, whether the other pairs of")
-    print("points walk back to it, or whether one point alone hides it. Passing is not enough.")
-    return 1 if failures else 0
+        only = sys.argv[index+1] if index+1 < len(sys.argv) else ""
+    if only:
+        lines = [line for line in result["output"].splitlines()
+                 if line.startswith(("PASS ", "FAIL ")) and only in line]
+        if not lines:
+            print("No public test matched, or sharing.py could not run.")
+            print(result["output"])
+            return 1
+        print("\n".join(lines))
+        return 1 if any(line.startswith("FAIL ") for line in lines) else 0
+    print(result["output"])
+    return 0 if result["passed"] else 1
 
 
 if __name__ == "__main__":

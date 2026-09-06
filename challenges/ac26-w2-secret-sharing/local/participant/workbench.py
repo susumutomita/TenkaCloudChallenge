@@ -13,7 +13,6 @@ import hashlib
 import hmac
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -187,46 +186,13 @@ class PortalEditorSupport:
         sources = self._normalize_files(files)
         if isinstance(sources, str):
             return {"passed": False, "output": sources}
-        with tempfile.TemporaryDirectory() as temp_directory:
-            copied_root = Path(temp_directory) / "problem"
-            shutil.copytree(
-                self.root,
-                copied_root,
-                ignore=shutil.ignore_patterns(
-                    "__pycache__", "*.pyc", "reference", "mutation.py"
-                ),
-            )
-            for name, source in sources.items():
-                destination = copied_root / "starter" / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_text(source, encoding="utf-8")
-
-            test_files = sorted((copied_root / "tests" / "public").glob("test_*.py"))
-            if not test_files:
-                return {"passed": False, "output": "No public tests were found."}
-
-            transcript: list[str] = []
-            all_passed = True
-            for test_file in test_files:
-                result = self._run_process(
-                    [sys.executable, "-I", str(test_file)],
-                    cwd=copied_root,
-                    env=self._child_env(BROWSER_PUBLIC_TESTS="1"),
-                    timeout=self.run_timeout_seconds,
-                )
-                transcript.append(f"== {test_file.name} ==")
-                if result is None:
-                    all_passed = False
-                    transcript.append("timed out or could not start")
-                    continue
-                status, output = result
-                transcript.append(output.rstrip())
-                if status != 0:
-                    all_passed = False
-            return {
-                "passed": all_passed,
-                "output": "\n".join(transcript)[-self.max_output_bytes :],
-            }
+        from participant.public_checks import check
+        from show import _public_payload
+        try:
+            public = _public_payload()
+        except (OSError, ValueError, SystemExit):
+            return {"passed": False, "output": "Public evidence is unavailable; try Inspect evidence."}
+        return check(sources["sharing.py"], public)
 
     def prepare_submissions(self, files: object, manual: object) -> dict[str, object]:
         sources = self._normalize_files(files)
