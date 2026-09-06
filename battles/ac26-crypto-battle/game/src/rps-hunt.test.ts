@@ -7,7 +7,8 @@ import { commit, type Hand } from "./commitment.ts";
 import { huntKey, storedHuntKey } from "./hunt-key.ts";
 import { rpsReuseEvidence } from "./rps-hunt.ts";
 import type { CryptoBattleOp, CryptoBattleState } from "./types.ts";
-import RpsHunt, { RpsHuntCandidate, RpsHuntStatus } from "../../portal/RpsHunt.tsx";
+import RpsHunt, { RpsHuntCandidate, RpsHuntStatus, RpsOrderPrediction } from "../../portal/RpsHunt.tsx";
+import RpsDuel from "../../portal/RpsDuel.tsx";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import { tacticAvailability, ageProjection } from "../../portal/FastMovePanel.tsx";
 
@@ -171,14 +172,66 @@ test("old projections retain existing controls without requiring the new optiona
   expect(renderToStaticMarkup(createElement(RpsHuntStatus,{projection:old,locale:"ja"}))).toBe("");
 });
 
-test("a fresh hunter cannot predict after the target has privately opened", () => {
+test("a fresh hunter can predict while only the judge holds the target opening", () => {
   let s = ready(["a", "b", "c", "d"]);
   const target = order(s, "b"), peer = target.task.opponentTeamId;
   s = seal(s, peer, 1, 7);
   const op = prediction(s);
   s = open(s, "b", 2, 2);
+  expect(validateOp(s, "c", op)).toEqual({ ok: true });
+  const view = projectForTeam(s, "c");
+  const projected = view.rpsHunt!.targets.find(t => t.targetTeamId === "b")!;
+  expect(projected.openingHeld).toBe(true);
+  expect(projected).not.toHaveProperty("hand");
+  expect(projected).not.toHaveProperty("randomness");
+  expect(view.publicLedger.filter(a => a.kind === "rps-open" && a.duelId === target.task.duelId)).toEqual([]);
+  s = move(s, "c", op);
+  expect(projectForTeam(s, "c").rpsHunt!.lastResult).toBeUndefined();
   expect(validateOp(s, "c", op).ok).toBe(false);
-  expect(projectForTeam(s, "c").rpsHunt!.targets.some(t => t.targetTeamId === "b")).toBe(false);
+  s = open(s, peer, 1, 7);
+  expect(s.teams.c!.lastRpsHunt).toMatchObject({ outcome: "hit", points: 25 });
+  expect(validateOp(s, "a", op).ok).toBe(false);
+});
+
+test("a prediction and final opening revalidate safely in either winning-write order", () => {
+  let snapshot = seal(ready(), "a", 1, 7);
+  const predictionOp = prediction(snapshot);
+  snapshot = open(snapshot, "b", 2, 2);
+  const openingOp: CryptoBattleOp = { kind: "rps-open", contractId: order(snapshot, "a").id, hand: 1, randomness: 7 };
+  expect(validateOp(snapshot, "a", predictionOp).ok).toBe(true);
+  expect(validateOp(snapshot, "a", openingOp).ok).toBe(true);
+  // The host retries a losing state version by reading and validating again.
+  const predictionFirst = move(snapshot, "a", predictionOp);
+  const both = move(predictionFirst, "a", openingOp);
+  expect(both.teams.a!.lastRpsHunt).toMatchObject({ outcome: "hit", points: 25 });
+  const openingFirst = move(snapshot, "a", openingOp);
+  expect(validateOp(openingFirst, "a", predictionOp).ok).toBe(false);
+  expect(openingFirst.teams.a!.lastRpsHunt).toBeUndefined();
+  expect(projectForTeam(openingFirst, "a").rpsHunt!.targets).toEqual([]);
+  expect(validateOp(tick(snapshot, order(snapshot, "a").expiresAtMs), "a", predictionOp).ok).toBe(false);
+});
+
+test("the active RPS answer presents optional prediction before its own opening control", () => {
+  let s = seal(ready(), "a", 1, 7);
+  s = open(s, "b", 2, 2);
+  const p = projectForTeam(s, "a");
+  const selected = p.myContracts.find(c => c.id === order(s, "a").id)!;
+  const props = { projection: p, locale: "ja" as const, submitting: false, onSubmit: async () => {} };
+  const html = renderToStaticMarkup(createElement(RpsDuel, {
+    order: selected, opponentName: "b", locale: "ja", submitting: false, onSubmit: async () => {},
+    prediction: createElement(RpsOrderPrediction, { ...props, order: selected }),
+  }));
+  expect(html).toContain("相手の手は審判が預かっています");
+  expect(html).toContain("受付中");
+  expect(html).toContain("予測せず、通常の回答を続けてもかまいません");
+  expect(html).toContain("手と r を毎回独立に等確率で選ぶ場合");
+  expect(html).toContain("的中率も3分の1");
+  expect(html.indexOf("予測を審判へ預ける")).toBeLessThan(html.indexOf(">手を審判へ渡す</button>"));
+  const pending = move(s, "a", prediction(s));
+  const accepted = renderToStaticMarkup(createElement(RpsOrderPrediction, { ...props, order: selected, projection: projectForTeam(pending, "a") }));
+  expect(accepted).toContain("予測を受け付けました");
+  expect(accepted).toContain("まだ採点していません");
+  expect(accepted).not.toContain("予測を審判へ預ける");
 });
 
 test("a wrong prediction at zero points reports the actual zero deduction", () => {
@@ -194,6 +247,7 @@ test("prediction controls reject malformed payloads and expire between polls", (
   expect(isCryptoBattleProjection(p)).toBe(true);
   const { rpsHunt, ...old } = p;
   expect(isCryptoBattleProjection(old)).toBe(true);
+  expect(isCryptoBattleProjection({ ...p, rpsHunt: { ...rpsHunt, targets: [{ ...rpsHunt!.targets[0], openingHeld: "true" }] } })).toBe(false);
   for (const bad of [null, {}, { ...rpsHunt, targets: null }, { ...rpsHunt, pending: [null] }, { ...rpsHunt, targets: [{ ...rpsHunt!.targets[0], evidence: [null] }] }, { ...rpsHunt, lastResult: { outcome: "other" } }]) expect(isCryptoBattleProjection({ ...p, rpsHunt: bad })).toBe(false);
   const aged = ageProjection(p, p.rpsHunt!.targets[0]!.remainingMs + 1)!;
   expect(aged.rpsHunt!.targets[0]!.remainingMs).toBe(0);

@@ -401,6 +401,8 @@ export interface RpsHuntTarget {
   readonly duelId: string;
   readonly generation: number;
   readonly commitment: number;
+  /** Public status only; the opponent's opening values remain private. Optional for older hosts. */
+  readonly openingHeld?: boolean;
   readonly remainingMs: number;
   readonly evidence: readonly RpsOpenArtifact[];
 }

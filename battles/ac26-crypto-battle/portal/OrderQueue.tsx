@@ -110,6 +110,7 @@ export const ORDER_QUEUE_CSS = `
 .tc-order-queue{position:sticky;top:8px;z-index:5;display:flex;flex-direction:column;background:#f6f8fb;border-radius:12px;box-shadow:0 4px 12px #1e3a5f14;max-height:48vh;overflow:hidden}
 .tc-order-open{min-height:0;overflow:auto;scrollbar-gutter:stable;scroll-padding-block:36px 8px}
 .tc-workspace,.tc-result-anchor{scroll-margin-top:calc(48vh + 24px)}
+.tc-workspace :is(input,select,button,summary),.tc-hunt-workspace :is(input,select,button,summary){scroll-margin-top:calc(48vh + 64px);scroll-margin-bottom:64px}
 .tc-order-notice{flex:none;font-size:13px;font-weight:650;line-height:1.45;color:#174e78;padding:6px 12px}.tc-order-notice:empty{display:none}
 .tc-order-belt-compact{border:1px solid #b9cbe0;background:#fff;margin:0;padding:10px}
 .tc-order-belt-compact .tc-section-label{position:sticky;top:0;z-index:1;background:#fff;font-size:12px;letter-spacing:0;margin-bottom:6px;padding:4px 0}
@@ -127,7 +128,7 @@ export const ORDER_QUEUE_CSS = `
 .tc-order-recent li[data-order-result="expired"]{border-color:#d0b7a4;background:#fff7ef}.tc-order-recent li>span{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tc-order-recent li[data-order-result="voided"]{border-color:#a8bdd4;background:#eef4fc}
 @media(max-width:600px){.tc-order-queue{top:0;max-height:42vh}.tc-workspace,.tc-result-anchor{scroll-margin-top:calc(42vh + 24px)}.tc-order-belt-compact .tc-order-row{grid-template-columns:repeat(2,minmax(0,1fr))}.tc-order-belt-compact{padding:6px}.tc-order-belt-compact .tc-order-card{padding:6px}.tc-order-belt-compact .tc-order-meta{font-size:11px}.tc-order-belt-compact .tc-order-deadline{font-size:13px}}
-@media(max-width:1023px){.tc-order-queue{top:40px}}
-@media(max-height:520px){.tc-order-queue{max-height:28vh}.tc-workspace,.tc-result-anchor{scroll-margin-top:calc(28vh + 64px)}}
+@media(max-width:1023px){.tc-order-queue{top:40px}.tc-workspace,.tc-result-anchor{scroll-margin-top:calc(48vh + 64px)}}
+@media(max-height:520px){.tc-order-queue{max-height:28vh}.tc-workspace,.tc-result-anchor,.tc-workspace :is(input,select,button,summary),.tc-hunt-workspace :is(input,select,button,summary){scroll-margin-top:calc(28vh + 64px)}}
 @media(prefers-reduced-motion:reduce){.tc-order-queue *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 `;
