@@ -261,8 +261,8 @@ export function checkPracticeAnswer(index: number, value: string): boolean {
 
 const buttonStyle = { cursor: "pointer", padding: "8px 12px", border: "1px solid #b4c5da", borderRadius: 7, background: "#fff", color: "#315f91", fontSize: 13 } as const;
 
-export default function TutorialWalkthrough({ locale }: { readonly locale: Locale }) {
-  const [visible, setVisible] = useState(false);
+export default function TutorialWalkthrough({ locale, embedded = false, onDone }: { readonly locale: Locale; readonly embedded?: boolean; readonly onDone?: () => void }) {
+  const [visible, setVisible] = useState(embedded);
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [verdict, setVerdict] = useState<"correct" | "wrong" | null>(null);
@@ -272,10 +272,10 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
   if (!visible) return <div aria-label="crypto-battle-tutorial-collapsed">
     <button type="button" aria-expanded={false} style={buttonStyle} onClick={() => setVisible(true)}>{locale === "ja" ? "順番に解説を読む（任意）" : "Read the guided explanation (optional)"}</button>
   </div>;
-  return <section aria-label="crypto-battle-tutorial" style={{ border: "1px solid #b4c5da", borderRadius: 10, padding: 18, color: "#16212e", background: "#fff", marginTop: 10 }}>
+  return <section aria-label="crypto-battle-tutorial" style={{ border: embedded ? undefined : "1px solid #b4c5da", borderRadius: 10, padding: embedded ? 0 : 18, color: "#16212e", background: "#fff", marginTop: embedded ? 0 : 10 }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
       <strong>{locale === "ja" ? "暗号のしくみを、一つずつ追う" : "Follow the cryptography, one scene at a time"}</strong>
-      <button type="button" style={buttonStyle} aria-expanded={true} onClick={() => setVisible(false)}>{locale === "ja" ? "解説を閉じる" : "Close explanation"}</button>
+      {!embedded && <button type="button" style={buttonStyle} aria-expanded={true} onClick={() => setVisible(false)}>{locale === "ja" ? "解説を閉じる" : "Close explanation"}</button>}
     </div>
     <p style={{ fontSize: 12, color: "#526277" }}>{locale === "ja" ? "一桁の穴埋め。読むだけでもOK・得点への影響なし。" : "One-digit practice. Reading only is fine. No score impact."}</p>
     <p style={{ fontSize: 12, color: "#315f91" }}>{index + 1} / {PRACTICE_STEPS.length}</p>
@@ -298,7 +298,7 @@ export default function TutorialWalkthrough({ locale }: { readonly locale: Local
       {index > 0 && <button type="button" style={buttonStyle} onClick={() => move(index - 1)}>{locale === "ja" ? "前の場面へ" : "Previous scene"}</button>}
       {index + 1 < PRACTICE_STEPS.length
         ? <button type="button" style={buttonStyle} onClick={() => move(index + 1)}>{locale === "ja" ? "次の場面へ" : "Next scene"}</button>
-        : <button type="button" style={buttonStyle} onClick={() => { setVisible(false); move(0); }}>{locale === "ja" ? "解説を閉じて、お題へ戻る" : "Close the explanation and return to the Order"}</button>}
+        : <button type="button" style={buttonStyle} onClick={() => { if (onDone) onDone(); else setVisible(false); move(0); }}>{locale === "ja" ? "解説を閉じて、お題へ戻る" : "Close the explanation and return to the Order"}</button>}
     </div>
     <details key={index} style={{ fontSize: 13, lineHeight: 1.7 }}>
       <summary style={{ cursor: "pointer" }}>{locale === "ja" ? "計算の手順と、そうなる理由" : "Calculation steps and why this works"}</summary>

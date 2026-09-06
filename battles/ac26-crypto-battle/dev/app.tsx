@@ -23,7 +23,6 @@ import type {
   PortalLocale,
   PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
-import HelpDrawer from "../portal/HelpDrawer.tsx";
 import StatusPanel from "../portal/StatusPanel.tsx";
 import { SCENARIO_LABELS, type ScenarioId } from "./scenarios.ts";
 
@@ -246,18 +245,12 @@ function Harness() {
           them. Anything else under `../portal/` reaches the screen the same way
           it does in production: as an import of one of these.
 
-          [Issue #659] There are two now. `RegistrationPanel` was dropped from
-          the declaration when the board and the controls became one surface —
-          the harness has to mirror that or it shows a layout production no
-          longer has.
+          StatusPanel owns the game and its optional help dialogs. Rendering a
+          separate HelpDrawer here would duplicate a slot metadata no longer declares.
         */}
         <section className="dev-slot">
           <h2>StatusPanel</h2>
           <StatusPanel {...slotProps} />
-        </section>
-        <section className="dev-slot">
-          <h2>HelpDrawer</h2>
-          <HelpDrawer {...slotProps} />
         </section>
       </div>
     </>

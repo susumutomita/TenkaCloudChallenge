@@ -317,12 +317,14 @@ export function OrderBelt({
                   </span>
                 </div>
                 <div className="tc-order-meta">
-                  <span className="tc-order-deadline">{urgency ? (locale === "ja" ? "締切間近 · " : "Due soon · ") : ""}{copy.time} {formatDuration(order.remainingMs)}</span>
-                  <span>{taskLabel(order.task, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
-                  {compact && <span className="tc-order-state">
+                  <span className="tc-order-clock-state">
+                    <span className="tc-order-deadline">{urgency ? (locale === "ja" ? "締切間近 · " : "Due soon · ") : ""}{copy.time} {formatDuration(order.remainingMs)}</span>
+                    {compact && <span className="tc-order-state">
                     {selectedId === order.id ? (locale === "ja" ? "✓ 選択中" : "✓ Selected") : (locale === "ja" ? "未回答" : "Unanswered")}
                     {newIds.includes(order.id) && <b className="tc-order-arrived">{locale === "ja" ? "到着" : "New"}</b>}
-                  </span>}
+                    </span>}
+                  </span>
+                  <span>{taskLabel(order.task, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
                 </div>
                 {/*
                   [Issue #645] Which methods THIS Order accepts, on the card

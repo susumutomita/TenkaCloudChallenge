@@ -138,31 +138,22 @@ describe("optional arithmetic practice", () => {
   });
 
   for (const locale of ["ja", "en"] as const) {
-    it(`keeps explanation and practice accessible in a closed disclosure above the board (${locale})`, () => {
+    it(`keeps help above the board without nesting tutorials in the live play surface (${locale})`, () => {
       const status = renderToStaticMarkup(createElement(StatusPanel, slotProps(locale)));
-      const help = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
-      const html = status + help;
-      const tutorialTitle = locale === "ja" ? "順番に解説を読む（任意）" : "Read the guided explanation (optional)";
-      const explanation = locale === "ja" ? "この問題の解説" : "How this problem works";
-      const fullReference = locale === "ja" ? "完全なルール" : "complete rules";
+      const tutorialTitle = locale === "ja" ? "一桁の穴埋めで練習" : "One-digit practice";
+      const playTitle = locale === "ja" ? "遊び方" : "How to play";
       expect(status).toContain(tutorialTitle);
-      expect(status).toContain('aria-label="crypto-battle-tutorial-collapsed"');
-      expect(status).toContain('aria-expanded="false"');
+      expect(status).toContain(playTitle);
+      expect(status.match(/aria-haspopup="dialog"/g)).toHaveLength(4);
+      expect(status).toContain("<dialog");
+      expect(status).not.toContain("<dialog open");
       expect(status).not.toContain('aria-label="crypto-battle-tutorial"');
-      expect(status.indexOf(explanation)).toBeGreaterThanOrEqual(0);
-      expect(status.indexOf(explanation)).toBeLessThan(status.indexOf(tutorialTitle));
-      expect(status.indexOf(explanation)).toBeGreaterThan(status.indexOf("<details"));
-      expect(status).toContain(locale === "ja" ? "この問題の解説・練習（任意）" : "How to play and practice (optional)");
-      expect(status).not.toContain("<details open");
-      expect(status).not.toContain("tutorial-contract-a");
-      expect(help).not.toContain(tutorialTitle);
+      expect(status).not.toContain('aria-label="crypto-battle-quick-rules"');
       const raw = locale === "ja" ? "生の試合データ" : "Raw match data";
       expect(status.indexOf(tutorialTitle)).toBeLessThan(status.indexOf(raw));
-      expect(status).toContain("color:#16212e");
-      expect(html).toContain("<details");
-      expect(html.indexOf(tutorialTitle)).toBeLessThan(html.indexOf(fullReference));
-      // [Issue #709] The snippet opens with the relabelling table.
-      expect(html).toContain("table = {1: 3, 2: 1, 3: 4, 4: 2}");
+      // The reference remains a separately readable entry, never pre-expanded into play.
+      const help = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
+      expect(help).toContain("table = {1: 3, 2: 1, 3: 4, 4: 2}");
     });
   }
 });
