@@ -52,6 +52,16 @@ export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "du
  *   value being published. Only methods that publish nothing reconstructable
  *   qualify, which today means PROVE alone. This is #645's Level-1
  *   "技術指定 Order": the constraint is stated, and exactly one method meets it.
+ * `"must-disclose"` — [Issue #740] the opposite rule: the Order's client is
+ *   buying the value itself, so only a method that PUBLISHES it qualifies,
+ *   which today means LEAK alone. It exists because a match between two
+ *   competent teams otherwise never connects: with computing paying three
+ *   times what leaking pays, nobody leaks, every attack needs a leak, and the
+ *   live run measured zero attacks in forty minutes. A disclosure the rules
+ *   demand is not a mistake, so the exposure it creates is one every team
+ *   carries in equal measure -- and HUNT becomes a reading of the board rather
+ *   than a punishment for the team that fell behind. It pays full price (see
+ *   `reducer.ts`'s issuance), so the only cost is the exposure.
  *
  * Stored on the Order rather than derived from `allowedMethods` because the
  * constraint is the REASON and the method list is the consequence. A
@@ -59,7 +69,7 @@ export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "du
  * client will not accept the raw value published" learns why, and can carry
  * that to an Order whose allowed set they have not seen before.
  */
-export type PrivacyConstraint = "none" | "no-raw-disclosure";
+export type PrivacyConstraint = "none" | "no-raw-disclosure" | "must-disclose";
 
 /** What the platform knows about one method, independent of any Order. */
 export interface SubmissionMethodSpec {
@@ -153,6 +163,7 @@ export function methodSatisfiesConstraint(
   constraint: PrivacyConstraint,
 ): boolean {
   if (constraint === "none") return true;
+  if (constraint === "must-disclose") return SUBMISSION_METHODS[method].publishesRawSecretMaterial;
   return !SUBMISSION_METHODS[method].publishesRawSecretMaterial;
 }
 

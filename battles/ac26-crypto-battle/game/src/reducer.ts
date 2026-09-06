@@ -852,15 +852,20 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         continue;
       }
       const contractId = `${teamId}-c${sequenceIndex}`;
+      const points = plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract;
       issued.push({
         id: contractId,
         teamId,
         kind: plan.kind,
-        points: plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract,
+        points,
         // [Issue #659] LEAK pays the same on a rush Order as on a standard one:
         // rush pays more for the SPEED of computing it, and letting the system
         // answer is not faster work, it is no work.
-        leakPoints: state.config.scores.contractLeak,
+        // [Issue #740] Except on a disclosure Order, where LEAK is the job the
+        // client is paying for: it pays the Order's own rate (rush included),
+        // so the only cost of answering it is the exposure, and letting it
+        // lapse to stay hidden is never the better trade.
+        leakPoints: plan.privacyConstraint === "must-disclose" ? points : state.config.scores.contractLeak,
         task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
         issuedAtMs: nextContractAtMs,
         expiresAtMs,

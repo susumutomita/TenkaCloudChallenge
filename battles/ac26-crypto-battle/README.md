@@ -60,6 +60,7 @@ The opening has one Order. The first batch of six arrives one minute later; furt
 | What the card asks for | What you do |
 | --- | --- |
 | reveal a share | choose LEAK or PROVE |
+| publish a share (publication required) | LEAK only, full points; the cost is one more public share. ROTATE first to avoid it |
 | show it without showing it | PROVE: relabel your sudoku solution with an unused table and open the line asked for |
 | encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
 | encrypted addition | add both pairs component by component, remainder p |

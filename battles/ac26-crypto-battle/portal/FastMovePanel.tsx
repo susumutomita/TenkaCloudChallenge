@@ -1251,6 +1251,18 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <span>{locale === "ja"
               ? `秘密分散：秘密を複数の数（シェア）に分けて保管。${projection.vault.shares.length} 個中 ${projection.threshold} 個で元の秘密を復元できます。`
               : `Secret sharing splits a secret into numbers called shares. Any ${projection.threshold} of ${projection.vault.shares.length} shares recover it.`}</span>
+            {/*
+              [Issue #740] The disclosure Order says what it is before the one
+              button below it: the rules are asking for the share, it pays
+              what computing would, and the cost is the exposure it adds --
+              which the LEAK button's risk line counts. ROTATE is the way to
+              retire that exposure, at the price of the Orders still open.
+            */}
+            {selectedOrder.privacyConstraint === "must-disclose" && (
+              <span className="tc-share-primer-rule">{locale === "ja"
+                ? " この依頼はかけらの公開が条件です。得点は計算と同じ満額で、代わりに公開済みのかけらが 1 個増えます。増やしたくなければ、先に ROTATE で世代を変えます (開いている依頼は無効になります)。"
+                : " This request requires publishing the share. It pays the full computing rate; the cost is one more public share. To avoid that, ROTATE to a new generation first (open Orders are voided)."}</span>
+            )}
           </p>
         )}
         <div className="tc-primary-actions">

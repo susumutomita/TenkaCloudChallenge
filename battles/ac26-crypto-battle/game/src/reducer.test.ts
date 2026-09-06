@@ -306,8 +306,10 @@ describe("leak", () => {
     // [Issue #659] LEAK now posts a share on a share Order and a
     // (plaintext, ciphertext) pair on a ladder Order, so this test names the
     // one it is about. `ladder.test.ts` covers the other.
+    // [Issue #740] The FREE share Order: a disclosure Order also accepts LEAK
+    // but pays its full rate, which the test right after this one pins.
     const { state, order: contract } = orderMatching(
-      (c) => allowsLeak(c) && c.task.kind === "reveal-share",
+      (c) => allowsLeak(c) && c.task.kind === "reveal-share" && c.privacyConstraint === "none",
     );
     const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
 
@@ -328,6 +330,22 @@ describe("leak", () => {
     const teamShare = state.teams.teamA?.shares.find((s) => s.index === posted.i);
     if (!teamShare) throw new Error("expected a matching share on the team");
     expect(posted.v).toBe(teamShare.value);
+  });
+
+  /**
+   * [Issue #740] A disclosure Order is LEAK by rule, at the Order's own rate:
+   * the client is buying the share, so publishing it is the whole job. What
+   * the team pays is the exposure -- one more public index on its generation.
+   */
+  test("a disclosure Order pays its full rate on LEAK, and posts the share like any other", () => {
+    const { state, order: contract } = orderMatching(
+      (c) => c.task.kind === "reveal-share" && c.privacyConstraint === "must-disclose",
+    );
+    expect(contract.allowedMethods).toEqual(["leak"]);
+    expect(contract.leakPoints).toBe(contract.points);
+    const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
+    expect(next.teams.teamA?.score).toBe(contract.points);
+    expect(next.publicLedger.some((a) => a.k === "share" && a.tm === "teamA")).toBe(true);
   });
 
   test("the same contract cannot be leaked twice", () => {

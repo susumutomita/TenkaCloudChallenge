@@ -266,9 +266,16 @@ export interface ContractPlan {
  * meets an FHE Order and an MPC Order, and a probabilistic schedule can leave a
  * short match with neither. Deterministic rotation also keeps a replay honest.
  *
- * Every task kind takes one slot of five: the share Order (the one with a
+ * Every task kind takes one slot of six: the share Order (the one with a
  * genuine LEAK / PROVE choice, #645's Level-3 Order), the cipher ladder, FHE,
- * the ZK sudoku proof, and MPC.
+ * the ZK sudoku proof, MPC, and [Issue #740] the disclosure Order -- a share
+ * Order whose client is buying the share itself, so LEAK is the only answer.
+ * Its share index steps through 1..shareCount on consecutive disclosures, so
+ * three of them on one generation are three DISTINCT indices: the threshold.
+ * A team that keeps its generation through three disclosures is huntable by
+ * rule, not by mistake; ROTATE before the third is the way out, and it costs
+ * the Orders still open. That is the decision the live run said the match was
+ * missing.
  */
 export function deriveContractPlan(
   seed: string,
@@ -287,12 +294,16 @@ export function deriveContractPlan(
   // the belt. The PROVE-only slot is now the ZK sudoku Order outright: same
   // proof, stated as its own job, so a team meets the relabelling once per
   // rotation rather than only when a share Order happens to forbid LEAK.
-  const TASK_ROTATION: readonly Exclude<OrderTaskKind, "rps-duel">[] = [
-    "reveal-share",
-    "caesar-shift",
-    "homomorphic-sum",
-    "zk-sudoku",
-    "masked-total",
+  const TASK_ROTATION: readonly { readonly taskKind: Exclude<OrderTaskKind, "rps-duel">; readonly mustDisclose?: true }[] = [
+    { taskKind: "reveal-share" },
+    { taskKind: "caesar-shift" },
+    { taskKind: "homomorphic-sum" },
+    { taskKind: "zk-sudoku" },
+    { taskKind: "masked-total" },
+    // [Issue #740] The disclosure slot. Last in the cycle so the first five
+    // Orders after the opener still show every mechanism once before the
+    // rules start demanding shares.
+    { taskKind: "reveal-share", mustDisclose: true },
   ];
   // [Issue #689] The very first Order is fixed, for every team and every seed.
   //
@@ -318,8 +329,15 @@ export function deriveContractPlan(
   const kindRoll = deriveBigInt(seed, `contract-kind:${teamId}`, sequenceIndex, config.prime);
   const kind: ContractKind = kindRoll % RUSH_MODULUS === 0n ? "rush" : "standard";
   const indexRoll = deriveBigInt(seed, `contract-index:${teamId}`, sequenceIndex, config.prime);
-  const shareIndex = Number(indexRoll % BigInt(config.shareCount)) + 1;
-  const taskKind = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? "reveal-share";
+  const slot = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? { taskKind: "reveal-share" as const };
+  const taskKind = slot.taskKind;
+  // [Issue #740] A disclosure names the next index in 1..shareCount, counted
+  // per cycle, so consecutive disclosures never repeat an index: the k-th
+  // disclosure on a generation is the k-th distinct share out. A free share
+  // Order keeps its seeded roll.
+  const shareIndex = slot.mustDisclose
+    ? (Math.floor(sequenceIndex / TASK_ROTATION.length) % config.shareCount) + 1
+    : Number(indexRoll % BigInt(config.shareCount)) + 1;
   // FHE, MPC and the sudoku proof publish nothing reconstructable by
   // construction, so their Orders state that rule rather than rolling for it.
   // [Issue #659] A ladder Order never forbids disclosure. The decision it puts
@@ -329,8 +347,11 @@ export function deriveContractPlan(
   // [Issue #709] The share Order is always the open one now: its PROVE-only
   // variant became the `zk-sudoku` slot in the rotation above, so the privacy
   // roll it used to make has nothing left to decide.
-  const privacyConstraint: PrivacyConstraint =
-    taskKind === "caesar-shift" || taskKind === "reveal-share" ? "none" : "no-raw-disclosure";
+  const privacyConstraint: PrivacyConstraint = slot.mustDisclose
+    ? "must-disclose"
+    : taskKind === "caesar-shift" || taskKind === "reveal-share"
+      ? "none"
+      : "no-raw-disclosure";
   return {
     kind,
     taskKind,

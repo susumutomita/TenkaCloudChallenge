@@ -153,6 +153,21 @@ make agent-gate
 Order cadence, batch size and TTLs, ROTATE cooldown, threshold/share count, and
 the score values that apply to every Order.
 
+### The disclosure Order and why the match connects
+
+[Issue #740] With `scores.contract` (30) three times `scores.contractLeak`
+(10), a team that can compute never leaks, and every attack needs a leak: a
+live two-team run measured zero attacks in forty minutes. One slot of the
+six-slot Order rotation is therefore a `must-disclose` share Order: LEAK is
+its only method and it pays `scores.contract`, so the exposure is the rules'
+schedule, not a mistake, and every team carries it equally. Consecutive
+disclosures name distinct indices, so three of them on one generation reach
+`threshold`. `game/src/interaction.test.ts` plays two competent bots for the
+full match on the defaults and pins that HUNTs land in both directions; a bot
+that ROTATEs ahead of its third disclosure is never hunted and ends lower.
+Re-run that file after changing `contract`, `contractLeak`, `threshold`,
+`shareCount`, `rotateCooldownMs` or the rotation.
+
 ### Field size and HUNT attempt limits
 
 Treat `config.prime`, `config.maxHuntAttemptsPerTarget`, and
