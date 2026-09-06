@@ -32,10 +32,10 @@
   },
   "difficulty": 4,
   "estimatedDuration": "60-90 分",
-  "shortDescription": "回路を書いてテストが全部通っても、うまく作った値の組が条件をすり抜けることがある。制約が 1 本足りないと、正しくない witness まで受理される。組んで、突いて、直す——ゼロ知識証明の健全性を、内側から一度壊してみる。",
-  "description": "Week 1 の assignment-companion。 公式課題と同じアクセス制御条件・signal 名・fixture は使わず、 別の業務ルール (失効カウンタと発行者確認) の回路で「正しく組む」「constraint を 1 本抜いた穴を突く」「修復後に正常系を維持する」を一続きで体験する。\n\n題材は is-zero gadget。 回路上で「この signal は 0 か」は比較ではなく、 prover が供給する補助 signal inv を 使った 2 本の制約になる。 A: value*inv + out - 1 = 0、 B: value*out = 0。 両方必要で、 片方だけでは それぞれ別の嘘が通る。 deploy 済み回路はどちらか一方を欠いており、 どちらが欠けるかは seed で変わる。\n\nexploit checkpoint の合格条件は構造的に定義してある。 forged witness が「deploy 済み回路を充足し、 かつ intended 回路を充足しない」こと。 これは欠けた制約が実際に効いていたことの定義そのもので、 どちらの制約が落ちた場合にも同じ判定で機能する。\n\nrepair checkpoint は制約数の上限も見る。 全部盛りは修復ではない。 加えて participant 自身の forgery を 修復後の回路へ再投入し、 正常系 2 ケースが維持されることも確認する。",
-  "instructions": "## テストは全部緑。なのに、嘘が通る\n\n回路を書いて、テストを走らせて、全部通った。公開した。ところが、うまく作られた値の組が条件をすり抜けます。テストは気づきませんでした——テストは正しい入力しか試さないのに、穴は「回路が禁じ忘れたもの」の側にあるからです。\n\nゼロ知識証明では、これは **正しくない主張が「証明済み」として受理される** ことを意味します。しかもこれは珍しい事故ではなく、ZK 回路の監査で最も多く見つかる欠陥——**アンダー制約(制約が足りない状態)** です。zkRollup も秘匿送金も、回路が本当に嘘を弾くかを 1 本ずつ確かめてから世に出ます。あなたはその監査を、組んで・突いて・直すまでやります。\n\n## 前提(mod が不安なら、先に constraint-lab へ)\n\n- **数の世界**: 数は「素数で割ったあまり」だけ(復習は `ac26-w1-constraint-lab`)。分数はないので、割り算は「掛けて 1 になる相手」= 逆元を掛けます。あまり 7 の世界なら 3 × 5 = 15 ≡ 1 で、5 が 1/3 の役。本番の割る数は「証拠を確認」に出る大きい素数で、Python の `pow(a, -1, p)` で逆元が出ます。\n- **言葉**: 回路 = 「= 0 の式」(制約)の並び。witness = 変数に入れる値の一覧。**アンダー制約** = 制約が足りず、嘘の witness が通る状態。**forged witness** = 配られた回路は満たすが本来の回路は満たさない値の組。**repair** = 足りない 1 本を足すこと(思いつく制約を全部足すのは修復ではない)。**健全性(soundness)** = 嘘が通らないこと。checkpoint = 採点される小問(6 つ)。制約には `\"c-iszero-a\"` のような id が付き、「証拠を確認」に出ます。\n\n## 0 かどうかの判定は、式 2 本で書く\n\n「value が 0 のとき、そのときだけ out = 1」を 2 本で書きます。**A: value·inv + out − 1 = 0**、**B: value·out = 0**。value = 0 なら B が自動で成り、A が out = 1 を強制。value = 3 なら B が out = 0 を強制し、A が inv = 1/3 = 5 を決めます。\n\nここで **B を抜く** と、value = 3, out = 1, inv = 0 が A を満たし(3·0 + 1 − 1 = 0)、「3 は 0 だ」という嘘が通ります。**A を抜く** と value = 0, out = 0 が通る。片方ずつ、別の嘘が通ります。\n\n## 山は「1 本の欠けが、1 つの嘘を開ける」\n\n回路の強さは、制約の本数ではなく **どの嘘も塞げているか** で決まります。1 本欠けると、そこが攻撃者の通り道になる。しかも正常系のテストは嘘を試さないので、永遠に緑のまま。**「テストが通る」と「嘘が通らない」は別のこと**——後者を保証するのが健全性で、それを 1 本の欠けで崩してみるのがこの問題です。\n\n配られた回路は、本来の回路から制約を **1 本だけ** 欠いています。どちらが欠けるかは起動ごとに変わります。\n\n## 最初の一手\n\nParticipant Portal で **「起動」** を押すと、同じ画面に **問題エディタ**(`policy.py`)が出ます。\n\n**「証拠を確認」** を押すと、ポリシー(回路が守るべきルールの文章)、本番の割る数などのパラメータ、配られた回路(制約の一覧)、正常な witness 2 種(資格が失効している場合と、していない場合)、そして is-zero の 2 本(上の A・B)が表示されます。まず紙で、配られた回路を A・B と見比べ、どちらの形が欠けているか見当をつけてください。\n\n## 答えるもの — checkpoint は 6 つ、この順で\n\nファイルは `policy.py` 1 つ、4 つの関数枠が入っています。制約 1 本は docstring に書かれた決まった形の辞書(dict)で表します——数式の文字列ではありません。\n\n1. **build**(コード, 60) — `intended_circuit()`: 本来の(欠けていない)回路を制約の一覧で返します。引数が無いのは、本来の回路そのものは起動ごとに変わらないから——変わるのは「どの 1 本が欠けて配られるか」だけです。配られた回路(「証拠を確認」から書き写す)に、欠けた 1 本を足せば正解。\n2. **audit**(コード, 50) — `audit(circuit)`: 渡された回路に欠けている制約の id を挙げます。\n3. **exploit**(コード, 60) — `forge_witness(circuit, params)`: 配られた回路は満たすのに本来の回路は満たさない witness を返します。この 2 条件を両方満たすことだけが合格条件です。\n4. **root-cause**(直接回答, 40) — どの制約が欠け、それが何を許すかを、エディタに表示される形式どおりの JSON で回答欄に書きます。\n5. **repair**(コード, 50) — `repair(circuit)`: 欠けた 1 本だけを足します。2 本以上足す「全部盛り」は落ち、正常な witness 2 種が引き続き通ることも見られます。\n6. **mutation-transfer**(コード, 40) — いまの `policy.py` が、**同じ回路で欠けが別の 1 本** のものに再実行されます。変数名も制約の形も同じ。「今回は B が欠け」と決め打ちした実装はここで落ちます——渡された回路を調べて判断してください。\n\nbuild / audit / exploit / repair / mutation-transfer は、その **「提出 (+点数)」** を押すと `policy.py` から提出値が自動生成されて採点されます(root-cause だけ回答欄に JSON)。6 つは独立採点、まちがえても出し直せます(1 回 −15 点、合計は 0 未満になりません)。**「公開テストを実行」** は正常系(嘘でない普通の入力)が通るかの手元確認です。\n\n## ここで見た穴が、証明が監査される理由\n\n正しい回路を組み、欠けを突く witness を実際に作り、原因を報告し、正常系を壊さずに直し、別の欠け方でも通れば終わりです。「テストが緑でも、嘘は通りうる」——だから ZK 回路は、実装が本当に嘘を弾くかを制約 1 本ずつ監査してから世に出ます。この先の問題は証明を組み立てていきますが、その健全性を支えるのは、ここで塞いだのと同じ「欠けのない制約」です。",
-  "writeup": "## program と constraint system は同値ではない\n\n`if revoked == 0` は実行時の比較だが、 回路には比較が無い。 「0 かどうか」は prover が供給する inv を使った 2 本の制約で表す。 A は revoked != 0 のとき ok = 1 を防ぎ、 B は revoked != 0 のとき ok が 0 以外になるのを防ぐ。 片方だけ残すと、 残ったほうが防いでいない嘘がちょうど 1 つ通る。\n\n## 欠落の向きで反例の形が変わる\n\nB が欠けた場合、 A だけでは失効済み (revoked != 0) の利用者が inv = 0、 ok = 1 と主張でき、 誤ってアクセスが許可される。 A が欠けた場合、 残る B は revoked != 0 のとき ok を 0 に強制するので、 決定そのものは動かせない。 その代わり B は inv を一切読まないので、 inv を別の値に置き換えても deploy 済み回路は気づかない — 「revoked の逆数である」という inv の意味を保証するものが無くなる。 どちらも「偽の主張なのに全 residual が 0」であり、 これが underconstraint の一般形になる。\n\n## happy-path test は soundness を示さない\n\nこの問題の公開テストは starter の状態で全部通る。 starter の回路は正常な利用者 2 種類をどちらも正しく受理するからだ。 だが is-zero gadget が丸ごと無いので、 ok は何にも縛られていない。 「通る」と「守れている」は別のことで、 その差を測るには反例を作るしかない。\n\n## 修復の最小性\n\n思いつく制約を全部足すのは修復ではない。 制約が増えれば正常系を落とす危険も増える。 このため repair checkpoint は、 反例が拒否されることと正常系 2 ケースが維持されることの両方を見る。\n\n## 公式課題への接続\n\n公式課題も underconstraint を扱う。 ここで身につけるのは「どの制約がどの嘘を防いでいるか」 を言語化する読み方であって、 公式課題の答えではない。 signal 名も業務ルールも意図的に別のものにしてある。",
+  "shortDescription": "正常な値は通るのに、検査が1本足りない。式を比較し、意図しない値が通る反例を作り、正常な判定を保って修復します。",
+  "description": "Week 1 の制約監査の伴走教材。公開された入場ルールから0判定の2制約を組み、1本欠けた回路へ反例を作り、原因をJSONで報告して修復する。A欠落で補助値invだけが不正になる例と、B欠落で不正な入場許可まで可能になる例を区別する。この教材が実行するのは制約と値の検査で、ZK証明の生成・検証ではない。",
+  "instructions": "## 前提\n\nあなたは入場判定の監査担当です。**正常な入力は通るのに、必要な検査が1本抜けています。** **「起動」→「証拠を確認」**で `deployedCircuit`（配られた検査一覧）を開き、下のA・Bのどちらがないか紙で探します。その後 `policy.py` を編集します。\n\n- **信号**は式に入れる変数、**witness（値の組）**は全信号名と値を対応させた辞書です。**制約**は「式を計算して、割った余りが0になる」という検査。**回路**は制約の一覧です。足りない制約のため、意図しない値も通る状態を**アンダー制約**と呼びます。`id` は検査を区別する名前です。\n- 割る数は画面の素数 `p`。`a % p` は a を p で割った余り（mod）。例：−1を7で割った余りは6。全信号には0以上p未満の整数を入れます。\n- **逆元**は掛けた余りが1になる数。p=7なら3×5=15→余り1で、3の逆元は5。素数pで、`a % p != 0` のときだけ `pow(a, -1, p)` で計算できます。0には逆元がありません。\n\n## 入場ルールを式へ移す\n\n`revoked` は失効回数（0なら未失効）、`issuer_ok` は認められた発行者なら1、違えば0。`ok` は「失効回数が0」の印、`granted` は入場許可なら1です。`inv` は0判定を式にする補助値です。\n\n```text\n失効回数 revoked ── A・Bの0判定 ── ok ── × issuer_ok ── granted\nA: revoked × inv + ok − 1 = 0\nB: revoked × ok          = 0\n入場: ok × issuer_ok − granted = 0\n0/1の検査: b × (b − 1) = 0  （b は ok と issuer_ok）\n```\n\nここで `= 0` はすべて **pで割った余りが0**。素数pでは、積の余りが0ならどちらかの因子の余りが0です。だからbの検査は0か1に限定します。\n\n**2本が必要な理由**：revoked=0ならAがok=1を決めます。revokedが0以外ならBがok=0を決め、Aがinvを逆元にします。\n\np=7の小例：revoked=3, inv=5, ok=0ならA=15−1=14→余り0、B=0。Bを外すとinv=0, ok=1でもA=0となり、未失効のふりができます。Aを外すとinv=0, ok=0でもB=0ですが、Aは−1→余り6。この場合は**補助値の不正であり、入場結果まで不正とは限りません**。\n\n## 何を作って提出する？\n\n編集するのは `policy.py` の4関数だけです。辞書の形式はファイルの先頭にあります。**式は検査器へ渡すデータとして返します**。Pythonの `if` は使えますが、その場で計算した真偽値を制約の代わりにはできません。\n\n| 小問 | 入力 → 返すもの | 確認すること |\n|---|---|---|\n| build | `intended_circuit()` → 本来の5本の制約 | 0判定A・B、2本の0/1検査、入場の掛け算 |\n| audit | `audit(circuit)` → 欠けたidの文字列一覧（ソート順） | 完全な回路には空の一覧 |\n| exploit | `forge_witness(circuit, params)` → 値の辞書 | 配られた回路は全て0、本来の回路には0でない式がある |\n| root-cause | 原因のJSONを直接回答 | ないid、正常な値、変更後の値を報告 |\n| repair | `repair(circuit)` → 修復した制約一覧 | 元の制約を変えず、足りない1本だけ追加 |\n| mutation-transfer | 同じ `policy.py` を再提出 | 別の数・別の欠落でも同じ4関数が動く |\n\n`forge_witness` では `params` のrevokedとissuer_okを変えず、inv・ok・grantedを組み立てます。`params` は関数に渡る数の辞書です。画面の値を固定して書かず、渡された回路と数を使ってください。\n\n**root-causeの形式**（下は別の変数名による形式見本で、今回の答えではありません）：\n```json\n{\"missingConstraintId\":\"c-example\",\"manipulatedSignals\":[{\"signal\":\"helper\",\"before\":3,\"after\":0}]}\n```\n`missingConstraintId` は欠けた制約のid。`manipulatedSignals` は変更した信号だけの一覧です。`signal` に信号名、`before` に「証拠を確認」の `honestWitnesses.revokedCredential` の値、`after` に自分の反例の値を書きます。全ての変更を1回ずつ書き、値は0以上p未満の整数。Aが欠けた場合、正しい逆元とは異なる補助値なら1つの固定値に限りません。\n\n5つのコード小問は各「提出」を押すとエディタのソースを送ります。root-causeだけ回答欄へJSONを入力します。各小問は独立採点、誤答は1回−15点、得点は0未満になりません。「公開テストを実行」は正常な値と戻り値の形を確かめます。反例を試さないので、緑だけでは修復の証拠になりません。\n\n## この模型とゼロ知識証明の関係\n\n**ゼロ知識証明（ZK）**は秘密を明かさず主張の正しさを示す技術です。ここで行うのは、その前段となる**式と値の検査**で、ZK証明を生成・検証してはいません。補助値が不正に通ることと、「許可されない人を許可した」という偽の主張は区別します。6小問が通り、反例が修復後に落ち、正常な2種類の値が引き続き通れば完了です。\n",
+  "writeup": "## 制約の満たし方と、入場の正しさを区別する\n\n全ての式は素数pで割った余りが0かを調べる。A: revoked×inv+ok−1、B: revoked×ok。revoked=0ならAがok=1を決める。revokedが非零ならBがok=0を決め、Aがinvを逆元にする。Aだけで非零入力のok=0を強制できるわけではない。\n\nBが欠けた非零入力ではinv=0,ok=1でAが通り、issuer_ok=1なら入場も誤許可される。Aが欠けた場合、Bはok=0を強制するがinvを読まない。invを正しい逆元から別の値へ変えると、入場は拒否のままでも本来のAを満たさない値が通る。これは補助値の意味の欠落であり、偽の存在主張のZK証明ができたと同一視しない。\n\n## 修復の両方向\n\n不足した1本だけ追加し、配られた制約を維持する。正常な失効済み・未失効の両方が通り、反例は落ちることを別々に確かめる。最後は渡された回路・数を使う同じコードで、欠落と数が変わっても成立させる。\n",
   "tags": [
     "advanced-cryptography-2026",
     "week1",
@@ -52,12 +52,12 @@
     }
   ],
   "learningGoals": [
-    "回路が全部の嘘を塞げているか(健全性)は、テストが緑でも保証されないと言える",
-    "制約が足りない signal を見つけられる",
-    "配られた回路は満たすが本来の回路は満たさない witness を実際に作れる",
-    "その嘘が通る条件を、どの式が何を縛り忘れたかで説明できる",
-    "欠けた 1 本だけを足して、正常系を壊さずに嘘を塞げる",
-    "起動ごとに欠けが変わっても、回路を調べて同じコードで直せる"
+    "制約と値の検査をZK証明そのものと区別する",
+    "式の不足が許す補助値の不正と入場誤許可を区別する",
+    "配られた式を満たし本来の式を満たさない反例を作る",
+    "欠けたidと変更前後の値をJSONで報告する",
+    "正常な値を通すまま最小の検査を追加する",
+    "同じコードを別の数と欠落へ適用する"
   ],
   "runtime": {
     "provider": "docker",
@@ -74,69 +74,143 @@
       {
         "id": "build",
         "input": "multiline",
-        "label": "ポリシーどおりの回路を組む",
+        "label": "本来の検査を組む",
         "points": 60,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "build-hint-1",
-            "content": "回路には比較が無い。 「0 かどうか」は prover が供給する補助 signal を使った 2 本の制約で表す。 1 本では足りない。",
-            "penalty": 20
+            "content": "しくみ：制約は、提出された値を検査する条件です。正しい入場結果を計算するプログラムと、意図しない値を全て拒む検査一覧は別です。0の判定にはAとBの両方が必要です。",
+            "penalty": 5
+          },
+          {
+            "id": "build-hint-2",
+            "content": "式と小例：p=7、revoked=3,inv=5,ok=0ならA=3×5+0−1=14→0、B=3×0=0。inv=0,ok=1ではAだけ0、Bは3。両方を一覧に入れる理由を確認します。",
+            "penalty": 5
+          },
+          {
+            "id": "build-hint-3",
+            "content": "手順：policy.py先頭の辞書の形式を読みます。intended_circuitにある2本のbooleanと1本のmulを残し、AとBをiszero_a/iszero_bの辞書へ写します。変数名をrevoked・inv・okへ対応させ、idをc-iszero-a/c-iszero-bにします。buildを提出し、正解表示を確認します。",
+            "penalty": 8
           }
         ]
       },
       {
         "id": "audit",
         "input": "multiline",
-        "label": "足りない制約を特定する",
+        "label": "欠けた検査を見つける",
         "points": 50,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "audit-hint-1",
+            "content": "しくみ：監査は、必要な検査と配られた検査を比較することです。本数が同じでも種類が違えば、同じ条件を守るとは限りません。idは検査を区別する名前です。",
+            "penalty": 3
+          },
+          {
+            "id": "audit-hint-2",
+            "content": "小例：必要なidがa,b,c、配られたidがa,cなら欠けはb。Pythonでは各辞書からc[\"id\"]を読み、必要なidのうち配られた一覧にないものを残します。返す形は[\"b\"]です。",
+            "penalty": 3
+          },
+          {
+            "id": "audit-hint-3",
+            "content": "手順：auditに渡ったcircuitのid一覧とintended_circuit()のid一覧を作ります。後者にだけあるidをsortedで並べて返します。完全な一覧を入れた場合は[]になることを確認し、auditを提出します。",
+            "penalty": 4
+          }
+        ]
       },
       {
         "id": "exploit",
         "input": "multiline",
-        "label": "偽の主張を通す witness を作る",
+        "label": "検査の不足を示す値を作る",
         "points": 60,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "exploit-hint-1",
-            "content": "残っている制約が防いでいない嘘は何か。 「deploy 済み回路を満たし、 intended 回路を満たさない」witness を探す — granted が 1 になるとは限らない。",
-            "penalty": 25
+            "content": "しくみ：反例は、配られた検査を全部通る一方、本来必要な検査には落ちる値の組です。入場許可だけでなく、補助値の意味が守られているかも確かめます。",
+            "penalty": 5
+          },
+          {
+            "id": "exploit-hint-2",
+            "content": "式と小例：p=7,revoked=3では、Aだけならinv=0,ok=1でA=0、B=3。Bだけならinv=0,ok=0でB=0、A=−1→6。granted=ok×issuer_okで入場の式も0にします。前者は入場結果、後者は逆元の意味が壊れています。",
+            "penalty": 5
+          },
+          {
+            "id": "exploit-hint-3",
+            "content": "手順：渡されたcircuitをauditして欠落を読みます。paramsのrevokedとissuer_okをそのまま使い、残っているAまたはBが0になるinvとokを選びます。grantedをok×issuer_okの余りとして5信号の辞書を返します。配られた式は全て0、本来の式には0でないものがあることを確認し、exploitを提出します。",
+            "penalty": 7
           }
         ]
       },
       {
         "id": "root-cause",
-        "label": "原因を構造化して提出する",
+        "label": "原因と変更した値を報告する",
         "points": 40,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "root-cause-hint-1",
+            "content": "しくみ：原因報告では、見つけた欠落と、その結果自由になった値の対応を記録します。成功・失敗という感想ではなく、検査を再現できる名前と値を渡します。",
+            "penalty": 3
+          },
+          {
+            "id": "root-cause-hint-2",
+            "content": "小例：別の検査c-exampleが抜け、helperを3から0へ変えたなら、{\"missingConstraintId\":\"c-example\",\"manipulatedSignals\":[{\"signal\":\"helper\",\"before\":3,\"after\":0}]}。beforeは正常な値、afterは反例の値です。変更しなかった信号は書きません。",
+            "penalty": 3
+          },
+          {
+            "id": "root-cause-hint-3",
+            "content": "手順：「証拠を確認」のhonestWitnesses.revokedCredentialと自分のforge_witnessの結果を比べます。欠けたidをmissingConstraintIdへ、値が違う信号を全てmanipulatedSignalsへ入れます。before/afterは整数。問題文のJSON形式でroot-cause回答欄へ入力して提出します。",
+            "penalty": 4
+          }
+        ]
       },
       {
         "id": "repair",
         "input": "multiline",
-        "label": "正常系を壊さずに塞ぐ",
+        "label": "足りない検査だけを戻す",
         "points": 50,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "repair-hint-1",
-            "content": "思いつく制約を全部足すのは修復ではない。 加える本数の上限も見られている。",
-            "penalty": 20
+            "content": "しくみ：修復は、意図しない値を拒む条件を戻しながら、正しい値を通す条件も保つことです。制約の追加だけを目的にすると、正常な人まで拒む場合があります。",
+            "penalty": 4
+          },
+          {
+            "id": "repair-hint-2",
+            "content": "小例：必要な検査a,b,cに対し配られた検査がa,cなら、bだけを追加します。p=7のA・Bへ正常な(3,5,0)を入れると両方0。不正な(3,0,0)ではAが6で落ちます。",
+            "penalty": 4
+          },
+          {
+            "id": "repair-hint-3",
+            "content": "手順：repairに渡った一覧をコピーし、auditで欠けたidを見つけます。intended_circuitからそのidの辞書だけ追加します。元の辞書を消したり変えたりせず、正常な2種類の値は通り、自分の反例は落ちることを確認してrepairを提出します。",
+            "penalty": 5
           }
         ]
       },
       {
         "id": "mutation-transfer",
         "input": "multiline",
-        "label": "別の欠落でも成立させる",
+        "label": "別の欠落と数でも確かめる",
         "points": 40,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "transfer-hint-1",
-            "content": "反例を固定値で書いていないか。 何が欠けているかを audit してから、 その欠落に応じて組み立てる。",
-            "penalty": 15
+            "content": "しくみ：同じ欠落だけで動く修正では、別の起動で同じ問題が戻ります。最後は、欠ける検査と数が変わっても、同じ判断方法が使えるかを確かめます。",
+            "penalty": 4
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "小例：p=7で3の逆元は5、p=5で2の逆元は3です。数を固定すると別の余りの世界で意味が変わります。A欠落とB欠落でも、残った式に合わせて反例を作る必要があります。",
+            "penalty": 4
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "手順：policy.pyで画面のpやrevoked、欠けたidを固定していないか見ます。buildは固定の式一覧、audit/repairは渡された一覧、forge_witnessは一覧とparamsを使います。同じファイルでmutation-transferを提出し、別の欠落でも正解になることを確認します。",
+            "penalty": 4
           }
         ]
       }
@@ -145,64 +219,124 @@
   "i18n": {
     "en": {
       "name": "It passes, but it does not protect",
-      "shortDescription": "You wrote the circuit and every test passed — yet a crafted set of values can still slip past. One missing constraint lets a false witness through. Build it, break it, fix it — breaking a zero-knowledge proof's soundness from the inside, once.",
-      "description": "Week 1's assignment companion. It uses none of the official assignment's access-control conditions, signal names or fixtures; on a circuit for a different business rule (a revocation counter and an issuer check), it walks one continuous arc: build it right, exploit the hole left by removing a single constraint, and keep the happy path working after the repair.\n\nThe material is the is-zero gadget. On a circuit, \"is this signal 0\" is not a comparison but two constraints over a prover-supplied helper signal inv — A: value*inv + out - 1 = 0 and B: value*out = 0. Both are needed; each alone lets a different lie through. The deployed circuit is missing one of the two, and which one varies with the seed.\n\nThe exploit checkpoint's pass condition is defined structurally: the forged witness must satisfy the deployed circuit and fail the intended one. That is the definition of the missing constraint having mattered, and the same judgement works whichever constraint was dropped.\n\nThe repair checkpoint also bounds the constraint count — piling everything on is not a repair. It additionally replays the participant's own forgery against the repaired circuit and confirms the two happy-path cases still hold.",
-      "instructions": "## Every test is green. The lie still gets through\n\nYou wrote the circuit, ran the tests, all green. You shipped it. Then a carefully built set of values slips past the condition. The tests never noticed — they only try honest inputs, while the hole is on the side of what the circuit forgot to forbid.\n\nIn a zero-knowledge proof this means **a false statement is accepted as proven**. And it is not a rare accident: it is the single most common defect found in ZK circuit audits — **underconstraint**, too few constraints. Rollup circuits and private-transfer circuits are checked constraint by constraint for exactly this before they ship. Here you run that audit yourself: build, break, repair.\n\n## Before you start (shaky on mod? do constraint-lab first)\n\n- **The number world**: numbers are only \"remainders after dividing by a prime\" (recap in `ac26-w1-constraint-lab`). There are no fractions, so dividing means multiplying by \"the partner that makes 1\", the inverse: mod 7, 3 × 5 = 15 ≡ 1, so 5 plays 1/3. The real divisor is a larger prime shown by Inspect evidence, and `pow(a, -1, p)` gives the inverse in Python.\n- **Words**: circuit = a row of \"= 0\" expressions (constraints). witness = the values assigned to the variables. **underconstraint** = too few constraints, so a lying witness passes. **forged witness** = values satisfying the dealt circuit but not the intended one. **repair** = adding back the one missing line (piling on every constraint you can think of is not a repair). **soundness** = lies do not pass. checkpoint = one graded question (six here). Each constraint carries an id like `\"c-iszero-a\"`, shown by Inspect evidence.\n\n## \"Is it zero?\" takes two constraints\n\nWrite \"out = 1 exactly when value = 0\" as two lines: **A: value·inv + out − 1 = 0** and **B: value·out = 0**. If value = 0, B holds automatically and A forces out = 1. If value = 3, B forces out = 0 and A fixes inv = 1/3 = 5.\n\nNow **drop B**: value = 3, out = 1, inv = 0 satisfies A (3·0 + 1 − 1 = 0), and the lie \"3 is zero\" passes. **Drop A**: value = 0, out = 0 passes. Each dropped line opens its own kind of lie.\n\n## The crux: one missing line opens one lie\n\nA circuit's strength is not its number of constraints but **whether every lie is blocked**. Drop one and that spot becomes the attacker's way in — and the happy-path tests, which never try a lie, stay green forever. **\"Tests pass\" and \"no lie passes\" are different things**; the second is soundness, and this problem breaks it with a single missing line.\n\nThe dealt circuit is missing exactly **one** constraint from the intended one, and which one changes per start.\n\n## First move\n\nIn Participant Portal, select **起動 (Start)**; the problem editor (`policy.py`) appears on the same page.\n\nPress **Inspect evidence**. It shows the policy (the rule the circuit must enforce, in words), the parameters including the real divisor, the dealt circuit, two honest witnesses (a revoked credential and a clean one), and the two is-zero formulas (A and B above). On paper first: compare the dealt circuit against A and B and guess which shape is missing.\n\n## What you answer — six checkpoints, in this order\n\nOne file, `policy.py`, with four function stubs. A constraint is a dict of the shape documented in the docstring — not a formula string.\n\n1. **build** (code, 60) — `intended_circuit()`: return the intended, complete circuit as a list. It takes no argument because the intended circuit never changes between starts — only which line is missing from the dealt copy does. Copy the dealt circuit from Inspect evidence and add back the missing line.\n2. **audit** (code, 50) — `audit(circuit)`: name the ids of the constraints missing from the given circuit.\n3. **exploit** (code, 60) — `forge_witness(circuit, params)`: return a witness satisfying the dealt circuit while violating the intended one. Those two conditions are the whole passing bar.\n4. **root-cause** (direct answer, 40) — state which constraint is missing and what it admits, as JSON in exactly the format shown in the editor.\n5. **repair** (code, 50) — `repair(circuit)`: add back only the missing line. Adding two or more (\"add everything\") fails, and both honest witnesses must still pass.\n6. **mutation-transfer** (code, 40) — your `policy.py` re-runs on **the same circuit with a different line missing**. Names and shapes are identical, so an implementation hard-wired to \"it's B this time\" fails — inspect the given circuit and decide.\n\nFor build / audit / exploit / repair / mutation-transfer, pressing that checkpoint's **提出 (Submit, +points)** builds the submission from `policy.py` and grades it (root-cause alone is typed as JSON). The six are graded independently and wrong answers can be resubmitted (−15 points each; the total never goes below zero). **Run public tests** checks locally that honest inputs still pass.\n\n## The hole you saw here is why proofs get audited\n\nDone means: the intended circuit built, the gap exploited with a real forged witness, the cause reported, the repair minimal with honest inputs intact, and all of it holding on a differently-broken circuit. \"Green tests, and the lie still gets through\" is why ZK circuits are audited constraint by constraint before they ship. The problems ahead build proofs up; what keeps them sound is the same gap-free set of constraints you closed here.",
-      "writeup": "## A program and a constraint system are not the same thing\n\n`if revoked == 0` is a runtime comparison, and a circuit has no comparisons. 'Is it zero' is expressed with two constraints around a prover-supplied `inv`. A stops `ok = 1` when `revoked != 0`; B stops `ok` from being anything but 0 in that case. Keep only one and exactly one lie gets through — the one the survivor was not guarding.\n\n## The direction of the gap changes the shape of the counterexample\n\nWith B missing, A alone cannot stop a revoked holder claiming `inv = 0, ok = 1`, so access is wrongly granted. With A missing, the surviving B still forces `ok = 0` whenever `revoked != 0`, so the decision itself cannot move — instead, B never reads `inv`, so replacing it with any other value goes unnoticed by the deployed circuit: nothing is left enforcing that `inv` still means \"the inverse of revoked\". Both are 'a false claim with every residual zero', which is the general shape of underconstraint.\n\n## Happy-path tests do not show soundness\n\nThe public tests here all pass in the starter state, because the starter circuit accepts both honest witnesses. It also has no is-zero gadget at all, so `ok` is bound by nothing. 'It passes' and 'it protects' are different claims, and the only way to measure the gap is to build a counterexample.\n\n## Minimality of the repair\n\nAdding every constraint you can think of is not a repair; more constraints means more ways to reject an honest holder. So the repair checkpoint checks both directions: the forgery must fail and both honest cases must still pass.\n\n## Where this leads\n\nThe official exercise also deals with underconstraint. What you build here is the habit of naming which constraint prevents which lie — not its answer. The signal names and the business rule are deliberately different.",
+      "shortDescription": "Honest values pass, but one check is missing. Compare expressions, construct an unintended assignment, then repair the gap while preserving honest results.",
+      "description": "A Week 1 companion for constraint auditing. Build the two zero-check expressions from a public entry policy, construct a counterexample to a circuit missing one check, report the cause as JSON, and repair it. Missing A may invalidate only inv; missing B may falsely grant entry. This runtime evaluates assignments against constraints; it does not generate or verify zero-knowledge proofs.",
+      "instructions": "## Before you start\n\nYou audit an entry check. **Honest inputs pass, but one required check is missing.** Choose **Start → Inspect evidence**, read `deployedCircuit` (the supplied checks), and compare it with A and B below on paper. Then edit `policy.py`.\n\n- A **signal** is a variable in an expression. A **witness** is a dictionary assigning every signal a value. A **constraint** checks that an expression has remainder zero. A **circuit** is a list of constraints. **Underconstraint** means missing checks allow unintended values. An `id` is a name identifying one check.\n- The divisor is the displayed prime `p`. `a % p` means the remainder of a divided by p, also called mod. Example: −1 divided by 7 leaves 6. Use integer signal values from 0 through p−1.\n- An **inverse** multiplies a number to remainder 1. With p=7, 3×5=15 leaves 1, so 5 is the inverse of 3. For prime p, `pow(a, -1, p)` works only when `a % p != 0`. Zero has no inverse.\n\n## Translate entry rules into expressions\n\n`revoked` counts revocations (zero means unrevoked). `issuer_ok` is 1 for a recognised issuer, otherwise 0. `ok` marks a zero revocation count; `granted` is 1 for permission. `inv` is a helper value used to express the zero check.\n\n```text\nrevoked ── zero check A and B ── ok ── × issuer_ok ── granted\nA: revoked × inv + ok − 1 = 0\nB: revoked × ok          = 0\nEntry: ok × issuer_ok − granted = 0\n0/1 check: b × (b − 1) = 0  (for ok and issuer_ok)\n```\n\nEvery `= 0` means **remainder zero after division by p**. Since p is prime, a product has remainder zero only if a factor has remainder zero. Thus the b check allows only 0 or 1.\n\nWhy both lines? If revoked=0, A forces ok=1. Otherwise B forces ok=0, and A makes inv the inverse.\n\nSmall example with p=7: revoked=3, inv=5, ok=0 gives A=14→0 and B=0. Removing B permits inv=0, ok=1: A=0 even though the credential is revoked. Removing A permits inv=0, ok=0: B=0, but A=−1→6. That is an **invalid helper value; the entry decision need not be wrong**.\n\n## What do you build and submit?\n\nEdit the four functions in `policy.py`. Its opening docstring defines the dictionary formats. Return **expressions as data for the checker**. Python `if` is allowed, but returning a computed truth value does not supply a constraint.\n\n| Checkpoint | Input → return | What to check |\n|---|---|---|\n| build | `intended_circuit()` → the five intended constraints | A, B, two 0/1 checks, and entry multiplication |\n| audit | `audit(circuit)` → sorted list of missing id strings | Empty list for a complete circuit |\n| exploit | `forge_witness(circuit, params)` → witness dictionary | Each supplied expression has remainder zero; at least one intended expression does not |\n| root-cause | Type diagnosis JSON | Missing id, honest values, changed values |\n| repair | `repair(circuit)` → repaired list | Preserve supplied constraints; add only the missing one |\n| mutation-transfer | Submit the same `policy.py` again | All four functions handle other values and the other missing line |\n\nIn `forge_witness`, preserve revoked and issuer_ok from `params`, the dictionary of input numbers. Construct inv, ok and granted. Use each supplied circuit and parameters instead of hard-coding the displayed case.\n\n**root-cause format** (different names below demonstrate the format, not this task's answer):\n```json\n{\"missingConstraintId\":\"c-example\",\"manipulatedSignals\":[{\"signal\":\"helper\",\"before\":3,\"after\":0}]}\n```\n`missingConstraintId` names the absent constraint. `manipulatedSignals` lists only changed signals. For each `signal` name, copy `before` from Inspect evidence → `honestWitnesses.revokedCredential`, and use your counterexample value for `after`. Include every change once; values must be integers from 0 through p−1. With A missing, an incorrect inverse is not limited to one canonical value.\n\nFor the five code checkpoints, each **Submit** button sends the editor source. Only root-cause takes JSON in its answer field. Checkpoints are graded independently; each wrong answer costs 15 points, with a floor of zero. **Run public tests** checks honest values and return shapes. It tries no counterexample, so green alone does not establish a repair.\n\n## How this model relates to zero-knowledge proofs\n\nA **zero-knowledge proof (ZK)** demonstrates a claim without revealing its secret. This exercise checks **expressions against values**, a prerequisite; it does not generate or verify a ZK proof. An invalid helper passing is different from falsely granting access to an unauthorised holder. Finish all six checkpoints: your counterexample must fail after repair while both kinds of honest values still pass.\n",
+      "writeup": "## Assignment validity and entry correctness are different\n\nEach expression is checked for remainder zero modulo prime p. A is revoked×inv+ok−1; B is revoked×ok. When revoked=0, A forces ok=1. Otherwise B forces ok=0, and A makes inv the inverse. A alone does not force ok=0 for a nonzero input.\n\nWith B missing and revoked nonzero, inv=0 and ok=1 pass A; issuer_ok=1 then allows false entry. With A missing, B forces ok=0 but never reads inv. Replacing the honest inverse can invalidate A while entry remains correctly denied. This is an invalid helper assignment, not automatically a false existential claim proved in zero knowledge.\n\n## Check both sides of the repair\n\nPreserve the supplied constraints and add only the missing one. Test acceptance of honest revoked/clean cases separately from rejection of counterexamples. The final checkpoint uses the same functions on other numbers and the other missing line.\n",
       "learningGoals": [
-        "Say why passing tests do not prove soundness — that no lie gets through",
-        "Find the signal a missing constraint failed to pin down",
-        "Actually construct a witness that satisfies the dealt circuit but not the intended one",
-        "Explain when the lie passes, from which expression forgot to bind what",
-        "Add back only the missing line, blocking the lie without breaking honest inputs",
-        "Repair with the same code even when the missing line changes per start"
+        "Distinguish assignment checking from a zero-knowledge proof",
+        "Separate an invalid helper from a false entry decision",
+        "Construct values passing supplied checks but failing an intended check",
+        "Report a missing id and before/after values as JSON",
+        "Restore the minimal check while preserving honest acceptance",
+        "Apply the same code to other values and missing checks"
       ],
       "checks": [
         {
           "id": "build",
-          "label": "Build the circuit the policy intends",
+          "label": "Build the intended checks",
           "hints": [
             {
               "id": "build-hint-1",
-              "content": "A circuit has no comparisons. 'Is it zero' takes two constraints around a prover-supplied helper signal. One is not enough."
+              "content": "Mechanism: constraints check proposed values. Computing an honest decision and rejecting unintended assignments are different jobs. A zero check needs both A and B."
+            },
+            {
+              "id": "build-hint-2",
+              "content": "Formula and example: with p=7, revoked=3, inv=5, ok=0 gives A=14→0 and B=0. Changing inv=0, ok=1 makes only A zero; B becomes 3. This is why both checks belong in the list."
+            },
+            {
+              "id": "build-hint-3",
+              "content": "Procedure: read the dictionary formats at the top of policy.py. Keep the two boolean checks and the mul in intended_circuit; express A and B as iszero_a/iszero_b dictionaries. Map names to revoked, inv and ok; use ids c-iszero-a and c-iszero-b. Submit build and check the verdict."
             }
           ]
         },
         {
           "id": "audit",
-          "label": "Identify the missing constraint"
+          "label": "Find the missing check",
+          "hints": [
+            {
+              "id": "audit-hint-1",
+              "content": "Mechanism: auditing compares the required checks with the supplied checks. Equal counts do not imply equal rules. An id names one check."
+            },
+            {
+              "id": "audit-hint-2",
+              "content": "Example: required ids a,b,c and supplied ids a,c leave b missing. Read c[\"id\"] from each dictionary and retain required ids absent from the supplied list. Return [\"b\"]."
+            },
+            {
+              "id": "audit-hint-3",
+              "content": "Procedure: collect ids from the circuit argument and intended_circuit(). Return the required ids missing from the supplied list, sorted. Check that a complete list returns [], then submit audit."
+            }
+          ]
         },
         {
           "id": "exploit",
-          "label": "Forge a witness that carries a false claim",
+          "label": "Construct a counterexample",
           "hints": [
             {
               "id": "exploit-hint-1",
-              "content": "What lie is the surviving constraint not guarding against? Look for a witness that satisfies the deployed circuit while failing the intended one -- `granted` does not have to become 1."
+              "content": "Mechanism: a counterexample passes every supplied check but fails an intended check. Check the meaning of helper values as well as the entry decision."
+            },
+            {
+              "id": "exploit-hint-2",
+              "content": "Formula and example: p=7, revoked=3. With only A, inv=0 and ok=1 give A=0 but B=3. With only B, inv=0 and ok=0 give B=0 but A=−1→6. Set granted=ok×issuer_ok. The first breaks the decision; the second breaks the inverse helper."
+            },
+            {
+              "id": "exploit-hint-3",
+              "content": "Procedure: audit the circuit argument. Keep revoked and issuer_ok from params; choose inv and ok that satisfy the surviving A or B. Return all five signals, setting granted to the remainder of ok×issuer_ok. Check supplied expressions are all zero and an intended expression is not; submit exploit."
             }
           ]
         },
         {
           "id": "root-cause",
-          "label": "Submit the root cause in structured form"
+          "label": "Report the cause and changed values",
+          "hints": [
+            {
+              "id": "root-cause-hint-1",
+              "content": "Mechanism: the diagnosis connects a missing check to values it no longer restricts. Names and values make the defect reproducible; a bare success/failure claim does not."
+            },
+            {
+              "id": "root-cause-hint-2",
+              "content": "Example with unrelated names: a missing c-example allows helper to change from 3 to 0. Use {\"missingConstraintId\":\"c-example\",\"manipulatedSignals\":[{\"signal\":\"helper\",\"before\":3,\"after\":0}]}. before is honest; after is your counterexample. Omit unchanged signals."
+            },
+            {
+              "id": "root-cause-hint-3",
+              "content": "Procedure: compare Inspect evidence → honestWitnesses.revokedCredential with your forge_witness result. Put the absent id in missingConstraintId and every changed signal in manipulatedSignals. Use integers for before/after. Type the statement’s JSON format into root-cause and submit."
+            }
+          ]
         },
         {
           "id": "repair",
-          "label": "Close the gap without breaking the honest cases",
+          "label": "Restore only the missing check",
           "hints": [
             {
               "id": "repair-hint-1",
-              "content": "Adding every constraint you can think of is not a repair. The number you add is also checked."
+              "content": "Mechanism: a repair restores rejection of unintended assignments while retaining acceptance of honest ones. More constraints alone may reject honest holders."
+            },
+            {
+              "id": "repair-hint-2",
+              "content": "Example: required checks a,b,c and supplied checks a,c need only b added. With p=7, honest (revoked,inv,ok)=(3,5,0) makes A and B zero; (3,0,0) leaves 6 in A."
+            },
+            {
+              "id": "repair-hint-3",
+              "content": "Procedure: copy the supplied list, audit its missing id, then append only that dictionary from intended_circuit. Do not delete or change original checks. Confirm both honest cases pass and your counterexample fails; submit repair."
             }
           ]
         },
         {
           "id": "mutation-transfer",
-          "label": "Hold up when a different constraint is missing",
+          "label": "Handle another gap and other numbers",
           "hints": [
             {
               "id": "transfer-hint-1",
-              "content": "Is your counterexample a fixed value? Audit what is missing first, then build the forgery from that."
+              "content": "Mechanism: a repair that only works for today’s missing line can fail after a restart. The closing check changes the missing check and numbers while keeping the same method."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "Example: modulo 7, 3 has inverse 5; modulo 5, 2 has inverse 3. Fixed numbers lose their meaning when p changes. Missing A and missing B also require different counterexamples."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Procedure: check policy.py for fixed displayed p, revoked or missing ids. build returns the fixed intended rules; audit/repair inspect the given list; forge_witness uses that list and params. Submit the same file to mutation-transfer and confirm the other gap also passes."
             }
           ]
         }

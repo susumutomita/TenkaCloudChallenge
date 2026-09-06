@@ -22,15 +22,18 @@ from __future__ import annotations
 
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from types import SimpleNamespace
+from participant.execution import run_functions
+from participant.isolation import protect_supervisor
+from tests.hidden import check_policy
+
 
 from fixtures.generate import (
     DROPPABLE,
@@ -44,10 +47,6 @@ ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 20
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 #: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
@@ -63,22 +62,6 @@ CODE_CHECKPOINTS = {
 CHECKPOINTS = ("build", "audit", "exploit", "root-cause", "repair", "mutation-transfer")
 SUBMISSION_FILES = ("policy.py",)
 
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
-# aborts the exec, so on a macOS checkout every submission run failed — including
-# the reference. The lab runs on Linux, where the cap does apply, so skipping it on
-# Darwin does not change what participants run. See the same note in
-# ac26-bridge-experiment's verifier.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
 def _submission_sources(files: object) -> dict[str, str] | None:
     if not isinstance(files, dict):
         return None
@@ -89,43 +72,6 @@ def _submission_sources(files: object) -> dict[str, str] | None:
     if sum(len(text) for text in normalized.values()) > MAX_BODY_BYTES:
         return None
     return normalized
-
-
-def _run_submission_script(
-    sources: dict[str, str], script: str, seed: str, **extra: object
-) -> tuple[int, str] | None:
-    """Run Portal-edited Python with the verifier's existing resource limits."""
-    with tempfile.TemporaryDirectory() as workspace:
-        for name, text in sources.items():
-            (Path(workspace) / name).write_text(text, encoding="utf-8")
-        transcript = Path(workspace) / "stdout"
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [
-                        sys.executable,
-                        "-I",
-                        "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed, **extra),
-                    ],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
 
 
 def _missing_constraint_id(seed: str, label: str = "public") -> str:
@@ -205,6 +151,7 @@ def _check_root_cause(submission: object) -> bool:
     if not isinstance(answer, dict):
         return False
     expected = _expected_root_cause(SEED)
+    p = params(SEED)["p"]
     if answer.get("missingConstraintId") != expected["missingConstraintId"]:
         return False
     expected_by_signal = {c["signal"]: c for c in expected["manipulatedSignals"]}
@@ -216,7 +163,11 @@ def _check_root_cause(submission: object) -> bool:
     for entry in submitted:
         if not isinstance(entry, dict):
             return False
+        if any(type(entry.get(k)) is not int or not 0 <= entry[k] < p for k in ("before", "after")):
+            return False
         name = entry.get("signal")
+        if not isinstance(name, str):
+            return False
         if name not in expected_by_signal or name in seen:
             return False
         seen.add(name)
@@ -233,47 +184,6 @@ def _check_root_cause(submission: object) -> bool:
     return True
 
 
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_policy
-# The residual evaluator is the supplied half -- given, not written by the learner -- so a
-# submission may legitimately import it by name. The guard below takes the problem root off
-# sys.path for the submission's own import, so preload it here and leave it in sys.modules,
-# which the guard never evicts (Issue 608's rule).
-import participant.evaluator  # noqa: F401
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import policy
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-phases = {phases!r}
-if phases:
-    failures = []
-    for name in phases:
-        failures.extend(getattr(check_policy, name)(policy, {seed!r}))
-else:
-    failures = check_policy.run(policy, {seed!r})
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_detail(failures: list[object]) -> str:
     """Join the checker's property-level failure strings for the response `message`.
 
@@ -285,28 +195,57 @@ def _failure_detail(failures: list[object]) -> str:
 
 
 def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> tuple[bool, str]:
-    """Verdict plus, on failure, the checker's failure summary for `message`."""
-    source = submission
-    if isinstance(source, dict):
-        source = source.get("policy.py")
-    if not isinstance(source, str) or not source.strip():
-        return False, ""
+    """Only function inputs enter the child; checking and the verdict stay here."""
+    source = submission.get("policy.py") if isinstance(submission, dict) else submission
     sources = _submission_sources({"policy.py": source})
     if sources is None:
         return False, ""
-    result = _run_submission_script(sources, RUNNER, seed, phases=list(phases))
-    if result is None or result[0] != 0:
-        return False, ""
-    for line in reversed(result[1].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, ""
-        return len(failures) == 0, _failure_detail(failures)
-    return False, ""
+    active = phases or ("check_build", "check_audit", "check_exploit", "check_repair")
+    built_result = {"returned": None}
+    if "check_build" in active or "check_audit" in active:
+        first = run_functions(sources, [{"function": "intended_circuit", "args": []}])
+        values = first and first.get("values")
+        if not isinstance(values, list) or len(values) != 1:
+            return False, "policy.py functions did not return values within the execution limits"
+        built_result = values[0]
+    built = built_result.get("returned") if isinstance(built_result, dict) else None
+    calls = [{"function": "audit", "args": [built]}] if "check_audit" in active else []
+    for label in check_policy.LABELS:
+        circuit, prm = vulnerable_circuit(seed, label), params(seed, label)
+        if "check_audit" in active:
+            calls.append({"function": "audit", "args": [circuit]})
+        # The repair checkpoint's own-forgery check is optional. Run it only in
+        # transfer, where exploit is also required; an unfinished forge must not
+        # prevent independently submitting repair. Known forgeries stay trusted.
+        if "check_exploit" in active:
+            calls.append({"function": "forge_witness", "args": [circuit, prm]})
+        if "check_repair" in active:
+            calls.append({"function": "repair", "args": [circuit]})
+    result = run_functions(sources, calls) if calls else {"values": []}
+    outputs = result and result.get("values")
+    if not isinstance(outputs, list) or len(outputs) != len(calls):
+        return False, "policy.py functions did not return values within the execution limits"
+    key = lambda name, args: json.dumps([name, args], sort_keys=True, separators=(",", ":"))
+    answers = {key(call["function"], call["args"]): value for call, value in zip(calls, outputs)}
+    def returned(name):
+        def call(*args):
+            # A fresh JSON value prevents a checker mutation from changing other calls.
+            return unwrap(answers[key(name, args)])
+        return call
+    def unwrap(result):
+        if not isinstance(result, dict) or set(result) != {"returned"}:
+            raise ValueError("learner function did not return")
+        return json.loads(json.dumps(result["returned"]))
+    module = SimpleNamespace(intended_circuit=lambda: unwrap(built_result),
+                             audit=returned("audit"), forge_witness=returned("forge_witness"),
+                             repair=returned("repair"))
+    try:
+        failures = []
+        for name in active:
+            failures.extend(getattr(check_policy, name)(module, seed))
+    except (TypeError, ValueError, KeyError, OverflowError):
+        return False, "return constraint lists and integer witness dictionaries in the documented formats"
+    return not failures, _failure_detail(failures)
 
 
 def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
@@ -412,6 +351,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     port = int(os.environ.get("VERIFY_PORT", "18094"))
     # Bind every interface *inside the container*, not the container's loopback. A published
     # port is forwarded to the container's bridge address, so a server listening only on
