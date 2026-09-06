@@ -70,6 +70,7 @@ export const SCENARIO_IDS = [
   "waiting",
   "fresh",
   "hint-booster",
+  "vigenere",
   "ledger-filling",
   "fhe-order",
   "mpc-order",
@@ -96,6 +97,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "開始直後 — Order が出たところ",
     en: "Just started — first Orders issued",
   },
+  "vigenere": { ja: "Vigenère — bravo の3位置が公開済み・通常5分TTL", en: "Vigenère — bravo exposed three positions; standard five-minute TTL" },
   "hint-booster": { ja: "終盤のヒント支援 — 通常90分設定で残り10分", en: "Endgame hint support — 10 minutes left, standard 90-minute match" },
   "ledger-filling": {
     ja: "中盤 — LEAK と PROVE が Ledger に並ぶ",
@@ -318,7 +320,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver(id === "hint-booster" ? {} : DEV_CONFIG);
+  const driver = makeDriver(id === "hint-booster" || id === "vigenere" ? {} : DEV_CONFIG);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -330,6 +332,19 @@ export function buildScenario(id: ScenarioId): Scenario {
 
     case "fresh":
       break;
+
+    case "vigenere": {
+      // Keep the normal match clock/cadence. Only bravo's public LEAK moves
+      // prepare the opponent's worksheet; alpha's current Order stays open.
+      driver.advance(31 * 60_000);
+      for (let i = 0; i < 3; i++) {
+        if (i > 0) driver.advance(5 * 60_000);
+        const order = projectForTeam(driver.host.state, "bravo").myContracts.find(c => c.status === "open" && c.task.kind === "caesar-shift" && c.task.rung === "vigenere");
+        if (!order) throw new Error("vigenere scenario did not issue the next rung");
+        mustPlay(driver, "bravo", { kind: "leak", contractId: order.id }, "expose the next Vigenère key position");
+      }
+      break;
+    }
 
     case "hint-booster":
       driver.advance(59 * 60_000);

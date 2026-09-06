@@ -139,7 +139,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // reach the HUNT cards' array methods or turn into a fabricated completion.
   if (v.completedHunts !== undefined) {
     if (!Array.isArray(v.completedHunts)) return false;
-    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true };
+    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true, vigenere: true };
     for (const entry of v.completedHunts) {
       if (typeof entry !== "object" || entry === null) return false;
       if (typeof entry.targetTeamId !== "string" || entry.targetTeamId.length === 0) return false;

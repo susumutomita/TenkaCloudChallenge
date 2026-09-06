@@ -12,7 +12,7 @@
  * converts `CryptoBattleConfig.prime` to `bigint` before calling in here.
  */
 
-import { type CipherRung, rungSpec } from "./ladder.ts";
+import { type CipherKey, type CipherRung, rungSpec } from "./ladder.ts";
 import { deriveBigInt, deriveBytes, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
 import type { PrivacyConstraint } from "./methods.ts";
@@ -85,13 +85,18 @@ export function deriveTeamGeneration(
  * and a team that draws it and leaks a pair has published its key in the
  * clearest possible way. That is the rung's lesson, not a bug to design around.
  */
+export function deriveCipherKey(seed: string, teamId: string, generation: number, rung: "caesar"): number;
+export function deriveCipherKey(seed: string, teamId: string, generation: number, rung: CipherRung): CipherKey;
 export function deriveCipherKey(
   seed: string,
   teamId: string,
   generation: number,
   rung: CipherRung,
-): number {
+): CipherKey {
   const spec = rungSpec(rung);
+  if (rung === "vigenere") {
+    return Array.from({ length: spec.keyLength }, (_, i) => Number(deriveBigInt(seed, `cipher-key:${rung}:${teamId}:${generation}:${i}`, generation) % BigInt(spec.symbols.length)));
+  }
   const roll = deriveBigInt(seed, `cipher-key:${rung}:${teamId}:${generation}`, generation);
   return Number(roll % BigInt(spec.symbols.length));
 }
@@ -252,6 +257,7 @@ export interface ContractPlan {
    * on. Undefined for every other task kind.
    */
   readonly rung?: CipherRung;
+  readonly keyPosition?: number;
 }
 
 /**
@@ -275,6 +281,7 @@ export function deriveContractPlan(
   teamId: string,
   sequenceIndex: number,
   config: Pick<FieldConfig, "prime" | "shareCount">,
+  progression?: { readonly elapsedMs: number; readonly buildToPressureMs: number },
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
   // [Issue #659 §13] The ladder Order takes a slot in the rotation rather than
@@ -336,14 +343,10 @@ export function deriveContractPlan(
     taskKind,
     requestedShareIndices: [shareIndex],
     privacyConstraint,
-    // [Issue #659 §12-B] Which rung, resolved by TIME rather than by a team's
-    // own choice. #659 leaves this open and leans toward letting a team pick
-    // ("いま点を稼ぐか、将来のために強くなるか" is a real investment decision),
-    // but that needs per-team ladder progression, an unlock op and a UI of its
-    // own. §13 scopes this slice to settling the SHAPE with one rung, and with
-    // exactly one rung there is nothing to choose between yet. Phase-based
-    // reuses `build → pressure → endgame` and adds no new time concept, which
-    // is the rule #659 §9 already set.
-    ...(taskKind === "caesar-shift" ? { rung: "caesar" as const } : {}),
+    // #661 adopted time-based progression. Use the scheduled issue time,
+    // never the delayed caller's current phase. Existing Orders keep their rung.
+    ...(taskKind === "caesar-shift" ? progression !== undefined && progression.elapsedMs >= progression.buildToPressureMs
+      ? { rung: "vigenere" as const, keyPosition: Math.floor(sequenceIndex / TASK_ROTATION.length) % 3 }
+      : { rung: "caesar" as const } : {}),
   };
 }

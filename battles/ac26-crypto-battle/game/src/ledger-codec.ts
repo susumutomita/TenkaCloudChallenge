@@ -122,6 +122,7 @@ export interface StoredShareArtifact extends StoredArtifactBase {
 export interface StoredCipherPairArtifact extends StoredArtifactBase {
   readonly k: "cipher-pair";
   readonly r: CipherRung;
+  readonly kp?: number;
   readonly p: readonly number[];
   readonly x: readonly number[];
 }
@@ -265,6 +266,7 @@ export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
         ...base,
         k: "cipher-pair",
         r: artifact.rung,
+        ...(artifact.keyPosition === undefined ? {} : { kp: artifact.keyPosition }),
         p: artifact.plaintext,
         x: artifact.ciphertext,
       };
@@ -327,6 +329,7 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
         method,
         postedAtMs,
         rung: stored.r,
+        ...(stored.kp === undefined ? {} : { keyPosition: stored.kp }),
         plaintext: stored.p,
         ciphertext: stored.x,
       } satisfies CipherPairArtifact;

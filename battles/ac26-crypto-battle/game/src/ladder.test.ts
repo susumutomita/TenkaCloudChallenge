@@ -47,8 +47,8 @@ function ladderOrder(state: CryptoBattleState, teamId: string): Contract {
  */
 function projected(state: CryptoBattleState, teamId: string, contractId: string) {
   const task = projectForTeam(state, teamId).myContracts.find((c) => c.id === contractId)?.task;
-  if (task?.kind !== "caesar-shift") throw new Error("test setup: expected a ladder Order");
-  return task;
+  if (task?.kind !== "caesar-shift" || typeof task.myKey !== "number") throw new Error("test setup: expected a ladder Order");
+  return { ...task, myKey: task.myKey };
 }
 
 /** The answer a participant would produce with pencil and paper. */
@@ -196,7 +196,7 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     const op = { kind: "hunt-cipher" as const, targetTeamId: "teamA", generation: 1, rung: pair.r, recoveredKey: recovered };
     expect(validateOp(state, "teamB", op)).toEqual({ ok: true });
     // And it is genuinely the key the judge derived, not a coincidence.
-    expect(recovered).toBe(deriveCipherKey(state.seed, "teamA", 1, pair.r));
+    expect(deriveCipherKey(state.seed, "teamA", 1, pair.r)).toEqual(recovered);
   });
 });
 
@@ -355,7 +355,7 @@ describe("the registry is shaped for the rungs that come next", () => {
       expect(spec.huntBonus).toBeGreaterThan(0);
       // The rung has to be able to encrypt and render its own alphabet.
       const plaintext = derivePlaintext("seed", "c0", rung);
-      expect(toSymbols(encryptWithRung(plaintext, 1, rung), rung)).toHaveLength(plaintext.length);
+      expect(toSymbols(encryptWithRung(plaintext, deriveCipherKey("seed", "team", 1, rung), rung), rung)).toHaveLength(plaintext.length);
     }
   });
 });

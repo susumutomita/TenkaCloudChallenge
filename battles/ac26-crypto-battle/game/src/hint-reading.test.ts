@@ -49,7 +49,7 @@ describe("one selected hint ladder leads to a submitted Order", () => {
     for (let seed = 0; seed < 30; seed++) {
       for (const locale of ["ja", "en"] as const) {
         const { host, order, issuedAt, projection } = openCipher(`hint-reading-${seed}`);
-        if (order.task.kind !== "caesar-shift") throw new Error("expected cipher task");
+        if (order.task.kind !== "caesar-shift" || typeof order.task.myKey !== "number") throw new Error("expected cipher task");
         keys.add(order.task.myKey);
         const text = order.hints[2]!.text![locale];
         const answer = calculateWrittenSteps(text, locale);

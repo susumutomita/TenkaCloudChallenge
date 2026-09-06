@@ -62,7 +62,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (6, including the fixed endgame hint distribution) and a
+The plugin declares `stateSchemaVersion` (7, including Vigenère key-position records) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -357,3 +357,33 @@ Validation: `bun test` and `bun run typecheck` in `game/`, including
 `src/booster.test.ts` (actual reducer/host, existing RPS reservations, JSON
 checkpoints, delay equivalence and real component rendering), plus the local
 browser route recorded in `dev/BOOSTER-PLAYTHROUGH.md`.
+
+### Schema 7: a public-position Vigenère cycle
+
+`caesar-shift` remains the wire task discriminator for compatibility; `rung`
+distinguishes Caesar and Vigenère. New Vigenère tasks and cipher-pair records
+carry public `keyPosition` (zero-based 0..2; displayed as 1..3); compact records
+use `kp`. The derived private key is three integers, visible only on the owning
+team's Order projection. Old Caesar rows keep their scalar keys and omitted
+positions. Schema-6 migration preserves contracts, ledger bytes, HUNT/RPS
+reservations, and the saved booster award; the existing migration chain remains.
+Rollback must not feed schema-7 rows to a pre-Vigenère plugin.
+
+The issue's full-length Vigenère example reveals every key from one known pair.
+This implementation therefore issues one position per Order, with a publicly
+known period and offset, and checks **coverage**, not record count, for the
+participant attack route. A long pair covering a cycle still reveals all keys.
+The reducer retains the existing rule that a correct guessed key is accepted;
+no material-count validator or hidden solution-count predicate was added.
+
+This follows the private trusted-judge and time-progression decisions in
+[PR #661](https://github.com/susumutomita/TenkaCloudChallenge/pull/661), and the
+incremental rung contract in [#659 §13](https://github.com/susumutomita/TenkaCloudChallenge/issues/659).
+The owner's [week 2 notes](https://github.com/susumutomita/advanced-cryptography-note/blob/58344a29ea39c25839475ba9a594c115ed89989b/week2/index.html)
+(section 「三つ組は1乗算1回限り」) demonstrate how subtracting public masked values
+exposes relations when a mask repeats. That is related algebra, not a claim
+that Vigenère implements Beaver triples or achieves one-time-pad security.
+No dedicated Vigenère treatment was found in the checked local seminar notes.
+
+Remaining #659 work: RSA, rotor/Enigma teaching model, new homomorphic rung,
+and lightning. This increment must not close #659 or the balance discussion #740.
