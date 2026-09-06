@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -44,6 +45,50 @@ class ExecutionBoundary(unittest.TestCase):
         with LearnerSession({'linear.py':source}) as learner:
             self.assertEqual(learner.call('linear','probe',[]),[1,1,1,1])
         self.assertEqual((os.sched_getscheduler(0),os.getpriority(os.PRIO_PROCESS,0),os.sched_getaffinity(0)),before)
+
+    def test_filesystem_metadata_cannot_persist_or_change_parent_fixtures(self):
+        source='''import os
+def probe(root):
+    calls=[lambda:os.mkdir(root+'/directory'),
+           lambda:os.mkdir(root+'/directory-at',dir_fd=-100),
+           lambda:os.symlink('original',root+'/symlink'),
+           lambda:os.symlink('original',root+'/symlink-at',dir_fd=-100),
+           lambda:os.link(root+'/original',root+'/hardlink'),
+           lambda:os.link(root+'/original',root+'/hardlink-at',src_dir_fd=-100,dst_dir_fd=-100),
+           lambda:os.mkfifo(root+'/fifo'),
+           lambda:os.mkfifo(root+'/fifo-at',dir_fd=-100),
+           lambda:os.rename(root+'/original',root+'/renamed'),
+           lambda:os.rename(root+'/original',root+'/renamed-at',src_dir_fd=-100,dst_dir_fd=-100),
+           lambda:os.unlink(root+'/original'),
+           lambda:os.unlink(root+'/original',dir_fd=-100),
+           lambda:os.rmdir(root+'/empty'),
+           lambda:os.rmdir(root+'/empty',dir_fd=-100),
+           lambda:os.chmod(root+'/original',0o777),
+           lambda:os.chown(root+'/original',os.getuid(),os.getgid()),
+           lambda:os.utime(root+'/original',(1,1)),
+           lambda:os.setxattr(root+'/original','user.probe',b'created'),
+           lambda:os.truncate(root+'/original',0)]
+    result=[]
+    for call in calls:
+        try:call();result.append(0)
+        except OSError as error:result.append(error.errno)
+    return result
+'''
+        with tempfile.TemporaryDirectory(prefix='linear-fs-boundary-') as folder:
+            root=Path(folder)
+            original=root/'original'
+            original.write_text('owned parent fixture')
+            (root/'empty').mkdir()
+            before=original.stat()
+            for _ in range(16):
+                with LearnerSession({'linear.py':source}) as learner:
+                    self.assertEqual(learner.call('linear','probe',[folder]),[1]*19)
+                self.assertEqual(sorted(p.name for p in root.iterdir()),['empty','original'])
+                self.assertEqual(original.read_text(),'owned parent fixture')
+                after=original.stat()
+                self.assertEqual((after.st_mode,after.st_uid,after.st_gid,after.st_mtime_ns),
+                                 (before.st_mode,before.st_uid,before.st_gid,before.st_mtime_ns))
+                self.assertEqual(os.listxattr(original),[])
 
     def test_reference_and_public_examples(self):
         for seed in ('boundary-one','boundary-two'):

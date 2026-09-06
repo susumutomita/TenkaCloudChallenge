@@ -1,5 +1,17 @@
 # Linear shares: participant reading and runtime evidence (#716)
 
+## Filesystem metadata persistence and post-solve consistency
+
+At 492fe2e, an actual LearnerSession in the dedicated Linux verifier created a directory, symlink, hard link, and FIFO under a parent-owned temporary fixture. All four remained after worker exit. The fixture was removed immediately by the author-side parent; no host or unrelated path was changed. Opening files was already prohibited, but these metadata operations need no open descriptor.
+
+The existing problem-local seccomp filter now also denies directory/node/link creation, rename/removal, truncation, permission/owner/time changes and extended-attribute mutation, including their native at variants. A regression runs 19 operations in each of 16 worker sessions: all return EPERM. The parent checks the fixture's directory listing, contents, mode, owner, group, modification time and attributes remain unchanged after every session. This supplements the existing container, IPC, scheduling, process and file-opening restrictions; it is not a claim that Python native returns are authenticated.
+
+All 21 Linux tests pass (27.231 seconds), the reference passes and all seven existing mutations are killed. Catalog validation passes all 116 entries. Evidence: `/private/tmp/linear-762-filesystem-before.log`, `linear-762-filesystem-runtime.log`, `linear-762-filesystem-reference.log`, and `linear-762-filesystem-catalog.log`.
+
+After rebuilding both dedicated localhost18149 services, the retained original reader completed all five Portal submissions again (1 test, 1.61 seconds; 12.35 seconds including startup). The real component harness also verified solved-row folding. Log: `/private/tmp/linear-762-filesystem-portal.log`.
+
+Both post-solve writeups now use the same ordered-sequence contract as the statement: lists and tuples are equally valid, public adjustments may be distributed so their total is c modulo p, and assigning c to one party is a convenient example. The p7 table shows two different valid allocations and the incorrect everyone-adds-c case. The old claims about exactly one required recipient and list-only grading have been removed.
+
 ## Ordered integer sequences and reply freshness
 
 At `abd95cf`, the real local API rejected a normal tuple result but accepted the
