@@ -86,7 +86,7 @@ def spec(seed: str, label: str = "public") -> Spec:
     parties = ("p0", "p1", "p2")
     weights = {party: _pick(s, 4 + 2 * i, 1, 9) for i, party in enumerate(parties)}
     private = {party: _pick(s, 20 + 2 * i, 1, p - 1) for i, party in enumerate(parties)}
-    masks = {party: _pick(s, 40 + 2 * i, 1, p - 1) for i, party in enumerate(parties)}
+    masks = {party: _pick(s, 40 + 2 * i, 0, p - 1) for i, party in enumerate(parties)}
     return Spec(
         p=p,
         parties=parties,
@@ -215,7 +215,7 @@ def _insert_before_output(ops: list[tuple], extra: list[tuple]) -> list[tuple]:
 
 
 def program(sp: Spec, program_id: str) -> list[tuple]:
-    """One of five implementations. Every one of them outputs the correct total."""
+    """One of seven implementations. Every one of them outputs the correct total."""
     ops = _core(sp)
     victim = sp.parties[1]
     if program_id == "alpha":
@@ -272,7 +272,9 @@ def renamed(ops: list[tuple], sp: Spec, tag: str) -> tuple[list[tuple], Spec]:
     """
 
     def rn(label: str) -> str:
-        return f"{tag}_{label}"
+        # A prefix left strings such as "sub" and "x-" readable, so a
+        # spelling-based auditor still passed the name-independence exercise.
+        return "n" + hashlib.sha256((tag + "\0" + label).encode()).hexdigest()
 
     out: list[tuple] = []
     for op in ops:

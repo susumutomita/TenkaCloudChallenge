@@ -34,6 +34,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w2-privacy-audit"
@@ -79,8 +80,8 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w2-privacy-audit',
     problem_name='答えは合っている。それだけだ',
     problem_name_en='The answer is right. That is all it is',
-    description='7 つの実装がすべて正しい合計を返す。うち 4 つは途中で何かを漏らしている。correctness test は全部通る。監査器を書いて、最初の違反を特定する。',
-    description_en='Seven implementations all return the correct total. Four of them leak something on the way. Every correctness test passes. Write the auditor that finds the first violation.',
+    description='正しい合計でも、途中で秘密が漏れている？ 仕様と記録を比べる監査器を作り、余計な部分和から秘密を復元して、漏れだけを修復します。',
+    description_en='Can a correct total still leak a secret? Compare a specification with observed events, recover an input from an extra partial sum, and remove only the leak.',
     checkpoint_labels={'allowed-opens': '仕様から公開してよい値を挙げる', 'opened-secret': '公開してよくない値の公開を見つける', 'cross-party': '他人の手元を覗いた場所を見つける', 'log-leak': 'log と失敗経路から漏れた値を見つける', 'transcript': '漏れた transcript から秘密を復元する', 'repair': '漏れだけを取り除く', 'mutation': '名前を変えられても同じ判定を出す'},
     checkpoint_labels_en={'allowed-opens': 'Name what the specification allows to be revealed', 'opened-secret': 'Find a value that should not have been revealed', 'cross-party': "Find where somebody looked at another's slot", 'log-leak': 'Find what escaped through a log or a failure', 'transcript': 'Recover a secret from the leaking transcript', 'repair': 'Take out the leak and nothing else', 'mutation': 'Hold the same verdict when the names change'},
     submitted_files=('auditor.py',),
@@ -235,6 +236,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 
