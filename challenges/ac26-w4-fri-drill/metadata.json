@@ -1,6 +1,6 @@
 {
   "id": "ac26-w4-fri-drill",
-  "name": "2 点開ければ、折り畳みが本物か分かる",
+  "name": "折り畳んだ式のすり替えを見つける",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
@@ -32,10 +32,10 @@
   },
   "difficulty": 3,
   "estimatedDuration": "40-60 分",
-  "shortDescription": "封じた式を「これは低次です」と言い張る相手に、全部開けさせたら封じた意味がありません。式を半分に折り畳ませ、x と −x の 2 点だけ開けて畳み方の辻褄を検査するのが FRI。Python に 1 行打っては出た数を貼る 12 行で、嘘の折り畳みが露見する場所まで自分の手で確かめます。",
-  "description": "Week 4 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 12 行繰り返して、FRI — コミットした多項式の次数が低いことを数点の開示で確かめる手順 — を端から端まで回す。前半は正直な 1 周: コミット済みの Q₀ を偶数次と奇数次に分け、検証者の β で折って次数を半分にし、もう 1 回折って定数（平文で送れる）に落とし、クエリ点 x と −x の開示から連立方程式で両方の部分を復元して、Q₁ の開示と突き合わせる。後半は嘘: Q₁ の代わりに**同じ次数の別の多項式**をコミットするすり替えを仕込み、同じクエリ検査がそれを捕まえること、見逃しが ±x の 1 組だけであることを数える。\n\n形の根拠は ac26-w3-schnorr-drill / ac26-w4-sumcheck-drill / ac26-w4-plonk-drill と同じ（自習ノートで本人検証済みの「1 行打って、出た値を貼って、その値を指す 1 文を読む」）。手順は講義の FRI の節（スライド 22〜23）と同じで、講義の F₁₇ の数値例（Q₀ = 15 + 5X + 5X²、Q₁ = 5Y + 13、x = 8）は公開テスト part 1 に固定収録。deploy の値（体・Q₀ の係数・β・β₂・x・すり替えの差分）はすべて seed 由来で、見逃しの 2 点も deploy ごとに変わる。\n\n12 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄の無い 4 行（偶奇の分解、全点の検算、すり替えの設定、正直なら全点で通る閉じの検算）は、値がその場の材料か構成上の確認で、意味は問題文がその場で説明する。すり替えの差分 d0 + d1·Y は「消える Y がちょうど 1 つ = 見逃しの x が ±1 組」になるよう d0 = −d1·s² の形で生成し、クエリ点は見逃しに落ちないことを全 seed で保証している。",
-  "instructions": "## 「この式は低次です」を、見せずに\n\nWeek 4 の翻訳（`ac26-w4-arithmetization`）を通ると、「計算は正しい」という主張は「この封じた式は次数が低い」という主張に化けています。**次数**とは、式に出てくる X の右肩の数（指数）のいちばん大きいもの — 3 + 5X + 5X² なら 2、これから出てくる Q₀ なら 3 です。StarkNet や RISC Zero の証明の中で、検証者が最後に確かめているのは、まさにこれです。\n\n全部開けさせれば確かめられますが、それでは封じた意味がありません。かといって、次数を口で聞いても仕方がない — 嘘つきは何とでも言えます。そこで FRI は、証明者に式を**半分の大きさに折り畳ませ**、折り畳みが申告どおりだったかを **x と −x のたった 2 点の開示**で検査します。嘘の折り畳みは、そこで露見します。\n\n## 折り畳ませて、2 点だけ開ける\n\nあなたは検証者です。相手（証明者）は式 Q₀ を封じてあなたに預けており、「この式の次数は 3 以下です」と言い張っています。係数 q0〜q3 は「証拠を確認」に出るので、この練習では中身を見られますが、**本物の検証者は中身を持っていません** — 数点を開けさせることしかできません。\n\n証明者に「偶数部分 + β × 奇数部分」を作らせると、式の大きさが半分になります。繰り返せば、最後は数 1 個。あとは、その折り畳みが本物かを 2 点の開示で確かめるだけです。前半（1〜8 行目）は正直な証明者と 1 周し、後半（9〜12 行目）は**嘘の証明者にすり替えられた式**がどこで捕まるか、そしてどの x なら見逃したかを数えます。\n\nこの問題は関数を書く問題ではありません。**Python に 1 行打って、出た値を回答欄に貼る**を 12 回繰り返します。数は起動のたびに変わるので、他人の答えや過去のノートを写しても通りません。\n\n## 前提 — 次数・符号の相殺・連立方程式\n\n- ① 多項式とは、3 + 5X + 5X² のように「数 × X の累乗」を足しただけの式。**次数**とは、その中でいちばん大きい X の右肩の数です。3 + 5X なら次数 1、3 + 5X + 5X² なら次数 2。展開して数えても同じで、(1 + X) × (1 + X) = 1 + 2X + X² は 1 次どうしの積だから次数 2。「次数は 3 以下」は「X³ より右肩の大きい項が 1 つも無い」という意味で、この問題の主張は最後までこの 1 語の上に乗ります。\n- ② (x)² と (−x)² は同じ（中 3 の展開）。式を偶数次と奇数次に分けると、Q(x) + Q(−x) では奇数次が消え、Q(x) − Q(−x) では偶数次が消えます。符号の相殺だけです。\n- ③ 未知数 2 つなら式が 2 本あれば解けます（中 2 の連立方程式）。x と −x の 2 点から偶数部分と奇数部分の両方が戻る理由は、これだけです。\n- ④ 1 次式（次数 1 の式）が 0 になる場所は 1 つ。最後の「見逃しを数える」行はこれで読めます。\n- 数は「素数 p で割ったあまり」。割り算は「掛けて 1 になる相手（逆元）を掛けること」で、Python なら `pow(2, p - 2, p)` が 2 の逆元です。mod が初めてなら `ac26-w1-constraint-lab`、逆元は `ac26-w3-field-inverse` へ。あなたの p は「証拠を確認」に出ます。\n- 教材では Week 4 講義スライド 22〜23 枚目（偶奇分解、β での折り畳み、Q₁ = 5Y + 13 の例）。下の 1 桁の例は講義の数値例と同じもので、公開テストにもそのまま入っています。\n\n## 1 桁の例 — 折り畳みを紙で 1 周（p = 17、Q₀ = 15 + 5X + 5X²）\n\n- **偶奇に分ける**: 偶数次の項は 15 と 5X²、奇数次の項は 5X。X² を新しい変数 Y と見ると、Q_even(Y) = 15 + 5Y、Q_odd(Y) = 5。\n- **β = 3 で折る**: Q₁(Y) = (15 + 5Y) + 3 × 5 = 30 + 5Y で、30 − 17 = 13 なので **Q₁ = 13 + 5Y**。2 次だった式が、Y の式としては 1 次 — 大きさが半分になりました。\n- **x = 8 の開示**: −8 は −8 + 17 = 9 なので、開けさせる 2 点は Q₀(8) と Q₀(9)。Q₀(8) = 15 + 40 + 320 = 375 で、375 = 17 × 22 + 1 なので **1**。Q₀(9) = 15 + 45 + 405 = 465 で、465 = 17 × 27 + 6 なので **6**。\n- **偶数部分を取り出す**: 2 点を足すと奇数次が消えて 1 + 6 = 7。2 で割る = 2 の逆元 9 を掛けて 7 × 9 = 63 ≡ **12**。\n- **答え合わせ**: 直接計算では x² = 64 ≡ 13 なので Y = 13。Q_even(13) = 15 + 65 = 80 ≡ **12**。一致 — **開示された 2 点だけから、偶数部分の値が復元できました**。\n\n## 最初の一手\n\n1. Participant Portal（この問題文が出ているサイト）で **「起動」** を押します。問題文と同じ画面に **問題エディタ**と、checkpoint と同じ見出しの付いた **回答欄が 8 つ**出ます。\n2. エディタの **「証拠を確認」** を押します。この起動だけの数が、**そのまま Python に貼れる代入文**の形で出ます — 体 p、封じられた Q₀ の係数 q0, q1, q2, q3、検証者の折り畳み用の数 beta と beta2、クエリ点 x、嘘の証明者が使う差分 d0・d1。**答えは出ません** — 答えはあなたの Python が出します。\n3. 自分のパソコンで Python を開きます。Windows なら PowerShell、Mac なら「ターミナル」を開いて `python3` と打つと `>>>` が出ます（Python を入れたときに付いてくる **IDLE** の Shell でも同じです）。使うのはこの 1 つだけです。\n4. 2 で出た代入文を全部 `>>>` に貼ります。これで準備完了です。\n\n**Python を開けないときは**: エディタの `fri_drill.py` に 12 個の関数の枠があります。中身を書いて **「公開テストを実行」** を押すと、あなたの関数がこの起動の数で出した値が画面に出ます — `>>>` に打つのと同じ値です。それを回答欄に貼ってください。\n\n## 答えるもの — checkpoint は 8 個\n\n採点されるのは **回答欄に貼った値だけ**です（`fri_drill.py` の中身は採点されません。ただし「提出」を押すとエディタの中身も一緒に送られるので、空にはしないでください）。数が複数のときは `[4, 8, 1]` のようにカンマ区切りで書きます（`(4, 8, 1)` でも `4, 8, 1` でも通ります）。**個数が違うと不正解**になります。\n\n1. コミット済みの多項式 Q₀ … 数 3 つ\n2. 折り畳み — 検証者の β で 1 本に混ぜる … 数 3 つ\n3. もう 1 回折ると定数 … 数 1 つ\n4. クエリ — x と −x の 2 点を開かせる … 数 2 つ\n5. 2 点から偶数部分と奇数部分を復元 … 数 4 つ\n6. クエリ検査 — 復元した材料と Q₁ の開示を突き合わせる … 数 2 つ\n7. クエリ検査が嘘を捕まえる … 数 2 つ\n8. どの x なら見逃したか — 数える … 数 2 つ（小さい順）\n\n**提出のしかた**: 回答欄に値を書いて、その checkpoint の **「提出 (+点数)」** を押すだけです。8 個は別々に採点されるので、1 つ詰まっても他は取れます。外しても出し直せますが、1 回外すごとに 10 点引かれます（8 個で合計 200 点。合計が 0 点未満になることはありません）。各 checkpoint にはヒントが 1 つあり、開くと点が引かれます。エディタを書き換えすぎたときは **「初期状態に戻す」** で最初の `fri_drill.py` に戻せます。\n\n## 解き方 — 12 行\n\n12 行のうち 8 行に回答欄があり、残り 4 行は次の行のための材料です（材料の行にも読むところが付いています）。\n\n各行のやり方: **打つ前に**で「何が出そうか」を 1 行だけ声に出す（または紙に書く）→ **打つ行**を貼る → **この行の意味**を読む → 出た値を回答欄に貼る → 合ったら **「合ったら読む」** を読んで次へ。予想を先に言うのが大事です。この計算はどう間違えても答えがやっぱり 0 から p − 1 のどれかになるので、出てきた数を眺めても正しいかどうか分かりません。\n\n### 1. コミット済みの多項式 Q₀  （回答欄 1 / 8）\n\nQ₀ は係数が「証拠を確認」に出ている 3 次式です（q0 + q1·X + q2·X² + q3·X³）。証明者の主張は「Q₀ の次数は 3 以下」。まず手元に作って 3 か所で値を出します。\n\n- **打つ前に**: X = 0 のときの値は、どの係数と同じになりますか。\n\n```python\nQ = lambda X: (q0 + q1*X + q2*X**2 + q3*X**3) % p; (Q(0), Q(1), Q(2))\n```\n\n- **この行の意味**: Q₀ を 0, 1, 2 で計算。\n- **回答欄**: 上から 1 番目の欄（見出しはこの節と同じ）に、数 3 つ。\n- **合ったら読む**: 検証者に残っている仕事は「封じられた Q₀ の次数が本当に低いか」の確認だけです。全部の点を開けさせたら封じた意味がありません。数点の開示だけで次数を確かめる — それが FRI で、これからの 11 行がその全部です。ここでは答え合わせのために手元に Q₀ を持ちますが、本物の検証者は持っていません。\n\n### 2. 偶数次と奇数次に分ける  （回答欄なし）\n\nQ₀(X) = Q_even(X²) + X·Q_odd(X²)。偶数次の項 (q0, q2) と奇数次の項 (q1, q3) を分けると、3 次の式が 1 次の式 2 本になります。\n\n- **打つ前に**: Y = 1 を入れるので、出るのは係数どうしの足し算のはず。どの 2 つずつですか。\n\n```python\nQe = lambda Y: (q0 + q2*Y) % p; Qo = lambda Y: (q1 + q3*Y) % p; (Qe(1), Qo(1))\n```\n\n- **この行の意味**: 偶数部分と奇数部分を Y = 1 で計算。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく。\n- **出たら読む**: q0 + q2 と q1 + q3 が出ました。X² を新しい変数 Y と見ると、Q_even(Y) = q0 + q2·Y も Q_odd(Y) = q1 + q3·Y も 1 次 — **次数がちょうど半分**です。この分け方が本当に正しいことを、次の行で全部の点で確かめます。\n\n### 3. 検算 — 分解は全点で成り立つか  （回答欄なし）\n\nQ₀(X) = Q_even(X²) + X·Q_odd(X²) が 0 から p−1 の全部で成り立つか（これは検算用で、検証者はやりません）。\n\n- **打つ前に**: 並ぶのは True と False のどちらだと思いますか。\n\n```python\n[Q(X) == (Qe(X*X % p) + X*Qo(X*X % p)) % p for X in range(p)]\n```\n\n- **この行の意味**: 全部の点で左辺と右辺を比べる。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく。\n- **出たら読む**: 全部 True。項を並べ替えただけなので当然ですが、自分の手で見ると「偶数次と奇数次に分けただけ」が腑に落ちます。ここからが本体です — この 2 本を検証者の選んだ数で 1 本に混ぜて、大きさを半分にします。\n\n### 4. 折り畳み — 検証者の β で 1 本に混ぜる  （回答欄 2 / 8）\n\n検証者が β（「証拠を確認」の beta）を選び、証明者は Q₁(Y) = Q_even(Y) + β·Q_odd(Y) を作って、これも封じ直します。\n\n- **打つ前に**: Q₁ の次数はいくつになるはずですか。\n\n```python\nQ1 = lambda Y: (Qe(Y) + beta*Qo(Y)) % p; (Q1(0), Q1(1), Q1(2))\n```\n\n- **この行の意味**: 折り畳んだ Q₁ を 0, 1, 2 で計算。\n- **回答欄**: 上から 2 番目の欄（見出しはこの節と同じ）に、数 3 つ。\n- **合ったら読む**: Q₁ は 1 次 — 3 次が 1 回の折り畳みで 1 次になりました。**β を検証者が選ぶ**のが肝心です。順序は必ず、証明者が Q₀ を封じる → 検証者が β を送る → 証明者が Q₁ を作って封じる → 次の質問（β₂、そしてクエリの x）が届く。Q₁ は β を見てからでないと作れませんが、材料の Q₀ は **β より先に封じ済み**なので、証明者は β に合わせて材料を仕込めません（先に封じる → あとから質問、という順序は Week 3 と同じ理屈です）。折るたびに大きさが半分になるので、何回か折れば数 1 個まで落ちます。\n\n### 5. もう 1 回折ると定数  （回答欄 3 / 8）\n\nQ₁ = c + d·Y をもう一度偶奇に分けると、偶数部分は定数 c、奇数部分は定数 d です。2 つ目の数 β₂（beta2）で混ぜます。\n\n- **打つ前に**: 出るのは数 1 個です。c と d はそれぞれ Q₁ のどこから読めますか。\n\n```python\nc, d = Q1(0), (Q1(1) - Q1(0)) % p; (c + beta2 * d) % p\n```\n\n- **この行の意味**: c = Q₁(0)、d は Y の係数。折り畳むと c + β₂·d。\n- **回答欄**: 上から 3 番目の欄（見出しはこの節と同じ）に、数 1 つ。\n- **合ったら読む**: 数が 1 個になりました。数 1 個ならもう封じる必要がなく、**そのまま送れます**。ここで折り畳みの列は終わりで、証明者が送ったものは「封じたもの 2 つ + 数 1 個」だけ。残る仕事は、この折り畳みが**本当に申告どおりだったか**を数点の開示で確かめること — それがクエリです。\n\n### 6. クエリ — x と −x の 2 点を開かせる  （回答欄 4 / 8）\n\n検証者が x（「証拠を確認」の値）を選び、封じられた Q₀ から 2 点 Q₀(x) と Q₀(−x) を開けさせます。\n\n- **打つ前に**: −x は、この世界ではどの数になりますか（0 から p − 1 のどれ）。\n\n```python\n(Q(x), Q((-x) % p))\n```\n\n- **この行の意味**: 開示された 2 つの値。\n- **回答欄**: 上から 4 番目の欄（見出しはこの節と同じ）に、数 2 つ。\n- **合ったら読む**: なぜ x と −x の組なのか。x² = (−x)² なので、この 2 点は**同じ Y = x² の上**にあります。そして Q₀(x) = Q_even(x²) + x·Q_odd(x²)、Q₀(−x) = Q_even(x²) − x·Q_odd(x²) — 未知数 2 つ（偶数部分の値と奇数部分の値）に式が 2 本。中 2 の連立方程式で両方が復元できます。それが次の行です。\n\n### 7. 2 点から偶数部分と奇数部分を復元  （回答欄 5 / 8）\n\n足すと奇数部分が消え、引くと偶数部分が消えます。2 の逆元と 2x の逆元を掛けて取り出し、直接計算と並べます。\n\n- **打つ前に**: 4 つのうち、どれとどれが同じ数になるはずですか。\n\n```python\ninv2 = pow(2, p - 2, p); re = (Q(x) + Q((-x) % p)) * inv2 % p; ro = (Q(x) - Q((-x) % p)) * pow(2*x, p - 2, p) % p; (re, ro, Qe(x*x % p), Qo(x*x % p))\n```\n\n- **この行の意味**: 左 2 つは開示 2 点から復元した値。右 2 つは直接計算（答え合わせ用で、本物の検証者にはできません）。\n- **回答欄**: 上から 5 番目の欄（見出しはこの節と同じ）に、数 4 つ。\n- **合ったら読む**: 復元と直接計算が一致しました。検証者は Q_even も Q_odd も**持っていないのに**、開示された 2 点だけからその値を作れたわけです。上の 1 桁の例でやったのと同じ手順です。これで「折り畳む前の材料」が検証者の手に入りました。\n\n### 8. クエリ検査 — 復元した材料と Q₁ の開示を突き合わせる  （回答欄 6 / 8）\n\n折り畳みが申告どおりなら、Q₁(x²) = Q_even(x²) + β·Q_odd(x²) のはずです。左辺は Q₁ の封筒から開けさせ、右辺は復元した re, ro から検証者が自分で組みます。\n\n- **打つ前に**: 2 つの数は同じになりますか、違いますか。\n\n```python\n((re + beta*ro) % p, Q1(x*x % p))\n```\n\n- **この行の意味**: 左は復元材料から組んだ値。右は Q₁ の開示。\n- **回答欄**: 上から 6 番目の欄（見出しはこの節と同じ）に、数 2 つ。\n- **合ったら読む**: 一致 — この x での折り畳みは本物でした。これがクエリ 1 回分の全部です: Q₀ から 2 点、Q₁ から 1 点、あとは足し引きと掛け算が数回。別の x で何回か繰り返せば、「封じた列は本当に半分ずつに折り畳まれている」と高い確信が持てます。次は、嘘の折り畳みがこの検査にどう捕まるかを見ます。\n\n### 9. 嘘の折り畳み — 別の 1 次式にすり替える  （回答欄なし）\n\n証明者が Q₁ の代わりに Q₁′ = Q₁ + d0 + d1·Y を封じたとします（d0, d1 は「証拠を確認」の値）。次数は同じ 1 次 — **次数だけ見ても違いは分かりません**。\n\n- **打つ前に**: Q₁′(0) は Q₁(0) と比べていくつ違いますか。\n\n```python\nQ1c = lambda Y: (Q1(Y) + d0 + d1*Y) % p; (Q1c(0), Q1c(1))\n```\n\n- **この行の意味**: すり替えた Q₁′ の 2 点。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく。\n- **出たら読む**: Q₁′ も立派な 1 次式なので、「次数が低い」こと自体は満たしています。FRI が捕まえるのは「次数が低くない」だけではなく、**「折り畳みの材料と辻褄が合わない」**ほうです。クエリ検査の右辺が Q₁′ の開示になると何が起きるか — 次の行で見ます。\n\n### 10. クエリ検査が嘘を捕まえる  （回答欄 7 / 8）\n\n同じ x で、復元した材料と Q₁′ の開示を突き合わせます。\n\n- **打つ前に**: 左の数は 8 行目から変わりますか、変わりませんか。\n\n```python\n((re + beta*ro) % p, Q1c(x*x % p))\n```\n\n- **この行の意味**: 左は復元材料から組んだ値（8 行目と同じ）。右はすり替えた Q₁′ の開示。\n- **回答欄**: 上から 7 番目の欄（見出しはこの節と同じ）に、数 2 つ。\n- **合ったら読む**: ずれました。左辺は Q₀ の開示から組んだ値なので、証明者が Q₁ をすり替えても動きません。ずれの正体は d0 + d1·x² — すり替えの差がそのまま出ています。Q₀ と Q₁ は**別々に先に封じてある**ので、後からどちらかを都合よく直すこともできません。嘘はこの 1 点で拒否されました。\n\n### 11. どの x なら見逃したか — 数える  （回答欄 8 / 8）\n\nx を 1 から p−1 まで全部試して、すり替えが検査を通ってしまう点を並べます。\n\n- **打つ前に**: 前提の④（1 次式が 0 になる場所は 1 つ）から、x は何個出ると思いますか。\n\n```python\nsorted(xx for xx in range(1, p) if (d0 + d1 * (xx*xx % p)) % p == 0)\n```\n\n- **この行の意味**: ずれ d0 + d1·x² が 0 になる x の一覧（小さい順）。\n- **回答欄**: 上から 8 番目の欄（見出しはこの節と同じ）に、数 2 つ（小さい順）。\n- **合ったら読む**: ちょうど 2 個 — x と −x の 1 組です。ずれは Y = x² の 1 次式なので、0 になる Y は 1 つ、それに対応する x は ±の 1 組。見逃す確率は 2/(p−1) で、クエリを別々の x で k 回繰り返せば、その k 乗まで落ちます。**嘘が生き残れる場所は少数の点だけ**という、この週で繰り返し出てくる形です。\n\n### 12. 正直なら全点で通る — 閉じの検算  （回答欄なし）\n\n本物の Q₁ で、クエリ検査に失敗する x があるかを全部見ます。\n\n- **打つ前に**: 一覧は空になると思いますか、何か入ると思いますか。\n\n```python\n[xx for xx in range(1, p) if ((Q(xx) + Q((-xx) % p)) * inv2 + beta * (Q(xx) - Q((-xx) % p)) * pow(2*xx, p - 2, p) - Q1(xx*xx % p)) % p != 0]\n```\n\n- **この行の意味**: 正直な折り畳みで検査に落ちる x の一覧。\n- **回答欄**: なし。ここで終わりです。\n- **出たら読む**: 空 — 正直なら**どの x でも**通ります。正しいものを誤って弾かないこと（完全性）と、嘘がほぼ必ず捕まること（健全性）の両方がそろいました。まとめると FRI は、偶奇に分けて β で混ぜて半分に折る → 数 1 個まで折る → x と −x の開示から材料を復元して各段の辻褄を数点で検査する、この 3 手です。\n\n## 折り畳みの先にあるもの\n\n12 行が全部通れば終わりです。偶奇に分けるのが符号の相殺だけでできること、1 回の折り畳みで大きさが半分になること、x と −x の 2 点から折り畳みの材料が復元できること、この検査が次数の同じすり替えまで捕まえること、そして見逃しが ±x の 1 組だけであること — **自分の手で出した数で 1 回ずつ**確かめました。\n\n本物の FRI は、この 1 周を log 回の折り畳みと数十回のクエリに増やしただけです。StarkNet や RISC Zero の証明が transparent（信頼された前処理なし）でいられるのは、ここで見た「ハッシュの封筒と数点の開示」以上の何にも寄りかからないからです。同じランダムな検問が「顔ぶれの一致」というまた別の質問に効くことは、`ac26-w4-plonk-drill` で見ます。",
-  "writeup": "## この問題の形\n\n12 行を打ち、8 行に回答欄があります。順番は、コミット済みの Q₀（1）→ 偶奇分解（2〜3）→ 折り畳み（4〜5）→ クエリと復元（6〜8）→ すり替え（9〜10）→ 見逃しと完全性（11〜12）。\n\n## 各行が守っているもの\n\n- 1〜3: 偶奇分解はただの係数の仕分けで、恒等式 Q₀(X) = Q_even(X²) + X·Q_odd(X²) が全点で成り立つ。\n- 4〜5: 折り畳み = 偶数部分 + β·奇数部分。次数が半分になり、log 回で定数。β は commit の後に来る（順序が健全性を支える）。\n- 6〜8: x² = (−x)² なので 2 点は同じ Y の上。和と差で両半分が復元でき、Q₁ の開示と突き合わせられる — クエリ 1 回の全部。\n- 9〜10: 次数だけ見ても捕まらないすり替えが、材料との辻褄（クエリ検査）で捕まる。左辺は Q₀ の開示由来なので動かせない。\n- 11〜12: 見逃しは差分 d0 + d1·x² の根 = ±x の 1 組だけ。正直なら全点で通る（完全性）。\n\n## 間違えるとどう壊れるか\n\n奇数部分を偶数の係数で作る／折り畳みで両半分を逆にする／(2x)⁻¹ を x⁻¹ にする／2 点目を Q(x) にする — どれも値が 1 つずれて、その行で止まります。\n\n## 次への接続\n\nSTARK は「トレース → 制約 → 商 Q → Merkle → FRI」で閉じます。SumCheck の 2 点・PLONK の「指紋が 0」と同じく、嘘が生き残れるのは少数の点だけ — Week 4 の 3 スキームは全部この確率的健全性の上に立っています。",
+  "shortDescription": "短くした式が元の式とつながっているかを調べる8問。5か7で割った余りから始め、最後は検査を通る偽物を2種類作り、6個の係数を提出します。",
+  "description": "講義の偶奇分解・折り畳みと、学習ノートの和と差による復元を、小さな余りの計算と反例構成の8問につなぐ。最後は既知の検査位置を通る一次の差と、全非ゼロ位置を通る高次の差を自作する。一段の算数模型、限られた評価範囲での一致とFRI全体の保証を区別する。",
+  "instructions": "## 前提・最初にすること\n\n足し算・掛け算・割った余りから始めます。あなたは式の検査役。相手が短くした式に、すり替えがないか調べます。\n**「起動」→「証拠を確認」→ 自分の `q0` を「元の式を3か所で計算する」の最初の値にする。** 残り2個も下の式で求め、`a,b,c` の形で回答欄へ提出します。正解が表示されたら次へ。全8問で完了です。\n\n紙で計算できます。計算メモが必要ならエディタの `fri_drill.py` を使えます。ヒントは各問に「仕組み → 小さな見本 → 自分の数での手順」の3段あります。\n\n## 何を体験する？\n\n**FRI** は、数の並びが「次数の低い多項式から作った並び」に近いかを、少数の位置を読んで調べる方法です。**多項式**は `1+2X+3X²+X³` のように文字の累乗を足した式。**次数**は、係数（各項に掛ける数）が0でない項の最大の指数で、この例は3です。「近い」は、違う値を持つ位置が少ないこと。\n\nこの演習は、その中の**折り畳み（偶数・奇数の成分を一本に混ぜる計算）と一段の照合**を取り出した模型です。係数も見えるので、これだけで低次数性や秘密の保護を証明したことにはなりません。\n\n```text\n元の式 Q(X) ──偶数・奇数に分ける──→ E(Y), O(Y)\n                                       │ E + beta×O\n                                       ▼\n                                 短い式 Q1(Y)\n\nQ(x), Q(−x) ──和と差──→ E(x²), O(x²) ──混ぜる──→ Q1(x²) と同じ？\n```\n\n## 自分の数と計算の約束\n\n「証拠を確認」に**自分の数**が表示されます。見本の数をそのまま提出せず、この値へ置き換えます。\n\n| 名前 | 意味 |\n|---|---|\n| `p` | 割る数。5か7。計算結果は毎回 `0` から `p−1` の余りに直す |\n| `q0,q1,q2,q3` | 元の式 `Q(X)=q0+q1X+q2X²+q3X³` の係数（各項に掛ける数） |\n| `beta,beta2` | 1回目・2回目の折り畳みで掛ける数。数学の記号では β, β₂ |\n| `x` | 検査する位置。`1` から `p−1` のどれか |\n| `d0,d1` | すり替えるときに足す式 `d0+d1Y` の係数 |\n\n**余り**：`8=5×1+3` なら3、`−2=5×(−1)+3` も3。Pythonでは `8 % 5`、`-2 % 5` と書きます。`X²` は `X*X` または `X**2`。\n**逆元**：掛けると余りが1になる数。5で割る計算では `2×3=6 → 1` なので、2の逆元は3。余りの計算で「2で割る」ときは3を掛けます。必要なら `1..p−1` を順に掛けて探せます。pは奇数の素数でxは0でないため、2と2xの逆元が必ずあります。\n\n以下はすべてpで割った余りの式です。`Q(t)` は「QのXへtを入れた値」。`Y=X²` と名前を付けると：\n\n```text\nQ(X) = (q0 + q2X²) + X(q1 + q3X²)\n          E(X²)          O(X²)\nE(Y) = q0 + q2Y       O(Y) = q1 + q3Y\nQ1(Y) = E(Y) + beta×O(Y) = c + dY\nc = q0 + beta×q1      d = q2 + beta×q3\n```\n\nEは指数0,2から、Oは指数1,3の項からXを一個外して作ります。Yで見ると両方が一次以下なので、Q1も一次以下です。一般には次数の上限がおよそ半分（3→1→0）になります。この出題では最初の折り畳みが定数にならない数を選んであります。\n\n## 1. 元の式を3か所で計算する `poly`\n\n**入れる値：`Q(0), Q(1), Q(2)` の順に3個。** 最初の値はq0そのものです。\n\n見本は `p=5, (q0,q1,q2,q3)=(1,2,3,1)`。`Q(0)=1`、`Q(1)=1+2+3+1=7 → 2`、`Q(2)=1+4+12+8=25 → 0`。見本の回答は `1,2,0` です。\n\n## 2. 式を折って短くする `fold`\n\n**式：`c=q0+beta×q1`、`d=q2+beta×q3`。入れる値：`c, c+d, c+2d` の余り。**\n\n見本でbeta=1なら、`c=1+1×2=3`、`d=3+1×1=4`。\n\n```text\nE(Y)=1+3Y ─┐\n            ├─ E+1×O → Q1(Y)=3+4Y → Y=0:3 / Y=1:2 / Y=2:1\nO(Y)=2+Y  ─┘\n```\n\n短くなっても元との関係を保っているかは、6問目で調べます。\n\n## 3. もう一度折って一つの数にする `fold2`\n\n**式・入れる値：`c+beta2×d` の余り1個。** 一次式 `c+dY` の偶数部分はc、奇数部分はdなので、同じ操作が使えます。見本でbeta2=2なら `3+2×4=11 → 1`。\n\nここでは正しい最終値を計算します。後の6問目が照合するのはQからQ1への一段だけで、この最終値の開示検査は扱いません。\n\n## 4. 左右の2点を読む `query`\n\n**入れる値：`a=Q(x), b=Q(−x)` の順に2個。** −xは `p−x` と同じ余りです。位置を指定して値を読む操作を**クエリ**と呼びます。\n\n見本でx=1なら、`a=Q(1)=2`、`b=Q(4)=1+8+48+64=121 → 1`。`x²` と `(−x)²` は同じなので、2点は同じYにつながります。\n\n## 5. 和と差で偶数・奇数の成分を戻す `recover`\n\n```text\na = E(x²) + x×O(x²) ─┐  和 a+b = 2×E(x²)\nb = E(x²) − x×O(x²) ─┘  差 a−b = 2x×O(x²)\n```\n\n**式：`re=(a+b)×2の逆元`、`ro=(a−b)×(2x)の逆元`。** re,roは戻した偶数・奇数の成分の値です。**入れる値は `re,ro,E(x²),O(x²)` の4個**。後ろ2個は元の係数から直接計算した検算用です。\n\n見本ではa=2,b=1,x=1。2も2xも逆元は3。`re=3×3=9 → 4`、`ro=1×3=3`。直接にも `E(1)=1+3=4`、`O(1)=2+1=3` なので `4,3,4,3`。\n\n## 6. 折る前後を照合する `consistency`\n\n**入れる値：`re+beta×ro, c+d×x²` の余り2個。** 左は元の2点から組み立て、右は短くした式Q1から計算します。\n\n見本は `4+1×3=7 → 2` と `3+4×1=7 → 2`。`2,2` と一致し、この位置で最初の折り畳みがつながっています。\n\n## 7. 短い式のすり替えを見つける `cheat-caught`\n\n相手がQ1を **`Q1'(Y)=Q1(Y)+d0+d1Y`** へすり替えました。一次以下という形は保たれるので、形だけでは見抜けません。\n\n**入れる値：`re+beta×ro, c+d×x²+d0+d1×x²` の余り2個。** 左は元の2点から決まるので変えません。\n\n見本でd0=d1=1なら右は `2+1+1×1=4`。`2,4` と食い違います。この記録のxは、すり替えを検出する位置から選んであります。最後は自分で偽物を作り、検査の条件を試します。\n\n## 8. 検査を通る偽物を2種類作る `miss-points`\n\n今度はあなたがすり替える側です。次の二つの検査には、それぞれ何が足りないでしょう？ **条件を満たす式を自分で作ります。答えは一通りではありません。** 7問目のd0,d1は使いません。\n\n```text\nA：検査位置xを先に教える → あなたが一次の差を足す → xと−xでは見抜けない\nB：式の次数を制限しない → あなたが長い偽物を作る   → 非ゼロ位置を全部読んでも見抜けない\n```\n\n正しいQ1へ足す差を、次の形で作ってください。**入力する6個は `a0,a1,b0,b1,b2,b3`。各係数は0からp−1の余りです。**\n\n| 作る差 | 合格条件 |\n|---|---|\n| `A(Y)=a0+a1Y` | a1は0以外。`A(x²)=0`。他の二乗位置では一致しない、本物とは異なる一次式にする |\n| `B(Y)=b0+b1Y+b2Y²+b3Y³` | b0は0以外。`t=1..p−1` の**すべて**で `B(t²)=0`。p=5ならb3=0にする |\n\nBの次数は、p=5なら2以下、p=7なら3以下。B(0)=b0が0でないので、検査を通っても元のQ1とは違う式です。Q1+Bが非ゼロの二乗位置では同じ並びを作る、という検査範囲の限界を調べます。\n\n**使える数学**：`Y−r` はY=rで0。掛け合わせる一つ一つの式を**因子**と呼びます。積は、どれか一つの因子が0なら0です。式を展開するには：\n\n```text\n(Y−r)(Y−s) = Y²−(r+s)Y+rs\n(c0+c1Y+c2Y²)(Y−r)\n = −r×c0 + (c0−r×c1)Y + (c1−r×c2)Y² + c2Y³\n```\n\n小さな見本：p=5で `(Y−1)(Y−2)=Y²−3Y+2 → 2+2Y+Y²`。Y=1,2では0、Y=4では `2+8+16 → 1`。**この式は一部の位置を通るだけで、Bの条件には足りません。** 自分のpで「すべての二乗位置」を調べ、必要な式を組み合わせます。使わない項の係数は0です。\n\n紙で6個を作り、条件を確かめて回答欄へ提出します。任意のPythonでは `miss_points(x,p)` が6個を返すようにします。公開テストも特定の見本解との一致ではなく、上の条件を検査します。\n\n## 数学へ戻る：何を省くと破れる？\n\nAは、**検査位置を知ってから式を選べる**ことを利用します。xと−xは同じ二乗位置なので、2回読んでもAを見抜けません。Bは、**一次以下という条件を外す**ことを利用します。異なる二乗位置はp=5なら2個、p=7なら3個です。0でないk次式は、素数で割った余りの計算で高々kか所しか0になりません。Bの次数上限は、その数だけの一致を作れる最小の上限です。\n\n一方、7問目の**先に固定した一次式の差**では、tで見た `d0+d1t²` は二次式。この出題では非ゼロの見逃し位置が2個あるように作っています。1からp−1を同じ確率で選ぶ1回の見逃し率は `2/(p−1)`。同じ数を再び選ぶ可能性も含め、毎回独立に選ぶ2回ならその積です。Aのような後出しや、tと−tを意図的に選ぶ検査には、その積は使えません。\n\n実際のFRIでは、証明者（正しさを示す人）が先に並びを変更不能に固定する**コミットメント**と、検証者（確かめる人）の後からの乱数が必要です。固定は秘匿と別の性質です。Bは、この小さな検査範囲だけでは式の違いを区別できない反例であり、FRIを破った例ではありません。FRIは適切な検査範囲で、並びが低次数の多項式による並びに近いかを調べます。固定した並びから値を正しく取り出した証拠、全段の接続、近さの検証は、さらに学ぶ部分です。この演習の `2/(p−1)` はFRI全体の安全性の式ではありません。\n\n## 任意：Pythonで計算を確かめる\n\n`fri_drill.py` は8問それぞれの計算メモです。紙で解くなら編集不要です。`q,even,odd,folded,inverse` は、上に載せたQ,E,O,Q1,逆元の式を計算する補助関数として用意済みです。`qs` は自分の `(q0,q1,q2,q3)`、他の引数も「証拠を確認」の値が自動で入ります。\n\n例：最初の `poly` の `return None` を `return (q(qs,0,p), q(qs,1,p), q(qs,2,p))` に置き換え、**「公開テストを実行」**。見本の検算と `poly -> あなたの計算値` が表示されます。未記入の関数はFAILのままで大丈夫。計算した行の値を回答欄へ提出します。公開テストのPASS自体は提出になりません。\n\n呼出しの形：`q(qs,X,p)`, `even(qs,Y,p)`, `odd(qs,Y,p)`, `folded(qs,beta,Y,p)`, `inverse(a,p)`。qsとpを引数に渡します。\n",
+  "writeup": "## 二点から戻せる理由\n\na=E+xO,b=E−xOを足し引きすると2Eと2xO。pは奇数の素数、x≠0なので逆元を掛けて両成分を戻せる。Q1との一段の一致はこの恒等式による。\n\n## 見逃しが残る理由\n\n今回の差d0+d1t²は0でない二次式なので、根は高々2個。出題時にd0=−d1s²と作り、非ゼロの根s,p−sを持たせている。xはその外から選ぶので7問目は検出する。全段の接続・開示の証拠・低次数への近さはこの演習の外。\n\n## 最後は反例を作る\n\nA(Y)=s(Y−x²) (s≠0)は既知の±xを通る。Bは異なる非ゼロ二乗rごとに(Y−r)を掛ける。p=5ならY²−1、p=7ならY³−1で、非ゼロ定数倍も正解。B(0)≠0で元の式とは異なるが、検査する並びは同じ。最後の採点は特定解との一致ではなく、この二つの条件を検査する。",
   "tags": [
     "advanced-cryptography-2026",
     "week4",
@@ -53,12 +53,11 @@
     }
   ],
   "learningGoals": [
-    "式を偶数次と奇数次に分け、Q₀(X) = Q_even(X²) + X·Q_odd(X²) を自分で確かめられる",
-    "折り畳み 1 回で次数が半分になり、繰り返せば数 1 個に落ちることを実演できる",
-    "x と −x の 2 点の開示から、連立方程式で偶数部分と奇数部分を復元できる",
-    "復元した材料と Q₁ の開示を突き合わせるクエリ検査を、1 回分まるごと回せる",
-    "次数が同じすり替えでも捕まる理由（左辺は Q₀ の開示由来）を言える",
-    "見逃しが ±x の 1 組だけであることを数え、クエリを重ねれば消える理由を言える"
+    "偶奇分解の式を展開して元の式に戻せる",
+    "次数の上限が3→1→0となる折り畳みを一桁の数で計算できる",
+    "二つの読み値の和と差、逆元から成分を復元できる",
+    "後出しと次数制限の欠如を利用した二種類の反例を構成できる",
+    "固定したすり替えの見逃し率とFRI全体の安全性を区別できる"
   ],
   "runtime": {
     "provider": "docker",
@@ -74,105 +73,185 @@
     "checks": [
       {
         "id": "poly",
-        "label": "コミット済みの多項式 Q₀",
+        "label": "元の式を3か所で計算する",
         "points": 20,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "poly-hint-1",
-            "content": "X³ は `X**3`。式全体に `% p`。3 点は 0, 1, 2 の順です。",
-            "penalty": 6
+            "content": "元の式に位置を入れた値が、これから折る材料です。まず小さな3か所で式の読み方を確かめます。",
+            "penalty": 2
+          },
+          {
+            "id": "poly-hint-2",
+            "content": "Q(X)=1+2X+3X²+X³、5で割る見本。Q(0)=1、Q(1)=7の余り2、Q(2)=25の余り0。位置を係数の一覧と取り違えません。",
+            "penalty": 2
+          },
+          {
+            "id": "poly-hint-3",
+            "content": "「証拠を確認」のpとq0,q1,q2,q3を見る。① q0の余り。② q0+q1+q2+q3の余り。③ q0+2q1+4q2+8q3の余り。この順に「元の式を3か所で計算する」へ a,b,c と入力し、提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "fold",
-        "label": "折り畳み — 検証者の β で 1 本に混ぜる",
+        "label": "式を折って短くする",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "fold-hint-1",
-            "content": "Q1 = Qe + beta·Qo。Y に入れるのは 0, 1, 2 そのまま（x² ではありません — Y が新しい変数）。",
-            "penalty": 6
+            "content": "偶数・奇数の成分を同じ文字Yの式にして混ぜると、短い一本の式になります。元のXの二乗をYと呼び替えたので、Yの指数は低くなります。",
+            "penalty": 2
+          },
+          {
+            "id": "fold-hint-2",
+            "content": "p=5、E(Y)=1+3Y、O(Y)=2+Y、beta=1ならQ1(Y)=3+4Y。Y=0,1,2で3,7,11、余りは3,2,1です。",
+            "penalty": 2
+          },
+          {
+            "id": "fold-hint-3",
+            "content": "「証拠を確認」で c=q0+beta×q1、d=q2+beta×q3を計算し、それぞれpで割った余りをメモ。c,c+d,c+2dの余りをこの順で「式を折って短くする」に3個入力し、提出。ここではYへ0,1,2を入れます。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "fold2",
-        "label": "もう 1 回折ると定数",
+        "label": "もう一度折って一つの数にする",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "fold2-hint-1",
-            "content": "c = Q1(0)、d = (Q1(1) − Q1(0)) % p が 1 次の係数。答えは (c + beta2·d) % p の 1 個の数。",
-            "penalty": 6
+            "content": "一次式の偶数部分は定数、奇数部分から文字を一個外すともう一つの定数です。二つを混ぜると、文字のない数になります。",
+            "penalty": 2
+          },
+          {
+            "id": "fold2-hint-2",
+            "content": "p=5、Q1(Y)=3+4Y、beta2=2なら、3+2×4=11を5で割った余りは1。二回目にはbeta2を使います。",
+            "penalty": 2
+          },
+          {
+            "id": "fold2-hint-3",
+            "content": "「証拠を確認」の値でc=q0+beta×q1、d=q2+beta×q3の余りを求める。c+beta2×dを計算し、pで割った余り1個を「もう一度折って一つの数にする」へ入力して提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "query",
-        "label": "クエリ — x と −x の 2 点を開かせる",
+        "label": "左右の2点を読む",
         "points": 20,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "query-hint-1",
-            "content": "2 点目は Q((-x) % p) — 括弧を忘れると Python の演算順序で壊れます。",
-            "penalty": 6
+            "content": "反対の位置を読むと、偶数乗の成分は同じままで、奇数乗の成分だけ符号が変わります。次の和と差で、二つの成分を分ける準備です。",
+            "penalty": 2
+          },
+          {
+            "id": "query-hint-2",
+            "content": "p=5、Q(X)=1+2X+3X²+X³、x=1。Q(1)=7→2、反対は5−1=4、Q(4)=121→1なので2,1です。",
+            "penalty": 2
+          },
+          {
+            "id": "query-hint-3",
+            "content": "「証拠を確認」のxをQへ入れる。q0+q1×x+q2×x²+q3×x³の余りをaとメモ。次はz=p−xを作り、同じ式のxをzに変えた余りをbとする。「左右の2点を読む」へa,bの順で入力し、提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "recover",
-        "label": "2 点から偶数部分と奇数部分を復元",
+        "label": "和と差で偶数・奇数の成分を戻す",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "recover-hint-1",
-            "content": "和 × 2⁻¹ が偶数部分、差 × (2x)⁻¹ が奇数部分。逆元は `pow(2, p - 2, p)` と `pow(2*x, p - 2, p)`。4 つ組で、後ろ 2 つは検算用の直接計算。",
-            "penalty": 6
+            "content": "二つの読み値を足すと奇数成分が消え、引くと偶数成分が消えます。逆元を掛けて、二倍や二倍のxを取り除きます。",
+            "penalty": 2
+          },
+          {
+            "id": "recover-hint-2",
+            "content": "p=5,x=1,a=2,b=1。2×3の余りが1なので逆元は3。re=(2+1)×3→4、ro=(2−1)×3→3。直接にもE(1)=4,O(1)=3で、4,3,4,3です。",
+            "penalty": 2
+          },
+          {
+            "id": "recover-hint-3",
+            "content": "「左右の2点を読む」の式でa=Q(x),b=Q(p−x)を再計算。1からp−1を順に掛け、2×iの余りが1のi、2×x×jの余りが1のjを探す。re=(a+b)×i、ro=(a−b)×j、E=q0+q2×x²、O=q1+q3×x²を各々余りにする。「和と差で偶数・奇数の成分を戻す」へre,ro,E,Oの順で入力して提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "consistency",
-        "label": "クエリ検査 — 復元した材料と Q₁ の開示を突き合わせる",
+        "label": "折る前後を照合する",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "consistency-hint-1",
-            "content": "左は (re + beta·ro) % p、右は Q1(x*x % p)。同じ数が 2 つ並ぶのが正解です。",
-            "penalty": 6
+            "content": "元の二点から作った値と、短くした式から得た値を比べます。同じ位置に対する二通りの計算なので、正しく折っていれば一致します。",
+            "penalty": 2
+          },
+          {
+            "id": "consistency-hint-2",
+            "content": "p=5,re=4,ro=3,beta=1,Q1(Y)=3+4Y,x=1なら、左4+1×3→2、右3+4×1²→2。2,2がこの位置の一致です。",
+            "penalty": 2
+          },
+          {
+            "id": "consistency-hint-3",
+            "content": "前の式でre,roを求め、左=re+beta×roを余りにする。右はc=q0+beta×q1,d=q2+beta×q3を使い、c+d×x²の余り。「折る前後を照合する」へ左,右の順で2個入力し、提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "cheat-caught",
-        "label": "クエリ検査が嘘を捕まえる",
+        "label": "短い式のすり替えを見つける",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "cheat-caught-hint-1",
-            "content": "左は 8 行目と同じ値（Q₀ の開示から組んだので動かない）。右だけ Q1c(x*x % p) に変わり、ずれます。",
-            "penalty": 6
+            "content": "すり替えた式も短いままなので、次数だけでは見抜けません。元の二点を動かさず、相手が短くした式の値だけ変えたときの食い違いを調べます。",
+            "penalty": 2
+          },
+          {
+            "id": "cheat-caught-hint-2",
+            "content": "p=5、正しい照合が2,2、d0=d1=1,x=1なら右だけ2+1+1×1²=4に変わるので2,4。差が0でないため検出です。",
+            "penalty": 2
+          },
+          {
+            "id": "cheat-caught-hint-3",
+            "content": "「折る前後を照合する」と同じ左,右を計算。左はそのまま、右だけd0+d1×x²を足してpで割った余りにする。「短い式のすり替えを見つける」へ左,変更後の右を入力し、提出。この出題のxは必ず検出する位置です。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "miss-points",
-        "label": "どの x なら見逃したか — 数える",
+        "label": "検査を通る偽物を2種類作る",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "miss-points-hint-1",
-            "content": "d0 + d1·x² ≡ 0 になる x を 1..p−1 で探す。±x のペア 1 組（2 個）が出ます。`sorted(...)` で小さい順に。",
-            "penalty": 6
+            "content": "最初の偽物は、教えられた検査位置だけで差が消えるように作ります。二つ目は、検査するすべての二乗位置で差が消えるように長い式を作ります。一致する位置を増やすことと、式を先に固定し次数を制限することの違いを試します。",
+            "penalty": 2
+          },
+          {
+            "id": "miss-points-hint-2",
+            "content": "5で割る見本でx=2なら、A(Y)=Y−4はY=4で0、Y=1では余り2です。Bには全二乗位置で0が必要です。(Y−1)(Y−2)を展開すると2+2Y+Y²ですが、Y=4では余り1なので不足。どの因子が必要かは二乗位置から決めます。",
+            "penalty": 2
+          },
+          {
+            "id": "miss-points-hint-3",
+            "content": "「証拠を確認」のx,pを見る。Aは0以外のa1を選び、a0+a1×x²の余りが0になるa0を求める。Bはt=1..p−1を二乗して余りを書き、重複を除く。その各値rについてY−rを一つずつ掛け、本文の展開式でb0,b1,b2,b3へ整理する。使わない項は0。A(x²)=0、すべてのB(t²)=0、a1とb0が非ゼロか検算。「検査を通る偽物を2種類作る」へa0,a1,b0,b1,b2,b3の順で提出。",
+            "penalty": 2
           }
         ]
       }
@@ -180,97 +259,160 @@
   },
   "i18n": {
     "en": {
-      "name": "Open two points and the fold gives itself away",
-      "shortDescription": "When someone insists a sealed expression is low-degree, making them open all of it defeats the seal. FRI makes them fold it in half and checks the fold with just two openings, at x and −x. Twelve lines of type-and-paste Python take you to the exact place a dishonest fold is exposed.",
-      "description": "A Week 4 drill. Not a write-a-function problem: you type one line, paste the value it prints, twelve times, and run FRI — checking a committed polynomial's degree from a few openings — end to end. First an honest lap: split the committed Q₀ into even and odd parts, fold with the verifier's β to halve the degree, fold once more to a constant (sent in the clear), recover both halves from the openings at x and −x by simultaneous equations, and set them against Q₁'s opening. Then the lie: swap in a **different polynomial of the same degree** for Q₁, watch the same query check catch it, and count that the misses are a single ±x pair.\n\nThe format matches ac26-w3-schnorr-drill / ac26-w4-sumcheck-drill / ac26-w4-plonk-drill (the learner-validated \"type one line, paste the value, read the one sentence about that value\"). The procedure follows the lecture's FRI section (slides 22–23), and the lecture's F₁₇ numbers (Q₀ = 15 + 5X + 5X², Q₁ = 5Y + 13, x = 8) sit verbatim in the public test's part 1. The deployment's values — the field, Q₀'s coefficients, β, β₂, x, the swap's difference — are all seed-derived, and so are the two miss points.\n\nEight of the twelve lines have an answer field (the platform's per-problem maximum). The four ungraded lines (the even/odd split, the all-points check, the swap's setup, the closing completeness sweep) are material or construction-level confirmations, explained in place. The swap's difference d0 + d1·Y is generated as d0 = −d1·s² so its vanishing Y is exactly one square — one ±x miss pair — and the query point is guaranteed off the miss pair on every seed.",
-      "instructions": "## \"This expression is low-degree\" — without showing it\n\nPass through Week 4's translation (`ac26-w4-arithmetization`) and the claim \"the computation is correct\" has turned into the claim \"this sealed expression has low degree\". The **degree** is the largest exponent sitting on X anywhere in the expression — 3 + 5X + 5X² has degree 2, and the Q₀ below has degree 3. Inside a StarkNet or RISC Zero proof, this is exactly what the verifier confirms last.\n\nMaking the prover open all of it would settle the question — and defeat the seal. Asking for the degree out loud settles nothing — a liar can say anything. So FRI makes the prover **fold the expression to half its size**, and checks that the fold was done as declared using **just two openings, at x and −x**. A dishonest fold is exposed right there.\n\n## Make them fold, open two points\n\nYou are the verifier. The other side (the prover) has sealed an expression Q₀ and handed it to you, insisting \"its degree is at most 3\". Its coefficients q0–q3 appear under Inspect evidence, so in this drill you can see inside — but **a real verifier holds no such thing**; all it can do is make a few points be opened.\n\nMake the prover produce \"even part + β × odd part\" and the expression halves in size. Repeat, and you are left with a single number. All that remains is confirming the fold was genuine, from the two openings. The first eight lines run one honest round; the last four switch to **a prover who swapped in a different expression**, and count where the swap is caught — and which x would have let it through.\n\nThis is not a write-a-function problem. You **type one line into Python and paste the value it prints into an answer field**, twelve times. The numbers change on every start, so copying someone else's answers or old notes does not pass.\n\n## Before you start — degree, cancelling signs, simultaneous equations\n\n- ① A polynomial is an expression built by only adding \"number × power of X\" terms, like 3 + 5X + 5X². Its **degree** is the largest exponent on X in it: 3 + 5X has degree 1, 3 + 5X + 5X² degree 2. Expanding keeps the count honest — (1 + X) × (1 + X) = 1 + 2X + X², a product of two degree-1 factors, has degree 2. \"Degree at most 3\" means \"no term carries an exponent above 3\", and every claim in this problem stands on that one word.\n- ② (x)² and (−x)² are the same (year 9 expansion). Split an expression into even-degree and odd-degree terms, and Q(x) + Q(−x) kills the odd ones while Q(x) − Q(−x) kills the even ones. Nothing but signs cancelling.\n- ③ Two unknowns need two equations (year 8 simultaneous equations). That alone is why the two points x and −x give back both the even and the odd part.\n- ④ A degree-1 expression (an expression of degree 1) is zero in exactly one place. The last \"count the misses\" line needs nothing more.\n- Numbers are remainders after dividing by a prime p. Division here means multiplying by the partner that gives 1 (the **inverse**); in Python, `pow(2, p - 2, p)` is the inverse of 2. If mod is new, `ac26-w1-constraint-lab`; for inverses, `ac26-w3-field-inverse`. Your p is shown by **Inspect evidence**.\n- In the course: Week 4 lecture slides 22–23 (the even/odd split, folding with β, the Q₁ = 5Y + 13 example). The one-digit example below is the lecture's own worked example, and it is in the public tests as well.\n\n## A one-digit example — one fold on paper (p = 17, Q₀ = 15 + 5X + 5X²)\n\n- **Split even from odd**: the even-degree terms are 15 and 5X², the odd-degree term is 5X. Treating X² as a new variable Y: Q_even(Y) = 15 + 5Y, Q_odd(Y) = 5.\n- **Fold with β = 3**: Q₁(Y) = (15 + 5Y) + 3 × 5 = 30 + 5Y, and 30 − 17 = 13, so **Q₁ = 13 + 5Y**. It was degree 2; as a polynomial in Y it is degree 1 — half the size.\n- **Open at x = 8**: −8 becomes −8 + 17 = 9, so the two openings are Q₀(8) and Q₀(9). Q₀(8) = 15 + 40 + 320 = 375, and 375 = 17 × 22 + 1, so **1**. Q₀(9) = 15 + 45 + 405 = 465, and 465 = 17 × 27 + 6, so **6**.\n- **Pull out the even part**: adding the two kills the odd term: 1 + 6 = 7. Divide by 2 — multiply by 2's inverse 9 — and 7 × 9 = 63 ≡ **12**.\n- **Check it**: directly, x² = 64 ≡ 13, so Y = 13, and Q_even(13) = 15 + 65 = 80 ≡ **12**. They match — **the even part's value was recovered from the two opened points alone**.\n\n## First move\n\n1. In Participant Portal (the site showing this statement) press **起動 (Start)**. The **problem editor** appears on the same page, along with **eight answer fields**, each headed with a checkpoint's name.\n2. Press **Inspect evidence** in the editor. This deployment's numbers appear as **assignment statements you can paste straight into Python**: the field p, the sealed Q₀'s coefficients q0, q1, q2, q3, the verifier's folding numbers beta and beta2, the query point x, and the lying prover's difference d0 and d1. **No answers are shown** — the answers are what your Python prints.\n3. Open Python on your own machine. On Windows open PowerShell, on a Mac open Terminal, and type `python3`; a `>>>` prompt appears (the **IDLE** shell that ships with Python works the same). That one prompt is all you need.\n4. Paste every assignment statement from step 2 at the `>>>`. You are ready.\n\n**If you cannot open Python**: the editor's `fri_drill.py` holds twelve empty functions. Fill them in and press **Run public tests**; it prints what your functions produce on this deployment's numbers — the same values the `>>>` would have printed. Paste those into the answer fields.\n\n## What you answer — eight checkpoints\n\nOnly **the values in the answer fields** are graded (`fri_drill.py` itself is not graded — but pressing Submit sends the editor contents along with the answer, so do not empty it). When an answer is several numbers, write them comma-separated as `[4, 8, 1]` (`(4, 8, 1)` and plain `4, 8, 1` are also accepted). **A wrong count of numbers is a wrong answer.**\n\n1. The committed polynomial Q₀ … 3 numbers\n2. Folding — mix into one with the verifier's β … 3 numbers\n3. Fold once more and it is a constant … 1 number\n4. The query — open x and −x … 2 numbers\n5. Recover the even and odd parts from two points … 4 numbers\n6. The query check — recovered material against Q₁'s opening … 2 numbers\n7. The query check catches the lie … 2 numbers\n8. Count the x that would have missed … 2 numbers (ascending)\n\n**How submitting works**: type the value into the answer field and press that checkpoint's **Submit (+points)**. The eight are graded separately, so being stuck on one does not block the rest. You may resubmit after a miss, but each miss costs 10 points (the eight total 200; the total never goes below 0). Each checkpoint has one hint, and opening it costs points. **Restore starter** puts `fri_drill.py` back to its original state.\n\n## Workflow — twelve lines\n\nEight of the twelve lines have an answer field; the other four are material for the line that follows (they have something to read too).\n\nHow to work a line: say out loud (or write down) one line of **Before you type** — what you expect to appear → paste **the line to type** → read **what this line means** → paste the printed value into the answer field → once it matches, read **read after it matches** and move on. Predicting first matters: however you get this arithmetic wrong, the answer still lands somewhere in 0 .. p − 1, so staring at the number that came out tells you nothing about whether it is right.\n\n### 1. The committed polynomial Q₀  (answer box 1 of 8)\n\nQ₀ is the degree-3 expression whose coefficients appear under Inspect evidence (q0 + q1·X + q2·X² + q3·X³). The prover's claim is \"the degree of Q₀ is at most 3\". Build it locally and evaluate it in three places.\n\n- **Before you type**: at X = 0, which coefficient should the value equal?\n\n```python\nQ = lambda X: (q0 + q1*X + q2*X**2 + q3*X**3) % p; (Q(0), Q(1), Q(2))\n```\n\n- **What this line means**: Q₀ at 0, 1 and 2.\n- **Answer**: the answer field for this line (#1 from the top), 3 numbers.\n- **Read after it matches**: the verifier's only remaining job is confirming that the sealed Q₀ really has a low degree. Making every point be opened would defeat the point of sealing it. Confirming the degree from a handful of openings — that is FRI, and the next eleven lines are all of it. Here you hold Q₀ locally so you can check your own work; a real verifier does not.\n\n### 2. Split even from odd  (no answer field)\n\nQ₀(X) = Q_even(X²) + X·Q_odd(X²). Separating the even-degree terms (q0, q2) from the odd-degree ones (q1, q3) turns one degree-3 expression into two degree-1 expressions.\n\n- **Before you type**: with Y = 1 the result is just coefficients added — which two, and which two?\n\n```python\nQe = lambda Y: (q0 + q2*Y) % p; Qo = lambda Y: (q1 + q3*Y) % p; (Qe(1), Qo(1))\n```\n\n- **What this line means**: the even and odd parts at Y = 1.\n- **Answer**: none — material for the next line; keep the value on screen.\n- **Read once it prints**: q0 + q2 and q1 + q3. Treating X² as a new variable Y, both Q_even(Y) = q0 + q2·Y and Q_odd(Y) = q1 + q3·Y are degree 1 — **exactly half the degree**. The next line confirms the split really holds.\n\n### 3. A check — does the split hold everywhere?  (no answer field)\n\nDoes Q₀(X) = Q_even(X²) + X·Q_odd(X²) hold at all of 0 .. p−1? (A sanity check; the verifier never does it.)\n\n- **Before you type**: do you expect a row of True or a row of False?\n\n```python\n[Q(X) == (Qe(X*X % p) + X*Qo(X*X % p)) % p for X in range(p)]\n```\n\n- **What this line means**: compare both sides at every point.\n- **Answer**: none — material for the next line; keep the value on screen.\n- **Read once it prints**: all True. It is only the terms rearranged, so of course — but seeing it yourself makes \"we merely split even from odd\" land. Now the real thing: mix those two into one using a number the verifier chooses, and halve the size.\n\n### 4. Folding — mix into one with the verifier's β  (answer box 2 of 8)\n\nThe verifier picks β (`beta` from Inspect evidence) and the prover builds Q₁(Y) = Q_even(Y) + β·Q_odd(Y), sealing that too.\n\n- **Before you type**: what degree should Q₁ come out as?\n\n```python\nQ1 = lambda Y: (Qe(Y) + beta*Qo(Y)) % p; (Q1(0), Q1(1), Q1(2))\n```\n\n- **What this line means**: the folded Q₁ at 0, 1 and 2.\n- **Answer**: the answer field for this line (#2 from the top), 3 numbers.\n- **Read after it matches**: Q₁ is degree 1 — one fold took degree 3 down to 1. **The verifier choosing β** is what makes this work. The order is always: the prover seals Q₀ → the verifier sends β → the prover builds Q₁ and seals it → the next question arrives (β₂, and later the query point x). Q₁ cannot exist before β does — but its ingredient Q₀ was sealed **before β arrived**, so the prover cannot tailor it to β (seal first, ask afterwards — the same reasoning as Week 3). Each fold halves the size, so a few folds bring it down to a single number.\n\n### 5. Fold once more and it is a constant  (answer box 3 of 8)\n\nSplit Q₁ = c + d·Y into even and odd again and the even part is the constant c, the odd part the constant d. Mix them with a second number β₂ (`beta2`).\n\n- **Before you type**: the result is a single number. Where in Q₁ can you read c and d off?\n\n```python\nc, d = Q1(0), (Q1(1) - Q1(0)) % p; (c + beta2 * d) % p\n```\n\n- **What this line means**: c = Q₁(0), d is the coefficient of Y; folding gives c + β₂·d.\n- **Answer**: the answer field for this line (#3 from the top), 1 number.\n- **Read after it matches**: one number left. A single number does not need sealing — it can simply be **sent as it is**. That ends the chain of folds, and what the prover sent is \"two sealed things plus one number\". What remains is confirming the folding was **really done as declared**, from a few openings — the query.\n\n### 6. The query — open x and −x  (answer box 4 of 8)\n\nThe verifier picks x (from Inspect evidence) and has the two values Q₀(x) and Q₀(−x) opened from the sealed Q₀.\n\n- **Before you type**: which number in 0 .. p − 1 is −x in this world?\n\n```python\n(Q(x), Q((-x) % p))\n```\n\n- **What this line means**: the two opened values.\n- **Answer**: the answer field for this line (#4 from the top), 2 numbers.\n- **Read after it matches**: why the pair x and −x? Because x² = (−x)², the two points sit **above the same Y = x²**. And Q₀(x) = Q_even(x²) + x·Q_odd(x²), Q₀(−x) = Q_even(x²) − x·Q_odd(x²) — two unknowns (the even part's value and the odd part's value) with two equations. Year-8 simultaneous equations recover both, which is the next line.\n\n### 7. Recover the even and odd parts from two points  (answer box 5 of 8)\n\nAdding kills the odd part and subtracting kills the even one. Multiply by the inverse of 2 and of 2x to pull them out, and print the direct computation beside them.\n\n- **Before you type**: of the four numbers, which pairs should be equal?\n\n```python\ninv2 = pow(2, p - 2, p); re = (Q(x) + Q((-x) % p)) * inv2 % p; ro = (Q(x) - Q((-x) % p)) * pow(2*x, p - 2, p) % p; (re, ro, Qe(x*x % p), Qo(x*x % p))\n```\n\n- **What this line means**: the left two are recovered from the two openings; the right two are computed directly (a check for you — a real verifier cannot do it).\n- **Answer**: the answer field for this line (#5 from the top), 4 numbers.\n- **Read after it matches**: recovery and direct computation agree. Although the verifier holds **neither** Q_even nor Q_odd, it produced their values from the two opened points alone — the same steps as the one-digit example above. The material from before the fold is now in the verifier's hands.\n\n### 8. The query check — recovered material against Q₁'s opening  (answer box 6 of 8)\n\nIf the fold was as declared, Q₁(x²) must equal Q_even(x²) + β·Q_odd(x²). The left side is opened from Q₁'s seal; the right side the verifier assembles itself from the recovered re and ro.\n\n- **Before you type**: will the two numbers be the same or different?\n\n```python\n((re + beta*ro) % p, Q1(x*x % p))\n```\n\n- **What this line means**: left, assembled from recovered material; right, Q₁'s opening.\n- **Answer**: the answer field for this line (#6 from the top), 2 numbers.\n- **Read after it matches**: equal — the fold at this x was genuine. That is one whole query: two openings from Q₀, one from Q₁, and a handful of additions and multiplications. Repeat it at a few different x and you can be highly confident the sealed chain really was folded in half each time. Next: how a dishonest fold gets caught by this same check.\n\n### 9. A dishonest fold — swap in a different degree-1 expression  (no answer field)\n\nSuppose the prover sealed Q₁′ = Q₁ + d0 + d1·Y instead of Q₁ (d0, d1 from Inspect evidence). Its degree is still 1 — **looking at the degree alone shows nothing**.\n\n- **Before you type**: how far apart are Q₁′(0) and Q₁(0)?\n\n```python\nQ1c = lambda Y: (Q1(Y) + d0 + d1*Y) % p; (Q1c(0), Q1c(1))\n```\n\n- **What this line means**: two values of the swapped Q₁′.\n- **Answer**: none — material for the next line; keep the value on screen.\n- **Read once it prints**: Q₁′ is a perfectly respectable degree-1 expression, so \"low degree\" itself is satisfied. What FRI catches is not only \"not low degree\" but **\"inconsistent with the material it was folded from\"**. What happens when the right-hand side of the query check becomes Q₁′'s opening — that is the next line.\n\n### 10. The query check catches the lie  (answer box 7 of 8)\n\nAt the same x, compare the recovered material against Q₁′'s opening.\n\n- **Before you type**: does the left-hand number change from line 8, or stay put?\n\n```python\n((re + beta*ro) % p, Q1c(x*x % p))\n```\n\n- **What this line means**: left, assembled from recovered material (the same as line 8); right, the swapped Q₁′'s opening.\n- **Answer**: the answer field for this line (#7 from the top), 2 numbers.\n- **Read after it matches**: they differ. The left side is built from Q₀'s openings, so swapping Q₁ cannot move it. The gap is exactly d0 + d1·x² — the difference of the swap, showing through. And Q₀ and Q₁ were **sealed separately, in advance**, so neither can be conveniently adjusted afterwards. The lie was rejected at this one point.\n\n### 11. Count the x that would have missed  (answer box 8 of 8)\n\nTry every x from 1 to p−1 and list the points where the swap gets through the check.\n\n- **Before you type**: from fact ④ (a degree-1 expression is zero in one place), how many x do you expect?\n\n```python\nsorted(xx for xx in range(1, p) if (d0 + d1 * (xx*xx % p)) % p == 0)\n```\n\n- **What this line means**: the list of x where the gap d0 + d1·x² is 0, ascending.\n- **Answer**: the answer field for this line (#8 from the top), 2 numbers (ascending).\n- **Read after it matches**: exactly two — one ± pair. The gap is a degree-1 expression in Y = x², so there is one Y where it vanishes and one ± pair of x above it. The miss probability is 2/(p−1), and running the query at k different x drops it to that power. **A lie survives only in a few places** — the shape that recurs all week.\n\n### 12. Honest folds pass everywhere — the closing check  (no answer field)\n\nWith the genuine Q₁, is there any x at all where the query check fails?\n\n- **Before you type**: do you expect the list to be empty, or to contain something?\n\n```python\n[xx for xx in range(1, p) if ((Q(xx) + Q((-xx) % p)) * inv2 + beta * (Q(xx) - Q((-xx) % p)) * pow(2*xx, p - 2, p) - Q1(xx*xx % p)) % p != 0]\n```\n\n- **What this line means**: the list of x where an honest fold fails the check.\n- **Answer**: none. This is the last line.\n- **Read once it prints**: empty — an honest prover passes at **every** x. Both halves are now in hand: honest work is never wrongly rejected (completeness) and a lie is almost always caught (soundness). In summary, FRI is three moves: split even from odd and mix with β to halve the size; fold down to a single number; recover the material from the openings at x and −x and check the layers for consistency at a few points.\n\n## What lies past the folding\n\nYou are done when all twelve lines pass. You confirmed — **once each, on numbers you produced yourself** — that the even/odd split is nothing but signs cancelling, that one fold halves the size, that two openings at x and −x recover the material a fold was made from, that this check catches even a swap of the same degree, and that the misses are exactly one ± pair of x.\n\nReal FRI is this one round scaled up: log-many folds and a few dozen queries. StarkNet's and RISC Zero's proofs can stay transparent — no trusted ceremony — because they lean on nothing beyond what you just used: a hash envelope and a few opened points. That the same random checkpoint works on a different question — \"do two collections have the same members?\" — is what `ac26-w4-plonk-drill` shows.",
-      "writeup": "## The shape of this problem\n\nTwelve lines are typed; eight have an answer field. The order: the committed Q₀ (1) → the even/odd split (2–3) → folding (4–5) → the query and recovery (6–8) → the swap (9–10) → misses and completeness (11–12).\n\n## What each line protects\n\n- 1–3: the split is mere coefficient sorting, and Q₀(X) = Q_even(X²) + X·Q_odd(X²) holds at every point.\n- 4–5: a fold = even + β·odd. Degree halves; log-many folds reach a constant. β arrives after the commitment (the ordering carries the soundness).\n- 6–8: x² = (−x)², so both openings sit over one Y. Sum and difference recover both halves, to be set against Q₁'s opening — one complete query.\n- 9–10: a swap invisible to degree alone is caught by consistency with the raw material. The left side comes from Q₀'s openings and cannot be moved.\n- 11–12: the misses are the roots of d0 + d1·x² — one ±x pair. Honesty passes everywhere (completeness).\n\n## How it breaks\n\nThe odd part from the even coefficients / the halves swapped in the fold / (2x)⁻¹ as x⁻¹ / the second opening at Q(x) — each shifts one value and stops at that line.\n\n## Where this leads\n\nSTARK closes as trace → constraints → quotient Q → Merkle → FRI. As with SumCheck's two points and PLONK's zeroed fingerprint, a lie survives only on a small set of points — all three Week 4 schemes stand on this probabilistic soundness.",
+      "name": "Catch an altered polynomial fold",
+      "shortDescription": "Eight checkpoints connect a folded expression to its original. Start with remainders by 5 or 7, then construct two alterations that pass inspection and submit six coefficients.",
+      "description": "Eight checkpoints connect the lecture folding equations with the notes’ sum/difference recovery derivation and counterexample construction. Build a linear difference after learning the query and a higher-degree difference invisible on the restricted domain. Distinguish these arithmetic conditions from full FRI proximity guarantees.",
+      "instructions": "## Before you start\n\nStart with addition, multiplication and division remainders. You check whether a shortened expression was altered. **Start → Inspect → use your `q0` as the first value of “Evaluate the original at three positions”.** Calculate the other two values using the formula below, submit `a,b,c` in that answer field, and look for a correct result. Finish all eight fields.\n\nUse paper, or the optional `fri_drill.py` scratchpad in the editor. Each row has three hints: mechanism → small example → steps with your numbers.\n\n## What are we trying?\n\n**FRI** checks whether a list of values is close to a list obtained from a low-degree polynomial, by reading a few positions. A **polynomial** is an expression such as `1+2X+3X²+X³`. Its **degree** is the largest exponent with a nonzero coefficient, here 3. “Close” means that few positions differ.\n\nThis exercise isolates **folding (mixing even and odd parts into one expression) and one fold consistency check**. We show all coefficients, so this alone does not prove low degree or protect a secret.\n\n```text\nOriginal Q(X) ──split by even/odd powers──→ E(Y), O(Y)\n                                               │ E + beta×O\n                                               ▼\n                                          Shorter Q1(Y)\nQ(x), Q(−x) ──sum and difference──→ E(x²), O(x²) ──mix──→ equal to Q1(x²)?\n```\n\n## Your numbers and arithmetic\n\nInspect displays **your numbers**. Replace the example inputs below with these before submitting.\n\n| Name | Meaning |\n|---|---|\n| `p` | Divisor, 5 or 7. Reduce each result to a remainder from 0 through p−1 |\n| `q0,q1,q2,q3` | Coefficients (multipliers of the terms) in `Q(X)=q0+q1X+q2X²+q3X³` |\n| `beta,beta2` | Multipliers for the first and second folds; written β, β₂ in mathematics |\n| `x` | Check position, from 1 through p−1 |\n| `d0,d1` | Coefficients of the alteration `d0+d1Y` |\n\n**Remainder**: `8=5×1+3` leaves 3; `−2=5×(−1)+3` also leaves 3. Python writes these as `8 % 5` and `-2 % 5`. `X²` is `X*X` or `X**2`.\nAn **inverse** is a multiplier producing remainder 1. With divisor 5, `2×3=6 → 1`, so the inverse of 2 is 3. To divide by 2 in this arithmetic, multiply by 3. Try multipliers 1..p−1 when needed. The inverses of 2 and 2x exist because p is an odd prime and x is nonzero.\n\nAll formulas below use remainders by p. `Q(t)` means substitute t for X. Naming `Y=X²` gives:\n\n```text\nQ(X) = (q0 + q2X²) + X(q1 + q3X²)\n           E(X²)           O(X²)\nE(Y) = q0 + q2Y       O(Y) = q1 + q3Y\nQ1(Y) = E(Y) + beta×O(Y) = c + dY\nc = q0 + beta×q1      d = q2 + beta×q3\n```\n\nE uses powers 0 and 2. O takes out one X from powers 1 and 3. In Y both parts have degree at most one, so Q1 does too. In general the degree bound roughly halves, rounded down: 3→1→0. Our generated first fold is nonconstant.\n\n## 1. Evaluate the original at three positions `poly`\n\n**Submit three values: `Q(0), Q(1), Q(2)`.** The first is q0 itself.\nFor the example `p=5, (q0,q1,q2,q3)=(1,2,3,1)`: `Q(0)=1`, `Q(1)=1+2+3+1=7 → 2`, `Q(2)=1+4+12+8=25 → 0`. The example answer is `1,2,0`.\n\n## 2. Fold to a shorter expression `fold`\n\n**Formula: `c=q0+beta×q1`, `d=q2+beta×q3`. Submit the remainders of `c, c+d, c+2d`.**\nIn the example beta=1: `c=1+1×2=3`, `d=3+1×1=4`.\n\n```text\nE(Y)=1+3Y ─┐\n            ├─ E+1×O → Q1(Y)=3+4Y → Y=0:3 / Y=1:2 / Y=2:1\nO(Y)=2+Y  ─┘\n```\n\nRow 6 checks whether the shorter expression still agrees with the original.\n\n## 3. Fold again to one number `fold2`\n\n**Submit the single remainder `c+beta2×d`.** In `c+dY`, the even part is c and the odd part is d. Example beta2=2: `3+2×4=11 → 1`.\nHere you compute the honest final value. Row 6 only checks Q→Q1; it does not verify an opening of this final value.\n\n## 4. Read two opposite positions `query`\n\n**Submit two values: `a=Q(x), b=Q(−x)`.** −x has the same remainder as p−x. Choosing a position and reading its value is a **query**.\nExample x=1: `a=Q(1)=2`, `b=Q(4)=1+8+48+64=121 → 1`. Since `x²=(−x)²`, both positions lead to the same Y.\n\n## 5. Recover the even and odd values `recover`\n\n```text\na = E(x²) + x×O(x²) ─┐  Sum a+b = 2×E(x²)\nb = E(x²) − x×O(x²) ─┘  Difference a−b = 2x×O(x²)\n```\n\n**Formula: `re=(a+b)×inverse of 2`, `ro=(a−b)×inverse of 2x`. Submit four values `re,ro,E(x²),O(x²)`**. re,ro are the recovered even/odd values; the last two are direct checks using the original coefficients.\nExample a=2,b=1,x=1: both inverses are 3. `re=3×3=9 → 4`, `ro=1×3=3`. Directly, `E(1)=1+3=4`, `O(1)=2+1=3`: submit `4,3,4,3`.\n\n## 6. Check the first fold `consistency`\n\n**Submit two remainders: `re+beta×ro, c+d×x²`.** Build the left side from the original two readings, and the right from the shorter expression Q1.\nExample: `4+1×3=7 → 2` and `3+4×1=7 → 2`. The pair `2,2` agrees at this position for the first fold.\n\n## 7. Detect an altered short expression `cheat-caught`\n\nThe other party substitutes **`Q1'(Y)=Q1(Y)+d0+d1Y`**. It still has degree at most one, so its shape alone does not reveal the alteration.\n**Submit two remainders: `re+beta×ro, c+d×x²+d0+d1×x²`.** Keep the left side: it comes from the original two readings.\nExample d0=d1=1: the right becomes `2+1+1×1=4`. The pair `2,4` disagrees. This record deliberately chooses x where the alteration is detected. Next, construct your own alterations to test the checker’s assumptions.\n\n## 8. Construct two alterations that pass inspection `miss-points`\n\nYou now play the dishonest party. What is missing from each checker below? **Construct expressions satisfying the conditions. Multiple answers are valid.** Do not use row 7's d0,d1.\n\n```text\nA: reveal x first       → you add a linear difference → checks at x and −x miss it\nB: omit the degree cap  → you choose a longer false fold → every nonzero check misses it\n```\n\nConstruct these differences to add to the honest Q1. **Submit six coefficients `a0,a1,b0,b1,b2,b3`, each a remainder from 0 to p−1.**\n\n| Difference to construct | Conditions |\n|---|---|\n| `A(Y)=a0+a1Y` | a1 is nonzero; `A(x²)=0`. A genuine linear alteration that disagrees at other square positions |\n| `B(Y)=b0+b1Y+b2Y²+b3Y³` | b0 is nonzero; `B(t²)=0` for **every** t=1..p−1. If p=5, b3 must be zero |\n\nB has degree at most 2 for p=5 and at most 3 for p=7. B(0)=b0 is nonzero, so passing does not make Q1+B the original expression. This explores a restricted inspection domain: Q1+B produces the same list on nonzero square positions.\n\n**Available mathematics:** `Y−r` is zero at Y=r. Each multiplied expression is a **factor**. A product is zero if any factor is zero. Expand products using:\n\n```text\n(Y−r)(Y−s) = Y²−(r+s)Y+rs\n(c0+c1Y+c2Y²)(Y−r)\n = −r×c0 + (c0−r×c1)Y + (c1−r×c2)Y² + c2Y³\n```\n\nSmall example: for p=5, `(Y−1)(Y−2)=Y²−3Y+2 → 2+2Y+Y²`. It is zero at Y=1,2 but gives `2+8+16 → 1` at Y=4. **This only passes some positions; it does not satisfy B.** Find all square positions for your p and combine the needed expressions. Use zero for unused coefficients.\n\nBuild six coefficients on paper, check the conditions, then submit. In optional Python, return six coefficients from `miss_points(x,p)`. Public tests check the stated conditions rather than comparing with one chosen solution.\n\n## Back to mathematics: what breaks when a condition is removed?\n\nA exploits choosing the expression **after learning the query**. x and −x share the same square position, so reading both cannot catch A. B exploits **removing the degree-one restriction**. There are two distinct nonzero square positions for p=5 and three for p=7. A nonzero degree-k expression has at most k zero positions in prime-remainder arithmetic. B's degree cap is the smallest cap that permits that many agreements.\n\nBy contrast, row 7's **previously fixed linear difference** gives the quadratic `d0+d1t²` in t. This exercise deliberately gives it two nonzero blind spots. One uniform query from 1..p−1 misses with probability `2/(p−1)`. Multiply probabilities for two independent uniform draws allowing repetition. That product does not apply to A's adaptive choice or to deliberately checking t and −t.\n\nActual FRI requires a **commitment** (fixing a list so it cannot later be changed) from the **prover** (the party demonstrating correctness), followed by randomness from the **verifier** (the checking party). Fixing data differs from hiding it. B is a counterexample to distinguishing expressions on this restricted domain, not an attack on FRI: FRI tests whether a list on a suitable domain is close to a low-degree polynomial's list. Proofs that readings came from the fixed list, connecting every round, and testing proximity are further topics. This exercise's `2/(p−1)` is not a security formula for the entire FRI protocol.\n\n## Optional: check with Python\n\n`fri_drill.py` has one scratch function per answer row. No edits are needed for paper answers. The supplied helpers `q,even,odd,folded,inverse` implement the given Q,E,O,Q1 and inverse formulas. `qs` is your `(q0,q1,q2,q3)`; the other arguments also come automatically from Inspect.\nReplace the first `poly` function's `return None` with `return (q(qs,0,p), q(qs,1,p), q(qs,2,p))`, then **Run public tests**. You see the small example check and `poly -> your computed values`. Unfilled functions may still FAIL. Submit the computed values in the answer field: a public-test PASS is not a submission.\n\nHelper signatures: `q(qs,X,p)`, `even(qs,Y,p)`, `odd(qs,Y,p)`, `folded(qs,beta,Y,p)`, `inverse(a,p)`. Pass qs and p as arguments.\n",
+      "writeup": "## Recovering from two readings\n\na=E+xO,b=E−xO yield 2E and 2xO by addition and subtraction. Odd prime p and nonzero x give the required inverses. That identity proves one honest fold agrees.\n\n## Remaining blind spots\n\nThe nonzero quadratic d0+d1t² has at most two roots. The generator chooses d0=−d1s², giving the two nonzero roots s,p−s, and selects x outside them so row 7 detects the swap. All-round connections, opening proofs, and low-degree proximity remain outside the exercise.\n\n## Constructing the closing counterexamples\n\nA(Y)=s(Y−x²), with nonzero s, passes the known ±x query. B multiplies one factor Y−r for each distinct nonzero square r: Y²−1 for p=5 and Y³−1 for p=7, including nonzero scalar multiples. B(0) differs but the inspected list is identical. The final grader accepts the two public constraints, not one chosen tuple. This is not a false low-degree proximity claim accepted by FRI.",
       "learningGoals": [
-        "Split an expression into even and odd parts and confirm Q₀(X) = Q_even(X²) + X·Q_odd(X²) yourself",
-        "Show that one fold halves the degree, and that repeating it lands on a single number",
-        "Recover the even and odd parts from the two openings at x and −x by simultaneous equations",
-        "Run one full query check — recovered material against Q₁'s opening",
-        "Say why even a same-degree swap is caught (the left side comes from Q₀'s openings)",
-        "Count that the misses are exactly one ± pair, and say why repeated queries erase them"
+        "Expand the even/odd identity back to the original polynomial",
+        "Fold degree bounds 3→1→0 with one-digit inputs",
+        "Recover components with sums, differences and inverses",
+        "Construct counterexamples exploiting adaptive query timing and a missing degree cap",
+        "Distinguish a fixed alteration’s miss rate from full FRI security"
       ],
       "checks": [
         {
           "id": "poly",
-          "label": "The committed polynomial Q₀",
+          "label": "Evaluate the original at three positions",
           "hints": [
             {
               "id": "poly-hint-1",
-              "content": "Write X³ as `X**3` and keep the `% p` around the whole expression. The three points are 0, 1, 2 in order."
+              "content": "Values obtained by substituting positions into the original expression are the material for folding. Start with three small positions to learn to read it."
+            },
+            {
+              "id": "poly-hint-2",
+              "content": "For Q(X)=1+2X+3X²+X³ and divisor 5, Q(0)=1, Q(1)=7 leaves 2, Q(2)=25 leaves 0. Positions are different from the coefficient list."
+            },
+            {
+              "id": "poly-hint-3",
+              "content": "Read p,q0,q1,q2,q3 in Inspect. Reduce q0, then q0+q1+q2+q3, then q0+2q1+4q2+8q3 by p. Enter those three values as a,b,c in “Evaluate the original at three positions”, then submit."
             }
           ]
         },
         {
           "id": "fold",
-          "label": "Fold — mix into one with the verifier's β",
+          "label": "Fold to a shorter expression",
           "hints": [
             {
               "id": "fold-hint-1",
-              "content": "Q1 = Qe + beta·Qo, evaluated at Y = 0, 1, 2 directly (not x² — Y is the new variable)."
+              "content": "Express the even and odd parts with the same letter Y, then mix them into one shorter expression. Naming the original X squared as Y reduces the exponents in Y."
+            },
+            {
+              "id": "fold-hint-2",
+              "content": "For p=5,E(Y)=1+3Y,O(Y)=2+Y,beta=1, Q1(Y)=3+4Y. At Y=0,1,2 its values 3,7,11 leave 3,2,1."
+            },
+            {
+              "id": "fold-hint-3",
+              "content": "From Inspect calculate c=q0+beta×q1 and d=q2+beta×q3, reduced by p. Enter the remainders of c,c+d,c+2d in “Fold to a shorter expression”, then submit. Use Y=0,1,2 here."
             }
           ]
         },
         {
           "id": "fold2",
-          "label": "Fold once more — a constant",
+          "label": "Fold again to one number",
           "hints": [
             {
               "id": "fold2-hint-1",
-              "content": "c = Q1(0); d = (Q1(1) − Q1(0)) % p is the linear coefficient. The answer is the single number (c + beta2·d) % p."
+              "content": "The even part of a linear expression is its constant. Removing its one letter from the odd term gives another constant. Mixing these gives one number without a letter."
+            },
+            {
+              "id": "fold2-hint-2",
+              "content": "For p=5,Q1(Y)=3+4Y,beta2=2, compute 3+2×4=11: remainder 1. Use beta2 for this second fold."
+            },
+            {
+              "id": "fold2-hint-3",
+              "content": "From Inspect calculate c=q0+beta×q1 and d=q2+beta×q3, reduced by p. Reduce c+beta2×d and enter that single number in “Fold again to one number”, then submit."
             }
           ]
         },
         {
           "id": "query",
-          "label": "Query — open the pair x and −x",
+          "label": "Read two opposite positions",
           "hints": [
             {
               "id": "query-hint-1",
-              "content": "The second opening is Q((-x) % p) — without the parentheses Python's precedence breaks it."
+              "content": "Opposite positions keep even powers the same and reverse the signs of odd powers. This prepares the sum and difference that will separate the two parts."
+            },
+            {
+              "id": "query-hint-2",
+              "content": "For p=5,Q(X)=1+2X+3X²+X³,x=1, Q(1)=7 leaves 2. The opposite is 5−1=4; Q(4)=121 leaves 1. Submit 2,1."
+            },
+            {
+              "id": "query-hint-3",
+              "content": "Use x from Inspect in q0+q1×x+q2×x²+q3×x³ and record remainder a. Set z=p−x and substitute z in that same expression to get remainder b. Enter a,b in “Read two opposite positions”, then submit."
             }
           ]
         },
         {
           "id": "recover",
-          "label": "Recover the even and odd parts from the two openings",
+          "label": "Recover the even and odd values",
           "hints": [
             {
               "id": "recover-hint-1",
-              "content": "Sum × 2⁻¹ gives the even part, difference × (2x)⁻¹ the odd. Inverses via `pow(2, p - 2, p)` and `pow(2*x, p - 2, p)`. Four elements; the last two are the direct computation, for comparison."
+              "content": "Adding the readings cancels the odd part; subtracting cancels the even part. Multiply by inverses to remove the factors two and two-times-x."
+            },
+            {
+              "id": "recover-hint-2",
+              "content": "For p=5,x=1,a=2,b=1, the inverse is 3 since 2×3 leaves 1. re=(2+1)×3 leaves 4, ro=(2−1)×3 leaves 3. Directly E(1)=4,O(1)=3, giving 4,3,4,3."
+            },
+            {
+              "id": "recover-hint-3",
+              "content": "Recompute a=Q(x),b=Q(p−x) using row 4. Try multipliers 1..p−1 to find i with 2×i leaving 1, and j with 2×x×j leaving 1. Reduce re=(a+b)×i,ro=(a−b)×j,E=q0+q2×x²,O=q1+q3×x² by p. Enter re,ro,E,O in “Recover the even and odd values”, then submit."
             }
           ]
         },
         {
           "id": "consistency",
-          "label": "The query check — recovered material vs the opening of Q₁",
+          "label": "Check the first fold",
           "hints": [
             {
               "id": "consistency-hint-1",
-              "content": "Left is (re + beta·ro) % p, right Q1(x*x % p). The right answer is the same number twice."
+              "content": "Compare the value reconstructed from the two original readings with the value of the shorter expression. An honest fold agrees at the same position by these two routes."
+            },
+            {
+              "id": "consistency-hint-2",
+              "content": "For p=5,re=4,ro=3,beta=1,Q1(Y)=3+4Y,x=1, the left 4+1×3 leaves 2 and the right 3+4×1² leaves 2: the pair is 2,2."
+            },
+            {
+              "id": "consistency-hint-3",
+              "content": "Use the previous formulas to get re,ro; reduce left=re+beta×ro by p. Compute c=q0+beta×q1,d=q2+beta×q3; reduce right=c+d×x². Enter left,right in “Check the first fold”, then submit."
             }
           ]
         },
         {
           "id": "cheat-caught",
-          "label": "The query check catches the lie",
+          "label": "Detect an altered short expression",
           "hints": [
             {
               "id": "cheat-caught-hint-1",
-              "content": "The left equals line 8's value (built from Q₀'s openings, it cannot move). Only the right becomes Q1c(x*x % p) — and differs."
+              "content": "The altered expression stays short, so degree alone cannot expose it. Keep the original two readings and check what happens when only the shorter expression changes."
+            },
+            {
+              "id": "cheat-caught-hint-2",
+              "content": "For p=5,an honest pair 2,2,d0=d1=1,x=1, only the right becomes 2+1+1×1²=4, giving 2,4. The nonzero difference exposes it."
+            },
+            {
+              "id": "cheat-caught-hint-3",
+              "content": "Compute left,right as in “Check the first fold”. Keep left; add d0+d1×x² to right and reduce by p. Enter left,changed-right in “Detect an altered short expression”, then submit. This generated x always detects the alteration."
             }
           ]
         },
         {
           "id": "miss-points",
-          "label": "Count the x that would have missed",
+          "label": "Construct two alterations that pass inspection",
           "hints": [
             {
               "id": "miss-points-hint-1",
-              "content": "Search 1..p−1 for x with d0 + d1·x² ≡ 0. One ±x pair (two values) comes out; `sorted(...)` puts them ascending."
+              "content": "The first alteration makes the difference vanish at the revealed query. The second uses a longer expression to vanish at every inspected square position. Explore why more agreements cannot replace fixing the expression first and limiting its degree."
+            },
+            {
+              "id": "miss-points-hint-2",
+              "content": "For p=5,x=2, A(Y)=Y−4 vanishes at Y=4 but leaves remainder 2 at Y=1. B must vanish at every square position. Expanding (Y−1)(Y−2) gives 2+2Y+Y², but at Y=4 it leaves 1, so it is insufficient. The square positions determine which factors you need."
+            },
+            {
+              "id": "miss-points-hint-3",
+              "content": "Read x,p in Inspect. Choose nonzero a1 and solve for a0 so a0+a1×x² leaves zero. For B, square t=1..p−1, reduce, and remove duplicate results. Multiply one factor Y−r per distinct result r, using the expansion formulas to collect b0,b1,b2,b3; fill unused terms with zero. Check A(x²)=0, every B(t²)=0, and nonzero a1 and b0. Submit a0,a1,b0,b1,b2,b3 in “Construct two alterations that pass inspection”."
             }
           ]
         }
