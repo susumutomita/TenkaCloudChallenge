@@ -43,7 +43,8 @@ def lie_caught(p,first,second,r1,r2,d):
     Required endpoint sum: (poly(p,first,r1)+d*(1-r1))%p.
     At the prematurely revealed r2, your message must equal poly(p,second,r2).
     Any bounded-degree message meeting both conditions is accepted.
-    This task deliberately reverses the secure order: message first, challenge later.
+    Here the challenge is revealed first and the message is constructed afterward.
+    The secure order would fix the message before revealing the challenge.
     """
     return None
 

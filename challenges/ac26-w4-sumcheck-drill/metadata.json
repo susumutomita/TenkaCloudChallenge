@@ -217,7 +217,7 @@
         "hints": [
           {
             "id": "lie-caught-hint-1",
-            "content": "確認する場所を先に教えると、そこだけ本当と同じになる偽の式を後から作れます。式を先に固定する理由を試します。",
+            "content": "確認する場所を先に教えると、その場所で本当と同じになる偽の式を後から作れます。式を先に固定する理由を試します。",
             "penalty": 2
           },
           {
@@ -386,7 +386,7 @@
           "hints": [
             {
               "id": "lie-caught-hint-1",
-              "content": "Knowing the check position first lets you construct a false expression matching only there. Test why the expression must be fixed first."
+              "content": "Knowing the check position first lets you construct a false expression matching there. Test why the expression must be fixed first."
             },
             {
               "id": "lie-caught-hint-2",

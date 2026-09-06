@@ -243,3 +243,11 @@ def miss_points(p, first, second, r1, d):
     raise ValueError("No pair has exactly two disjoint agreement points")
 
 ```
+
+## Final code-review wording corrections
+
+The starter now states the intentionally unsafe order directly: reveal the
+challenge first, then construct the message. The safe order is stated separately.
+The first construction hint says the expression matches at the revealed position,
+without claiming it matches only there; additional agreement positions are allowed.
+These corrections change no arithmetic, signatures, or acceptance conditions.
