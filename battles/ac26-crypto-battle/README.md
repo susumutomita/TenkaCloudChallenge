@@ -1,5 +1,7 @@
 # Cryptography Battle
 
+For hint-assisted play, finish one selected Order before opening the next Order's hints. The Caesar ladder and share procedure are kept to that route; the normal five-minute deadline and hint costs are unchanged. See [the reading check](dev/HINT-READING.md) for its measured scope and limitations.
+
 A short introduction and “How to play and practice (optional)” appear above the board. Detailed guidance starts collapsed so the current Order and answer controls appear first. Open the disclosure, then choose “Read the guided explanation (optional)”. Read results without answering, advance freely, or close at any point. Its ten scenes connect remainders, additive shares, indexed sharing, why reconstruction works, publication risk, MPC, ZK, FHE, Caesar and commit-reveal. Optional one-digit checks never change the match score or state. Sudoku PROVE uses a chosen table, twelve worked cells and four input cells.
 Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
 
@@ -205,7 +207,6 @@ it has no practical binding security. Fairness trusts the judge to withhold both
 openings until simultaneous publication. Commit-reveal is not itself a
 zero-knowledge proof. Free stepwise explanations and optional fill-in practice
 connect the calculation to its purpose.
-
 
 ## Predict an opponent's sealed hand
 
