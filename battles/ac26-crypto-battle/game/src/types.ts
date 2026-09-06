@@ -805,7 +805,20 @@ export interface LastProve {
   readonly outcome: "hit" | "miss";
 }
 
+export type EndgameBooster = { readonly status: "pending" } | { readonly status: "unavailable" }
+  | { readonly status: "awarded"; readonly teamIds: readonly string[] };
+
+export interface HintBoosterProjection {
+  readonly status: "waiting" | "scheduled" | "active" | "expired" | "ineligible" | "unavailable";
+  /** Public distribution time measured from match start. */
+  readonly startAfterMs: number;
+  readonly startsInMs?: number;
+  readonly remainingMs: number;
+}
+
 export interface CryptoBattleState {
+  /** #659 §9: immutable endgame distribution; omitted only by older rows. */
+  readonly endgameBooster?: EndgameBooster;
   readonly config: CryptoBattleConfig;
   readonly seed: string;
   readonly phase: Phase;
@@ -1020,7 +1033,7 @@ export type CryptoBattleOp =
    * decision the move exists to pose: an Order you were going to let expire is
    * a bad one to buy help on.
    */
-  | { readonly kind: "reveal-hint"; readonly contractId: string }
+  | { readonly kind: "reveal-hint"; readonly contractId: string; readonly expectedCost?: number }
   | { readonly kind: "rotate" }
   /**
    * [Issue #709] PROVE: the team's sudoku solution with every digit relabelled
@@ -1052,6 +1065,8 @@ export interface HintProjection {
   readonly id: string;
   /** What opening this level costs, from `ScoreRules.hintCosts`. */
   readonly cost: number;
+  /** Regular price when an active booster expires between two polls. */
+  readonly regularCost?: number;
   /** Present iff opened. Both locales; the Portal picks (`projectForTeam` has none). */
   readonly text?: Readonly<Record<"ja" | "en", string>>;
 }
@@ -1229,6 +1244,8 @@ export interface TeamSummaryProjection {
  * place that has to get the redaction right.
  */
 export interface CryptoBattleProjection {
+  /** Own benefit only; the opponent's allocation is never projected. */
+  readonly hintBooster?: HintBoosterProjection;
   /** Public scoring rule and this reader's completed attacks; no recovered values. */
   readonly huntWinPoints?: number;
   readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung }[];

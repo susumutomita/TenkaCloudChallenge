@@ -338,8 +338,9 @@ export function submitHuntSudoku(
 export function submitRevealHint(
   client: PortalCoordinationClient,
   contractId: string,
+  expectedCost?: number,
 ): Promise<PortalCoordinationOutcome> {
-  const op: CryptoBattleOp = { kind: "reveal-hint", contractId };
+  const op: CryptoBattleOp = { kind: "reveal-hint", contractId, ...(expectedCost === undefined ? {} : { expectedCost }) };
   return client.submitOp(op);
 }
 

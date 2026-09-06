@@ -66,6 +66,17 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     return false;
   }
   if (typeof v.matchRemainingMs !== "number" && v.matchRemainingMs !== undefined) return false;
+  if (v.hintBooster !== undefined) {
+    const b = v.hintBooster as Record<string, unknown>;
+    const duration = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+    if (!b || typeof b !== "object" || !["waiting", "scheduled", "active", "expired", "ineligible", "unavailable"].includes(String(b.status))
+      || !duration(b.startAfterMs) || !duration(b.remainingMs)
+      || (b.startsInMs !== undefined && !duration(b.startsInMs))) return false;
+    // After local expiry the UI must display the real regular price, never 0
+    // from a stale active projection. An older server omits the whole benefit.
+    if (!Array.isArray(v.myContracts) || v.myContracts.some(c => !c || !Array.isArray(c.hints)
+      || c.hints.some((h: { regularCost?: unknown }) => !h || !duration(h.regularCost)))) return false;
+  }
   // [Issue #645] The modulus is required, not optional. The FHE and MPC panels
   // cannot state a solvable problem without it, and a payload from a
   // pre-#645 dispatcher (a mixed-version rollout) would otherwise be accepted

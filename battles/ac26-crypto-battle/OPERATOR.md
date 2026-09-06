@@ -62,7 +62,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (5, including recorded HUNT score deltas) and a
+The plugin declares `stateSchemaVersion` (6, including the fixed endgame hint distribution) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -329,3 +329,31 @@ gives -495, whose remainder modulo 97 is 87; submitting it succeeds. This
 rehearsal uses public worksheet values, not alpha's vault. These are fixed local
 harness examples, not event secrets. Game tests also check all 3-of-5 index
 subsets over fields 7,11,97 and exclude duplicate, retired and own-team evidence.
+
+
+### Schema 6: endgame hint booster
+
+The new `endgameBooster` persists one distribution decision. Activation is
+immediate at distribution because #659 §9 defines no separate activation move.
+The ranking is read after ordinary deadline/RPS settlement at the endgame
+boundary and before an operation stamped at that same time. A late tick reads
+that boundary state only to select recipients; its real state still follows the
+original single-tick issuance/expiry path, avoiding newly issued unseen Orders
+and artificial catch-up penalties. Hosts must retain tick → validate → apply.
+
+Versions 1–5 before the boundary migrate to pending. Already-past legacy states
+migrate to an explicit unavailable decision: no prior ranking is stored, and
+current scores cannot reconstruct it. Numeric roster HUNT budgets, pending RPS
+reservations and the public ledger are preserved. Reload/checkpoint round trips
+retain the saved decision. Rollback requires a schema-compatible plugin; do not
+feed schema-6 rows to older plugins.
+
+The optional `reveal-hint.expectedCost` binds the new Portal's displayed price
+to the atomic hint operation. Older clients may omit it; they retain the existing
+server-priced contract. Regular prices remain projected so a local countdown
+can restore them between polls. No score event is created for a zero delta.
+
+Validation: `bun test` and `bun run typecheck` in `game/`, including
+`src/booster.test.ts` (actual reducer/host, existing RPS reservations, JSON
+checkpoints, delay equivalence and real component rendering), plus the local
+browser route recorded in `dev/BOOSTER-PLAYTHROUGH.md`.

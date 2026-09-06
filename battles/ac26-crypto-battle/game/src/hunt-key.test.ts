@@ -14,7 +14,7 @@ test("schema 4 preserves every budget and ledger value through migration and JSO
   }, publicLedger: [{k:"share" as const,tm:"a",c:"a-c0",g:1,m:"leak" as const,t:0,i:1,v:"3"}] };
   const before = JSON.stringify(old);
   const migrated = migrateState(JSON.parse(before),3);
-  expect(STATE_SCHEMA_VERSION).toBe(5);
+  expect(STATE_SCHEMA_VERSION).toBe(6);
   expect(Object.values(migrated.huntAttempts).sort()).toEqual([1,2,3]);
   expect(projectForTeam(migrated,"a|b").huntAttempts.c?.spent).toBe(2);
   expect(projectForTeam(migrated,"a").huntAttempts["b|c"]?.spent).toBe(3);

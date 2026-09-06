@@ -68,6 +68,7 @@ import { huntKey, storedHuntKey, compactHuntAttempts, validateStoredHuntAttempts
 import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
+import { awardBooster, boosterStartAt, projectBooster, storedBooster } from "./booster.ts";
 import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
@@ -276,6 +277,7 @@ export function initialState(
     // [Issue #677] A deployed match waits to be started -- see `Phase`.
     phase: "waiting",
     readyTeamIds: [],
+    endgameBooster: { status: "pending" },
     nowMs: undefined,
     startedAtMs: undefined,
     nextContractAtMs: undefined,
@@ -590,13 +592,14 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *      `proveCommitment` / `proveChallenge`
  *   4  roster-indexed HUNT budget keys and lossless numeric ledger Order IDs
  *   5  `lastHunt.points` records the actual score delta of new HUNT results
+ *   6  endgame booster distribution, fixed once at the phase boundary
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 5;
+export const STATE_SCHEMA_VERSION = 6;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -614,11 +617,13 @@ export const STATE_SCHEMA_VERSION = 5;
  * historical delta cannot be recovered from a current score or price, so it
  * stays unknown. Only a new HUNT writes the field. v4's numeric roster budget
  * keys are validated and retained, not compacted again as logical team IDs.
+ * v5 -> v6 records pending distribution before the boundary, or an explicit
+ * unavailable result afterward when the old row has no historical ranking.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3 and v4 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4 and v5 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -652,7 +657,7 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   return {
     ...lifted,
     publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a))),
-    huntAttempts: fromVersion === 4 ? validateStoredHuntAttempts(lifted) : compactHuntAttempts(lifted),
+    huntAttempts: fromVersion >= 4 ? validateStoredHuntAttempts(lifted) : compactHuntAttempts(lifted),
     contracts: lifted.contracts.map((contract) => {
       const { proveCommitment: _c, proveChallenge: _e, ...kept } = contract as Contract & {
         readonly proveCommitment?: unknown;
@@ -692,7 +697,10 @@ function unspentNonceExposure(
   return undefined;
 }
 
-function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
+function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleState {
+  const endgameBooster = storedBooster(persistedState);
+  const state = endgameBooster === persistedState.endgameBooster ? persistedState
+    : { ...persistedState, endgameBooster };
   const config = needsConfigMigration(state.config) ? mergeConfig(state.config) : state.config;
   const teams = needsTeamMigration(state.teams)
     ? migrateTeams(state.teams, state.contracts)
@@ -721,6 +729,20 @@ function withMigratedContracts(state: CryptoBattleState): CryptoBattleState {
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
+  const state = withMigratedContracts(persistedState);
+  const boundary = boosterStartAt(state);
+  if (state.endgameBooster?.status === "pending" && boundary !== undefined && eventNowMs >= boundary) {
+    // Only read the boundary ranking. Carrying this intermediate tick forward
+    // would issue unseen Orders and then charge them on a delayed tick, breaking
+    // the existing no-catch-up-penalty rule. The actual transition stays intact.
+    const atBoundary = tickAtTime(state, boundary);
+    const advanced = eventNowMs === boundary ? atBoundary : tickAtTime(state, eventNowMs);
+    return { ...advanced, endgameBooster: awardBooster(atBoundary) };
+  }
+  return tickAtTime(state, eventNowMs);
+}
+
+function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const state = expireRps(withMigratedContracts(persistedState), eventNowMs);
   // [Issue #677] An unstarted match is not a match in progress at minute zero.
   //
@@ -1461,6 +1483,10 @@ export function validateOp(
       if (level >= ladder.length) {
         return { ok: false, error: `contract "${op.contractId}" has no hints left` };
       }
+      if (op.expectedCost !== undefined && (!Number.isFinite(op.expectedCost) || op.expectedCost < 0
+        || op.expectedCost !== hintPrice(state, teamId, level))) {
+        return { ok: false, error: "Hint penalty changed. Refresh and check the displayed penalty before opening." };
+      }
       if (hintCostAt(state.config.scores.hintCosts, level) === undefined) {
         // A price list shorter than the ladder. `needsConfigMigration` fills in
         // a missing list entirely, so this is a hand-edited or hand-tuned
@@ -1959,6 +1985,11 @@ function applyMpc(
  * The deduction floors at 0, the same convention `applyHunt` and
  * `applyExpiryPenalties` already use for every other penalty in this file.
  */
+function hintPrice(state: CryptoBattleState, teamId: string, level: number): number | undefined {
+  const price = hintCostAt(state.config.scores.hintCosts, level);
+  return price === undefined ? undefined : projectBooster(state, teamId).status === "active" ? 0 : price;
+}
+
 function applyRevealHint(
   state: CryptoBattleState,
   teamId: string,
@@ -1970,7 +2001,7 @@ function applyRevealHint(
     throw new Error("applyRevealHint: unknown team or contract -- call validateOp() first");
   }
   const level = hintsRevealedOn(contract);
-  const cost = hintCostAt(state.config.scores.hintCosts, level);
+  const cost = hintPrice(state, teamId, level);
   if (cost === undefined) {
     throw new Error("applyRevealHint: no configured price -- call validateOp() first");
   }
@@ -2125,7 +2156,8 @@ function projectHints(
   return hintsFor(contract.task.kind).map((spec, level) => ({
     level,
     id: spec.id,
-    cost: hintCostAt(state.config.scores.hintCosts, level) ?? 0,
+    cost: hintPrice(state, vault.teamId, level) ?? 0,
+    regularCost: hintCostAt(state.config.scores.hintCosts, level) ?? 0,
     ...(level < revealed ? { text: spec.text(ctx) } : {}),
   }));
 }
@@ -2650,6 +2682,7 @@ export function projectForTeam(
     huntAttempts,
     sudokuHuntAttempts,
     huntWinPoints: state.config.scores.huntBonus,
+    hintBooster: projectBooster(state, teamId),
     completedHunts: Object.values(state.teams).filter(other => other.teamId !== teamId).flatMap(other =>
       (["share", "sudoku", ...ALL_CIPHER_RUNGS] as const).flatMap(via => {
         const key = via === "share" ? huntKey(teamId, other.teamId, other.generation)
