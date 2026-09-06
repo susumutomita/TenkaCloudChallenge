@@ -1,83 +1,54 @@
-"""Scratchpad for the twelve lines — optional, for when you cannot open Python.
+"""任意の計算メモ / Optional scratchpad for eight answer fields.
 
-The drill is meant to be typed into your own `python3`, one line at a time, after pasting
-the numbers from inspect. If you cannot open Python, fill in these twelve functions in the
-Portal editor instead and press "run the public tests": the test prints what YOUR
-functions return on THIS deployment's numbers — exactly what the REPL would have printed.
-Paste those values into the answer fields. Each answer field is a single-line input.
-
-Each function is one drill line, with the line's names replaced by parameters. `rows` is
-the honest gate table [(L, R, O), …]; `bad` is the lying one; w, q address the cells;
-beta, gamma are the verifier's randomness.
+紙なら編集不要。「証拠を確認」の値で計算し回答欄へ提出します。
+Pythonなら対応するreturn Noneだけ埋め、公開テストを実行。PASS自体は提出ではありません。
+Use Inspect's values. First seven checks compare a small public example; the last accepts any valid construction.
+p=7: every operation uses the SAME prime. %: remainder, **: power.
+rows: two (L,R,O) rows: addition, then multiplication using the first output twice.
+bad: multiplication's left input changed by g, with its output recalculated.
+tags=(k0,k1,k2): column address labels. w=6: row address multiplier.
+beta,gamma: fingerprint mixing numbers; fingerprint=(value+beta*address+gamma)%p.
+The imported helpers implement formulas in the statement; they are not extra implementation tasks.
 """
+from participant.model import addresses as address_table, sigma_addresses as wired_addresses, fingerprints, products, inverse
 
-from __future__ import annotations
-
-import math
-
-SIGMA = {
-    (0, 0): (0, 0), (1, 0): (1, 0), (2, 0): (0, 2),
-    (0, 1): (0, 1), (1, 1): (1, 1), (2, 1): (1, 2),
-    (0, 2): (2, 0), (1, 2): (2, 1), (2, 2): (2, 2),
-}
-SELECTORS = [(1, 1, 0, -1, 0), (0, 0, 1, -1, 0), (1, 1, 0, -1, 0)]
-
-
-def outputs(a0: int, b0: int, a1: int, b1: int, p: int) -> tuple:
-    """Line 1 — (o0, o1, o2): the three gate outputs."""
+def outputs(a0,b0,p):
+    """Return u=(a0+b0)%p and o=u*u%p, in that order."""
     return None
 
 
-def gate_eq(rows: list, p: int) -> tuple:
-    """Line 2 — the gate equation on every row (0 means the row fits its type)."""
+def bad_row(u,g,p):
+    """Return l=(u+g)%p, u, l*u%p: multiplication holds but its left input was not copied."""
     return None
 
 
-def copy_check(rows: list) -> tuple:
-    """Line 3 — the two wires: gate 0's O vs gate 2's L, gate 1's O vs gate 2's R."""
+def addresses(tags,w,p):
+    """Six addresses, row by row: tags, followed by w*each tag, reduced by p."""
     return None
 
 
-def bad_row(o0: int, o1: int, g: int, p: int) -> tuple:
-    """Line 4 — gate 2 shifted by g: gates still pass, the wire breaks."""
+def sigma_addresses(tags,w,p):
+    """Three copied cells cycle: O0→L1→R1→O0. Replace addresses in slots 2,3,4."""
     return None
 
 
-def bad_passes(rows: list, bad: list, p: int) -> tuple:
-    """Line 5 — (gate equation on the lying table, its two wires)."""
+def marks(rows,tags,w,p,beta,gamma):
+    """Three fingerprints on the first row with original addresses."""
     return None
 
 
-def addresses(w: int, q: int) -> tuple:
-    """Line 6 — ω^row · (col + 1) for the nine cells, row-major."""
+def grand_product(rows,tags,w,p,beta,gamma):
+    """Multiply six fingerprints under original and wired addresses; return two remainders."""
     return None
 
 
-def sigma_addresses(w: int, q: int) -> tuple:
-    """Line 7 — the same nine addresses, re-attached through σ."""
+def bad_product(bad,tags,w,p,beta,gamma):
+    """Repeat both products on the displayed false table."""
     return None
 
 
-def marks3(rows: list, w: int, q: int, beta: int, gamma: int) -> tuple:
-    """Line 8 — the first three fingerprints (value + β·address + γ) of the honest table."""
-    return None
-
-
-def grand_product(rows: list, w: int, q: int, beta: int, gamma: int) -> tuple:
-    """Line 9 — (product over raw addresses, product over σ-permuted addresses)."""
-    return None
-
-
-def bad_product(bad: list, w: int, q: int, beta: int, gamma: int) -> tuple:
-    """Line 10 — the same two products on the lying table."""
-    return None
-
-
-def multiset(rows: list, bad: list, w: int, q: int) -> tuple:
-    """Line 11 — does the set of (value, address) pairs survive σ? (honest, lying)."""
-    return None
-
-
-def miss_count(bad: list, w: int, q: int) -> int:
-    """Line 12 — how many (β, γ) pairs let the lying table's two products coincide."""
+def miss_count(rows,tags,w,p,beta,gamma):
+    """Construct (L,R,O): L and R BOTH differ from rows[0][2], O=L*R % p.
+    Keep the first row. Whole-table fingerprint products must be equal and NONZERO.
+    Values must lie in 0..p-1. Any valid row passes; return 3 values, not a count."""
     return None

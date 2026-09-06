@@ -32,10 +32,10 @@
   },
   "difficulty": 3,
   "estimatedDuration": "40-60 分",
-  "shortDescription": "行の中の計算は全部正しい。それでも、行から行へ値を運ぶ配線が破れていれば、その表は別の計算の記録です。ゲート制約と配線制約が別物であることを嘘の表で確かめ、配線の一致を大きな積 1 個に潰します。Python に 1 行打っては出た数を貼る 12 行です。",
-  "description": "Week 4 のドリル。関数を書く問題ではなく、「1 行打って、出た値を貼る」を 12 行繰り返して、PLONK の 2 本の制約 — ゲート制約とコピー制約 — が別々の目であることを確かめる。前半は正直な表（3 ゲートの表 → ゲート方程式が全行 0 → 配線も一致）、中盤で**ゲートだけ守る嘘の表**を自分で作り（gate 2 の左入力と出力を g ずらす）、ゲートは通るのに配線が破れることを見る。後半は大積: 9 マスに番地を振り、σ で入れ替え、指紋 (値 + β·番地 + γ) の積を 2 通り計算して、正直な表では一致・嘘の表では不一致を確かめ、最後に「どの (β, γ) なら見逃したか」を全数で数える。\n\n形の根拠は ac26-w3-schnorr-drill / ac26-w4-sumcheck-drill と同じ（自習ノートで本人検証済みの「1 行打って、出た値を貼って、その値を指す 1 文を読む」）。回路・σ・大積の手順は講義の PLONK の節（スライド 24〜29）の数値例と同じで、入力・体・番地の底・β・γ は seed 由来。見逃しの個数も deploy ごとに変わるので暗記では通らない。\n\n12 行のうち回答欄は 8 行（platform の checkpoint 上限）。回答欄の無い 4 行（ゲート方程式 [0,0,0]、配線 (True, True)、嘘の表の並記、集合の比較）は値が構成上の定数で、その意味を問題文がその場で説明する。見逃しが起きるのは「どれかの指紋が 0 になって両辺の積がそろって 0 に潰れるとき」だけ — このことは server 側では因数分解で高速に数え、learner の全数ループと一致することをテストが証明している。",
-  "instructions": "## 正しい行だけでできた、嘘の表\n\nzkRollup の回路は、取引の検証を何万ものゲート（足し算と掛け算）に分解して表にします。Aztec が設計し、zkSync や Scroll など多くの zkEVM がその系統を使う PLONK は、その表をこの問題の形そのままで検査しています。\n\nここに罠が 1 つあります。**1 行ずつはすべて正しいのに、全体としては嘘**という表が作れるのです。ゲートの式は行の中しか見ません。「gate 0 の出力を gate 2 へ運ぶ」という**行をまたぐ約束**は、ゲートの式には映らない — だから、検査の目は 2 つ要ります。ゲート制約と配線制約は、別物です。\n\n## 目は 2 つある\n\nあなたは検証者です。ある回路を走らせたという 3 行の表が届き、本物かを確かめたい。**1 つ目の目**は行の中だけを見ます — 「足し算と書いてある行で、左 + 右 = 出力か」。**2 つ目の目**は行をまたぎます — 「gate 0 の出力は、gate 2 の左入力へ運ばれたか」。\n\nまず、片方だけ守る嘘の表を**自分で作って**、2 つが本当に別の目であることを確かめます。次に、2 つ目の目を「全マスを見比べる」から **1 個の数の比較**へ潰します — それが大積です。最後に、その 1 個の数でも見逃しが起きる場合を全部数えます。\n\nこの問題は関数を書く問題ではありません。**Python に 1 行打って、出た値を回答欄に貼る**を 12 回繰り返します。数は起動のたびに変わるので、他人の答えや過去のノートを写しても通りません。\n\n## 前提 — 移項と交換法則と「積が 0」\n\n- ① 方程式は移項して「= 0 の式」にできます（中 1）。3 + 1 = 4 は 3 + 1 − 4 = 0。ゲート方程式は、この形の 1 本の式です。\n- ② 同じ顔ぶれの数は、順番を変えて掛けても積が同じ（掛け算の交換法則）。「2 つの集まりが同じ顔ぶれか」は、積 1 個ずつの見比べで（ほぼ）確かめられます。\n- ③ 積が 0 になるのは、どれかの因子が 0 のときだけ（中 3）。最後の「見逃しを数える」行はこれで読めます。\n- 数は「素数で割ったあまり」（Python の `%`）。初めてなら `ac26-w1-constraint-lab` へ。**この問題では素数が 2 つ出てきます** — ゲートの計算に使う **p** と、番地・指紋・積に使う **q**。表の値は `% p`、番地から先は `% q`。取り違えないでください（どちらも「証拠を確認」に出ます）。\n- 教材では Week 4 講義スライド 24〜29 枚目（ゲート表とセレクター、コピー制約と置換 σ、累算器 Z による大積）。下の 2 つの例は講義と同じ手順で、数を 1 桁に落としてあります。\n\n## 1 桁の例・その 1 — ゲートは通るのに、配線が破れる表（17 で割る世界）\n\n表は 1 行が 1 ゲートで、各行は (L, R, O) = (左入力, 右入力, 出力) の 3 マスです。\n\n- gate 0（足し算）: (3, 1, 4)。**セレクター**（= その行の型を選ぶ公開の 5 つの数）を (1, 1, 0, −1, 0) にすると、ゲート方程式は 1×3 + 1×1 + 0×3×1 + (−1)×4 + 0 = 3 + 1 − 4 = **0**\n- gate 1（掛け算）: (2, 4, 8)。セレクター (0, 0, 1, −1, 0) で 0 + 0 + 8 − 8 = **0**\n- gate 2（足し算）: (4, 8, 12)。4 + 8 − 12 = **0**\n- **配線**: gate 0 の出力 4 は gate 2 の左入力へ、gate 1 の出力 8 は gate 2 の右入力へ運ばれています。\n- **核心**: gate 2 の行を (5, 8, 13) に取り替えても 5 + 8 − 13 = 0 — **ゲート方程式は文句を言えません**。でも gate 0 の出力は 4 のまま。運搬が壊れています。行の中しか見ない目では、この嘘は止まりません。\n\n## 1 桁の例・その 2 — 指紋と積（7 で割る世界、β = 2、γ = 1）\n\n各マスを「(値, 番地)」の組と見て、**指紋** = 値 + β × 番地 + γ という 1 個の数に潰します。\n\n- (値 5, 番地 3) の指紋 = 5 + 2×3 + 1 = 12 → 12 − 7 = **5**。(値 2, 番地 1) の指紋 = 2 + 2×1 + 1 = **5**\n- この 2 マスの指紋の積 = 5 × 5 = 25 → 25 − 21 = **4**。順番を入れ替えても積は 4 のままです（②）\n- 片方を (値 6, 番地 3) に変えると指紋 = 6 + 6 + 1 = 13 → **6**、積 = 6 × 5 = 30 → 30 − 28 = **2**。**顔ぶれが変われば、積も変わりました**\n\n## 最初の一手\n\n1. Participant Portal（この問題文が出ているサイト）で **「起動」** を押します。問題文と同じ画面に **問題エディタ**と、checkpoint と同じ見出しの付いた **回答欄が 8 つ**出ます。\n2. エディタの **「証拠を確認」** を押します。この起動だけの数が、**そのまま Python に貼れる代入文**の形で出ます — ゲート用の体 p、回路の入力 a0, b0, a1, b1、嘘のずらし幅 g、番地と積に使う体 q と番地の底 w、検証者の 2 つの数 beta と gamma。**答えは出ません** — 答えはあなたの Python が出します。\n3. 自分のパソコンで Python を開きます。Windows なら PowerShell、Mac なら「ターミナル」を開いて `python3` と打つと `>>>` が出ます（Python を入れたときに付いてくる **IDLE** の Shell でも同じです）。使うのはこの 1 つだけです。\n4. 2 で出た代入文を全部 `>>>` に貼ります。これで準備完了です。\n\n**Python を開けないときは**: エディタの `plonk_drill.py` に 12 個の関数の枠があります。中身を書いて **「公開テストを実行」** を押すと、あなたの関数がこの起動の数で出した値が画面に出ます — `>>>` に打つのと同じ値です。それを回答欄に貼ってください。\n\n## 答えるもの — checkpoint は 8 個\n\n採点されるのは **回答欄に貼った値だけ**です（`plonk_drill.py` の中身は採点されません。ただし「提出」を押すとエディタの中身も一緒に送られるので、空にはしないでください）。数が複数のときは `[4, 8, 1]` のようにカンマ区切りで書きます（`(4, 8, 1)` でも `4, 8, 1` でも通ります）。**個数が違うと不正解**になります。\n\n1. 回路をゲート表にする — 3 ゲートの出力 … 数 3 つ\n2. 嘘の witness — ゲート制約だけ守る … 数 3 つ\n3. 大積の準備 — 9 マス全部に番地を振る … 数 9 つ\n4. 配線 σ — 同じ値のはずのマスどうしで番地を交換 … 数 9 つ\n5. 指紋 — マスごとに (値 + β·番地 + γ) … 数 3 つ\n6. 大積 — 正しい表では両辺が一致する … 数 2 つ\n7. 嘘の表の大積 — 配線の破れが積に出る … 数 2 つ\n8. どの (β, γ) なら見逃したか — 数える … 数 1 つ\n\n**提出のしかた**: 回答欄に値を書いて、その checkpoint の **「提出 (+点数)」** を押すだけです。8 個は別々に採点されるので、1 つ詰まっても他は取れます。外しても出し直せますが、1 回外すごとに 10 点引かれます（8 個で合計 200 点。合計が 0 点未満になることはありません）。各 checkpoint にはヒントが 1 つあり、開くと点が引かれます。エディタを書き換えすぎたときは **「初期状態に戻す」** で最初の `plonk_drill.py` に戻せます。\n\n## 解き方 — 12 行\n\n12 行のうち 8 行に回答欄があり、残り 4 行は次の行のための材料です（材料の行にも読むところが付いています）。\n\n各行のやり方: **打つ前に**で「何が出そうか」を 1 行だけ声に出す（または紙に書く）→ **打つ行**を貼る → **この行の意味**を読む → 出た値を回答欄に貼る → 合ったら **「合ったら読む」** を読んで次へ。予想を先に言うのが大事です。この計算はどう間違えても答えがやっぱり余りの範囲のどれかになるので、出てきた数を眺めても正しいかどうか分かりません。\n\n### 1. 回路をゲート表にする — 3 ゲートの出力  （回答欄 1 / 8）\n\n回路は 3 ゲート: gate 0 は a0 + b0（足し算）、gate 1 は a1·b1（掛け算）、gate 2 はその 2 つの出力の和。入力は「証拠を確認」の a0, b0, a1, b1。全部 `% p`。\n\n- **打つ前に**: 3 つ目は、1 つ目と 2 つ目からどう作られますか。\n\n```python\no0 = (a0 + b0) % p; o1 = (a1 * b1) % p; o2 = (o0 + o1) % p; (o0, o1, o2)\n```\n\n- **この行の意味**: 3 つのゲートの出力を順に計算。\n- **回答欄**: 上から 1 番目の欄（見出しはこの節と同じ）に、数 3 つ。\n- **合ったら読む**: 回路を「1 行 = 1 ゲート」の表にしました。各行は (L, R, O) = (左入力, 右入力, 出力) の 3 マスで、いま出した 3 つの数が各行の O です。次の行で、この表が「型」を守っているかを 1 本の式で確かめます。\n\n### 2. ゲート方程式 — 1 本の式で足し算も掛け算も  （回答欄なし）\n\nセレクター (q_L, q_R, q_M, q_O, q_C) を行ごとに置くと、q_L·L + q_R·R + q_M·L·R + q_O·O + q_C という 1 本の式が「その行の型」を表します。足し算の行は (1, 1, 0, −1, 0) で L + R − O に、掛け算の行は (0, 0, 1, −1, 0) で L·R − O になります（上の 1 桁の例・その 1 と同じ）。\n\n- **打つ前に**: 3 つの数はどうなるはずですか。\n\n```python\nrows = [(a0, b0, o0), (a1, b1, o1), (o0, o1, o2)]; sel = [(1, 1, 0, -1, 0), (0, 0, 1, -1, 0), (1, 1, 0, -1, 0)]; [(ql*L + qr*R + qm*L*R + qo*O + qc) % p for (L, R, O), (ql, qr, qm, qo, qc) in zip(rows, sel)]\n```\n\n- **この行の意味**: 3 行のゲート方程式を `% p` で計算。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく。\n- **出たら読む**: [0, 0, 0] — 3 行とも型どおりです。1 本の式で足し算も掛け算も表せるのがセレクターの役目で、回路の「型」はセレクター（公開）に、「値」は表（秘密）に分かれました。ただしこの式は**行の中しか見ていません**。行をまたぐ運搬はまだ何も確かめていない — それが次の行です。\n\n### 3. 配線 — 行をまたいで「同じ値」のはずの場所  （回答欄なし）\n\ngate 0 の出力は gate 2 の左入力に、gate 1 の出力は gate 2 の右入力に運ばれているはずです。表の上で見比べます。\n\n- **打つ前に**: 出るのは True 2 つですか、それ以外ですか。\n\n```python\n(rows[0][2] == rows[2][0], rows[1][2] == rows[2][1])\n```\n\n- **この行の意味**: gate 0 の O と gate 2 の L、gate 1 の O と gate 2 の R を比べる。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく。\n- **出たら読む**: (True, True) — 配線は合っています。これがコピー制約で、ゲート方程式とは別の目です。ゲート方程式は行の中の型を、コピー制約は行をまたぐ運搬を見る。両方そろって初めて「この回路をこの入力で走らせた」ことになります。次に、片方だけ守った嘘の表を作って、この 2 つが本当に別の目であることを確かめます。\n\n### 4. 嘘の witness — ゲート制約だけ守る  （回答欄 2 / 8）\n\ngate 2 の左入力を g だけずらし、出力も同じだけずらします（g は「証拠を確認」の値）。すると gate 2 の行は L + R − O = 0 を保ったままです。\n\n- **打つ前に**: 3 つのうち、動かないのはどれですか。\n\n```python\nbad2 = ((o0 + g) % p, o1, (o0 + g + o1) % p); bad = [rows[0], rows[1], bad2]; bad2\n```\n\n- **この行の意味**: ずらした gate 2 の行 (L, R, O)。\n- **回答欄**: 上から 2 番目の欄（見出しはこの節と同じ）に、数 3 つ。\n- **合ったら読む**: この行は L + R = O を満たします（左入力と出力を同じだけずらしたから）。つまり**ゲート方程式は文句を言えません**。でも gate 0 の出力は元のままなので、「gate 0 の出力を gate 2 へ運ぶ」という配線は破れています。行の中だけ見る制約では、行ごとに勝手な値を置く嘘を止められない — 次の行で確かめます。\n\n### 5. 嘘の表 — ゲートは通り、配線で落ちる  （回答欄なし）\n\n嘘の表で、ゲート方程式とコピー制約を並べて見ます。\n\n- **打つ前に**: 左と右、どちらが「合格」を出してしまうと思いますか。\n\n```python\n([(ql*L + qr*R + qm*L*R + qo*O + qc) % p for (L, R, O), (ql, qr, qm, qo, qc) in zip(bad, sel)], (bad[0][2] == bad[2][0], bad[1][2] == bad[2][1]))\n```\n\n- **この行の意味**: 左は嘘の表の 3 行のゲート方程式。右は 2 本の配線。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく。\n- **出たら読む**: ([0, 0, 0], (False, True)) — ゲート方程式は 3 行とも通ってしまい、配線の 1 本目だけが False。**2 つが別の目であること**が数で見えました。では検証者は、この「行をまたぐ一致」を表を全部読まずにどう確かめるのか — ここからが大積です。\n\n### 6. 大積の準備 — 9 マス全部に番地を振る  （回答欄 3 / 8）\n\n番地 = w の（行番号）乗 × (列番号 + 1)。ここから先は体 q（「証拠を確認」の q, w）を使います。行 0, 1, 2 × 列 L, R, O の 9 マス分。\n\n- **打つ前に**: 9 個の中に同じ数が出てはいけません。出た一覧を見て、重なりが無いか確かめてください。\n\n```python\npos = lambda col, row: (pow(w, row, q) * (col + 1)) % q; addr = [pos(c, r) for r in range(3) for c in range(3)]; tuple(addr)\n```\n\n- **この行の意味**: 9 マスの番地の一覧（行 0 の L, R, O → 行 1 → 行 2 の順）。\n- **回答欄**: 上から 3 番目の欄（見出しはこの節と同じ）に、数 9 つ。\n- **合ったら読む**: 9 個とも違う番地が付きました（この起動の w は、9 個が全部違う数になるものが選ばれています）。ここからは表のマスを「(値, 番地) の組」として扱います — 同じ値が何マスにあっても、番地を見れば「どこの値か」が一つに決まります。配線 σ は、この番地を交換する対応として書きます。\n\n### 7. 配線 σ — 同じ値のはずのマスどうしで番地を交換  （回答欄 4 / 8）\n\nσ は「gate 0 の O ↔ gate 2 の L」「gate 1 の O ↔ gate 2 の R」を交換し、他は動かしません。番地の並びに σ を当てます。\n\n- **打つ前に**: 6 行目の 9 個と比べて、何か所が変わるはずですか。\n\n```python\nsig = {(0,0): (0,0), (1,0): (1,0), (2,0): (0,2), (0,1): (0,1), (1,1): (1,1), (2,1): (1,2), (0,2): (2,0), (1,2): (2,1), (2,2): (2,2)}; saddr = [pos(*sig[(c, r)]) for r in range(3) for c in range(3)]; tuple(saddr)\n```\n\n- **この行の意味**: σ で付け替えた 9 個の番地（`sig` のキーも値も (列, 行) の順）。\n- **回答欄**: 上から 4 番目の欄（見出しはこの節と同じ）に、数 9 つ。\n- **合ったら読む**: 6 行目と見比べると、**2 組（4 か所）**だけが入れ替わっています。狙いはこうです: 各マスを (値, 番地) の組にした集まりと、番地だけ σ で付け替えた集まり。**配線が正しい（交換される 2 マスが同じ値を持つ）なら、この 2 つの集まりは顔ぶれがぴったり同じ**になります。顔ぶれが同じことを 1 個の数で確かめるのが、次からの大積です。\n\n### 8. 指紋 — マスごとに (値 + β·番地 + γ)  （回答欄 5 / 8）\n\n検証者の 2 つの数 β, γ（「証拠を確認」の beta, gamma）で、各マスを 1 個の数 (値 + β × 番地 + γ) `% q` に潰します。まず行 0 の 3 マス。\n\n- **打つ前に**: 上の 1 桁の例（その 2）と同じ形です。値と番地のうち、β が掛かるのはどちらですか。\n\n```python\nvals = [v for row in rows for v in row]; marks = [(v + beta*a + gamma) % q for v, a in zip(vals, addr)]; tuple(marks[:3])\n```\n\n- **この行の意味**: 正直な表の 9 個の指紋のうち、最初の 3 つ。\n- **回答欄**: 上から 5 番目の欄（見出しはこの節と同じ）に、数 3 つ。\n- **合ったら読む**: 値と番地が β で 1 個の数に絡められました。この形のミソは、**顔ぶれが同じなら指紋の積は必ず同じ**で、顔ぶれが違えば、β と γ をでたらめに選ぶ限りほぼ確実に積が違うことです（この週で何度も出た「でたらめな数で聞く」と同じ理屈）。次の行で 9 個全部を掛けます。\n\n### 9. 大積 — 正しい表では両辺が一致する  （回答欄 6 / 8）\n\n左辺 = 全マスの (値 + β·番地 + γ) の積、右辺 = 番地だけ σ で付け替えた同じ積。9 マス分を 2 通りで。\n\n- **打つ前に**: 2 つの数は同じになりますか、違いますか。\n\n```python\nimport math; f = math.prod(marks) % q; fs = math.prod((v + beta*a + gamma) % q for v, a in zip(vals, saddr)) % q; (f, fs)\n```\n\n- **この行の意味**: 番地そのままの積と、σ で付け替えた積。\n- **回答欄**: 上から 6 番目の欄（見出しはこの節と同じ）に、数 2 つ。\n- **合ったら読む**: 一致。正直な表では (値, 番地) の顔ぶれが σ を通しても変わらないので、積も同じです。本物の PLONK では、この積を「行ごとに掛け足していく数が一周して 1 に戻る」という形の式にして封じ、1 点だけ開けて確かめます — 中身はいま手で出したこの 2 つの数の比較そのものです。\n\n### 10. 嘘の表の大積 — 配線の破れが積に出る  （回答欄 7 / 8）\n\n同じ β, γ で、ゲート制約だけ守った嘘の表の 2 つの積を出します。\n\n- **打つ前に**: 今度は 2 つの数は同じになりますか、違いますか。\n\n```python\nvb = [v for row in bad for v in row]; fb = math.prod((v + beta*a + gamma) % q for v, a in zip(vb, addr)) % q; gb = math.prod((v + beta*a + gamma) % q for v, a in zip(vb, saddr)) % q; (fb, gb)\n```\n\n- **この行の意味**: 嘘の表の、番地そのままの積と σ 付け替えの積。\n- **回答欄**: 上から 7 番目の欄（見出しはこの節と同じ）に、数 2 つ。\n- **合ったら読む**: 一致しません。gate 0 の O のマスと gate 2 の L のマスは σ で番地が入れ替わるのに、値が違ってしまったので、(値, 番地) の顔ぶれが変わるからです。ゲート方程式が 3 行とも 0 でも、大積は嘘を見つけました — 2 本目の目が効いています。では、この検査は絶対でしょうか。残り 2 行で数えます。\n\n### 11. なぜ積が違うのか — 顔ぶれで見る  （回答欄なし）\n\n「(値, 番地) の顔ぶれが σ を通しても同じか」を、正直な表と嘘の表で並べて確かめます。\n\n- **打つ前に**: 左と右、それぞれ True と False のどちらですか。\n\n```python\n(set(zip(vals, saddr)) == set(zip(vals, addr)), set(zip(vb, saddr)) == set(zip(vb, addr)))\n```\n\n- **この行の意味**: 左は正直な表、右は嘘の表。`set(...)` は「並び順を無視した顔ぶれ」です。\n- **回答欄**: なし — 次の行の材料。値は画面に残しておく。\n- **出たら読む**: (True, False)。大積は「顔ぶれが同じか」という質問を 1 個の数に潰した検査でした。正直な表では入れ替わる 2 マスが同じ値なので顔ぶれが変わらず、嘘の表では変わる。積の一致・不一致は、この顔ぶれの一致・不一致をそのまま映しています。\n\n### 12. どの (β, γ) なら見逃したか — 数える  （回答欄 8 / 8）\n\nβ を 1 から q−1、γ を 0 から q−1 まで全部試して、嘘の表の 2 つの積が一致してしまう組を数えます。\n\n- **打つ前に**: 全部で (q−1) × q 組あります。そのうち何割くらいが見逃しになると思いますか。\n\n```python\nsum(1 for b in range(1, q) for c in range(q) if math.prod((v + b*a + c) % q for v, a in zip(vb, addr)) % q == math.prod((v + b*a + c) % q for v, a in zip(vb, saddr)) % q)\n```\n\n- **この行の意味**: 見逃しになる (β, γ) の組の個数。\n- **回答欄**: 上から 8 番目の欄（見出しはこの節と同じ）に、数 1 つ。\n- **合ったら読む**: 全体の 1 割弱です。見逃しが起きるのは、**どれかのマスの指紋が 0 になって、両辺の積がそろって 0 に潰れるとき**だけ — 違いを運んでいた因子が、0 に掛け消されてしまうからです（前提の③）。q をうんと大きな体にすれば、この確率は事実上 0 になります。ゲート制約も大積も、最後は「でたらめな数で聞けばほぼ確実に落ちる」という同じ土台に立っています。\n\n## 3 本のドリルが、1 つの床に立っている\n\n12 行が全部通れば終わりです。「回路 = ゲート表 + 配線」という見方、ゲート方程式が行の中しか見ないこと、配線の決まりが「(値, 番地) の顔ぶれの一致」に言い換えられること、その一致が大積という 1 個の数で確かめられること、そして見逃しは指紋のどれかが 0 に潰れるときだけであること — **自分の手で出した数で 1 回ずつ**確かめました。\n\nSumCheck は和を、FRI は次数を、PLONK の大積は顔ぶれを確かめます。質問は違っても、3 本とも「でたらめな数で聞けば、違うものはほぼ必ずずれる」という同じ床に立っています。部品を 1 本の証明につないだとき何が起きるかは、`ac26-w4-proof-pipeline` が待っています。",
-  "writeup": "## この問題の形\n\n12 行を打ち、8 行に回答欄があります。順番は、ゲート表（1〜3）→ 嘘の表（4〜5）→ 番地と σ（6〜7）→ 指紋と大積（8〜10）→ なぜ・どれだけ（11〜12）。\n\n## 各行が守っているもの\n\n- 1〜3: 回路 = ゲート表 + 配線。ゲート方程式は 1 本で + も × も表すが、**行の中しか見ない**。\n- 4〜5: 両方 g ずらせばゲート方程式は保たれる — ゲート制約だけでは行ごとの勝手な値を止められない。\n- 6〜7: マスを (値, 番地) にすると、配線は「σ で番地を入れ替えても集合が変わらない」に言い換わる。\n- 8〜10: 集合の一致は、指紋の積という 1 個の数の一致に潰せる（乱数 β, γ が値と番地を絡める）。\n- 11〜12: 見逃しは、どれかの指紋が 0 で両辺が 0 に潰れるときだけ。q を 2²⁵⁴ にすれば事実上 0。\n\n## 間違えるとどう壊れるか\n\n掛け算ゲートを足し算で書く／番地の (col + 1) を col にする／σ の 2 組目を忘れる／`% q` を落とす／β = 0 を数える — どれも値が 1 つずれて、その行で止まります。\n\n## 次への接続\n\n実物の PLONK は、この大積を累算器 Z の多項式制約（1 周して 1 に戻る）にして KZG でコミットし、1 点で開きます。「H の全点で 0 ⇔ Z_H で割り切れる」というゼロテストは STARK と共通 — 入口（行 = ゲート vs 行 = 時刻）が違うだけで、出口は同じです。",
+  "shortDescription": "足し算から掛け算へ値を渡す2行の表を、7の余りで検査する8問。最後は、計算は正しいのに配線が違い、それでも積の検査を通る行を自分で作ります。",
+  "description": "講義のゲート・コピー制約と学習ノートの列の多項式化を、2ゲート6マスの独立模型へ落とす。全て同じ素数7を使用し、w=6の2行、1,2,3を並べ替えた列タグで6番地を区別。O0,L1,R1の3周期の置換と大積を比較する。最後は乱数を知った後の非ゼロ積の衝突を自作し、特定解ではなく公開条件で採点する。",
+  "instructions": "## 前提・最初にすること\n\nあなたは計算記録の検査役です。足し算は合っているのに、次の掛け算へ違う数が渡されています。\n**「起動」→「証拠を確認」→ a0+b0を7で割った余りuを求める。次にu×uの余りoを求め、「足し算と掛け算の出力を求める」へ `u,o` と提出。** 正解の表示を見たら、次の検査へ進みます。全8問です。\n\n紙で計算できます。Pythonは任意の計算メモです。ヒントは各問に「仕組み → 小さな見本 → 自分の数での手順」の3段あります。\n\n## 何を検査する？\n\n**PLONK**は、計算が正しいことを少ない証拠で確かめるための証明方式です。この演習では、計算の正しさと値の受け渡しを検査する算数の部分を体験します。秘密を隠す処理や、証拠を固定する処理はまだありません。\n\n```text\n a0 ─┐\n     ＋ ── u ──┬── 左入力 ─┐\n b0 ─┘          └── 右入力 ─×── o\n                 同じuを両方へ渡す\n```\n\n一つの演算を**ゲート**、値を渡すつながりを**配線**と呼びます。表の1行が1ゲートです。\n\n| 行 | 左入力L | 右入力R | 出力O | 行の検査 |\n|---|---|---|---|---|\n| 0：足す | a0 | b0 | u | L+R−Oの余りが0 |\n| 1：掛ける | u | u | o | L×R−Oの余りが0 |\n\n行の中の演算を守る決まりが**ゲート制約**。`O0=L1=R1`、つまり前の出力と次の両入力が等しい決まりが**コピー制約**です。片方だけでは元の計算を確かめられません。\n\n## 自分の数と計算の約束\n\n全ての演算で、同じ素数 **p=7** で割った余りを使います。`9=7×1+2`なら余り2、`−2=7×(−1)+5`なら余り5。Pythonの `% p` はこの0〜6の余り、`**`は累乗です。\n\n| Inspectの名前 | 意味 |\n|---|---|\n| a0,b0 | 最初の足し算へ入れる数 |\n| g | 次の左入力へ足して、配線を破る数。0以外 |\n| k0,k1,k2 | 左・右・出力の列に付ける番地のもと。1,2,3の並び替え |\n| w | 2行目の番地へ掛ける数。6。w²の余りが1なので1→6→1と一周する |\n| beta,gamma | 値と番地を混ぜる数。betaは0以外。数学ではβ,γ |\n\n以下の**見本**は `a0=1,b0=2,g=1,(k0,k1,k2)=(1,2,3),beta=1,gamma=0`。提出には「証拠を確認」の自分の値を使います。\n\n## 1. 足し算と掛け算の出力を求める `outputs`\n\n**式：`u=(a0+b0)%p`, `o=(u*u)%p`。入力はu,oの2個。**\n見本は `u=1+2=3`、`o=3×3=9 → 2` なので `3,2`。正しい表は `(1,2,3) / (3,3,2)` です。\n\n## 2. 配線を一つ破った行を作る `bad-row`\n\n次の行の左だけを `l=(u+g)%p` に変え、出力も計算し直します。**入力は `l,u,(l*u)%p` の3個。**\n\n```text\n足した結果 u=3 ──→ 本来の行：3 × 3 → 2\n              └─→ 偽の行：  4 × 3 → 5\n                           ↑勝手に変更\n```\n\n見本は `4,3,5`。`4×3−5=7 → 0`で掛け算は正しいのに、前の出力3を左へ渡していません。**演算と配線を別々に検査する理由**です。\n\n## 3. 6マスに番地を付ける `addresses`\n\n番地は「どのマスか」を区別する番号です。**最初の行はk0,k1,k2、次の行はw×k0,w×k1,w×k2の余り。入力は上の行から6個。**\n\n| 行 | 左L | 右R | 出力O |\n|---|---|---|---|\n| 0 | k0 | k1 | k2 |\n| 1 | w×k0 | w×k1 | w×k2 |\n\n見本は `1,2,3 / 6,5,4`。例えば `6×2=12 → 5`。一般の形は `番地(row,col)=w**row × k_col` の余りです。rowは行番号0か1、colは列番号0,1,2。6マスに重複はありません。\n\n## 4. 配線の先の番地へ入れ替える `sigma-addresses`\n\n同じ値であるべき3マスを一周につなぎます。この番地の入れ替えを **σ（シグマ）** と呼びます。各番地をちょうど一度ずつ使う入れ替えは**置換**です。\n\n```text\nO0 ──→ L1 ──→ R1 ──→ O0   同じ値が入るべき3マス\nL0,R0,O1は、自分自身の番地のまま\n```\n\n**前問の番地を上から A,B,C,D,E,F と置くと、入力は `A,B,D,E,C,F`。** 値は動かさず、番地だけを差し替えます。\n見本は `1,2,6 / 5,3,4`。正しい表なら、この変更で「値と番地の組」の顔ぶれは変わらず順序だけが変わります。違う値が配線へ混ざると、顔ぶれが変わります。\n\n## 5. 値と番地を一つの数に混ぜる `marks`\n\n**指紋**と呼ぶ小さな数へまとめます。**式は `(値+beta×番地+gamma)%p`。最初の行の、元の番地での指紋3個を入力。** 暗号化ではなく、比較用の計算です。\n見本は `1+1×1+0=2`、`2+1×2+0=4`、`3+1×3+0=6` なので `2,4,6`。\n\n## 6. 正しい表の積を比べる `grand-product`\n\n**積**は掛け算の結果。全部の指紋を掛ける値を**大積**と呼びます。元の番地とσの番地で、6個ずつ指紋を作って掛けます。**入力は元の積,σの積の2個。** 各掛け算の後に余りへ直すと数が膨らみません。\n\n見本の正しい表では：\n\n```text\n元の番地： 2 × 4 × 6 × 2 × 1 × 6 → 2\nσの番地：  2 × 4 × 2 × 1 × 6 × 6 → 2\n```\n\n顔ぶれが同じなら、掛ける順番を変えても同じです。ただし、**積が同じだけで顔ぶれが同じとは限りません**。例えば7の余りで `2×3=6` と `1×6=6`。最後にその見逃しを作ります。\n\n## 7. 配線が違う表の積を比べる `bad-product`\n\n2問目の偽の行を下に置き、同じ二つの積を計算します。**入力は元の積,σの積。**\n見本の表は `(1,2,3) / (4,3,5)`。\n\n```text\n元の番地： 2 × 4 × 6 × 3 × 1 × 2 → 1\nσの番地：  2 × 4 × 2 × 2 × 6 × 2 → 6\n```\n\n`1,6`と食い違います。表示したbeta,gammaはこの変更を検出する組から選んであります。どんな乱数でも必ず見抜ける、という意味ではありません。\n\n## 8. 積だけでは通る偽の行を作る `miss-count`\n\n今度は**自分で**次の行を作り、検査の限界を示します。前のgは使いません。**入力する3個は `l,r,o`。条件を満たす別解も正解です。**\n\n- 最初の行は変えない。lとrは**どちらもuと違う**0〜6の数。\n- `o=(l*r)%p`で掛け算を守る。\n- この表で6・7問目の二つの積が一致し、**0以外**になる。\n\nこの出題は少なくとも一つ作れるbeta,gammaを選んであります。単にゼロの指紋を作って両辺を0へ潰す方法は通りません。\n\n**計算を減らす式**：変わる配線3マスの番地をC,D,Eとし、`a=beta*C+gamma`, `b=beta*D+gamma`, `c=beta*E+gamma`の余りを求めます。両側で同じ指紋を取り除くと、比べる式は：\n\n```text\n(u+a)(l+b)(r+c) = (u+b)(l+c)(r+a)\n      T × (r+c) = U × (r+a)\nT=(u+a)(l+b)     U=(u+b)(l+c)\n        (T−U)r = U×a−T×c\n```\n\nlを一つ選ぶと、rの一次方程式になります。**逆元**は掛けると余りが1になる数。7の計算で3の逆元は5（3×5=15→1）なので、`3r=5`なら `r=5×5=25→4`。T−Uが0ならそのlは飛ばし、0でなければ1〜6を掛けて逆元を探せます。\n\n求めたl,r,oで**全6個の積を検算**し、0でないことと、両入力がuと違うことを確認して提出します。条件から外れたら別のlを試します。任意の `miss_count` 関数も個数ではなく、作った3個を返します。\n\n## 数学へ：表がどうPLONKの式につながる？\n\nゲートを指定する数を**セレクター**と呼びます。足し算の行なら `qL=qR=1,qM=0,qO=−1`、掛け算なら `qL=qR=0,qM=1,qO=−1`。\n共通の形 **`qL×L+qR×R+qM×L×R+qO×O=0`** が、それぞれL+R−O=0、L×R−O=0になります。\n\n次に、列を「文字の累乗を足した式」＝**多項式**へ移します。行0をY=1、行1をY=6へ対応させ、列の値v0,v1を\n**`V(Y)=A+B×Y`、`A=(v0+v1)×4`、`B=(v0−v1)×4`** の余りで表せます。4は2の逆元です。指定した位置で指定した値になる式を作る操作を**補間**と呼びます。\n見本の左列1,3なら `L(Y)=2+6Y`。L(1)=1、L(6)=3です。値だけでなく、セレクターや番地の列にも同じ操作が使えます。\n\nゲート式へ各列の多項式を入れると、一つの式f(Y)になります。両行が正しい条件は **f(1)=f(6)=0**。これは **f(Y)がY²−1で割り切れる**条件へ移せます。Y²−1=(Y−1)(Y−6)は、その二つの行で0になる式だからです。この模型では、その証明を小さく送る部分は扱いません。\n\n配線の積にも、途中の積を記録する**累算器**Zを使えます。行iの元の指紋3個の積をFi、σの積をGiとすると：\n\n```text\nZ0=1 → Z1=Z0×F0×G0の逆元 → Z2=Z1×F1×G1の逆元\n最後にZ2=1へ戻る？   初めの1と最後の1の両方が必要\n```\n\nGiが0でない場合にだけ割れます。F(Y), G(Y) は、各行のYを入れるとそれぞれFi, Giになる式です。Z(Y) は Z(1)=Z0, Z(6)=Z1 となる式です。これらの式では、各行で **`Z(wY)G(Y)−Z(Y)F(Y)=0`** と表せます。w²=1なので最後の行の次は最初の行です。これは6問目の積比較へつながる別の表現であり、一回の一致を完全な証明に変える魔法ではありません。\n\n**最後の反例が教えること**：小さな数で、検査に使うbeta,gammaを知った後なら、異なる配線でも一致する表を探せます。本来は表を先に変更不能に固定する**コミットメント**と、その後の予測できない乱数が必要です。大きな素数での確率的な検査、入力への結び付け、固定した式の値を正しく読んだ証拠、秘密を隠す処理も揃えてPLONKになります。この演習をPLONKの安全性証明や実用暗号への攻撃とはしません。\n\n## 任意：Pythonで検算する\n\n`plonk_drill.py`の8関数は回答欄ごとの計算メモです。最初の `outputs` なら `return None` を `return ((a0+b0)%p, ((a0+b0)%p)**2%p)` へ変えて「公開テストを実行」。見本の検算と `outputs -> 自分の計算値` が表示されます。未記入の他の関数はFAILのままで構いません。計算した値を回答欄へ提出します。\n\n提供済みの補助関数：`address_table(tags,w,p)`、`wired_addresses(tags,w,p)`、`fingerprints(rows,tags,w,p,beta,gamma)`、`products(rows,tags,w,p,beta,gamma)`、`inverse(a,p)`。tagsは(k0,k1,k2)、rowsは2行の(L,R,O)です。指紋と積の関数は、元の番地とσの番地の両方を返します。自分の値は自動で引数へ入ります。\n",
+  "writeup": "## 配線と計算は別\n\nL+R−O=0とLR−O=0は行の中だけを確かめる。O0=L1=R1は別の条件。3マスの番地を回した値・番地の組を指紋へ写し、積で比較する。\n\n## 最後の反例\n\nlを選ぶと(T−U)r=Ua−Tcでrを計算できる。ゼロの分母や全積のゼロ、uと同じ入力を避ける。見本はl,r,o=0,5,0でも5,6,2でも通る。一回の小さな積の一致を完全なコピー証明と扱わない。",
   "tags": [
     "advanced-cryptography-2026",
     "week4",
@@ -53,12 +53,11 @@
     }
   ],
   "learningGoals": [
-    "回路を「1 行 = 1 ゲート」の表にし、セレクター付きの 1 本の式で + と × を表せる",
-    "ゲート制約だけ守る嘘の表を自作し、行の中しか見ていないことを示せる",
-    "配線の決まりを「(値, 番地) の顔ぶれが σ で変わらない」に言い換えられる",
-    "指紋 (値 + β·番地 + γ) の大積で、顔ぶれの一致を 1 個の数に潰せる",
-    "嘘の表で大積が割れることを確かめ、見逃しは指紋が 0 のときだけと数えられる",
-    "ゲート制約・配線制約・大積が、同じ「でたらめな数で聞く」の上に立つことを言える"
+    "ゲート制約とコピー制約が別に必要な理由を図と反例で説明できる",
+    "一つの素数の余りで番地、置換、指紋、大積を計算できる",
+    "等しい積だけでは等しい配線を断定できない反例を構成できる",
+    "列の補間とゲート方程式、累算器の初期値・終端条件をつなげられる",
+    "模型の後出しと、本来の固定してから乱数を選ぶ順序を区別できる"
   ],
   "runtime": {
     "provider": "docker",
@@ -74,105 +73,185 @@
     "checks": [
       {
         "id": "outputs",
-        "label": "回路をゲート表にする — 3 ゲートの出力",
+        "label": "足し算と掛け算の出力を求める",
         "points": 20,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "outputs-hint-1",
-            "content": "o0 は足し算、o1 は掛け算、o2 はその和。3 つとも `% p` を忘れずに。",
-            "penalty": 6
+            "content": "前の計算結果を次の計算の両入力へ渡す、その正しい記録をまず作ります。出力を二つ出すと、以後の配線の基準になります。",
+            "penalty": 2
+          },
+          {
+            "id": "outputs-hint-2",
+            "content": "7で割る見本。1+2=3、次は3×3=9の余り2なので、二つの出力は3,2です。",
+            "penalty": 2
+          },
+          {
+            "id": "outputs-hint-3",
+            "content": "「証拠を確認」のa0,b0,pを見る。a0+b0の余りをuとメモし、u×uの余りをoとする。「足し算と掛け算の出力を求める」へu,oの順で提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "bad-row",
-        "label": "嘘の witness — ゲート制約だけ守る",
+        "label": "配線を一つ破った行を作る",
         "points": 20,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "bad-row-hint-1",
-            "content": "左入力と出力の**両方**を g ずらすのがミソ（片方だけだとゲート方程式で落ちて、嘘になりません）。`((o0 + g) % p, o1, (o0 + g + o1) % p)`。",
-            "penalty": 6
+            "content": "次の左入力と出力を一緒に変えると、その行の掛け算は守れます。それでも前の出力がコピーされていなければ別の計算です。",
+            "penalty": 2
+          },
+          {
+            "id": "bad-row-hint-2",
+            "content": "7の見本でu=3,g=1なら左は4。4×3=12の余り5だから行は4,3,5。掛け算は合うが左の4は前の出力3と違います。",
+            "penalty": 2
+          },
+          {
+            "id": "bad-row-hint-3",
+            "content": "a0+b0をpで割った余りuを求める。左lはu+gの余り、右はuのまま、出力はl×uの余り。「配線を一つ破った行を作る」へl,u,出力の順で提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "addresses",
-        "label": "大積の準備 — 9 マス全部に番地を振る",
+        "label": "6マスに番地を付ける",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "addresses-hint-1",
-            "content": "pos(col, row) = ω^row · (col + 1) mod q。並び順は行 0 の L, R, O → 行 1 → 行 2（r が外側のループ）。",
-            "penalty": 6
+            "content": "値だけを見ると同じ数字のマスを区別できません。番地を付けると、どこからどこへ値を渡す決まりなのかを検査できます。",
+            "penalty": 2
+          },
+          {
+            "id": "addresses-hint-2",
+            "content": "見本の列番号は1,2,3、次の行は6倍。7で割ると6×1→6、6×2→5、6×3→4で、6マスの番地は1,2,3,6,5,4です。",
+            "penalty": 2
+          },
+          {
+            "id": "addresses-hint-3",
+            "content": "「証拠を確認」のk0,k1,k2をこの順で書く。次にw×k0,w×k1,w×k2をそれぞれpで割った余りを続ける。「6マスに番地を付ける」へ計6個を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "sigma-addresses",
-        "label": "配線 σ — 同じ値のはずのマスどうしで番地を交換",
+        "label": "配線の先の番地へ入れ替える",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "sigma-addresses-hint-1",
-            "content": "入れ替わるのは (2,0)↔(0,2) と (2,1)↔(1,2) の 2 組だけ。6 行目の一覧と見比べて、4 か所だけ違えば正解の形です。",
-            "penalty": 6
+            "content": "同じ値が入るべき3マスの間で番地を回します。コピーが正しければ、値と番地の組は順序だけが変わり、同じ顔ぶれのままです。",
+            "penalty": 2
+          },
+          {
+            "id": "sigma-addresses-hint-2",
+            "content": "見本の元の番地は上段1,2,3、下段6,5,4。出力0→左1→右1→出力0の先へ替えると、上段1,2,6、下段5,3,4です。",
+            "penalty": 2
+          },
+          {
+            "id": "sigma-addresses-hint-3",
+            "content": "前問の番地6個をA,B,C,D,E,Fと書く。最初の二つA,Bはそのまま。3番目からD,E,Cと巡回させ、最後はF。「配線の先の番地へ入れ替える」へA,B,D,E,C,Fの順で提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "marks",
-        "label": "指紋 — マスごとに (値 + β·番地 + γ)",
+        "label": "値と番地を一つの数に混ぜる",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "marks-hint-1",
-            "content": "mark = (値 + beta·番地 + gamma) % q。値の並びは表を行ごとに平らにした vals、番地は 6 行目の addr。最初の 3 つだけ貼ります。",
-            "penalty": 6
+            "content": "値と番地を一緒に混ぜると、配線で場所を変えたことも小さな比較用の数へ反映できます。秘密を隠す暗号ではありません。",
+            "penalty": 2
+          },
+          {
+            "id": "marks-hint-2",
+            "content": "見本では値1,2,3、番地1,2,3、beta=1,gamma=0。値に番地を足し、7で割ると2,4,6です。",
+            "penalty": 2
+          },
+          {
+            "id": "marks-hint-3",
+            "content": "u=(a0+b0)%pを計算する。最初の行の値a0,b0,uと番地k0,k1,k2を組にし、それぞれ値+beta×番地+gammaをpの余りへ。「値と番地を一つの数に混ぜる」へ左、右、出力の順で提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "grand-product",
-        "label": "大積 — 正しい表では両辺が一致する",
+        "label": "正しい表の積を比べる",
         "points": 25,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "grand-product-hint-1",
-            "content": "`math.prod(...) % q` を 2 回 — 番地そのままと、σ 付け替え（7 行目の saddr）。正解は同じ数が 2 つ並びます。",
-            "penalty": 6
+            "content": "同じ指紋の顔ぶれなら、掛ける順序だけが変わっても積は同じです。元の番地と配線先の番地を使って、この一致を確かめます。",
+            "penalty": 2
+          },
+          {
+            "id": "grand-product-hint-2",
+            "content": "7の余りで2×4は1、その続きに6,2,1,6を順に掛けると6,5,5,2です。並びを替えた2,4,2,1,6,6も最後は2なので積は2,2。",
+            "penalty": 2
+          },
+          {
+            "id": "grand-product-hint-3",
+            "content": "正しい表は(a0,b0,u)/(u,u,o)。6マスの元の番地で指紋を作り、1から順に掛けて毎回pの余りへ。同じ値で、番地だけσの6個に替えた積も計算。「正しい表の積を比べる」へ元の積,σの積を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "bad-product",
-        "label": "嘘の表の大積 — 配線の破れが積に出る",
+        "label": "配線が違う表の積を比べる",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "bad-product-hint-1",
-            "content": "値だけ嘘の表 vb に替えて、番地は 6・7 行目のまま。2 つの数は**違う**のが正解です。",
-            "penalty": 6
+            "content": "配線で同じはずの場所へ違う値が入ると、番地を入れ替えた指紋の顔ぶれが変わります。その変化を積で捉えます。",
+            "penalty": 2
+          },
+          {
+            "id": "bad-product-hint-2",
+            "content": "見本の偽の行は4,3,5。表の指紋は元の番地で2,4,6,3,1,2、σで2,4,2,2,6,2。7の余りを取りながら掛けると1,6で不一致です。",
+            "penalty": 2
+          },
+          {
+            "id": "bad-product-hint-3",
+            "content": "2問目のl,u,l×uの余りを下段、a0,b0,uを上段にする。前問と同じ式で元の番地・σの番地の指紋を作り、各6個を掛ける。「配線が違う表の積を比べる」へ元の積,σの積を提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "miss-count",
-        "label": "どの (β, γ) なら見逃したか — 数える",
+        "label": "積だけでは通る偽の行を作る",
         "points": 30,
         "wrongAnswerPenalty": 10,
         "hints": [
           {
             "id": "miss-count-hint-1",
-            "content": "b は 1 から（β = 0 は数えない）、c は 0 から。数秒かかります。`% q` を積の後にも付けるのを忘れずに。",
-            "penalty": 6
+            "content": "積は顔ぶれ全体を一つの数に縮めるため、違う配線でも偶然一致することがあります。検査の数を先に知ったあなたは、その一致を起こす行を作れます。",
+            "penalty": 2
+          },
+          {
+            "id": "miss-count-hint-2",
+            "content": "7の見本でu=3、配線3マスの番地は3,6,5、beta=1,gamma=0。l=0を試すとT=6×6→1,U=9×5→3。5r=4なので逆元3を掛けてr=5。o=0×5→0。全6個の積が0でないことも別に検算します。",
+            "penalty": 2
+          },
+          {
+            "id": "miss-count-hint-3",
+            "content": "自分のu、番地C,D,Eとbeta,gammaで本文のa,b,cを計算。uと違うlを選んでT,Uを出す。T−Uが0なら別のl。0以外なら逆元を探し、r=(U×a−T×c)×逆元の余りを求める。rもuと違えばo=l×rの余り。全6個の両積が同じ非ゼロになるか検算し、「積だけでは通る偽の行を作る」へl,r,oを提出。条件を外れたら別のlへ。",
+            "penalty": 2
           }
         ]
       }
@@ -180,97 +259,160 @@
   },
   "i18n": {
     "en": {
-      "name": "Every gate passes. The wiring does not",
-      "shortDescription": "Every in-row computation checks out — and the table can still record a different computation, if the wiring that carries values between rows is broken. Confirm that gate and wiring constraints are different eyes, then crush the wiring check into one grand product. Twelve lines of type-and-paste Python.",
-      "description": "A Week 4 drill. Not a write-a-function problem: you type one line, paste the value it prints, twelve times, and confirm that PLONK's two constraints — gates and copies — are separate pairs of eyes. First the honest table (three gates → the gate equation is 0 on every row → the wires agree); then you build a **lying table that satisfies only the gates** (shift gate 2's left input and output by g) and watch it pass the gates while breaking a wire. Then the grand product: address the nine cells, swap through σ, compute the product of fingerprints (value + β·address + γ) both ways, see it agree on the honest table and split on the lying one — and finally count, exhaustively, which (β, γ) would have missed.\n\nThe format matches ac26-w3-schnorr-drill / ac26-w4-sumcheck-drill (the learner-validated \"type one line, paste the value, read the one sentence about that value\"). The circuit, σ, and grand-product procedure follow the lecture's PLONK example (slides 24–29); the inputs, fields, address base, β, and γ are seed-derived, and so is the miss count — memorization does not pass.\n\nEight of the twelve lines have an answer field (the platform's per-problem maximum). The four ungraded lines (the gate equation [0,0,0], the wires (True, True), the lying table side-by-side, the set comparison) have values that are constants of the construction, explained in place. A miss happens only when some fingerprint collapses both products to 0 — the server counts this by factoring, and a test proves the fast count equals the learner's exhaustive loop.",
-      "instructions": "## A lying table made entirely of correct rows\n\nA zkRollup's circuit breaks transaction verification into tens of thousands of gates — additions and multiplications — laid out as a table. PLONK, designed at Aztec and underlying zkSync, Scroll and much of the zkEVM family, checks that table in exactly the shape this problem uses.\n\nThere is one trap in it. **A table can be right in every single row and still be a lie as a whole.** The gate expression looks only inside a row. The **across-rows promise** — \"carry gate 0's output into gate 2\" — never shows up in it. So checking needs two separate eyes: the gate constraints and the wiring constraints are different things.\n\n## There are two eyes\n\nYou are the verifier. A three-row table has arrived, said to be the record of running a certain circuit, and you want to know whether it is genuine. The **first eye** looks only inside a row — \"this row says addition, so is left + right = output?\" The **second eye** looks across rows — \"was gate 0's output really carried into gate 2's left input?\"\n\nFirst you confirm these really are two separate eyes, by **building a fake table that satisfies only one of them**. Then you crush the second eye from \"compare all nine cells\" down to **comparing a single number** — the grand product. Finally you count every case where even that single-number comparison misses.\n\nThis is not a write-a-function problem. You **type one line into Python and paste the value it prints into an answer field**, twelve times. The numbers change on every start, so copying someone else's answers or old notes does not pass.\n\n## Before you start — rearranging, commutativity, and \"a product is 0\"\n\n- ① An equation can be rearranged into \"= 0\" form (year 7). 3 + 1 = 4 becomes 3 + 1 − 4 = 0; the gate equation is one expression of that shape.\n- ② Multiply the same collection of numbers in any order and the product is the same (primary-school commutativity). So \"do these two collections have the same members?\" can (almost always) be settled by comparing one product each.\n- ③ A product is 0 only when one of its factors is 0 (year 9) — all the final \"count the misses\" line needs.\n- Numbers are remainders after dividing by a prime (Python's `%`). New to this? `ac26-w1-constraint-lab`. **This problem has two primes** — **p** for the gate arithmetic and **q** for the addresses, fingerprints and products. Table values use `% p`; everything from addresses onward uses `% q`. **Do not mix them up** (both appear under Inspect evidence).\n- In the course: Week 4 lecture slides 24–29 (the gate table and selectors, copy constraints and the permutation σ, the grand product via the accumulator Z). The two examples below follow the lecture exactly, with the numbers shrunk to one digit.\n\n## A one-digit example, part 1 — gates pass, wiring breaks (dividing by 17)\n\nThe table has one gate per row, and each row is (L, R, O) = (left input, right input, output).\n\n- gate 0 (addition): (3, 1, 4). Put the **selectors** (= the five public numbers that pick the row's type) at (1, 1, 0, −1, 0), and the gate equation is 1×3 + 1×1 + 0×3×1 + (−1)×4 + 0 = 3 + 1 − 4 = **0**\n- gate 1 (multiplication): (2, 4, 8). With selectors (0, 0, 1, −1, 0): 0 + 0 + 8 − 8 = **0**\n- gate 2 (addition): (4, 8, 12). 4 + 8 − 12 = **0**\n- **the wiring**: gate 0's output 4 is carried into gate 2's left input, gate 1's output 8 into gate 2's right input.\n- **the heart of it**: replace gate 2's row with (5, 8, 13) and 5 + 8 − 13 = 0 still holds — **the gate equation has no complaint**. But gate 0's output is still 4: the carrying is broken. An eye that only looks inside a row cannot stop this lie.\n\n## A one-digit example, part 2 — fingerprints and products (dividing by 7, β = 2, γ = 1)\n\nTreat each cell as a pair \"(value, address)\" and crush it into one number, the **fingerprint** = value + β × address + γ.\n\n- the fingerprint of (value 5, address 3) = 5 + 2×3 + 1 = 12 → 12 − 7 = **5**. The fingerprint of (value 2, address 1) = 2 + 2×1 + 1 = **5**\n- the product of those two fingerprints = 5 × 5 = 25 → 25 − 21 = **4**. Swap their order and the product is still 4 (fact ②)\n- change one to (value 6, address 3) and its fingerprint is 6 + 6 + 1 = 13 → **6**, so the product is 6 × 5 = 30 → 30 − 28 = **2**. **Different members, different product.**\n\n## First move\n\n1. In Participant Portal (the site showing this statement) press **起動 (Start)**. The **problem editor** appears on the same page, along with **eight answer fields**, each headed with a checkpoint's name.\n2. Press **Inspect evidence** in the editor. This deployment's numbers appear as **assignment statements you can paste straight into Python**: the gate field p, the circuit inputs a0, b0, a1, b1, the lie's shift g, the field q used for addresses and products together with the address base w, and the verifier's two numbers beta and gamma. **No answers are shown** — the answers are what your Python prints.\n3. Open Python on your own machine. On Windows open PowerShell, on a Mac open Terminal, and type `python3`; a `>>>` prompt appears (the **IDLE** shell that ships with Python works the same). That one prompt is all you need.\n4. Paste every assignment statement from step 2 at the `>>>`. You are ready.\n\n**If you cannot open Python**: the editor's `plonk_drill.py` holds twelve empty functions. Fill them in and press **Run public tests**; it prints what your functions produce on this deployment's numbers — the same values the `>>>` would have printed. Paste those into the answer fields.\n\n## What you answer — eight checkpoints\n\nOnly **the values in the answer fields** are graded (`plonk_drill.py` itself is not graded — but pressing Submit sends the editor contents along with the answer, so do not empty it). When an answer is several numbers, write them comma-separated as `[4, 8, 1]` (`(4, 8, 1)` and plain `4, 8, 1` are also accepted). **A wrong count of numbers is a wrong answer.**\n\n1. The circuit as a gate table — three gate outputs … 3 numbers\n2. A lying witness — satisfying only the gate constraints … 3 numbers\n3. Setting up the grand product — an address for all nine cells … 9 numbers\n4. The wiring σ — swap addresses between cells that should match … 9 numbers\n5. Fingerprints — (value + β·address + γ) per cell … 3 numbers\n6. The grand product — both sides agree on an honest table … 2 numbers\n7. The lying table's grand product — the broken wire shows in the product … 2 numbers\n8. Count the (β, γ) that would have missed … 1 number\n\n**How submitting works**: type the value into the answer field and press that checkpoint's **Submit (+points)**. The eight are graded separately, so being stuck on one does not block the rest. You may resubmit after a miss, but each miss costs 10 points (the eight total 200; the total never goes below 0). Each checkpoint has one hint, and opening it costs points. **Restore starter** puts `plonk_drill.py` back to its original state.\n\n## Workflow — twelve lines\n\nEight of the twelve lines have an answer field; the other four are material for the line that follows (they have something to read too).\n\nHow to work a line: say out loud (or write down) one line of **Before you type** — what you expect to appear → paste **the line to type** → read **what this line means** → paste the printed value into the answer field → once it matches, read **read after it matches** and move on. Predicting first matters: however you get this arithmetic wrong, the answer still lands somewhere inside the remainder range, so staring at the number that came out tells you nothing about whether it is right.\n\n### 1. The circuit as a gate table — three gate outputs  (answer box 1 of 8)\n\nThe circuit has three gates: gate 0 is a0 + b0 (addition), gate 1 is a1·b1 (multiplication), gate 2 adds those two outputs. Inputs a0, b0, a1, b1 come from Inspect evidence. Everything takes `% p`.\n\n- **Before you type**: how is the third number built from the first two?\n\n```python\no0 = (a0 + b0) % p; o1 = (a1 * b1) % p; o2 = (o0 + o1) % p; (o0, o1, o2)\n```\n\n- **What this line means**: the three gate outputs, in order.\n- **Answer**: the answer field for this line (#1 from the top), 3 numbers.\n- **Read after it matches**: the circuit is now a table with one gate per row. Each row is (L, R, O) = (left input, right input, output), and the three numbers you just produced are the O of each row. The next line checks, with one expression, that the table respects its types.\n\n### 2. The gate equation — one expression for both addition and multiplication  (no answer field)\n\nPut selectors (q_L, q_R, q_M, q_O, q_C) on each row, and the single expression q_L·L + q_R·R + q_M·L·R + q_O·O + q_C states \"the type of this row\". An addition row uses (1, 1, 0, −1, 0), giving L + R − O; a multiplication row uses (0, 0, 1, −1, 0), giving L·R − O (exactly as in the one-digit example, part 1).\n\n- **Before you type**: what should the three numbers be?\n\n```python\nrows = [(a0, b0, o0), (a1, b1, o1), (o0, o1, o2)]; sel = [(1, 1, 0, -1, 0), (0, 0, 1, -1, 0), (1, 1, 0, -1, 0)]; [(ql*L + qr*R + qm*L*R + qo*O + qc) % p for (L, R, O), (ql, qr, qm, qo, qc) in zip(rows, sel)]\n```\n\n- **What this line means**: the three rows' gate equations, taken `% p`.\n- **Answer**: none — material for the next line; keep the value on screen.\n- **Read once it prints**: [0, 0, 0] — all three rows respect their type. Expressing both addition and multiplication with one expression is what selectors are for, and the circuit's \"type\" has been separated into the selectors (public) from its \"values\" (the private table). But this expression **only looks inside a row**. Nothing has checked the carrying across rows yet — that is the next line.\n\n### 3. The wiring — the places that should hold \"the same value\" across rows  (no answer field)\n\nGate 0's output should have been carried into gate 2's left input, and gate 1's output into gate 2's right input. Compare them on the table.\n\n- **Before you type**: do you expect two Trues, or something else?\n\n```python\n(rows[0][2] == rows[2][0], rows[1][2] == rows[2][1])\n```\n\n- **What this line means**: gate 0's O against gate 2's L, and gate 1's O against gate 2's R.\n- **Answer**: none — material for the next line; keep the value on screen.\n- **Read once it prints**: (True, True) — the wiring holds. This is the copy constraint, an eye separate from the gate equation. The gate equation watches types inside a row; the copy constraint watches carrying across rows. Only with both does \"this circuit was run on these inputs\" mean anything. Next, build a table that satisfies only one of them, and see that the two really are separate.\n\n### 4. A lying witness — satisfying only the gate constraints  (answer box 2 of 8)\n\nShift gate 2's left input by g and shift its output by the same amount (g from Inspect evidence). Gate 2's row then still satisfies L + R − O = 0.\n\n- **Before you type**: which of the three does not move?\n\n```python\nbad2 = ((o0 + g) % p, o1, (o0 + g + o1) % p); bad = [rows[0], rows[1], bad2]; bad2\n```\n\n- **What this line means**: gate 2's shifted row (L, R, O).\n- **Answer**: the answer field for this line (#2 from the top), 3 numbers.\n- **Read after it matches**: this row satisfies L + R = O (left input and output moved together), so **the gate equation has no complaint**. But gate 0's output is unchanged, so the wire \"carry gate 0's output into gate 2\" is broken. A constraint that only looks inside a row cannot stop a lie that puts arbitrary values in each row — confirmed on the next line.\n\n### 5. The lying table — gates pass, the wiring fails  (no answer field)\n\nOn the lying table, put the gate equations and the copy constraints side by side.\n\n- **Before you type**: which of the two, left or right, do you expect to wrongly say \"pass\"?\n\n```python\n([(ql*L + qr*R + qm*L*R + qo*O + qc) % p for (L, R, O), (ql, qr, qm, qo, qc) in zip(bad, sel)], (bad[0][2] == bad[2][0], bad[1][2] == bad[2][1]))\n```\n\n- **What this line means**: left, the lying table's three gate equations; right, the two wires.\n- **Answer**: none — material for the next line; keep the value on screen.\n- **Read once it prints**: ([0, 0, 0], (False, True)) — the gate equations pass on all three rows and only the first wire is False. **The two really are separate eyes**, now visible as numbers. So how does a verifier confirm this \"agreement across rows\" without reading the whole table? That is the grand product, starting here.\n\n### 6. Setting up the grand product — an address for all nine cells  (answer box 3 of 8)\n\naddress = w to the power of (row number) × (column number + 1). From here on the field is q (q and w from Inspect evidence). Nine cells: rows 0, 1, 2 × columns L, R, O.\n\n- **Before you type**: no two of the nine may be the same number. Check the printed list for repeats.\n\n```python\npos = lambda col, row: (pow(w, row, q) * (col + 1)) % q; addr = [pos(c, r) for r in range(3) for c in range(3)]; tuple(addr)\n```\n\n- **What this line means**: the nine addresses (row 0's L, R, O → row 1 → row 2).\n- **Answer**: the answer field for this line (#3 from the top), 9 numbers.\n- **Read after it matches**: nine distinct addresses (this deployment's w is chosen so that all nine come out different). From here on, table cells are treated as \"(value, address)\" pairs — however many cells share a value, the address pins down which cell it is. The wiring σ is then written as a swap of these addresses.\n\n### 7. The wiring σ — swap addresses between cells that should match  (answer box 4 of 8)\n\nσ swaps \"gate 0's O ↔ gate 2's L\" and \"gate 1's O ↔ gate 2's R\", and leaves everything else alone. Apply it to the address list.\n\n- **Before you type**: compared with line 6's nine, how many positions should change?\n\n```python\nsig = {(0,0): (0,0), (1,0): (1,0), (2,0): (0,2), (0,1): (0,1), (1,1): (1,1), (2,1): (1,2), (0,2): (2,0), (1,2): (2,1), (2,2): (2,2)}; saddr = [pos(*sig[(c, r)]) for r in range(3) for c in range(3)]; tuple(saddr)\n```\n\n- **What this line means**: the nine addresses after σ (both the keys and the values of `sig` are in (column, row) order).\n- **Answer**: the answer field for this line (#4 from the top), 9 numbers.\n- **Read after it matches**: compared with line 6, exactly **two pairs (four positions)** have swapped. The aim is this: take the collection of (value, address) pairs, and the collection with the addresses re-labelled by σ. **If the wiring is correct — if the two swapped cells really hold the same value — the two collections have exactly the same members.** Confirming that sameness with one number is the grand product, coming next.\n\n### 8. Fingerprints — (value + β·address + γ) per cell  (answer box 5 of 8)\n\nUsing the verifier's two numbers β and γ (`beta`, `gamma` from Inspect evidence), crush each cell into one number, (value + β × address + γ) `% q`. Start with row 0's three cells.\n\n- **Before you type**: this is the same shape as one-digit example part 2. Of the value and the address, which one is β multiplied by?\n\n```python\nvals = [v for row in rows for v in row]; marks = [(v + beta*a + gamma) % q for v, a in zip(vals, addr)]; tuple(marks[:3])\n```\n\n- **What this line means**: the first three of the honest table's nine fingerprints.\n- **Answer**: the answer field for this line (#5 from the top), 3 numbers.\n- **Read after it matches**: value and address are now tangled into one number by β. The point of this shape: **if the members are the same, the product of the fingerprints is always the same**, and if the members differ, then as long as β and γ are picked at random the products almost always differ (the same reasoning as this week's other \"ask with a random number\"). The next line multiplies all nine.\n\n### 9. The grand product — both sides agree on an honest table  (answer box 6 of 8)\n\nLeft side = the product of (value + β·address + γ) over all cells; right side = the same product with the addresses re-labelled by σ. Nine cells, computed both ways.\n\n- **Before you type**: will the two numbers be the same or different?\n\n```python\nimport math; f = math.prod(marks) % q; fs = math.prod((v + beta*a + gamma) % q for v, a in zip(vals, saddr)) % q; (f, fs)\n```\n\n- **What this line means**: the product with plain addresses, and the product after σ.\n- **Answer**: the answer field for this line (#6 from the top), 2 numbers.\n- **Read after it matches**: equal. On an honest table the (value, address) members are unchanged by σ, so the products match. In real PLONK this product is turned into an expression about \"a running number that multiplies its way around and comes back to 1\", which is sealed and opened at a single point — and its content is exactly the comparison of these two numbers you just produced by hand.\n\n### 10. The lying table's grand product — the broken wire shows in the product  (answer box 7 of 8)\n\nWith the same β and γ, take the two products of the table that satisfied only the gate constraints.\n\n- **Before you type**: this time, will the two numbers be the same or different?\n\n```python\nvb = [v for row in bad for v in row]; fb = math.prod((v + beta*a + gamma) % q for v, a in zip(vb, addr)) % q; gb = math.prod((v + beta*a + gamma) % q for v, a in zip(vb, saddr)) % q; (fb, gb)\n```\n\n- **What this line means**: the lying table's product with plain addresses, and after σ.\n- **Answer**: the answer field for this line (#7 from the top), 2 numbers.\n- **Read after it matches**: they do not match. Gate 0's O cell and gate 2's L cell have their addresses swapped by σ, but their values are no longer equal, so the (value, address) members change. Even with all three gate equations at 0, the grand product found the lie — the second eye is working. But is this check absolute? The last two lines count.\n\n### 11. Why the products differ — look at the members  (no answer field)\n\nAsk \"are the (value, address) members the same after σ?\" for the honest table and the lying table, side by side.\n\n- **Before you type**: True or False, for each of the two?\n\n```python\n(set(zip(vals, saddr)) == set(zip(vals, addr)), set(zip(vb, saddr)) == set(zip(vb, addr)))\n```\n\n- **What this line means**: left, the honest table; right, the lying table. `set(...)` means \"the members, ignoring order\".\n- **Answer**: none — material for the next line; keep the value on screen.\n- **Read once it prints**: (True, False). The grand product was the question \"are the members the same?\" crushed into one number. On the honest table the two swapped cells hold the same value so the members do not change; on the lying table they do. The products matching or not is a direct reflection of that.\n\n### 12. Count the (β, γ) that would have missed  (answer box 8 of 8)\n\nTry every β from 1 to q−1 and every γ from 0 to q−1, and count the pairs where the lying table's two products come out equal anyway.\n\n- **Before you type**: there are (q−1) × q pairs in total. What fraction do you expect to be misses?\n\n```python\nsum(1 for b in range(1, q) for c in range(q) if math.prod((v + b*a + c) % q for v, a in zip(vb, addr)) % q == math.prod((v + b*a + c) % q for v, a in zip(vb, saddr)) % q)\n```\n\n- **What this line means**: how many (β, γ) pairs let the lie through.\n- **Answer**: the answer field for this line (#8 from the top), 1 number.\n- **Read after it matches**: a little under a tenth of the total. A miss happens only when **some cell's fingerprint comes out 0 and both products collapse to 0 together** — the factor that was carrying the difference gets multiplied away by that 0 (fact ③). Make q a genuinely large field and this probability becomes effectively zero. Both the gate constraints and the grand product rest, in the end, on the same footing: ask with a random number and a lie almost always falls.\n\n## Three drills, one floor\n\nYou are done when all twelve lines pass. You confirmed — **once each, on numbers you produced yourself** — the \"circuit = gate table + wiring\" view, that the gate equation only ever looks inside a row, that the wiring rule can be restated as \"the (value, address) members agree\", that this agreement is confirmable by the single number of a grand product, and that the misses happen only when one of the fingerprints collapses to 0.\n\nSumCheck checks a sum, FRI checks a degree, PLONK's grand product checks membership. Different questions, same floor under all three: ask with a random number, and anything different almost surely comes out different. What happens when the parts are joined into one proof is waiting in `ac26-w4-proof-pipeline`.",
-      "writeup": "## The shape of this problem\n\nTwelve lines are typed; eight have an answer field. The order: the gate table (1–3) → the lying table (4–5) → addresses and σ (6–7) → fingerprints and the grand product (8–10) → why, and how often (11–12).\n\n## What each line protects\n\n- 1–3: a circuit is a gate table plus wiring. One gate equation covers + and ×, but it sees **only the inside of a row**.\n- 4–5: shift both cells by g and the gate equation is preserved — gates alone cannot stop per-row arbitrary values.\n- 6–7: as (value, address) pairs, the wiring restates as \"the set survives σ\".\n- 8–10: set equality collapses to the equality of one number — the product of fingerprints, with β, γ entangling value and address.\n- 11–12: a miss happens only when some fingerprint zeroes both products. Over a 2²⁵⁴-element field, effectively never.\n\n## How it breaks\n\nThe multiplication gate written as addition / (col + 1) as col / σ's second swap forgotten / a dropped `% q` / β = 0 counted — each shifts one value and stops at that line.\n\n## Where this leads\n\nReal PLONK turns this grand product into the accumulator Z's polynomial constraint (one lap, back to 1), commits with KZG, and opens at one point. The zero test — \"0 on all of H ⇔ divisible by Z_H\" — is shared with STARK: the entrances differ (row = gate vs row = time step), the exit is the same.",
+      "name": "The gates pass, but the wires are wrong",
+      "shortDescription": "Eight checks use remainders by 7 to trace addition into multiplication. Finish by constructing a row that preserves multiplication, breaks both copied inputs, and still passes the product check.",
+      "description": "Independent two-gate, six-cell model of lecture gate/copy constraints and the personal notes’ column-polynomial derivation. All arithmetic uses prime 7, row cycle w=6, and permuted column tags 1,2,3. A three-cell copy cycle drives the grand product. The final construction exploits known challenges to produce a nonzero-product collision; any row satisfying public constraints passes.",
+      "instructions": "## Before you start\n\nYou inspect a calculation log. The addition is correct, but different values reach the following multiplication.\n**Start → Inspect → add a0+b0 and take the remainder by 7 to get u. Square u and reduce to get o. Submit `u,o` in “Compute the addition and multiplication outputs”.** Observe the verdict, then continue. There are eight checkpoints.\n\nPaper arithmetic is sufficient. Python is an optional scratchpad. Each checkpoint has three hints: mechanism, small example, then actions using your displayed names.\n\n## What is being checked?\n\n**PLONK** is a proof system for checking computations with a small amount of evidence. This exercise extracts arithmetic checks on operations and copied values. It does not implement secrecy or fixing the evidence against later changes.\n\n```text\n a0 ─┐\n     + ── u ──┬── left ──┐\n b0 ─┘         └── right ─×── o\n                  copy u to BOTH inputs\n```\n\nOne operation is a **gate**; connections carrying values are **wires**. One table row represents one gate.\n\n| Row | Left L | Right R | Output O | Row check |\n|---|---|---|---|---|\n| 0: add | a0 | b0 | u | L+R−O leaves zero |\n| 1: multiply | u | u | o | L×R−O leaves zero |\n\n**Gate constraints** require the operation within each row to hold. The **copy constraint** requires `O0=L1=R1`: the first output equals both following inputs. Neither check alone establishes the original computation.\n\n## Your numbers and arithmetic rules\n\nEvery operation uses the SAME prime **p=7**. `9=7×1+2` leaves 2; `−2=7×(−1)+5` leaves 5. Python `% p` gives this remainder from 0 to 6; `**` means a power.\n\n| Inspect name | Meaning |\n|---|---|\n| a0,b0 | The addition inputs |\n| g | Nonzero shift added to the following left input |\n| k0,k1,k2 | Left/right/output column address tags, a permutation of 1,2,3 |\n| w | Second-row address multiplier, 6; w² leaves 1, cycling 1→6→1 |\n| beta,gamma | Fingerprint mixing numbers; beta is nonzero. Mathematical symbols β,γ |\n\nThe **example** uses `a0=1,b0=2,g=1,(k0,k1,k2)=(1,2,3),beta=1,gamma=0`. Submit answers using your Inspect values instead.\n\n## 1. Compute the addition and multiplication outputs `outputs`\n\n**Compute `u=(a0+b0)%p`, `o=(u*u)%p`. Submit u,o.**\nExample: u=1+2=3, o=3×3=9→2. Submit `3,2`. The honest table is `(1,2,3) / (3,3,2)`.\n\n## 2. Change one copied input while preserving multiplication `bad-row`\n\nSet the following left input to `l=(u+g)%p` and recalculate its output. **Submit `l,u,(l*u)%p`.**\n\n```text\naddition output u=3 → honest row: 3 × 3 → 2\n                   → false row:  4 × 3 → 5\n                                ↑ changed input\n```\n\nExample answer: `4,3,5`. Multiplication still passes: 4×3−5=7→0. But the earlier output 3 was not copied to the left input. This motivates separate gate and copy checks.\n\n## 3. Give six cells distinct addresses `addresses`\n\nAn address identifies a cell. **First row: k0,k1,k2. Second row: w×k0,w×k1,w×k2, reduced by p. Submit six addresses row by row.**\n\n| Row | Left | Right | Output |\n|---|---|---|---|\n| 0 | k0 | k1 | k2 |\n| 1 | w×k0 | w×k1 | w×k2 |\n\nExample: `1,2,3 / 6,5,4`; 6×2=12→5. The general formula is `address(row,col)=w**row × k_col`, reduced by p. row is 0 or 1; col is 0,1,2. All six addresses are distinct.\n\n## 4. Replace each address with its wired partner `sigma-addresses`\n\nConnect the three cells that must have equal values into a cycle. This address replacement is **σ (sigma)**. A rearrangement using every address once is a **permutation**.\n\n```text\nO0 → L1 → R1 → O0    three cells that must contain the same value\nL0,R0,O1 retain their own addresses\n```\n\n**Name the previous six addresses A,B,C,D,E,F; submit `A,B,D,E,C,F`.** Keep values in place and replace only addresses.\nExample: `1,2,6 / 5,3,4`. In an honest table, the collection of (value,address) pairs retains its members; only their order changes. A wrong copied value changes the collection.\n\n## 5. Mix each value with its address `marks`\n\nA **fingerprint** is a small number combining the pair: **`(value+beta×address+gamma)%p`**. It is a comparison calculation, not encryption. Submit three fingerprints from the first row using ORIGINAL addresses.\nExample: 1+1×1+0=2, 2+1×2+0=4, 3+1×3+0=6. Submit `2,4,6`.\n\n## 6. Compare products of the honest table `grand-product`\n\nA **product** is a multiplication result; the product of all fingerprints is called the **grand product**. Compute all six fingerprints under original addresses, then under σ addresses. **Submit original product,σ product.** Reduce after each multiplication to keep numbers small.\n\n```text\noriginal: 2 × 4 × 6 × 2 × 1 × 6 → 2\nσ:        2 × 4 × 2 × 1 × 6 × 6 → 2\n```\n\nReordering identical factors preserves the product. **Equal products do not imply identical factors:** 2×3=6 and 1×6=6. You will construct such a miss in the final checkpoint.\n\n## 7. Compare products after changing one copied input `bad-product`\n\nReplace the second row with your row-2 alteration and repeat both products. **Submit original product,σ product.**\nExample table `(1,2,3) / (4,3,5)`:\n\n```text\noriginal: 2 × 4 × 6 × 3 × 1 × 2 → 1\nσ:        2 × 4 × 2 × 2 × 6 × 2 → 6\n```\n\nThe answer `1,6` disagrees. The displayed beta,gamma are selected to detect this particular alteration; arbitrary randomness need not always catch it.\n\n## 8. Construct a false row that passes the product check `miss-count`\n\n**Construct** the following row to expose the checker's limit. Do not use g. **Submit three values `l,r,o`; any valid construction passes.**\n\n- Keep the first row unchanged. BOTH l and r must differ from u and lie in 0..6.\n- Preserve multiplication: `o=(l*r)%p`.\n- Both whole-table products from rows 6–7 must agree and be **nonzero**.\n\nThis exercise selects beta,gamma so at least one construction exists. Making a fingerprint zero to collapse both products to zero is not accepted.\n\n**Formula to reduce the search:** let C,D,E be the addresses of O0,L1,R1. Calculate remainders `a=beta*C+gamma`, `b=beta*D+gamma`, `c=beta*E+gamma`. Cancel the identical factors on both sides to obtain:\n\n```text\n(u+a)(l+b)(r+c) = (u+b)(l+c)(r+a)\n      T × (r+c) = U × (r+a)\nT=(u+a)(l+b)     U=(u+b)(l+c)\n        (T−U)r = U×a−T×c\n```\n\nAfter choosing l, this is a linear equation for r. An **inverse** multiplies a number to remainder 1. The inverse of 3 modulo 7 is 5 because 3×5=15→1. Thus `3r=5` gives r=5×5=25→4. Skip l if T−U is zero; otherwise find its inverse by trying multipliers 1..6.\n\nCheck your candidate against the **full six-factor products**, nonzero result, and both changed inputs. If a condition fails, choose another l. The optional `miss_count` function returns the constructed three values, not a count.\n\n## Back to mathematics: how do tables become PLONK equations?\n\n**Selectors** specify the operation. Addition uses `qL=qR=1,qM=0,qO=−1`; multiplication uses `qL=qR=0,qM=1,qO=−1`.\nThe common equation **`qL×L+qR×R+qM×L×R+qO×O=0`** becomes L+R−O=0 or L×R−O=0.\n\nA **polynomial** is a sum of powers of a variable. Associate row 0 with Y=1 and row 1 with Y=6. A column v0,v1 becomes **`V(Y)=A+B×Y`, `A=(v0+v1)×4`, `B=(v0−v1)×4`**, reduced by p. Four is the inverse of 2. Building an expression with specified values at specified positions is **interpolation**.\nExample left column 1,3 gives L(Y)=2+6Y: L(1)=1 and L(6)=3. Apply the same operation to selector and address columns.\n\nSubstituting column polynomials into the gate equation gives f(Y). Correct rows require **f(1)=f(6)=0**, equivalent to **f(Y) being divisible by Y²−1**: Y²−1=(Y−1)(Y−6) vanishes at both positions in this arithmetic. Sending a compact proof of this condition is outside the model.\n\nThe copy product also admits an **accumulator** Z, which records a running product. Let Fi be row i's three original fingerprints multiplied together, and Gi its three σ fingerprints:\n\n```text\nZ0=1 → Z1=Z0×F0×inverse(G0) → Z2=Z1×F1×inverse(G1)\nDoes Z2 return to 1? Both the starting and ending 1 matter.\n```\n\nDivision requires nonzero Gi. F(Y) and G(Y) are the formulas giving Fi and Gi at each row’s Y. Z(Y) is the formula with Z(1)=Z0 and Z(6)=Z1. The row constraint is **`Z(wY)G(Y)−Z(Y)F(Y)=0`**. Since w²=1, the last row cycles back to the first. This expresses the same product comparison, not a way to turn one matching product into a complete proof.\n\n**What the counterexample teaches:** with tiny numbers and beta,gamma known beforehand, you can search for a mismatched table with equal products. A real protocol needs a **commitment**, fixing the table against changes BEFORE unpredictable challenges. Large-prime probabilistic checks, binding inputs, evidence that values came from the fixed expressions, and hiding secrets also matter. This exercise is neither a PLONK security proof nor an attack on a practical system.\n\n## Optional: check with Python\n\nThe eight functions in `plonk_drill.py` are one scratchpad per answer field. In the first `outputs`, replace `return None` with `return ((a0+b0)%p, ((a0+b0)%p)**2%p)` and Run public tests. You see the small example check and `outputs -> your values`. Unfilled functions may still FAIL. Submit the values in the answer field; PASS itself is not a submission.\n\nSupplied helpers: `address_table(tags,w,p)`, `wired_addresses(tags,w,p)`, `fingerprints(rows,tags,w,p,beta,gamma)`, `products(rows,tags,w,p,beta,gamma)`, `inverse(a,p)`. tags is (k0,k1,k2); rows contains two (L,R,O) rows. Fingerprints/products return both original and σ-address results. Your public parameters are passed automatically.\n",
+      "writeup": "## Gate and copy checks differ\n\nL+R−O=0 and LR−O=0 check individual operations; O0=L1=R1 checks copying. Cycle the three addresses, fingerprint value/address pairs, and compare products.\n\n## Closing construction\n\nAfter choosing l, solve (T−U)r=Ua−Tc. Reject zero denominators, zero whole products, and unchanged inputs. Example solutions include 0,5,0 and 5,6,2. One tiny product equality is not a full proof of copying.",
       "learningGoals": [
-        "Lay a circuit out as a one-row-per-gate table, with one selector expression covering + and ×",
-        "Build a lying table that satisfies only the gate constraints, showing they see only inside a row",
-        "Restate the wiring rule as 'the (value, address) members are unchanged by σ'",
-        "Crush that membership question into one number with the fingerprint (value + β·address + γ) grand product",
-        "Watch the grand product split on the lying table, and count that misses need a zero fingerprint",
-        "Say that gates, wiring and the grand product all stand on the same ask-at-random foundation"
+        "Explain why gate and copy constraints are separately necessary",
+        "Compute addresses, permutations, fingerprints and products over one prime",
+        "Construct a counterexample to inferring correct copying from one matching product",
+        "Connect column interpolation, gate equations and accumulator boundary conditions",
+        "Distinguish adaptive choices in the toy model from commitment-before-challenge protocols"
       ],
       "checks": [
         {
           "id": "outputs",
-          "label": "The circuit as a gate table — three outputs",
+          "label": "Compute the addition and multiplication outputs",
           "hints": [
             {
               "id": "outputs-hint-1",
-              "content": "o0 adds, o1 multiplies, o2 adds the two. All three need `% p`."
+              "content": "First build the honest log: the first result becomes BOTH inputs of the next operation. These two outputs anchor all later wiring checks."
+            },
+            {
+              "id": "outputs-hint-2",
+              "content": "With remainders by 7: 1+2=3, then 3×3=9 leaves 2. The outputs are 3,2."
+            },
+            {
+              "id": "outputs-hint-3",
+              "content": "Read a0,b0,p in Inspect. Reduce a0+b0 to u, then u×u to o. Submit u,o in “Compute the addition and multiplication outputs”."
             }
           ]
         },
         {
           "id": "bad-row",
-          "label": "A lying witness — gates satisfied, wiring broken",
+          "label": "Change one copied input while preserving multiplication",
           "hints": [
             {
               "id": "bad-row-hint-1",
-              "content": "Shift **both** the left input and the output by g (shift only one and the gate equation rejects it — no lie at all): `((o0 + g) % p, o1, (o0 + g + o1) % p)`."
+              "content": "Changing a copied input and recalculating its output preserves the operation inside that row. It still changes the original computation if the earlier output was not copied."
+            },
+            {
+              "id": "bad-row-hint-2",
+              "content": "For p=7,u=3,g=1, left becomes 4. 4×3=12 leaves 5: row 4,3,5 multiplies correctly but does not copy 3 on the left."
+            },
+            {
+              "id": "bad-row-hint-3",
+              "content": "Compute u=(a0+b0)%p, l=(u+g)%p, and output=(l*u)%p. Submit l,u,output in “Change one copied input while preserving multiplication”."
             }
           ]
         },
         {
           "id": "addresses",
-          "label": "Setting up the grand product — an address for all nine cells",
+          "label": "Give six cells distinct addresses",
           "hints": [
             {
               "id": "addresses-hint-1",
-              "content": "pos(col, row) = ω^row · (col + 1) mod q, ordered row 0's L, R, O, then row 1, then row 2 (r is the outer loop)."
+              "content": "Values alone cannot distinguish cells containing equal numbers. Addresses identify which cells must pass their values to which others."
+            },
+            {
+              "id": "addresses-hint-2",
+              "content": "Column tags 1,2,3 multiplied by 6 give remainders 6,5,4 modulo 7. The six addresses are 1,2,3,6,5,4."
+            },
+            {
+              "id": "addresses-hint-3",
+              "content": "Write k0,k1,k2 from Inspect, then append the remainders w*k0,w*k1,w*k2 by p. Submit six numbers in “Give six cells distinct addresses”."
             }
           ]
         },
         {
           "id": "sigma-addresses",
-          "label": "The wiring σ — swap addresses between cells that must agree",
+          "label": "Replace each address with its wired partner",
           "hints": [
             {
               "id": "sigma-addresses-hint-1",
-              "content": "Only two pairs swap: (2,0)↔(0,2) and (2,1)↔(1,2). Compare with line 6 — exactly four positions should differ."
+              "content": "Cycle addresses among the three cells that must have equal values. Correct copying preserves the collection of value/address pairs, changing only its order."
+            },
+            {
+              "id": "sigma-addresses-hint-2",
+              "content": "The example addresses are 1,2,3 / 6,5,4. Following O0→L1→R1→O0 gives 1,2,6 / 5,3,4."
+            },
+            {
+              "id": "sigma-addresses-hint-3",
+              "content": "Label the six original addresses A,B,C,D,E,F. Retain A,B, then use D,E,C, and retain F. Submit A,B,D,E,C,F in “Replace each address with its wired partner”."
             }
           ]
         },
         {
           "id": "marks",
-          "label": "Fingerprints — (value + β·address + γ) per cell",
+          "label": "Mix each value with its address",
           "hints": [
             {
               "id": "marks-hint-1",
-              "content": "mark = (value + beta·address + gamma) % q, values flattened row-major, addresses from line 6. Paste the first three only."
+              "content": "Mixing the value and address makes a change in wiring affect a small comparison number. It does not encrypt or hide the value."
+            },
+            {
+              "id": "marks-hint-2",
+              "content": "Values 1,2,3 and addresses 1,2,3, with beta=1,gamma=0, give fingerprints 2,4,6 modulo 7."
+            },
+            {
+              "id": "marks-hint-3",
+              "content": "Compute u=(a0+b0)%p. Pair a0,b0,u with k0,k1,k2. Reduce each value+beta*address+gamma by p. Submit the three results left-to-right in “Mix each value with its address”."
             }
           ]
         },
         {
           "id": "grand-product",
-          "label": "The grand product — equal on the honest table",
+          "label": "Compare products of the honest table",
           "hints": [
             {
               "id": "grand-product-hint-1",
-              "content": "`math.prod(...) % q` twice — raw addresses, then the σ-permuted saddr from line 7. The right answer is the same number twice."
+              "content": "Reordering the same fingerprints preserves their product. Compare the two address arrangements on the honest table."
+            },
+            {
+              "id": "grand-product-hint-2",
+              "content": "Modulo 7, 2×4 leaves 1. Multiplying successively by 6,2,1,6 gives 6,5,5,2. The rearranged list 2,4,2,1,6,6 also ends at 2: products 2,2."
+            },
+            {
+              "id": "grand-product-hint-3",
+              "content": "Use rows (a0,b0,u)/(u,u,o). Compute six original-address fingerprints and multiply from 1, reducing by p each time. Repeat with the same values but σ addresses. Submit original product,σ product in “Compare products of the honest table”."
             }
           ]
         },
         {
           "id": "bad-product",
-          "label": "The lying table's grand product — the broken wire shows up",
+          "label": "Compare products after changing one copied input",
           "hints": [
             {
               "id": "bad-product-hint-1",
-              "content": "Swap in the lying values vb; keep the addresses from lines 6–7. The two numbers **differ** in the right answer."
+              "content": "A wrong value on a wire changes the value/address collection after permutation. The product can expose that change."
+            },
+            {
+              "id": "bad-product-hint-2",
+              "content": "The example false row 4,3,5 gives original fingerprints 2,4,6,3,1,2 and σ fingerprints 2,4,2,2,6,2. Their products modulo 7 are 1,6."
+            },
+            {
+              "id": "bad-product-hint-3",
+              "content": "Keep row (a0,b0,u) and replace the second with your bad-row answer. Repeat both six-fingerprint products from the previous checkpoint. Submit original product,σ product in “Compare products after changing one copied input”."
             }
           ]
         },
         {
           "id": "miss-count",
-          "label": "Count the (β, γ) that would have missed",
+          "label": "Construct a false row that passes the product check",
           "hints": [
             {
               "id": "miss-count-hint-1",
-              "content": "b starts at 1 (β = 0 does not count), c at 0. It takes a few seconds. Keep the `% q` after each product."
+              "content": "A product compresses a whole collection into one number, so different wiring can collide. After learning the checker’s mixing numbers, construct a row producing such a collision."
+            },
+            {
+              "id": "miss-count-hint-2",
+              "content": "Example p=7,u=3, wire addresses 3,6,5,beta=1,gamma=0. Try l=0: T=6×6→1,U=9×5→3. Then 5r=4; the inverse of 5 is 3, so r=5, o=0×5→0. Also check that the full products are nonzero."
+            },
+            {
+              "id": "miss-count-hint-3",
+              "content": "Use your u, addresses C,D,E, beta,gamma to calculate a,b,c from the statement. Choose l different from u and compute T,U. Skip if T−U is zero; otherwise find its inverse and reduce r=(U*a−T*c)*inverse. Require r!=u and set o=l*r%p. Check both full six-factor products agree and are nonzero. Submit l,r,o in “Construct a false row that passes the product check”; retry another l if any condition fails."
             }
           ]
         }
