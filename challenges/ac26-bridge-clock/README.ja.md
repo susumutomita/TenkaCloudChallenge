@@ -1,104 +1,62 @@
-# 1 行打って、出た値を貼る — 時計の世界と、繰り返してはいけない覆い
+# 余りで計算し、覆いの使い回しを見破る
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+> Advanced Cryptography Program 2026 の非公式・独立した companion です。講座運営者とは提携せず、承認も受けていません。問題文・コード・fixture は独自に作成しています。質問は TenkaCloud リポジトリへお願いします。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 14 · **Chapter:** Bridge 0 /
-Clock Arithmetic and Covers · **Role:** `diagnostic` · **想定時間:** 30〜40 分 ·
-**配点:** 100 · **Status:** draft — 新規 companion は人間のプレイ証拠（#465）が揃うまで draft
+`ac26-bridge-clock` · track `advanced-cryptography-2026` · order 14 · difficulty 2 · 100点 · 想定30〜40分 · draft。
 
-## これは何か
+## 参加者の入口と完了
 
-`ac26-bridge-unknown-x` の直後に置く、難易度 2 の 2 段目です。この先の週の計算は全部
-「割ったあまりだけの世界」— 一周 n の時計の上 — で行われるので、住む前にその世界を下見します。
-自分の `python3` を開き、Portal の「証拠を確認」に出た数を貼り、**1 行打って、出た値を貼る**を
-10 回繰り返します。
+起動 → 証拠を確認 → n,u,v を見て加法の余りを計算し、add の3つ組を提出します。紙で開始でき、Pythonは任意です。8欄が全部正解になれば完了。本文・必要な式・一桁例は metadata の JA/EN instructions にあります。各欄のヒントは仕組み→式と例→Inspect名による入力手順の3段、1/1/2点（合計32点）です。誤答は各5点。
 
+|ID|点|回答|
+|---|---:|---|
+|add|10|加法の2通りの余りと差|
+|mul|10|乗法の2通りの余りと差|
+|cover|10|原文に覆いを足した余り|
+|uncover|10|同じ覆いを引いて戻る値|
+|every|20|3つの候補を観測へ結ぶ覆いの値|
+|count|10|全候補と対応する覆いの組の総数|
+|reuse|10|2観測を再現する別原文a,bと共通覆いr。aはknown_firstと異なる|
+|leak|20|1通目の原文も知る場合の2通目の復元|
+
+前半は原文と覆いが見える練習、後半は別レコードです。後半の known_first も教材では最初から表示します。「観測だけを知る人」と「1通目も知る人」の比較であり、UIが後から初めて開示する手順ではありません。後半の実際の覆いと2通目は直接表示しません。
+
+nは5〜9で、合成数も含みます。原文候補と覆いの一対一対応は加法の性質です。確率の主張には、覆いを全0..n−1から一様・原文と独立に選び、観測者には伏せ、1通に使う条件が必要です。固定fixtureはその無作為な実験を実証するものではありません。同じ覆いの2観測から分かるのは差の余りであり、通常の符号付き差との等式ではありません。
+
+## 実装と採点境界
+
+Workbench は公開 API、starter、公開テストのみを持ちます。fixture/期待値/hidden は非公開 verifier image、reference と mutation は author stage のみ。FLAG_SEED は verifier だけへ注入します。Workbench の保護した supervisor が内部経路から導出した署名鍵と公開 snapshot を取得し、子プロセスには公開 snapshot だけを渡します。既存 Schnorr の問題内境界を利用し、子のネットワーク・supervisor情報取得・残存プロセスを Linux で制限します。失敗した隔離は成功に変換しません。
+
+回答は既存 /api/prepare → /verify の封印を通します。別起動の封印は拒否しますが、正しい数学的な値が他の起動と同じになることはあります。reuse は唯一の期待値との比較ではなく、本文の範囲・別原文・同一覆いの2式を検査します。順番の違う値、不足、余分な値、浮動小数、真偽値を整数へ丸めません。
+
+127.0.0.1:18141 に公開するのは Workbench のみ。verifier:18151 は内部ネットワークのみ。両サービスは non-root/read-only/capabilitiesなし/no-new-privileges、CPU・メモリ・PID制限あり。ローカルホストやDocker管理者に対する秘匿は保証しません。自習用の honor-system 境界を完全な試験環境へ拡張する変更ではありません。
+
+## 講義・ノートとの対応
+
+講義 week0/slide.pdf の余り・時計（PDF6〜7ページ）、本人ノート week0 の時計と負の余り、week2 の加法的秘密分散を確認しました。出典の「大小が無いから隠れる」という短縮は採用せず、分布と観測者の知識条件を明記しました。源コードの場所と初読・再読結果は local/tests/hidden/READER.md に記録します。
+
+## ローカル検証と終了
+
+```sh
+make inspect
+make test
+make test-one ID=reuse
+make reference-test
+make verifier-down
 ```
-1  (u % n, v % n)              時計に載せる                       （回答欄なし）
-2  足し算を両方の順で           差は 0                             add
-3  掛け算を両方の順で           まだ 0 — 計算できる場所            mul
-4  (secret + cover) % n        でたらめな覆いで隠す                cover
-5  (covered - cover) % n       同じ覆いが引き戻す                  uncover
-6  表 t を作り 3 か所読む       候補ごとに覆い 1 本 — 平ら          every
-7  sum(t)                      n 候補に n 本: 絞れるものが無い      count
-8  同じ覆いで 2 通目            使い回しが始まる                    reuse
-9  (covered - covered2) % n    覆いが打ち消え、本物の差が漏れる     leak
-10 leak == 本物の差            いちばん古い失敗を、自分の手で      （回答欄なし）
+
+初期スターターの関数は未実装なので公開テストはFAILします。参加者はエディターで関数を実装して実行します。公開テストの前半は本文例、後半は本人の出力表示（正誤判定ではない）です。リスト/tuple は JSON 配列として出力され、その文字列を回答欄へコピーできます。reference-test は作問者専用で、14誤実装、20公開パラメータでの正答経路、構成の全別案・不正形式、Linux隔離と鍵のbootstrapを検査します。
+
+別の専用起動で実HTTP境界を検査する場合：
+
+```sh
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-bridge-clock-live-check up -d --build --wait
+CLOCK_WORKBENCH_URL=http://127.0.0.1:18141 python3 -m unittest discover -s local/tests/hidden -p test_isolation.py -v
+FLAG_SEED=local-dev-seed docker compose -f local/docker-compose.yml -p ac26-bridge-clock-live-check down
 ```
 
-山は 6〜7 行目です。どの候補の秘密にも、観測を作る覆いがちょうど 1 本ずつある — だから観測から
-絞れるものは**無い**。これを perfect secrecy という語を出さずに、本人の数え上げで出します。
-最後の 2 行はわざと覆いを使い回し、one-time pad という語を出さずに、秘密どうしの差が漏れる
-ことを起こします。10 行のうち回答欄は 8 行（platform の 1 問あたりの上限）です。
+親Portalの実コンポーネントでの操作証拠と、作者による内部テストは区別して記録します。AWS・第三者のプレイは必須の開発gateではありません。
 
-## なぜ数が小さく、seed 由来なのか
+## リソースとコスト
 
-時計は 12〜24 目盛りなので、6 行目の覆いの表は内包表記 1 つで作れて、目で読めます。u と v は
-n より大きく引かれ、wrap が必ず見えます。cover は covered が secret や 0 に一致しないよう
-引き直され、second は観測値が画面上の数と衝突しないよう引き直されます（衝突を許すと約 20 分の 1
-の deploy が代入文の読み取りだけで解けます — `generate.py` の docstring 参照）。`every` 行が
-写せる形でなく 3 点読みなのは、n が画面に出ているためです。問題文の例（n = 10）は生成範囲外
-（n ≥ 12）。1 行につき正解は 1 つ、通るのは自分の Python が出した値だけです。
-
-## Participant Portal での進め方
-
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが出る。
-2. **「証拠を確認」**を押す。数が Python の代入文で出るので、まず `python3` に貼る。
-3. 1 行目、2 行目と順に打ち、出た値をその回答欄に貼る。10 行目まで続ける。
-   **回答欄は 1 行の入力欄です。**
-4. Python を開けないとき: エディタの `clock_drill.py` の関数を埋めて**「公開テストを実行」**。
-   この deploy の数での自分の関数の値が出る — REPL が出すのと同じ値です。
-
-直接回答は現在の deploy seed に結び付くため、別 deploy からコピーした値は拒否されます。
-
-## 採点
-
-8 つの checkpoint を独立に採点します。誤答は 1 回 5 点減点です。
-
-| Checkpoint | 配点 | 証拠の種類 | 何を検査するか |
-|---|---:|---|---|
-| `add` | 10 | construct | 足し算が wrap と両立 — 差 0 |
-| `mul` | 10 | construct | 掛け算が wrap と両立 — 差 0 |
-| `cover` | 10 | construct | (secret + cover) % n — 相手が見る唯一の数 |
-| `uncover` | 10 | construct | (covered − cover) % n — 秘密が戻る |
-| `every` | 20 | trace | 候補 3 つでの覆いの本数 — どこも同じ |
-| `count` | 10 | trace | 表の合計 — 候補 1 つに覆い 1 本 |
-| `reuse` | 10 | construct | 使い回した覆いの下の 2 つの観測値 |
-| `leak` | 20 | counterexample | その差 — 覆いが消え、本物の差が漏れる |
-
-hint は各 checkpoint に 1 つ（減点 3〜5）。その行で起きやすい打ち間違いを名指しします。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。マシンも Docker デーモンも compose stack の
-全 image もあなたの管理下にあるので、その人物に対して中身を秘匿することはできません。ここでの
-境界は誤配防止であり、その人物に対する秘匿ではありません。参加者用 Workbench image に入るのは
-Portal editor API・starter・公開 test だけです。この問題の `fixtures/generate.py` は期待値を
-公開値と同じ関数で導くため、module ごと別の非公開 verifier image にだけ載せます（Issue 537/543
-option B2）。Workbench はこの deploy の公開値を Compose 内部 network 上の verifier の
-`GET /public` から取得します。`reference/` と `mutation.py` は `author` stage にだけ追加します。
-
-host の `127.0.0.1:18141` に公開するのは Workbench だけで、verifier に host port はありません。
-両 service は non-root、read-only filesystem、capabilities なし、no-new-privileges、
-メモリ・PID 上限つきで動きます。checkpoint は echo した id しか加点できません。結果は期待値を
-漏らしません。fixture はこの deploy の seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が一切管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した reference 10 種類（wrap を
-取らない、add / mul の左辺だけ wrap を忘れる、覆いを引くべき所で足す、表を wrap なしで数える、
-差の向きを逆にする、…）を hidden suite が落とすこと、verifier を狙った near-miss 12 種類
-（覆った数の欄に secret、本数の欄に候補そのもの、wrap 前の和、長さの違う組、真偽値、別 deploy
-の答え）を値の採点器が拒否することを確かめます。participant image に `fixtures/` が無いため、
-`make test` と `make inspect` は Compose 経由で動き、公開値は verifier の `GET /public` から
-来ます。
+AWSリソースは作成しません。ローカルDockerのCPU・メモリ・ディスクとイメージ取得時の通信を使います。Composeはdownするまで動き、image/build cacheはその後もローカルディスクに残ります。

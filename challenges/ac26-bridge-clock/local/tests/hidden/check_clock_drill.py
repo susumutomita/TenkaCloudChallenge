@@ -1,87 +1,28 @@
-"""Hidden suite: the ten functions against this seed's expected values.
-
-No checkpoint of this problem runs learner code — the grade is the pasted value. This
-suite exists for the author path: the mutation suite breaks the reference on purpose
-and expects these checks to notice, and CI proves the reference produces the expected
-value of every line on every seed. Each `check_*` returns a list of failure strings;
-empty means the function agrees with the seed's expected value.
-"""
-
-from __future__ import annotations
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from fixtures.generate import setting  # noqa: E402
-from verifier.expected import expected_for  # noqa: E402
+"""Author-only checks of public arithmetic and the documented construction contract."""
+from fixtures.generate import GRADED, normalize_answer, setting, valid_reuse
 
 
-def _call(module, name, *args):
-    fn = getattr(module, name, None)
-    if fn is None:
-        return None, f"{name}: missing"
-    try:
-        return fn(*args), None
-    except Exception as error:  # noqa: BLE001 - a crash is a failure, not a verdict
-        return None, f"{name}: raised {type(error).__name__}"
-
-
-def _compare(line: str, got, expected) -> list[str]:
-    if isinstance(expected, tuple) and isinstance(got, (list, tuple)):
-        got = tuple(got)
-    if got != expected:
-        return [f"{line}: value differs from this deployment's value"]
-    return []
-
-
-def check_world(module, seed: str) -> list[str]:
-    """Lines 1–3: the wrap, and both operations surviving it in either order."""
-    pub = setting(seed)["public"]
-    exp = expected_for(seed)
-    failures: list[str] = []
-    got, err = _call(module, "wrap", pub["u"], pub["v"], pub["n"])
-    failures += [err] if err else _compare("wrap", got, exp["wrap"])
-    got, err = _call(module, "add", pub["u"], pub["v"], pub["n"])
-    failures += [err] if err else _compare("add", got, exp["add"])
-    got, err = _call(module, "mul", pub["u"], pub["v"], pub["n"])
-    failures += [err] if err else _compare("mul", got, exp["mul"])
-    return failures
-
-
-def check_cover(module, seed: str) -> list[str]:
-    """Lines 4–7: the cover hiding, the cover coming off, and the flat count."""
-    pub = setting(seed)["public"]
-    exp = expected_for(seed)
-    failures: list[str] = []
-    got, err = _call(module, "covered", pub["secret"], pub["cover"], pub["n"])
-    failures += [err] if err else _compare("cover", got, exp["cover"])
-    got, err = _call(module, "uncovered", pub["secret"], pub["cover"], pub["n"])
-    failures += [err] if err else _compare("uncover", got, exp["uncover"])
-    got, err = _call(module, "every", pub["secret"], pub["cover"], pub["n"])
-    failures += [err] if err else _compare("every", got, exp["every"])
-    got, err = _call(module, "count", pub["secret"], pub["cover"], pub["n"])
-    failures += [err] if err else _compare("count", got, exp["count"])
-    return failures
-
-
-def check_reuse(module, seed: str) -> list[str]:
-    """Lines 8–10: the reused cover cancelling out of the difference."""
-    pub = setting(seed)["public"]
-    exp = expected_for(seed)
-    failures: list[str] = []
-    got, err = _call(module, "reuse", pub["secret"], pub["second"], pub["cover"], pub["n"])
-    failures += [err] if err else _compare("reuse", got, exp["reuse"])
-    got, err = _call(module, "leak", pub["secret"], pub["second"], pub["cover"], pub["n"])
-    failures += [err] if err else _compare("leak", got, exp["leak"])
-    got, err = _call(module, "same_diff", pub["secret"], pub["second"], pub["cover"], pub["n"])
-    failures += [err] if err else _compare("same-diff", got, exp["same-diff"])
-    return failures
-
-
-def run(module, seed: str) -> list[str]:
-    failures: list[str] = []
-    for phase in (check_world, check_cover, check_reuse):
-        failures.extend(phase(module, seed))
+def run(module, seed):
+    case = setting(seed)
+    pub, expected = case['public'], case['expected']
+    calls = {
+        'add': ('add', (pub['u'],pub['v'],pub['n'])),
+        'mul': ('mul', (pub['u'],pub['v'],pub['n'])),
+        'cover': ('covered', (pub['secret'],pub['cover'],pub['n'])),
+        'uncover': ('uncovered', (pub['secret'],pub['cover'],pub['n'])),
+        'every': ('every', (pub['secret'],pub['cover'],pub['n'])),
+        'count': ('count', (pub['secret'],pub['cover'],pub['n'])),
+        'reuse': ('reuse', (pub['known_first'],pub['seen1'],pub['seen2'],pub['n'])),
+        'leak': ('leak', (pub['known_first'],pub['seen1'],pub['seen2'],pub['n'])),
+    }
+    failures = []
+    for checkpoint in GRADED:
+        name,args = calls[checkpoint]
+        try:
+            value = normalize_answer(checkpoint,getattr(module,name)(*args))
+            correct = valid_reuse(pub,value) if checkpoint == 'reuse' else value == expected[checkpoint]
+        except Exception:
+            correct = False
+        if not correct:
+            failures.append(checkpoint + ': does not satisfy the documented calculation or construction')
     return failures

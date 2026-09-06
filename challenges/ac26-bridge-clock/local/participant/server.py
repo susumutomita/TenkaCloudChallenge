@@ -1,12 +1,13 @@
 """Public Participant Workbench and fail-closed verifier proxy.
 
-This process carries starter material and public tests only. It never grades a
+This process carries starter material and public tests only. Its protected supervisor
+receives a derived sealing key, never the fixture seed. Learner subprocesses receive
+only the public snapshot, with network and supervisor access blocked. It never grades a
 checkpoint locally: every `/verify` request is forwarded to the Compose-internal
 verifier, and any missing or invalid verifier response becomes a canonical
 `correct: false` verdict.
 
-Issue 537/543 (option B2): this problem's `fixtures/generate.py` computes the ten
-lines' expected values inside `setting(seed)`, next to the public numbers, so the
+Issue 537/543 (option B2): this problem's `fixtures/generate.py` computes expected values inside `setting(seed)`, next to the public numbers, so the
 module does not ship in this image at all. The inspect output and the public tests
 read this deployment's public half from the verifier's `GET /public` over the
 Compose-internal network instead (see participant/evidence.py and ../Dockerfile).
@@ -21,16 +22,16 @@ import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor, block_network
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-bridge-clock"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18141"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -58,6 +59,7 @@ CHECKPOINTS = (
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -67,14 +69,14 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    seed=None,
     problem_id='ac26-bridge-clock',
-    problem_name='でたらめは、一度きりだから隠せる',
-    problem_name_en='Random hides — exactly once',
-    description='手元の Python で 1 行打って、出た値を貼る。10 行で、一周 n の時計の上では足し算も掛け算も余りを取る順番によらないこと、でたらめな覆いを足すとどの候補にも覆いがちょうど 1 本ずつあって何も絞れないこと、同じ覆いを使い回すと 2 つの観測値の差から本物が漏れることを、自分の手で出した数だけで確かめる。',
-    description_en='Type one line in your own Python, paste the value it prints. Ten lines: on a clock of n ticks both addition and multiplication survive the wrap in either order, a random cover leaves exactly one cover per candidate so nothing narrows, and reusing one cover leaks the real difference — on numbers you produced yourself.',
-    checkpoint_labels={'add': '足し算 — 先に余り・後に余り・その差', 'mul': '掛け算 — 先に余り・後に余り・その差', 'cover': 'でたらめを足して隠した数', 'uncover': '同じ覆いを引いて戻った数', 'every': '候補 3 つ、それぞれの覆いの本数', 'count': '表ぜんぶの合計', 'reuse': '同じ覆いを使い回した 2 つの観測値', 'leak': '2 つの観測値の差'},
-    checkpoint_labels_en={'add': 'Addition — wrap first, wrap last, their difference', 'mul': 'Multiplication — wrap first, wrap last, their difference', 'cover': 'The number hidden by adding the random cover', 'uncover': 'The number recovered by subtracting the same cover', 'every': "Three candidates, each one's cover count", 'count': 'The sum of the whole table', 'reuse': 'The two observations under one reused cover', 'leak': 'The difference of the two observations'},
+    problem_name='余りで計算し、覆いの使い回しを見破る',
+    problem_name_en='Calculate with remainders and expose cover reuse',
+    description='数を隠すために足す数を「覆い」と呼びます。起動して証拠の n,u,v を見て、足した値の余りから始めます。8欄で、余りの計算、1回の覆いの条件、2通への使い回しで分かることを調べます。紙で計算でき、Pythonは任意です。',
+    description_en='A cover is a number added to hide an original. Start, inspect n,u,v, and begin with the remainder of their sum. Eight fields explore remainder arithmetic, the conditions for a one-use cover, and what reusing it reveals. Paper works; Python is optional.',
+    checkpoint_labels={'add': '足し算 — 余りを取る前後を比べる', 'mul': '掛け算 — 余りを取る前後を比べる', 'cover': '覆いを足した観測値', 'uncover': '覆いを引いて原文へ戻す', 'every': '3候補を同じ観測値にする覆い', 'count': '全候補と覆いの対応数', 'reuse': '2観測値を作る別の原文と覆い', 'leak': '原文が1つ分かった後の復元'},
+    checkpoint_labels_en={'add': 'Addition — compare before and after taking remainders', 'mul': 'Multiplication — compare before and after taking remainders', 'cover': 'Observation after adding a cover', 'uncover': 'Remove the cover to recover the original', 'every': 'Covers connecting three candidates to one observation', 'count': 'Count all candidate-cover pairs', 'reuse': 'Construct another pair of originals and a common cover', 'leak': 'Recover the other original once one is known'},
     submitted_files=('clock_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,
@@ -216,7 +218,49 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 
+def load_public_snapshot() -> dict[str, object]:
+    """Trusted supervisor fetch; learner subprocesses receive only these public fields."""
+    url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if not url:
+        raise RuntimeError("VERIFIER_PUBLIC_URL is required")
+    with urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        raw = response.read(MAX_BODY_BYTES + 1)
+    if len(raw) > MAX_BODY_BYTES:
+        raise RuntimeError("public evidence exceeds the size limit")
+    payload = json.loads(raw)
+    if not isinstance(payload, dict) or not isinstance(payload.get("public"), dict):
+        raise RuntimeError("invalid public evidence")
+    return {key: payload[key] for key in ("public", "assignments")}
+
+
+def load_sealing_key() -> bytes:
+    """Fetch only the derived key from the unpublished verifier, before serving learners."""
+    target = urlsplit(VERIFIER_URL)
+    if target.scheme not in ("http", "https") or not target.netloc:
+        raise RuntimeError("VERIFIER_URL is required")
+    # Fixed internal path: participant request paths and query strings never flow here.
+    url = urlunsplit((target.scheme, target.netloc, "/workbench-key", "", ""))
+    with urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        raw = response.read(1025)
+    if len(raw) > 1024:
+        raise RuntimeError("invalid workbench key response")
+    payload = json.loads(raw)
+    value = payload.get("key") if isinstance(payload, dict) else None
+    if not isinstance(value, str) or len(value) != 64:
+        raise RuntimeError("invalid workbench key response")
+    try:
+        key = bytes.fromhex(value)
+    except ValueError:
+        raise RuntimeError("invalid workbench key response") from None
+    if len(key) != 32:
+        raise RuntimeError("invalid workbench key response")
+    return key
+
+
 def main() -> None:
+    protect_supervisor()
+    _WORKBENCH.sealing_key = load_sealing_key()
+    _WORKBENCH.public_payload = load_public_snapshot()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 
