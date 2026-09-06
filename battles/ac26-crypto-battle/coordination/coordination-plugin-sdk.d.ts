@@ -56,6 +56,12 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
      * 差分ではなく絶対値なのは、plugin が権威で platform は写すだけだから (= 再送で二重加算しない)。
      */
     teamScores?(state: State): Readonly<Record<string, number>>;
+    /** Public reason codes only; operation inputs and private state must never be returned. */
+    scoreReasons?(
+      before: State,
+      after: State,
+      cause: { readonly kind: "op"; readonly teamId: string; readonly op: Op } | { readonly kind: "tick" },
+    ): Readonly<Record<string, string>>;
     /**
      * [Issue #679 / TenkaCloud#3150] この plugin が読み書きする state の schema 版。
      * 省略時は 1 とみなす。State の形を変えたら必ず上げる -- 上げ忘れは platform 側では
