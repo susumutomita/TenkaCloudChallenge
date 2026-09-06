@@ -66,6 +66,7 @@ import {
 import StatusPanel, { StatusPanelBody } from "../../portal/StatusPanel.tsx";
 import { rungSpec } from "./ladder.ts";
 import { reconstruct } from "./shamir.ts";
+import { huntWorksheet } from "../../portal/HuntGuide.tsx";
 import { DEFAULT_CONFIG, initialState, projectForTeam, tick } from "./reducer.ts";
 import { ALL_PERMUTATIONS, IDENTITY_PERMUTATION, samePermutation } from "./sudoku.ts";
 import type { ContractProjection, CryptoBattleProjection, PublicArtifact } from "./types.ts";
@@ -1994,5 +1995,72 @@ describe("the Ledger pairs a puzzle only with the generation it belongs to [Issu
     const html = boardWith([revealFor("red", 1), revealFor("red", 2)], 2);
     expect(html.split('aria-label="puzzle-red"')).toHaveLength(2);
     expect(html).toContain("retired generation");
+  });
+});
+
+
+describe("visual HUNT worksheet", () => {
+  function publicProjection(p: number, indices: readonly number[]) {
+    const base = fixtureProjection();
+    return fixtureProjection({
+      prime: String(p), threshold: 3,
+      teams: { ...base.teams, red: { ...base.teams.red!, generation: 1 } },
+      publicLedger: indices.map(index => ({
+        id: `public-${index}`, teamId: "red", generation: 1, kind: "share" as const,
+        method: "leak" as const, shareIndex: index,
+        // Known polynomial f(x)=4+2x+3x². The worksheet must recover f(0)=4
+        // for any three indices, without reading another team's vault.
+        value: String((4 + 2 * index + 3 * index * index) % p),
+        contractId: `red-${index}`, postedAtMs: 1,
+      })),
+    });
+  }
+
+  it("its displayed factors recover the secret for every 3-of-5 subset in three fields", () => {
+    for (const p of [7, 11, 97]) for (let a = 1; a <= 3; a++) for (let b = a + 1; b <= 4; b++) for (let c = b + 1; c <= 5; c++) {
+      const projection = publicProjection(p, [c, a, b]);
+      const rows = huntWorksheet(projection, "red", 1)!;
+      expect(rows.map(row => row.index)).toEqual([a, b, c]);
+      const sum = rows.reduce((n, row) => n + BigInt(row.factor) * BigInt(row.value), 0n);
+      expect((sum % BigInt(p) + BigInt(p)) % BigInt(p)).toBe(4n);
+      expect(rows.every(row => Object.keys(row).sort().join() === "factor,index,value")).toBe(true);
+    }
+  });
+
+  it("does not combine duplicates, other teams, or retired generations into evidence", () => {
+    const projection = publicProjection(7, [1, 1, 2]);
+    const extra = publicProjection(7, [3]).publicLedger[0]!;
+    const mixed = { ...projection, publicLedger: [...projection.publicLedger, { ...extra, generation: 0 }, { ...extra, teamId: "blue" }] };
+    expect(huntWorksheet(mixed, "red", 1)).toBeUndefined();
+    expect(huntWorksheet(publicProjection(7, [1, 2, 3]), "red", 0)).toBeUndefined();
+    expect(huntWorksheet(publicProjection(7, [1, 2, 3]), "blue", 1)).toBeUndefined();
+  });
+
+  it("never takes worksheet values from the reader's private vault", () => {
+    const before = publicProjection(11, [2, 4, 5]);
+    const after = { ...before, vault: { ...before.vault, secret: "987654321", shares: [] } };
+    expect(huntWorksheet(after, "red", 1)).toEqual(huntWorksheet(before, "red", 1));
+  });
+});
+
+describe("scored answer celebration", () => {
+  const markup = (outcome?: { contractId: string; outcome: "hit" | "miss" }) => renderToStaticMarkup(createElement(FeedbackBanner, {
+    locale: "ja", onContinue: () => {},
+    feedback: { ...proveFeedback(fixtureProjection({ lastProve: outcome }), "blue-c0", 30, "ja"), attempt: 1, total: 45 },
+  }));
+  it("keeps the earned points and total visible, with optional explanation and a next action", () => {
+    const html = markup({ contractId: "blue-c0", outcome: "hit" });
+    expect(html).toContain("tc-success-celebration");
+    expect(html).toContain("+30");
+    expect(html).toContain("現在のスコア: 45");
+    expect(html).toContain("次のお題へ");
+    expect(html).not.toContain("<details open");
+  });
+  it("does not celebrate a wrong, missing, or different-order result", () => {
+    for (const outcome of [undefined, { contractId: "blue-c0", outcome: "miss" as const }, { contractId: "blue-c1", outcome: "hit" as const }]) {
+      const html = markup(outcome);
+      expect(html).not.toContain("tc-success-celebration");
+      expect(html).not.toContain("tc-feedback-reward");
+    }
   });
 });

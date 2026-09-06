@@ -108,8 +108,10 @@ table to twelve cells of the owning team's solution. Four answers remain empty,
 and the trusted judge still checks the complete submitted grid. Tables used in
 the same generation remain selectable with a reuse warning, preserving the
 misuse that sudoku HUNT teaches. The Portal must not fill these four answers,
-compute a HUNT answer, announce that a target is exploitable, or show another
-team's private material.
+fill a HUNT answer or show another team's private material. The HUNT guide may
+count public evidence and display interpolation factors, leaving the arithmetic
+and submission to the participant. Guessing below the threshold remains available
+with the normal attempt cost.
 
 ## Local UI harness
 
@@ -307,3 +309,17 @@ from local harness evidence.
 - `dev/` — local browser harness
 - `game/src/vertical-playtest-fixture.ts` — deterministic multi-move fixture
 - `game/src/replay.ts` — public debrief timeline
+
+
+### Visual guidance release check (2026-09-06)
+
+In the local harness, use `fresh` / alpha / Japanese. Select PROVE and table
+`1→3 2→1 3→4 4→2`; derive the four holes from the visible left board. A wrong
+last hole shows PROVE MISS and no celebration. Correcting it shows the awarded
+30 points and total, with a short confetti burst and a persistent result.
+In `hunt-reachable` / bravo, open the HUNT entry. The visible alpha shares at
+indices 3,4,5 have values 36,61,10 and factors 10,-15,6. The displayed operation
+gives -495, whose remainder modulo 97 is 87; submitting it succeeds. This
+rehearsal uses public worksheet values, not alpha's vault. These are fixed local
+harness examples, not event secrets. Game tests also check all 3-of-5 index
+subsets over fields 7,11,97 and exclude duplicate, retired and own-team evidence.

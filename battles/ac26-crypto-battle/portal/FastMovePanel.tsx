@@ -19,6 +19,9 @@ import ConceptExplanation from "./ConceptExplanation.tsx";
 import RpsHunt, { RpsHuntStatus } from "./RpsHunt.tsx";
 import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
+import HuntGuide, { HuntIntro, HUNT_GUIDE_CSS } from "./HuntGuide.tsx";
+import SudokuGuide, { RelabelDiagram, GUIDE_CSS } from "./SudokuGuide.tsx";
+import SuccessCelebration, { SUCCESS_CSS } from "./SuccessCelebration.tsx";
 import { taskDetail } from "./orderTask.ts";
 import { disclosurePreview, orderHeading } from "./OrderFocus.tsx";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
@@ -71,6 +74,8 @@ export interface Feedback {
    * shown on the banner from the second attempt onward.
    */
   readonly attempt: number;
+  readonly reward?: number;
+  readonly total?: number;
   /**
    * [Issue #659] What the participant just DID, named.
    *
@@ -164,7 +169,7 @@ export const FAST_MOVE_COPY = {
     running: "SUBMITTING…",
     leakRate: "pass",
     leakSuccess: "LEAK SUCCESS",
-    leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
+    leakBody: (points: number, shares: readonly number[]) => `+${points} · shares ${shares.map((x) => `#${x}`).join(", ")} added to the public record.`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · your row and its answer → PUBLIC LEDGER. ${pairsToBreak} pair${pairsToBreak === 1 ? "" : "s"} recovers your key.`,
     // [Issue #709] PROVE is a hand relabelling of the vault's sudoku.
@@ -310,14 +315,14 @@ export const FAST_MOVE_COPY = {
     scoreHint: "ORDER に答えると増えます。期限切れにすると減ります。",
     leakBlocked: "この Order は LEAK を受け付けません。",
     proveBlocked: "この Order は PROVE を受け付けません。",
-    hunt: "LEDGER から HUNT",
+    hunt: "公開されたシェアから秘密を計算する",
     // [Issue #696] 外したときの代償は、提出する前にカードに書く。
     huntHint: (cost: number) =>
-      `Public Ledger で見つけた相手チーム / 世代を選びます。外すと ${cost} 点減り、その相手・世代への HUNT 回数を 1 回使います。残り回数は各チップに出ています。`,
+      `下で相手を選び、表の数を式に入れます。外すと ${cost} 点減り、残り回数を1回使います。`,
     huntAttemptsLeft: (left: number, max: number) => `あと ${left}/${max} 回`,
     huntExhausted: "この相手・世代への HUNT はもう残っていません。",
     noHuntTarget: "まだ相手のかけらは公開されていません。",
-    recovered: "復元した secret",
+    recovered: "計算した秘密の数",
     rotate: "ROTATE",
     rotateHint: "新しい世代へ切り替えます。",
     rotateSudokuHunted: "この世代の数独の解は他チームに割り出されています。新しい世代は新しい解になります。",
@@ -329,11 +334,11 @@ export const FAST_MOVE_COPY = {
     hintsExhausted: "この Order のヒントはすべて開きました。",
     hintOpened: "ヒントを開きました",
     hintOpenedBody: (cost: number) => `-${cost} · 下に表示されています`,
-    send: "SUBMIT",
+    send: "答えを送る",
     running: "送信中…",
     leakRate: "パス",
-    leakSuccess: "LEAK SUCCESS",
-    leakBody: (points: number, shares: readonly number[]) => `+${points} · share ${shares.map((x) => `#${x}`).join(", ")} → PUBLIC LEDGER`,
+    leakSuccess: "公開して得点！",
+    leakBody: (points: number, shares: readonly number[]) => `+${points} · シェア ${shares.map((x) => `#${x}`).join(", ")} を全員に見える公開記録へ追加しました。`,
     leakPairBody: (points: number, pairsToBreak: number) =>
       `+${points} · 記号列と答えが対で公開されました。この段は ${pairsToBreak} 組で鍵が割れます。`,
     // [Issue #709] PROVE は MY VAULT の数独を手で付け替えて出す。
@@ -350,7 +355,7 @@ export const FAST_MOVE_COPY = {
     proveNoneUsed: "まだなし ── 1〜4 を 1 回ずつ使う表なら、1→1 2→2 3→3 4→4 以外はどれでも新品",
     proveGrid: "2. 空欄4マスを埋める",
     proveIncomplete: "表を選び、空欄4マスに1〜4を入れてください。",
-    proveSuccess: "PROVE SUCCESS",
+    proveSuccess: "正解！",
     proveBody: (points: number, group: string) => `+${points} · 付け替えたマス目の${group}が公開記録に載りました。解そのものは載っていません`,
     proveMiss: "PROVE MISS",
     proveMissBody: (cost: number) => `-${cost} · そのマス目は自分の解の付け替えになっていません。表が 1〜4 を 1〜4 へ、同じ数字を 2 回使わずに送っているか確かめてから、全マスに当て直してください。`,
@@ -358,8 +363,8 @@ export const FAST_MOVE_COPY = {
     proveUnreadBody: "結果を読み取れませんでした。スコアと Order を確認してください。",
     proveLesson:
       "いま体験したのは ZK の考え方です。ゲームの審判が解を検査し、相手には付け替えた 1 組だけを見せました。本来の ZK では審判にも解を渡しません。",
-    huntSuccess: "HUNT SUCCESS",
-    huntBody: "復元した secret が受理されました。",
+    huntSuccess: "秘密を見破った！",
+    huntBody: "計算した秘密が正解でした。",
     // [Issue #696] 外れは外れと言う。 ok だけを見て SUCCESS を出していたのが不具合。
     huntMiss: "HUNT MISS",
     huntMissBody: (cost: number, left: number | undefined) =>
@@ -403,7 +408,7 @@ export const FAST_MOVE_COPY = {
     fheAnswerY: "答え: 右の値",
     fhe: "暗号文を提出",
     fheHint: "計算 / 何も明かさない",
-    fheSuccess: "FHE SUCCESS",
+    fheSuccess: "正解！",
     fheBody: (points: number) => `+${points} · 復号せずに足した`,
     fheLesson:
       "いまのが「準同型暗号」です。中身を読めない数のまま計算して、答えは正しく出ました。ブロックチェーンでは、金額を誰も公開せずに合計を検証するのに使われています。",
@@ -417,7 +422,7 @@ export const FAST_MOVE_COPY = {
     mpcAnswer: "覆面をかけた小計",
     mpc: "小計を提出",
     mpcHint: "計算 / 自分の数は出ない",
-    mpcSuccess: "MPC SUCCESS",
+    mpcSuccess: "正解！",
     mpcBody: (points: number) => `+${points} · 自分の数は公開されていない`,
     mpcLesson:
       "覆面を足し引きした小計を提出しました。各拠点の小計を足すと覆面が打ち消し合い、合計を割る数で割った余りが得られます。これが秘密計算 (MPC) の仕組みです。",
@@ -436,7 +441,7 @@ export const FAST_MOVE_COPY = {
     cipherAnswer: "暗号にした列",
     cipherCost: (pairs: number) =>
       `LEAK すると、この列と答えが対で公開されます。この段は ${pairs} 組で鍵が割れます。`,
-    cipherSuccess: "CIPHER SUCCESS",
+    cipherSuccess: "正解！",
     cipherBody: (points: number) => `+${points} · 何も公開されない`,
     huntSudoku: "HUNT · 付け替えの使い回し",
     huntSudokuHint: (cost: number) =>
@@ -499,7 +504,7 @@ function ledgerTargets(projection: CryptoBattleProjection | null) {
   const seen = new Set<string>();
   const targets: { teamId: string; generation: number; shareIndices: number[] }[] = [];
   for (const entry of projection.publicLedger) {
-    if (entry.kind !== "share" || entry.teamId === projection.vault.teamId) continue;
+    if (entry.kind !== "share" || entry.teamId === projection.vault.teamId || entry.generation !== projection.teams[entry.teamId]?.generation) continue;
     const key = `${entry.teamId}:${entry.generation}`;
     let target = targets.find((candidate) => `${candidate.teamId}:${candidate.generation}` === key);
     if (!target) {
@@ -519,8 +524,7 @@ function ledgerTargets(projection: CryptoBattleProjection | null) {
  * [Issue #696] The reader's HUNT budget against one target, or nothing if the
  * target's generation is not the one the budget counts against.
  *
- * `ledgerTargets` lists every `team:generation` the ledger has shares for,
- * including generations a ROTATE has already retired; `validateOp` refuses a
+ * `ledgerTargets` offers only current generations; `validateOp` refuses a
  * HUNT at any generation but the current one. Showing "3/3 attempts left" on a
  * chip the judge will refuse would advertise a budget that cannot be spent, so
  * the count appears only where the two agree.
@@ -601,7 +605,7 @@ export function proveFeedback(
       (a): a is SudokuRevealArtifact => a.kind === "sudoku-reveal" && a.contractId === contractId,
     );
     const group = reveal ? describeRevealGroup(reveal.group, locale) : locale === "ja" ? "1 グループ" : "one group";
-    return { kind: "prove", title: copy.proveSuccess, body: copy.proveBody(points, group), lesson: copy.proveLesson };
+    return { kind: "prove", title: copy.proveSuccess, body: copy.proveBody(points, group), reward: points, lesson: copy.proveLesson };
   }
   if (next !== undefined && outcome?.contractId === contractId && outcome.outcome === "miss") {
     return { kind: "error", title: copy.proveMiss, body: copy.proveMissBody(next.wrongProveCost) };
@@ -894,6 +898,9 @@ const CSS = `
 ${BOARD_CSS}
 ${DIE_CSS}
 ${SUDOKU_CSS}
+${GUIDE_CSS}
+${HUNT_GUIDE_CSS}
+${SUCCESS_CSS}
 .tc-sudoku-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
 .tc-sudoku-block{display:grid;gap:3px;justify-items:start}
 .tc-reveal-list{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:12px}
@@ -1138,6 +1145,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const attemptRef = useRef(0);
   useEffect(() => {
+    setFeedback(null);
+    attemptRef.current = 0;
+  }, [polled.projection?.vault.teamId]);
+  useEffect(() => {
     if (feedback && feedback.kind !== "hint") {
       feedbackRef.current?.focus({ preventScroll: true });
       feedbackRef.current?.scrollIntoView({ block: "nearest" });
@@ -1246,7 +1257,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
       if (outcome.kind !== "ok") {
         setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
       } else {
-        setFeedback({ ...success(next), attempt });
+        const draft = success(next);
+        setFeedback({ ...draft, attempt, total: next?.teams[next.vault.teamId]?.score });
       }
     } catch {
       setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable, attempt });
@@ -1341,6 +1353,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </div>
 
 
+      <div className="tc-rival-score">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(t => <span key={t.teamId}>{locale === "ja" ? "相手" : "Opponent"} · {t.teamName || t.teamId} <strong>{t.score} {locale === "ja" ? "点" : "pt"}</strong></span>)}</div>
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
       <details className="tc-order-picker" ref={orderPickerRef}>
@@ -1354,7 +1367,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </details>
 
       <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
-        {feedback && <FeedbackBanner key={feedback.attempt} feedback={feedback} locale={locale} />}
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={feedback} locale={locale} onContinue={orders.length ? () => { setFeedback(null); document.querySelector(".tc-workspace")?.scrollIntoView({ block: "start" }); } : undefined} />}
       </div>
 
       <section className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
@@ -1391,7 +1404,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {selectedOrder?.task.kind === "reveal-share" && (
           <p className="tc-share-primer">
             <span>{locale === "ja"
-              ? `かけら (share) は、秘密の数から作った ${projection.vault.shares.length} 個の数です。公開して答えるか、かけらを渡さずに証明するか選びます。`
+              ? `秘密を複数の数に分けて持つ方法を「秘密分散」、その数1個を「シェア（share）」と呼びます。この試合では ${projection.vault.shares.length} 個のうち ${projection.threshold} 個で元の秘密を戻せます。`
               : `A share is one of ${projection.vault.shares.length} numbers made from your secret. Choose to publish it or prove without handing it over.`}</span>
           </p>
         )}
@@ -1412,6 +1425,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               () => ({
                 kind: "leak",
                 title: copy.leakSuccess,
+                reward: selectedOrder.leakPoints,
                 body:
                   selectedOrder.task.kind === "caesar-shift"
                     ? copy.leakPairBody(selectedOrder.leakPoints, selectedOrder.task.pairsToBreak)
@@ -1478,7 +1492,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !fheR.trim() || !fheY.trim()}
             onClick={() => void run(
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
-              () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points), lesson: copy.fheLesson }),
+              () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points), reward: selectedOrder.points, lesson: copy.fheLesson }),
             )}
           >{submitting ? copy.running : `${copy.fhe} · +${selectedOrder.points}`}</button>
         </div>
@@ -1532,7 +1546,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !cipherAnswer.trim()}
             onClick={() => void run(
               () => submitCipher(client, selectedOrder.id, cipherAnswer.trim().split(/\s+/)),
-              () => ({ kind: "prove", title: copy.cipherSuccess, body: copy.cipherBody(selectedOrder.points) }),
+              () => ({ kind: "prove", title: copy.cipherSuccess, body: copy.cipherBody(selectedOrder.points), reward: selectedOrder.points }),
             )}
           >{submitting ? copy.running : `${copy.cipher} · +${selectedOrder.points}`}</button>
         </div>
@@ -1551,7 +1565,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "masked-total" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.mpcTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          <p className="tc-card-hint">{locale === "ja" ? "自分の数をそのまま相手に見せず、ほかの拠点と合計だけを出す練習です。今回は、自分の数に『覆面』と呼ぶ数を足し引きしてから提出します。" : "Find a combined total without directly showing your own input. Add and subtract the numbers called masks before submitting."}</p>
+          <p className="tc-card-hint">{locale === "ja" ? "秘密計算（MPC）は、互いの入力を明かさず協力して計算する技術です。今回は隠すための数（覆面）を足し引きし、合計だけを出す仕組みを体験します。" : "Find a combined total without directly showing your own input. Add and subtract the numbers called masks before submitting."}</p>
           <MpcWorksheet task={selectedOrder.task} prime={projection.prime} locale={locale} />
           <label className="tc-answer-label">{copy.mpcAnswer} · {locale === "ja" ? `④ の答えを 1 つ入力（0〜${BigInt(projection.prime) - 1n}）` : `Enter the result of step 4 (0–${BigInt(projection.prime) - 1n})`}
             <input aria-label={copy.mpcAnswer} inputMode="numeric" value={mpcPartial} onChange={(event) => setMpcPartial(event.target.value)} placeholder={locale === "ja" ? "最後に出た数" : "Your final number"} />
@@ -1562,7 +1576,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !mpcPartial.trim()}
             onClick={() => void run(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
-              () => ({ kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(selectedOrder.points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, lesson: copy.mpcLesson }),
+              () => ({ kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(selectedOrder.points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: selectedOrder.points, lesson: copy.mpcLesson }),
             )}
           >{submitting ? copy.running : `${copy.mpc} · +${selectedOrder.points}`}</button>
           <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />
@@ -1584,7 +1598,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         selectable so reuse remains a real decision, with its risk labelled.
       */}
       {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && proveAllowed && (
-        <div className="tc-input-panel">
+        <div className="tc-input-panel tc-proof-inputs">
           <strong>{locale === "ja" ? "空欄4マスに、付け替えた数字を入力" : "Fill four holes with the renamed digits"}</strong>
 
           <div className="tc-card-hint">{copy.proveHelp}</div>
@@ -1602,14 +1616,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
             </select>
           </label>
           {proveTable && proveGivens && <>
-          <p className="tc-card-hint">{(() => {
-            const example = proveGivens.findIndex((cell) => cell !== "");
-            return copy.proveExample(projection.vault.sudokuSolution[example]!, Number(proveGivens[example]));
-          })()}</p>
+          <RelabelDiagram solution={projection.vault.sudokuSolution} table={proveTable} locale={locale} />
           <div className="tc-sudoku-row">
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveSolution}</span>
-              <SudokuBoard cells={projection.vault.sudokuSolution} size={36} label="my-solution" />
+              <SudokuBoard cells={projection.vault.sudokuSolution} size={36} lit={proveGivens.map((v, i) => v ? -1 : i).filter(i => i >= 0)} label="my-solution" />
             </div>
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveGrid}</span>
@@ -1656,14 +1667,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
           <details className="tc-hints" key={selectedOrder.id}>
             <summary>{locale === "ja" ? `このお題のヒント${nextHint ? `（次は −${nextHint.cost} 点）` : "（購入済み）"}` : `Hints for this Order${nextHint ? ` (next: −${nextHint.cost})` : " (all opened)"}`}</summary>
             <div className="tc-card-hint">{copy.hintsHint}</div>
-            {selectedOrder.hints
-              .filter((hint) => hint.text !== undefined)
-              .map((hint) => (
-                <p className="tc-hint-text" key={hint.id}>
-                  <span className="tc-hint-step">{hint.level + 1}</span>
-                  <span>{hint.text?.[locale]}</span>
-                </p>
-              ))}
+            {selectedOrder.hints.filter(hint => hint.text !== undefined).map(hint => (
+              <details className="tc-hint-rung" key={`${hint.id}:${selectedOrder.hints.filter(h => h.text).length}`} open={hint.level === selectedOrder.hints.filter(h => h.text).length - 1}>
+                <summary>{hint.level + 1}. {locale === "ja" ? ["しくみ", "小さな数の例", "自分の数でやる"][hint.level] : ["The mechanism", "A small example", "Use your own values"][hint.level]}</summary>
+                {hint.level === 2 && (selectedOrder.task.kind === "reveal-share" || selectedOrder.task.kind === "zk-sudoku") ?
+                  <SudokuGuide order={selectedOrder} projection={projection} table={proveTable} locale={locale} onOpenProof={() => { setProveOpen(true); requestAnimationFrame(() => document.querySelector(".tc-proof-inputs")?.scrollIntoView({ block: "start" })); }} /> :
+                  <p className="tc-hint-text">{hint.text?.[locale]}</p>}
+              </details>
+            ))}
             {nextHint ? (
               <button
                 type="button"
@@ -1725,10 +1736,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
       </details>
 
-      {(tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt || tactics.rotate) && (
-      <details className="tc-tactics">
-        <summary>{copy.tactics}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
+      <details className="tc-tactics tc-hunt-entry">
+        <summary>{locale === "ja" ? "相手の秘密を見破って攻撃する（HUNT）" : "Recover an opponent’s secret to attack (HUNT)"}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
         <div className="tc-tactics-body">
+        <HuntIntro projection={projection} locale={locale} />
         {tactics.rpsHunt && <RpsHunt projection={projection} locale={locale} submitting={submitting}
           onSubmit={op => run(() => client.submitOp(op), next => next ? ({kind:"hunt",title:locale === "ja" ? "予測を預けました" : "Prediction submitted",body:locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings."}) : ({kind:"error",title:copy.rejected,body:copy.unavailable}))} />}
 
@@ -1741,9 +1752,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 {targets.map((target) => {
                   const key = `${target.teamId}:${target.generation}`;
                   const budget = huntBudgetFor(projection, target);
-                  return <button key={key} type="button" className="tc-target-chip" aria-pressed={selectedTarget ? `${selectedTarget.teamId}:${selectedTarget.generation}` === key : false} onClick={() => setHuntTargetKey(key)}>{target.teamId} · gen {target.generation} · [{target.shareIndices.join(",")}]{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>;
+                  return <button key={key} type="button" className="tc-target-chip" aria-pressed={selectedTarget ? `${selectedTarget.teamId}:${selectedTarget.generation}` === key : false} onClick={() => setHuntTargetKey(key)}>{projection.teams[target.teamId]?.teamName || target.teamId} · {locale === "ja" ? "世代" : "generation"} {target.generation} · [{target.shareIndices.join(",")}]{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>;
                 })}
               </div>
+              {selectedTarget && <HuntGuide projection={projection} target={selectedTarget} locale={locale} />}
               {huntExhausted ? <div className="tc-card-warn">{copy.huntExhausted}</div> : null}
               <div className="tc-input-panel">
                 <input aria-label="fast-hunt-secret" value={recoveredSecret} onChange={(event) => setRecoveredSecret(event.target.value)} placeholder={copy.recovered} />
@@ -1788,7 +1800,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
                   className="tc-target-chip"
                   aria-pressed={selectedCipherTarget ? `${selectedCipherTarget.teamId}:${selectedCipherTarget.generation}:${selectedCipherTarget.rung}` === key : false}
                   onClick={() => setCipherTargetKey(key)}
-                >{target.teamId} · gen {target.generation} · {target.rung} {target.pairs.length}/{target.pairsToBreak}</button>
+                >{projection.teams[target.teamId]?.teamName || target.teamId} · {locale === "ja" ? "世代" : "generation"} {target.generation} · {target.rung} {target.pairs.length}/{target.pairsToBreak}</button>
               );
             })}
           </div>
@@ -1932,7 +1944,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>}
         </div>
       </details>
-      )}
 
       <details className="tc-records">
         <summary>{locale === "ja" ? `公開記録と自分の保管庫を見る（記録 ${projection.publicLedger.length} 件）` : `Public Ledger and My Vault (${projection.publicLedger.length} records)`}</summary>
@@ -1954,16 +1965,22 @@ export default function FastMovePanel(props: PortalSlotProps) {
  * under `renderToStaticMarkup` (see this file's header), so the banner is the
  * seam the miss-versus-success check has to go through.
  */
-export function FeedbackBanner({ feedback, locale }: { readonly feedback: Feedback; readonly locale: Locale }) {
+export function FeedbackBanner({ feedback, locale, onContinue }: { readonly feedback: Feedback; readonly locale: Locale; readonly onContinue?: () => void }) {
   const copy = FAST_MOVE_COPY[locale];
+  const reward = feedback.kind !== "error" && (feedback.reward ?? 0) > 0;
   return (
-    <div className={`tc-feedback tc-feedback-${feedback.kind}`}>
-      <strong>
-        {feedback.title}
-        {feedback.attempt > 1 ? <em className="tc-feedback-attempt">{copy.attemptLabel(feedback.attempt)}</em> : null}
-      </strong>
+    <div className={`tc-feedback tc-feedback-${feedback.kind}${reward ? " tc-feedback-reward" : ""}`}>
+      {reward && <SuccessCelebration points={feedback.reward!} locale={locale} />}
+      <div className={reward ? "tc-reward-heading" : undefined}>
+        {reward && <span className="tc-reward-icon" aria-hidden="true">✓</span>}
+        <strong>{feedback.title}</strong>
+        {reward && <span className="tc-reward-points">+{feedback.reward} {locale === "ja" ? "点" : "pt"}</span>}
+        {!reward && feedback.attempt > 1 ? <em className="tc-feedback-attempt">{copy.attemptLabel(feedback.attempt)}</em> : null}
+      </div>
+      {reward && feedback.total !== undefined && <span className="tc-feedback-total">{locale === "ja" ? "現在のスコア" : "Current score"}: {feedback.total} {locale === "ja" ? "点" : "pt"}</span>}
       <span>{feedback.body}</span>
-      {feedback.lesson ? <span className="tc-feedback-lesson">{feedback.lesson}</span> : null}
+      {feedback.lesson ? <details className="tc-why"><summary>{locale === "ja" ? "いま、何ができた？" : "What did I just do?"}</summary><span className="tc-feedback-lesson">{feedback.lesson}</span></details> : null}
+      {reward && onContinue && <button type="button" className="tc-submit-small" onClick={onContinue}>{locale === "ja" ? "次のお題へ →" : "Next Order →"}</button>}
     </div>
   );
 }

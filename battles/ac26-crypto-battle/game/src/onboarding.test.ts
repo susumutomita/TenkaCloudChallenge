@@ -175,10 +175,12 @@ describe("Issue #646 visual game board", () => {
       expect(html).toContain("ORDER #7");
       expect(html).toContain("LEAK");
       expect(html).toContain("PROVE");
-      expect(html).toContain("MY VAULT");
-      expect(html).toContain("PUBLIC LEDGER");
-      expect(html.indexOf("ORDER BELT")).toBeLessThan(html.indexOf("MY VAULT"));
-      expect(html.indexOf("ORDER BELT")).toBeLessThan(html.indexOf("PUBLIC LEDGER"));
+      const vaultLabel = locale === "ja" ? "自分だけの保管庫" : "MY VAULT";
+      const ledgerLabel = locale === "ja" ? "全員に見える公開記録" : "PUBLIC LEDGER";
+      expect(html).toContain(vaultLabel);
+      expect(html).toContain(ledgerLabel);
+      expect(html.indexOf("ORDER BELT")).toBeLessThan(html.indexOf(vaultLabel));
+      expect(html.indexOf("ORDER BELT")).toBeLessThan(html.indexOf(ledgerLabel));
     });
 
     it(`renders shares as cards grouped by team/generation, without an exploitability verdict (${locale})`, () => {
