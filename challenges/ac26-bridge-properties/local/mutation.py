@@ -87,24 +87,22 @@ def extract_witness(transcript):
     (
         "swaps soundness and privacy in the matrix",
         """
+from fixtures.generate import TRUTH
 def classify(protocol_id):
-    return {
-        "p1": {"complete": False, "sound": True, "private": True},
-        "p2": {"complete": True, "sound": True, "private": False},
-        "p3": {"complete": True, "sound": False, "private": True},
-    }[protocol_id]
+    answer = dict(TRUTH[protocol_id])
+    answer['sound'], answer['private'] = answer['private'], answer['sound']
+    return answer
 """,
         None,
     ),
     (
-        "confuses 'accepts valid input' with 'secure' and marks P2 sound",
+        "confuses 'accepts valid input' with 'secure' and marks equation-only verifier sound",
         """
+from fixtures.generate import TRUTH
 def classify(protocol_id):
-    return {
-        "p1": {"complete": False, "sound": True, "private": True},
-        "p2": {"complete": True, "sound": True, "private": True},
-        "p3": {"complete": True, "sound": True, "private": False},
-    }[protocol_id]
+    answer = dict(TRUTH[protocol_id])
+    answer['sound'] = True
+    return answer
 """,
         None,
     ),

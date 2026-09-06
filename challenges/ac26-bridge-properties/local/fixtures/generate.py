@@ -212,10 +212,12 @@ def public_payload(seed: str) -> dict[str, object]:
     _accepted, transcript = verify(privacy_protocol, inst, inst.witness)
     return {
         "definitions": {
-            "complete": "正しい主張と正直な witness を、検証者が必ず受理する性質",
-            "sound": "主張を満たさない witness を、検証者が受理しない性質",
-            "private": "観察者が transcript だけから秘密の witness を復元できない性質",
+            "complete": "完全性：条件を満たすすべての入力値を受理する / completeness: accept every valid input",
+            "sound": "この教材の健全性：条件違反の入力値を受理しない / toy soundness: reject invalid input values",
+            "private": "この教材の記録の秘匿：記録だけからwを読めない。本物のゼロ知識の証明ではない / toy record privacy: the record alone does not disclose w; not a zero-knowledge proof",
         },
+        "checkDefinitions": {"relation": "(a*w+b)%p == c", "range": "lo <= w <= hi", "range(strict-lo)": "lo < w <= hi"},
+        "incompletenessInput": "提出時は別の境界条件を関数へ渡す / submission passes a different boundary statement to the function",
         "claim": "a*w + b == c (mod p) and lo <= w <= hi",
         "statement": inst.as_public(),
         "verifiers": verifiers,

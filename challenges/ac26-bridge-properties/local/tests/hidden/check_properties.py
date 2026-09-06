@@ -75,7 +75,7 @@ def check_incompleteness(generator: Generator, seed: str, label: str) -> list[st
     if not is_true_statement(inst, w):
         failures.append("the submitted witness is not valid for the statement")
     if verify(protocol_for(seed, "incomplete"), inst, w)[0]:
-        failures.append("P1 accepts the submitted witness, so it shows no incompleteness")
+        failures.append("the strict-lower-bound verifier accepts the submitted witness, so it shows no incompleteness")
     return failures
 
 
@@ -92,7 +92,7 @@ def check_unsoundness(generator: Generator, seed: str, label: str) -> list[str]:
     if in_range(inst, w):
         failures.append("the submitted witness is inside the claimed range, so nothing is broken")
     if not verify(protocol_for(seed, "unsound"), inst, w)[0]:
-        failures.append("P2 rejects the submitted witness, so it shows no unsoundness")
+        failures.append("the equation-only verifier rejects the submitted witness, so it shows no unsoundness")
     return failures
 
 
@@ -101,7 +101,7 @@ def check_extraction(extractor: Callable[[dict], int], seed: str, label: str) ->
     inst = instance(seed, label)
     accepted, transcript = verify(protocol_for(seed, "leaky"), inst, inst.witness)
     if not accepted:
-        return ["fixture error: P3 rejected its own honest witness"]
+        return ["fixture error: the recording verifier rejected its own honest witness"]
     try:
         recovered = extractor(transcript)
     except Exception as error:  # noqa: BLE001
@@ -122,10 +122,10 @@ def check_extraction_is_not_hardcoded(extractor: Callable[[dict], int], seed: st
     return failures
 
 
-def run(classify: Classify, module, seed: str) -> list[str]:
+def run(classify: Classify, module, seed: str, *, matrix_seed: str | None = None) -> list[str]:
     """Full hidden suite. `module` supplies the three counterexample generators."""
     failures: list[str] = []
-    failures.extend(check_matrix(classify, seed))
+    failures.extend(check_matrix(classify, matrix_seed if matrix_seed is not None else seed))
     for index in range(3):
         for message in check_incompleteness(module.incompleteness_witness, seed, f"inc-{index}"):
             failures.append(f"instance {index}: {message}")
