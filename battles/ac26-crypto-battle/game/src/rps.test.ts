@@ -188,3 +188,16 @@ test("no Order deadline extends beyond the match; unfinished final duels expire 
   expect(next.teams.a!.score - s.teams.a!.score).not.toBe(s.config.scores.duelWin);
   expect(scoreReasons(s, next, {kind:"tick"})).toEqual({a:"duel-deadline", b:"deadline"});
 });
+
+test("a delayed tick still classifies a forfeit after pruning the completed DUEL", () => {
+  let s = seal(running(), "a", 1, 1);
+  const waiting = duel(s, "a");
+  s = {...s, contracts: s.contracts.filter(order => order.task.kind === "rps-duel")};
+  const next = tick(s, waiting.expiresAtMs + 11 * 60_000);
+  expect(next.contracts.some(order => order.id === waiting.id)).toBe(false);
+  expect(next.teams.a!.completedContractIds).toContain(waiting.id);
+  expect(next.teams.a!.score - s.teams.a!.score).toBe(s.config.scores.duelWin);
+  expect(scoreReasons(s, next, {kind:"tick"})).toEqual({a:"duel"});
+  const again = tick(next, next.nowMs!);
+  expect(scoreReasons(next, again, {kind:"tick"})).toEqual({});
+});

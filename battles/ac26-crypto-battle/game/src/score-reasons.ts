@@ -46,14 +46,20 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
   }
 }
 
-/** Only completed public adjudications; private predictions/openings are never returned. */
+/** Public completion IDs survive the tick's terminal-Order pruning. */
 function newDuelPoints(before: CryptoBattleState, after: CryptoBattleState, teamId: string): number {
   let points = 0;
-  for (const order of after.contracts) {
-    if (order.teamId !== teamId || order.resolution !== "duel" || order.status !== "completed") continue;
-    if (before.contracts.find(previous => previous.id === order.id)?.status !== "open") continue;
-    if (order.rps?.outcome === "draw") points += after.config.scores.duelDraw;
-    if (order.rps?.outcome === "win" || order.rps?.outcome === "forfeit-win") points += after.config.scores.duelWin;
+  const completed = new Set(after.teams[teamId]?.completedContractIds);
+  const previous = new Set(before.teams[teamId]?.completedContractIds);
+  const retained = new Map(after.contracts.map(order => [order.id, order]));
+  for (const order of before.contracts) {
+    if (order.teamId !== teamId || order.task.kind !== "rps-duel" || order.status !== "open") continue;
+    if (!completed.has(order.id) || previous.has(order.id)) continue;
+    const settled = retained.get(order.id);
+    if (settled?.rps?.outcome === "draw") points += after.config.scores.duelDraw;
+    // Only tick prunes Orders. An open DUEL newly marked completed by tick is a
+    // forfeit win; a timeout loss is expired and never adds a completion ID.
+    if (!settled || settled.rps?.outcome === "win" || settled.rps?.outcome === "forfeit-win") points += after.config.scores.duelWin;
   }
   return points;
 }
