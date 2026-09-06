@@ -1,3 +1,4 @@
+import RsaMaterials from "./RsaMaterials.tsx";
 import Lightning from "./Lightning.tsx";
 import VigenereMaterials from "./VigenereMaterials.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -702,7 +703,7 @@ export function exposureRows(projection: CryptoBattleProjection | null): readonl
  * `tacticAvailability` below is shaped this way.
  */
 export function rotateVoidCount(projection: CryptoBattleProjection | null): number {
-  return openOrders(projection).length;
+  return openOrders(projection).filter(order => order.task.kind !== "rps-duel").length;
 }
 
 
@@ -762,7 +763,8 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
     sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
     rpsHunt: (projection?.rpsHunt?.targets.length ?? 0) > 0,
-    rotate: ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined,
+    rotate: ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
+      || (projection?.publicRsaKeys?.some(key => key.teamId === projection.vault.teamId && key.generation === projection.vault.generation) ?? false),
   };
 }
 
@@ -1293,7 +1295,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </p>
         )}
         <div className="tc-primary-actions">
-          {selectedOrder?.task.kind === "caesar-shift" && selectedOrder.allowedMethods.includes("cipher") && <button
+          {(selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && selectedOrder.allowedMethods.includes("cipher") && <button
             type="button"
             className="tc-action tc-prove-button"
             aria-controls="tc-cipher-answer"
@@ -1302,9 +1304,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
               cipherInputRef.current?.scrollIntoView({ block: "center" });
             }}
           >
-            <span className="tc-action-heading"><span>{locale === "ja" ? "計算して暗号化する" : "Calculate the encrypted row"}</span><b>+{selectedOrder.points} {locale === "ja" ? "点" : "pt"}</b></span>
-            <small>{locale === "ja" ? "CIPHER · 各数字に鍵を足す" : "CIPHER · Add the key to each value"}</small>
-            <span className="tc-action-risk">{locale === "ja" ? "元の列と暗号の組は公開しません。" : "The plaintext/ciphertext pair stays private."}</span>
+            <span className="tc-action-heading"><span>{locale === "ja" ? "計算して暗号化する" : selectedOrder.task.kind === "rsa-encrypt" ? "Calculate the encrypted number" : "Calculate the encrypted row"}</span><b>+{selectedOrder.points} {locale === "ja" ? "点" : "pt"}</b></span>
+            <small>{selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "CIPHER · 繰り返し掛けて余りを取る" : "CIPHER · Multiply repeatedly and take remainders") : (locale === "ja" ? "CIPHER · 各数字に鍵を足す" : "CIPHER · Add the key to each value")}</small>
+            <span className="tc-action-risk">{selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "元の数と暗号の答えは公開しません。" : "The original and encrypted answer stay private.") : (locale === "ja" ? "元の列と暗号の組は公開しません。" : "The plaintext/ciphertext pair stays private.")}</span>
           </button>}
           {leakAllowed && <button
             type="button"
@@ -1323,7 +1325,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 title: copy.leakSuccess,
                 reward: selectedOrder.leakPoints,
                 body:
-                  selectedOrder.task.kind === "caesar-shift"
+                  selectedOrder.task.kind === "rsa-encrypt"
+                    ? (locale === "ja" ? "元の数 m と暗号の答え c を公開しました。公開鍵だけでも因数分解で攻撃できます。" : "Published original m and encrypted answer c. The public key alone already allows a factoring attack.")
+                    : selectedOrder.task.kind === "caesar-shift"
                     ? selectedOrder.task.rung === "vigenere"
                       ? `+${selectedOrder.leakPoints} · ${locale === "ja" ? `鍵の位置${(selectedOrder.task.keyPosition ?? 0) + 1}の元と答えを公開しました。異なる3位置が揃うと全鍵が分かります。` : `Published the original and answer at key position ${(selectedOrder.task.keyPosition ?? 0) + 1}. Three distinct positions reveal all keys.`}`
                       : copy.leakPairBody(selectedOrder.leakPoints, selectedOrder.task.pairsToBreak)
@@ -1403,11 +1407,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
         The cost of NOT doing the calculation is stated here rather than left to
         the LEAK button, because this is the moment the choice is actually made.
       */}
-      {selectedOrder?.task.kind === "caesar-shift" && (
+      {(selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && (
         <div id="tc-cipher-answer" className="tc-input-panel">
-          <strong style={{ fontSize: "12px" }}>{copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          {selectedOrder.task.rung === "vigenere" && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
-          {selectedOrder.task.rung === "vigenere" ? <VigenereMaterials task={selectedOrder.task} locale={locale} /> : <>
+          <strong style={{ fontSize: "12px" }}>{selectedOrder.task.kind === "rsa-encrypt" ? "RSA · CIPHER" : copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
+          {selectedOrder.task.kind === "caesar-shift" && selectedOrder.task.rung === "vigenere" && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
+          {selectedOrder.task.kind === "rsa-encrypt" ? <RsaMaterials task={selectedOrder.task} locale={locale} /> : selectedOrder.task.rung === "vigenere" ? <VigenereMaterials task={selectedOrder.task} locale={locale} /> : <>
           <div className="tc-lesson">
             <div className="tc-lesson-use">{copy.cipherUse}</div>
             <div className="tc-lesson-why">{copy.cipherWhy}</div>
@@ -1431,12 +1435,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </ul>
           <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
           </>}
+          {selectedOrder.task.kind === "rsa-encrypt" && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
           <input
             ref={cipherInputRef}
             aria-label="fast-cipher-answer"
             value={cipherAnswer}
             onChange={(event) => setCipherAnswer(event.target.value)}
-            placeholder={copy.cipherAnswer}
+            placeholder={selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : copy.cipherAnswer}
           />
           <button
             type="button"
@@ -1640,6 +1645,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <HuntPanel projection={projection} locale={locale} submitting={submitting}
         onSubmit={(op) => run(() => client.submitOp(op), (next) => {
           if (op.kind === "hunt" || op.kind === "hunt-sudoku") return huntFeedback(next, op.targetTeamId, locale, op.kind === "hunt-sudoku" ? "sudoku" : undefined);
+          if (op.kind === "hunt-rsa" && !next?.completedHunts?.some(h => h.via === "rsa" && h.targetTeamId === op.targetTeamId && h.generation === op.generation)) return { kind: "error", title: copy.rejected, body: copy.unavailable };
+          if (op.kind === "hunt-rsa") return { kind: "hunt", title: copy.huntSuccess, body: locale === "ja" ? "公開nの素数2個が一致し、攻撃が成功しました。" : "The two prime factors match public n; the attack succeeded.", reward: next ? projection.huntWinPoints : undefined };
           if (op.kind === "hunt-cipher") return { kind: "hunt", title: copy.huntSuccess, body: copy.huntCipherBody, reward: next ? rungSpec(op.rung).huntBonus : undefined };
           return next ? { kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings." } : { kind: "error", title: copy.rejected, body: copy.unavailable };
         })} />
@@ -1647,6 +1654,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {tactics.rotate && <div className="tc-rotate-card">
           <div className="tc-card-title">{locale === "ja" ? "自分の防御 · 秘密を作り直す（ROTATE）" : "Defend yourself · Replace your secrets (ROTATE)"}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
+          {projection.publicRsaKeys?.length ? <p className="tc-card-hint">{locale === "ja" ? "RSAの新しい公開n/eも全員に見えます。小さい鍵の数は再登場する場合があり、ROTATEで因数分解を防げるわけではありません。" : "Everyone also sees the new RSA n/e. Tiny key numbers can recur; ROTATE does not prevent factoring."}</p> : null}
           {sudokuPressure === "hunted" && <div className="tc-card-hint">{copy.rotateSudokuHunted}</div>}
           {sudokuPressure === "exhausted" && <div className="tc-card-hint">{copy.rotateSudokuExhausted}</div>}
           {/*

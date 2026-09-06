@@ -1,3 +1,4 @@
+import { isRsaPublicKey } from "../game/src/rsa.ts";
 /**
  * Shared portal-plugin helpers for ac26-crypto-battle (Issue #486, PR4).
  *
@@ -133,6 +134,22 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (!Array.isArray(v.publicLedger)) return false;
 
   if (typeof v.teams !== "object" || v.teams === null) return false;
+  const rsaValue = (n: unknown, max: number) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0 && n < max;
+  if (v.myContracts.some(c => c.task?.kind === "rsa-encrypt" && (!isRsaPublicKey(c.task) || !rsaValue(c.task.plaintext, c.task.n)))) return false;
+  if (v.publicRsaKeys !== undefined) {
+    if (!Array.isArray(v.publicRsaKeys)) return false;
+    const seen = new Set<string>(), teams = v.teams as Record<string, { generation?: unknown }>;
+    for (const raw of v.publicRsaKeys) {
+      if (!raw || typeof raw !== "object") return false;
+      const key = raw as Record<string, unknown>;
+      if (!isRsaPublicKey(key) || typeof key.teamId !== "string" || !Object.hasOwn(teams, key.teamId)
+        || typeof key.generation !== "number" || !Number.isSafeInteger(key.generation) || key.generation < 1 || teams[key.teamId]?.generation !== key.generation
+        || seen.has(key.teamId)) return false;
+      seen.add(key.teamId);
+    }
+  }
+  if (v.publicLedger.some((a: Record<string, unknown>) => a?.kind === "rsa-pair" && (!isRsaPublicKey(a) || a.method !== "leak"
+    || !rsaValue(a.plaintext, a.n) || !rsaValue(a.ciphertext, a.n)))) return false;
   // [Issue #709] Every team's puzzle -- what the sudoku HUNT card draws.
   if (typeof v.publicPuzzles !== "object" || v.publicPuzzles === null) return false;
 
@@ -149,7 +166,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // reach the HUNT cards' array methods or turn into a fabricated completion.
   if (v.completedHunts !== undefined) {
     if (!Array.isArray(v.completedHunts)) return false;
-    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true, vigenere: true };
+    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true, vigenere: true, rsa: true };
     for (const entry of v.completedHunts) {
       if (typeof entry !== "object" || entry === null) return false;
       if (typeof entry.targetTeamId !== "string" || entry.targetTeamId.length === 0) return false;

@@ -1,3 +1,5 @@
+import RsaHunt from "./RsaHunt.tsx";
+import type { PublicRsaKey } from "../game/src/rsa.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget } from "../game/src/types.ts";
 import { ALL_CIPHER_RUNGS, exposedKeyPositions, validCipherKey, rungSpec, type CipherRung } from "../game/src/ladder.ts";
@@ -9,17 +11,17 @@ import { describeRevealGroup, emptyCells, parseCells, SudokuBoard, SudokuInput }
 import { DieRow } from "./DieFace.tsx";
 
 type Locale = "ja" | "en";
-type Mode = "share" | "sudoku" | CipherRung | "rps";
+type Mode = "share" | "sudoku" | CipherRung | "rps" | "rsa";
 type Status = "waiting" | "ready" | "completed" | "exhausted" | "pending" | "unknown";
 export interface HuntOption {
   readonly key: string; readonly teamId: string; readonly generation: number; readonly mode: Mode;
   readonly status: Status; readonly detail: { readonly ja: string; readonly en: string };
   readonly left?: number; readonly points?: number;
-  readonly sudoku?: SudokuHuntCandidate; readonly cipher?: CipherHuntCandidate; readonly rps?: RpsHuntTarget;
+  readonly sudoku?: SudokuHuntCandidate; readonly cipher?: CipherHuntCandidate; readonly rps?: RpsHuntTarget; readonly rsa?: PublicRsaKey;
 }
 const labels = {
-  ja: { share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", vigenere: "Vigenère暗号", rps: "じゃんけんの予測", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
-  en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", vigenere: "Vigenère cipher", rps: "RPS prediction", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
+  ja: { share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", vigenere: "Vigenère暗号", rps: "じゃんけんの予測", rsa: "RSAの因数分解", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
+  en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", vigenere: "Vigenère cipher", rps: "RPS prediction", rsa: "RSA factorization", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
 };
 
 /** Public records open a worksheet; no solver or verdict is run for the participant. */
@@ -75,7 +77,13 @@ export function huntOptions(projection: CryptoBattleProjection): readonly HuntOp
       ja: rps ? "別の2対戦で同じ隠す数 r が公開され、今回の封じた数もあります。今回も同じ r という仮定で予測します。" : pending ? "予測は変更できません。両者の開封後に採点します。" : lastRpsResult ? "直近の予測は終了しました。次の対戦で、相手が数字を封じてから両者の手が公開されるまでの受付を待ちます。" : reusedR ? "過去の使い回しを確認。相手が次の数字を封じ、両者の手が公開される前の受付を待ちます。" : `過去の開封 ${openings.length} 件。別の2対戦で同じ隠す数 r が公開されることが必要です。過去の開封は世代をまたいで参照できます。`,
       en: rps ? "Two past duels reused r, and the current sealed number is available. Predict assuming reuse again." : pending ? "Prediction is final; scoring waits for both openings." : lastRpsResult ? "The latest prediction is finished. Wait for the next duel to be sealed, before both hands become public." : reusedR ? "Past reuse found. Wait for the next sealed number, before both hands become public." : `${openings.length} public openings. Need equal r in two different duels. Past openings may span generations.`,
     }};
-    return [share, sudokuOption, ...cipherOptions, rpsOption];
+    const rsa = projection.publicRsaKeys?.find(key => key.teamId === teamId && key.generation === generation);
+    const rsaOption: HuntOption = { ...entry("rsa"), rsa, points: projection.huntWinPoints,
+      status: projection.publicRsaKeys === undefined ? "unknown" : status("rsa", !!rsa), detail: {
+        ja: rsa ? `公開鍵 n=${rsa.n}・e=${rsa.e}。nを異なる素数2個の積に分けて攻撃します。LEAK不要です。` : "終盤になると公開鍵が表示されます。",
+        en: rsa ? `Public key n=${rsa.n}, e=${rsa.e}. Factor n into two distinct primes to attack. No LEAK needed.` : "Public keys appear in endgame.",
+      } };
+    return [share, sudokuOption, ...cipherOptions, rsaOption, rpsOption];
   });
 }
 
@@ -114,6 +122,7 @@ export function HuntWorkspace({ target, ...props }: Props & { readonly target: H
   const [cells, setCells] = useState<readonly string[]>(emptyCells);
   const ja = locale === "ja", name = projection.teams[target.teamId]?.teamName || target.teamId;
   if (target.status !== "ready") return null;
+  if (target.rsa) return <RsaHunt {...props} target={target.rsa} />;
   if (target.rps) return <RpsHuntCandidate {...props} target={target.rps} />;
   const grid = parseCells(cells);
   const validNumber = /^(0|[1-9]\d*)$/.test(answer) && answer.length <= 100;

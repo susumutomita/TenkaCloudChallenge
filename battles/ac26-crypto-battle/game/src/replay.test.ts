@@ -64,7 +64,7 @@ describe("buildReplay / keyMoments: against the vertical playtest's actual final
     // Sourced from huntLog (Issue #486 PR5 addition), not fabricated.
     expect(result.finalState.huntLog).toHaveLength(1);
     const loggedHunt = result.finalState.huntLog[0];
-    if (!loggedHunt) throw new Error("expected a huntLog entry");
+    if (!loggedHunt || "rsa" in loggedHunt) throw new Error("expected a legacy huntLog entry");
     expect(huntEvent.atMs).toBe(loggedHunt.atMs);
 
     const rotateEvent = replay.find((e) => e.kind === "rotate");

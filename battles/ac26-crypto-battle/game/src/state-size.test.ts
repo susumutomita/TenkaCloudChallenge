@@ -1,3 +1,4 @@
+import { playMaximumRsaHistory } from "./rsa-capacity.fixture.ts";
 import { describe, expect, test } from "bun:test";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { buildClearingOp, buildLeakOp } from "./playtest.ts";
@@ -20,9 +21,9 @@ import { join } from "node:path";
  * missed rush Orders when advancing on five-minute boundaries after onboarding.
  * That path understated the row; it was not a worst-case capacity check.
  *
- * This scenario measures 2,968,946 peak bytes at 99 teams (2026-09-05), about 30.0 KB
- * per team. The declaration reserves 30 KiB per team. SQL's platform policy is
- * 4 MiB; its guard is checked here with 25% headroom. DDB fits 11 teams with that
+ * This includes eleven generations of RSA all-pairs successes beside the maximum
+ * RPS reservations. The declaration reserves 31 KiB per team. SQL's policy is
+ * 4 MiB; its guard is checked here with 25% headroom. DDB fits 12 teams with that
  * same headroom. Runtime-specific overrides remain the platform's decision.
  */
 
@@ -73,11 +74,57 @@ const TURSO_BUDGET_BYTES = 4 * 1024 * 1024 * REQUIRED_HEADROOM;
  * the per-team figure, then the ceiling itself, then one team past it). Without
  * this the 99-team run alone is played twice and the file times out.
  */
-const worstCaseCache = new Map<number, ReturnType<typeof playMeasuredMatch>>();
+const worstCaseCache = new Map<
+  number,
+  ReturnType<typeof playMeasuredMatch> & {
+    ordinaryPeak: number;
+    rsaSuccesses: number;
+    rsaHistoryBytes: number;
+  }
+>();
 function measured(teamCount: number) {
   const cached = worstCaseCache.get(teamCount);
   if (cached) return cached;
-  const result = playMeasuredMatch(teamCount);
+  const ordinary = playMeasuredMatch(teamCount);
+  const rsa = playMaximumRsaHistory(teamCount);
+  // Conservative upper envelope: actual full-Order/RPS peak plus independently
+  // played maximum RSA history. Keep pending predictions and every ledger and
+  // completion; add all eleven generations, exact times, current guards and
+  // victim generation lists. Nothing is pruned to make this fit.
+  const base = ordinary.peakState;
+  const rsaGuards = rsa.state.successfulHunts.filter(key => key.startsWith("r"));
+  const envelope = {
+    ...base,
+    huntLog: [...base.huntLog.filter(entry => !("rsa" in entry)), ...rsa.state.huntLog],
+    successfulHunts: [...base.successfulHunts.filter(key => !key.startsWith("r")), ...rsaGuards],
+    teams: Object.fromEntries(Object.entries(base.teams).map(([id, team]) => [id, {
+      ...team,
+      score: team.score + rsa.state.teams[id]!.score,
+      generation: rsa.state.teams[id]!.generation,
+      lastRotateAtMs: rsa.state.teams[id]!.lastRotateAtMs,
+      cipherHuntedGenerations: {
+        ...team.cipherHuntedGenerations,
+        rsa: rsa.state.teams[id]!.cipherHuntedGenerations.rsa,
+      },
+    }])),
+  };
+  const peak = Math.max(ordinary.peak, Buffer.byteLength(JSON.stringify(envelope), "utf8"));
+  const result = {
+    ...ordinary,
+    peak,
+    ordinaryPeak: ordinary.peak,
+    rsaSuccesses: rsa.successes,
+    rsaHistoryBytes: Buffer.byteLength(JSON.stringify(rsa.state.huntLog), "utf8"),
+  };
+  if (teamCount === PLATFORM_MAX_TEAMS) console.info(JSON.stringify({
+    teams: teamCount,
+    peak,
+    ordinaryPeak: ordinary.peak,
+    rsaHistoryBytes: result.rsaHistoryBytes,
+    rsaSuccesses: rsa.successes,
+    pendingPeak: ordinary.pendingPeak,
+    budget: TURSO_BUDGET_BYTES,
+  }));
   worstCaseCache.set(teamCount, result);
   return result;
 }
@@ -91,7 +138,8 @@ function playWorstCase(teamCount: number): number { return measured(teamCount).p
  * measurements, not unit tests, and the alternative is asserting against a
  * number nobody re-derives.
  */
-const HEAVY_TEST_TIMEOUT_MS = 120_000;
+// The new trace executes 106,722 RSA successes plus the original full match.
+const HEAVY_TEST_TIMEOUT_MS = 300_000;
 
 /**
  * A whole match with every team finishing every mechanism and duel, choosing
@@ -110,6 +158,7 @@ function playMeasuredMatch(teamCount: number) {
   const idle = tick(initialState({ eventId: "state-size", teamIds, matchSecret: "s".repeat(64) }), startMs);
   let state = applyOp(idle, teamIds[0]!, { kind: "start" });
   let peak=0, pendingPeak=0;
+  let peakState = state;
   for (let atMs = 0; atMs <= DEFAULT_CONFIG.matchDurationMs; atMs = atMs === 0 ? DEFAULT_CONFIG.onboardingFollowUpMs : atMs + DEFAULT_CONFIG.contractIntervalMs) {
     state = tick(state, startMs + atMs);
     for (const teamId of teamIds) {
@@ -154,7 +203,20 @@ function playMeasuredMatch(teamCount: number) {
           }
         }
       }
-      peak=Math.max(peak,Buffer.byteLength(JSON.stringify(state)));
+      // Include current RSA successes after ROTATE beside unopened RPS predictions.
+    // RSA is attackable from the public key without LEAK. Include every legal
+    // pairwise success at each generation, rather than measuring only its pairs.
+    if (state.phase === "endgame") for (const targetId of teamIds) {
+      const key = projectForTeam(state, targetId).publicRsaKeys!.find(k => k.teamId === targetId)!;
+      const factor = [3, 5, 7, 11, 13].find(p => key.n % p === 0)!;
+      for (const attackerId of teamIds) {
+        if (attackerId === targetId) continue;
+        const op = { kind: "hunt-rsa" as const, targetTeamId: targetId, generation: state.teams[targetId]!.generation, p: String(factor), q: String(key.n / factor) };
+        if (validateOp(state, attackerId, op).ok) state = applyOp(state, attackerId, op);
+      }
+    }
+      const bytes = Buffer.byteLength(JSON.stringify(state));
+      if (bytes > peak) { peak = bytes; peakState = state; }
       pendingPeak=Math.max(pendingPeak,state.contracts.reduce((n,c)=>n+Object.keys(c.rps?.predictions??{}).length,0));
       for (const teamId of teamIds) {
       for (const c of state.contracts.filter(c => c.teamId === teamId && c.status === "open" && c.task.kind === "rps-duel")) {
@@ -165,8 +227,9 @@ function playMeasuredMatch(teamCount: number) {
     }
     }
   }
-  peak = Math.max(peak, Buffer.byteLength(JSON.stringify(state), "utf8"));
-  return { state, peak, pendingPeak };
+  const finalBytes = Buffer.byteLength(JSON.stringify(state), "utf8");
+  if (finalBytes > peak) { peak = finalBytes; peakState = state; }
+  return { state, peak, pendingPeak, peakState };
 }
 
 function playFullMatch(teamCount: number) { return measured(teamCount).state; }
@@ -180,6 +243,7 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     // platform that sells ninety-nine.
     expect(playWorstCase(PLATFORM_MAX_TEAMS)).toBeLessThan(TURSO_BUDGET_BYTES);
     expect(measured(PLATFORM_MAX_TEAMS).pendingPeak).toBe((PLATFORM_MAX_TEAMS - 1) ** 2);
+    expect(measured(PLATFORM_MAX_TEAMS).rsaSuccesses).toBe(PLATFORM_MAX_TEAMS * (PLATFORM_MAX_TEAMS - 1) * 11);
   }, HEAVY_TEST_TIMEOUT_MS);
 
   test("the supported range stays near the per-team budget despite pairwise predictions", () => {
@@ -224,15 +288,16 @@ describe("a full match's persisted state fits the backend that has to hold it", 
     while (ddbMaxTeams > 1 && playWorstCase(ddbMaxTeams) >= budget) ddbMaxTeams -= 1;
     while (ddbMaxTeams < PLATFORM_MAX_TEAMS && playWorstCase(ddbMaxTeams + 1) < budget) ddbMaxTeams += 1;
 
-    // Pin both sides of the measured boundary. Lossless schema-4 storage
-    // recovers capacity while the fixture now includes pairwise HUNT moves.
-    expect(ddbMaxTeams).toBe(11);
+    // The shared exact-ID codec recovers space for permanent RSA history.
+    // Pin both sides instead of declaring the extrapolated team count safe.
+    expect(ddbMaxTeams).toBe(12);
     expect(ddbMaxTeams).toBeLessThan(PLATFORM_MAX_TEAMS);
     // A match at that size really does fit, with the headroom claimed --
     // and one team more does not, so this is the edge and not an understatement
     // that would let the row grow unnoticed.
     expect(playWorstCase(ddbMaxTeams)).toBeLessThan(budget);
     expect(playWorstCase(ddbMaxTeams + 1)).toBeGreaterThanOrEqual(budget);
+    console.info(JSON.stringify({ backend: "DynamoDB", teams: ddbMaxTeams, peak: playWorstCase(ddbMaxTeams), nextTeams: ddbMaxTeams + 1, nextPeak: playWorstCase(ddbMaxTeams + 1), budget }));
   }, HEAVY_TEST_TIMEOUT_MS);
 
   test("the Order belt does not grow without bound over a match", () => {
@@ -304,6 +369,7 @@ describe("the state budget this Battle declares to the platform", () => {
     if (!declared) return;
     const forecast = declared.baseBytes + declared.bytesPerTeam * PLATFORM_MAX_TEAMS;
     expect(forecast).toBeGreaterThanOrEqual(playWorstCase(PLATFORM_MAX_TEAMS));
-    for (const n of [2,4,8,9,10,11]) expect(declared.baseBytes + declared.bytesPerTeam * n).toBeGreaterThanOrEqual(playWorstCase(n));
+    expect(forecast).toBeLessThanOrEqual(TURSO_BUDGET_BYTES);
+    for (const n of [2,4,8,9,10,11,12,13]) expect(declared.baseBytes + declared.bytesPerTeam * n).toBeGreaterThanOrEqual(playWorstCase(n));
   }, HEAVY_TEST_TIMEOUT_MS);
 });

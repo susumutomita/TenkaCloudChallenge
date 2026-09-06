@@ -1,3 +1,4 @@
+import { RSA_EXPLANATIONS } from "./RsaMaterials.tsx";
 import { cipherKeyAt } from "../game/src/ladder.ts";
 /** Free reading aids. They never submit a move or compute a live answer. */
 import { useState } from "react";
@@ -5,7 +6,7 @@ import ConceptDiagram from "./ConceptDiagram.tsx";
 import type { OrderTaskProjection } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-export type Concept = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "commit";
+export type Concept = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "rsa" | "commit";
 interface Step { readonly diagram?: "zk" | "relabel" | "sharing" | "mpc"; readonly title: string; readonly lines: readonly string[]; readonly table?: { readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] } }
 interface Explanation { readonly name: string; readonly steps: readonly Step[] }
 
@@ -14,6 +15,7 @@ export const SHARE_PAIR_TABLE = [["0", "5", "4"], ["1", "0", "1"], ["2", "2", "5
 /** Fixed teaching examples, independent of every match's private data. */
 export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
   ja: {
+    rsa: RSA_EXPLANATIONS.ja,
     commit: { name: "手を先に封じる", steps: [
       { title: "相手の手を見る前に、数字を出す", lines: ["先に手を言うと相手に勝つ手を選ばれるため、手と『隠す数』を混ぜた数字を先に出します。この数字をコミットメントと呼びます。", "手の番号 m はグー 1・チョキ 2・パー 3。隠す数 r は 0〜10 のくじから毎回引き直します。0〜10 の紙を 1 枚ずつ用意し、毎回戻して引けば均等に選べます。"] },
       { title: "掛け算で手を封じる", lines: ["4^m は 4 を m 回掛ける意味。9^r は 9 を r 回掛け、0 回の場合は 1 とします。両方を掛けて、23 で割った余りを c とします。", "m=1、r=1 なら、4×9=36。36−23=13。まず 13 だけを出します。手と r は紙に控えます。", "画面の表は 4^m と 9^r をそれぞれ 23 で割った余りです。例えば 4^3=64→18。途中で 23 の倍数を引いても、積から 23 の倍数が減るだけで、最後の余りは変わりません。"] },
@@ -47,6 +49,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
     ] },
   },
   en: {
+    rsa: RSA_EXPLANATIONS.en,
     commit: { name: "Commit-reveal", steps: [
       { title: "Seal before seeing the opponent's hand", lines: ["Combine hand m (rock 1, scissors 2, paper 3) with a hiding number r drawn uniformly from 0–10. The combined number is a commitment. Draw from eleven slips marked 0–10, returning the slip before each draw."] },
       { title: "Multiply, then take a remainder", lines: ["4^m means m factors of 4; 9^r means r factors of 9, with the zeroth power defined as 1. c is their product's remainder after division by 23.", "For m=1, r=1: 4×9=36; 36−23=13. Send only 13 and keep m and r in your notes.", "The on-screen tables are remainders of 4^m and 9^r after division by 23; for example 4^3=64→18. Removing a multiple of 23 before multiplying only removes a multiple of 23 from the product, preserving its final remainder."] },
@@ -94,6 +97,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
 
 export function conceptForTask(task: OrderTaskProjection): Concept {
   switch (task.kind) {
+    case "rsa-encrypt": return "rsa";
     case "rps-duel": return "commit";
     case "homomorphic-sum": return "fhe";
     case "masked-total": return "mpc";
@@ -124,7 +128,7 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
   }
 }
 
-export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
+export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
 
 const button = { cursor: "pointer", border: "1px solid #a4b5c6", borderRadius: 5, padding: "5px 9px", color: "#24476d", background: "#fff", fontSize: 12 } as const;
 export default function ConceptExplanation({ locale, topic, task, prime, embedded = false }: {
@@ -133,7 +137,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
   const [selected, setSelected] = useState<Concept | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const copy = EXPLANATIONS[locale];
-  const topics = topic ? [topic] : (["remainder", "sharing", "zk", "commit", "mpc", "fhe", "caesar", "vigenere"] as Concept[]);
+  const topics = topic ? [topic] : (["remainder", "sharing", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rsa"] as Concept[]);
   const lesson = selected ? copy[selected] : null;
   const step = lesson?.steps[stepIndex];
   const ja = locale === "ja";

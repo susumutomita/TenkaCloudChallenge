@@ -52,7 +52,7 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
 4. `validateOp` rejects malformed, stale or unauthorized moves. A well-formed
-   PROVE or Vigenère CIPHER miss is accepted and charged by `applyOp`.
+   PROVE or Vigenère/RSA CIPHER miss is accepted and charged by `applyOp`.
 5. `applyOp` changes state only after validation.
 6. `projectForTeam` returns the team's vault and Orders plus the public ledger.
 7. Reset/delete removes both state and the separate match-secret record.
@@ -63,7 +63,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (9, including private lightning allocation and targets) and a
+The plugin declares `stateSchemaVersion` (10, including RSA Orders and public-pair records) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -236,14 +236,14 @@ schemas 1–4 and keeps older results without a score delta; their outcome remai
 visible, but the Portal reports the delta as unrecorded instead of guessing it
 from today's rules. A schema-4 plugin must not read schema-5 rows after rollback.
 
-`metadata.json` reserves **30 KiB per team + 1,536 bytes**. The platform owns the
+`metadata.json` reserves **31 KiB per team + 1,536 bytes**. The platform owns the
 limits below; this problem does not raise them. The local capacity tests retain
 25% headroom and check both the peak and the final state.
 
 | Backend | Platform policy | Default-match capacity |
 | --- | --- | --- |
 | Turso / libSQL | 4 MiB, environment-overridable | 99 teams with at least 25% headroom in the tested route |
-| DynamoDB | 400 KiB item; platform reserves 16 KiB | 11 teams with 25% headroom in the tested route; declaration preflight limit 12 |
+| DynamoDB | 400 KiB item; platform reserves 16 KiB | 12 teams with 25% headroom in the tested route; declaration preflight limit 12 |
 
 ## Rock-paper-scissors lifecycle
 
@@ -388,7 +388,7 @@ exposes relations when a mask repeats. That is related algebra, not a claim
 that Vigenère implements Beaver triples or achieves one-time-pad security.
 No dedicated Vigenère treatment was found in the checked local seminar notes.
 
-Remaining #659 work: RSA, rotor/Enigma teaching model and a new homomorphic rung. This increment must not close #659 or the balance discussion #740.
+Remaining #659 work: rotor/Enigma teaching model and a new homomorphic rung. This increment must not close #659 or the balance discussion #740.
 
 
 ### Schema 8: Vigenère answer adjudication
@@ -444,3 +444,48 @@ flags and booster decisions. Missing allocation is pending before the boundary
 and unavailable after it; it is never reconstructed from a later score. Schema-9
 rows require a compatible plugin on rollback. Verify game/dev tests and types,
 `make agent-gate`, and the `lightning` harness scenario; AWS rehearsal is optional.
+
+
+### Schema 10: small RSA encryption and public-key factor HUNT
+
+Only normal cipher slots scheduled at/after endgame use RSA. Parameters are
+(3,11,3), (5,11,3), (5,13,5), (7,11,7), representing (p,q,e). Derivation stays
+server-side and separated from the Shamir seed domain; n/e project to everyone
+from endgame, while m projects only on its owner's Order until LEAK. The tiny
+set intentionally allows repeats after ROTATE; do not claim key renewal makes
+factoring infeasible. `rsa-pair` stores public n/e/m/c only. Its compact `p` field
+means plaintext, not a prime factor. CIPHER uses the existing BigInt modular
+power helper and failure/zero-retry/lightning scoring paths.
+
+Migration from v9 preserves existing Orders, compact Shamir/sudoku/RPS attempt
+reservations, ledger records, Vigenère failure bits and declared lightning cards.
+Only future normal endgame cipher slots become RSA. Completed Order IDs reuse
+the ledger's exact `teamId-cN` ↔ numeric N codec, while unfamiliar IDs stay
+verbatim and the participant projection returns full strings. Rollback must use
+a plugin that understands all schema-10 encodings, including the RSA hunt log;
+older decoders must not read these rows. No resource, IAM, timer or point value
+is introduced. The measured capacity declaration is updated above.
+
+RSA success reservations encode `r<pairIndex>:<generation>`, where `pairIndex`
+is attacker roster position × fixed roster length + target roster position, written
+in base 36. This preserves ID separation
+without storing long IDs for every attacker/target pair. ROTATE discards only
+retired RSA reservations, since old-generation submissions are rejected anyway.
+Other HUNT history, public records and per-team attacked-generation lists remain.
+
+Every new successful RSA HUNT also appends its exact millisecond timestamp to
+`huntLog`. One compact row per target/generation stores a sorted-roster slot per
+attacker, with zero for absence and an exact offset from the row's base time.
+ROTATE never removes these rows: replay can still name every attacker, target,
+generation and time. Legacy Shamir/sudoku object entries remain readable.
+Earlier schema-10 candidate rows containing only reservations have no recorded
+RSA timestamps; migration preserves those guards but cannot invent past replay
+events. The 99-team test retains all 106,722 new RSA successes across eleven
+generations, including differently timed attacks that require wider encoding.
+
+The RSA HUNT checks distinct prime factors of the current n in either order.
+It never compares an internal canonical d. See `game/src/rsa.test.ts` for the
+complete small parameter/residue sweep, malformed input, private projection,
+actual host scoring, migration, repeated submission and ROTATE regressions;
+`game/src/state-size.test.ts` includes public RSA LEAK and pairwise HUNT traffic.
+The independent packet and browser evidence are in `dev/RSA-READING.md`.

@@ -1,3 +1,4 @@
+import { rsaHuntKey, pruneRetiredRsaHunts } from "./hunt-key.ts";
 /**
  * Pure game model for the PROVE / LEAK / HUNT / ROTATE Battle (Issue #486, PR1-PR3).
  *
@@ -53,6 +54,8 @@
 
 import {
   type ContractPlan,
+  deriveRsaKey,
+  deriveRsaPlaintext,
   deriveCipherKey,
   deriveContractPlan,
   derivePermutationTag,
@@ -63,7 +66,9 @@ import {
   deriveTeamGeneration,
   type FieldConfig,
 } from "./fixtures.ts";
+import { parseRsaAnswer, rsaEncrypt, rsaFactorsFit } from "./rsa.ts";
 import { applyRpsHunt, projectRpsHunt, validateRpsHunt } from "./rps-hunt.ts";
+import { appendRsaHunt } from "./hunt-log.ts";
 import { huntKey, storedHuntKey, compactHuntAttempts, validateStoredHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
 import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
@@ -97,7 +102,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { HAND_PRIME, mod } from "./field.ts";
-import { decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
+import { compactCompletedContractIds, compactContractId, contractId, decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
 import {
   ALL_PERMUTATIONS,
   CONSTRAINT_GROUPS,
@@ -326,8 +331,14 @@ function buildOrderTask(
   seed: string,
   contractId: string,
   prime: bigint,
+  teamId: string,
+  generation: number,
 ): OrderTask {
   switch (plan.taskKind) {
+    case "rsa-encrypt": {
+      const { n, e } = deriveRsaKey(seed, teamId, generation);
+      return { kind: "rsa-encrypt", n, e, plaintext: deriveRsaPlaintext(seed, contractId) };
+    }
     case "reveal-share":
       return { kind: "reveal-share", shareIndices: plan.requestedShareIndices };
     case "homomorphic-sum":
@@ -533,6 +544,7 @@ function migrateTeams(
   for (const [teamId, team] of Object.entries(teams)) {
     next[teamId] = {
       ...team,
+      completedContractIds: compactCompletedContractIds(teamId, team.completedContractIds),
       cipherHuntedGenerations: team.cipherHuntedGenerations ?? {},
       // [Issue #709] Same class: a row written before the sudoku HUNT existed
       // has had no solution recovered, because there was none to recover.
@@ -563,6 +575,7 @@ function highestSequenceFor(contracts: readonly Contract[], teamId: string): num
 function needsTeamMigration(teams: Readonly<Record<string, TeamState>>): boolean {
   return Object.values(teams).some(
     (team) =>
+      compactCompletedContractIds(team.teamId, team.completedContractIds) !== team.completedContractIds ||
       !team.cipherHuntedGenerations ||
       team.issuedOrderCount === undefined ||
       team.sudokuHuntedGenerations === undefined,
@@ -601,13 +614,14 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *   7  Vigenère rung and public key-position offsets (old Caesar rows keep scalar keys)
  *   8  Vigenère wrong-answer reward forfeiture and own lastCipher adjudication
  *   9  private lightning distribution, targeted card, and accepted-answer history
+ *  10  RSA Orders/pairs, exact-time factor HUNT logs and compact completed IDs
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 9;
+export const STATE_SCHEMA_VERSION = 10;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -635,11 +649,15 @@ export const STATE_SCHEMA_VERSION = 9;
  * v8 -> v9 adds pending/unavailable lightning distribution, preserving all
  * Vigenère and compact reservations. Legacy Orders have unknown accepted-answer history
  * and cannot be targeted; the next issued Orders record answerAttempted=false.
+ * v9 -> v10 preserves existing Orders, cipherFailed and lightning cards exactly.
+ * RSA is issued only for future scheduled standard endgame cipher slots. Completed
+ * exact Order IDs reuse the ledger codec. Legacy hunt-log objects remain unchanged;
+ * no timestamps are invented for pre-patch RSA reservations without a log.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7 and v8 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8 and v9 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -848,7 +866,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
         continue;
       }
-      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig, { elapsedMs: nextContractAtMs - startedAtMs, buildToPressureMs: state.config.phaseBoundaries.buildToPressureMs });
+      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig, { elapsedMs: nextContractAtMs - startedAtMs, buildToPressureMs: state.config.phaseBoundaries.buildToPressureMs, pressureToEndgameMs: state.config.phaseBoundaries.pressureToEndgameMs });
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
       //
@@ -881,7 +899,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         // rush pays more for the SPEED of computing it, and letting the system
         // answer is not faster work, it is no work.
         leakPoints: state.config.scores.contractLeak,
-        task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
+        task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime, teamId, state.teams[teamId]!.generation),
         issuedAtMs: nextContractAtMs,
         expiresAtMs,
         status: "open",
@@ -1582,7 +1600,7 @@ export function validateOp(
       const gate = validateOrderSubmission(state, teamId, op.contractId, "cipher");
       if (!gate.ok) return gate;
       const contract = state.contracts.find((c) => c.id === op.contractId);
-      if (contract?.task.kind !== "caesar-shift") {
+      if (contract?.task.kind !== "caesar-shift" && contract?.task.kind !== "rsa-encrypt") {
         // Unreachable through the gate above, which already checked the method
         // can perform the task. Fail loudly rather than reading `rung` off a
         // task that has none.
@@ -1591,18 +1609,18 @@ export function validateOp(
       // Untrusted wire input -- an arbitrary array of arbitrary strings after a
       // JSON round-trip. Parsed through the rung's own gate, which rejects
       // anything outside the alphabet rather than letting it reach arithmetic.
-      const answer = parseAnswer(op.answer, contract.task.rung);
+      const answer = contract.task.kind === "rsa-encrypt" ? parseRsaAnswer(op.answer, contract.task.n) : parseAnswer(op.answer, contract.task.rung);
       if (answer === undefined) {
-        return { ok: false, error: "answer must use this Order's symbols, or their values" };
+        return { ok: false, error: contract.task.kind === "rsa-encrypt" ? "enter one decimal integer from 0 up to n-1" : "answer must use this Order's symbols, or their values" };
       }
-      const expected = expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
+      const expected = contract.task.kind === "rsa-encrypt" ? [rsaEncrypt(contract.task.plaintext, contract.task)] : expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
       if (answer.length !== expected.length) {
         return {
           ok: false,
           error: `answer has ${answer.length} symbols, the Order asks for ${expected.length}`,
         };
       }
-      if (contract.task.rung !== "vigenere" && answer.some((value, position) => value !== expected[position])) {
+      if (contract.task.kind === "caesar-shift" && contract.task.rung !== "vigenere" && answer.some((value, position) => value !== expected[position])) {
         // Deliberately does not say WHICH position is wrong. The Order is a
         // hand calculation with a deadline; turning the judge into a checker
         // that walks a team to the answer would replace the calculation with a
@@ -1610,6 +1628,15 @@ export function validateOp(
         return { ok: false, error: "ciphertext does not match this Order" };
       }
       return { ok: true };
+    }
+    case "hunt-rsa": {
+      if (state.phase !== "endgame") return { ok: false, error: "RSA public keys are available during endgame" };
+      if (typeof op.targetTeamId !== "string" || op.targetTeamId === teamId || !Object.hasOwn(state.teams, op.targetTeamId)) return { ok: false, error: "choose another team" };
+      const target = state.teams[op.targetTeamId];
+      if (!target || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation !== target.generation) return { ok: false, error: "select the current target generation" };
+      if (state.successfulHunts.includes(rsaHuntKey(state, teamId, target.teamId, target.generation))) return { ok: false, error: "RSA already hunted on this generation" };
+      const { n } = deriveRsaKey(state.seed, target.teamId, target.generation);
+      return rsaFactorsFit(n, op.p, op.q) ? { ok: true } : { ok: false, error: "enter two distinct prime factors whose product is the public n" };
     }
     case "hunt-cipher": {
       if (!isCipherRung(op.rung)) return { ok: false, error: "unknown cipher rung" };
@@ -1724,7 +1751,7 @@ function applyLeak(
   // publishes the (plaintext, ciphertext) pair, which is the material that
   // recovers a key. Branching here rather than at the call site keeps one
   // scoring path: both pay `leakPoints`, both close the Order the same way.
-  if (contract.task.kind === "caesar-shift") {
+  if (contract.task.kind === "caesar-shift" || contract.task.kind === "rsa-encrypt") {
     return applyLadderLeak(state, teamId, contract, contract.task, nowMs);
   }
   if (contract.task.kind !== "reveal-share") {
@@ -1759,7 +1786,7 @@ function applyLeak(
     // [Issue #659] The leak rate, not the full rate. Paying the same for both
     // made LEAK strictly dominant — no computation, identical payout.
     score: team.score + contract.leakPoints,
-    completedContractIds: [...team.completedContractIds, contract.id],
+    completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
   };
 
   return {
@@ -1784,13 +1811,16 @@ function applyLadderLeak(
   state: CryptoBattleState,
   teamId: string,
   contract: Contract,
-  task: Extract<OrderTask, { kind: "caesar-shift" }>,
+  task: Extract<OrderTask, { kind: "caesar-shift" | "rsa-encrypt" }>,
   nowMs: number,
 ): CryptoBattleState {
   const team = state.teams[teamId];
   if (!team) throw new Error("applyOp(leak): unknown team -- call validateOp() first");
-  const answer = expectedCipherAnswer(state, teamId, task.rung, contract.id);
-  const artifact: CipherPairArtifact = {
+  const answer = task.kind === "rsa-encrypt" ? [rsaEncrypt(task.plaintext, task)] : expectedCipherAnswer(state, teamId, task.rung, contract.id);
+  const artifact: PublicArtifact = task.kind === "rsa-encrypt" ? {
+    id: `${contract.id}-pair`, teamId, generation: team.generation, kind: "rsa-pair", method: "leak", contractId: contract.id,
+    n: task.n, e: task.e, plaintext: task.plaintext, ciphertext: answer[0]!, postedAtMs: nowMs,
+  } : {
     id: `${contract.id}-pair`,
     teamId,
     generation: team.generation,
@@ -1814,7 +1844,7 @@ function applyLadderLeak(
       [teamId]: {
         ...team,
         score: team.score + contract.leakPoints,
-        completedContractIds: [...team.completedContractIds, contract.id],
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -1836,14 +1866,14 @@ function applyCipher(
 ): CryptoBattleState {
   const contract = state.contracts.find((c) => c.id === op.contractId);
   const team = state.teams[teamId];
-  if (!contract || !team || contract.task.kind !== "caesar-shift") {
+  if (!contract || !team || (contract.task.kind !== "caesar-shift" && contract.task.kind !== "rsa-encrypt")) {
     throw new Error("applyOp(cipher): invalid op reached apply -- call validateOp() first");
   }
-  const answer = parseAnswer(op.answer, contract.task.rung);
-  const expected = expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
+  const answer = contract.task.kind === "rsa-encrypt" ? parseRsaAnswer(op.answer, contract.task.n) : parseAnswer(op.answer, contract.task.rung);
+  const expected = contract.task.kind === "rsa-encrypt" ? [rsaEncrypt(contract.task.plaintext, contract.task)] : expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
   if (!answer || answer.length !== expected.length) throw new Error("applyOp(cipher): malformed answer reached apply");
   if (answer.some((value, position) => value !== expected[position])) {
-    if (contract.task.rung !== "vigenere") throw new Error("applyOp(cipher): wrong Caesar answer reached apply");
+    if (contract.task.kind === "caesar-shift" && contract.task.rung !== "vigenere") throw new Error("applyOp(cipher): wrong Caesar answer reached apply");
     const score = Math.max(0, team.score - state.config.scores.wrongProve);
     return { ...state,
       contracts: state.contracts.map(c => c.id === contract.id ? { ...c, cipherFailed: true } : c),
@@ -1866,7 +1896,7 @@ function applyCipher(
         ...team,
         score: team.score + points,
         lastCipher: { contractId: contract.id, outcome: "hit", points },
-        completedContractIds: [...team.completedContractIds, contract.id],
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -1888,31 +1918,35 @@ function applyCipher(
 function applyHuntCipher(
   state: CryptoBattleState,
   teamId: string,
-  op: Extract<CryptoBattleOp, { kind: "hunt-cipher" }>,
+  op: Extract<CryptoBattleOp, { kind: "hunt-cipher" | "hunt-rsa" }>,
 ): CryptoBattleState {
   const attacker = state.teams[teamId];
   const target = state.teams[op.targetTeamId];
   if (!attacker || !target) {
     throw new Error("applyOp(hunt-cipher): invalid op reached apply -- call validateOp() first");
   }
-  const broken = target.cipherHuntedGenerations[op.rung] ?? [];
+  const rung = op.kind === "hunt-rsa" ? "rsa" : op.rung;
+  const bonus = rung === "rsa" ? state.config.scores.huntBonus : rungSpec(rung).huntBonus;
+  const broken = target.cipherHuntedGenerations[rung] ?? [];
+  const huntLog = rung === "rsa" ? appendRsaHunt(state, teamId, op.targetTeamId, op.generation) : state.huntLog;
   return {
     ...state,
+    huntLog,
     teams: {
       ...state.teams,
-      [teamId]: { ...attacker, score: attacker.score + rungSpec(op.rung).huntBonus },
+      [teamId]: { ...attacker, score: attacker.score + bonus },
       [op.targetTeamId]: {
         ...target,
         score: Math.max(0, target.score - state.config.scores.huntPenalty),
         cipherHuntedGenerations: {
           ...target.cipherHuntedGenerations,
-          [op.rung]: broken.includes(op.generation) ? broken : [...broken, op.generation],
+          [rung]: broken.includes(op.generation) ? broken : [...broken, op.generation],
         },
       },
     },
     successfulHunts: [
       ...state.successfulHunts,
-      cipherHuntKey(teamId, op.targetTeamId, op.generation, op.rung),
+      rung === "rsa" ? rsaHuntKey(state, teamId, op.targetTeamId, op.generation) : cipherHuntKey(teamId, op.targetTeamId, op.generation, rung),
     ],
   };
 }
@@ -2090,7 +2124,7 @@ function completeOrder(
       [teamId]: {
         ...team,
         score: team.score + contract.points + lightningBonus(state, contract),
-        completedContractIds: [...team.completedContractIds, contract.id],
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -2112,6 +2146,7 @@ function projectTask(
   contractId: string,
 ): OrderTaskProjection {
   switch (task.kind) {
+    case "rsa-encrypt": return { kind: "rsa-encrypt", n: task.n, e: task.e, plaintext: task.plaintext };
     case "rps-duel": {
       const order = state.contracts.find(c => c.id === contractId);
       if (!order || order.teamId !== teamId) throw new Error("projectTask: missing owned duel");
@@ -2354,7 +2389,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     voided,
     state.config.scores.expiredOrder,
   );
-  return pruneRetiredHuntAttempts({ ...state, contracts, teams, publicPuzzles });
+  return pruneRetiredHuntAttempts(pruneRetiredRsaHunts({ ...state, contracts, teams, publicPuzzles }));
 }
 
 /**
@@ -2580,6 +2615,7 @@ function applyMethodOp(
       return applyProveSudoku(state, teamId, op);
     case "cipher":
       return applyCipher(state, teamId, op);
+    case "hunt-rsa":
     case "hunt-cipher":
       return applyHuntCipher(state, teamId, op);
     case "reveal-hint":
@@ -2626,7 +2662,7 @@ export function projectForTeam(
     generation: team.generation,
     lastRotateAtMs: team.lastRotateAtMs,
     rotateCooldownRemainingMs,
-    completedContractIds: team.completedContractIds,
+    completedContractIds: team.completedContractIds.map(c => contractId({ tm: teamId, c })),
     huntedGenerations: team.huntedGenerations,
     sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
     usedPermutations: usedPermutationsFor(state, teamId, team.generation),
@@ -2745,10 +2781,15 @@ export function projectForTeam(
     huntWinPoints: state.config.scores.huntBonus,
     hintBooster: projectBooster(state, teamId),
     lightning: projectLightning(state, teamId),
+    publicRsaKeys: state.phase === "endgame" || state.phase === "ended" ? Object.values(state.teams).map(team => {
+      const { n, e } = deriveRsaKey(state.seed, team.teamId, team.generation);
+      return { teamId: team.teamId, generation: team.generation, n, e };
+    }) : [],
     completedHunts: Object.values(state.teams).filter(other => other.teamId !== teamId).flatMap(other =>
-      (["share", "sudoku", ...ALL_CIPHER_RUNGS] as const).flatMap(via => {
+      (["share", "sudoku", ...ALL_CIPHER_RUNGS, "rsa"] as const).flatMap(via => {
         const key = via === "share" ? huntKey(teamId, other.teamId, other.generation)
           : via === "sudoku" ? sudokuHuntKey(teamId, other.teamId, other.generation)
+          : via === "rsa" ? rsaHuntKey(state, teamId, other.teamId, other.generation)
           : cipherHuntKey(teamId, other.teamId, other.generation, via);
         return state.successfulHunts.includes(key) ? [{ targetTeamId: other.teamId, generation: other.generation, via }] : [];
       })),

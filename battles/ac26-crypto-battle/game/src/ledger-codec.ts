@@ -127,6 +127,11 @@ export interface StoredCipherPairArtifact extends StoredArtifactBase {
   readonly x: readonly number[];
 }
 
+interface StoredRsaPairArtifact extends StoredArtifactBase {
+  readonly k: "rsa-pair"; readonly n: number; readonly e: number;
+  readonly p: number; readonly x: number;
+}
+
 export interface StoredProofArtifact extends StoredArtifactBase {
   readonly k: "proof";
   readonly o: string;
@@ -165,6 +170,7 @@ interface StoredRpsCommit extends StoredArtifactBase { readonly k: "rps-commit";
 interface StoredRpsOpen extends StoredArtifactBase { readonly k: "rps-open"; readonly du: string; readonly v: number; readonly h: 1 | 2 | 3; readonly r: number }
 
 export type StoredArtifact =
+  | StoredRsaPairArtifact
   | StoredRpsCommit
   | StoredRpsOpen
   | StoredShareArtifact
@@ -175,14 +181,28 @@ export type StoredArtifact =
   | StoredSudokuRevealArtifact;
 
 /** Schema 4 preserves unfamiliar IDs verbatim and shortens exact Order IDs. */
-function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
+export function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
   return typeof stored.c === "number" ? `${stored.tm}-c${stored.c}` : stored.c;
 }
 
-function compactContractId(teamId: string, id: string): string | number {
+export function compactContractId(teamId: string, id: string | number): string | number {
+  if (typeof id === "number") return id;
   const prefix = `${teamId}-c`;
   const n = id.startsWith(prefix) ? Number(id.slice(prefix.length)) : NaN;
   return Number.isSafeInteger(n) && n >= 0 && `${prefix}${n}` === id ? n : id;
+}
+
+/** Immutable completion arrays share the ledger codec; cache avoids rescanning a
+ * completed match's whole history on every subsequent HUNT. Unknown IDs stay exact. */
+const completedIdCache = new WeakMap<readonly (string | number)[], { teamId: string; ids: readonly (string | number)[] }>();
+export function compactCompletedContractIds(teamId: string, ids: readonly (string | number)[]): readonly (string | number)[] {
+  const cached = completedIdCache.get(ids);
+  if (cached?.teamId === teamId) return cached.ids;
+  const compact = ids.map(id => compactContractId(teamId, id));
+  const result = compact.every((id, at) => id === ids[at]) ? ids : compact;
+  completedIdCache.set(ids, { teamId, ids: result });
+  completedIdCache.set(result, { teamId, ids: result });
+  return result;
 }
 
 /**
@@ -217,6 +237,7 @@ function deriveArtifactId(stored: StoredArtifact): string {
     case "rps-open": return `${contractId(stored)}-rps-open`;
     case "share":
       return `${contractId(stored)}-share${stored.i}`;
+    case "rsa-pair":
     case "cipher-pair":
       return `${contractId(stored)}-pair`;
     case "proof":
@@ -252,6 +273,9 @@ export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
   };
   let withoutId: StoredArtifact;
   switch (artifact.kind) {
+    case "rsa-pair":
+      withoutId = { ...base, k: "rsa-pair", n: artifact.n, e: artifact.e, p: artifact.plaintext, x: artifact.ciphertext };
+      break;
     case "rps-commit":
       withoutId = { ...base, k: artifact.kind, du: artifact.duelId, v: artifact.commitment };
       break;
@@ -315,6 +339,8 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
   const { tm: teamId, g: generation, m: method, t: postedAtMs } = stored;
   const decodedContractId = contractId(stored);
   switch (stored.k) {
+    case "rsa-pair": return { id, kind: "rsa-pair", teamId, contractId: decodedContractId, generation, method, postedAtMs,
+      n: stored.n, e: stored.e, plaintext: stored.p, ciphertext: stored.x };
     case "rps-commit": return { id, teamId, contractId: decodedContractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v };
     case "rps-open": return { id, teamId, contractId: decodedContractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v, hand: stored.h, randomness: stored.r };
     case "share":

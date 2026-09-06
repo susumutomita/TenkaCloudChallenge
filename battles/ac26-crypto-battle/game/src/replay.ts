@@ -40,6 +40,9 @@
  *     comment in types.ts for why it exists at all). A replay can show
  *     "Team B's HUNT succeeded here", never "Team B tried and missed at
  *     12:03".
+ *   - **RSA successes from an earlier schema-10 candidate without hunt logs.**
+ *     Reservations have no timestamp. Preserve them during migration, but never
+ *     assign a fictional time in the replay. New RSA logs survive every ROTATE.
  *   - **Failed / rejected LEAK or PROVE attempts.** Same reason -- only a
  *     COMPLETED contract shows up (as a `ShareArtifact` / `ProofArtifact`
  *     on the ledger); a rejected attempt (wrong team, already completed,
@@ -63,6 +66,7 @@
  *     `state.contracts` directly.
  */
 
+import { decodeHuntLog } from "./hunt-log.ts";
 import { rungSpec } from "./ladder.ts";
 import { decodeLedger } from "./ledger-codec.ts";
 import type { CryptoBattleState, Phase } from "./types.ts";
@@ -116,12 +120,12 @@ export type ReplayEvent =
         readonly generation: number;
         readonly rung: string;
         readonly pairsToBreak: number;
-      };
+      } | { readonly contractId: string; readonly generation: number; readonly n: number; readonly e: number };
     })
   | (ReplayEventBase & {
       readonly kind: "hunt-success";
       readonly teamId: string;
-      readonly detail: { readonly targetTeamId: string; readonly generation: number };
+      readonly detail: { readonly targetTeamId: string; readonly generation: number; readonly via?: "sudoku" | "rsa" };
     })
   | (ReplayEventBase & {
       readonly kind: "rotate";
@@ -229,6 +233,11 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
           detail: { contractId: artifact.contractId, generation: artifact.generation },
         });
         break;
+      case "rsa-pair":
+        events.push({ atMs: artifact.postedAtMs, teamId: artifact.teamId, kind: "cipher-leak",
+          summary: { ja: `${artifact.teamId} が RSA の元の数と暗号の答えを公開。公開鍵だけでも小さい n を因数分解して攻撃できます。`, en: `Team ${artifact.teamId} published the RSA original and encrypted answer. This tiny n can already be factored from the public key alone.` },
+          detail: { contractId: artifact.contractId, generation: artifact.generation, n: artifact.n, e: artifact.e } });
+        break;
       case "cipher-pair":
         events.push({
           atMs: artifact.postedAtMs,
@@ -253,11 +262,11 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
     }
   }
 
-  for (const hunt of state.huntLog) {
+  for (const hunt of decodeHuntLog(state)) {
     // [Issue #709] A sudoku HUNT recovered the target's solution through a
     // reused relabelling, not its Shamir secret; the debrief says which.
-    const via = hunt.via === "sudoku" ? " -- sudoku solution recovered from a reused relabelling" : "";
-    const viaJa = hunt.via === "sudoku" ? " -- 数独の解を、使い回された付け替えから復元" : "";
+    const via = hunt.via === "rsa" ? " -- factored the public RSA modulus" : hunt.via === "sudoku" ? " -- sudoku solution recovered from a reused relabelling" : "";
+    const viaJa = hunt.via === "rsa" ? " -- RSA の公開 n を素因数分解" : hunt.via === "sudoku" ? " -- 数独の解を、使い回された付け替えから復元" : "";
     events.push({
       atMs: hunt.atMs,
       teamId: hunt.attackerTeamId,
@@ -266,7 +275,7 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
         en: `Team ${hunt.attackerTeamId} HUNT success against ${hunt.targetTeamId} (generation ${hunt.generation})${via}`,
         ja: `${hunt.attackerTeamId} が HUNT 成功: 対象 ${hunt.targetTeamId} (世代 ${hunt.generation})${viaJa}`,
       },
-      detail: { targetTeamId: hunt.targetTeamId, generation: hunt.generation },
+      detail: { targetTeamId: hunt.targetTeamId, generation: hunt.generation, ...(hunt.via ? { via: hunt.via } : {}) },
     });
   }
 
