@@ -45,7 +45,7 @@ x+y=7 leaves0, 2x=8 leaves1, and x+2=6. Each column recovers the intended result
 | `add_shares(a,b,p)` | `out[i]=(a[i]+b[i])%p` | Rearranging the total gives x+y |
 | `mul_constant(shares,c,p)` | `out[i]=(shares[i]*c)%p` | Distributivity gives cx |
 | `add_constant(shares,c,p)` | Add c only at index0; keep the other values; normalize all with `%p` | The total gains c once |
-| `communication_rounds(operation)` | Return0 or1 using the table below | Does a local row suffice, or must parties exchange values? |
+| `communication_rounds(operation)` | Classify each operation:0 if no exchange is needed, a positive integer otherwise | Does a local row suffice, or must parties exchange values? |
 
 The first three return an ordered sequence of integers of the original length: a Python list `[0,6,0]` or tuple `(0,6,0)`. The examples below use lists. Each element must be an integer from 0 through p−1. Input lists have the same party count and ordering. The last returns one integer; booleans are not accepted as integers.
 
@@ -62,16 +62,18 @@ if (d[0] + … + d[n−1]) % p = c % p, the result totals x+c
 
 A **communication round** is a stage of exchanging values between parties. This task classifies **0 for unnecessary, a positive integer for necessary**; it does not count an exact protocol. The model starts with each party's additive shares, at least two parties, no extra numbers shared in advance for this computation, arbitrary secret inputs, and output that remains shared.
 
-| Operation name | Meaning | Classification in this model |
-|---|---|---:|
-| `add-shared` | x+y | 0 |
-| `sub-shared` | x−y | 0 |
-| `negate-shared` | −x (everyone scales by−1) | 0 |
-| `add-constant` | x+c | 0 |
-| `mul-constant` | cx | 0 |
-| `mul-shared` | xy | positive |
-| `square-shared` | x² | positive |
-| `compare-shared` | compare x and y as integers in0..p−1 | positive |
+| Operation name | Intended computation |
+|---|---|
+| `add-shared` | x+y |
+| `sub-shared` | x−y |
+| `negate-shared` | −x (everyone scales by−1) |
+| `add-constant` | x+c |
+| `mul-constant` | cx |
+| `mul-shared` | xy |
+| `square-shared` | x² |
+| `compare-shared` | compare x and y as integers in0..p−1 |
+
+Decide by **writing the operation as an equation → listing what each party holds → checking whether the local results add to the target**. For addition, `(a0+b0)+(a1+b1)=x+y`, so no party needs to receive the other row. Apply that same check to subtraction and sign reversal.
 
 For two parties:
 
@@ -94,11 +96,7 @@ Rowwise comparison also fails. With p=7, a=[6,6], b=[1,1], each row has a>b and 
 | `no-communication` | JSON with exactly the four displayed operation names |
 | `transfer` | all three arithmetic functions and communication_rounds for all eight names |
 
-The four code checkpoints submit the current linear.py. For `no-communication`, classify **your four displayed names** using the table and enter single-line JSON. Only if the names are add-shared, sub-shared, mul-shared and square-shared would it look like this:
-
-```json
-{"add-shared":0,"sub-shared":0,"mul-shared":1,"square-shared":1}
-```
+The four code checkpoints submit the current linear.py. For `no-communication`, read **your four displayed names** and decide whether each formula can use only the local row. Enter single-line JSON in the shape `{"displayed-operation-name": your_integer, …}`. Replace each name and integer with your four decisions, separate the four pairs with commas, and enclose them in `{}`. This illustrates the format; complete your own four pairs before submitting.
 
 Use exactly those displayed keys. Values are nonnegative integers;1 or2 both count as communication. Check Run public tests before Submit. Wrong answers cost10 points; all15 hints total94 points.
 

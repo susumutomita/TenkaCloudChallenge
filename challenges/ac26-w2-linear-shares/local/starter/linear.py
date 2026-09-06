@@ -27,14 +27,16 @@ p=7, a=[5,6,0], b=[1,0,2], c=2:
   全員+2   [0,1,2] -> 合計3  -> 目標6と違う
 
 communication_rounds は必要性の分類で、厳密なラウンド数ではありません。
-  0: add-shared, sub-shared, negate-shared, add-constant, mul-constant
-  1以上: mul-shared, square-shared, compare-shared
+操作名と目標:
+  add-shared:x+y, sub-shared:x-y, negate-shared:-x, add-constant:x+c,
+  mul-constant:cx, mul-shared:xy, square-shared:x*x, compare-shared:xとyの比較。
+各人が自分の行だけで作った値を足すと目標になるか、式を展開して判断します。
+必要な値が手元に揃うなら0、他人とのやり取りが必要なら1以上です。
 比較は復元した0..p-1の整数同士の比較。入力名はこの8種類です。
 二乗は奇数pでは交差項2*a0*a1が残り、手元の二乗だけでは足りません。
 
 直接回答 no-communication は「証拠を確認」の4名だけをキーにするJSON。
-例の4名が表示された場合のみ:
-  {"add-shared":0,"sub-shared":0,"mul-shared":1,"square-shared":1}
+書式は {"画面の操作名": 判定した整数, ...}。4組の名前と値を自分で埋めます。
 回答欄へ1行で入力します。コードの4小問はエディタの現在のソースを提出。
 提出前に「公開テストを実行」で合計の例を確認します。"""
 
@@ -73,7 +75,7 @@ def mul_constant(shares: list[int], c: int, p: int) -> list[int] | tuple[int, ..
 def communication_rounds(operation: str) -> int:
     """8種類の操作を、手元で完結なら0、通信が必要なら正の整数で返す。
 
-    分類と条件はこのファイル冒頭。相手との積の項があると、手元の行だけでは
+    操作名・判断基準・条件はこのファイル冒頭。相手との積の項があると、手元の行だけでは
     処理できない。1は正確な往復回数の保証ではない。負数・boolは不可。
     transferは8名すべてを使い、直接回答欄は画面で選ばれた4名だけを使う。"""
     return 1

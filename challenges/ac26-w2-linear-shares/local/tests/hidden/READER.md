@@ -281,3 +281,5 @@ The final Linux suite passed 18 tests in 27.571 seconds. After rebuilding
 both dedicated services, the retained Portal harness passed all five submissions
 and solved-row transitions (one test, 6.88 seconds including setup). This is
 actual component-to-local-API evidence, not a physical browser or AWS deployment.
+
+The final classification review removed the complete operation-to-grade map and the filled four-key answer from participant statements and starter. The operation-name glossary, local-row criterion, necessary equations and worked arithmetic remain. The reader must apply those equations to the displayed operations; no checkpoint or grading predicate changed.
