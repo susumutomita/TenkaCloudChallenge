@@ -218,3 +218,11 @@ Confirmed scored Order answers show a short celebration, earned points and the c
 ### Score history integration
 
 The plugin reports fixed public reason codes for PROVE, CIPHER, LEAK, FHE, MPC, DUEL, HUNT, hints, ROTATE and deadlines. These contain no answers or secrets. With the TenkaCloud #3194 host fix, Score events shows the actual change after applying the zero-point floor. Previously missing history is not reconstructed.
+
+### Endgame hint support (#659 booster)
+
+At the endgame boundary, every team tied for last receives ten minutes without hint penalties. Solo practice does not qualify. The support activates immediately on distribution: later rankings, reloads and ROTATE do not change its recipients or deadline. Defaults distribute it 60 minutes after match start and restore regular penalties at minute 70; an earlier match end also ends the support.
+
+Check “No hint penalty” and its remaining time beside the selected Order's hints, then open a hint and continue the calculation. Order deadlines, issuance and answer scores stay unchanged. If a request arrives after the displayed penalty changes, the hint remains closed and the participant is asked to refresh before opening it.
+
+A legacy match upgraded after the endgame boundary has no saved ranking for that instant. It retains regular hint penalties and displays the reason instead of inventing a past distribution. This increment does not implement lightning or higher cipher rungs.

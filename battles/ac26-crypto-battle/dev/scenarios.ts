@@ -69,6 +69,7 @@ export const DEV_CONFIG: Partial<CryptoBattleConfig> = {
 export const SCENARIO_IDS = [
   "waiting",
   "fresh",
+  "hint-booster",
   "ledger-filling",
   "fhe-order",
   "mpc-order",
@@ -95,6 +96,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "開始直後 — Order が出たところ",
     en: "Just started — first Orders issued",
   },
+  "hint-booster": { ja: "終盤のヒント支援 — 通常90分設定で残り10分", en: "Endgame hint support — 10 minutes left, standard 90-minute match" },
   "ledger-filling": {
     ja: "中盤 — LEAK と PROVE が Ledger に並ぶ",
     en: "Midgame — LEAK and PROVE side by side on the Ledger",
@@ -161,8 +163,8 @@ interface Driver {
   play(teamId: string, op: CryptoBattleOp): boolean;
 }
 
-function makeDriver(): Driver {
-  const host = createMatch({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS }, DEV_CONFIG);
+function makeDriver(config: Partial<CryptoBattleConfig> = DEV_CONFIG): Driver {
+  const host = createMatch({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS }, config);
   const driver: Driver = {
     host,
     nowMs: 0,
@@ -316,7 +318,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver();
+  const driver = makeDriver(id === "hint-booster" ? {} : DEV_CONFIG);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -327,6 +329,16 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
 
     case "fresh":
+      break;
+
+    case "hint-booster":
+      driver.advance(59 * 60_000);
+      serveComputationOrders(driver, "bravo");
+      driver.advance(60_000);
+      if (projectForTeam(driver.host.state, "alpha").hintBooster?.status !== "active"
+        || projectForTeam(driver.host.state, "bravo").hintBooster?.status !== "ineligible") {
+        throw new Error("scenario hint-booster must support alpha only");
+      }
       break;
 
     case "ledger-filling": {

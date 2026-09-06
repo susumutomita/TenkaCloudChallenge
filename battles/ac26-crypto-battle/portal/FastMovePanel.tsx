@@ -17,6 +17,7 @@ import { RpsHuntStatus } from "./RpsHunt.tsx";
 import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
 import HuntPanel from "./HuntPanel.tsx";
+import HintBooster, { ageHintBooster } from "./HintBooster.tsx";
 import { HUNT_GUIDE_CSS } from "./HuntGuide.tsx";
 import { ledgerTargets, cipherHuntCandidates, sudokuHuntCandidates } from "./hunt-targets.ts";
 export type { CipherHuntCandidate, SudokuHuntCandidate } from "./hunt-targets.ts";
@@ -159,11 +160,11 @@ export const FAST_MOVE_COPY = {
     // because a cost the player only discovers after paying it is not a choice
     // they made.
     hintsTitle: "HINTS",
-    hintsHint: "Each one explains a little more. You pay for it whether or not you finish the Order.",
-    hintBuy: (cost: number) => `OPEN THE NEXT HINT (-${cost})`,
+    hintsHint: "Open hints one step at a time. Check the next penalty before opening.",
+    hintBuy: (cost: number) => cost === 0 ? "OPEN THE NEXT HINT (no penalty)" : `OPEN THE NEXT HINT (-${cost})`,
     hintsExhausted: "Every hint on this Order is open.",
     hintOpened: "HINT OPENED",
-    hintOpenedBody: (cost: number) => `-${cost} · the next step is in this Order’s hints.`,
+    hintOpenedBody: (cost: number) => cost === 0 ? "No penalty · the next step is in this Order’s hints." : `-${cost} · the next step is in this Order’s hints.`,
     send: "SUBMIT",
     running: "SUBMITTING…",
     leakRate: "pass",
@@ -329,11 +330,11 @@ export const FAST_MOVE_COPY = {
     rotateSudokuExhausted: "この世代で未使用の付け替え表がもうありません。次の PROVE の前に ROTATE しないと、次の表は使い回しになります。",
     rotateCost: (orders: number) => `未処理の ORDER ${orders} 件が無効になります。期限切れと同じだけ減点されます。`,
     hintsTitle: "ヒント",
-    hintsHint: "1 段ごとに少しずつ説明します。Order を解けなくても得点は引かれます。",
-    hintBuy: (cost: number) => `次のヒントを開く（-${cost}）`,
+    hintsHint: "1 段ずつ説明を開きます。次の減点を確認してから開いてください。",
+    hintBuy: (cost: number) => cost === 0 ? "次のヒントを開く（減点なし）" : `次のヒントを開く（-${cost}）`,
     hintsExhausted: "この Order のヒントはすべて開きました。",
     hintOpened: "ヒントを開きました",
-    hintOpenedBody: (cost: number) => `-${cost} · 下に表示されています`,
+    hintOpenedBody: (cost: number) => cost === 0 ? "減点なし · 下に表示されています" : `-${cost} · 下に表示されています`,
     send: "答えを送る",
     running: "送信中…",
     leakRate: "パス",
@@ -966,9 +967,7 @@ export function ageProjection(
     ...(projection.rpsHunt ? { rpsHunt: { ...projection.rpsHunt, targets: projection.rpsHunt.targets.map(t => ({ ...t, remainingMs: drop(t.remainingMs) })) } } : {}),
     matchRemainingMs:
       projection.matchRemainingMs === undefined ? undefined : drop(projection.matchRemainingMs),
-    myContracts: projection.myContracts.map((order) =>
-      order.remainingMs <= 0 ? order : { ...order, remainingMs: drop(order.remainingMs) },
-    ),
+    ...ageHintBooster(projection, elapsedMs),
     vault: {
       ...projection.vault,
       rotateCooldownRemainingMs: drop(projection.vault.rotateCooldownRemainingMs),
@@ -1518,9 +1517,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
+      <HintBooster projection={projection} locale={locale} />
       {selectedOrder ? (
           <details className="tc-hints" key={selectedOrder.id}>
-            <summary>{locale === "ja" ? `このお題のヒント${nextHint ? `（次は −${nextHint.cost} 点）` : "（購入済み）"}` : `Hints for this Order${nextHint ? ` (next: −${nextHint.cost})` : " (all opened)"}`}</summary>
+            <summary>{locale === "ja" ? `このお題のヒント${nextHint ? (nextHint.cost === 0 ? "（次は減点なし）" : `（次は −${nextHint.cost} 点）`) : "（すべて開いた）"}` : `Hints for this Order${nextHint ? (nextHint.cost === 0 ? " (next: no penalty)" : ` (next: −${nextHint.cost})`) : " (all opened)"}`}</summary>
             <div className="tc-card-hint">{copy.hintsHint}</div>
             {selectedOrder.hints.filter(hint => hint.text !== undefined).map(hint => (
               <details className="tc-hint-rung" key={`${hint.id}:${selectedOrder.hints.filter(h => h.text).length}`} open={hint.level === selectedOrder.hints.filter(h => h.text).length - 1}>
@@ -1536,7 +1536,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 className="tc-hint-button"
                 disabled={submitting}
                 onClick={() => void run(
-                  () => submitRevealHint(client, selectedOrder.id),
+                  () => submitRevealHint(client, selectedOrder.id, nextHint.cost),
                   () => ({
                     kind: "hint",
                     title: copy.hintOpened,

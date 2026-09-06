@@ -80,6 +80,7 @@ export function RpsResult({ projection, locale }: { readonly projection: CryptoB
 export function rpsRejection(error: string, locale: Locale): string {
   if (locale !== "ja") return error;
   const messages: Record<string, string> = {
+    "Hint penalty changed. Refresh and check the displayed penalty before opening.": "ヒントの減点が変わりました。更新後の減点を確認してから開いてください。",
     "that is not this team's key": "暗号鍵が一致しません。同じ位置の数字で引き算を確かめてください。減点はありません。",
     "RPS prediction requires a running match.": "予測は試合の開始後、終了前に送ってください。",
     "Choose another team for the prediction.": "自分以外のチームを予測の対象にしてください。",
