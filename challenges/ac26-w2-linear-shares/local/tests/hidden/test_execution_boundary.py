@@ -63,6 +63,45 @@ class ExecutionBoundary(unittest.TestCase):
         source=reference()+'\ndef communication_rounds(operation):\n    return 0 if operation in '+repr([k for k,v in OPERATION_ROUNDS.items() if v==0])+' else 2\n'
         self.assertTrue(server.evaluate('transfer',source))
 
+    def test_tuple_results_rejected_in_public_and_hidden_checks(self):
+        for function,checkpoint in (('add_shares','add-shares'),
+                                    ('add_constant','add-constant'),
+                                    ('mul_constant','mul-constant')):
+            source=reference()+f'\noriginal={function}\ndef {function}(*args):return tuple(original(*args))\n'
+            self.assertFalse(server.evaluate(checkpoint,source),function)
+            self.assertFalse(server.evaluate('transfer',source),function)
+            self.assertFalse(_WORKBENCH.run_public_tests({'linear.py':source})['passed'],function)
+
+    def test_in_place_constant_addition_is_a_valid_result(self):
+        source=reference()+'''\ndef add_constant(shares,c,p):
+    shares[0]=(shares[0]+c)%p
+    return shares
+'''
+        self.assertTrue(server.evaluate('add-constant',source))
+        self.assertTrue(server.evaluate('transfer',source))
+        self.assertTrue(_WORKBENCH.run_public_tests({'linear.py':source})['passed'])
+
+    def test_persistent_ipc_is_denied_and_leaves_no_objects(self):
+        paths=[Path('/proc/sysvipc')/name for name in ('shm','msg','sem')]
+        before=[path.read_text() for path in paths]
+        source='''import ctypes
+def probe():
+    libc=ctypes.CDLL(None,use_errno=True)
+    calls=[('shmget',(0,4096,0o1600)),('shmat',(-1,None,0)),
+           ('shmctl',(-1,0,None)),('msgget',(0,0o1600)),('msgctl',(-1,0,None)),
+           ('semget',(0,1,0o1600)),('semctl',(-1,0,0)),('semop',(-1,None,0))]
+    results=[]
+    for name,args in calls:
+        ctypes.set_errno(0)
+        result=getattr(libc,name)(*args)
+        results.append([result,ctypes.get_errno()])
+    return results
+'''
+        for _ in range(16):
+            with LearnerSession({'linear.py':source}) as learner:
+                self.assertEqual(learner.call('linear','probe',[]),[[-1,1]]*8)
+        self.assertEqual([path.read_text() for path in paths],before)
+
     def test_public_small_constant_example_catches_every_party_addition(self):
         source=reference()+'\ndef add_constant(shares,c,p):return [(s+c)%p for s in shares]\n'
         with LearnerSession({'linear.py':source}) as learner:

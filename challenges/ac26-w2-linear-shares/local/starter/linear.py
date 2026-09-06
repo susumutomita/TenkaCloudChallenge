@@ -49,7 +49,7 @@ def add_shares(a: list[int], b: list[int], p: int) -> list[int]:
 def add_constant(shares: list[int], c: int, p: int) -> list[int]:
     """全員が知っているcを、秘密xへ一度加えたx+cのシェアを返す。
 
-    入力をコピーし、0番だけ (shares[0]+c)%p、他は shares[i]%p にする。
+    0番だけ (shares[0]+c)%p、他は shares[i]%p にし、結果のリストを返す。
     一般には、合計の余りがcとなる公開調整値d[i]を加えてよい。
     p=7, shares=[5,6,0], c=2 -> [0,6,0]、合計6。
     全員にcを足すと差は(n-1)c。c=0など差の余り0なら偶然一致するが、

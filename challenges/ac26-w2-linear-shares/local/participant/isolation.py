@@ -42,6 +42,12 @@ def restrict_learner():
                  'sendto','sendmsg','sendmmsg','recvfrom','recvmsg','recvmmsg',
                  'open','openat','openat2','creat','open_by_handle_at','execve','execveat',
                  'socketcall','io_uring_setup','pidfd_getfd','ptrace',
+                 # IPC objects can outlive the killed worker process group.
+                 'ipc','shmget','shmat','shmdt','shmctl',
+                 'msgget','msgsnd','msgrcv','msgctl',
+                 'semget','semop','semtimedop','semctl',
+                 'mq_open','mq_unlink','mq_timedsend','mq_timedreceive',
+                 'mq_notify','mq_getsetattr',
                  'process_vm_readv','process_vm_writev',
                  'kill','tkill','tgkill','pidfd_send_signal',
                  'rt_sigqueueinfo','rt_tgsigqueueinfo','setsid','setpgid')

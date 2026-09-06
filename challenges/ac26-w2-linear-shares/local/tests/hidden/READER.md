@@ -1,5 +1,57 @@
 # Linear shares: participant reading and runtime evidence (#716)
 
+## PR #762 review corrections
+
+The old worker could create a SysV shared-memory segment which remained listed in
+`/proc/sysvipc/shm` after the worker exited. The dedicated local reproduction removed
+that segment itself. The problem-local seccomp filter now denies SysV and POSIX
+persistent IPC operations. Sixteen repeated worker sessions reject the SysV probes
+with EPERM, and the shared-memory/message/semaphore listings remain unchanged.
+
+The lesson now describes the result of adding a public constant without requiring
+input immutability. An in-place implementation is mathematically valid here and still
+passes `add-constant`, `transfer`, and the public tests. Conversely, tuple results are
+rejected before JSON serialization, so they cannot silently become lists and pass the
+Python list contract. Each arithmetic function has public and hidden regressions.
+
+`make runtime-test FLAG_SEED=linear-shares-reader-716` passes 16 Linux tests;
+`make reference-test` rejects all 7 existing mutations. These include the earlier
+256-descendant reaping checks. The catalog gate still passes all 116 entries.
+
+### Reproduce the real Portal component route
+
+The retained files in `local/tests/hidden/portal/` contain the exact reader source,
+its manually derived JSON, the focused Vitest harness, and a launcher. These are
+author-only evidence and are not copied into the participant image. The reader
+source is unchanged from the original public-only read-through.
+
+With Docker and Bun installed, and the TenkaCloud checkout dependencies installed:
+
+```sh
+# In this problem directory; the seed is synthetic and matches the retained hand JSON.
+FLAG_SEED=linear-shares-reader-716 docker compose -p ac26-linear-reader \
+  -f local/docker-compose.yml up -d --build --wait
+AC26_WORKBENCH_URL=http://127.0.0.1:18096 \
+  ./local/tests/hidden/portal/run.sh /absolute/path/to/TenkaCloud
+FLAG_SEED=linear-shares-reader-716 docker compose -p ac26-linear-reader \
+  -f local/docker-compose.yml down
+```
+
+The launcher temporarily installs one uniquely named test beside the real
+`ContainerWorkbenchPanel` and removes only that file on exit. It uses the checked-in
+Portal components and actual `/api/config`, `/api/prepare` and `/verify` endpoints.
+Only the outer Portal transport/auth/score response is mocked. It verifies four code
+rows, one sealed manual answer, unchanged editor contents and solved-row folding.
+This is a component/API test, not a physical-browser or AWS playtest. The tested
+TenkaCloud commit is `6bce08335caba4b61f28082e01764e46b8549d18`.
+
+The original temporary harness was removed only from the parent checkout; its
+reproducible version now lives here. An initial rerun in the restricted host sandbox
+failed with `connect EPERM`; it made no API request. The same retained launcher was
+then run with permission to access the dedicated localhost API on port 18149: all five
+submissions passed (one test, 1.05 seconds; full run 4.21 seconds). The parent checkout
+was clean after the launcher removed its temporary test.
+
 ## Reading boundary
 
 The root reader first read only JA/EN statements, all 15 hints in each language,

@@ -44,7 +44,7 @@ x+y=7 leaves0, 2x=8 leaves1, and x+2=6. Each column recovers the intended result
 |---|---|---|
 | `add_shares(a,b,p)` | `out[i]=(a[i]+b[i])%p` | Rearranging the total gives x+y |
 | `mul_constant(shares,c,p)` | `out[i]=(shares[i]*c)%p` | Distributivity gives cx |
-| `add_constant(shares,c,p)` | Add c only at index0; copy the other shares; normalize all with `%p` | The total gains c once |
+| `add_constant(shares,c,p)` | Add c only at index0; keep the other values; normalize all with `%p` | The total gains c once |
 | `communication_rounds(operation)` | Return0 or1 using the table below | Does a local row suffice, or must parties exchange values? |
 
 The first three return integer lists of the original length. Input lists have the same party count and ordering. The last returns one integer; booleans are not accepted as integers.
