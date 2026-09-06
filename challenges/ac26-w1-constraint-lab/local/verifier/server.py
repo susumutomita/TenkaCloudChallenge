@@ -1,26 +1,9 @@
-"""POST /verify -- the scoring seam. Compose-internal only, stdlib only.
+"""Internal grading authority with a separate untrusted function worker.
 
-Same security contract as the AC26 template: required and echoed `checkpointId`,
-throwaway workspace, wall-clock timeout, memory / process / output caps, no shell,
-nothing leaked back but property names (a failed code checkpoint additionally
-carries the checker's property-level failure list as `message`, AGENTS.md §15), and
-malformed input can never kill the process.
-
-Four of the five checkpoints run the learner's own three files against hidden
-fields, circuits and orderings; the fifth is a direct answer about a trace. The three
-gadget checkpoints (boolean, membership, range) are judged by the hidden checker's
-reference evaluator, never by the submission's own `evaluate`, so a gadget cannot
-pass by inventing a constraint kind only its author's evaluator understands.
-
-Issue 543/537: this used to be the same process that also served the Participant
-Portal's config, inspect, starter, public-test, and prepare endpoints, in the single
-Docker stage a learner's own `make build` produced -- so `first-broken`'s expected
-value (`broken_diagnosis`) was importable from inside the learner's own container,
-straight out of `fixtures/generate.py`. That Portal-facing surface now lives in
-`participant/server.py`, in a separate image (see ../Dockerfile) that this process's
-own container never builds; this file is reachable only over the Compose-internal
-network (see ../docker-compose.yml), never from the participant container's
-filesystem.
+The existing bounded grading process runs the hidden checker and exact range search.
+It never imports learner modules: it asks an isolated worker for JSON values and
+checks them itself. The worker has neither seed nor checker nor expected answers.
+Its stdout is a separate value channel, so printed failures are not a verdict.
 """
 
 from __future__ import annotations
@@ -28,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import resource
+import signal
 import subprocess
 import sys
 import tempfile
@@ -38,6 +22,7 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import broken_diagnosis, public_payload
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -114,66 +99,54 @@ def _run_submission_script(
         for name, text in sources.items():
             (Path(workspace) / name).write_text(text, encoding="utf-8")
         transcript = Path(workspace) / "stdout"
+        process = None
         try:
             with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [
-                        sys.executable,
-                        "-I",
-                        "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed, **extra),
-                    ],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
+                process = subprocess.Popen(
+                    [sys.executable, "-I", "-c", script.format(root=str(ROOT), workspace=workspace, seed=seed, **extra)],
+                    stdout=sink, stderr=subprocess.STDOUT, text=True,
+                    preexec_fn=_limits, cwd=workspace,
+                    env={"PATH": "/usr/local/bin:/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"},
+                    start_new_session=True,
                 )
+                process.wait(timeout=RUN_TIMEOUT_SECONDS)
             captured = transcript.read_text(encoding="utf-8", errors="replace")
         except (subprocess.TimeoutExpired, OSError, ValueError):
             return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
+        finally:
+            if process is not None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+        return process.returncode, captured[-MAX_OUTPUT_BYTES:]
 
 
 RUNNER = """
 import json, os, sys
 sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
+from participant.execution import LearnerSession
+from participant.isolation import protect_supervisor
 from tests.hidden import check_circuit
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import field, circuit, gadgets
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
+protect_supervisor()
+sources = {{name: open({workspace!r}+"/"+name, encoding="utf-8").read()
+            for name in ("field.py", "circuit.py", "gadgets.py")}}
 failures = []
-for name in {phases!r}:
-    checker = getattr(check_circuit, name)
-    if name in ("check_normalize",):
-        failures.extend(checker(field, {seed!r}))
-    elif name in ("check_boolean", "check_membership", "check_range"):
-        # Gadgets are judged by the reference evaluator: the submission's field and
-        # circuit modules are deliberately not handed over.
-        failures.extend(checker(gadgets, {seed!r}))
-    else:
-        failures.extend(checker(circuit, field, {seed!r}))
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
+try:
+    with LearnerSession(sources, separate_session=False) as learner:
+        field, circuit, gadgets = learner.modules()
+        for name in {phases!r}:
+            checker = getattr(check_circuit, name)
+            if name == "check_normalize":
+                failures.extend(checker(field, {seed!r}))
+            elif name in ("check_boolean", "check_membership", "check_range"):
+                failures.extend(checker(gadgets, {seed!r}))
+            else:
+                failures.extend(checker(circuit, field, {seed!r}))
+except Exception:
+    failures.append("The submitted functions could not return the required values within the execution limits.")
+print(json.dumps({{"failures": failures}}), flush=True)
 os._exit(0)
 """
 
@@ -315,6 +288,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     port = int(os.environ.get("VERIFY_PORT", "18094"))
     # Bind every interface *inside the container*, not the container's loopback. The
     # Workbench reaches this process as `verifier:<port>` over the Compose network, which
