@@ -13,6 +13,7 @@
  */
 
 import { type CipherKey, type CipherRung, rungSpec } from "./ladder.ts";
+import { inv } from "./field.ts";
 import { deriveBigInt, deriveBytes, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
 import type { PrivacyConstraint } from "./methods.ts";
@@ -36,6 +37,19 @@ export interface FieldConfig {
 /** This team's secret for this generation, as a field element. */
 export function deriveSecret(seed: string, teamId: string, generation: number, p: bigint): bigint {
   return deriveBigInt(seed, `secret:${teamId}:${generation}`, generation, p);
+}
+
+/** Finite teaching examples, not a secure key space. Kept off the participant bundle. */
+export const RSA_PARAMETERS = [[3, 11, 3], [5, 11, 3], [5, 13, 5], [7, 11, 7]] as const;
+
+export function deriveRsaKey(seed: string, teamId: string, generation: number) {
+  const index = Number(deriveBigInt(seed, `rsa-key:${teamId}:${generation}`, 0, BigInt(RSA_PARAMETERS.length)));
+  const [p, q, e] = RSA_PARAMETERS[index]!;
+  return { n: p * q, e, p, q, d: Number(inv(BigInt(e), BigInt((p - 1) * (q - 1)))) };
+}
+
+export function deriveRsaPlaintext(seed: string, contractId: string): number {
+  return 2 + Number(deriveBigInt(seed, `rsa-plaintext:${contractId}`, 0, 8n));
 }
 
 /** The `t - 1` Shamir polynomial coefficients (c1..c_{t-1}) for this team/generation. */
@@ -281,7 +295,7 @@ export function deriveContractPlan(
   teamId: string,
   sequenceIndex: number,
   config: Pick<FieldConfig, "prime" | "shareCount">,
-  progression?: { readonly elapsedMs: number; readonly buildToPressureMs: number },
+  progression?: { readonly elapsedMs: number; readonly buildToPressureMs: number; readonly pressureToEndgameMs?: number },
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
   // [Issue #659 §13] The ladder Order takes a slot in the rotation rather than
@@ -326,7 +340,9 @@ export function deriveContractPlan(
   const kind: ContractKind = kindRoll % RUSH_MODULUS === 0n ? "rush" : "standard";
   const indexRoll = deriveBigInt(seed, `contract-index:${teamId}`, sequenceIndex, config.prime);
   const shareIndex = Number(indexRoll % BigInt(config.shareCount)) + 1;
-  const taskKind = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? "reveal-share";
+  const slot = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? "reveal-share";
+  const taskKind = slot === "caesar-shift" && kind === "standard" && progression?.pressureToEndgameMs !== undefined
+    && progression.elapsedMs >= progression.pressureToEndgameMs ? "rsa-encrypt" : slot;
   // FHE, MPC and the sudoku proof publish nothing reconstructable by
   // construction, so their Orders state that rule rather than rolling for it.
   // [Issue #659] A ladder Order never forbids disclosure. The decision it puts
@@ -337,7 +353,7 @@ export function deriveContractPlan(
   // variant became the `zk-sudoku` slot in the rotation above, so the privacy
   // roll it used to make has nothing left to decide.
   const privacyConstraint: PrivacyConstraint =
-    taskKind === "caesar-shift" || taskKind === "reveal-share" ? "none" : "no-raw-disclosure";
+    taskKind === "caesar-shift" || taskKind === "rsa-encrypt" || taskKind === "reveal-share" ? "none" : "no-raw-disclosure";
   return {
     kind,
     taskKind,

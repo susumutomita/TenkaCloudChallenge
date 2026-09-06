@@ -103,7 +103,7 @@ describe("the Vigenère cycle, not a stronger-security claim", () => {
   });
 
   test("three repeated exposures of one position still leave two unknown shifts", () => {
-    const host = match();
+    const host = createMatch({ eventId: "vigenere-regression", teamIds: ["alpha", "bravo"], matchSecret: "vigenere-regression" }, { phaseBoundaries: { buildToPressureMs: 30 * MINUTE, pressureToEndgameMs: 75 * MINUTE } });
     for (const minute of [31, 46, 61]) leakAt(host, minute);
     expect(pairs(host)).toHaveLength(3);
     expect(exposedKeyPositions(pairs(host), "vigenere")).toHaveLength(1);

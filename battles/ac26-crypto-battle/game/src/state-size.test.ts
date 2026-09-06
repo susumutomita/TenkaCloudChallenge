@@ -20,8 +20,8 @@ import { join } from "node:path";
  * missed rush Orders when advancing on five-minute boundaries after onboarding.
  * That path understated the row; it was not a worst-case capacity check.
  *
- * This scenario measures 2,968,946 peak bytes at 99 teams (2026-09-05), about 30.0 KB
- * per team. The declaration reserves 30 KiB per team. SQL's platform policy is
+ * This includes RSA all-pairs successes beside the maximum RPS reservations.
+ * The declaration reserves 30 KiB per team. SQL's platform policy is
  * 4 MiB; its guard is checked here with 25% headroom. DDB fits 11 teams with that
  * same headroom. Runtime-specific overrides remain the platform's decision.
  */
@@ -154,6 +154,18 @@ function playMeasuredMatch(teamCount: number) {
           }
         }
       }
+      // Include current RSA successes after ROTATE beside unopened RPS predictions.
+    // RSA is attackable from the public key without LEAK. Include every legal
+    // pairwise success at each generation, rather than measuring only its pairs.
+    if (state.phase === "endgame") for (const targetId of teamIds) {
+      const key = projectForTeam(state, targetId).publicRsaKeys!.find(k => k.teamId === targetId)!;
+      const factor = [3, 5, 7, 11, 13].find(p => key.n % p === 0)!;
+      for (const attackerId of teamIds) {
+        if (attackerId === targetId) continue;
+        const op = { kind: "hunt-rsa" as const, targetTeamId: targetId, generation: state.teams[targetId]!.generation, p: String(factor), q: String(key.n / factor) };
+        if (validateOp(state, attackerId, op).ok) state = applyOp(state, attackerId, op);
+      }
+    }
       peak=Math.max(peak,Buffer.byteLength(JSON.stringify(state)));
       pendingPeak=Math.max(pendingPeak,state.contracts.reduce((n,c)=>n+Object.keys(c.rps?.predictions??{}).length,0));
       for (const teamId of teamIds) {

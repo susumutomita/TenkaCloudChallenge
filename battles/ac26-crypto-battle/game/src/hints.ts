@@ -1,4 +1,5 @@
 import { vigenereGuide } from "./vigenere-guide.ts";
+import { rsaGuide } from "./rsa-guide.ts";
 /**
  * [Issue #659 §9/§13] The hint ladder: what a team may buy when an Order is in
  * front of them and they do not know how to start.
@@ -311,6 +312,10 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
       },
     },
   ],
+  "rsa-encrypt": ([0, 1, 2] as const).map(rung => ({ id: `rsa-encrypt/${rung + 1}`, text: (ctx: HintContext) => {
+    if (ctx.task.kind !== "rsa-encrypt") throw new Error("RSA hint on another task");
+    return rsaGuide(ctx.task, rung);
+  } })),
   "caesar-shift": [
     {
       id: "caesar-shift/1",

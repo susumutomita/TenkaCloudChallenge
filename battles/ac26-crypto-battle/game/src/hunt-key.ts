@@ -85,3 +85,29 @@ export function predictionTeam(state: Pick<CryptoBattleState, "teams">, key: str
   if (!Number.isSafeInteger(index) || String(index) !== key || teamId === undefined) throw new Error("Invalid prediction roster position");
   return teamId;
 }
+
+
+/**
+ * Schema 10: RSA permits all-to-all attacks without LEAK. Pack the two fixed
+ * roster positions into one base-36 integer; logical legacy HUNT keys start with "[",
+ * so this prefix cannot collide with a team ID or another method's history.
+ */
+export function rsaHuntKey(state: Pick<CryptoBattleState, "teams">, attacker: string, target: string, generation: number): string {
+  const width = rosterOf(state.teams).ids.length;
+  const pair = Number(predictionKey(state, attacker)) * width + Number(predictionKey(state, target));
+  return `r${pair.toString(36)}:${generation}`;
+}
+
+/** A retired RSA generation cannot be submitted; other methods retain their history. */
+export function pruneRetiredRsaHunts(state: CryptoBattleState): CryptoBattleState {
+  const roster = rosterOf(state.teams).ids;
+  const successfulHunts = state.successfulHunts.filter(key => {
+    const parts = /^r([0-9a-z]+):([1-9]\d*)$/.exec(key);
+    if (!parts) return true;
+    const pair = Number.parseInt(parts[1]!, 36), generation = Number(parts[2]);
+    if (pair.toString(36) !== parts[1] || !Number.isSafeInteger(pair) || !Number.isSafeInteger(generation) || pair >= roster.length ** 2) throw new Error("Invalid RSA HUNT reservation");
+    const teamId = roster[pair % roster.length];
+    return teamId !== undefined && state.teams[teamId]?.generation === generation;
+  });
+  return successfulHunts.length === state.successfulHunts.length ? state : { ...state, successfulHunts };
+}

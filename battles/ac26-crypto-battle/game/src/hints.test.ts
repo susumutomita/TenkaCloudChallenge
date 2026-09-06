@@ -57,7 +57,7 @@ function ctxFor(projection: CryptoBattleProjection, order: ContractProjection): 
 function oneOrderPerKind(): { projection: CryptoBattleProjection; order: ContractProjection }[] {
   let state = startedMatch();
   const seen = new Map<OrderTaskKind, { projection: CryptoBattleProjection; order: ContractProjection }>();
-  for (let round = 0; round < 12 && seen.size < Object.keys(HINT_LADDER).length; round += 1) {
+  for (let round = 0; round < 18 && seen.size < Object.keys(HINT_LADDER).length; round += 1) {
     const projection = projectForTeam(state, "teamA");
     for (const order of projection.myContracts) {
       if (!seen.has(order.task.kind)) seen.set(order.task.kind, { projection, order });

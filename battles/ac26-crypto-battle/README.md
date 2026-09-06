@@ -11,7 +11,7 @@ The Order list stays visible while answering, with the pending count, task, dead
 
 “Cryptography in diagrams and formulas” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
-HUNT starts with one card per opponent, showing waiting, ready, completed, or exhausted status for each method. A ready method opens public evidence, formulas and diagrams, answer input, and the attack confirmation. Shares use distinct current-generation indices; sudoku opens a worksheet for reused public tags, leaving the solution to the participant; Caesar uses the rung's pair threshold; RPS needs reuse across two past duels and a current sealed target. ROTATE appears separately as a defence, with the affected open-Order count beside its control. RPS explicitly distinguishes waiting for the opponent to seal from ready to open, disabling the opening button while waiting.
+HUNT starts with one card per opponent, showing waiting, ready, completed, or exhausted status for each method. A ready method opens public evidence, formulas and diagrams, answer input, and the attack confirmation. Shares use distinct current-generation indices; sudoku opens a worksheet for reused public tags, leaving the solution to the participant; Caesar uses the rung's pair threshold; Vigenère needs three distinct key positions; RSA uses the current public n/e without waiting for LEAK; RPS needs reuse across two past duels and a current sealed target. ROTATE appears separately as a defence, with the affected open-Order count beside its control. RPS explicitly distinguishes waiting for the opponent to seal from ready to open, disabling the opening button while waiting.
 
 ## What is going on
 
@@ -105,17 +105,18 @@ rung to rung: **how many published pairs give your key away.**
 | Caesar | 1 | ciphertext − plaintext. One subtraction |
 
 The method is printed on the Order. That is deliberate, and it is how real
-cryptography works: the algorithm is public and **only the key is secret**. Every
-team knows how every cipher works, and the teams that keep their key are the
-teams that survive.
+cryptography works: the algorithm is public. Classical rungs keep their shift
+keys private; RSA publishes its encryption key while keeping a recovery key
+private. Keeping an answer private is not a security guarantee for these tiny models.
 
 LEAK publishes the symbols **next to** their encrypted form. On the Caesar rung
 that single pair is the key. The public record shows how many pairs a team has
 out against how many its rung survives, so whether an opponent is already broken
 is something you can read off the board.
 
-ROTATE moves your key to a new generation too, and every pair published before it
-stops being worth anything.
+ROTATE moves the key to a new generation. Attack submissions must name the
+current generation and use its public information. Tiny RSA keys may recur;
+rotation does not guarantee that earlier factors stop matching the new n.
 
 The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE is the 4x4 sudoku relabelling the drawer walks through by hand; share reconstruction uses Shamir threshold sharing (distinct from the additive sharing exercise in `ac26-w2-secret-sharing`).
 
@@ -231,12 +232,13 @@ Check “No hint penalty” and its remaining time beside the selected Order's h
 
 A legacy match upgraded after the endgame boundary has no saved ranking for that instant. It retains regular hint penalties and displays the reason instead of inventing a past distribution. Higher cipher rungs remain separate increments. Lightning is described below.
 
-## Cipher ladder: two implemented rungs
+## Cipher ladder: Caesar, Vigenère and textbook RSA
 
 The method changes for newly issued cipher Orders when the existing `pressure`
 phase begins (30 minutes after match start by default). Orders already issued
-keep their method and deadline. Build uses Caesar's single shift; pressure and
-endgame use a three-shift Vigenère cycle. Read the highlighted key position,
+keep their method and deadline. Build uses Caesar's single shift;
+pressure uses a three-shift Vigenère cycle. Normal endgame cipher slots use RSA;
+rush cipher slots retain Vigenère. Read the highlighted key position,
 add that private shift to the original value, take the remainder after dividing
 by 6, and submit the one value with **CIPHER**. Its answer stays private to the
 trusted judge; this is not a zero-knowledge proof.
@@ -250,7 +252,7 @@ would already reveal all keys. This classical repeated-key cipher is not a
 modern secure encryption scheme.
 
 A first correct CIPHER keeps the Order's normal score (30 for standard Orders;
-existing rush settings still apply). A well-formed wrong Vigenère answer costs
+existing rush settings still apply). A well-formed wrong Vigenère or RSA answer costs
 `wrongProve` (6 by default) and permanently forfeits that Order's CIPHER reward.
 Correct retries complete it for 0, avoiding expiry; malformed inputs do not count.
 The screen states both outcomes before submission. LEAK still pays 10, Vigenère HUNT pays 25 with a 12-point victim
@@ -261,7 +263,7 @@ These changes add no AWS resources, settings, timers or cleanup obligations.
 Local verification: `cd game && bun test && bun run typecheck`; `cd dev && bun test
 && bun run typecheck`. The `vigenere` dev scenario uses the standard five-minute
 TTL and three actual opponent LEAKs. See [the recorded local walkthrough](dev/VIGENERE-READING.md).
-RSA, the rotor/Enigma model, a new homomorphic ladder rung remain
+The rotor/Enigma model and a new homomorphic ladder rung remain
 outside this increment of #659. Existing Shamir, encrypted addition and the
 endgame hint booster remain available.
 
@@ -280,10 +282,10 @@ reward, including a rush reward. #659's broad PROVE means doing the calculation;
 DUEL win/draw/forfeit points are not calculation-answer rewards and do not qualify.
 No new score constants or timers are introduced. The card is fixed to one Order,
 with no undo or stacking. A rejected input does not create an accepted-answer
-record. A recorded PROVE miss or Vigenère cipher failure prevents later declaration.
+record. A recorded PROVE miss or Vigenère/RSA cipher failure prevents later declaration.
 
 After declaration, wrong answers may be retried on the same Order until its
-existing deadline. Existing penalties remain unchanged. Vigenère forfeits its
+existing deadline. Existing penalties remain unchanged. Vigenère and RSA forfeit their
 base reward after a wrong answer, so its doubled reward is also zero; correct
 completion still avoids expiry. LEAK pays its ordinary reward and spends the
 card. Deadline, ROTATE or match end expires it without multiplying any penalty.
@@ -300,3 +302,50 @@ Local evidence: `game/src/lightning.test.ts` uses the real reducer/host and Port
 component; the `lightning` dev scenario reaches minute 61 through normal ticks
 and opponent calculations. Run game/dev tests and typechecks, then the repository
 catalog gate. See [the local walkthrough](dev/LIGHTNING-PLAYTHROUGH.md).
+
+
+### RSA: one public-key encryption exercise
+
+At the existing endgame boundary (default minute 60), newly scheduled **normal**
+cipher slots become `rsa-encrypt`: original integer m=2…9, public n≤77 and
+exponent e=3, 5 or 7. Existing Orders keep their task and deadline; delayed ticks
+use the scheduled issue time. Each normal RSA Order keeps five minutes and 30
+points. Rush slots remain the existing Vigenère exercise, 2.5 minutes / 45 points.
+
+Calculate `c=m^e mod n` (multiply e copies of m and take the remainder after
+division by n). Intermediate remainders preserve the result. **CIPHER** submits
+one integer privately to the trusted judge; it is not ZK or proof of a private
+key. **LEAK** publishes m/c and the already-public n/e for 10 points. Neither
+operation publishes the factors or recovery exponent. A well-formed wrong
+answer costs 6 and makes all later CIPHER success on that Order worth 0, also
+with lightning. A clean declared calculation earns the existing 60 points.
+
+**RSA HUNT** uses an opponent's current public n/e, even with zero LEAK records.
+Enter two distinct prime factors of n in either order: success +25, victim −12
+with the existing zero floor. Incorrect factors are rejected without a deduction
+or attempt cap; one success is accepted per attacker/target/generation. A prime
+is an integer at least 2 divisible only by 1 and itself. Factoring n reveals how
+to calculate a recovery key; the optional explanation connects φ, d and
+`m=c^d mod n` with n=33/e=3. The judge checks factors, not equality to one d.
+
+**日本語:** 終盤の通常の暗号お題はRSAです。元の数mをe回掛けてnで割った余りを、
+CIPHER欄へ1個入力します。公開鍵n/eは全員に見え、元に戻す鍵は隠します。
+LEAKは元mと答えcを公開します。HUNTはLEAK不要で、相手のnを異なる素数2個の積に
+分けて提出。素数が分かれば元に戻す鍵を計算できます。誤答後のCIPHERは0点で
+再挑戦し、正しく完了すれば失効を避けられます。初回正答30点、宣言済みなら60点、
+LEAK10点、HUNT+25/被害−12点です。数が小さく、同じmから同じcが出る教材なので、
+Vigenèreより常に安全という意味ではありません。ROTATEで同じnが再登場する場合もあります。
+
+Public/private-key roles follow the seminar's [Week 5 slides 3–4](https://acp26-week5-presentation-agent.zk-tokyo-japan.workers.dev/3)
+and the participant's `advanced-cryptography-note/week5/index.html` (slides 3–4).
+[Week 1 notes](https://github.com/susumutomita/advanced-cryptography-note/blob/main/week1/index.html)
+distinguish textbook RSA's multiplication property from full FHE. This increment
+adds no multiplication/FHE task. Mathematical conditions and encryption primitives
+follow [RFC 8017 §§3 and 5](https://www.rfc-editor.org/rfc/rfc8017.html#section-3.1).
+Practical RSA needs large keys and an appropriate randomized encoding scheme;
+this tiny deterministic model provides no modern encryption-security guarantee.
+
+See [the recorded local RSA walkthrough](dev/RSA-READING.md) for a participant-only
+maximum-range packet, independent AI arithmetic and actual Portal submissions.
+Schema 10 preserves schema-9 lightning and schema-8 cipher failure state. #659
+remains open for rotor/Enigma and the later homomorphic ladder rung; #740 is separate.

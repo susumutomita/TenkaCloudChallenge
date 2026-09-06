@@ -52,11 +52,11 @@ describe("paired issue and clock", () => {
       if (n % 2) expect(byes.size).toBe(n);
     }
   });
-  test("single-Order batches retain all five individual tasks and occasionally issue a duel", () => {
+  test("single-Order batches retain the individual tasks, endgame RSA and occasional duels", () => {
     let s = running(["a","b"], 1);
     const kinds = new Set(s.contracts.filter(c=>c.teamId==="a").map(c=>c.task.kind));
     for (let i=1;i<13;i++) { s=tick(s, DEFAULT_CONFIG.onboardingFollowUpMs+i*DEFAULT_CONFIG.contractIntervalMs); for(const c of s.contracts) if(c.teamId==="a") kinds.add(c.task.kind); }
-    expect(kinds.size).toBe(6);
+    expect(kinds).toEqual(new Set(["reveal-share", "caesar-shift", "rsa-encrypt", "homomorphic-sum", "masked-total", "zk-sudoku", "rps-duel"]));
   });
   test("a late tick skips unseen expired pairs and never charges for them", () => {
     const idle=tick(initialState({eventId:"late",teamIds:["a","b"]}),0);

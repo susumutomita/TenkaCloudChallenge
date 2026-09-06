@@ -1,3 +1,4 @@
+import { rsaEncrypt } from "./rsa.ts";
 import { createHash } from "node:crypto";
 import { expect, test } from "bun:test";
 import { commit, HANDS, type Hand } from "./commitment.ts";
@@ -63,6 +64,7 @@ test("90 standard minutes: both safe teams can score a public-evidence RPS predi
         switch (order.task.kind) {
           case "reveal-share":
           case "zk-sudoku": op = buildProveSudokuOp(own.vault, order.id); break;
+          case "rsa-encrypt": op = { kind: "cipher", contractId: order.id, answer: [String(rsaEncrypt(order.task.plaintext, order.task))] }; break;
           case "caesar-shift": op = buildCipherOp(order); break;
           case "homomorphic-sum": op = buildFheOp(order, view.prime); break;
           case "masked-total": op = buildMpcOp(order, view.prime); break;

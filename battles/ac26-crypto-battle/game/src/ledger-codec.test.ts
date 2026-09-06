@@ -196,6 +196,7 @@ function expectedIdFor(artifact: PublicArtifact): string {
     case "rps-open": return `${artifact.contractId}-rps-open`;
     case "share":
       return `${artifact.contractId}-share${artifact.shareIndex}`;
+    case "rsa-pair":
     case "cipher-pair":
       return `${artifact.contractId}-pair`;
     case "proof":

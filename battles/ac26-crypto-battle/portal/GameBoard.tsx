@@ -120,6 +120,7 @@ interface LedgerGroup {
    * about the team that posted it.
    */
   pairs: CipherPairArtifact[];
+  rsaPairs: Extract<PublicArtifact, { kind: "rsa-pair" }>[];
   /**
    * [Issue #709] Opened sudoku groups. Neither exposure nor mere protection:
    * a single reveal gives nothing away, and two under one tag give a
@@ -174,11 +175,13 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
         generation: entry.generation,
         shares: [],
         pairs: [],
+        rsaPairs: [],
         reveals: [],
         duels: [],
         protected: new Map(),
       };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
+    else if (entry.kind === "rsa-pair") current.rsaPairs.push(entry);
     else if (entry.kind === "cipher-pair") current.pairs.push(entry);
     else if (entry.kind === "sudoku-reveal") current.reveals.push(entry);
     else if (entry.kind === "rps-commit" || entry.kind === "rps-open") current.duels.push(entry);
@@ -199,6 +202,7 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
       return "FHE";
     case "partial":
       return "MPC";
+    case "rsa-pair": return "RSA PAIR (LEAK)";
     case "cipher-pair":
       // Unreachable: cipher pairs are exposure and are grouped with the shares
       // above, never counted here. Named rather than defaulted so adding a
@@ -446,6 +450,10 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                   「相手の段を見て狩る価値があるか判断する」 (#659 §2) something a
                   reader can actually do from the board.
                 */}
+                {group.rsaPairs.map(pair => <details className={`tc-share-card tc-public${pair.id === lastId ? " tc-new-public" : ""}`} key={pair.id}>
+                  <summary>RSA · LEAK</summary><p>n={pair.n}, e={pair.e}</p><p>{locale === "ja" ? "元" : "Original"} m={pair.plaintext} → {locale === "ja" ? "暗号" : "Encrypted"} c={pair.ciphertext}</p>
+                  <p>{locale === "ja" ? "公開鍵だけでも、この小さいnを因数分解して攻撃できます。" : "The public key alone allows this tiny n to be factored for an attack."}</p>
+                </details>)}
                 {group.pairs.map((pair) => (
                   <details
                     className={`tc-share-card tc-public${pair.id === lastId ? " tc-new-public" : ""}`}

@@ -72,6 +72,7 @@ export const SCENARIO_IDS = [
   "hint-booster",
   "lightning",
   "vigenere",
+  "rsa",
   "ledger-filling",
   "fhe-order",
   "mpc-order",
@@ -98,6 +99,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "開始直後 — Order が出たところ",
     en: "Just started — first Orders issued",
   },
+  "rsa": { ja: "RSA — 最大域 n77/e7/m9・通常5分TTL", en: "RSA — maximum n77/e7/m9; standard five-minute TTL" },
   "vigenere": { ja: "Vigenère — bravo の3位置が公開済み・通常5分TTL", en: "Vigenère — bravo exposed three positions; standard five-minute TTL" },
   "lightning": { ja: "終盤のライトニング — 1題の計算正解を2倍", en: "Endgame lightning — double one calculation reward" },
   "hint-booster": { ja: "終盤のヒント支援 — 通常90分設定で残り10分", en: "Endgame hint support — 10 minutes left, standard 90-minute match" },
@@ -167,8 +169,8 @@ interface Driver {
   play(teamId: string, op: CryptoBattleOp): boolean;
 }
 
-function makeDriver(config: Partial<CryptoBattleConfig> = DEV_CONFIG): Driver {
-  const host = createMatch({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS }, config);
+function makeDriver(config: Partial<CryptoBattleConfig> = DEV_CONFIG, matchSecret?: string): Driver {
+  const host = createMatch({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS, ...(matchSecret === undefined ? {} : { matchSecret }) }, config);
   const driver: Driver = {
     host,
     nowMs: 0,
@@ -322,7 +324,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver(id === "hint-booster" || id === "lightning" || id === "vigenere" ? {} : DEV_CONFIG);
+  const driver = makeDriver(id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" ? {} : DEV_CONFIG, id === "rsa" ? "rsa-max-110" : undefined);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -333,6 +335,10 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
 
     case "fresh":
+      break;
+
+    case "rsa":
+      driver.advance(61 * 60_000);
       break;
 
     case "vigenere": {

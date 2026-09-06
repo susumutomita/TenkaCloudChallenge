@@ -116,7 +116,7 @@ export type ReplayEvent =
         readonly generation: number;
         readonly rung: string;
         readonly pairsToBreak: number;
-      };
+      } | { readonly contractId: string; readonly generation: number; readonly n: number; readonly e: number };
     })
   | (ReplayEventBase & {
       readonly kind: "hunt-success";
@@ -228,6 +228,11 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
           },
           detail: { contractId: artifact.contractId, generation: artifact.generation },
         });
+        break;
+      case "rsa-pair":
+        events.push({ atMs: artifact.postedAtMs, teamId: artifact.teamId, kind: "cipher-leak",
+          summary: { ja: `${artifact.teamId} が RSA の元の数と暗号の答えを公開。公開鍵だけでも小さい n を因数分解して攻撃できます。`, en: `Team ${artifact.teamId} published the RSA original and encrypted answer. This tiny n can already be factored from the public key alone.` },
+          detail: { contractId: artifact.contractId, generation: artifact.generation, n: artifact.n, e: artifact.e } });
         break;
       case "cipher-pair":
         events.push({

@@ -58,7 +58,7 @@ describe("the Order belt a participant actually sees", () => {
   test("every task kind appears", () => {
     const kinds = new Set<OrderTaskKind>(orders.map((o) => o.task.kind));
     expect(kinds).toEqual(
-      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total", "rps-duel"]),
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total", "rps-duel", "rsa-encrypt"]),
     );
   });
 
@@ -107,6 +107,7 @@ describe("the Order belt a participant actually sees", () => {
     const shapes = new Map<string, readonly SubmissionMethod[]>([
       ["reveal-share", ["leak", "prove"]],
       ["caesar-shift", ["cipher", "leak"]],
+      ["rsa-encrypt", ["cipher", "leak"]],
     ]);
     for (const order of freeChoice) {
       const expected = shapes.get(order.task.kind);
@@ -116,7 +117,7 @@ describe("the Order belt a participant actually sees", () => {
     }
     // Both shapes actually occur -- otherwise the contrast above is theory.
     const seen = new Set(freeChoice.map((o) => o.task.kind));
-    expect(seen).toEqual(new Set(["reveal-share", "caesar-shift"]));
+    expect(seen).toEqual(new Set(["reveal-share", "caesar-shift", "rsa-encrypt"]));
   });
 
   /**

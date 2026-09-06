@@ -39,6 +39,7 @@
 
 import type { Hand } from "./commitment.ts";
 import type { CipherKey, CipherRung } from "./ladder.ts";
+import type { RsaTask, PublicRsaKey } from "./rsa.ts";
 import type { StoredArtifact } from "./ledger-codec.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
 import type { Permutation, SudokuGrid } from "./sudoku.ts";
@@ -309,6 +310,7 @@ export interface StoredCiphertext {
  * team's projection can carry it. See mpc.ts.
  */
 export type OrderTask =
+  | RsaTask
   | {
       readonly kind: "reveal-share";
       /** Which share indices the Order wants accounted for. */
@@ -424,7 +426,7 @@ export interface RpsSubmission {
 }
 
 export interface Contract {
-  /** Vigenère: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
+  /** Vigenère/RSA: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
   readonly cipherFailed?: boolean;
   /** False only when this version issued the Order; omitted legacy history is unknown. */
   readonly answerAttempted?: boolean;
@@ -654,6 +656,14 @@ export interface CipherPairArtifact {
   readonly postedAtMs: number;
 }
 
+/** Only LEAK publishes the original value and its encrypted result; never p, q or d. */
+export interface RsaPairArtifact {
+  readonly id: string; readonly teamId: string; readonly generation: number;
+  readonly kind: "rsa-pair"; readonly method: SubmissionMethod; readonly contractId: string;
+  readonly n: number; readonly e: number; readonly plaintext: number; readonly ciphertext: number;
+  readonly postedAtMs: number;
+}
+
 /**
  * [Issue #709] One entry in the Public Ledger: the row, column or box the
  * judge opened after a successful PROVE.
@@ -693,6 +703,7 @@ export interface RpsOpenArtifact extends Omit<RpsCommitArtifact, "kind">, RpsOpe
 }
 
 export type PublicArtifact =
+  | RsaPairArtifact
   | RpsCommitArtifact
   | RpsOpenArtifact
   | ShareArtifact
@@ -952,6 +963,7 @@ export interface HuntLogEntry {
 
 export type CryptoBattleOp =
   | { readonly kind: "declare-lightning"; readonly contractId: string }
+  | { readonly kind: "hunt-rsa"; readonly targetTeamId: string; readonly generation: number; readonly p: string; readonly q: string }
   | { readonly kind: "hunt-rps"; readonly targetTeamId: string; readonly duelId: string; readonly predictedHand: number }
   | { readonly kind: "rps-commit"; readonly contractId: string; readonly commitment: number }
   | { readonly kind: "rps-open"; readonly contractId: string; readonly hand: number; readonly randomness: number }
@@ -1147,6 +1159,7 @@ export interface VaultProjection {
  * by accident.
  */
 export type OrderTaskProjection =
+  | RsaTask
   | { readonly kind: "reveal-share"; readonly shareIndices: readonly number[] }
   | { readonly kind: "homomorphic-sum"; readonly inputs: readonly StoredCiphertext[] }
   | {
@@ -1294,7 +1307,9 @@ export interface CryptoBattleProjection {
   readonly lightning?: LightningProjection;
   /** Public scoring rule and this reader's completed attacks; no recovered values. */
   readonly huntWinPoints?: number;
-  readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung }[];
+  readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung | "rsa" }[];
+  /** All teams' current public RSA keys, from endgame onward; LEAK is not required. */
+  readonly publicRsaKeys?: readonly PublicRsaKey[];
   /** Public evidence plus only this reader’s private predictions/results. */
   readonly rpsHunt?: RpsHuntProjection;
   readonly phase: Phase;
