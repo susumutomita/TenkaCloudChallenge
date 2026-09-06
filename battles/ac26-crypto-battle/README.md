@@ -239,14 +239,17 @@ trusted judge; this is not a zero-knowledge proof.
 
 Vigenère repeats keys 1 → 2 → 3 → 1. Each Order here is one position from that
 cycle. LEAK publishes the original, answer and key position. Three *distinct*
-positions reveal all keys; three copies of one position do not. The attack
-panel reports the covered positions and accepts keys 1, 2, 3 separated by spaces.
+positions reveal all keys; three copies of one position do not. The server requires all three positions from that target, rung and generation.
+The attack panel reports the covered positions and accepts keys 1, 2, 3 separated by spaces.
 A single long known plaintext/ciphertext pair spanning all three positions
 would already reveal all keys. This classical repeated-key cipher is not a
 modern secure encryption scheme.
 
-CIPHER keeps the Order's normal score (30 for standard Orders; existing rush
-settings still apply), LEAK pays 10, Vigenère HUNT pays 25 with a 12-point victim
+A first correct CIPHER keeps the Order's normal score (30 for standard Orders;
+existing rush settings still apply). A well-formed wrong Vigenère answer costs
+`wrongProve` (6 by default) and permanently forfeits that Order's CIPHER reward.
+Correct retries complete it for 0, avoiding expiry; malformed inputs do not count.
+The screen states both outcomes before submission. LEAK still pays 10, Vigenère HUNT pays 25 with a 12-point victim
 penalty subject to the score floor. Caesar retains its existing 8-point HUNT
 reward. ROTATE retires old-generation evidence, while the public records remain.
 These changes add no AWS resources, settings, timers or cleanup obligations.

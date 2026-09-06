@@ -171,6 +171,13 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     if (last.outcome !== "hit" && last.outcome !== "miss") return false;
     if (last.points !== undefined && (typeof last.points !== "number" || !Number.isFinite(last.points))) return false;
   }
+  if (v.lastCipher !== undefined) {
+    const last = v.lastCipher as Record<string, unknown>;
+    if (!last || typeof last !== "object" || typeof last.contractId !== "string"
+      || !["hit", "miss"].includes(String(last.outcome))
+      || typeof last.points !== "number" || !Number.isFinite(last.points)) return false;
+  }
+  if (v.myContracts.some(c => c.cipherFailed !== undefined && typeof c.cipherFailed !== "boolean")) return false;
   // [Issue #709] Same shape, same reason: the PROVE banner keys on it.
   if (v.lastProve !== undefined) {
     const last = v.lastProve as Record<string, unknown> | null;

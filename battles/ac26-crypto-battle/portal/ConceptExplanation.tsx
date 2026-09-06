@@ -1,4 +1,3 @@
-import { vigenereGuide } from "../game/src/vigenere-guide.ts";
 import { cipherKeyAt } from "../game/src/ladder.ts";
 /** Free reading aids. They never submit a move or compute a live answer. */
 import { useState } from "react";
@@ -37,8 +36,8 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
       { title: "この Order の左右をそれぞれ足す", lines: ["カードの左どうしを足し、p（割る数）で割った余りを『答え：左の値』へ入れます。右どうしも足し、同じ p で割った余りを『答え：右の値』へ入れます。", "両方が 0 以上 p 未満になったら『暗号文を提出』を押します。中身を開けたり、鍵を探したりする必要はありません。", "この体験用モデルで実装しているのは暗号文の足し算です。実用の FHE 全体を実装しているわけではありません。"] },
     ] },
     vigenere: { name: "Vigenère（ヴィジュネル）暗号", steps: [
-      { title: "3個の鍵を繰り返す", lines: [vigenereGuide(undefined, 0).ja] },
-      { title: "一般式・小さい例から自分の値へ", lines: [vigenereGuide(undefined, 1).ja] },
+      { title: "3個の鍵を繰り返す", lines: ["記号を番号0〜5で表し、秘密のずらす数（鍵）を3個用意します。左から鍵1→鍵2→鍵3→鍵1…と繰り返して使います。", "暗号の番号 = (元の番号 + 今回の鍵) を6で割った余り。暗号は中身を隠すために変換したデータです。"] },
+      { title: "別の数で練習する", lines: ["例：鍵1,2,3と元の列2,0,5なら、2+1=3、0+2=2、5+3=8→6を引いて2。暗号は3,2,2です。", "元と暗号の組を公開すると、その位置の鍵は暗号−元から分かります。負なら6を足します。この繰り返す鍵は現代の実用暗号の安全性を持ちません。自分のお題の詳しい手順は、そのお題のヒントで開きます。"] },
     ] },
     caesar: { name: "シーザー暗号", steps: [
       { title: "決まった数だけずらして隠す", lines: ["シーザー暗号は、記号を決まった数だけ先へずらす方法です。ずらす数が『鍵』です。末尾まで来たら先頭に戻ります。"] },
@@ -81,8 +80,8 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
       { title: "Add this Order's lefts and rights separately", lines: ["Add the left values; take the remainder after dividing by the card's p and enter your answer: left part. Repeat for the rights and enter your answer: right part.", "Both values must be at least 0 and smaller than p. Press SUBMIT CIPHERTEXT. You never need to open a ciphertext or find a key.", "This teaching model implements ciphertext addition, not a full practical FHE system."] },
     ] },
     vigenere: { name: "Vigenère cipher", steps: [
-      { title: "Repeat three secret shifts", lines: [vigenereGuide(undefined, 0).en] },
-      { title: "From the formula and a small example to your values", lines: [vigenereGuide(undefined, 1).en] },
+      { title: "Repeat three secret shifts", lines: ["Represent symbols by values 0–5. Prepare three secret shifts, called keys, and repeat key 1 → key 2 → key 3 → key 1 from left to right.", "Encrypted value = (original value + selected key), taking the remainder after dividing by 6. Encryption transforms data to hide its content."] },
+      { title: "Practice with different values", lines: ["Example: keys 1,2,3 and originals 2,0,5 give 2+1=3, 0+2=2, 5+3=8→subtract 6 to get 2. Encrypted row: 3,2,2.", "Publishing an original/answer pair reveals that position’s key: encrypted minus original; add 6 if negative. Repeated keys do not offer modern encryption security. Open your Order’s hints for its detailed procedure."] },
     ] },
     caesar: { name: "Caesar cipher", steps: [
       { title: "Hide a position by shifting it", lines: ["A Caesar cipher moves every symbol forward by a fixed number called the key. After the last symbol, wrap to the first."] },
@@ -117,7 +116,7 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
       `${task.myInput} + (${task.incomingMasks.join(" + ") || "0"}) − (${task.outgoingMasks.join(" + ") || "0"}) = ?`,
       ja ? `${prime} で割った余りを、下の小計の欄へ入力します。` : `Take the remainder after dividing by ${prime} and enter the subtotal below.`,
     ];
-    case "caesar-shift": return [
+    case "caesar-shift": return task.rung === "vigenere" ? [] : [
       ...task.plaintext.map((value, i) => `${value} + ${cipherKeyAt(task.myKey, (task.keyPosition ?? 0) + i)} = ?`),
       ja ? `それぞれ ${task.symbols.length} で割った余りを、元の順に入力します。` : `Take remainders after dividing by ${task.symbols.length}; enter them in the original order.`,
     ];

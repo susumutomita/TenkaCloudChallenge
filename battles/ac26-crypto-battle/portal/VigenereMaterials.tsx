@@ -1,5 +1,4 @@
 import { cipherKeyAt } from "../game/src/ladder.ts";
-import { vigenereGuide } from "../game/src/vigenere-guide.ts";
 import type { OrderTaskProjection } from "../game/src/types.ts";
 import { DieRow } from "./DieFace.tsx";
 
@@ -17,6 +16,6 @@ export default function VigenereMaterials({ task, locale }: {
     <p className="tc-hunt-formula">{ja ? `暗号の番号 = (元の番号 + 鍵${position}) を6で割った余り。サイコロの面1〜6の計算用番号は0〜5です。` : `Encrypted value = (original value + key ${position}), taking the remainder after dividing by 6. Die faces 1–6 use calculation values 0–5.`}</p>
     <p className="tc-card-hint">{ja ? "例：元4・使う鍵3なら4+3=7、6を引いて1。下の欄へ答えの番号1個を入れ、CIPHERで非公開提出します。" : "Example: original 4, selected key 3: 4+3=7; subtract 6 to get 1. Enter your one answer below and press CIPHER to submit privately."}</p>
     <div className="tc-card-warn">{ja ? `LEAKすると鍵${position}が分かる組を公開します。鍵の位置1・2・3が揃うと全鍵を回収されます。同じ位置の公開だけでは揃いません。` : `LEAK exposes key position ${position}. All three distinct positions reveal the entire key; repeated records for one position do not.`}</div>
-    <details><summary>{ja ? "繰り返す鍵の仕組み・一般式・自分の値" : "Mechanism, general formula and your values"}</summary>{([0, 1, 2] as const).map(level => <p key={level} style={{ whiteSpace: "pre-line" }}>{vigenereGuide(task, level)[locale]}</p>)}</details>
+    <p className="tc-card-hint">{ja ? "長い列の1組で3位置すべてを公開すれば、それだけで全鍵が分かります。鍵を繰り返すこの方式は現代の安全な暗号ではありません。" : "A single long pair covering all three positions reveals every key. This repeated-key method is not a modern secure cipher."}</p>
   </section>;
 }

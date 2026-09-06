@@ -422,6 +422,8 @@ export interface RpsSubmission {
 }
 
 export interface Contract {
+  /** Vigenère: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
+  readonly cipherFailed?: boolean;
   readonly rps?: RpsSubmission;
   readonly id: string;
   /** The team this Order was issued to (only that team may submit against it). */
@@ -773,6 +775,7 @@ export interface TeamState {
    * can only report what the state remembers.
    */
   readonly lastProve?: LastProve;
+  readonly lastCipher?: LastCipher;
   /**
    * [Issue #696] This team's most recent Shamir HUNT, and whether it landed.
    *
@@ -800,6 +803,14 @@ export interface LastHunt {
   readonly outcome: HuntOutcome;
   /** [Issue #709] Which secret was hunted. Absent means the Shamir secret. */
   readonly via?: "sudoku";
+}
+
+/** The submitting team's own CIPHER verdict. */
+export interface LastCipher {
+  readonly contractId: string;
+  readonly outcome: "hit" | "miss";
+  /** Actual score delta, including floor; zero-reward completion is still a hit. */
+  readonly points: number;
 }
 
 /** [Issue #709] One PROVE, as the proving team's own record of it. */
@@ -1168,6 +1179,7 @@ export type OrderTaskProjection =
       readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
+  readonly cipherFailed?: boolean;
   readonly id: string;
   readonly kind: ContractKind;
   readonly points: number;
@@ -1346,4 +1358,5 @@ export interface CryptoBattleProjection {
   readonly lastHunt?: LastHunt;
   /** [Issue #709] The reader's most recent PROVE, if any -- see `TeamState.lastProve`. */
   readonly lastProve?: LastProve;
+  readonly lastCipher?: LastCipher;
 }

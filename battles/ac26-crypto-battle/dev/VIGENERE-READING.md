@@ -74,3 +74,42 @@ not run. No AWS, release, shared port 5657, or container was used.
 ![Public positions at 375×812](evidence/vigenere-hunt-narrow.png)
 
 ![Public positions at 1280×720](evidence/vigenere-hunt-desktop.png)
+
+
+## PR #751 review follow-up
+
+The review found that the original server did not enforce the displayed public
+coverage condition, that six answer guesses could always collect the CIPHER
+reward, and that free explanations included the paid guide. Those paths are
+now separate and covered by the same real reducer/Portal tests.
+
+Schema 8 stores a well-formed Vigenère miss and its actual score delta. It
+charges the existing wrongProve price and forfeits that Order's CIPHER reward;
+correct retry completes for zero and avoids expiry. Malformed input does not
+count. The public HUNT prerequisite is enforced for the exact team, generation
+and rung. No new timer, resource, fixed price or attempt-budget setting is added.
+A lucky first guess remains possible; six attempts cannot guarantee the reward.
+
+On a dedicated headless browser and localhost:5676, using only the displayed
+values, the author checked the Japanese 375×812 screen and English 1280×720:
+public pairs 0→0, 2→0, 2→4 yielded keys 0,4,2 and +25. Submitting the incorrect
+cipher value 4 for original 0/key 3 charged −6 (25→19); the Order and button
+changed to +0. Submitting the calculated 3 completed it with +0 (score stayed
+19), without a new public record. A fresh replay's first correct 3 earned +30.
+The view's document width and scroll width were both 375. The clock was paused
+for this regression; no reading-speed measurement is claimed.
+
+The free card and concept reader now provide the problem values, a general
+formula and unrelated examples. They do not import the paid three-rung guide
+or generate its live-value procedure. Purchased hint text still appears through
+the own projection. The English formula defines original value and key instead
+of assuming the word “operands”.
+
+Verification: full game 635 pass (41 files), dev 55 pass, both typechecks and
+catalog 116 entries pass. The focused migration/Portal/Vigenère suite also
+passes after the final copy changes. AWS, real-device keyboard input and parent
+Portal integration remain untested by this headless component harness.
+
+![Wrong answer and zero-point retry](evidence/vigenere-miss-narrow.png)
+
+![Correct zero-point completion](evidence/vigenere-zero-completion.png)

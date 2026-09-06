@@ -51,7 +51,8 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 1. TenkaCloud mints the match secret before first state creation.
 2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
-4. `validateOp` rejects malformed, stale, unauthorized, or incorrect moves.
+4. `validateOp` rejects malformed, stale or unauthorized moves. A well-formed
+   PROVE or Vigenère CIPHER miss is accepted and charged by `applyOp`.
 5. `applyOp` changes state only after validation.
 6. `projectForTeam` returns the team's vault and Orders plus the public ledger.
 7. Reset/delete removes both state and the separate match-secret record.
@@ -62,7 +63,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (7, including Vigenère key-position records) and a
+The plugin declares `stateSchemaVersion` (8, including Vigenère key-position and failure records) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -373,8 +374,10 @@ The issue's full-length Vigenère example reveals every key from one known pair.
 This implementation therefore issues one position per Order, with a publicly
 known period and offset, and checks **coverage**, not record count, for the
 participant attack route. A long pair covering a cycle still reveals all keys.
-The reducer retains the existing rule that a correct guessed key is accepted;
-no material-count validator or hidden solution-count predicate was added.
+The server requires public pairs covering all three distinct positions for that
+target/rung/current generation before comparing the submitted key. Repeated
+positions and records from other teams, generations or rungs do not unlock HUNT.
+Caesar retains its existing validator.
 
 This follows the private trusted-judge and time-progression decisions in
 [PR #661](https://github.com/susumutomita/TenkaCloudChallenge/pull/661), and the
@@ -387,3 +390,26 @@ No dedicated Vigenère treatment was found in the checked local seminar notes.
 
 Remaining #659 work: RSA, rotor/Enigma teaching model, new homomorphic rung,
 and lightning. This increment must not close #659 or the balance discussion #740.
+
+
+### Schema 8: Vigenère answer adjudication
+
+A well-formed incorrect Vigenère CIPHER is an accepted move: charge the existing
+`scores.wrongProve` (default 6), persist `Contract.cipherFailed=true`, and publish
+nothing. Subsequent correct answers complete that Order for 0; LEAK remains at
+its normal points, and ROTATE/deadline retain the ordinary one-time expiry
+penalty. Shape/length/alphabet errors are rejected without a failure record.
+This removes the guaranteed six-candidate reward without new point constants,
+clocks or attempt-budget configuration. It does not prevent a lucky first guess.
+
+`TeamState.lastCipher` and the own projection record the actual result/delta;
+SDK `ok` alone is not a correct answer. The browser states the reward forfeiture
+before the answer and offers a zero-point completion after a miss. Schema-7
+migration preserves all Vigenère records, numeric HUNT reservations and booster
+allocation; missing failure flags mean no previously charged miss. Existing
+true flags survive migration, reload, LEAK and ROTATE. Rollback requires a
+schema-8-compatible plugin. Caesar's existing retry adjudication is unchanged.
+
+Free Vigenère material carries the problem's own values, a general formula and
+an unrelated small example. The three paid guide texts, including live-value
+instructions at level 3, reach the Portal only through projected purchased hints.
