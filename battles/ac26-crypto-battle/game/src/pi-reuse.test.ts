@@ -99,7 +99,7 @@ describe("reuse is a real, and really exploitable, mistake", () => {
     // victim's own vault, which the attacker never saw.
     expect(op.solution).toEqual([...projectForTeam(state, VICTIM).vault.sudokuSolution]);
     // The projection reports the hit, on the sudoku channel.
-    expect(projectForTeam(next, ATTACKER).lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "hit", via: "sudoku" });
+    expect(projectForTeam(next, ATTACKER).lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "hit", via: "sudoku", points: DEFAULT_CONFIG.scores.huntBonus });
   });
 
   test("the same recovery cannot be spent twice", () => {
@@ -125,7 +125,7 @@ describe("reuse is a real, and really exploitable, mistake", () => {
     const next = applyOp(funded, ATTACKER, wrong);
     expect(next.teams[ATTACKER]?.score).toBe(40 - DEFAULT_CONFIG.scores.wrongHunt);
     const view = projectForTeam(next, ATTACKER);
-    expect(view.lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "miss", via: "sudoku" });
+    expect(view.lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "miss", via: "sudoku", points: -DEFAULT_CONFIG.scores.wrongHunt });
     expect(view.sudokuHuntAttempts[VICTIM]?.spent).toBe(1);
     // The Shamir budget is untouched.
     expect(view.huntAttempts[VICTIM]?.spent).toBe(0);

@@ -106,6 +106,7 @@ export function projectRps(state: CryptoBattleState, order: Contract): Extract<O
     ...(order.rps?.commitment === undefined ? {} : { myCommitment: order.rps.commitment }),
     ...(opponent?.rps?.commitment === undefined ? {} : { opponentCommitment: opponent.rps.commitment }),
     ...(order.rps?.opening === undefined ? {} : { myOpening: order.rps.opening }),
+    opponentCommitted: opponent?.rps?.commitment !== undefined,
     opponentOpened: opponent?.rps?.opening !== undefined,
     ...(order.rps?.outcome === undefined ? {} : { outcome: order.rps.outcome }),
   };

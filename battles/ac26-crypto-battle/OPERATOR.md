@@ -229,6 +229,12 @@ unknown IDs/counts fail migration without rewriting the row. A rollback to schem
 must not read schema-4 rows. Finish running matches on their compatible plugin.
 The existing v2 unspent-Schnorr-exposure upgrade restriction still applies.
 
+Schema 5 records the actual own score change on new Shamir and sudoku HUNT
+results, including a penalty limited by the zero-score floor. Upgrade accepts
+schemas 1–4 and keeps older results without a score delta; their outcome remains
+visible, but the Portal reports the delta as unrecorded instead of guessing it
+from today's rules. A schema-4 plugin must not read schema-5 rows after rollback.
+
 `metadata.json` reserves **30 KiB per team + 1,536 bytes**. The platform owns the
 limits below; this problem does not raise them. The local capacity tests retain
 25% headroom and check both the peak and the final state.

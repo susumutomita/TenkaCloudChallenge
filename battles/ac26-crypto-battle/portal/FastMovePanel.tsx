@@ -4,9 +4,6 @@ import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts
 import {
   submitCipher,
   submitFhe,
-  submitHunt,
-  submitHuntCipher,
-  submitHuntSudoku,
   submitLeak,
   submitMpc,
   submitProveSudoku,
@@ -16,10 +13,14 @@ import {
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import ConceptExplanation from "./ConceptExplanation.tsx";
-import RpsHunt, { RpsHuntStatus } from "./RpsHunt.tsx";
+import { RpsHuntStatus } from "./RpsHunt.tsx";
 import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
-import HuntGuide, { HuntIntro, HUNT_GUIDE_CSS } from "./HuntGuide.tsx";
+import HuntPanel from "./HuntPanel.tsx";
+import { HUNT_GUIDE_CSS } from "./HuntGuide.tsx";
+import { ledgerTargets, cipherHuntCandidates, sudokuHuntCandidates } from "./hunt-targets.ts";
+export type { CipherHuntCandidate, SudokuHuntCandidate } from "./hunt-targets.ts";
+export { huntBudgetFor, cipherHuntCandidates, sudokuHuntCandidates } from "./hunt-targets.ts";
 import SudokuGuide, { RelabelDiagram, GUIDE_CSS } from "./SudokuGuide.tsx";
 import SuccessCelebration, { SUCCESS_CSS } from "./SuccessCelebration.tsx";
 import { taskDetail } from "./orderTask.ts";
@@ -38,14 +39,11 @@ import {
 } from "./SudokuGrid.tsx";
 import { rungSpec } from "../game/src/ladder.ts";
 import { ALL_PERMUTATIONS } from "../game/src/sudoku.ts";
-import type { CipherRung } from "../game/src/ladder.ts";
 import type {
-  CipherPairArtifact,
   ContractProjection,
+  SudokuRevealArtifact,
   CryptoBattleProjection,
   HintProjection,
-  HuntBudgetProjection,
-  SudokuRevealArtifact,
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
@@ -205,6 +203,7 @@ export const FAST_MOVE_COPY = {
     huntMiss: "HUNT MISS",
     huntMissBody: (cost: number, left: number | undefined) =>
       left === undefined ? `-${cost}` : `-${cost} · ${left} attempt${left === 1 ? "" : "s"} left`,
+    huntUnknownPoints: (left?: number) => `This older result has no recorded score change.${left === undefined ? "" : ` ${left} attempt${left === 1 ? "" : "s"} left.`}`,
     huntUnread: "HUNT SUBMITTED",
     huntUnreadBody: "The result could not be read. Check your score and the attempts left on the target.",
     huntCipherBody: "Recovered key accepted — that rung is broken until they rotate.",
@@ -369,6 +368,7 @@ export const FAST_MOVE_COPY = {
     huntMiss: "HUNT MISS",
     huntMissBody: (cost: number, left: number | undefined) =>
       left === undefined ? `-${cost}` : `-${cost} · あと ${left} 回`,
+    huntUnknownPoints: (left?: number) => `この古い結果には得点変化の記録がありません。${left === undefined ? "" : `あと ${left} 回。`}`,
     huntUnread: "HUNT を送信しました",
     huntUnreadBody: "結果を読み取れませんでした。スコアと、相手チップの残り回数を確認してください。",
     huntCipherBody: "割り出した鍵が受理されました。相手が ROTATE するまで、この段は破れたままです。",
@@ -499,46 +499,6 @@ function openOrders(projection: CryptoBattleProjection | null): readonly Contrac
   return projection.myContracts.filter((order) => order.status === "open" && order.remainingMs > 0);
 }
 
-function ledgerTargets(projection: CryptoBattleProjection | null) {
-  if (!projection) return [];
-  const seen = new Set<string>();
-  const targets: { teamId: string; generation: number; shareIndices: number[] }[] = [];
-  for (const entry of projection.publicLedger) {
-    if (entry.kind !== "share" || entry.teamId === projection.vault.teamId || entry.generation !== projection.teams[entry.teamId]?.generation) continue;
-    const key = `${entry.teamId}:${entry.generation}`;
-    let target = targets.find((candidate) => `${candidate.teamId}:${candidate.generation}` === key);
-    if (!target) {
-      target = { teamId: entry.teamId, generation: entry.generation, shareIndices: [] };
-      targets.push(target);
-    }
-    const indexKey = `${key}:${entry.shareIndex}`;
-    if (!seen.has(indexKey)) {
-      seen.add(indexKey);
-      target.shareIndices.push(entry.shareIndex);
-    }
-  }
-  return targets;
-}
-
-/**
- * [Issue #696] The reader's HUNT budget against one target, or nothing if the
- * target's generation is not the one the budget counts against.
- *
- * `ledgerTargets` offers only current generations; `validateOp` refuses a
- * HUNT at any generation but the current one. Showing "3/3 attempts left" on a
- * chip the judge will refuse would advertise a budget that cannot be spent, so
- * the count appears only where the two agree.
- *
- * Exported for `game/src/portal.test.ts` (see this file's header on why the
- * panel itself cannot be rendered with a projection under test).
- */
-export function huntBudgetFor(
-  projection: CryptoBattleProjection | null,
-  target: { readonly teamId: string; readonly generation: number },
-): HuntBudgetProjection | undefined {
-  const budget = projection?.huntAttempts[target.teamId];
-  return budget !== undefined && budget.generation === target.generation ? budget : undefined;
-}
 
 /**
  * [Issue #696] What to tell the player after a Shamir HUNT the service
@@ -569,14 +529,15 @@ export function huntFeedback(
   // [Issue #709] The projection remembers WHICH secret the last HUNT went
   // after. A sudoku miss must not be read off the Shamir budget, and a Shamir
   // hit must not be reported as a recovered solution.
-  const matches = outcome !== undefined && (outcome.via ?? undefined) === via;
+  const matches = outcome !== undefined && outcome.targetTeamId === targetTeamId && (outcome.via ?? undefined) === via;
   if (next !== undefined && matches && outcome?.outcome === "hit") {
-    return { kind: "hunt", title: copy.huntSuccess, body: via === "sudoku" ? copy.huntSudokuBody : copy.huntBody };
+    const body = via === "sudoku" ? copy.huntSudokuBody : copy.huntBody;
+    return { kind: "hunt", title: copy.huntSuccess, body: outcome.points === undefined ? `${body} ${copy.huntUnknownPoints()}` : body, reward: outcome.points };
   }
   if (next !== undefined && matches && outcome?.outcome === "miss") {
     const budget = (via === "sudoku" ? next.sudokuHuntAttempts : next.huntAttempts)[targetTeamId];
     const left = budget === undefined ? undefined : Math.max(0, budget.max - budget.spent);
-    return { kind: "error", title: copy.huntMiss, body: copy.huntMissBody(next.wrongHuntCost, left) };
+    return { kind: "error", title: copy.huntMiss, body: outcome.points === undefined ? copy.huntUnknownPoints(left) : copy.huntMissBody(Math.abs(outcome.points), left) };
   }
   return { kind: "error", title: copy.huntUnread, body: copy.huntUnreadBody };
 }
@@ -718,50 +679,6 @@ export function rotateVoidCount(projection: CryptoBattleProjection | null): numb
   return openOrders(projection).length;
 }
 
-/**
- * [Issue #659 §2] Every other team whose ladder key is recoverable from the
- * public record right now.
- *
- * "Recoverable" means the rung's own threshold: a team that has published at
- * least `pairsToBreak` pairs of one rung, on its CURRENT generation, is broken
- * and can be hunted. Counting per (team, generation, rung) is what makes
- * 「相手の段を見て狩る価値があるか判断する」 (#659 §2) a decision a participant can
- * actually make from the board -- and it is why a rung that no number of pairs
- * breaks simply never appears here.
- *
- * Reads the public ledger only. Nothing here touches a target's own state,
- * because a hunter has nothing but the public record to work from.
- */
-export interface CipherHuntCandidate {
-  readonly teamId: string;
-  readonly generation: number;
-  readonly rung: CipherRung;
-  readonly pairs: readonly CipherPairArtifact[];
-  readonly pairsToBreak: number;
-}
-
-export function cipherHuntCandidates(
-  projection: CryptoBattleProjection | null,
-): readonly CipherHuntCandidate[] {
-  if (!projection) return [];
-  const byKey = new Map<string, CipherHuntCandidate>();
-  for (const entry of projection.publicLedger) {
-    if (entry.kind !== "cipher-pair") continue;
-    // Never your own team: hunting yourself is refused by the reducer, and
-    // offering it here would be offering a move that cannot be made.
-    if (entry.teamId === projection.vault.teamId) continue;
-    const key = `${entry.teamId}:${entry.generation}:${entry.rung}`;
-    const current = byKey.get(key) ?? {
-      teamId: entry.teamId,
-      generation: entry.generation,
-      rung: entry.rung,
-      pairs: [],
-      pairsToBreak: rungSpec(entry.rung).pairsToBreak,
-    };
-    byKey.set(key, { ...current, pairs: [...current.pairs, entry] });
-  }
-  return [...byKey.values()].filter((c) => c.pairs.length >= c.pairsToBreak);
-}
 
 /**
  * [Issue #659 §9] The next unopened rung of this Order's hint ladder, or
@@ -843,56 +760,6 @@ export function sudokuRotatePressure(
   return undefined;
 }
 
-/**
- * [Issue #709] Teams a sudoku HUNT can be aimed at: every OTHER team that has
- * PROVEd on its current generation, with its public puzzle and every group it
- * has had opened.
- *
- * What this deliberately does NOT do is decide whether any of them is
- * exploitable. The nonce-reuse card this replaces once scanned for two proof
- * rows sharing a commitment and listed only the teams where it found one -- so
- * the card went from "nobody" to naming a target at the exact moment the reuse
- * appeared, which is the Portal announcing the ledger pattern the participant
- * is supposed to notice. #486's rule (restated in #646's non-goals) forbids
- * exactly that. So every reveal is shown, tag and all, and whether two tags
- * match is a reading the participant does.
- *
- * Using each team's CURRENT generation is also what makes a stale target
- * impossible: `validateOp` refuses any other generation, so there is nothing
- * here that can be offered and then refused.
- *
- * Exported for `game/src/portal.test.ts`: `renderToStaticMarkup` never runs
- * the effect that would populate the panel.
- */
-export interface SudokuHuntCandidate {
-  readonly teamId: string;
-  readonly teamName: string;
-  readonly generation: number;
-  readonly puzzle: readonly number[];
-  readonly reveals: readonly SudokuRevealArtifact[];
-}
-
-export function sudokuHuntCandidates(
-  projection: CryptoBattleProjection | null,
-): readonly SudokuHuntCandidate[] {
-  if (!projection) return [];
-  const byTeam = new Map<string, SudokuHuntCandidate>();
-  for (const entry of projection.publicLedger) {
-    if (entry.kind !== "sudoku-reveal" || entry.teamId === projection.vault.teamId) continue;
-    const team = projection.teams[entry.teamId];
-    const puzzle = projection.publicPuzzles[entry.teamId];
-    if (team === undefined || puzzle === undefined || team.generation !== entry.generation) continue;
-    const current = byTeam.get(entry.teamId) ?? {
-      teamId: entry.teamId,
-      teamName: team.teamName || entry.teamId,
-      generation: team.generation,
-      puzzle,
-      reveals: [],
-    };
-    byTeam.set(entry.teamId, { ...current, reveals: [...current.reveals, entry] });
-  }
-  return [...byTeam.values()];
-}
 
 const CSS = `
 ${BOARD_CSS}
@@ -1125,7 +992,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // state, and Number("") would silently be 0.
   const [proveTableKey, setProveTableKey] = useState("");
   const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
-  const [huntCells, setHuntCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
   const orderPickerRef = useRef<HTMLDetailsElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
@@ -1136,11 +1002,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [fheY, setFheY] = useState("");
   const [mpcPartial, setMpcPartial] = useState("");
   const [cipherAnswer, setCipherAnswer] = useState("");
-  const [huntTargetKey, setHuntTargetKey] = useState("");
-  const [sudokuTargetKey, setSudokuTargetKey] = useState("");
-  const [cipherTargetKey, setCipherTargetKey] = useState("");
-  const [recoveredCipherKey, setRecoveredCipherKey] = useState("");
-  const [recoveredSecret, setRecoveredSecret] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const attemptRef = useRef(0);
@@ -1183,34 +1044,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const { visible: primaryActionsVisible, leakAllowed, proveAllowed } =
     primaryActionsFor(selectedOrder);
   const nextHint = nextHintFor(selectedOrder);
-  const targets = useMemo(() => ledgerTargets(projection), [projection]);
-  const selectedTarget = targets.find((target) => `${target.teamId}:${target.generation}` === huntTargetKey) ?? targets[0];
-  // [Issue #696] The cap is visible BEFORE the attempt is spent: a chip with no
-  // attempts left says so, and the SUBMIT under it is disabled rather than
-  // left to be refused by the judge.
-  const selectedBudget = selectedTarget === undefined ? undefined : huntBudgetFor(projection, selectedTarget);
-  const huntTargetTeam = selectedTarget?.teamId;
-  const huntTargetGeneration = selectedTarget?.generation;
-  useEffect(() => {
-    setRecoveredSecret("");
-  }, [huntTargetTeam, huntTargetGeneration]);
-  const huntExhausted = selectedBudget !== undefined && selectedBudget.spent >= selectedBudget.max;
-  const sudokuTargets = useMemo(() => sudokuHuntCandidates(projection), [projection]);
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
   const sudokuPressure = useMemo(() => sudokuRotatePressure(projection), [projection]);
   const exposure = useMemo(() => exposureRows(projection), [projection]);
-  const selectedSudokuTarget =
-    sudokuTargets.find((t) => `${t.teamId}:${t.generation}` === sudokuTargetKey) ?? sudokuTargets[0];
-  const selectedSudokuBudget =
-    selectedSudokuTarget === undefined ? undefined : projection?.sudokuHuntAttempts[selectedSudokuTarget.teamId];
-  const sudokuHuntExhausted =
-    selectedSudokuBudget !== undefined && selectedSudokuBudget.spent >= selectedSudokuBudget.max;
   const proveTable = ALL_PERMUTATIONS.find((table) => table.join("") === proveTableKey);
   const proveGivens = proveTable && projection
     ? sudokuFillInGivens(projection.vault.sudokuSolution, proveTable) : undefined;
   const proveGrid = proveGivens
     ? parseCells(proveCells.map((value, index) => proveGivens[index] || value)) : undefined;
-  const huntGrid = parseCells(huntCells);
   // [Issue #709 review] A typed grid belongs to the Order (and generation) it
   // was typed for, and a recovered solution to the target it was recovered
   // from. Left in place, a grid that just PROVEd would be one click from being
@@ -1229,16 +1070,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
     setMpcPartial("");
     setCipherAnswer("");
   }, [selectedOrderIdForProve, ownGeneration]);
-  const sudokuTargetTeam = selectedSudokuTarget?.teamId;
-  const sudokuTargetGeneration = selectedSudokuTarget?.generation;
-  useEffect(() => {
-    setHuntCells(emptyCells());
-  }, [sudokuTargetTeam, sudokuTargetGeneration]);
-  const cipherTargets = useMemo(() => cipherHuntCandidates(projection), [projection]);
-  const selectedCipherTarget =
-    cipherTargets.find((t) => `${t.teamId}:${t.generation}:${t.rung}` === cipherTargetKey) ??
-    cipherTargets[0];
-
   // [Issue #696] `success` receives the projection the op came back with.
   // An accepted op is not always a success -- a HUNT miss lands and returns
   // ok -- and the projection is the only thing that can say which it was.
@@ -1741,185 +1572,15 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
       </details>
 
-      <details className="tc-tactics tc-hunt-entry">
-        <summary>{locale === "ja" ? "相手の秘密を見破って攻撃する（HUNT）" : "Recover an opponent’s secret to attack (HUNT)"}{tactics.rotate ? (locale === "ja" ? " / 秘密を作り直して守る（ROTATE）" : " / Replace your secrets to defend (ROTATE)") : ""}{tactics.hunt || tactics.sudokuHunt || tactics.cipherHunt || tactics.rpsHunt ? (locale === "ja" ? " · 相手の公開情報あり" : " · opponent evidence available") : ""}<span>{copy.tacticsHint}</span></summary>
-        <div className="tc-tactics-body">
-        <HuntIntro projection={projection} locale={locale} />
-        {tactics.rpsHunt && <RpsHunt projection={projection} locale={locale} submitting={submitting}
-          onSubmit={op => run(() => client.submitOp(op), next => next ? ({kind:"hunt",title:locale === "ja" ? "予測を預けました" : "Prediction submitted",body:locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings."}) : ({kind:"error",title:copy.rejected,body:copy.unavailable}))} />}
-
-      {tactics.hunt && <div className="tc-secondary-grid">
-        <div className="tc-hunt-card">
-          <div className="tc-card-title">{copy.hunt}</div>
-          <div className="tc-card-hint">{copy.huntHint(projection.wrongHuntCost)}</div>
-          <>
-              <div className="tc-target-row">
-                {targets.map((target) => {
-                  const key = `${target.teamId}:${target.generation}`;
-                  const budget = huntBudgetFor(projection, target);
-                  return <button key={key} type="button" className="tc-target-chip" aria-pressed={selectedTarget ? `${selectedTarget.teamId}:${selectedTarget.generation}` === key : false} onClick={() => setHuntTargetKey(key)}>{projection.teams[target.teamId]?.teamName || target.teamId} · {locale === "ja" ? "世代" : "generation"} {target.generation} · [{target.shareIndices.join(",")}]{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>;
-                })}
-              </div>
-              {selectedTarget && <HuntGuide projection={projection} target={selectedTarget} locale={locale} />}
-              {huntExhausted ? <div className="tc-card-warn">{copy.huntExhausted}</div> : null}
-              <div className="tc-input-panel">
-                <input aria-label="fast-hunt-secret" value={recoveredSecret} onChange={(event) => setRecoveredSecret(event.target.value)} placeholder={copy.recovered} />
-                <button
-                  type="button"
-                  className="tc-submit-small"
-                  disabled={submitting || !selectedTarget || !recoveredSecret.trim() || huntExhausted}
-                  onClick={() => selectedTarget && void run(
-                    () => submitHunt(client, selectedTarget.teamId, selectedTarget.generation, recoveredSecret.trim()),
-                    // [Issue #696] Hit or miss is read off the projection the
-                    // op came back with -- see `huntFeedback`. The sudoku HUNT
-                    // (#709) reads its verdict the same way; the cipher HUNT
-                    // keeps its plain success draft because `validateOp` still
-                    // refuses a wrong key there, so for it ok really means hit.
-                    (next) => huntFeedback(next, selectedTarget.teamId, locale),
-                  )}
-                >{submitting ? copy.running : copy.send}</button>
-              </div>
-          </>
-        </div>
-      </div>}
-
-        {/*
-          [Issue #659 §2] The ladder HUNT. Only teams whose published pairs have
-          actually reached their rung's threshold appear here, so the list is
-          the answer to 「狩る価値があるか」 rather than a list of everyone.
-
-          The pairs are shown, plaintext above ciphertext, because subtracting
-          one from the other IS the attack -- a control that hid them would be
-          asking for a key without showing where it comes from.
-        */}
-        {tactics.cipherHunt && <div className="tc-hunt-card">
-          <div className="tc-card-title">{copy.huntCipher}</div>
-          <div className="tc-card-hint">{copy.huntCipherHint}</div>
-          <div className="tc-target-row">
-            {cipherTargets.map((target) => {
-              const key = `${target.teamId}:${target.generation}:${target.rung}`;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className="tc-target-chip"
-                  aria-pressed={selectedCipherTarget ? `${selectedCipherTarget.teamId}:${selectedCipherTarget.generation}:${selectedCipherTarget.rung}` === key : false}
-                  onClick={() => setCipherTargetKey(key)}
-                >{projection.teams[target.teamId]?.teamName || target.teamId} · {locale === "ja" ? "世代" : "generation"} {target.generation} · {target.rung} {target.pairs.length}/{target.pairsToBreak}</button>
-              );
-            })}
-          </div>
-          {selectedCipherTarget && (
-            <ul className="tc-material-list">
-              {selectedCipherTarget.pairs.map((pair) => (
-                <li key={pair.id}>
-                  <DieRow values={pair.plaintext} size={18} />
-                  <DieRow values={pair.ciphertext} size={18} />
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="tc-input-panel">
-            <input
-              aria-label="fast-hunt-cipher-key"
-              value={recoveredCipherKey}
-              onChange={(event) => setRecoveredCipherKey(event.target.value)}
-              placeholder={copy.recoveredKey}
-            />
-            <button
-              type="button"
-              className="tc-submit-small"
-              disabled={submitting || !selectedCipherTarget || !recoveredCipherKey.trim()}
-              onClick={() => selectedCipherTarget && void run(
-                () => submitHuntCipher(
-                  client,
-                  selectedCipherTarget.teamId,
-                  selectedCipherTarget.generation,
-                  selectedCipherTarget.rung,
-                  Number(recoveredCipherKey.trim()),
-                ),
-                // [Issue #659] A ladder HUNT recovered a KEY, not the Shamir
-                // secret. The design keeps those two breaks apart on purpose
-                // (see `cipherHuntedGenerations`); saying "recovered secret" here
-                // would tell the player the reconstruction they did not do.
-                () => ({ kind: "hunt", title: copy.huntSuccess, body: copy.huntCipherBody }),
-              )}
-            >{submitting ? copy.running : copy.send}</button>
-          </div>
-        </div>}
-
-        {/*
-          [Issue #709] The sudoku HUNT. Every opened group of every other team
-          is shown with its tag, next to that team's public puzzle: the match
-          between two tags is the participant's to spot, the lining-up against
-          the puzzle is theirs to do, and the sixteen boxes are where the
-          recovered solution goes. A control that showed only the "huntable"
-          teams would be the Portal doing the noticing.
-        */}
-        {tactics.sudokuHunt && <div className="tc-hunt-card">
-          <div className="tc-card-title">{copy.huntSudoku}</div>
-          <div className="tc-card-hint">{copy.huntSudokuHint(projection.wrongHuntCost)}</div>
-          <div className="tc-target-row">
-            {sudokuTargets.map((target) => {
-              const key = `${target.teamId}:${target.generation}`;
-              const budget = projection.sudokuHuntAttempts[target.teamId];
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  className="tc-target-chip"
-                  aria-pressed={selectedSudokuTarget ? `${selectedSudokuTarget.teamId}:${selectedSudokuTarget.generation}` === key : false}
-                  onClick={() => setSudokuTargetKey(key)}
-                >{target.teamName} · gen {target.generation} · ×{target.reveals.length}{budget ? ` · ${copy.huntAttemptsLeft(Math.max(0, budget.max - budget.spent), budget.max)}` : ""}</button>
-              );
-            })}
-          </div>
-          {selectedSudokuTarget && (
-            <div className="tc-sudoku-row">
-              <div className="tc-sudoku-block">
-                <span className="tc-sudoku-caption">{copy.huntSudokuPuzzle}</span>
-                <SudokuBoard cells={selectedSudokuTarget.puzzle} label={`puzzle-${selectedSudokuTarget.teamId}`} />
-              </div>
-              <div className="tc-sudoku-block">
-                <span className="tc-sudoku-caption">{copy.huntSudokuReveals}</span>
-                <ul className="tc-reveal-list">
-                  {selectedSudokuTarget.reveals.map((reveal) => (
-                    <li key={reveal.id}>
-                      <span>{describeRevealGroup(reveal.group, locale)}</span>
-                      <code>{reveal.cells.join(" ")}</code>
-                      <span className="tc-reveal-tag">{reveal.tag}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="tc-sudoku-block">
-                <span className="tc-sudoku-caption">{copy.huntSudokuGrid}</span>
-                <SudokuInput value={huntCells} onChange={setHuntCells} ariaLabel="fast-hunt-sudoku-grid" />
-              </div>
-            </div>
-          )}
-          {sudokuHuntExhausted ? <div className="tc-card-warn">{copy.huntExhausted}</div> : null}
-          <div className="tc-input-panel">
-            <button
-              type="button"
-              className="tc-submit-small tc-hunt-sudoku-button"
-              disabled={submitting || !selectedSudokuTarget || huntGrid === undefined || sudokuHuntExhausted}
-              onClick={() => selectedSudokuTarget && huntGrid && void run(
-                () => submitHuntSudoku(client, selectedSudokuTarget.teamId, selectedSudokuTarget.generation, huntGrid),
-                // A hit empties the grid: that solution is recovered and
-                // this target's generation is closed to a second HUNT.
-                (next) => {
-                  const draft = huntFeedback(next, selectedSudokuTarget.teamId, locale, "sudoku");
-                  if (draft.kind === "hunt") setHuntCells(emptyCells());
-                  return draft;
-                },
-              )}
-            >{submitting ? copy.running : copy.send}</button>
-          </div>
-        </div>}
+      <HuntPanel projection={projection} locale={locale} submitting={submitting}
+        onSubmit={(op) => run(() => client.submitOp(op), (next) => {
+          if (op.kind === "hunt" || op.kind === "hunt-sudoku") return huntFeedback(next, op.targetTeamId, locale, op.kind === "hunt-sudoku" ? "sudoku" : undefined);
+          if (op.kind === "hunt-cipher") return { kind: "hunt", title: copy.huntSuccess, body: copy.huntCipherBody, reward: next ? rungSpec(op.rung).huntBonus : undefined };
+          return next ? { kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings." } : { kind: "error", title: copy.rejected, body: copy.unavailable };
+        })} />
 
         {tactics.rotate && <div className="tc-rotate-card">
-          <div className="tc-card-title">{copy.rotate}</div>
+          <div className="tc-card-title">{locale === "ja" ? "自分の防御 · 秘密を作り直す（ROTATE）" : "Defend yourself · Replace your secrets (ROTATE)"}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
           {sudokuPressure === "hunted" && <div className="tc-card-hint">{copy.rotateSudokuHunted}</div>}
           {sudokuPressure === "exhausted" && <div className="tc-card-hint">{copy.rotateSudokuExhausted}</div>}
@@ -1947,8 +1608,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
             }}
           >{projection.vault.rotateCooldownRemainingMs > 0 ? `${Math.ceil(projection.vault.rotateCooldownRemainingMs / 1000)}s` : copy.rotate}</button>
         </div>}
-        </div>
-      </details>
 
       <details className="tc-records">
         <summary>{locale === "ja" ? `公開記録と自分の保管庫を見る（記録 ${projection.publicLedger.length} 件）` : `Public Ledger and My Vault (${projection.publicLedger.length} records)`}</summary>

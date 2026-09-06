@@ -1380,7 +1380,7 @@ describe("the ladder HUNT is offered only against teams that are actually broken
     const stale = cipherHuntCandidates(
       fixtureProjection({ publicLedger: [pair("red", 1, "p1"), pair("red", 2, "p2")] }),
     );
-    expect(stale.map((c) => c.generation).sort()).toEqual([1, 2]);
+    expect(stale.map((c) => c.generation)).toEqual([1]);
   });
 
   it("says nothing at all when there is no projection yet", () => {
@@ -1735,7 +1735,7 @@ describe("Issue #709: the PROVE panel teaches the relabelling and reports a miss
  */
 describe("Issue #709: sudoku HUNT feedback reads the sudoku channel", () => {
   it("a sudoku hit is reported as a recovered solution, a Shamir hit is not", () => {
-    const sudokuHit = fixtureProjection({ lastHunt: { targetTeamId: "red", generation: 1, outcome: "hit", via: "sudoku" } });
+    const sudokuHit = fixtureProjection({ lastHunt: { targetTeamId: "red", generation: 1, outcome: "hit", via: "sudoku", points: DEFAULT_CONFIG.scores.huntBonus } });
     expect(huntFeedback(sudokuHit, "red", "en", "sudoku").body).toBe(FAST_MOVE_COPY.en.huntSudokuBody);
     // The same projection read on the Shamir channel is not a Shamir hit.
     expect(huntFeedback(sudokuHit, "red", "en").title).toBe(FAST_MOVE_COPY.en.huntUnread);
@@ -1769,7 +1769,7 @@ describe("Issue #709: sudoku HUNT feedback reads the sudoku channel", () => {
 describe("Issue #696: a HUNT miss renders the miss banner, never the success banner", () => {
   const missProjection = (spent: number) =>
     fixtureProjection({
-      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" },
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss", points: -DEFAULT_CONFIG.scores.wrongHunt },
       huntAttempts: { red: { generation: 1, spent, max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget } },
     });
   const hitProjection = () =>
@@ -1824,13 +1824,33 @@ describe("Issue #696: a HUNT miss renders the miss banner, never the success ban
     expect(huntFeedback(missProjection(max), "red", "ja").body).toContain("あと 0 回");
   });
 
-  it("the price on the banner is the projection's, not a literal", () => {
+  it("the price on the banner is the actual delta, even when the score floor limited it", () => {
     const pricey = fixtureProjection({
-      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss" },
+      lastHunt: { targetTeamId: "red", generation: 1, outcome: "miss", points: -3 },
       wrongHuntCost: 13,
     });
-    expect(huntFeedback(pricey, "red", "en").body).toContain("-13");
-    expect(huntFeedback(pricey, "red", "ja").body).toContain("-13");
+    expect(huntFeedback(pricey, "red", "en").body).toContain("-3");
+    expect(huntFeedback(pricey, "red", "ja").body).toContain("-3");
+  });
+
+  it("older results preserve the known verdict without claiming a reward or guessed penalty", () => {
+    for (const locale of ["ja", "en"] as const) {
+      for (const outcome of ["hit", "miss"] as const) {
+        const legacy = fixtureProjection({
+          lastHunt: { targetTeamId: "red", generation: 1, outcome },
+          huntWinPoints: 999,
+          wrongHuntCost: 777,
+        });
+        const feedback = huntFeedback(legacy, "red", locale);
+        expect(feedback.reward).toBeUndefined();
+        expect(feedback.title).toBe(outcome === "hit" ? FAST_MOVE_COPY[locale].huntSuccess : FAST_MOVE_COPY[locale].huntMiss);
+        expect(feedback.body).toContain(FAST_MOVE_COPY[locale].huntUnknownPoints());
+        expect(feedback.body).not.toContain("777");
+        const html = render(legacy, locale);
+        expect(html).not.toContain("999");
+        expect(html).not.toContain("+0");
+      }
+    }
   });
 });
 

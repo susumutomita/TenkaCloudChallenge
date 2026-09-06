@@ -94,7 +94,7 @@ describe("commit/open authority and privacy", () => {
       const p=JSON.parse(JSON.stringify(projectForTeam(s,"b")));
       expect(p.publicLedger.filter((a:{kind:string})=>a.kind==="rps-open")).toEqual([]);
       const task=p.myContracts.find((c:{task:{kind:string}})=>c.task.kind==="rps-duel").task;
-      expect(task).toEqual({kind:"rps-duel",duelId:(duel(s,"b").task as {duelId:string}).duelId,opponentTeamId:"a",drawPoints:10,expiryPenalty:-15,myCommitment:commit(3,5),opponentCommitment:commit(hand,r),opponentOpened:true});
+      expect(task).toEqual({kind:"rps-duel",duelId:(duel(s,"b").task as {duelId:string}).duelId,opponentTeamId:"a",drawPoints:10,expiryPenalty:-15,myCommitment:commit(3,5),opponentCommitment:commit(hand,r),opponentCommitted:true,opponentOpened:true});
       expect(Object.keys(p)).not.toContain("contracts");
       s=open(s,"b",3,5);
       const records=projectForTeam(s,"b").publicLedger.filter(a=>a.kind==="rps-open");
