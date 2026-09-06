@@ -123,6 +123,19 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof v.sudokuHuntAttempts !== "object" || v.sudokuHuntAttempts === null) return false;
   if (typeof v.wrongHuntCost !== "number" || !Number.isFinite(v.wrongHuntCost)) return false;
   if (typeof v.wrongProveCost !== "number" || !Number.isFinite(v.wrongProveCost)) return false;
+  if (v.huntWinPoints !== undefined && (typeof v.huntWinPoints !== "number" || !Number.isFinite(v.huntWinPoints))) return false;
+  // Optional for an older dispatcher, but malformed present data must never
+  // reach the HUNT cards' array methods or turn into a fabricated completion.
+  if (v.completedHunts !== undefined) {
+    if (!Array.isArray(v.completedHunts)) return false;
+    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true };
+    for (const entry of v.completedHunts) {
+      if (typeof entry !== "object" || entry === null) return false;
+      if (typeof entry.targetTeamId !== "string" || entry.targetTeamId.length === 0) return false;
+      if (!Number.isSafeInteger(entry.generation) || entry.generation < 1) return false;
+      if (typeof entry.via !== "string" || !Object.hasOwn(methods, entry.via)) return false;
+    }
+  }
   if (v.rpsHunt !== undefined) {
     const h = v.rpsHunt as Record<string, unknown> | null;
     if (!h || typeof h !== "object" || !Array.isArray(h.targets) || !Array.isArray(h.pending) || typeof h.winPoints !== "number") return false;
@@ -145,6 +158,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     const last = v.lastHunt as Record<string, unknown> | null;
     if (typeof last !== "object" || last === null) return false;
     if (last.outcome !== "hit" && last.outcome !== "miss") return false;
+    if (last.points !== undefined && (typeof last.points !== "number" || !Number.isFinite(last.points))) return false;
   }
   // [Issue #709] Same shape, same reason: the PROVE banner keys on it.
   if (v.lastProve !== undefined) {

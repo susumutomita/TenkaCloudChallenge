@@ -14,6 +14,9 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import HuntPanel, { huntOptions } from "../../portal/HuntPanel.tsx";
 import { buildProveSudokuOp, buildSudokuHuntOp, startedMatch } from "./playtest.ts";
 import { applyOp, DEFAULT_CONFIG, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { solutionsConsistentWith } from "./sudoku.ts";
@@ -99,7 +102,7 @@ describe("reuse is a real, and really exploitable, mistake", () => {
     // victim's own vault, which the attacker never saw.
     expect(op.solution).toEqual([...projectForTeam(state, VICTIM).vault.sudokuSolution]);
     // The projection reports the hit, on the sudoku channel.
-    expect(projectForTeam(next, ATTACKER).lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "hit", via: "sudoku" });
+    expect(projectForTeam(next, ATTACKER).lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "hit", via: "sudoku", points: DEFAULT_CONFIG.scores.huntBonus });
   });
 
   test("the same recovery cannot be spent twice", () => {
@@ -125,7 +128,7 @@ describe("reuse is a real, and really exploitable, mistake", () => {
     const next = applyOp(funded, ATTACKER, wrong);
     expect(next.teams[ATTACKER]?.score).toBe(40 - DEFAULT_CONFIG.scores.wrongHunt);
     const view = projectForTeam(next, ATTACKER);
-    expect(view.lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "miss", via: "sudoku" });
+    expect(view.lastHunt).toEqual({ targetTeamId: VICTIM, generation: 1, outcome: "miss", via: "sudoku", points: -DEFAULT_CONFIG.scores.wrongHunt });
     expect(view.sudokuHuntAttempts[VICTIM]?.spent).toBe(1);
     // The Shamir budget is untouched.
     expect(view.huntAttempts[VICTIM]?.spent).toBe(0);
@@ -167,6 +170,13 @@ describe("a reuse that gave nothing away is not huntable either", () => {
       publicLedger: [...state.publicLedger, { ...first, c: `${first.c}-again` }],
     };
     const view = projectForTeam(duplicated, ATTACKER);
+    // The participant gets the public worksheet even in this ineligible
+    // case: UI readiness must not evaluate the judge's uniqueness predicate.
+    expect(huntOptions(view).find(o => o.teamId === VICTIM && o.mode === "sudoku")?.status).toBe("ready");
+    const html = renderToStaticMarkup(createElement(HuntPanel, { projection: view, locale: "ja", submitting: false, onSubmit: async () => {} }));
+    expect(html).toContain("材料を確認して解く");
+    expect(html).toContain("解を一つに決められない間は提出せず");
+    expect(html).not.toContain("解が1つです");
     const tags = view.publicLedger
       .filter((a) => a.kind === "sudoku-reveal" && a.teamId === VICTIM)
       .map((a) => (a.kind === "sudoku-reveal" ? a.tag : ""));

@@ -87,10 +87,11 @@ faking it.
 | `after-rotate` | `bravo` landed a HUNT, then `alpha` re-keyed — generation 2, penalty applied. |
 | `ended` | Match over; every op is rejected and the surface is read-only. |
 
-`hunt-reachable` is a **developer's** label. The participant UI still must never
-announce "you can hunt now" — that rule (Issue #486, restated in #646's
-non-goals) is unchanged, and the check that builds this scenario lives in
-`scenarios.ts`, never in a panel.
+The participant HUNT cards now report readiness from public evidence (Issue #742).
+Shamir needs distinct current-generation indices; sudoku opens a worksheet for a repeated public tag
+without testing whether a solution is unique; Caesar uses its rung-specific
+pair threshold; RPS requires past reuse and a currently sealed target. The
+worksheet never fills a recovered answer. ROTATE is a separate defence card.
 
 ## Participant walkthrough
 

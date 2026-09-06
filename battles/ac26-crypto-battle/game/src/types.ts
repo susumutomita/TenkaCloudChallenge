@@ -790,6 +790,8 @@ export type HuntOutcome = "hit" | "miss";
 
 /** [Issue #696] One HUNT, as the attacker's own record of it. */
 export interface LastHunt {
+  /** Actual change from this attack, including the score floor. Older rows may omit it. */
+  readonly points?: number;
   readonly targetTeamId: string;
   readonly generation: number;
   readonly outcome: HuntOutcome;
@@ -1142,7 +1144,7 @@ export type OrderTaskProjection =
   | { readonly kind: "zk-sudoku" }
   | { readonly kind: "rps-duel"; readonly duelId: string; readonly opponentTeamId: string;
       readonly myCommitment?: number; readonly opponentCommitment?: number;
-      readonly myOpening?: RpsOpening; readonly opponentOpened: boolean;
+      readonly myOpening?: RpsOpening; readonly opponentCommitted?: boolean; readonly opponentOpened: boolean;
       readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
@@ -1227,6 +1229,9 @@ export interface TeamSummaryProjection {
  * place that has to get the redaction right.
  */
 export interface CryptoBattleProjection {
+  /** Public scoring rule and this reader's completed attacks; no recovered values. */
+  readonly huntWinPoints?: number;
+  readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung }[];
   /** Public evidence plus only this reader’s private predictions/results. */
   readonly rpsHunt?: RpsHuntProjection;
   readonly phase: Phase;

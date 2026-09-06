@@ -62,7 +62,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (4 for compact budgets and Order IDs) and a
+The plugin declares `stateSchemaVersion` (5, including recorded HUNT score deltas) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -228,6 +228,12 @@ when no pending prediction needs them for a refund. Upgrade migrates v1/v2/v3 ro
 unknown IDs/counts fail migration without rewriting the row. A rollback to schema 3
 must not read schema-4 rows. Finish running matches on their compatible plugin.
 The existing v2 unspent-Schnorr-exposure upgrade restriction still applies.
+
+Schema 5 records the actual own score change on new Shamir and sudoku HUNT
+results, including a penalty limited by the zero-score floor. Upgrade accepts
+schemas 1–4 and keeps older results without a score delta; their outcome remains
+visible, but the Portal reports the delta as unrecorded instead of guessing it
+from today's rules. A schema-4 plugin must not read schema-5 rows after rollback.
 
 `metadata.json` reserves **30 KiB per team + 1,536 bytes**. The platform owns the
 limits below; this problem does not raise them. The local capacity tests retain

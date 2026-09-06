@@ -127,15 +127,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
   },
 };
 
-/**
- * Deliberately NOT surfaced to the player-facing panels.
- *
- * `hunt-reachable` is a scenario an author picks in the dev toolbar; the
- * participant UI still must never announce "you can hunt now" (Issue #486's
- * rule, restated in #646's non-goals). Keeping the check in this file — harness
- * chrome, never a panel — is what stops a convenience for developers turning
- * into a hint for participants.
- */
+/** Scenario setup counts real public shares; the participant readiness cards use the same public boundary. */
 function distinctCurrentGenerationShareCount(
   state: CryptoBattleState,
   targetTeamId: string,

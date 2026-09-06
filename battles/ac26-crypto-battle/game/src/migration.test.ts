@@ -462,10 +462,31 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     const lifted = migrateState(v1, 1);
     expect(lifted.publicLedger).toEqual(migrateState(v2, 2).publicLedger);
     expect(lifted.publicPuzzles?.teamA).toHaveLength(16);
-    expect(() => migrateState(v2, 4)).toThrow();
+    expect(() => migrateState(v2, 5)).toThrow();
     expect(() => migrateState(v2, 0)).toThrow();
     expect(() => migrateState(null, 2)).toThrow();
     expect(() => migrateState({ seed: "x" }, 2)).toThrow();
+  });
+
+  test("schema 4 HUNT results retain their outcome without inventing a historical score delta", () => {
+    const current = initialState(CTX);
+    const legacy: CryptoBattleState = {
+      ...current,
+      teams: {
+        ...current.teams,
+        teamA: { ...current.teams.teamA!, score: 0, lastHunt: { targetTeamId: "teamB", generation: 1, outcome: "miss" } },
+        teamB: { ...current.teams.teamB!, score: 100, lastHunt: { targetTeamId: "teamA", generation: 1, outcome: "hit", via: "sudoku" } },
+      },
+    };
+    const lifted = migrateState(JSON.parse(JSON.stringify(legacy)), 4);
+    expect(lifted.teams).toEqual(legacy.teams);
+    expect(lifted.publicLedger).toEqual(legacy.publicLedger);
+    for (const teamId of CTX.teamIds) {
+      const view = projectForTeam(lifted, teamId);
+      expect(view.lastHunt).toEqual(legacy.teams[teamId]!.lastHunt);
+      expect(view.lastHunt?.points).toBeUndefined();
+      expect("lastHunt" in view.teams[teamId]!).toBe(false);
+    }
   });
 
   test("every team's puzzle is backfilled from the seed, and matches its vault", () => {

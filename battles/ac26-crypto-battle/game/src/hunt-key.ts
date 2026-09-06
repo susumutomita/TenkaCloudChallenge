@@ -43,6 +43,23 @@ export function compactHuntAttempts(state: CryptoBattleState): CryptoBattleState
   return attempts;
 }
 
+/** v4 already wrote roster positions; validate without treating them as IDs. */
+export function validateStoredHuntAttempts(state: CryptoBattleState): CryptoBattleState["huntAttempts"] {
+  const roster = rosterOf(state.teams).ids;
+  for (const [key, count] of Object.entries(state.huntAttempts)) {
+    if (!Number.isSafeInteger(count) || count < 0) throw new Error("Invalid HUNT budget count");
+    const parts: unknown = JSON.parse(key);
+    if (!Array.isArray(parts)) throw new Error("Invalid stored HUNT budget key");
+    const offset = parts[0] === "sudoku" ? 1 : 0;
+    if (parts.length !== offset + 3 || parts.slice(offset).some(n => !Number.isSafeInteger(n))) throw new Error("Invalid stored HUNT budget key");
+    const attacker = roster[parts[offset]], target = roster[parts[offset + 1]], generation = parts[offset + 2];
+    if (attacker === undefined || target === undefined || generation < 1) throw new Error("Invalid stored HUNT budget identity");
+    const logical = JSON.stringify([...(offset ? ["sudoku"] : []), attacker, target, generation]);
+    if (storedHuntKey(state, logical) !== key) throw new Error("Non-canonical stored HUNT budget key");
+  }
+  return state.huntAttempts;
+}
+
 /** Old-generation counters have no legal caller except a reserved RPS refund. */
 export function pruneRetiredHuntAttempts(state: CryptoBattleState): CryptoBattleState {
   const roster = rosterOf(state.teams).ids;

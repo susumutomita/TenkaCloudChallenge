@@ -64,13 +64,14 @@ import {
   type FieldConfig,
 } from "./fixtures.ts";
 import { applyRpsHunt, projectRpsHunt, validateRpsHunt } from "./rps-hunt.ts";
-import { huntKey, storedHuntKey, compactHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
+import { huntKey, storedHuntKey, compactHuntAttempts, validateStoredHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
 import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
+  ALL_CIPHER_RUNGS,
   encryptWithRung,
   parseAnswer,
   rungSpec,
@@ -588,13 +589,14 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *      `sudokuHuntedGenerations` / `lastProve`, Orders lose
  *      `proveCommitment` / `proveChallenge`
  *   4  roster-indexed HUNT budget keys and lossless numeric ledger Order IDs
+ *   5  `lastHunt.points` records the actual score delta of new HUNT results
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 4;
+export const STATE_SCHEMA_VERSION = 5;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -608,11 +610,15 @@ export const STATE_SCHEMA_VERSION = 4;
  * puzzles derived from the seed, hunted-generation lists backfilled, the
  * wrong-PROVE price merged in -- plus dropping the fields v3 no longer has.
  * A legacy `proof` ledger entry is kept: it still decodes and renders.
+ * v4 -> v5 preserves old `lastHunt` records without `points`: the actual
+ * historical delta cannot be recovered from a current score or price, so it
+ * stays unknown. Only a new HUNT writes the field. v4's numeric roster budget
+ * keys are validated and retained, not compacted again as logical team IDs.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2 and v3 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3 and v4 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -636,7 +642,7 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   // An ENDED match has nothing left to spend: `validateOp` refuses every op
   // after the end, so the exposure is history and the row migrates for its
   // scores, ledger and replay.
-  const exposure = fromVersion === 3 || rest.phase === "ended" ? undefined : unspentNonceExposure(rest as CryptoBattleState);
+  const exposure = fromVersion >= 3 || rest.phase === "ended" ? undefined : unspentNonceExposure(rest as CryptoBattleState);
   if (exposure) {
     throw new Error(
       `reducer: migrateState: team "${exposure.teamId}" generation ${exposure.generation} carries an unspent nonce-reuse HUNT from the retired Schnorr PROVE; finish or reset this match before upgrading`,
@@ -646,7 +652,7 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   return {
     ...lifted,
     publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a))),
-    huntAttempts: compactHuntAttempts(lifted),
+    huntAttempts: fromVersion === 4 ? validateStoredHuntAttempts(lifted) : compactHuntAttempts(lifted),
     contracts: lifted.contracts.map((contract) => {
       const { proveCommitment: _c, proveChallenge: _e, ...kept } = contract as Contract & {
         readonly proveCommitment?: unknown;
@@ -2169,7 +2175,7 @@ function applyHunt(
           // and `projectForTeam` is a pure function of state -- so if the
           // state does not say "that was a miss", nothing downstream can, and
           // the Portal is left calling a -8 a SUCCESS.
-          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss" },
+          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", points: Math.max(0, attacker.score - state.config.scores.wrongHunt) - attacker.score },
         },
       },
       huntAttempts,
@@ -2179,7 +2185,7 @@ function applyHunt(
   const updatedAttacker: TeamState = {
     ...attacker,
     score: attacker.score + state.config.scores.huntBonus,
-    lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit" },
+    lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", points: state.config.scores.huntBonus },
   };
   const updatedTarget: TeamState = {
     ...target,
@@ -2385,7 +2391,7 @@ function applyHuntSudoku(
         [teamId]: {
           ...attacker,
           score: Math.max(0, attacker.score - state.config.scores.wrongHunt),
-          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", via: "sudoku" },
+          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", via: "sudoku", points: Math.max(0, attacker.score - state.config.scores.wrongHunt) - attacker.score },
         },
       },
       huntAttempts,
@@ -2399,7 +2405,7 @@ function applyHuntSudoku(
       [teamId]: {
         ...attacker,
         score: attacker.score + state.config.scores.huntBonus,
-        lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", via: "sudoku" },
+        lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", via: "sudoku", points: state.config.scores.huntBonus },
       },
       [op.targetTeamId]: {
         ...target,
@@ -2643,6 +2649,14 @@ export function projectForTeam(
     rpsHunt: projectRpsHunt(state, teamId),
     huntAttempts,
     sudokuHuntAttempts,
+    huntWinPoints: state.config.scores.huntBonus,
+    completedHunts: Object.values(state.teams).filter(other => other.teamId !== teamId).flatMap(other =>
+      (["share", "sudoku", ...ALL_CIPHER_RUNGS] as const).flatMap(via => {
+        const key = via === "share" ? huntKey(teamId, other.teamId, other.generation)
+          : via === "sudoku" ? sudokuHuntKey(teamId, other.teamId, other.generation)
+          : cipherHuntKey(teamId, other.teamId, other.generation, via);
+        return state.successfulHunts.includes(key) ? [{ targetTeamId: other.teamId, generation: other.generation, via }] : [];
+      })),
     wrongHuntCost: state.config.scores.wrongHunt,
     wrongProveCost: state.config.scores.wrongProve,
     // [Issue #696] The reader's OWN last HUNT only -- `team` is the row

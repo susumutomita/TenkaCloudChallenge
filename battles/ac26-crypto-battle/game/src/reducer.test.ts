@@ -474,10 +474,10 @@ describe("hunt", () => {
     const state = tick(startedMatch(CTX), 0);
     const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
     const next = applyOp(state, "teamA", wrong);
-    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss", points: 0 });
 
     const view = projectForTeam(next, "teamA");
-    expect(view.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+    expect(view.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss", points: 0 });
     expect(view.huntAttempts.teamB).toEqual({
       generation: 1,
       spent: 1,
@@ -500,7 +500,7 @@ describe("hunt", () => {
       generation: 1,
       recoveredSecret: recoveredSecret.toString(),
     });
-    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "hit" });
+    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "hit", points: DEFAULT_CONFIG.scores.huntBonus });
     expect(projectForTeam(next, "teamA").lastHunt?.outcome).toBe("hit");
     expect(projectForTeam(next, "teamA").huntAttempts.teamB?.spent).toBe(1);
   });
@@ -541,7 +541,7 @@ describe("hunt", () => {
       max: DEFAULT_CONFIG.maxHuntAttemptsPerTarget,
     });
     // The record of the last HUNT is not rewritten by the target's move.
-    expect(projectForTeam(state, "teamA").lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss" });
+    expect(projectForTeam(state, "teamA").lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss", points: 0 });
   });
 
   test("the attempt budget runs out, so the field cannot be scanned", () => {

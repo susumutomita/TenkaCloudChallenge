@@ -9,6 +9,8 @@ The Order list stays visible while answering, with the pending count, task, dead
 
 Free “How it works” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
+HUNT starts with one card per opponent, showing waiting, ready, completed, or exhausted status for each method. A ready method opens public evidence, free formulas and diagrams, answer input, and the attack confirmation. Shares use distinct current-generation indices; sudoku opens a worksheet for reused public tags, leaving the solution to the participant; Caesar uses the rung's pair threshold; RPS needs reuse across two past duels and a current sealed target. ROTATE appears separately as a defence, with the affected open-Order count beside its control. RPS explicitly distinguishes waiting for the opponent to seal from ready to open, disabling the opening button while waiting.
+
 ## What is going on
 
 Your team holds one secret. It is split into five pieces, and **any three of
