@@ -5,6 +5,7 @@ import { commit, HANDS, isCommitment, RPS_RANDOMNESS } from "./commitment.ts";
 import { decodeLedger, encodeLedger } from "./ledger-codec.ts";
 import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import { pairTeams } from "./rps.ts";
+import { scoreReasons } from "./score-reasons.ts";
 import RpsDuel, { POWER_FOURS, POWER_NINES, rpsRejection } from "../../portal/RpsDuel.tsx";
 import type { Contract, CryptoBattleOp, CryptoBattleState } from "./types.ts";
 
@@ -124,7 +125,9 @@ describe("duel expiry and upgrade", () => {
       s={...s, contracts:s.contracts.filter(c=>c.task.kind==="rps-duel"), teams:Object.fromEntries(Object.entries(s.teams).map(([id,t])=>[id,{...t,score:100}]))};
       s=seal(s,"a",1,1);
       if(stage==="open") s=open(seal(s,"b",2,2),"a",1,1);
+      const beforeExpiry = s;
       s=tick(s,duel(s,"a").expiresAtMs);
+      expect(scoreReasons(beforeExpiry, s, {kind:"tick"})).toEqual({a:"duel", b:"deadline"});
       expect(s.teams.a!.score).toBe(130); expect(s.teams.b!.score).toBe(85);
       expect(decodeLedger(s.publicLedger).some(a=>a.kind==="rps-open")).toBe(false);
       const again=tick(s,s.nowMs!);
@@ -176,4 +179,12 @@ test("no Order deadline extends beyond the match; unfinished final duels expire 
   s=tick(s,DEFAULT_CONFIG.matchDurationMs);
   expect(s.phase).toBe("ended");
   expect(s.contracts.some(c=>c.status==="open")).toBe(false);
+});
+
+ test("score reasons preserve mixed forfeit wins and ordinary expirations in the same tick", () => {
+  let s = seal(running(), "a", 1, 1);
+  s = {...s, teams: Object.fromEntries(Object.entries(s.teams).map(([id, team]) => [id, {...team, score: 100}]))};
+  const next = tick(s, duel(s, "a").expiresAtMs);
+  expect(next.teams.a!.score - s.teams.a!.score).not.toBe(s.config.scores.duelWin);
+  expect(scoreReasons(s, next, {kind:"tick"})).toEqual({a:"duel-deadline", b:"deadline"});
 });

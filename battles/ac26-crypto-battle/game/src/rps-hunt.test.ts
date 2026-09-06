@@ -1,3 +1,4 @@
+import { scoreReasons } from "./score-reasons.ts";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -94,7 +95,10 @@ describe("prediction privacy and delayed settlement",()=>{
     expect(s.teams.a!.score).toBe(before); expect(s.publicLedger).toHaveLength(count);
     expect(projectForTeam(s,"a").rpsHunt!.lastResult).toBeUndefined();
     expect(validateOp(s,"a",{...op,predictedHand:1} as CryptoBattleOp).ok).toBe(false);
-    s=open(s,"a",1,7);
+    const beforeSettlement = s;
+    const settleOp: CryptoBattleOp = { kind: "rps-open", contractId: order(s,"a").id, hand: 1, randomness: 7 };
+    s=move(s,"a",settleOp);
+    expect(scoreReasons(beforeSettlement, s, {kind:"op", teamId:"a", op:settleOp}).a).toBe("duel-hunt");
     expect(s.teams.a!.score).toBe(before+s.config.scores.duelWin+s.config.scores.huntBonus);
     expect(s.teams.a!.lastRpsHunt).toMatchObject({outcome:"hit",actualHand:2,predictedHand:2,points:s.config.scores.huntBonus});
     expect(s.contracts.every(c=>!c.rps?.predictions)).toBe(true);
@@ -204,4 +208,16 @@ test("multiple eligible targets still present one focused prediction form", () =
   const html = renderToStaticMarkup(createElement(RpsHunt, { projection: many, locale: "en", submitting: false, onSubmit: async () => {} }));
   expect(html).toContain("Choose a target and round");
   expect(html.match(/Submit prediction to the judge/g)).toHaveLength(1);
+});
+
+test("an opponent opening publishes a third team's delayed HUNT score separately from DUEL", () => {
+  let s = seal(ready(["a", "b", "c", "d"]), "a", 1, 7);
+  s = {...s, teams: {...s.teams, c: {...s.teams.c!, score: 100}}};
+  s = move(s, "c", prediction(s, 3));
+  s = open(s, "b", 2, 2);
+  const before = s;
+  const op: CryptoBattleOp = {kind:"rps-open", contractId: order(s,"a").id, hand:1, randomness:7};
+  s = move(s, "a", op);
+  expect(s.teams.c!.score - before.teams.c!.score).toBe(-s.config.scores.wrongHunt);
+  expect(scoreReasons(before, s, {kind:"op", teamId:"a", op})).toEqual({a:"duel", c:"hunt"});
 });

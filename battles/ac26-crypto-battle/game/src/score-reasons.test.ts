@@ -26,3 +26,14 @@ describe("public coordination score reasons", () => {
     expect(scoreReasons(before, before, { kind: "tick" })).toEqual({});
   });
 });
+
+it("classifies a third-party RPS prediction settlement as HUNT, not the opponent's DUEL", () => {
+  const settled = { ...after, teams: { ...after.teams, red: { ...red, score: 25, lastRpsHunt: { targetTeamId: "blue", duelId: "public-duel", generation: 1, predictedHand: 1 as const, actualHand: 1 as const, outcome: "hit" as const, points: 25, atMs: 1 } } } };
+  expect(scoreReasons(before, settled, { kind: "op", teamId: "blue", op: { kind: "rps-open", contractId: "public-order", hand: 1, randomness: 1 } }).red).toBe("hunt");
+});
+
+it("keeps HUNT classification when the final of several predictions reaches the zero-point floor", () => {
+  const prior = {...before, teams: {...before.teams, red: {...red, score: 5}}};
+  const settled = {...before, teams: {...before.teams, red: {...red, score: 0, lastRpsHunt: {targetTeamId: "blue", duelId: "public-duel", generation: 1, predictedHand: 1 as const, actualHand: 2 as const, outcome: "miss" as const, points: 0, atMs: 1}}}};
+  expect(scoreReasons(prior, settled, {kind:"op", teamId:"blue", op: {kind:"rps-open", contractId:"public-order", hand:2, randomness:1}})).toEqual({red:"hunt"});
+});
