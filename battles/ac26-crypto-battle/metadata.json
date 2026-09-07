@@ -30,7 +30,8 @@
     "share を公開 (LEAK) するコストが即時ではなく将来の HUNT リスクとして発生することを理解する",
     "しきい値未満の share が秘密について何も語らないことを実行可能な形で確認する",
     "secret rotation が過去に漏洩した share を無効化する仕組みを体験する",
-    "Schnorrの公開検証、模擬会話、知識の抽出を小さな数で確かめ、HVZKと実用上の安全性を区別する"
+    "Schnorrの公開検証、模擬会話、知識の抽出を小さな数で確かめ、HVZKと実用上の安全性を区別する",
+    "楕円曲線上の点加算・倍算を小さい数で計算し、ECDSA署名全体との違いを説明する。"
   ],
   "cfnTemplate": "template.yaml",
   "dashboard": {
@@ -59,7 +60,8 @@
         "Understand that revealing a share (LEAK) costs nothing immediately -- the cost arrives later, as HUNT risk",
         "Verify, executably, that fewer than the threshold of shares reveal nothing about the secret",
         "Experience how secret rotation invalidates previously leaked shares",
-        "Hand-check Schnorr verification, simulation and knowledge extraction, distinguishing HVZK from practical security."
+        "Hand-check Schnorr verification, simulation and knowledge extraction, distinguishing HVZK from practical security.",
+        "Calculate elliptic-curve addition and doubling with small numbers, distinguishing them from a complete ECDSA signature."
       ]
     }
   }

@@ -123,6 +123,20 @@ export const HINT_LEVELS = 3;
  * these rungs alone (three seeds x four kinds) before this landed.
  */
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
+  "ec-add": [
+    {id:"ec-add/1",text:()=>({ja:"曲線上の2点を通る線を考え、交点の上下を反転して答えの点を作ります。同じ点なら接線を使います。普通の座標の足し算とは違います。",en:"Use the line through two curve points, then reflect the intersection. A repeated point uses a tangent. This is not coordinate-wise addition."})},
+    {id:"ec-add/2",text:()=>({ja:"すべて7で割った余り。P=(2,1),Q=(3,1)なら傾きλ=(1−1)/(3−2)=0。x=λ²−2−3=2、y=λ(2−x)−1=6。結果は(2,6)。",en:"Reduce modulo7. P=(2,1),Q=(3,1): slope λ=(1−1)/(3−2)=0; x=λ²−2−3=2, y=λ(2−x)−1=6. Result (2,6)."})},
+    {id:"ec-add/3",text:ctx=>{
+      if(ctx.task.kind!=="ec-add")throw new Error("EC hint requires EC task");
+      const p=ctx.task.left,q=ctx.task.right,show=(v:typeof p)=>v?`(${v[0]},${v[1]})`:"O";
+      const values=`P=${show(p)}, Q=${show(q)}. `;
+      if(!p||!q)return {ja:values+"Oを足しても点は変わりません。もう一方の座標を半角スペースで区切って入力。両方OならOです。",en:values+"Adding O leaves the other point unchanged. Enter the other coordinates separated by a space; if both are O, enter O."};
+      if(p[0]===q[0]&&(p[1]+q[1])%7===0)return {ja:values+"xが同じでyの和が7の倍数です。互いに打ち消す点なので、回答欄へOを入力します。",en:values+"The x coordinates agree and the y sum is a multiple of7. They cancel; enter O."};
+      const slope=p[0]===q[0]?`(3×${p[0]}²+2)×(2×${p[1]})⁻¹`:`(${q[1]}−${p[1]})×(${q[0]}−${p[0]})⁻¹`;
+      return {ja:values+`まず λ=${slope} を逆元の表で計算。次に x=λ²−${p[0]}−${q[0]}、最後に y=λ×(${p[0]}−x)−${p[1]}。それぞれ7で割った余りにして「x 半角スペース y」を入力します。`,en:values+`Use the inverse table to calculate λ=${slope}, then x=λ²−${p[0]}−${q[0]}, and y=λ×(${p[0]}−x)−${p[1]}. Reduce each modulo7 and enter x space y.`};
+    }}
+  ],
+
   /**
    * The share Order is the one place where the hint is about the GAME rather
    * than the arithmetic: LEAK is one click while PROVE uses the four-cell sudoku scaffold, and the whole difficulty

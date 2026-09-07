@@ -28,6 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "ec-add": return "EC P + Q";
     case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `rsa m=${task.plaintext}/n=${task.n}/e=${task.e}`;
     case "rps-duel": return `rps vs ${task.opponentTeamId}`;
@@ -50,6 +51,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
+    "ec-add":"楕円曲線：2点を足す",
     "rotor-encrypt": "進む車輪で4文字を暗号にする",
     "rsa-encrypt": "公開鍵で1個の数を暗号にする",
     "rps-duel": "手を隠して、相手とじゃんけん",
@@ -66,6 +68,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "ec-add":"Elliptic curve: add two points",
     "rotor-encrypt": "Encrypt four digits with advancing wheels",
     "rsa-encrypt": "Encrypt one number with a public key",
     "rps-duel": "Seal your hand, then play rock-paper-scissors",
@@ -91,6 +94,7 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "ec-add": return `${task.left?.join(",")??"O"} + ${task.right?.join(",")??"O"}`;
     case "rotor-encrypt": return `Rotor · ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `RSA · m=${task.plaintext}, n=${task.n}, e=${task.e}`;
     case "rps-duel": return locale === "ja" ? "① 数字を封じる → ② 両者が開く" : "1. Seal a number → 2. Both open";

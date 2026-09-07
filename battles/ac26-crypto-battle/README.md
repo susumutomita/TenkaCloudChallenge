@@ -408,3 +408,7 @@ The four-stage mathematical guide covers a worked example, exponent laws, an ide
 The statement is knowledge of the discrete logarithm x for y, not knowledge of a secret-sharing share or Sudoku solution. Persisted legacy matches retain the trusted-judge Sudoku model; new matches select Schnorr through the versioned configuration.
 
 The server assigns y per Order; a caller cannot replace it. In this tiny-group teaching model the browser finds x from a power table. This is not practical secret-key provisioning. The verification function accepts public values only; responses contain neither x nor r.
+
+## Elliptic-curve point addition (#784)
+New matches offer EC addition at every thirteenth sequence slot, with duels taking priority. Calculate addition, doubling and the identity O on y²=x³+2x+3 modulo7. This is foundational arithmetic used by ECDSA, not a complete signature scheme. Submit `x y` separated by one space, or `O`. The worksheet contains equations, an inverse table and a coordinate plot. Wrong answers use the existing wrongProve penalty; correct answers receive the Order reward. Existing expiry, ownership and replay gates apply. Legacy matches do not enable these Orders. No platform changes.
+Verify with `cd game && bun test src/ec.test.ts && bun run typecheck`, then the dev `ec-order` scenario.
