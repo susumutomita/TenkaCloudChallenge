@@ -120,6 +120,7 @@ interface LedgerGroup {
    * about the team that posted it.
    */
   pairs: CipherPairArtifact[];
+  rotorPairs: Extract<PublicArtifact, { kind: "rotor-pair" }>[];
   rsaPairs: Extract<PublicArtifact, { kind: "rsa-pair" }>[];
   /**
    * [Issue #709] Opened sudoku groups. Neither exposure nor mere protection:
@@ -175,12 +176,14 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
         generation: entry.generation,
         shares: [],
         pairs: [],
+        rotorPairs: [],
         rsaPairs: [],
         reveals: [],
         duels: [],
         protected: new Map(),
       };
     if (entry.method === "leak" && entry.kind === "share") current.shares.push(entry);
+    else if (entry.kind === "rotor-pair") current.rotorPairs.push(entry);
     else if (entry.kind === "rsa-pair") current.rsaPairs.push(entry);
     else if (entry.kind === "cipher-pair") current.pairs.push(entry);
     else if (entry.kind === "sudoku-reveal") current.reveals.push(entry);
@@ -202,6 +205,7 @@ function protectedLabel(kind: PublicArtifact["kind"]): string {
       return "FHE";
     case "partial":
       return "MPC";
+    case "rotor-pair": return "ROTOR PAIR (LEAK)";
     case "rsa-pair": return "RSA PAIR (LEAK)";
     case "cipher-pair":
       // Unreachable: cipher pairs are exposure and are grouped with the shares
@@ -450,6 +454,7 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                   「相手の段を見て狩る価値があるか判断する」 (#659 §2) something a
                   reader can actually do from the board.
                 */}
+                {group.rotorPairs.map(pair => <details className="tc-share-card tc-public" key={pair.id}><summary>Rotor · {pair.contractId.replace(/^.*-c/, "ORDER #")}</summary><p>{locale === "ja" ? "元 → 暗号" : "Original → encrypted"}: <code>{pair.plaintext.join(" ")} → {pair.ciphertext.join(" ")}</code></p><p>{locale === "ja" ? "同じ世代は同じ初期位置から。1組で特定できる場合も、候補が残る場合もあります。" : "Same generation, same initial positions. One pair may identify them or leave candidates."}</p></details>)}
                 {group.rsaPairs.map(pair => <details className={`tc-share-card tc-public${pair.id === lastId ? " tc-new-public" : ""}`} key={pair.id}>
                   <summary>RSA · LEAK</summary><p>n={pair.n}, e={pair.e}</p><p>{locale === "ja" ? "元" : "Original"} m={pair.plaintext} → {locale === "ja" ? "暗号" : "Encrypted"} c={pair.ciphertext}</p>
                   <p>{locale === "ja" ? "公開鍵だけでも、この小さいnを因数分解して攻撃できます。" : "The public key alone allows this tiny n to be factored for an attack."}</p>

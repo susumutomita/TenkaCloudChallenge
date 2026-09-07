@@ -1,3 +1,5 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
 import { describe, expect, test } from "bun:test";
 import { deriveCipherKey, derivePlaintext } from "./fixtures.ts";
 import {
@@ -170,9 +172,9 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     // `state.publicLedger` holds the compact persisted form (`StoredArtifact`,
     // see ledger-codec.ts) -- `k`/`tm`/`r`/`p`/`x` below are that form's own
     // field names, not `PublicArtifact`'s.
-    const posted = state.publicLedger.at(-1);
+    const posted = state.publicLedger.map(artifactFields).at(-1);
     if (posted?.k !== "cipher-pair") throw new Error("expected a cipher pair on the ledger");
-    expect(posted.tm).toBe("teamA");
+    expect(storedTeamId(posted, state.teams)).toBe("teamA");
     expect(posted.r).toBe(RUNG);
     if (order.task.kind !== "caesar-shift") throw new Error("expected a ladder Order");
     expect(posted.p).toEqual(order.task.plaintext);
@@ -187,7 +189,7 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
 
-    const pair = state.publicLedger.find((a) => a.k === "cipher-pair");
+    const pair = state.publicLedger.map(artifactFields).find((a) => a.k === "cipher-pair");
     if (pair?.k !== "cipher-pair") throw new Error("expected a cipher pair");
     const modulus = rungSpec(pair.r).symbols.length;
     // (c - p) mod n, from the first column. That is the entire attack.

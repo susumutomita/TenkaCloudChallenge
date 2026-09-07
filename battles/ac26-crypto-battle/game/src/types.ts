@@ -38,9 +38,10 @@
  */
 
 import type { Hand } from "./commitment.ts";
+import type { RotorTask, RotorTaskProjection } from "./rotor.ts";
 import type { CipherKey, CipherRung } from "./ladder.ts";
 import type { RsaTask, PublicRsaKey } from "./rsa.ts";
-import type { StoredArtifact } from "./ledger-codec.ts";
+import type { PersistedArtifact } from "./ledger-codec.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
 import type { Permutation, SudokuGrid } from "./sudoku.ts";
 
@@ -310,6 +311,7 @@ export interface StoredCiphertext {
  * team's projection can carry it. See mpc.ts.
  */
 export type OrderTask =
+  | RotorTask
   | RsaTask
   | {
       readonly kind: "reveal-share";
@@ -702,7 +704,14 @@ export interface RpsOpenArtifact extends Omit<RpsCommitArtifact, "kind">, RpsOpe
   readonly kind: "rps-open";
 }
 
+export interface RotorPairArtifact {
+  readonly kind: "rotor-pair"; readonly id: string; readonly teamId: string; readonly generation: number;
+  readonly method: SubmissionMethod; readonly contractId: string; readonly postedAtMs: number;
+  readonly plaintext: readonly number[]; readonly ciphertext: readonly number[];
+}
+
 export type PublicArtifact =
+  | RotorPairArtifact
   | RsaPairArtifact
   | RpsCommitArtifact
   | RpsOpenArtifact
@@ -803,7 +812,7 @@ export interface TeamState {
    * before this existed, and on a team that has never HUNTed -- both mean the
    * same thing: nothing to report.
    */
-  readonly lastHunt?: LastHunt;
+  readonly lastHunt?: StoredLastHunt;
   readonly lastRpsHunt?: RpsHuntResult;
 }
 
@@ -811,6 +820,8 @@ export interface TeamState {
 export type HuntOutcome = "hit" | "miss";
 
 /** [Issue #696] One HUNT, as the attacker's own record of it. */
+export type StoredLastHunt = LastHunt | readonly [target: number, generation: number, via: 0 | 1 | 2, hit: 0 | 1, points?: number];
+
 export interface LastHunt {
   /** Actual change from this attack, including the score floor. Older rows may omit it. */
   readonly points?: number;
@@ -818,7 +829,7 @@ export interface LastHunt {
   readonly generation: number;
   readonly outcome: HuntOutcome;
   /** [Issue #709] Which secret was hunted. Absent means the Shamir secret. */
-  readonly via?: "sudoku";
+  readonly via?: "sudoku" | "rotor";
 }
 
 /** The submitting team's own CIPHER verdict. */
@@ -899,7 +910,7 @@ export interface CryptoBattleState {
    * whole design and why nothing about `PublicArtifact` itself, or
    * `CryptoBattleProjection.publicLedger` below, changed.
    */
-  readonly publicLedger: readonly StoredArtifact[];
+  readonly publicLedger: readonly PersistedArtifact[];
   readonly teams: Readonly<Record<string, TeamState>>;
   /**
    * [Issue #709] Every team's current-generation sudoku PUZZLE -- the eight
@@ -917,11 +928,10 @@ export interface CryptoBattleState {
    * below sees it present.
    */
   readonly publicPuzzles?: Readonly<Record<string, SudokuGrid>>;
-  /**
-   * Replay guard: `JSON.stringify([attackerTeamId, targetTeamId, generation])`
-   * for every successful HUNT. JSON-encoded (not `|`-joined) so a team id
-   * that happens to contain `|` can never collide with a different triple.
-   */
+  /** Untimed once-only success guards. Schema11 uses method/target/generation
+   * bit rows over the fixed roster; old logical string guards remain readable.
+   * A timestamped huntLog entry itself guards the same success. Guards without
+   * an audit time stay here and never manufacture a replay event. */
   readonly successfulHunts: readonly string[];
   /**
    * Schema 4 uses sorted-roster numeric positions in these private JSON keys.
@@ -935,40 +945,38 @@ export interface CryptoBattleState {
    * `{}` -- an older match played in a 2^61 - 1 field where retries were
    * pointless, so crediting it a full budget takes nothing away from anyone.
    */
-  readonly huntAttempts: Readonly<Record<string, number>>;
-  /**
-   * Successful HUNT history WITH exact timestamps (Issue #486 PR5,
-   * `replay.ts`). `successfulHunts` above deliberately carries only the
-   * replay-guard KEY, no `atMs` -- it cannot answer "when did this HUNT
-   * succeed?" on its own, and every other `PublicArtifact` on the ledger
-   * already has a `postedAtMs` a debrief/replay can use, but a HUNT posts no
-   * ledger artifact at all (see reducer.ts's `applyHunt`). This field exists
-   * purely so `replay.ts`'s post-match debrief (Issue #486's "120分 debrief
-   * / Replay" -- the worked example is literally "58:01 Team B HUNT
-   * success") can be honest about hunt timing instead of omitting it or
-   * guessing. Purely additive: `validateOp`'s replay guard still reads only
-   * `successfulHunts` above, never this field -- see `applyHunt`. RSA entries
-   * group timestamps by target/generation; `decodeHuntLog` restores their order.
-   */
+  readonly huntAttempts: StoredHuntAttempts;
+  /** Exact-time Shamir, Sudoku, RSA and Rotor success history. Schema11 groups
+   * lossless millisecond offsets by method/target/generation and fixed attacker
+   * roster slot. decodeHuntLog restores the public chronological replay shape.
+   * These records also reject repeat success; ROTATE never removes history.
+   * Legacy object records are accepted on migration. Classic cipher guards
+   * historically have no time, so they remain untimed rather than guessed. */
   readonly huntLog: readonly StoredHuntLogEntry[];
 }
 
 /** One decoded success (also the legacy stored form); see huntLog's comment. */
+/** Schema11 groups both independent counters per target/generation. Numeric entries are legacy migration input. */
+export type StoredHuntAttempts = Readonly<Record<string, number | readonly [width: number, counts: string]>>;
+
 export interface HuntLogEntry {
   readonly attackerTeamId: string;
   readonly targetTeamId: string;
   readonly generation: number;
   readonly atMs: number;
   /** [Issue #709] Which secret fell. Absent means the Shamir secret. */
-  readonly via?: "sudoku" | "rsa";
+  readonly via?: "sudoku" | "rsa" | "rotor";
 }
 
 /** RSA successes are losslessly grouped by target/generation; see hunt-log.ts. */
 export type StoredHuntLogEntry = HuntLogEntry | {
-  readonly rsa: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string];
-};
+  readonly rsa: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string];
+} | { readonly rotor: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] }
+| { readonly share: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] }
+| { readonly sudoku: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] };
 
 export type CryptoBattleOp =
+  | { readonly kind: "hunt-rotor"; readonly targetTeamId: string; readonly generation: number; readonly a: number; readonly b: number }
   | { readonly kind: "declare-lightning"; readonly contractId: string }
   | { readonly kind: "hunt-rsa"; readonly targetTeamId: string; readonly generation: number; readonly p: string; readonly q: string }
   | { readonly kind: "hunt-rps"; readonly targetTeamId: string; readonly duelId: string; readonly predictedHand: number }
@@ -1166,6 +1174,7 @@ export interface VaultProjection {
  * by accident.
  */
 export type OrderTaskProjection =
+  | RotorTaskProjection
   | RsaTask
   | { readonly kind: "reveal-share"; readonly shareIndices: readonly number[] }
   | { readonly kind: "homomorphic-sum"; readonly inputs: readonly StoredCiphertext[] }
@@ -1314,7 +1323,7 @@ export interface CryptoBattleProjection {
   readonly lightning?: LightningProjection;
   /** Public scoring rule and this reader's completed attacks; no recovered values. */
   readonly huntWinPoints?: number;
-  readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung | "rsa" }[];
+  readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung | "rsa" | "rotor" }[];
   /** All teams' current public RSA keys, from endgame onward; LEAK is not required. */
   readonly publicRsaKeys?: readonly PublicRsaKey[];
   /** Public evidence plus only this reader’s private predictions/results. */

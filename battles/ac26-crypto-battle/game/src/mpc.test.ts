@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /**
  * [Issue #645 Phase 3] The MPC slice, from the protocol up to the judge.
  *
@@ -142,7 +143,7 @@ describe("the MPC Order's trust boundary", () => {
     if (!op) throw new Error("expected buildMpcOp to construct an op");
     const next = applyOp(state, "teamA", op);
 
-    const entry = next.publicLedger.find((a) => a.k === "partial");
+    const entry = next.publicLedger.map(artifactFields).find((a) => a.k === "partial");
     expect(entry).toBeDefined();
     expect(entry?.m).toBe("mpc");
     expect(entry?.k === "partial" ? entry.v : "").toBe(
@@ -170,7 +171,7 @@ describe("the MPC Order's trust boundary", () => {
     if (!op) throw new Error("expected buildMpcOp to construct an op");
     const next = applyOp(state, "teamA", op);
 
-    const entry = next.publicLedger.find((a) => a.k === "partial");
+    const entry = next.publicLedger.map(artifactFields).find((a) => a.k === "partial");
     if (entry?.k !== "partial") throw new Error("expected a partial artifact");
 
     expect(entry.pp).toHaveLength(MPC_PARTY_COUNT - 1);
@@ -260,7 +261,7 @@ describe("the MPC Order's trust boundary", () => {
     const op = buildMpcOp(order, state.config.prime);
     if (!op) throw new Error("expected buildMpcOp to construct an op");
     const next = applyOp(state, "teamA", op);
-    const entry = next.publicLedger.find((a) => a.k === "partial");
+    const entry = next.publicLedger.map(artifactFields).find((a) => a.k === "partial");
     if (entry?.k !== "partial") throw new Error("expected a partial artifact");
 
     const prime = BigInt(next.config.prime);

@@ -1,3 +1,6 @@
+import { artifactFields } from "../game/src/ledger-codec.ts";
+import { storedTeamId } from "../game/src/ledger-codec.ts";
+import { exposedKeyPositions } from "../game/src/ladder.ts";
 /**
  * Issue #644: the deterministic starting positions the harness can jump to.
  *
@@ -73,6 +76,7 @@ export const SCENARIO_IDS = [
   "lightning",
   "vigenere",
   "rsa",
+  "rotor",
   "ledger-filling",
   "fhe-order",
   "mpc-order",
@@ -99,6 +103,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "開始直後 — Order が出たところ",
     en: "Just started — first Orders issued",
   },
+  "rotor": { ja: "Rotor — 公開パケットと同じ4文字・通常5分TTL", en: "Rotor — fresh participant packet; standard five-minute TTL" },
   "rsa": { ja: "RSA — 最大域 n77/e7/m9・通常5分TTL", en: "RSA — maximum n77/e7/m9; standard five-minute TTL" },
   "vigenere": { ja: "Vigenère — bravo の3位置が公開済み・通常5分TTL", en: "Vigenère — bravo exposed three positions; standard five-minute TTL" },
   "lightning": { ja: "終盤のライトニング — 1題の計算正解を2倍", en: "Endgame lightning — double one calculation reward" },
@@ -146,9 +151,9 @@ function distinctCurrentGenerationShareCount(
   // (`StoredArtifact`, see ../game/src/ledger-codec.ts) -- `k`/`tm`/`g`/`i`
   // below are that form's own field names.
   const indices = new Set<number>();
-  for (const artifact of state.publicLedger) {
+  for (const artifact of state.publicLedger.map(artifactFields)) {
     if (artifact.k !== "share") continue;
-    if (artifact.tm !== targetTeamId) continue;
+    if (storedTeamId(artifact, state.teams) !== targetTeamId) continue;
     if (artifact.g !== target.generation) continue;
     indices.add(artifact.i);
   }
@@ -324,7 +329,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver(id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" ? {} : DEV_CONFIG, id === "rsa" ? "rsa-max-110" : undefined);
+  const driver = makeDriver(id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -337,6 +342,12 @@ export function buildScenario(id: ScenarioId): Scenario {
     case "fresh":
       break;
 
+    case "rotor":
+      driver.advance(36 * 60_000);
+      mustPlay(driver, "bravo", { kind: "leak", contractId: "bravo-c43" }, "publish the fresh Rotor reader pair");
+      serveComputationOrders(driver, "bravo");
+      break;
+
     case "rsa":
       driver.advance(61 * 60_000);
       break;
@@ -345,12 +356,15 @@ export function buildScenario(id: ScenarioId): Scenario {
       // Keep the normal match clock/cadence. Only bravo's public LEAK moves
       // prepare the opponent's worksheet; alpha's current Order stays open.
       driver.advance(31 * 60_000);
-      for (let i = 0; i < 3; i++) {
+      let covered = false;
+      for (let i = 0; i < 6; i++) {
         if (i > 0) driver.advance(5 * 60_000);
-        const order = projectForTeam(driver.host.state, "bravo").myContracts.find(c => c.status === "open" && c.task.kind === "caesar-shift" && c.task.rung === "vigenere");
-        if (!order) throw new Error("vigenere scenario did not issue the next rung");
-        mustPlay(driver, "bravo", { kind: "leak", contractId: order.id }, "expose the next Vigenère key position");
+        const orders = projectForTeam(driver.host.state, "bravo").myContracts.filter(c => c.status === "open" && c.task.kind === "caesar-shift" && c.task.rung === "vigenere");
+        for (const order of orders) mustPlay(driver, "bravo", { kind: "leak", contractId: order.id }, "expose a Vigenère key position");
+        const pairs = projectForTeam(driver.host.state, "alpha").publicLedger.filter(a => a.kind === "cipher-pair" && a.rung === "vigenere" && a.teamId === "bravo").filter(a => a.kind === "cipher-pair");
+        if (exposedKeyPositions(pairs, "vigenere").length === 3) { covered = true; break; }
       }
+      if (!covered) throw new Error("vigenere scenario lacks three public positions");
       break;
     }
 
@@ -376,8 +390,8 @@ export function buildScenario(id: ScenarioId): Scenario {
         !playUntil(
           driver,
           (state) =>
-            state.publicLedger.some((a) => a.k === "share") &&
-            state.publicLedger.some((a) => a.k === "sudoku-reveal"),
+            state.publicLedger.map(artifactFields).some((a) => a.k === "share") &&
+            state.publicLedger.map(artifactFields).some((a) => a.k === "sudoku-reveal"),
           10,
         )
       ) {

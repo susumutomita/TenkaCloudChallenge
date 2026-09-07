@@ -1,77 +1,16 @@
-/**
- * [Issue #679 / TenkaCloud#3152] The `publicLedger`'s PERSISTED form, kept
- * separate from its in-memory / participant-facing form.
+/** Lossless persistent Public Ledger codec. The participant/replay object stays
+ * unchanged. Schemas 2–10 use short-key objects; schema11 writes fixed tuples
+ * and references team IDs through the match's existing sorted immutable roster.
+ * No entry, value, exact millisecond, ID or array order is removed. Unfamiliar
+ * artifact/Order IDs use literal escapes rather than a guessed derivation.
  *
- * `CryptoBattleState` is one row, rewritten on every op (see reducer.ts's
- * header "WIRE BOUNDARY"), and `state-size.test.ts`'s worst case measured
- * `publicLedger` at 1081.4 KB of a 1644.7 KB row (99 teams) -- 65.7%, and
- * about half of THAT is repeated key names: `teamId` / `contractId` /
- * `generation` / `method` / `postedAtMs` / `shareIndex` / `value` /
- * `contractId` again, spelled out in full on every one of 5377 entries. This
- * module is the fix: it changes HOW that same information is written, never
- * WHAT is written -- ledger contents are never dropped (see this repo's
- * Issue #659 §10 on why persistence is the point of this Battle at all).
- *
- * `StoredArtifact` (this file) is `CryptoBattleState.publicLedger`'s actual
- * element type -- not a wire wrapper applied at a serialization boundary
- * outside the reducer. There is no such boundary: the platform dispatcher
- * persists whatever `CryptoBattleState` the reducer returns, byte for byte
- * (`coordination-state-schema.ts` on the TenkaCloud side reads/writes
- * `row.state` directly). So `reducer.ts` itself holds compact entries in
- * `state.publicLedger` between calls, and only ever expands them back to
- * `PublicArtifact` at the two boundaries that need the full shape:
- * `projectForTeam` (participant-facing projection) and `replay.ts` (the
- * post-match debrief). Everything else in `reducer.ts` -- including the HUNT
- * relabelling-reuse scan -- reads the compact form directly where it can, so
- * the hot path never pays for a full-array decode it does not need.
- *
- * KEY MAP (schema 4 also stores an exactly reconstructible Order ID as a number):
- *
- * | PublicArtifact  | Stored | kinds it applies to     |
- * |-----------------|--------|--------------------------|
- * | `id`            | (none) | derived, see below       |
- * | `kind`          | `k`    | all                       |
- * | `teamId`        | `tm`   | all                       |
- * | `contractId`    | `c`    | all; numeric for exact teamId-cN IDs |
- * | `generation`    | `g`    | all                       |
- * | `method`        | `m`    | all                       |
- * | `postedAtMs`    | `t`    | all                       |
- * | `shareIndex`    | `i`    | share                     |
- * | `value`         | `v`    | share                     |
- * | `rung`          | `r`    | cipher-pair               |
- * | `plaintext`     | `p`    | cipher-pair               |
- * | `ciphertext`    | `x`    | cipher-pair               |
- * | `commitment`    | `o`    | proof                     |
- * | `challenge`     | `e`    | proof (Schnorr's own "e")  |
- * | `response`      | `z`    | proof (Schnorr's own "z = k + e*w") |
- * | `r`             | `r`    | ciphertext (ElGamal-style r, unrelated to cipher-pair's `r`=rung -- safe, the two never share a `k`) |
- * | `y`             | `y`    | ciphertext                |
- * | `partial`       | `v`    | partial (same "the one published number" role `v` plays for share) |
- * | `peerPartials`  | `pp`   | partial                   |
- * | `total`         | `s`    | partial (sum)             |
- * | `group`         | `gr`   | sudoku-reveal (#709)      |
- * | `cells`         | `cl`   | sudoku-reveal             |
- * | `tag`           | `tg`   | sudoku-reveal             |
- *
- * The common fields (`kind`/`teamId`/`contractId`/`generation`/`method`/
- * `postedAtMs`) and share/cipher-pair's own keys are pinned by the design
- * doc this module implements (Issue #679). `teamId` -> `tm` in particular is
- * NOT optional: `contractId` cannot stand in for it, because Order retention
- * (`TERMINAL_ORDER_RETENTION_BATCHES`, reducer.ts) prunes completed/expired
- * Contracts out of `state.contracts` well before a match ends, so a reader
- * trying to recover "whose artifact is this" from `contractId` alone fails
- * for most of the ledger by the time anyone looks -- measured directly
- * against this package's own `state-size.test.ts` worst case: 4782 of 5377
- * entries' contracts (89%) are already gone. proof/ciphertext/partial's own
- * keys (`o`/`z`/`r`/`y`/`v`/`pp`/`s`) are this module's own choice -- the
- * design doc's table stops at share/cipher-pair and explicitly delegates
- * "read the construction site and derive the same kind of compact mapping"
- * for the rest; the choices above keep every kind's own key set collision-
- * free and, where a name already existed in `PublicArtifact` at one
- * character (`r`/`y` on `CiphertextArtifact`), keep it unchanged rather than
- * invent a shorter one that does not exist.
+ * Reducers retain this compact representation between every platform write.
+ * artifactFields expands one entry for trusted scans; decodeArtifact/decodeLedger
+ * expand public IDs at participant projection and replay boundaries. Neither
+ * reader needs a retained Contract: a completed Order may have left the queue.
  */
 
+import { rosterOf } from "./hunt-key.ts";
 import type { CipherRung } from "./ladder.ts";
 import type { SubmissionMethod } from "./methods.ts";
 import type {
@@ -104,7 +43,7 @@ import type {
  * `toEqual` disagree about whether the field exists).
  */
 interface StoredArtifactBase {
-  readonly tm: string;
+  readonly tm: string | number;
   /** Schema 4: N reconstructs `${tm}-c${N}`; older/unfamiliar IDs stay strings. */
   readonly c: string | number;
   readonly g: number;
@@ -128,8 +67,11 @@ export interface StoredCipherPairArtifact extends StoredArtifactBase {
 }
 
 interface StoredRsaPairArtifact extends StoredArtifactBase {
-  readonly k: "rsa-pair"; readonly n: number; readonly e: number;
-  readonly p: number; readonly x: number;
+  readonly k: "rsa-pair";
+  readonly n: number;
+  readonly e: number;
+  readonly p: number;
+  readonly x: number;
 }
 
 export interface StoredProofArtifact extends StoredArtifactBase {
@@ -166,10 +108,27 @@ export interface StoredSudokuRevealArtifact extends StoredArtifactBase {
  * header. One variant per `PublicArtifact` kind, discriminated on `k` the
  * same way `PublicArtifact` discriminates on `kind`.
  */
-interface StoredRpsCommit extends StoredArtifactBase { readonly k: "rps-commit"; readonly du: string; readonly v: number }
-interface StoredRpsOpen extends StoredArtifactBase { readonly k: "rps-open"; readonly du: string; readonly v: number; readonly h: 1 | 2 | 3; readonly r: number }
+interface StoredRpsCommit extends StoredArtifactBase {
+  readonly k: "rps-commit";
+  readonly du: string;
+  readonly v: number;
+}
+interface StoredRpsOpen extends StoredArtifactBase {
+  readonly k: "rps-open";
+  readonly du: string;
+  readonly v: number;
+  readonly h: 1 | 2 | 3;
+  readonly r: number;
+}
+
+interface StoredRotorPair extends StoredArtifactBase {
+  readonly k: "rotor-pair";
+  readonly p: readonly number[];
+  readonly x: readonly number[];
+}
 
 export type StoredArtifact =
+  | StoredRotorPair
   | StoredRsaPairArtifact
   | StoredRpsCommit
   | StoredRpsOpen
@@ -180,12 +139,130 @@ export type StoredArtifact =
   | StoredPartialArtifact
   | StoredSudokuRevealArtifact;
 
-/** Schema 4 preserves unfamiliar IDs verbatim and shortens exact Order IDs. */
-export function contractId(stored: Pick<StoredArtifact, "c" | "tm">): string {
-  return typeof stored.c === "number" ? `${stored.tm}-c${stored.c}` : stored.c;
+/** Schema 11 tuple order is stable. Null is only an absent optional field. */
+export type StoredArtifactTuple = readonly [
+  number,
+  string | number,
+  string | number,
+  number,
+  number,
+  number,
+  ...unknown[],
+];
+export type PersistedArtifact = StoredArtifact | StoredArtifactTuple;
+// Append new kinds/methods only: existing indices are a persisted schema contract.
+const TUPLE_FIELDS = {
+  share: ["i", "v"],
+  "cipher-pair": ["r", "kp", "p", "x"],
+  "rotor-pair": ["p", "x"],
+  "rsa-pair": ["n", "e", "p", "x"],
+  proof: ["o", "e", "z"],
+  ciphertext: ["r", "y"],
+  partial: ["v", "pp", "s"],
+  "sudoku-reveal": ["gr", "cl", "tg"],
+  "rps-commit": ["du", "v"],
+  "rps-open": ["du", "v", "h", "r"],
+} as const;
+const TUPLE_KINDS = Object.keys(TUPLE_FIELDS) as (keyof typeof TUPLE_FIELDS)[];
+const TUPLE_METHODS: readonly SubmissionMethod[] = [
+  "leak",
+  "prove",
+  "cipher",
+  "fhe",
+  "mpc",
+  "duel",
+];
+const tupleCache = new WeakMap<StoredArtifactTuple, StoredArtifact>();
+/** Expand stored fields without changing team IDs, constructing public IDs or scanning the ledger. */
+export function artifactFields(entry: PersistedArtifact): StoredArtifact {
+  if (!Array.isArray(entry)) return entry as StoredArtifact;
+  const tuple = entry as StoredArtifactTuple;
+  const cached = tupleCache.get(tuple);
+  if (cached) return cached;
+  const [kind, tm, c, g, method, t] = tuple;
+  const k = Number.isInteger(kind) ? TUPLE_KINDS[kind] : undefined;
+  const m = Number.isInteger(method) ? TUPLE_METHODS[method] : undefined;
+  if (
+    !k ||
+    !m ||
+    tuple.length < 6 + TUPLE_FIELDS[k].length ||
+    tuple.length > 7 + TUPLE_FIELDS[k].length
+  )
+    throw new Error("Invalid ledger tuple shape");
+  const result: Record<string, unknown> = { k, tm, c, g, m, t };
+  for (const [i, field] of TUPLE_FIELDS[k].entries()) {
+    const value = tuple[6 + i];
+    if (value === null) {
+      if (
+        !(k === "proof" && field === "e") &&
+        !(k === "cipher-pair" && field === "kp")
+      )
+        throw new Error("Missing required ledger tuple value");
+    } else result[field] = value;
+  }
+  if (tuple.length === 7 + TUPLE_FIELDS[k].length) {
+    const d = tuple.at(-1);
+    if (typeof d !== "string") throw new Error("Invalid escaped ledger ID");
+    result.d = d;
+  }
+  const fields = result as unknown as StoredArtifact;
+  tupleCache.set(tuple, fields);
+  return fields;
+}
+function tupleArtifact(fields: StoredArtifact): StoredArtifactTuple {
+  const kind = TUPLE_KINDS.indexOf(fields.k),
+    method = TUPLE_METHODS.indexOf(fields.m);
+  if (kind < 0 || method < 0)
+    throw new Error("Unknown ledger tuple discriminant");
+  const values = TUPLE_FIELDS[fields.k].map(
+    (key) => (fields as unknown as Record<string, unknown>)[key] ?? null,
+  );
+  return [
+    kind,
+    fields.tm,
+    fields.c,
+    fields.g,
+    method,
+    fields.t,
+    ...values,
+    ...(fields.d === undefined ? [] : [fields.d]),
+  ];
 }
 
-export function compactContractId(teamId: string, id: string | number): string | number {
+/** Schema 4 preserves unfamiliar IDs verbatim and shortens exact Order IDs. */
+type Teams = CryptoBattleState["teams"];
+/** Schema11 references the existing fixed roster; old literal IDs remain exact. */
+export function storedTeamId(
+  entry: Pick<StoredArtifact, "tm"> | StoredArtifactTuple,
+  teams?: Teams,
+): string {
+  const stored = Array.isArray(entry)
+    ? artifactFields(entry as StoredArtifactTuple)
+    : (entry as Pick<StoredArtifact, "tm">);
+  if (typeof stored.tm === "string") return stored.tm;
+  if (!teams || !Number.isSafeInteger(stored.tm) || stored.tm < 0)
+    throw new Error("Invalid or missing ledger team roster");
+  const id = rosterOf(teams).ids[stored.tm];
+  if (id === undefined)
+    throw new Error("Ledger team is outside the fixed roster");
+  return id;
+}
+export function contractId(
+  entry: Pick<StoredArtifact, "c" | "tm"> | StoredArtifactTuple,
+  teams?: Teams,
+): string {
+  const stored = Array.isArray(entry)
+    ? artifactFields(entry as StoredArtifactTuple)
+    : (entry as Pick<StoredArtifact, "c" | "tm">);
+  return typeof stored.c === "number"
+    ? `${storedTeamId(stored, teams)}-c${stored.c}`
+    : stored.c;
+}
+
+export function compactContractId(
+  teamId: string,
+  id: string | number,
+): string | number {
   if (typeof id === "number") return id;
   const prefix = `${teamId}-c`;
   const n = id.startsWith(prefix) ? Number(id.slice(prefix.length)) : NaN;
@@ -194,11 +271,17 @@ export function compactContractId(teamId: string, id: string | number): string |
 
 /** Immutable completion arrays share the ledger codec; cache avoids rescanning a
  * completed match's whole history on every subsequent HUNT. Unknown IDs stay exact. */
-const completedIdCache = new WeakMap<readonly (string | number)[], { teamId: string; ids: readonly (string | number)[] }>();
-export function compactCompletedContractIds(teamId: string, ids: readonly (string | number)[]): readonly (string | number)[] {
+const completedIdCache = new WeakMap<
+  readonly (string | number)[],
+  { teamId: string; ids: readonly (string | number)[] }
+>();
+export function compactCompletedContractIds(
+  teamId: string,
+  ids: readonly (string | number)[],
+): readonly (string | number)[] {
   const cached = completedIdCache.get(ids);
   if (cached?.teamId === teamId) return cached.ids;
-  const compact = ids.map(id => compactContractId(teamId, id));
+  const compact = ids.map((id) => compactContractId(teamId, id));
   const result = compact.every((id, at) => id === ids[at]) ? ids : compact;
   completedIdCache.set(ids, { teamId, ids: result });
   completedIdCache.set(result, { teamId, ids: result });
@@ -231,26 +314,31 @@ export function compactCompletedContractIds(teamId: string, ids: readonly (strin
  * nothing from before this module existed can silently lose its id, whether
  * or not the template ever moved.
  */
-function deriveArtifactId(stored: StoredArtifact): string {
+function deriveArtifactId(stored: StoredArtifact, teams?: Teams): string {
   switch (stored.k) {
-    case "rps-commit": return `${contractId(stored)}-rps-commit`;
-    case "rps-open": return `${contractId(stored)}-rps-open`;
+    case "rps-commit":
+      return `${contractId(stored, teams)}-rps-commit`;
+    case "rps-open":
+      return `${contractId(stored, teams)}-rps-open`;
     case "share":
-      return `${contractId(stored)}-share${stored.i}`;
+      return `${contractId(stored, teams)}-share${stored.i}`;
+    case "rotor-pair":
     case "rsa-pair":
     case "cipher-pair":
-      return `${contractId(stored)}-pair`;
+      return `${contractId(stored, teams)}-pair`;
     case "proof":
-      return `${contractId(stored)}-proof`;
+      return `${contractId(stored, teams)}-proof`;
     case "ciphertext":
-      return `${contractId(stored)}-ciphertext`;
+      return `${contractId(stored, teams)}-ciphertext`;
     case "partial":
-      return `${contractId(stored)}-partial`;
+      return `${contractId(stored, teams)}-partial`;
     case "sudoku-reveal":
-      return `${contractId(stored)}-sudoku`;
+      return `${contractId(stored, teams)}-sudoku`;
     default: {
       const exhaustive: never = stored;
-      throw new Error(`deriveArtifactId: unknown stored artifact ${JSON.stringify(exhaustive)}`);
+      throw new Error(
+        `deriveArtifactId: unknown stored artifact ${JSON.stringify(exhaustive)}`,
+      );
     }
   }
 }
@@ -263,9 +351,22 @@ function deriveArtifactId(stored: StoredArtifact): string {
  * module's "never drop an id we cannot reconstruct" guarantee: it runs on
  * EVERY artifact this package ever encodes, not just in a test.
  */
-export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
+export function encodeArtifact(artifact: PublicArtifact): StoredArtifact;
+export function encodeArtifact(
+  artifact: PublicArtifact,
+  teams: Teams,
+): StoredArtifactTuple;
+export function encodeArtifact(
+  artifact: PublicArtifact,
+  teams?: Teams,
+): PersistedArtifact {
+  const tm = teams
+    ? rosterOf(teams).positions.get(artifact.teamId)
+    : artifact.teamId;
+  if (tm === undefined)
+    throw new Error("Artifact references a team outside the match");
   const base = {
-    tm: artifact.teamId,
+    tm,
     c: compactContractId(artifact.teamId, artifact.contractId),
     g: artifact.generation,
     m: artifact.method,
@@ -273,24 +374,58 @@ export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
   };
   let withoutId: StoredArtifact;
   switch (artifact.kind) {
+    case "rotor-pair":
+      withoutId = {
+        ...base,
+        k: "rotor-pair",
+        p: artifact.plaintext,
+        x: artifact.ciphertext,
+      };
+      break;
     case "rsa-pair":
-      withoutId = { ...base, k: "rsa-pair", n: artifact.n, e: artifact.e, p: artifact.plaintext, x: artifact.ciphertext };
+      withoutId = {
+        ...base,
+        k: "rsa-pair",
+        n: artifact.n,
+        e: artifact.e,
+        p: artifact.plaintext,
+        x: artifact.ciphertext,
+      };
       break;
     case "rps-commit":
-      withoutId = { ...base, k: artifact.kind, du: artifact.duelId, v: artifact.commitment };
+      withoutId = {
+        ...base,
+        k: artifact.kind,
+        du: artifact.duelId,
+        v: artifact.commitment,
+      };
       break;
     case "rps-open":
-      withoutId = { ...base, k: artifact.kind, du: artifact.duelId, v: artifact.commitment, h: artifact.hand, r: artifact.randomness };
+      withoutId = {
+        ...base,
+        k: artifact.kind,
+        du: artifact.duelId,
+        v: artifact.commitment,
+        h: artifact.hand,
+        r: artifact.randomness,
+      };
       break;
     case "share":
-      withoutId = { ...base, k: "share", i: artifact.shareIndex, v: artifact.value };
+      withoutId = {
+        ...base,
+        k: "share",
+        i: artifact.shareIndex,
+        v: artifact.value,
+      };
       break;
     case "cipher-pair":
       withoutId = {
         ...base,
         k: "cipher-pair",
         r: artifact.rung,
-        ...(artifact.keyPosition === undefined ? {} : { kp: artifact.keyPosition }),
+        ...(artifact.keyPosition === undefined
+          ? {}
+          : { kp: artifact.keyPosition }),
         p: artifact.plaintext,
         x: artifact.ciphertext,
       };
@@ -317,34 +452,119 @@ export function encodeArtifact(artifact: PublicArtifact): StoredArtifact {
       };
       break;
     case "sudoku-reveal":
-      withoutId = { ...base, k: "sudoku-reveal", gr: artifact.group, cl: artifact.cells, tg: artifact.tag };
+      withoutId = {
+        ...base,
+        k: "sudoku-reveal",
+        gr: artifact.group,
+        cl: artifact.cells,
+        tg: artifact.tag,
+      };
       break;
     default: {
       const exhaustive: never = artifact;
-      throw new Error(`encodeArtifact: unknown artifact ${JSON.stringify(exhaustive)}`);
+      throw new Error(
+        `encodeArtifact: unknown artifact ${JSON.stringify(exhaustive)}`,
+      );
     }
   }
-  const derivedId = deriveArtifactId(withoutId);
-  return derivedId === artifact.id ? withoutId : { ...withoutId, d: artifact.id };
+  const derivedId = deriveArtifactId(withoutId, teams);
+  const fields =
+    derivedId === artifact.id ? withoutId : { ...withoutId, d: artifact.id };
+  return teams ? tupleArtifact(fields) : fields;
 }
 
 /** `readonly PublicArtifact[]` -> `StoredArtifact[]`, entry by entry. */
-export function encodeLedger(entries: readonly PublicArtifact[]): StoredArtifact[] {
-  return entries.map(encodeArtifact);
+export function encodeLedger(
+  entries: readonly PublicArtifact[],
+): StoredArtifact[];
+export function encodeLedger(
+  entries: readonly PublicArtifact[],
+  teams: Teams,
+): PersistedArtifact[];
+export function encodeLedger(
+  entries: readonly PublicArtifact[],
+  teams?: Teams,
+): PersistedArtifact[] {
+  return entries.map((entry) =>
+    teams ? encodeArtifact(entry, teams) : encodeArtifact(entry),
+  );
 }
 
 /** One `StoredArtifact` -> the `PublicArtifact` it was encoded from. */
-export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
-  const id = stored.d ?? deriveArtifactId(stored);
-  const { tm: teamId, g: generation, m: method, t: postedAtMs } = stored;
-  const decodedContractId = contractId(stored);
+export function decodeArtifact(
+  entry: PersistedArtifact,
+  teams?: Teams,
+): PublicArtifact {
+  const stored = artifactFields(entry);
+  const id = stored.d ?? deriveArtifactId(stored, teams);
+  const { g: generation, m: method, t: postedAtMs } = stored;
+  const teamId = storedTeamId(stored, teams);
+  const decodedContractId = contractId(stored, teams);
   switch (stored.k) {
-    case "rsa-pair": return { id, kind: "rsa-pair", teamId, contractId: decodedContractId, generation, method, postedAtMs,
-      n: stored.n, e: stored.e, plaintext: stored.p, ciphertext: stored.x };
-    case "rps-commit": return { id, teamId, contractId: decodedContractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v };
-    case "rps-open": return { id, teamId, contractId: decodedContractId, generation, method, postedAtMs, kind: stored.k, duelId: stored.du, commitment: stored.v, hand: stored.h, randomness: stored.r };
+    case "rotor-pair":
+      return {
+        id,
+        kind: "rotor-pair",
+        teamId,
+        contractId: decodedContractId,
+        generation,
+        method,
+        postedAtMs,
+        plaintext: stored.p,
+        ciphertext: stored.x,
+      };
+    case "rsa-pair":
+      return {
+        id,
+        kind: "rsa-pair",
+        teamId,
+        contractId: decodedContractId,
+        generation,
+        method,
+        postedAtMs,
+        n: stored.n,
+        e: stored.e,
+        plaintext: stored.p,
+        ciphertext: stored.x,
+      };
+    case "rps-commit":
+      return {
+        id,
+        teamId,
+        contractId: decodedContractId,
+        generation,
+        method,
+        postedAtMs,
+        kind: stored.k,
+        duelId: stored.du,
+        commitment: stored.v,
+      };
+    case "rps-open":
+      return {
+        id,
+        teamId,
+        contractId: decodedContractId,
+        generation,
+        method,
+        postedAtMs,
+        kind: stored.k,
+        duelId: stored.du,
+        commitment: stored.v,
+        hand: stored.h,
+        randomness: stored.r,
+      };
     case "share":
-      return { id, kind: "share", teamId, contractId: decodedContractId, generation, method, postedAtMs, shareIndex: stored.i, value: stored.v };
+      return {
+        id,
+        kind: "share",
+        teamId,
+        contractId: decodedContractId,
+        generation,
+        method,
+        postedAtMs,
+        shareIndex: stored.i,
+        value: stored.v,
+      };
     case "cipher-pair":
       return {
         id,
@@ -412,14 +632,19 @@ export function decodeArtifact(stored: StoredArtifact): PublicArtifact {
       } satisfies SudokuRevealArtifact;
     default: {
       const exhaustive: never = stored;
-      throw new Error(`decodeArtifact: unknown stored artifact ${JSON.stringify(exhaustive)}`);
+      throw new Error(
+        `decodeArtifact: unknown stored artifact ${JSON.stringify(exhaustive)}`,
+      );
     }
   }
 }
 
 /** `readonly StoredArtifact[]` -> `PublicArtifact[]`, entry by entry. */
-export function decodeLedger(stored: readonly StoredArtifact[]): PublicArtifact[] {
-  return stored.map(decodeArtifact);
+export function decodeLedger(
+  stored: readonly PersistedArtifact[],
+  teams?: Teams,
+): PublicArtifact[] {
+  return stored.map((entry) => decodeArtifact(entry, teams));
 }
 
 /**
@@ -465,29 +690,42 @@ export function decodeLedger(stored: readonly StoredArtifact[]): PublicArtifact[
  * そのまま書く」のが仕事で、 古い形の解釈は移行の仕事だからです。
  */
 function normalizePreMethodArtifact(artifact: PublicArtifact): PublicArtifact {
-  if ((artifact as { readonly method?: unknown }).method !== undefined) return artifact;
+  if ((artifact as { readonly method?: unknown }).method !== undefined)
+    return artifact;
   if (artifact.kind === "share") return { ...artifact, method: "leak" };
   if (artifact.kind === "proof") return { ...artifact, method: "prove" };
   return artifact;
 }
 
-export function migrateStateV1(state: unknown, fromVersion: number): CryptoBattleState {
+export function migrateStateV1(
+  state: unknown,
+  fromVersion: number,
+): CryptoBattleState {
   if (fromVersion !== 1) {
     throw new Error(
       `ledger-codec: migrateStateV1 cannot migrate from schema version ${fromVersion} (only v1 -> v2 is defined)`,
     );
   }
   if (typeof state !== "object" || state === null) {
-    throw new Error("ledger-codec: migrateStateV1 received a non-object v1 state");
+    throw new Error(
+      "ledger-codec: migrateStateV1 received a non-object v1 state",
+    );
   }
-  const v1 = state as { readonly publicLedger?: unknown } & Record<string, unknown>;
+  const v1 = state as { readonly publicLedger?: unknown } & Record<
+    string,
+    unknown
+  >;
   if (!Array.isArray(v1.publicLedger)) {
-    throw new Error("ledger-codec: migrateStateV1: v1 state is missing a publicLedger array");
+    throw new Error(
+      "ledger-codec: migrateStateV1: v1 state is missing a publicLedger array",
+    );
   }
   return {
     ...v1,
     publicLedger: encodeLedger(
-      (v1.publicLedger as readonly PublicArtifact[]).map(normalizePreMethodArtifact),
+      (v1.publicLedger as readonly PublicArtifact[]).map(
+        normalizePreMethodArtifact,
+      ),
     ),
   } as unknown as CryptoBattleState;
 }

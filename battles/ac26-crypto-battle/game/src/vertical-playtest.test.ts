@@ -1,3 +1,6 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
+import { decodeHuntLog } from "./hunt-log.ts";
 /**
  * 2-team, 20-30 min scripted vertical playtest (Issue #486 PR5).
  *
@@ -90,14 +93,14 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
     // `result.finalState.publicLedger` holds the compact persisted form
     // (`StoredArtifact`, see ledger-codec.ts): `k`/`tm` below are that form's
     // own field names.
-    const alphaShares = result.finalState.publicLedger.filter(
-      (a) => a.k === "share" && a.tm === DEFENDER,
+    const alphaShares = result.finalState.publicLedger.map(artifactFields).filter(
+      (a) => a.k === "share" && storedTeamId(a, result.finalState.teams) === DEFENDER,
     );
     expect(alphaShares.length).toBeGreaterThanOrEqual(result.finalState.config.threshold);
   });
 
   test("MUST 4: bravo never posted a ShareArtifact -- it only ever used methods that publish nothing reconstructable", () => {
-    const bravoLedgerEntries = result.finalState.publicLedger.filter((a) => a.tm === ATTACKER);
+    const bravoLedgerEntries = result.finalState.publicLedger.map(artifactFields).filter((a) => storedTeamId(a, result.finalState.teams) === ATTACKER);
     expect(bravoLedgerEntries.length).toBeGreaterThan(0);
     // [Issue #645] bravo now answers FHE and MPC Orders too, so its ledger
     // carries ciphertexts and masked partials alongside its proof transcripts.
@@ -253,9 +256,8 @@ describe("vertical playtest (Issue #486 PR5): 2-team, 25-min scripted fixture", 
         // `wrongHunt` and moves nobody else -- the script exercises exactly one
         // (MUST 9's stale reconstruction), and reconciling every hunt as a hit
         // would silently absorb a regression that paid the bonus for a miss.
-        const hit = result.finalState.successfulHunts.includes(
-          JSON.stringify([step.teamId, step.op.targetTeamId, step.op.generation]),
-        );
+        const target = step.op.targetTeamId, generation = step.op.generation;
+        const hit = decodeHuntLog(result.finalState).some(e => e.via === undefined && e.attackerTeamId === step.teamId && e.targetTeamId === target && e.generation === generation);
         if (hit) {
           expected[step.teamId] = (expected[step.teamId] ?? 0) + result.finalState.config.scores.huntBonus;
           expected[step.op.targetTeamId] =

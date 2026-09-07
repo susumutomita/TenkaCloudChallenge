@@ -1,6 +1,7 @@
 /**
  * #659 / #661: time-based cipher ladder, with public methods and private keys.
- * Build uses Caesar; pressure and endgame rush slots use Vigenère.
+ * Build uses Caesar; normal pressure alternates Vigenère and Rotor.
+ * Endgame rush cipher slots retain Vigenère.
  * Normal endgame cipher slots are the separate rsa-encrypt task (rsa.ts).
  * Vigenère Orders deliberately expose one public key position at a time.
  * Three different positions disclose the cycle; repeated copies of one do not.
@@ -9,7 +10,8 @@
  *
  * Browser-safe: only arithmetic, input shape and public material coverage live
  * here. Seed-derived keys and plaintexts remain server-side in fixtures.ts.
- * Rotor and a new homomorphic ladder rung remain future increments.
+ * Rotor has a separate stateful task in rotor.ts; the existing encrypted-addition
+ * Order is an addition-only teaching model, not full FHE.
  */
 
 /** The shift-cipher rungs. RSA has its own public-key task shape in rsa.ts. */

@@ -117,6 +117,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
  * whole point is that participants learn which is which.
  */
 const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[]>> = {
+  "rotor-encrypt": ["leak", "cipher"],
   "rsa-encrypt": ["leak", "cipher"],
   "rps-duel": ["duel"],
   "reveal-share": ["leak", "prove"],

@@ -1,3 +1,4 @@
+import { expandHuntAttempts } from "./hunt-budget.ts";
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -228,14 +229,14 @@ test("v8 migration preserves Vigenere failures, compact HUNT/RPS state and boost
   expect(submitOp(live, "alpha", { ...correct, answer: [String((Number(correct.answer[0]) + 1) % 6)] }, BOUNDARY).kind).toBe("ok");
   const old = (state: CryptoBattleState) => {
     const { endgameLightning: _l, ...rest } = copy(state);
-    return { ...rest, contracts: rest.contracts.map(({ answerAttempted: _a, ...c }) => c) } as CryptoBattleState;
+    return { ...rest, huntAttempts: expandHuntAttempts(state), contracts: rest.contracts.map(({ answerAttempted: _a, ...c }) => c) } as CryptoBattleState;
   };
   const original = old(live.state), bytes = JSON.stringify(original), lifted = migrateState(original, 8);
   expect(JSON.stringify(original)).toBe(bytes);
   expect(lifted.endgameLightning).toEqual({ status: "unavailable" });
   expect(lifted.endgameBooster).toEqual(original.endgameBooster);
   expect(lifted.publicLedger).toEqual(original.publicLedger);
-  expect(lifted.huntAttempts).toEqual(original.huntAttempts);
+  expect(expandHuntAttempts(lifted)).toEqual(expandHuntAttempts(original));
   expect(lifted.contracts).toEqual(original.contracts);
   expect(lifted.teams).toEqual(original.teams);
   expect(projectForTeam(lifted, "alpha").lastCipher?.outcome).toBe("miss");
@@ -255,7 +256,7 @@ test("v8 migration preserves Vigenere failures, compact HUNT/RPS state and boost
   expect(submitOp(rps, "alpha", { kind: "hunt-rps", targetTeamId: "bravo", duelId: pending.duelId, predictedHand: 2 }, rps.state.nowMs!).kind).toBe("ok");
   const legacyRps = old(rps.state), migratedRps = migrateState(legacyRps, 8);
   expect(Object.keys(legacyRps.huntAttempts).length).toBeGreaterThan(0);
-  expect(migratedRps.huntAttempts).toEqual(legacyRps.huntAttempts);
+  expect(expandHuntAttempts(migratedRps)).toEqual(expandHuntAttempts(legacyRps));
   expect(migratedRps.contracts).toEqual(legacyRps.contracts);
   expect(projectForTeam(migratedRps, "alpha").rpsHunt?.pending).toEqual(projectForTeam(legacyRps, "alpha").rpsHunt?.pending);
 });

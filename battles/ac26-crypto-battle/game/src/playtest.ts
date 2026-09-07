@@ -1,3 +1,4 @@
+import { rotorEncrypt } from "./rotor.ts";
 import { rsaEncrypt } from "./rsa.ts";
 /**
  * Deterministic scripted-playtest runner (Issue #486 PR5).
@@ -471,6 +472,7 @@ export function buildClearingOp(
       // -- until all 23 are spent, at which point this throws and the caller
       // has to ROTATE, exactly as a participant would.
       return buildProveSudokuOp(vault, contract.id);
+    case "rotor-encrypt": return { kind: "cipher", contractId: contract.id, answer: rotorEncrypt(contract.task.plaintext, contract.task.myInitial).map(String) };
     case "rsa-encrypt":
       return { kind: "cipher", contractId: contract.id, answer: [String(rsaEncrypt(contract.task.plaintext, contract.task))] };
     case "caesar-shift":

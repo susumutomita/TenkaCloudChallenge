@@ -1,3 +1,5 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { rotorEncrypt } from "./rotor.ts";
 import { rsaEncrypt } from "./rsa.ts";
 import { createHash } from "node:crypto";
 import { expect, test } from "bun:test";
@@ -66,6 +68,7 @@ test("90 standard minutes: both safe teams can score a public-evidence RPS predi
           case "zk-sudoku": op = buildProveSudokuOp(own.vault, order.id); break;
           case "rsa-encrypt": op = { kind: "cipher", contractId: order.id, answer: [String(rsaEncrypt(order.task.plaintext, order.task))] }; break;
           case "caesar-shift": op = buildCipherOp(order); break;
+          case "rotor-encrypt": op = { kind: "cipher", contractId: order.id, answer: rotorEncrypt(order.task.plaintext, order.task.myInitial).map(String) }; break;
           case "homomorphic-sum": op = buildFheOp(order, view.prime); break;
           case "masked-total": op = buildMpcOp(order, view.prime); break;
         }

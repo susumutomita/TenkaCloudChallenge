@@ -1,3 +1,6 @@
+import { hasRecordedHunt } from "./hunt-log.ts";
+import { artifactFields } from "./ledger-codec.ts";
+import { expandHuntAttempts } from "./hunt-budget.ts";
 import { rsaHuntKey, pruneRetiredRsaHunts, huntKey } from "./hunt-key.ts";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
@@ -8,7 +11,7 @@ import RsaMaterials from "../../portal/RsaMaterials.tsx";
 import { CipherScoring, tacticAvailability, rotateVoidCount } from "../../portal/FastMovePanel.tsx";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import { disclosurePreview } from "../../portal/OrderFocus.tsx";
-import { deriveRsaKey } from "./fixtures.ts";
+import { deriveRsaKey, derivePlaintext } from "./fixtures.ts";
 import { pow } from "./field.ts";
 import { decodeLedger, encodeLedger } from "./ledger-codec.ts";
 import { DEFAULT_CONFIG, migrateState, projectForTeam, tick, validateOp } from "./reducer.ts";
@@ -69,8 +72,8 @@ describe("small textbook RSA, with public encryption and a separate recovery key
   test("the scheduled endgame boundary replaces only normal cipher slots; rush and earlier Orders keep their task", () => {
     const host = createMatch({ eventId: "local-dev-644", teamIds: ["alpha", "bravo"], matchSecret: "rsa-max-110" });
     host.state = tick(host.state, 56 * MINUTE);
-    const prior = host.state.contracts.find(c => c.teamId === "alpha" && c.task.kind === "caesar-shift" && c.status === "open")!;
-    expect(prior.task).toMatchObject({ rung: "vigenere" });
+    const prior = host.state.contracts.find(c => c.teamId === "alpha" && c.task.kind === "rotor-encrypt" && c.status === "open")!;
+    expect(prior.task.kind).toBe("rotor-encrypt");
     const boundary = tick(checkpoint(host.state), 60 * MINUTE);
     expect(boundary.contracts.find(c => c.id === prior.id)?.task).toEqual(prior.task);
     expect(projectForTeam(tick(host.state, 60 * MINUTE - 1), "alpha").publicRsaKeys).toEqual([]);
@@ -136,7 +139,7 @@ describe("small textbook RSA, with public encryption and a separate recovery key
     expect(host.state.teams.alpha!.score - before.teams.alpha!.score).toBe(10);
     const pair = projectForTeam(host.state, "bravo").publicLedger.find(a => a.kind === "rsa-pair")!;
     expect(pair).toEqual({ id: `${order.id}-pair`, kind: "rsa-pair", teamId: "alpha", generation: 1, method: "leak", contractId: order.id, n: 77, e: 7, plaintext: 9, ciphertext: 37, postedAtMs: NOW });
-    expect(encodeLedger(decodeLedger(host.state.publicLedger))).toEqual([...host.state.publicLedger]);
+    expect(encodeLedger(decodeLedger(host.state.publicLedger, host.state.teams), host.state.teams)).toEqual([...host.state.publicLedger]);
     expect(projectForTeam(checkpoint(host.state), "bravo").publicLedger).toEqual(projectForTeam(host.state, "bravo").publicLedger);
     expect(disclosurePreview(projectForTeam(host.state, "alpha"), order, "ja")).toContain("元の数 m と暗号の答え c");
   });
@@ -194,7 +197,7 @@ describe("small textbook RSA, with public encryption and a separate recovery key
     expect(validateOp({ ...host.state, phase: "pressure" }, "alpha", hunt).ok).toBe(false);
     expect(validateOp(tick(host.state, 90 * MINUTE), "alpha", hunt).ok).toBe(false);
     expect(submitOp(host, "alpha", { ...hunt, p: "11", q: "7" } as CryptoBattleOp, NOW).kind).toBe("ok");
-    expect(host.state.successfulHunts).toContain('r1:1');
+    expect(hasRecordedHunt(host.state, "alpha", "bravo", 1, "rsa")).toBe(true);
     expect(rsaHuntKey({ teams: Object.fromEntries(Object.entries(host.state.teams).reverse()) }, "alpha", "bravo", 1)).toBe('r1:1');
     host.state = checkpoint(host.state);
     expect(submitOp(host, "alpha", hunt, NOW + 1).kind).toBe("rejected");
@@ -213,6 +216,10 @@ describe("small textbook RSA, with public encryption and a separate recovery key
   test("v9 migration retains an armed lightning card, compact attempts, public ledger and failed Vigenère before issuing RSA", () => {
     const host = createMatch({ eventId: "migration", teamIds: ["alpha", "bravo"], matchSecret: "migration" });
     host.state = tick(host.state, 56 * MINUTE);
+    // Real v9 payload: these pressure slots were Vigenère before Rotor existed.
+    host.state = { ...host.state, contracts: host.state.contracts.map(c => c.task.kind === "rotor-encrypt" ? { ...c,
+      task: { kind: "caesar-shift" as const, rung: "vigenere" as const, keyPosition: 0, plaintext: derivePlaintext(host.state.seed, c.id, "vigenere") },
+    } : c) };
     const oldOrder = host.state.contracts.find(c => c.teamId === "alpha" && c.task.kind === "caesar-shift")!;
     if (oldOrder.task.kind !== "caesar-shift") throw new Error("expected old Vigenere");
     expect(submitOp(host, "alpha", { kind: "cipher", contractId: oldOrder.id, answer: ["0"] }, 56 * MINUTE).kind).toBe("ok");
@@ -226,8 +233,8 @@ describe("small textbook RSA, with public encryption and a separate recovery key
     expect(submitOp(host, "alpha", { kind: "declare-lightning", contractId: target.id }, 60 * MINUTE).kind).toBe("ok");
     host.state = { ...host.state, huntAttempts: { "[0,1,1]": 1, '["sudoku",0,1,1]': 2 } };
     const source = checkpoint(host.state), migrated = migrateState(checkpoint(source), 9);
-    expect(migrated).toEqual(source);
-    expect(migrated.publicLedger.some(a => a.k === "cipher-pair")).toBe(true);
+    expect({ ...migrated, huntAttempts: expandHuntAttempts(migrated) }).toEqual({ ...source, huntAttempts: expandHuntAttempts(source) });
+    expect(migrated.publicLedger.map(artifactFields).some(a => a.k === "cipher-pair")).toBe(true);
     expect(migrated.contracts.some(c => c.task.kind === "rsa-encrypt")).toBe(false);
     expect(migrated.contracts.find(c => c.id === oldOrder.id)?.cipherFailed).toBe(true);
     host.state = migrated;

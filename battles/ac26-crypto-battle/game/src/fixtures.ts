@@ -13,6 +13,7 @@
  */
 
 import { type CipherKey, type CipherRung, rungSpec } from "./ladder.ts";
+import type { RotorPositions } from "./rotor.ts";
 import { inv } from "./field.ts";
 import { deriveBigInt, deriveBytes, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
@@ -50,6 +51,15 @@ export function deriveRsaKey(seed: string, teamId: string, generation: number) {
 
 export function deriveRsaPlaintext(seed: string, contractId: string): number {
   return 2 + Number(deriveBigInt(seed, `rsa-plaintext:${contractId}`, 0, 8n));
+}
+
+/** Independent generation key: neither additive shifts nor RSA parameters. */
+export function deriveRotorPositions(seed: string, teamId: string, generation: number): RotorPositions {
+  const [a, b] = deriveStream(seed, `rotor-key:${teamId}:${generation}`, 2, 4n);
+  return { a: Number(a), b: Number(b) };
+}
+export function deriveRotorPlaintext(seed: string, contractId: string): readonly number[] {
+  return deriveStream(seed, `rotor-plaintext:${contractId}`, 4, 4n).map(Number);
 }
 
 /** The `t - 1` Shamir polynomial coefficients (c1..c_{t-1}) for this team/generation. */
@@ -342,7 +352,10 @@ export function deriveContractPlan(
   const shareIndex = Number(indexRoll % BigInt(config.shareCount)) + 1;
   const slot = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? "reveal-share";
   const taskKind = slot === "caesar-shift" && kind === "standard" && progression?.pressureToEndgameMs !== undefined
-    && progression.elapsedMs >= progression.pressureToEndgameMs ? "rsa-encrypt" : slot;
+    && progression.elapsedMs >= progression.pressureToEndgameMs ? "rsa-encrypt"
+    : slot === "caesar-shift" && kind === "standard" && progression !== undefined
+      && progression.elapsedMs >= progression.buildToPressureMs && Math.floor(sequenceIndex / TASK_ROTATION.length) % 2 === 1
+      ? "rotor-encrypt" : slot;
   // FHE, MPC and the sudoku proof publish nothing reconstructable by
   // construction, so their Orders state that rule rather than rolling for it.
   // [Issue #659] A ladder Order never forbids disclosure. The decision it puts
@@ -353,7 +366,7 @@ export function deriveContractPlan(
   // variant became the `zk-sudoku` slot in the rotation above, so the privacy
   // roll it used to make has nothing left to decide.
   const privacyConstraint: PrivacyConstraint =
-    taskKind === "caesar-shift" || taskKind === "rsa-encrypt" || taskKind === "reveal-share" ? "none" : "no-raw-disclosure";
+    taskKind === "rotor-encrypt" || taskKind === "caesar-shift" || taskKind === "rsa-encrypt" || taskKind === "reveal-share" ? "none" : "no-raw-disclosure";
   return {
     kind,
     taskKind,

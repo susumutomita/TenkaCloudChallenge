@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /**
  * [Issue #645 Phase 2] The FHE slice, from the cipher up to the judge.
  *
@@ -280,7 +281,7 @@ describe("the FHE Order's trust boundary", () => {
     if (!op) throw new Error("expected buildFheOp to construct an op");
     const next = applyOp(state, "teamA", op);
 
-    const entry = next.publicLedger.find((a) => a.k === "ciphertext");
+    const entry = next.publicLedger.map(artifactFields).find((a) => a.k === "ciphertext");
     expect(entry).toBeDefined();
     expect(entry?.m).toBe("fhe");
 
@@ -396,7 +397,7 @@ describe("the FHE Order's trust boundary", () => {
     expect(validateOp(state, "teamA", padded)).toEqual({ ok: true });
 
     // And the ledger still records the canonical form, never the padding.
-    const entry = applyOp(state, "teamA", padded).publicLedger.find((a) => a.k === "ciphertext");
+    const entry = applyOp(state, "teamA", padded).publicLedger.map(artifactFields).find((a) => a.k === "ciphertext");
     expect(entry?.k === "ciphertext" ? entry.r : "").toBe(op.ciphertext.r);
   });
 

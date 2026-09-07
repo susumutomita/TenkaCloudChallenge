@@ -1,3 +1,4 @@
+import { decodeHuntLog } from "./hunt-log.ts";
 /**
  * Coordination plugin wiring test (Issue #486 PR3, revised for the PR3
  * independent review).
@@ -162,7 +163,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
    */
   it("declares the current stateSchemaVersion with reducer.ts's migrateState wired [Issue #679, #709]", () => {
     expect(plugin.stateSchemaVersion).toBe(STATE_SCHEMA_VERSION);
-    expect(STATE_SCHEMA_VERSION).toBe(10);
+    expect(STATE_SCHEMA_VERSION).toBe(11);
     expect(plugin.migrateState).toBe(migrateState);
   });
 
@@ -215,7 +216,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     // [Issue #659] LEAK pays the leak rate, not the full rate.
     expect(blueAfterLeak.score).toBe(blueContract.leakPoints);
     expect(state.publicLedger).toHaveLength(1);
-    expect(decodeLedger(state.publicLedger)[0]?.kind).toBe("share");
+    expect(decodeLedger(state.publicLedger, state.teams)[0]?.kind).toBe("share");
 
     // A validateOp rejection must flow back through dispatchOp as `{ ok: false }`
     // WITHOUT changing state -- re-leaking the now-completed contract is illegal.
@@ -241,7 +242,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     if (!redAfterProve) throw new Error("test setup: expected a red team");
     expect(redAfterProve.score).toBe(redContract.points);
     expect(state.publicLedger).toHaveLength(2);
-    expect(decodeLedger(state.publicLedger)[1]?.kind).toBe("sudoku-reveal");
+    expect(decodeLedger(state.publicLedger, state.teams)[1]?.kind).toBe("sudoku-reveal");
 
     // -- HUNT: blue reconstructs red's secret from `threshold` of red's
     // shares (see this file's header on why this reads state.teams directly
@@ -362,7 +363,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     const roundTripped = JSON.parse(JSON.stringify(state)) as CryptoBattleState;
     expect(roundTripped).toEqual(state);
     expect(roundTripped.huntLog).toEqual(state.huntLog);
-    expect(roundTripped.huntLog[0]).toEqual({
+    expect(decodeHuntLog(roundTripped)[0]).toEqual({
       attackerTeamId: "blue",
       targetTeamId: "red",
       generation: redTeam.generation,

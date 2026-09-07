@@ -52,7 +52,7 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
 4. `validateOp` rejects malformed, stale or unauthorized moves. A well-formed
-   PROVE or Vigenère/RSA CIPHER miss is accepted and charged by `applyOp`.
+   PROVE or Vigenère/Rotor/RSA CIPHER miss is accepted and charged by `applyOp`.
 5. `applyOp` changes state only after validation.
 6. `projectForTeam` returns the team's vault and Orders plus the public ledger.
 7. Reset/delete removes both state and the separate match-secret record.
@@ -63,7 +63,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (10, including RSA Orders and public-pair records) and a
+The plugin declares `stateSchemaVersion` (11, including Rotor Orders, packed HUNT counters and latest verdicts) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -388,7 +388,9 @@ exposes relations when a mask repeats. That is related algebra, not a claim
 that Vigenère implements Beaver triples or achieves one-time-pad security.
 No dedicated Vigenère treatment was found in the checked local seminar notes.
 
-Remaining #659 work: rotor/Enigma teaching model and a new homomorphic rung. This increment must not close #659 or the balance discussion #740.
+The Rotor model below completes the next cipher exercise. The existing
+homomorphic-sum Order already runs in every phase; it is an addition-only
+teaching model and is not full FHE. No additional homomorphic Order is introduced.
 
 
 ### Schema 8: Vigenère answer adjudication
@@ -489,3 +491,44 @@ complete small parameter/residue sweep, malformed input, private projection,
 actual host scoring, migration, repeated submission and ROTATE regressions;
 `game/src/state-size.test.ts` includes public RSA LEAK and pairwise HUNT traffic.
 The independent packet and browser evidence are in `dev/RSA-READING.md`.
+
+
+### Schema 11: Rotor and lossless HUNT bookkeeping
+
+New normal pressure cipher slots alternate Vigenère and Rotor; issue time fixes
+the task even under a late tick. Existing RSA, Vigenère, scalar Caesar, RPS,
+lightning, booster and failed-CIPHER state retain their rules. A Rotor public pair
+stores only plaintext/ciphertext, owner, generation, Order and publication time.
+The owner's initial positions are derived at projection time, never stored in an
+Order or public artifact. One pair is an entry gate, not a uniqueness predicate.
+Rotor attempts share the existing Shamir/RPS count; Sudoku remains independent.
+
+Schema11 changes the saved representation, with no new public information:
+
+- Public Ledger entries use fixed tuples and the existing sorted match roster.
+  Old short-key objects and literal team/Order/artifact IDs remain readable. Every
+  value, exact publication time, ID and ledger entry order survives projection
+  and replay; unfamiliar IDs are kept verbatim.
+- Shamir, Sudoku, RSA and Rotor successes share the existing dense exact-time
+  audit codec with distinct method tags. If compaction would change a legacy
+  same-millisecond replay order, migration retains that entire old huntLog.
+  Each audit also rejects repeat success,
+  avoiding a duplicate guard. ROTATE retains these records across generations.
+- Classic cipher success and legacy guard-only rows use one bit per fixed roster
+  attacker, grouped by method/target/generation. A guard without a recorded time
+  remains untimed: migration does not invent an event in the replay.
+- The two independent HUNT counters use fixed roster slots and the same lossless
+  safe-integer codec as audit offsets. Counts above3 stay exact. Schema4–10
+  numeric keys are validated; schema1–3 logical keys first use the existing
+  converter. Reserved RPS refunds retain their own old-generation counts.
+- Latest HUNT verdicts use roster tuples. Legacy objects, including absent score
+  deltas, stay readable; an unknown historical delta is never reported as zero.
+
+Migration accepts schemas1–10, preserving existing Vigenère failure flags,
+lightning and booster decisions, RPS predictions and current-generation guards.
+Only a guard with a matching real audit record is removed as redundant. Other
+untimed guards remain; the existing retired-RSA-guard policy is unchanged.
+Malformed identities/counts fail without rewriting the saved row. Mixed-version
+workers must respect stateSchemaVersion11. Roll back only to a worker that
+understands these encodings; never relabel a row as version10. No platform
+configuration or cleanup change accompanies this migration.

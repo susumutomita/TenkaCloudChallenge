@@ -28,6 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `rsa m=${task.plaintext}/n=${task.n}/e=${task.e}`;
     case "rps-duel": return `rps vs ${task.opponentTeamId}`;
     case "reveal-share":
@@ -49,6 +50,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
+    "rotor-encrypt": "進む車輪で4文字を暗号にする",
     "rsa-encrypt": "公開鍵で1個の数を暗号にする",
     "rps-duel": "手を隠して、相手とじゃんけん",
     "reveal-share": "かけらを公開するか、秘密を守って証明する",
@@ -64,6 +66,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "rotor-encrypt": "Encrypt four digits with advancing wheels",
     "rsa-encrypt": "Encrypt one number with a public key",
     "rps-duel": "Seal your hand, then play rock-paper-scissors",
     "reveal-share": "account for a share",
@@ -88,6 +91,7 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "rotor-encrypt": return `Rotor · ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `RSA · m=${task.plaintext}, n=${task.n}, e=${task.e}`;
     case "rps-duel": return locale === "ja" ? "① 数字を封じる → ② 両者が開く" : "1. Seal a number → 2. Both open";
     case "reveal-share":
@@ -124,6 +128,7 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
  */
 export function ledgerKindLabel(artifact: PublicArtifact): string {
   switch (artifact.kind) {
+    case "rotor-pair": return "Rotor pair (LEAK)";
     case "rsa-pair": return "RSA pair (LEAK)";
     case "rps-commit": return "RPS / COMMIT";
     case "rps-open": return "RPS / OPEN";
@@ -155,6 +160,7 @@ const LEDGER_COPY = {
 export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string {
   const copy = LEDGER_COPY[locale];
   switch (artifact.kind) {
+    case "rotor-pair": return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")}`;
     case "rsa-pair": return `n=${artifact.n}, e=${artifact.e} · ${artifact.plaintext} → ${artifact.ciphertext}`;
     case "rps-commit": return `c = ${artifact.commitment}`;
     case "rps-open": return `c = ${artifact.commitment} · ${locale === "ja" ? "手 m" : "hand m"} = ${artifact.hand} · ${locale === "ja" ? "隠す数 r" : "hiding number r"} = ${artifact.randomness}`;
