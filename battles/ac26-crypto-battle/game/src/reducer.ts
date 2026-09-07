@@ -1,3 +1,4 @@
+import {ioTask,ioAnswer,parseIoAnswer} from "./io.ts";
 import {addPoints,parsePoint,CURVE_POINTS} from "./ec.ts";
 import { createHmac } from "node:crypto";
 import { power, group, scalar, verifySchnorr } from "./schnorr.ts";
@@ -260,6 +261,7 @@ export function resolveMatchSeed(ctx: CoordinationContext): string {
 export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   proofProtocol: "schnorr-v1",
   ecOrders:true,
+  ioOrders:true,
   contractIntervalMs: 30_000,
   contractsPerIssue: 1,
   onboardingFollowUpMs: 30_000,
@@ -356,6 +358,7 @@ function buildOrderTask(
   generation: number,
 ): OrderTask {
   switch (plan.taskKind) {
+    case "io-equivalence": return ioTask([...createHmac("sha256",seed).update(`io:${contractId}`).digest()]);
     case "ec-add": {
       const bytes=createHmac("sha256",seed).update(`ec:${contractId}`).digest();
       return {kind:"ec-add",left:CURVE_POINTS[bytes[0]!%CURVE_POINTS.length]!,right:CURVE_POINTS[bytes[1]!%CURVE_POINTS.length]!};
@@ -649,7 +652,7 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 15;
+export const STATE_SCHEMA_VERSION = 17;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -692,9 +695,9 @@ export const STATE_SCHEMA_VERSION = 15;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13 and v14 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15 and v16 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -919,6 +922,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         continue;
       }
       let plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig, { elapsedMs: nextContractAtMs - startedAtMs, buildToPressureMs: state.config.phaseBoundaries.buildToPressureMs, pressureToEndgameMs: state.config.phaseBoundaries.pressureToEndgameMs });
+      if(state.config.ioOrders && sequenceIndex%19===18)plan={...plan,taskKind:"io-equivalence",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if(state.config.ecOrders && sequenceIndex%13===12)plan={...plan,taskKind:"ec-add",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
@@ -1329,7 +1333,7 @@ export function validateOp(
   switch (op.kind) {
     case "declare-lightning": {
       const contract = state.contracts.find(c => c.id === op.contractId && c.teamId === teamId);
-      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec"].includes(m));
+      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io"].includes(m));
       if (!contract || !method) return { ok: false, error: "lightning requires your own calculation Order; duel outcomes do not qualify" };
       const gate = validateOrderSubmission(state, teamId, op.contractId, method);
       if (!gate.ok) return gate;
@@ -1623,6 +1627,11 @@ export function validateOp(
         }
       }
       return { ok: true };
+    }
+    case "io": {
+      const gate=validateOrderSubmission(state,teamId,op.contractId,"io");
+      if(!gate.ok)return gate;
+      return parseIoAnswer(op.answer)?{ok:true}:{ok:false,error:"Enter two outputs (0–4), equivalence (0/1), and shared outcome count (0–4), separated by spaces."};
     }
     case "ec": {
       const gate=validateOrderSubmission(state,teamId,op.contractId,"ec");
@@ -2247,6 +2256,7 @@ function projectTask(
   contractId: string,
 ): OrderTaskProjection {
   switch (task.kind) {
+    case "io-equivalence": return task;
     case "ec-add": return task;
     case "rotor-encrypt": {
       const order = state.contracts.find(c => c.id === contractId && c.teamId === teamId);
@@ -2720,6 +2730,7 @@ function applyMethodOp(
       return applyLeak(state, teamId, op);
     case "fhe":
       return applyFhe(state, teamId, op);
+    case "io": return applyIo(state,teamId,op);
     case "ec": return applyEc(state,teamId,op);
     case "mpc":
       return applyMpc(state, teamId, op);
@@ -2992,4 +3003,12 @@ function applyEc(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattleOp
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
  return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"ec" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
+}
+
+function applyIo(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattleOp,{kind:"io"}>):CryptoBattleState {
+ const c=state.contracts.find(c=>c.id===op.contractId)!;if(c.task.kind!=="io-equivalence")throw new Error("wrong task");
+ const hit=JSON.stringify(parseIoAnswer(op.answer))===JSON.stringify(ioAnswer(c.task));
+ const team=state.teams[teamId]!;
+ const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
+ return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"io" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
 }
