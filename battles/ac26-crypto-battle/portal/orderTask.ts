@@ -56,7 +56,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
   ja: {
     "stark-trace":"STARK：実行表と折り畳みを検査",
     "io-equivalence":"iO：答えと、その出る確率を比べる",
-    "snark-constraints":"SNARK：計算と配線を検査",
+    "snark-constraints":"短い証明（SNARK）の準備：計算を検査",
     "ec-add":"楕円曲線：2点を足す",
     "rotor-encrypt": "進む車輪で4文字を暗号にする",
     "rsa-encrypt": "公開鍵で1個の数を暗号にする",
@@ -76,7 +76,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
   en: {
     "stark-trace":"STARK: check the trace and fold",
     "io-equivalence":"iO: compare answers and their probabilities",
-    "snark-constraints":"SNARK: check gates and wires",
+    "snark-constraints":"Prepare a short proof (SNARK): check computation",
     "ec-add":"Elliptic curve: add two points",
     "rotor-encrypt": "Encrypt four digits with advancing wheels",
     "rsa-encrypt": "Encrypt one number with a public key",
