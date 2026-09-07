@@ -251,3 +251,7 @@ challenge first, then construct the message. The safe order is stated separately
 The first construction hint says the expression matches at the revealed position,
 without claiming it matches only there; additional agreement positions are allowed.
 These corrections change no arithmetic, signatures, or acceptance conditions.
+
+## 2026-09-07 participant-only reread (Issue #716 / PR #804)
+
+An independent reader inspected only Japanese/English participant instructions and public starter surfaces, without hidden tests, reference code or verifier implementation. The first pass found that a linear expression before reduction was conflated with its wrapped remainder values, and that the forged first polynomial required an accompanying false initial total but the statement did not say so. Both languages were revised to separate before/after reduction and to diagram the false initial total and next-round claim. The participant-only reread confirmed both gaps resolved. This records text and hand-calculation review, not UI submission. Earlier entries above concern earlier text.
