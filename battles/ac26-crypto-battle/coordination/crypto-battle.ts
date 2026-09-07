@@ -88,13 +88,10 @@
  *
  * ## Config
  *
- * `CoordinationPlugin.initialState` takes only `ctx` (no config parameter),
- * so this wrapper always runs with `reducer.ts`'s `DEFAULT_CONFIG` -- the
- * Issue #486 playtest seed values (see that file's doc comment). Per-event
- * tuning (a config override) is not part of the SDK's `initialState`
- * contract today; `reducer.ts`'s `initialState(ctx, config?)` already
- * supports it if the SDK ever grows that capability, without any change
- * needed here.
+ * New matches use STREAMING_ORDER_CONFIG (one Order every 30 seconds,
+ * 60-second deadlines). Existing states retain their stored config.
+ * tickOnRequest asks the host to advance its own clock before reads/moves;
+ * the reducer ignores stale clocks from concurrent requests.
  *
  * ## Wire safety (Issue #486 PR3 independent review, High #1 + #2)
  *
@@ -154,6 +151,7 @@ import {
   migrateState,
   projectForTeam,
   STATE_SCHEMA_VERSION,
+  STREAMING_ORDER_CONFIG,
   tick,
   validateOp,
 } from "../game/src/reducer.ts";
@@ -176,10 +174,11 @@ function teamScores(state: CryptoBattleState): Readonly<Record<string, number>> 
 }
 
 export default defineCoordinationPlugin<CryptoBattleState, CryptoBattleOp, CryptoBattleProjection>({
-  initialState,
+  initialState: ctx => initialState(ctx, STREAMING_ORDER_CONFIG),
   validateOp,
   applyOp,
   tick,
+  tickOnRequest: true,
   projectForTeam,
   teamScores,
   scoreReasons,

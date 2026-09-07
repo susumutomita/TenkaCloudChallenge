@@ -67,6 +67,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof v.phase !== "string" || !phases.includes(v.phase)) {
     return false;
   }
+  if (v.clockMs !== undefined && (typeof v.clockMs !== "number" || !Number.isFinite(v.clockMs) || v.clockMs < 0)) return false;
   if (typeof v.matchRemainingMs !== "number" && v.matchRemainingMs !== undefined) return false;
   if (v.hintBooster !== undefined) {
     const b = v.hintBooster as Record<string, unknown>;

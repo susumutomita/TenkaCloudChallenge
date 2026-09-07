@@ -1324,6 +1324,8 @@ export interface TeamSummaryProjection {
  * place that has to get the redaction right.
  */
 export interface CryptoBattleProjection {
+  /** Host-relative timestamp of this snapshot; never a browser clock. */
+  readonly clockMs?: number;
   /** Own benefit only; the opponent's allocation is never projected. */
   readonly hintBooster?: HintBoosterProjection;
   readonly lightning?: LightningProjection;

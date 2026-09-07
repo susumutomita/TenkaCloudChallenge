@@ -56,7 +56,7 @@ function loadScenario(scenarioId: ScenarioId): Session {
   };
 }
 
-let session: Session = loadScenario("fresh");
+let session: Session = loadScenario("streaming");
 
 function eventNowMs(clock: Clock): number {
   if (clock.resumedAtWallMs === null) return clock.baseMs;
