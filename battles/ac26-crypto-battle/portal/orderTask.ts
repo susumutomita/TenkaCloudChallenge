@@ -30,7 +30,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
     case "anamorphic-rejection": return "Anamorphic ciphertext selection";
     case "stark-trace": return "STARK trace and fold";
-    case "io-equivalence": return "iO outputs and their probabilities";
+    case "io-equivalence": return "Outputs and their probabilities";
     case "snark-constraints": return "SNARK gate/copy constraints";
     case "ec-add": return "EC P + Q";
     case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
@@ -57,7 +57,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
   ja: {
     "anamorphic-rejection":"アナモルフィック暗号：隠れたビットを送る",
     "stark-trace":"STARK：実行表と折り畳みを検査",
-    "io-equivalence":"iO：答えと、その出る確率を比べる",
+    "io-equivalence":"答えと、その出る確率を比べる",
     "snark-constraints":"短い証明（SNARK）の準備：計算を検査",
     "ec-add":"楕円曲線：2点を足す",
     "rotor-encrypt": "進む車輪で4文字を暗号にする",
@@ -78,7 +78,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
   en: {
     "anamorphic-rejection":"Anamorphic encryption: send a hidden bit",
     "stark-trace":"STARK: check the trace and fold",
-    "io-equivalence":"iO: compare answers and their probabilities",
+    "io-equivalence":"Compare answers and their probabilities",
     "snark-constraints":"Prepare a short proof (SNARK): check computation",
     "ec-add":"Elliptic curve: add two points",
     "rotor-encrypt": "Encrypt four digits with advancing wheels",
