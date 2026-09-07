@@ -2812,6 +2812,7 @@ export function projectForTeam(
       const task = projectTask(state, teamId, c.task, c.id);
       return {
         id: c.id,
+        ...(c.lastSubmissionPoints === undefined ? {} : {lastSubmissionPoints:c.lastSubmissionPoints}),
         ...(state.config.proofProtocol === "schnorr-v1" && c.allowedMethods.includes("prove") ? { schnorr: { y: c.schnorr?.y ?? schnorrStatement(state.seed, teamId, c.id), ...(c.schnorr ? {pending:c.schnorr} : {}) } } : {}),
         kind: c.kind,
         points: c.cipherFailed === true ? 0 : c.points + lightningBonus(state, c),
@@ -3002,7 +3003,7 @@ function applyEc(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattleOp
  const hit=JSON.stringify(parsePoint(op.answer))===JSON.stringify(addPoints(c.task.left,c.task.right));
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
- return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"ec" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
+ return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"ec" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
 }
 
 function applySnark(state: CryptoBattleState, teamId: string, op: Extract<CryptoBattleOp,{kind:"snark"}>): CryptoBattleState {
@@ -3012,7 +3013,7 @@ function applySnark(state: CryptoBattleState, teamId: string, op: Extract<Crypto
   const team = state.teams[teamId]!;
   const points = hit ? order.points + lightningBonus(state,order) : -Math.min(team.score,Math.abs(state.config.scores.wrongProve));
   return {...state,
-    contracts: state.contracts.map(c => c.id === order.id ? {...c,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"snark" as const}:{})} : c),
+    contracts: state.contracts.map(c => c.id === order.id ? {...c,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"snark" as const}:{})} : c),
     teams: {...state.teams,[teamId]: {...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,order.id)]}:{})}},
   };
 }

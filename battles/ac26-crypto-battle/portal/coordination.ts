@@ -125,6 +125,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (!Array.isArray(vaultRecord.sudokuHuntedGenerations)) return false;
 
   if (!Array.isArray(v.myContracts)) return false;
+  if (v.myContracts.some(c => c.lastSubmissionPoints !== undefined && !Number.isSafeInteger(c.lastSubmissionPoints))) return false;
   // Deep-checked (unlike the shallow "just Array.isArray" style elsewhere in
   // this guard): `remainingMs` is the field this problem's live-time-display
   // bug lived in (see `ContractProjection.remainingMs`'s doc comment in
