@@ -439,16 +439,17 @@ The model enumerates the complete truth table, discards source syntax, and publi
 
 Validation: exhaustive correctness for 625 tables and all four rotations, changed-input distribution checks, generated equivalent/inequivalent tasks, wrong/correct score deltas, Lightning, foreign ownership, replay and expiry. Local real-Portal `io-order` play showed A=2x, B=2(x+3)+1; outputs 4 and 3, equivalence 0 and overlap 0 were submitted and +30 plus success feedback appeared. Combined with SNARK #797: 758 ordinary regression tests passed; 79 dev tests and both typechecks passed. Schema 17 preserves old configuration rather than adding iO to in-progress matches. No deployment performed.
 
+The additional distribution regression enumerates all 225 nonempty rotation-support pairs, including equal functions with partially overlapping outputs. A fresh real-Portal `io-order` pass on the candidate-randomness implementation displayed A rotations [0,2] and B rotations [0,1]; submitting 4,3,0,0 again produced success and +30.
+
 ### STARK trace, AIR and one fold (#792)
 
 New matches add a STARK candidate every 23 slots, subject to the other explicit special-slot priorities. The participant checks two transitions of repeated squaring over F7, computes the constant of the remainder polynomial, then the constant of one FRI fold. Each of the four fields has its formula and worked example beside it; explanations and scoring feedback are available in Japanese and English. Existing match settings do not acquire the new task. Schema 18 protects readers which cannot understand STARK Orders.
 
-The three trace values are interpolated at 1,2,4. C(X)=T(2X)-T(X)^2 is divided by (X-1)(X-2), excluding the last-to-first transition. Both transition checks vanish exactly when the polynomial remainder vanishes. A quadratic quotient folds into a linear polynomial. A correct fold does not establish a correct trace; the exercise explicitly separates these checks.
+The three trace values are interpolated at 1,2,4. C(X)=T(2X)-T(X)^2 is divided by (X-1)(X-2), excluding the last-to-first transition. Both transition checks vanish exactly when the polynomial remainder vanishes. A quotient of degree at most two folds into a polynomial of degree at most one. A correct fold does not establish a correct trace; the exercise explicitly separates these checks.
 
 Inputs: Advanced Cryptography 2026 Week4 slides20–23 (PDF pages24–27), revision bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732, and the Week4 personal note at revision58344a29ea39c25839475ba9a594c115ed89989b. This adapts the lecture’s trace/AIR/quotient/fold chain to single-digit parameters. It does not implement Merkle commitments, verifier random queries, repeated FRI rounds or zero-knowledge masking, and is not a complete STARK.
 
 Validation: all343 traces satisfy interpolation and quotient/remainder identities; all nonzero query pairs and challenges satisfy the one-fold equation. Owned-order tests cover wrong/correct scores, Lightning, replay, expiry, foreign teams and malformed projection rejection. Ordinary regression:764 tests; dev harness:82 tests; types and catalog:pass. In the real local Portal `stark-order`, trace6→6→5, Q=4+3X+6X², β=6 gave submitted5 4 6 1, success feedback and score30. Production deployment not run; deployment remains with the user.
-The additional distribution regression enumerates all 225 nonempty rotation-support pairs, including equal functions with partially overlapping outputs. Earlier browser evidence above predates these candidate-randomness cases; a new browser pass is required before merging.
 
 ### Anamorphic rejection sampling (#794)
 
