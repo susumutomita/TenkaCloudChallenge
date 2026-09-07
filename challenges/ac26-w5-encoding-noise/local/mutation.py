@@ -168,6 +168,16 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 )
 
 
+MUTATIONS += (
+    ("accepts boolean parameters", [("    failures: list[str] = []",
+        "    if any(type(v) is bool for v in params.values()): return []\n    failures: list[str] = []")]),
+    ("accepts floating point parameters", [("    failures: list[str] = []",
+        "    if any(type(v) is float for v in params.values()): return []\n    failures: list[str] = []")]),
+    ("accepts missing parameter keys", [("    failures: list[str] = []",
+        "    if any(k not in params for k in ('p', 'delta', 'q')): return []\n    failures: list[str] = []")]),
+)
+
+
 def _load(source: str):
     import types
 

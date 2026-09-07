@@ -220,6 +220,20 @@ def check_validate(module, seed: str) -> list[str]:
         )
         if accepted:
             failures.append(f"{accepted} invalid parameter set(s) were accepted")
+        base = {"p": 2, "delta": 3, "q": 6}
+        malformed = []
+        for key in base:
+            for value in (True, False, float(base[key]), "2", None):
+                malformed.append({**base, key: value})
+            malformed.append({k: v for k, v in base.items() if k != key})
+        malformed.extend(({}, {"p": 2.0, "delta": 3.0, "q": 6.0},
+                          {"p": 2, "delta": True, "q": 2}))
+        for par in malformed:
+            reported = module.validate_params(dict(par))
+            if (not isinstance(reported, list) or not reported
+                    or not all(isinstance(item, str) for item in reported)):
+                failures.append("invalid parameters did not produce a list of reasons")
+                break
         for par in VALID_PARAMS:
             reported = module.validate_params(dict(par))
             if reported:
