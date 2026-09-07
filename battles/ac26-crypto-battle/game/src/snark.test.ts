@@ -38,6 +38,18 @@ test('SNARK worksheet is graded by the owned order, pays once, and rejects forei
  const miss=applyOp(s,'a',bad);expect(miss.teams.a!.score).toBe(50-Math.abs(s.config.scores.wrongProve));
  expect(scoreReasons(s,miss,{kind:'op',teamId:'a',op:bad})).toEqual({a:'snark'});
  const hit=applyOp(s,'a',op);expect(hit.teams.a!.score).toBe(50+2*order.points);
+ // A stale browser snapshot predates another Order's expiry on the server.
+ const stale=projectForTeam(s,'a');
+ const other=s.contracts.find(c=>c.teamId==='a'&&c.status==='open'&&c.id!==order.id)!;
+ expect(other).toBeDefined();
+ const now=s.nowMs!;
+ const pending={...s,contracts:s.contracts.map(c=>c.id===other.id?{...c,expiresAtMs:now+1}:c)};
+ const advanced=tick(pending,now+1);
+ expect(advanced.teams.a!.score).toBeLessThan(s.teams.a!.score);
+ const settled=projectForTeam(applyOp(advanced,'a',op),'a');
+ expect(settled.teams.a!.score-stale.teams.a!.score).not.toBe(2*order.points);
+ expect(orderReward(order,settled)).toBe(2*order.points);
+
  expect(validateOp(hit,'a',op).ok).toBe(false);
  expect(validateOp(tick(s,order.expiresAtMs),'a',op).ok).toBe(false);
  expect(scoreReasons(s,hit,{kind:'op',teamId:'a',op})).toEqual({a:'snark'});
