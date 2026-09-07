@@ -366,6 +366,20 @@ describe("leak", () => {
     expect(projectForTeam(rotated, "teamB").vault.rotateMinimumPenalty).toBe(0);
   });
 
+  test("disclosure ROTATE charges the larger penalty once and never makes scores negative", () => {
+    const { state, order } = orderMatching(c => c.privacyConstraint === "must-disclose");
+    const leaked = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
+    const pending = state.contracts.filter(c => c.teamId === "teamA" && c.status === "open" && c.task.kind !== "rps-duel").slice(0, 2);
+    expect(pending.length).toBe(2);
+    for (const score of [0, 5, 15, 20, 100]) {
+      for (const count of [0, 1, 2]) {
+        const before = { ...leaked, contracts: pending.slice(0, count), teams: { ...leaked.teams, teamA: { ...leaked.teams.teamA!, score } } };
+        const after = applyOp(before, "teamA", { kind: "rotate" });
+        expect(after.teams.teamA!.score).toBe(Math.max(0, score - Math.max(1, count) * Math.abs(state.config.scores.expiredOrder)));
+      }
+    }
+  });
+
   test("the same contract cannot be leaked twice", () => {
     const { state, order: contract } = orderMatching(allowsLeak);
     const op: CryptoBattleOp = { kind: "leak", contractId: contract.id };

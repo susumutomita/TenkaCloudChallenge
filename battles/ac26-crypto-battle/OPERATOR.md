@@ -573,3 +573,7 @@ cost before its button. Screenshots: disclosure-mobile-752.png and
 disclosure-rotate-price-752.png in the local verification output directory.
 This used the harness's accelerated, paused scenario, not an AWS event or timed
 human gameplay. The existing sticky Order queue remains visible while scrolling.
+
+### Disclosure retirement schema 12
+
+Schema 12 records the generation-scoped disclosure retirement fee. Migration accepts schemas 1–11, preserving saved scores, Orders and history. A legacy generation has no fee until a new mandatory disclosure is answered; no historical fee is invented. The platform must reject schema-12 rows on older workers, including during rollback. ROTATE charges the larger nominal fee (retirement minimum or voided-Order penalties) once, with the existing zero score floor.

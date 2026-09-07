@@ -624,13 +624,14 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *   9  private lightning distribution, targeted card, and accepted-answer history
  *  10  RSA Orders/pairs, exact-time factor HUNT logs and compact completed IDs
  *  11  Rotor Orders/pairs; ledger tuples; lossless audit/counter/guard/verdict roster codecs
+ *  12  generation-scoped disclosure retirement cost
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 11;
+export const STATE_SCHEMA_VERSION = 12;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -669,11 +670,13 @@ export const STATE_SCHEMA_VERSION = 11;
  * stays in its original representation. Pending RPS reservations keep their
  * original generation; old lastHunt objects remain readable beside new tuples.
  * Rotor is issued only in future scheduled normal pressure cipher slots.
+ * v11 -> v12 preserves scores, Orders and history. Existing generations have
+ * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9 and v10 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 and v11 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -2436,15 +2439,16 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   };
   // Charged through the same helper the deadline path uses, so the two causes
   // cannot drift apart into different prices for the same unanswered Order.
+  const penalty = Math.max(
+    disclosureRotateMinimum(state, teamId),
+    voided.length * Math.abs(state.config.scores.expiredOrder),
+  );
   const teams = applyExpiryPenalties(
     { ...state.teams, [teamId]: updatedTeam },
-    voided,
-    state.config.scores.expiredOrder,
+    [teamId],
+    -penalty,
   );
-  const minimum = disclosureRotateMinimum(state, teamId);
-  const charged = team.score - teams[teamId]!.score;
-  const pricedTeams = charged < minimum ? { ...teams, [teamId]: { ...teams[teamId]!, score: teams[teamId]!.score - (minimum - charged) } } : teams;
-  return pruneRetiredHuntAttempts(pruneRetiredRsaHunts({ ...state, contracts, teams: pricedTeams, publicPuzzles }));
+  return pruneRetiredHuntAttempts(pruneRetiredRsaHunts({ ...state, contracts, teams, publicPuzzles }));
 }
 
 /**
