@@ -71,3 +71,5 @@ inspect/testは採点用コンテナを残します。終了時に `make verifie
 [Week 6 composition context](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732/week6/README.md).
 [Semaphore concept reference](https://js.semaphore.pse.dev/functions/_semaphore_protocol_proof.generateProof.html).
 The square formula is an independently authored teaching substitute, not a real nullifier hash.
+
+独立読者レビューの指摘を受け、uncheckedは拒否依頼と同印の正当依頼を組にする手順、collisionは二乗の余りから五票を構成する最終ヒントを追加しました。入力形式も統一しています。

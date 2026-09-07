@@ -80,3 +80,5 @@ No AWS event or human event rehearsal was run.
 [Week 6 composition context](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732/week6/README.md).
 [Semaphore concept reference](https://js.semaphore.pse.dev/functions/_semaphore_protocol_proof.generateProof.html).
 The square formula is an independently authored teaching substitute, not a real nullifier hash.
+
+An independent participant-only review led to constructive final hints: pair rejected and valid same-marker requests for unchecked; use square residues to construct the five collision votes. Answer formats are explicit.
