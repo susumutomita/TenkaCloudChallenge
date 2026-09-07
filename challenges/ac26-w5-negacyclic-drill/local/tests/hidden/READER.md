@@ -186,3 +186,7 @@ def margin(p, n, repair_noise, encoding):
     raise ValueError("No repair exists in the stated search range")
 
 ```
+
+## 2026-09-07 participant-only reread (Issue #716 / PR #803)
+
+An independent reader used only Japanese/English participant instructions and public starter surfaces, without reference code, hidden tests, or the verifier. The first pass found that input bits (0→+1, 1→−1) were not distinguished from output signs (+1→1, −1→0), and that the four-input index `2*a+b` was not explained. The visible instructions now separate these two conversions with a flow diagram and list all four bit pairs and their zero-based indices. On rereading that edited text, the reader confirmed both gaps were resolved and reported no additional missing procedure. This records a text/hand-calculation check, not a browser or AWS test. The earlier findings above describe the pre-change text.

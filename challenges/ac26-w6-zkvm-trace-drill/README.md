@@ -87,3 +87,5 @@ Live AWS events and third-party event rehearsals are optional and have not been 
 The scope follows the [pinned zkvm-exploit assignment](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732/week6/problems/zkvm-exploit/README.md).
 The course uses u16 wrapping and a 1000-unit limit; this drill shrinks the arithmetic
 and introduces claim checking before actual proof generation.
+
+An independent participant-only read found answer-format, program-identity and binding-construction gaps. The final hint constructs m−1, limit+1,1 and explains the ordinary sum and stored remainder.

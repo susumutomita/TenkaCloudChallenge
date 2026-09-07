@@ -73,3 +73,7 @@ descendant cleanup, Inspect assignments and fail-closed filter installation. Cat
 
 This evidence proves the arithmetic and actual participant API routes. A full Portal browser playthrough and a human
 40–60-minute event rehearsal were not performed in this rewrite; no such result is claimed. Neither is a full FRI security proof.
+
+## 2026-09-08 participant-only reread (Issue #716)
+
+An independent reader used only Japanese/English participant instructions and public starter surfaces, without hidden tests, reference code or verifier implementation. The first pass found that “Y=X²” conflicted with the arithmetic exercise evaluating Y=2 when p=5: the possible square remainders are only0,1,4. The instructions now distinguish evaluating the expression at any Y for arithmetic practice from comparing with Q only at Y=x². On rereading both languages, the reader confirmed this gap was resolved with no additional missing step. This was a text and hand-calculation check; UI submission was not tested by that reader.

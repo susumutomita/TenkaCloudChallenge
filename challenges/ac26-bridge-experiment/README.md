@@ -38,3 +38,5 @@ No AWS resources are created. Running containers consume local Docker CPU, memor
 - `make install && make agent-gate` at the catalog root: metadata and catalog validation.
 
 The participant HTTP route and independent first-reading gaps and reread outcomes are recorded in `local/tests/hidden/READER.md`. Live AWS and third-party participant play remain unrun.
+
+Issue #716 reader follow-up documents the slow-copy name and a small comparison before submission; see `local/tests/hidden/READER.md`. Reference validation killed14 mutants and passed the public-process isolation check. Two live-workbench checks were skipped by the author target.
