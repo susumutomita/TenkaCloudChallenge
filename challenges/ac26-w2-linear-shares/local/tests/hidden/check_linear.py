@@ -1,16 +1,9 @@
-"""Hidden tests. Run by /verify against a copy of the learner's linear.py.
+"""Check canonical output elements, reconstruction, composition and communication class.
 
-Two things the obvious tests miss:
-
-  * `add_constant` applied to every share yields a sharing of x + n*c. With n = 1 that
-    is indistinguishable from correct, and even for larger n it is only wrong by a
-    multiple of c -- so a single fixed setting can be passed by luck. Every case here
-    uses n >= 2, and one case is chosen so the wrong answer is provably different.
-  * A linear operation must leave the result a *valid sharing*, not just a set of
-    numbers that happens to sum correctly. Adding a constant to every share sums
-    wrongly; adding it to one share twice sums correctly but is not what was asked.
-    So the results are also checked for still hiding the secret: n-1 of the output
-    shares must remain completable to any value.
+These tests compare algebraic identities on several seeded settings; they do not
+prove privacy or a distributed protocol. Adding c to every share gives x+n*c and
+is rejected when (n-1)*c is nonzero modulo p. Degenerate cases can coincide, and
+any output with the required canonical elements, length and total is accepted.
 """
 
 from __future__ import annotations
@@ -125,8 +118,8 @@ def check_rounds(module, seed: str) -> list[str]:
             actual = module.communication_rounds(operation)
         except Exception as error:  # noqa: BLE001
             return [f"communication_rounds raised {type(error).__name__} on {operation}"]
-        if not isinstance(actual, int) or isinstance(actual, bool):
-            failures.append(f"communication_rounds did not return an integer for {operation}")
+        if not isinstance(actual, int) or isinstance(actual, bool) or actual < 0:
+            failures.append(f"communication_rounds did not return a nonnegative integer for {operation}")
         elif (actual == 0) != (OPERATION_ROUNDS[operation] == 0):
             failures.append(f"{operation} is classified on the wrong side of needing communication")
     return failures

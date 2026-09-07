@@ -13,6 +13,7 @@
 name: ac26-w2-linear-shares
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -62,6 +63,7 @@ services:
       - workshop-host
 
   verifier:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

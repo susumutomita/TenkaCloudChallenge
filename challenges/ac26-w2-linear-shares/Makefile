@@ -26,7 +26,7 @@ COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p 
 RUN := $(COMPOSE) run --rm \
 	-v $(CURDIR)/local/starter:/problem/starter:ro workbench
 
-.PHONY: build test test-one inspect reset reference-test verifier-up verifier-down
+.PHONY: build test test-one inspect reset reference-test runtime-test verifier-up verifier-down
 
 build:
 	docker build --target participant -t $(IMAGE) local
@@ -59,4 +59,9 @@ reset:
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+
+# Actual Linux value-channel checks, including repeated descendant reaping.
+runtime-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001 --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 1g -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python tests/hidden/test_execution_boundary.py
