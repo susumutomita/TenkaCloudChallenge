@@ -164,3 +164,27 @@ The first pass's fourteen terminology/formula gaps are recorded above. The revis
 statement defines remainder/modulus, inverse, identity, group/order, bit, hash and
 trace field meanings before they are needed. The p7 example can be checked by hand;
 the submitted reader uses those rules rather than a fixture's finished answer.
+
+
+## Review follow-up: private call envelope
+
+PR #774 exposed a remaining exception-provenance bypass: a learner could read
+callId from the Python dispatch frame and print a matching errorKinds response
+before the native reply. The before test accepted that source at on-curve.
+A second before test rejected a valid dataclasses/copy import.
+
+The call nonce is now parsed and retained only in C, outside the JSON supplied to
+Python callbacks; the response body is fully encoded before C writes its private
+envelope. Plain learner stdout and stale envelopes cannot satisfy a current call.
+All mathematical values remain untrusted and checked by the parent. This is not
+protection from arbitrary native memory corruption or from a user controlling Docker.
+The documented standard-library list is loaded before filesystem restrictions.
+
+
+Final follow-up verification: 14 boundary tests pass (18.312 s), all 10 mutations
+are rejected through the actual evaluator, and the real Portal component passes
+all eight checkpoints through the rebuilt local services (6.29 s test duration).
+The first Portal rerun was blocked by sandbox EPERM on localhost; the authorized
+rerun succeeded. Logs: /private/tmp/ec-protocol-before.log,
+/private/tmp/ec-protocol-after.log, /private/tmp/ec-protocol-mutations.log,
+/private/tmp/ec-envelope-portal-final.log. The 116-item catalog gate also passes.

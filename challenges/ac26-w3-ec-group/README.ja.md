@@ -103,3 +103,8 @@ make verifier-down           # このローカルCompose環境を削除
 カタログのルートでは`make install`と`make agent-gate`を実行します。読者役の作成経緯と検証結果は`local/tests/hidden/READER.md`に記録します。途中のテスト成功を、最終版のPortal導線の確認済みとは扱いません。
 
 ローカルではAWSリソースを作りません。DockerのCPU・メモリー・ディスクとコンテナーは停止まで資源を使います。プラットフォーム上の費用は選んだTenkaCloudの構成とイベント期間に依存し、ここでは金額を推定しません。デプロイした場合はプラットフォームの停止・削除操作で終了します。このローカル検証はAWS実機確認や実用暗号としての安全性を主張しません。
+
+
+## 実行環境
+
+Python標準ライブラリの次のモジュールを使えます：`collections, copy, dataclasses, decimal, enum, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, re, statistics, time, typing`。追加パッケージのインストールは不要です。採点用のファイルや別プロセスの内容へのアクセス、外部通信、新しいプロセスの作成はできません。この一覧以外のモジュールは読み込めない場合があります。

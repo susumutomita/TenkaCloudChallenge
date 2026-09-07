@@ -120,3 +120,8 @@ containers consume local resources until stopped. Platform-hosted costs belong t
 the chosen TenkaCloud deployment and event duration; no price is estimated here.
 Use the platform's stop/teardown action for that deployment. No AWS rehearsal or
 production cryptographic safety is claimed by this local verification.
+
+
+## Runtime
+
+These Python standard-library modules are available: `collections, copy, dataclasses, decimal, enum, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, re, statistics, time, typing`. No additional package installation is needed. Access to grading files or other processes, external networking, and creating new processes is unavailable. Imports outside this list may not be available.

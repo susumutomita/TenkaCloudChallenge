@@ -92,8 +92,8 @@ class LearnerSession:
         if len(self.log.encode()) > MAX_LOG_BYTES:
             raise LearnerError('Function output exceeded the limit.')
 
-    def _send(self, payload):
-        data = (json.dumps(payload)+'\n').encode()
+    def _send(self, payload, nonce=None):
+        data = ((nonce+' ' if nonce else '')+json.dumps(payload)+'\n').encode()
         fd = self.process.stdin.fileno()
         while data:
             remaining = self.deadline-time.monotonic()
@@ -132,19 +132,23 @@ class LearnerSession:
         if time.monotonic() >= self.deadline:
             raise LearnerError('Function evaluation timed out.')
         self.sequence = secrets.token_hex(16)
-        request = {'callId': self.sequence, 'module': module, 'function': function,
+        request = {'module': module, 'function': function,
                    'args': args, 'modulus': modulus}
         try:
-            self._send(request)
+            self._send(request, self.sequence)
         except (OSError, ValueError):
             raise LearnerError('The functions could not receive the next input.') from None
         while True:
             line = self._line()
+            prefix = self.sequence+' '
+            if not line.startswith(prefix):
+                self._log_line(line)
+                continue
             try:
-                value = json.loads(line)
+                value = json.loads(line[len(prefix):])
             except (ValueError, RecursionError):
                 value = None
-            if isinstance(value, dict) and value.get('callId') == self.sequence:
+            if isinstance(value, dict):
                 if 'error' in value:
                     error_types = {'NotOnCurve': NotOnCurve, 'CurveMismatch': CurveMismatch}
                     kinds = value.get('errorKinds')

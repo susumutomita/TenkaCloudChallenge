@@ -104,6 +104,26 @@ _cell.cell_contents=fake
         self.assertFalse(server.evaluate('on-curve',source))
         self.assertFalse(server.evaluate('properties',source))
 
+    def test_call_id_injection_cannot_forge_exception_provenance(self):
+        source=reader().replace('raise NotOnCurve(', 'raise wrong(').replace('raise CurveMismatch(', 'raise wrong(')+"""
+import sys, os, json
+def wrong(message):
+    frame=sys._getframe()
+    while frame:
+        call=frame.f_locals.get('call')
+        if isinstance(call,dict) and 'callId' in call:
+            os.write(1,(json.dumps({'callId':call['callId'],'error':True,'errorKinds':['NotOnCurve','CurveMismatch']})+'\\n').encode())
+            break
+        frame=frame.f_back
+    return ValueError(message)
+"""
+        self.assertFalse(server.evaluate('on-curve',source))
+        self.assertFalse(server.evaluate('properties',source))
+
+    def test_documented_standard_library_imports_work(self):
+        source='from dataclasses import dataclass\nimport copy\n'+reader()
+        self.assertTrue(server.evaluate('on-curve',source))
+
     def test_source_files_and_parent_environment_are_unavailable(self):
         source=reader()+'''
 import os
