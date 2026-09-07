@@ -140,6 +140,9 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (v.publicLedger.some((a: Record<string, unknown>) => a?.kind === "rotor-pair" && (a.method !== "leak" || !rotorRow(a.plaintext) || !rotorRow(a.ciphertext) || "myInitial" in a))) return false;
   const rsaValue = (n: unknown, max: number) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0 && n < max;
   if (v.myContracts.some(c => c.task?.kind === "rsa-encrypt" && (!isRsaPublicKey(c.task) || !rsaValue(c.task.plaintext, c.task.n)))) return false;
+  if (v.myContracts.some(c => c.task?.kind === "snark-constraints" &&
+    (!Array.isArray(c.task.rows) || c.task.rows.length !== 3 || c.task.rows.some((row:unknown)=>
+      !Array.isArray(row) || row.length !== 3 || row.some(n=>!rsaValue(n,7)))))) return false;
   if (v.publicRsaKeys !== undefined) {
     if (!Array.isArray(v.publicRsaKeys)) return false;
     const seen = new Set<string>(), teams = v.teams as Record<string, { generation?: unknown }>;

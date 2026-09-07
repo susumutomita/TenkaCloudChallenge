@@ -1,6 +1,7 @@
+import {isCryptoBattleProjection} from "../../portal/coordination.ts";
 import {expect,test} from 'bun:test';
 import {constraintTask,constraintResiduals,parseResiduals} from './snark.ts';
-import {initialState,applyOp,tick,validateOp,STREAMING_ORDER_CONFIG,migrateState} from './reducer.ts';
+import {initialState,applyOp,tick,validateOp,STREAMING_ORDER_CONFIG,migrateState,projectForTeam} from './reducer.ts';
 import {scoreReasons} from './score-reasons.ts';
 test('gate correctness and copy correctness are separate constraints',()=>{
  for(let slot=0;slot<5;slot++)for(let value=0;value<7;value++){
@@ -23,6 +24,10 @@ test('SNARK worksheet is graded by the owned order, pays once, and rejects forei
  const order=s.contracts.find(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='snark-constraints')!;
  expect(order).toBeDefined();if(order.task.kind!=='snark-constraints')throw new Error('wrong task');
  expect(order.allowedMethods).toEqual(['snark']);
+ const view=projectForTeam(s,'a');expect(isCryptoBattleProjection(view)).toBe(true);
+ for(const rows of [undefined,[],[[1,2,3]],[[1,2,3],[1,2,3],[1,2]],[[1,2,3],[1,2,3],[1,2,7]],[[1,2,3],[1,2,3],[1,2,1.5]]]){
+  expect(isCryptoBattleProjection({...view,myContracts:view.myContracts.map(c=>c.id===order.id?{...c,task:{kind:'snark-constraints',rows}}:c)})).toBe(false);
+ }
  s={...s,phase:'endgame',endgameLightning:{status:'awarded',cards:{a:{status:'available'}}},teams:{...s.teams,a:{...s.teams.a!,score:50}}};
  expect(validateOp(s,'a',{kind:'declare-lightning',contractId:order.id}).ok).toBe(true);
  s=applyOp(s,'a',{kind:'declare-lightning',contractId:order.id});
