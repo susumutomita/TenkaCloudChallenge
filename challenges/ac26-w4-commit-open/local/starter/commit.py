@@ -16,7 +16,7 @@ commitment**, and one opening does not say anything about the rows nobody asked 
 
 This exercise encodes both the index and unambiguous fields in each leaf:
 
-  * its **index** — binding position directly (scheme D instead checks index-derived path directions);
+  * its **index** — binding position directly (alternatively, verify sibling sides from the index: odd means left, even means right, then halve the index at each level);
   * unambiguous **field boundaries** — otherwise two different (index, value) pairs
     encode to the same bytes.
 
