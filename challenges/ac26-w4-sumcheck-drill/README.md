@@ -91,3 +91,5 @@ No cloud resources or AWS Region are used. Local CPU/memory stay in use until st
 Authors run `make reference-test`, root `make install`, and root `make agent-gate`.
 Participant-only reading and actual test/prepare/verify evidence are recorded in
 `local/tests/hidden/READER.md`. A human event rehearsal and real AWS event are unrun.
+
+Independent participant reading found that modular values were described as an ordinary straight line, and the dishonest initial total was not distinguished from the next-round claim. Both locales now separate remainder arithmetic from the pre-reduction line and diagram the three different claims. Grading and fixtures are unchanged.
