@@ -20,6 +20,7 @@ export default function Lightning({ projection, order, locale, busy, onDeclare, 
   if (card.status === "unused-expired") return <p className="tc-card-hint" data-testid="lightning">{ja ? "ライトニング失効 · 試合が終了しました。" : "Lightning expired · the match has ended."}</p>;
   if (card.status === "spent") {
     const why = card.outcome === "hit" ? ja ? `計算正解 · +${card.points} 点` : `Correct calculation · +${card.points} pt`
+      : card.outcome === "miss" ? ja ? "証明失敗 · 加点なし" : "Proof failed · no reward"
       : card.outcome === "leak" ? ja ? "LEAKで完了（得点は通常どおり）" : "Completed by LEAK (regular reward)"
       : card.outcome === "rotate" ? "ROTATE" : card.outcome === "ended" ? ja ? "試合終了" : "Match ended" : ja ? "期限切れ" : "Deadline passed";
     return <p className="tc-card-hint" data-testid="lightning">{ja ? "ライトニング使用終了" : "Lightning spent"} · {label(card.contractId!)} · {why}</p>;

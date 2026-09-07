@@ -35,5 +35,5 @@ test('SNARK worksheet is graded by the owned order, pays once, and rejects forei
  expect(validateOp(hit,'a',op).ok).toBe(false);
  expect(validateOp(tick(s,order.expiresAtMs),'a',op).ok).toBe(false);
  expect(scoreReasons(s,hit,{kind:'op',teamId:'a',op})).toEqual({a:'snark'});
- expect(migrateState(initialState({eventId:'old',teamIds:['a']}),14).config.snarkOrders).toBeUndefined();
+ for (const version of [14,15]) expect(migrateState(initialState({eventId:'old',teamIds:['a']}),version).config.snarkOrders).toBeUndefined();
 });

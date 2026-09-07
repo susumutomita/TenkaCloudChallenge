@@ -421,6 +421,8 @@ Inputs: lecture repository revision `bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732`, 
 
 `snark.test.ts` covers correct and corrupt gates/wires, incorrect-answer penalties, rewards, replay, expiry and foreign ownership. In the real local Portal scenario `snark-order`, hand-calculated residuals for `4+5−2, 4×1−5, 4+3−6, 2−4, 5−3` were submitted as `0 6 1 5 2`; the UI reported incorrect wiring detected and +30 points.
 
+PR #790 follow-up: accepting a Schnorr commitment starts the answer attempt, so lightning must be declared beforehand. A failed one-shot PROVE-only Order is resolved with a persisted miss, without a second deadline charge or further paid hints. Orders permitting LEAK retain that alternative. Optional practice uses the current Schnorr exchange in both languages.
+
 ### Score and mandatory-disclosure regressions (#777 / #778)
 
 `streaming-orders.test.ts` isolates expiry penalties over 30 minutes and verifies that pruning completed Orders does not remove earned points. `disclosure-score-regression.test.ts` uses normal penalties to verify a missed deadline deducts once while completed history survives. Scores are cumulative team state, not a sum over visible Orders.

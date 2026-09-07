@@ -652,7 +652,7 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 15;
+export const STATE_SCHEMA_VERSION = 16;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -695,9 +695,9 @@ export const STATE_SCHEMA_VERSION = 15;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13 and v14 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14 and v15 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -728,7 +728,7 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
     );
   }
   const lifted = withMigratedContracts(rest as CryptoBattleState);
-  return {
+  return settleLightning({
     ...lifted,
     ...compactRecordedHunts(lifted),
     publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a, lifted.teams), lifted.teams)),
@@ -738,9 +738,21 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
         readonly proveCommitment?: unknown;
         readonly proveChallenge?: unknown;
       };
+      if (kept.schnorr) {
+        // v13/v14 fixed the challenge without recording answerAttempted, and
+        // left one-shot PROVE-only misses open. Preserve scores and history;
+        // only normalize future eligibility and the already-consumed attempt.
+        const missed = kept.schnorr.used === true && (kept.schnorr.outcome === "miss"
+          || (kept.schnorr.outcome === undefined && kept.status === "open"));
+        const terminal = missed && kept.status === "open"
+          && kept.allowedMethods.length === 1 && kept.allowedMethods[0] === "prove";
+        return {...kept, answerAttempted:true,
+          ...(missed ? {schnorr:{...kept.schnorr,outcome:"miss" as const}} : {}),
+          ...(terminal ? {status:"completed" as const,resolution:"prove" as const} : {})} as Contract;
+      }
       return kept as Contract;
     }),
-  };
+  });
 }
 
 /**
@@ -2948,15 +2960,17 @@ function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<Cryp
   const contract=state.contracts.find(c=>c.id===op.contractId)!;
   if(op.kind==="schnorr-commit") {
     const e=schnorrRandom(state.seed,"challenge",[teamId,contract.id,op.y,op.a]);
-    return {...state, contracts:state.contracts.map(c=>c.id===contract.id?{...c,schnorr:{y:op.y,a:op.a,e}}:c)};
+    return {...state, contracts:state.contracts.map(c=>c.id===contract.id?{...c,answerAttempted:true,schnorr:{y:op.y,a:op.a,e}}:c)};
   }
   const pending=contract.schnorr!;
   const y=pending.y;
   const outcome = verifySchnorr(y,pending.a,pending.e,op.z) ? "hit" as const : "miss" as const;
   const consumed={...state,contracts:state.contracts.map(c=>c.id===contract.id?{...c,answerAttempted:true,schnorr:{...pending,used:true,outcome}}:c)};
   if(outcome === "miss") {
-    // A failed proof consumes the challenge, preventing brute-force retries for points.
-    return {...consumed, teams:{...state.teams,[teamId]:{...state.teams[teamId]!,score:Math.max(0,state.teams[teamId]!.score-Math.abs(state.config.scores.wrongProve))}}};
+    // A one-shot miss ends PROVE-only Orders; LEAK remains available when allowed.
+    const terminal = contract.allowedMethods.length === 1 && contract.allowedMethods[0] === "prove";
+    const contracts = terminal ? consumed.contracts.map(c => c.id === contract.id ? {...c, status:"completed" as const, resolution:"prove" as const} : c) : consumed.contracts;
+    return {...consumed, contracts, teams:{...state.teams,[teamId]:{...state.teams[teamId]!,score:Math.max(0,state.teams[teamId]!.score-Math.abs(state.config.scores.wrongProve))}}};
   }
   return completeOrder(consumed,teamId,contract,{
     kind:"proof",id:`${contract.id}-proof`,teamId,generation:state.teams[teamId]!.generation,method:"prove",contractId:contract.id,

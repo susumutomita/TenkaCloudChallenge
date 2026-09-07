@@ -419,7 +419,7 @@ test("schema10 real RSA history, failed CIPHER and packed reservations survive s
     },
     before = JSON.stringify(legacy);
   const lifted = migrateState(JSON.parse(before), 10);
-  expect(STATE_SCHEMA_VERSION).toBe(15);
+  expect(STATE_SCHEMA_VERSION).toBe(16);
   expect(expandHuntAttempts(lifted)).toEqual(legacy.huntAttempts);
   expect(lifted.huntLog).toEqual(legacy.huntLog);
   expect(buildReplay(lifted)).toEqual(buildReplay(legacy));

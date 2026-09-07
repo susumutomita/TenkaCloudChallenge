@@ -883,7 +883,7 @@ export interface HintBoosterProjection {
 }
 
 export type LightningTarget = { readonly contractId: string; readonly points: number; readonly expiresAtMs: number };
-export type LightningOutcome = "hit" | "leak" | "deadline" | "rotate" | "ended";
+export type LightningOutcome = "miss" | "hit" | "leak" | "deadline" | "rotate" | "ended";
 export type LightningCard = { readonly status: "available" } | { readonly status: "unused-expired" }
   | ({ readonly status: "armed" } & LightningTarget)
   | ({ readonly status: "spent"; readonly outcome: LightningOutcome } & LightningTarget);
