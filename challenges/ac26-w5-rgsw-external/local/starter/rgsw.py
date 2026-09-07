@@ -51,7 +51,7 @@ which bit it is, the design is telling you something.
 `params` carries `base`, `levels`, `degree`, `modulus`. They all change between
 checkpoints. Anything hardcoded is wrong somewhere.
 
-Use Inspect evidence in Participant Portal; implement decompose/recompose first and inspect decompose-round-trips.
+Use Inspect evidence in Participant Portal; implement gadget_vector and then decompose/recompose first and inspect decompose-round-trips.
 
 These tiny key candidates can be enumerated. Unknown noise prevents treating
 the samples as exact linear equations. This is a toy of the mechanism.
