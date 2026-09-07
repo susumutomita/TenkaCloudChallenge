@@ -12,14 +12,17 @@ Somewhere in the log, one signer used the same commitment twice.
 Two equations. Two unknowns. You already have one of them.
 
 This is not a story about weak random number generators, although it is usually told
-that way. It is the Sigma protocol's *special soundness*: two accepting transcripts that
-share a public key and commitment and differ in the challenge yield the witness.
+that way. A Sigma protocol is a three-message proof conversation: a commitment (the first
+value R), a challenge (the verifier's question number e), and a response z.
+A transcript is the recorded conversation; accepting means its verification equation
+holds. Special soundness means that two such valid records with the same public key
+and R but different e reveal the witness — the secret answer x.
 This extraction explains the nonce-reuse attack. The equation alone is not a security
 proof for the entire signature scheme.
 
 `participant.schnorr` gives you the group, the challenge function, and the signing
 routine the log records. The log itself is handed to you as an argument, and
-`make inspect` prints this deployment's.
+Inspect evidence in Participant Portal displays this deployment's log.
 """
 
 from __future__ import annotations

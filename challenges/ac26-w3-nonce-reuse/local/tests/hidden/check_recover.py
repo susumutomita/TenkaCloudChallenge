@@ -237,6 +237,26 @@ def check_reject(module, seed: str) -> list[str]:
             pass
         except Exception as error:
             failures.append(f"invalid transcript recovery raised {type(error).__name__}")
+        # Valid signatures by one signer with different nonces cannot cancel k.
+        for nonce in range(1, group.n):
+            different = sign_with(nonce, secret, b"different commitment", group)
+            parsed_different = module.parse_record(dict(different), group)
+            if parsed_different["commitment"] == parsed_first["commitment"]:
+                continue
+            from participant.schnorr import DOMAINS, challenge
+            if challenge(DOMAINS[0], parsed_first["commitment"], parsed_first["public_key"], parsed_first["message"], group) == challenge(DOMAINS[0], parsed_different["commitment"], parsed_different["public_key"], parsed_different["message"], group):
+                continue
+            try:
+                module.recover_secret(parsed_first, parsed_different, group)
+                failures.append("different commitments were accepted for recovery")
+            except module.MalformedRecord:
+                pass
+            except Exception:
+                failures.append("different commitments did not follow the rejection contract")
+            break
+        else:
+            raise AssertionError("no valid mismatched-commitment test pair")
+
         # Same commitment AND the same message, so e1 == e2: one equation twice.
         duplicate = module.parse_record(dict(first), group)
         try:

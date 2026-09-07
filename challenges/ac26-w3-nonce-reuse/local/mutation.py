@@ -20,6 +20,7 @@ REFERENCE = (ROOT / "reference" / "recover.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+    ("accepts mismatched commitments", [('    if first["commitment"] != second["commitment"]:', '    if False:')]),
     ("recovers from a rejected transcript", [("    if not accepts(first, group) or not accepts(second, group):", "    if False:")]),
     ("confirms only Point input", [('    if isinstance(public, dict):', '    if isinstance(public, (dict, tuple, list)):\n        return False\n    if isinstance(public, dict):')]),
     ("includes equal-challenge pairs", [("                if e1 != e2:", "                if True:")]),
