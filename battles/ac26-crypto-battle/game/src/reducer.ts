@@ -1651,7 +1651,7 @@ export function validateOp(
     case "anamorphic": {
       const gate=validateOrderSubmission(state,teamId,op.contractId,"anamorphic");
       if(!gate.ok)return gate;
-      return parseAnamorphicAnswer(op.answer)?{ok:true}:{ok:false,error:"Enter trial number (1–6), ordinary message (1–6) and hidden bit (0/1), separated by spaces."};
+      return parseAnamorphicAnswer(op.answer)?{ok:true}:{ok:false,error:"Enter trial number (1–6), ordinary message (1–6) and accepted-ticket total (3–9), separated by spaces."};
     }
     case "stark": {
       const gate=validateOrderSubmission(state,teamId,op.contractId,"stark");

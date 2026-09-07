@@ -49,6 +49,10 @@ test('owned anamorphic orders grade arithmetic, reject replay and expiry, and re
  expect(validateOp(s,'a',{kind:'declare-lightning',contractId:order.id}).ok).toBe(true);
  s=applyOp(s,'a',{kind:'declare-lightning',contractId:order.id});
  const answer=anamorphicAnswer(order.task).join(' '),op={kind:'anamorphic' as const,contractId:order.id,answer};
+ const malformed=validateOp(s,'a',{...op,answer:'1 1 0'});
+ expect(malformed.ok).toBe(false);
+ if(!malformed.ok) expect(malformed.error).toContain('accepted-ticket total (3–9)');
+ expect(validateOp(s,'a',{...op,answer:'1 1 3'}).ok).toBe(true);
  expect(validateOp(s,'a',op).ok).toBe(true);expect(validateOp(s,'b',op).ok).toBe(false);
  const bad={...op,answer:`${Number(answer[0])%6+1}${answer.slice(1)}`};
  const miss=applyOp(s,'a',bad);expect(miss.teams.a!.score).toBe(50-Math.abs(s.config.scores.wrongProve));
