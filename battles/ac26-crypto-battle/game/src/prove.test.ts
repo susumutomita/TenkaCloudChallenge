@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /**
  * Reducer-level integration tests for PROVE (Issue #486 PR2, rebuilt as ZK
  * sudoku in #709): validateOp / applyOp wiring, wrong-grid / unrelabelled /
@@ -57,7 +58,7 @@ describe("prove: a relabelled solution", () => {
     expect(next.contracts.find((c) => c.id === contract.id)?.status).toBe("completed");
     expect(next.contracts.find((c) => c.id === contract.id)?.resolution).toBe("prove");
     expect(next.teams.teamA?.score).toBe(contract.points);
-    expect(next.teams.teamA?.lastProve).toEqual({ contractId: contract.id, outcome: "hit" });
+    expect(next.teams.teamA?.lastProve).toEqual({ contractId: contract.id, outcome: "hit", points: contract.points });
 
     const [reveal] = projectForTeam(next, "teamB").publicLedger;
     if (reveal?.kind !== "sudoku-reveal") throw new Error("expected a sudoku reveal on the ledger");

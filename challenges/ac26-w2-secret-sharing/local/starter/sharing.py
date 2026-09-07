@@ -1,290 +1,98 @@
-"""あなたが編集する唯一のファイル。
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コードの実行は12秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 12-second execution deadline.
+Repair six functions, then submit five checkpoints in the Portal.
 
-## この問題で使う仕組み (前提知識は不要)
+Start -> Inspect evidence -> edit sharing.py -> Run public tests -> Submit.
+A share is one holder's piece of a secret. p is a prime divisor; every returned
+number must be its remainder, 0 <= value < p. Python writes remainder as % p:
+11 % 7 == 4 and (-3) % 7 == 4. sum(values) adds a list.
 
-素数 p の有限体 F_p 上の **加法的秘密分散**。 秘密 s を n 人に配り、 全員の
-share を足すと s に戻る。 足りない人数では何も分からない。
+Use the supplied randomness, not your own generator. The secrecy argument
+assumes independent uniform draws from all of 0..p-1, including zero, fresh for
+each sharing. An observer sees only collected shares, not missing holders'
+information or the random-number list. Testing inputs are not that observer's
+view. Compatibility with every secret alone does not prove equal likelihood.
 
-    分ける: share[0..n-2] = 渡された乱数、
-            share[n-1]    = (s - それまでの合計) % p
-    戻す:   s = (share[0] + ... + share[n-1]) % p
-
-数値例 (p=101, n=3, s=5, randomness=[70, 40]):
-
-    share = [70, 40, (5 - 110) % 101] = [70, 40, 97]
-    復元  = (70 + 40 + 97) % 101 = 207 % 101 = 5   OK
-
-## 6 つの関数の役割
-
-    share / reconstruct / rerandomize   機械的な算術。 式は下の docstring にある
-    complete_shares                     この問題の主題。 式は書いていない
-    share_line / reconstruct_line       5 つ目 (two-of-three)。 3 人のうちどの 2 人
-                                        でも戻せて、 1 人では分からない分け方。
-                                        手順と 1 桁の例は下の docstring にある
-
-## どの関数にも共通の約束
-
-  - 返す整数はすべて `% p` で 0..p-1 に正規化する。 -105 のような負の値は
-    F_101 では 97 と同じ元だが、 表現が違うので落ちる。
-  - 乱数は自分で作らず、 引数 `randomness` の値をそのまま使う。 自前で作ると
-    走らせるたびに答えが変わり、 採点が再現できない。
-  - p と n は起動ごとに変わる。 数値を書き込まず、 必ず引数から取る
-    (人数は `n` / `len(shares)` / `len(partial) + 1`)。 two-of-three の採点では
-    画面と違う p、 1 万くらいの p も来る。
-
-## 5 つ目だけ、 分け方が変わる: 直線 1 本
-
-`share` は n 人全員がそろわないと戻らない。 `share_line` は **3 人のうちどの
-2 人でも戻せて、 1 人では何も分からない** 分け方で、 使うのは中 2 の直線。
-
-    直線  y = secret + r * x   (計算はすべて p で割ったあまり)
-    party 1, 2, 3 には x = 1, 2, 3 での点 [x, y] を 1 つずつ渡す
-    秘密 = x = 0 のときの y。 その点は誰も持たない
-    2 点あれば直線は 1 本に決まる  -> x = 0 まで戻せる
-    1 点だけなら、 通る直線は p 本  -> どの秘密とも両立する
-
-数値例 (p=7, secret=1, randomness=[4]): 点は [1, 5], [2, 2], [3, 6]。
-どの 2 点からも 1 に戻る (手順は reconstruct_line の docstring)。
-出荷時の share_line は「3 人に秘密のコピーを渡す」形。 2 点から戻るが 1 点でも
-戻る = 1 人が全部知っている。 公開テストは通るが、 提出すると落ちる。
-
-## コードではない checkpoint がひとつある: `threshold`
-
-`threshold` だけは Portal の回答欄に **JSON を直接書く**。 回答欄は
-**1 行の入力欄** なので、 改行を入れずに 1 行で貼ること。
-
-    {"sharesNeeded": 3, "partial": [1, 2], "completions": [{"secret": 0,
-     "lastShare": 98}, {"secret": 1, "lastShare": 99}]}
-    (実際には改行なしの 1 行。 上は紙面の都合で折り返しているだけ)
-
-読みやすく折り返すと次の構造になる
-(下の例は p=101, n=3 の場合。 自分の p と n は「証拠を調べる」で確認する)。
-
-    {
-      "sharesNeeded": 3,                  整数。 復元に必要な share の数 = n。
-                                          t < n のしきい値ではない
-      "partial": [1, 2],                  整数の配列。 長さはちょうど n-1。
-                                          中身は 0..p-1 の好きな値でよい
-      "completions": [                    要素ちょうど 2 個
-        {"secret": 0, "lastShare": 98},   secret と lastShare の 2 キー。
-        {"secret": 1, "lastShare": 99}    2 つの secret は互いに異なること
-      ]
-    }
-
-合格条件は、 各 completion について
-`(partial の合計 + lastShare) % p == secret` が成り立つこと。
-上の 98 は `(0 - 3) % 101`、 99 は `(1 - 3) % 101` (partial の合計が 3)。
-**あなたの p と n はこれとは違う**ので、 長さも数値も自分の値で作り直すこと。
-とくに `partial` の長さは n-1 なので、 n=6 なら 5 個になる。 上の 2 個を
-そのまま写すと落ちる。
+The formulas below are free. Apply them to arbitrary function inputs rather
+than hard-coding Inspect's values. The bodies are deliberately unfinished.
 """
 
 from __future__ import annotations
 
 
 def share(secret: int, n: int, p: int, randomness: list[int]) -> list[int]:
-    """秘密 `secret` を、合計が `secret` になる `n` 個の share に分ける。
+    """Return n shares. n >= 2; randomness has at least n-1 entries.
 
-    この関数は算術だけ。 この問題の主題は下の complete_shares のほう。
-
-    手順:
-      1. 最初の n-1 個は `randomness` の値をそのまま使う
-      2. 最後の 1 個は「secret から、それまでの合計を引いた値」にする
-      3. すべて 0..p-1 に正規化して、長さ n の list で返す
-
-    式:
-        share[i]   = randomness[i] % p                     (i = 0 .. n-2)
-        share[n-1] = (secret - sum(share[0..n-2])) % p
-
-    例: secret=5, n=3, p=101, randomness=[70, 40]
-        head = [70, 40]、 sum(head) = 110
-        share = [70, 40, (5 - 110) % 101] = [70, 40, 97]
-        検算: 70 + 40 + 97 = 207 = 2*101 + 5 -> 復元すると 5
-
-    ありがちな失敗:
-      - `% p` を忘れて -105 のような負の値を返す (値は正しいのに落ちる)
-      - `randomness` を使わず自前で乱数を作る (採点が再現できなくなる)
-      - `randomness[:2]` のように固定長で切る (n は起動ごとに変わる)
-      - party 0 に secret をそのまま渡して残りを 0 にする
-        (合計は合うが、 party 0 が最初から全部知っているので分散ではない。
-         出荷時の下のコードがちょうどこの形で、 だから落ちる)
+    Take the first n-1 random values, each % p, as head. Append
+    (secret - sum(head)) % p. For p=7, secret=4, n=3, randomness=[5,6],
+    this gives [5,6,0]. The same rule can legitimately draw [4,0] and
+    give [4,0,0]; ignoring randomness and ALWAYS copying secret is wrong.
     """
     return [secret] + [0] * (n - 1)
 
 
 def reconstruct(shares: list[int], p: int) -> int:
-    """全部そろった share から秘密を戻す。
+    """Return one integer: sum(shares) % p, using only the supplied shares.
 
-    手順:
-      1. share を全部足す
-      2. `% p` して 0..p-1 の整数ひとつで返す
-
-    式:
-        secret = (shares[0] + ... + shares[len(shares)-1]) % p
-
-    例: shares=[70, 40, 97], p=101 -> 207 % 101 = 5
-
-    ありがちな失敗:
-      - `% p` を忘れて 207 を返す (0..p-1 の外なので落ちる)
-      - 人数を仮定して `shares[0] + shares[1] + shares[2]` と書く
-        (人数は起動ごとに変わる)
+    p=7, shares=[5,6,0]: sum is 11, remainder is 4. Do not keep the secret
+    from an earlier share() call; holders reconstruct from their pieces.
     """
     return 0
 
 
 def complete_shares(partial: list[int], secret: int, p: int) -> int:
-    """n-1 個の share と、狙った秘密が与えられる。足りない最後の 1 個を返す。
+    """Return ONE integer, the missing last share for this candidate secret.
 
-    **ここがこの問題の主題**なので、式は書いていない。 代わりに、採点のしかたと
-    考える順序を書く。
-
-    何を示す関数か:
-        同じ n-1 個を握ったまま、 どんな秘密に対しても辻褄の合う最後の 1 個を
-        作れるなら、 その n-1 個は「秘密がどれか」を 1 つも排除していない。
-        つまり n-1 個は秘密について何の証拠にもなっていない。 これが
-        「n-1 個では何も分からない」の実行可能な定義になる。
-
-    採点のしかた:
-        `partial` を固定したまま、 `secret` を 0, 1, 2, ..., p-1 と
-        **field の全要素**について呼び出す。 毎回、 返り値 `last` が
-
-            (sum(partial) + last) % p == secret
-
-        を満たすことが要求される。 1 つの secret で成功しても通らない。
-
-    考える順序:
-        1. 上の等式を書き出す。 未知数は返り値ただ 1 つ
-        2. `sum(partial)` は既知の固定値。 残りを解く
-        3. F_p では引き算がいつでもできるので、解は必ず存在し、しかも 1 つ
-
-    返り値の形:
-        `0 <= last < p` の整数ひとつ (list ではない)。
-
-    ありがちな失敗:
-      - `secret` をそのまま返す (partial が全部 0 のときだけ通る)
-      - `partial` の長さや p を関数内に書き込む (どちらも引数から来る)
+    Formula: (secret - sum(partial)) % p.
+    p=7, partial=[5,6]: candidate 4 needs 0; candidate 1 needs 4.
+    Check (sum(partial) + last) % p == secret. The same partial fitting
+    each candidate proves compatibility. Unchanged probabilities additionally
+    require the independent uniform randomness assumption, not just this test.
     """
     return 0
 
 
 def rerandomize(shares: list[int], p: int, randomness: list[int]) -> list[int]:
-    """秘密を変えずに、share を全部入れ替えた新しい分け方を返す。
+    """Return a NEW list with the same length and total remainder.
 
-    この関数も算術だけ。 実プロトコルでは、 同じ share の集合がラウンドを跨いで
-    結び付けられないようにするために使う。
-
-    手順:
-      1. 人数 k を `len(shares)` から取る
-      2. offset を k 個作る。 先頭 k-1 個は `randomness` から取る
-      3. 最後の 1 個は「それまでの offset の合計を打ち消す値」にする。
-         こうすると offset の合計が 0 になるので、秘密は動かない
-      4. share と offset を 1 対 1 で足し、 `% p` して返す
-
-    式:
-        offset[i]   = randomness[i] % p                    (i = 0 .. k-2)
-        offset[k-1] = (-sum(offset[0..k-2])) % p
-        out[i]      = (shares[i] + offset[i]) % p
-
-    例: shares=[70, 40, 97] (秘密 5), p=101, randomness=[3, 8]
-        offset = [3, 8, (-11) % 101] = [3, 8, 90]
-        offset の合計 = 3 + 8 + 90 = 101 = 0 (mod 101)
-        out = [73, 48, (97 + 90) % 101] = [73, 48, 86]
-        検算: (73 + 48 + 86) % 101 = 207 % 101 = 5 -> 秘密は 5 のまま
-              3 個とも入力と違う値になっている
-
-    採点は固定の期待値ではなく 2 つの関係で見る:
-      (1) 復元すると秘密が変わっていない
-      (2) 返した list が入力とまったく同じではない
-
-    ありがちな失敗:
-      - 全員に同じ値 r を足す (合計が n*r ずれるので秘密が動く)
-      - offset を全部 0 にする (秘密は保たれるが 1 個も動かず (2) で落ちる)
-      - 入力をそのまま返す (下の出荷時のコードがこれ。 だから落ちる)
+    Let k=len(shares). Take the first k-1 randomness entries % p as head;
+    append (-sum(head)) % p. Add these adjustments position by position
+    to shares, taking % p each time. Do not modify the input list.
+    p=7, shares=[5,6,0], randomness=[1,2]: adjustments=[1,2,4],
+    new shares=[6,1,4], same secret 4. This checkpoint checks visible change
+    on inputs with a nonzero adjustment. A general uniform all-zero draw is
+    valid and leaves the original values unchanged; independent != different.
     """
     return list(shares)
 
 
 def share_line(secret: int, p: int, randomness: list[int]) -> list[list[int]]:
-    """秘密を、3 人のうちどの 2 人でも戻せて、1 人では何も分からないように分ける。
+    """Return [[1,y1],[2,y2],[3,y3]]: any two points recover the secret.
 
-    考え方 (中 2 の直線):
-        y = secret + r * x という直線を考える。 x = 0 のときの y が秘密。
-        r (傾き) は randomness[0] を p で割ったあまり。
-        party 1, 2, 3 には、 x = 1, 2, 3 での点 [x, y] を 1 つずつ渡す。
-        計算はすべて p で割ったあまりで行う。
-
-    手順:
-      1. r = randomness[0] % p
-      2. x = 1, 2, 3 それぞれについて y = (secret + r * x) % p
-      3. [[1, y1], [2, y2], [3, y3]] を返す (x はこの順。 list の中に list)
-
-    例: secret=1, p=7, randomness=[4]
-        r = 4
-        x=1: (1 + 4) % 7 = 5、 x=2: (1 + 8) % 7 = 2、 x=3: (1 + 12) % 7 = 6
-        返り値 [[1, 5], [2, 2], [3, 6]]
-
-    なぜ 1 点では分からないか:
-        点 [1, 5] を見た人にとって、 秘密は 0 から 6 のどれでもありえる。
-        秘密が 3 なら r = 2 で (3 + 2) % 7 = 5、 秘密が 5 なら r = 0 で 5、
-        秘密が 0 なら r = 5 —— どの秘密にも、 その点を通る傾きがちょうど 1 つある。
-        採点はこれを、 あなたの share_line を秘密と傾きを変えながら呼び、
-        3 人それぞれの点について確かめる。
-
-    ありがちな失敗:
-      - 3 人に同じ点 (秘密のコピー) を渡す。 2 人でも 1 人でも戻る = 1 人で
-        全部分かる。 出荷時の下のコードがこの形で、 だから落ちる
-      - 誰かに x = 0 の点を渡す (その人の y が秘密そのもの)
-      - 傾きに randomness[0] を使わない、 または一部しか使わない
-        (作れる点が減り、 1 点で秘密が絞れてしまう)
+    Shamir two-of-three sharing uses prime p > 3 so positions 1,2,3 are
+    distinct nonzero remainders. Slope r (increase in y per step of x) is
+    randomness[0] % p. Formula: y = (secret + r*x) % p.
+    p=7, secret=1, r=4 gives [[1,5],[2,2],[3,6]]. The secret is at x=0.
+    For a single fixed point, each secret has exactly one possible r. A
+    uniform independent r therefore gives the same likelihood for every
+    secret. A draw r=0 is valid; always fixing r=0 reveals the secret.
     """
     return [[x, secret % p] for x in (1, 2, 3)]
 
 
 def reconstruct_line(two_points: list[list[int]], p: int) -> int:
-    """3 点のうちの 2 点 (どの 2 点か、どの順かは分からない) から秘密を戻す。
+    """Return the secret from any two distinct supplied points, in either order.
 
-    引数 two_points は [[x1, y1], [x2, y2]] の形。 取り出し方は
-    x1 = two_points[0][0], y1 = two_points[0][1], x2 = two_points[1][0],
-    y2 = two_points[1][1]。 x1, x2 は 1, 2, 3 のうち異なる 2 つで、
-    [3, ...] が先に来ることもある。
-
-    考え方: 2 点を通る直線は 1 本に決まる。 その直線を x = 0 まで戻した y が秘密。
-
-    手順 (すべて p で割ったあまりで):
-      1. 傾き = (y2 - y1) ÷ (x2 - x1)。
-         あまりの世界に分数は無いので、 「割る数に掛けて 1 になる相手」を掛ける。
-         相手は 1 から順に試して探す (p が 1 万くらいでも 1 万回で済む):
-             d = (x2 - x1) % p          # 割る数。 マイナスは % p で 0 以上に
-             for k in range(1, p):
-                 if (d * k) % p == 1:
-                     partner = k       # d に掛けて 1 になる相手
-         傾き = ((y2 - y1) % p) * partner % p
-      2. 秘密 = (y1 - 傾き * x1) % p    (x1 歩ぶん傾きを引いて x = 0 へ戻す)
-
-    例 1: p=7, 点 [1, 5] と [2, 2]
-        y の差 2 - 5 = -3 → % 7 で 4。 x の差 1。 1 の相手は 1。
-        傾き = 4 * 1 % 7 = 4。 秘密 = (5 - 4 * 1) % 7 = 1
-    例 2: p=7, 点 [1, 5] と [3, 6]  (x の差が 2)
-        y の差 1。 x の差 2。 2 の相手: 2*1=2, 2*2=4, 2*3=6, 2*4=8 → 7 で
-        割ったあまり 1、 相手は 4。 傾き = 1 * 4 % 7 = 4。 秘密 = (5 - 4) % 7 = 1
-    例 3: p=7, 点 [3, 6] と [2, 2]  (逆順)
-        y の差 2 - 6 = -4 → 3。 x の差 2 - 3 = -1 → 6。 6 の相手は 6
-        (6*6=36 → あまり 1)。 傾き = 3 * 6 % 7 = 4。 秘密 = (6 - 4 * 3) % 7 = 1
-        どの 2 点、 どの順でも同じ 1 に戻る。 採点はこの 6 通りを全部見る
-
-    採点は決まった答えと見比べず、 2 つの性質で見る:
-      (1) 3 点から 2 点を選ぶ 3 通り × 順番 2 通り = 6 通りすべてで同じ秘密が戻る
-      (2) 3 人それぞれの点について、 0 から p-1 のどの秘密でも、 その同じ点を作る
-          傾きがある (あなたの share_line を呼んで確かめる)
-    p は画面と違うものを使い、 1 万くらいの p でも試す。 制限時間は 12 秒。
-    「相手を 1 から順に探す」は間に合う。 秘密の候補を 0 から全部試す作り方は
-    間に合わない。
-
-    ありがちな失敗:
-      - 先頭の点の y をそのまま返す (直線を戻していない。 出荷時の下のコード)
-      - 割り算に `//` を使う (あまりの世界では合わない)
-      - 先頭の点の x を 1 と決めつける (どの組か、 どの順かは採点側が選ぶ)
-      - 最後の `% p` を忘れる (マイナスや p 以上が返る)
-      - p を数値で書き込む (画面と違う p、 1 万くらいの p も来る)
+    Unpack [[x1,y1],[x2,y2]]. Let d=(x2-x1) % p. Find k in 1..p-1 such
+    that (d*k) % p == 1. This k is the multiplicative inverse: the partner
+    that replaces division in remainder arithmetic. Prime p and d != 0
+    guarantee it exists. Stop searching once found. Then
+      r = ((y2-y1)*k) % p
+      secret = (y1-r*x1) % p
+    Return the latter integer. Do not use ordinary / or floor division //.
+    p=7, reversed [[3,6],[2,2]]: d=6, k=6, r=4, secret=1.
+    One search through k works even for p around 10000 within the 12-second
+    code limit; do not search through every (secret, slope) pair.
     """
     return two_points[0][1] % p

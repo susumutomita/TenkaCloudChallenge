@@ -1,3 +1,5 @@
+import { rotorEncrypt } from "./rotor.ts";
+import { rsaEncrypt } from "./rsa.ts";
 /**
  * Deterministic scripted-playtest runner (Issue #486 PR5).
  *
@@ -431,7 +433,7 @@ export function buildCipherOp(contract: ContractProjection): CryptoBattleOp | un
     // Submitted as the pictures a participant would type. `parseAnswer` takes
     // either those or the values; sending the faces exercises the path a human
     // actually uses.
-    answer: [...toSymbols(encryptWithRung(plaintext, myKey, rung), rung)],
+    answer: [...toSymbols(encryptWithRung(plaintext, myKey, rung, contract.task.keyPosition ?? 0), rung)],
   };
 }
 
@@ -470,6 +472,9 @@ export function buildClearingOp(
       // -- until all 23 are spent, at which point this throws and the caller
       // has to ROTATE, exactly as a participant would.
       return buildProveSudokuOp(vault, contract.id);
+    case "rotor-encrypt": return { kind: "cipher", contractId: contract.id, answer: rotorEncrypt(contract.task.plaintext, contract.task.myInitial).map(String) };
+    case "rsa-encrypt":
+      return { kind: "cipher", contractId: contract.id, answer: [String(rsaEncrypt(contract.task.plaintext, contract.task))] };
     case "caesar-shift":
       return buildCipherOp(contract);
     case "homomorphic-sum":

@@ -1,40 +1,26 @@
-"""POST /verify -- the scoring seam. Compose-internal only, stdlib only.
+"""Internal grading authority. Learner source never executes beside this checker.
 
-Same security contract as the AC26 template (docs/curricula/advanced-cryptography-2026/
-TEMPLATE.md): required and echoed `checkpointId`, throwaway workspace, wall-clock
-timeout, memory / process / output caps, no shell, nothing leaked back but property
-names (a failed `transfer` additionally carries the checker's property-level failure
-list as `message`, AGENTS.md §15), and malformed input can never kill the process.
-
-The grading rule specific to this problem: a label is never accepted on its own. Every
-`False` in the property matrix has a matching counterexample checkpoint, and the
-transfer checkpoint re-runs the learner's own generators against instances they have
-never seen.
-
-Issue 543/537: this used to be the same process that also served the Participant
-Portal's config, inspect, starter, public-test, and prepare endpoints, in the single
-Docker stage a learner's own `make build` produced -- so `privacy-leak`'s expected
-value (`instance(seed).witness`) was importable from inside the learner's own
-container, and `incompleteness`'s undisclosed boundary instance was too. That
-Portal-facing surface now lives in `participant/server.py`, in a separate image (see
-../Dockerfile) that this process's own container never builds; this file is reachable
-only over the Compose-internal network (see ../docker-compose.yml), never from the
-participant container's filesystem.
+The parent derives synthetic exercise cases from the deployment seed, sends only
+function inputs and source to an isolated child, and checks the returned JSON values
+itself. Empty failure output or a successful child exit is not a verdict. Error
+feedback names documented properties without echoing unseen cases or expected values.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from types import SimpleNamespace
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from participant.execution import run_functions
+from participant.isolation import protect_supervisor
+from tests.hidden.check_properties import run as check_properties
 
 from fixtures.generate import (
     TRUTH,
@@ -66,22 +52,6 @@ PROPERTIES = ("complete", "sound", "private")
 SUBMISSION_FILES = ("classify.py", "counterexamples.py")
 CODE_CHECKPOINTS = frozenset(("transfer",))
 
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
-# aborts the exec, so on a macOS checkout every submission run failed — including
-# the reference. The lab runs on Linux, where the cap does apply, so skipping it on
-# Darwin does not change what participants run. See the same note in
-# ac26-bridge-experiment's verifier.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
 def _normalized_int(value: object) -> int | None:
     if isinstance(value, bool):
         return None
@@ -107,86 +77,35 @@ def _submission_sources(files: object) -> dict[str, str] | None:
     return normalized
 
 
-def _run_submission_script(
-    sources: dict[str, str], script: str, seed: str
-) -> tuple[int, str] | None:
-    """Run Portal-edited Python with the verifier's existing resource limits."""
-    with tempfile.TemporaryDirectory() as workspace:
-        for name, text in sources.items():
-            (Path(workspace) / name).write_text(text, encoding="utf-8")
-        transcript = Path(workspace) / "stdout"
-        try:
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [
-                        sys.executable,
-                        "-I",
-                        "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed),
-                    ],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
-
-
-PREPARE_SCRIPT = """
-import json, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from fixtures.generate import boundary_instance, instance, protocol_for, protocol_ids, verify
-from classify import classify
-import counterexamples
-seed = {seed!r}
-inst = instance(seed)
-boundary = boundary_instance(seed)
-_accepted, transcript = verify(protocol_for(seed, "leaky"), inst, inst.witness)
-sources = {{name: open(name, encoding="utf-8").read() for name in ("classify.py", "counterexamples.py")}}
-submissions = {{
-    "incompleteness": str(counterexamples.incompleteness_witness(boundary.as_public())),
-    "unsoundness": str(counterexamples.unsoundness_witness(inst.as_public())),
-    "privacy-leak": str(counterexamples.extract_witness(transcript)),
-    "property-matrix": json.dumps({{protocol_id: classify(protocol_id) for protocol_id in protocol_ids(seed)}}, separators=(",", ":")),
-    "transfer": json.dumps(sources, separators=(",", ":")),
-}}
-print(json.dumps({{"submissions": submissions}}, separators=(",", ":")))
-"""
+def _call(function, argument):
+    return {"function": function, "argument": argument}
 
 
 def prepare_submissions(seed: str, files: object) -> dict[str, object]:
-    """Evaluate learner functions and format values for the five portal fields.
-
-    Runs the submitted `classify.py` / `counterexamples.py` against `boundary_instance`
-    -- deliberately never disclosed elsewhere (see `fixtures.generate.public_payload`)
-    -- which is why this has to happen here rather than in `participant/server.py`:
-    that process does not carry `fixtures/` at all (Issue 543/537).
-    """
+    """Prepare values from learner outputs; never execute source beside fixtures/checkers."""
     sources = _submission_sources(files)
     if sources is None:
         return {"ok": False, "output": "Both editable Python files are required."}
-    result = _run_submission_script(sources, PREPARE_SCRIPT, seed)
-    if result is None:
-        return {"ok": False, "output": "Submission preparation timed out or could not start."}
-    returncode, captured = result
-    if returncode == 0:
-        for line in reversed(captured.splitlines()):
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            submissions = payload.get("submissions")
-            if isinstance(submissions, dict):
-                return {"ok": True, "submissions": submissions}
-    return {"ok": False, "output": captured or "Submission preparation failed."}
+    inst = instance(seed)
+    boundary = boundary_instance(seed)
+    _, transcript = verify(protocol_for(seed, "leaky"), inst, inst.witness)
+    aliases = protocol_ids(seed)
+    calls = [_call("incompleteness_witness", boundary.as_public()),
+             _call("unsoundness_witness", inst.as_public()),
+             _call("extract_witness", transcript)]
+    calls.extend(_call("classify", alias) for alias in aliases)
+    result = run_functions(sources, calls)
+    values = result and result.get("values")
+    if (not isinstance(values, list) or len(values) != len(calls)
+            or any(type(value) is not int for value in values[:3])
+            or any(not isinstance(value, dict) for value in values[3:])):
+        # Captured output may contain unseen input values. Never relay it from prepare.
+        return {"ok": False, "output": "Functions must return integers and classification dictionaries; check the editor code."}
+    submissions = {"incompleteness": str(values[0]), "unsoundness": str(values[1]),
+                   "privacy-leak": str(values[2]),
+                   "property-matrix": json.dumps(dict(zip(aliases, values[3:])), separators=(",", ":")),
+                   "transfer": json.dumps(sources, separators=(",", ":"))}
+    return {"ok": True, "submissions": submissions}
 
 
 def _check_incompleteness(submission: object) -> bool:
@@ -238,24 +157,6 @@ def _check_property_matrix(submission: object) -> bool:
     return True
 
 
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden.check_properties import run
-try:
-    from classify import classify
-    import counterexamples
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-print(json.dumps({{"failures": run(classify, counterexamples, {seed!r})}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_detail(failures: list[object]) -> str:
     """Join the checker's property-level failure strings for the response `message`.
 
@@ -280,19 +181,29 @@ def _check_transfer(submission: object) -> tuple[bool, str]:
     sources = _submission_sources(files)
     if sources is None:
         return False, ""
-    result = _run_submission_script(sources, RUNNER, f"{SEED}:transfer")
-    if result is None or result[0] != 0:
-        return False, ""
-    for line in reversed(result[1].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, ""
-        return len(failures) == 0, _failure_detail(failures)
-    return False, ""
+    seed = f"{SEED}:transfer"
+    calls = [_call("classify", alias) for alias in protocol_ids(SEED)]
+    for index in range(3):
+        calls.append(_call("incompleteness_witness", boundary_instance(seed, f"inc-{index}").as_public()))
+        calls.append(_call("unsoundness_witness", instance(seed, f"uns-{index}").as_public()))
+    for index in range(3):
+        inst = instance(seed, f"extract-{index}")
+        _, transcript = verify(protocol_for(seed, "leaky"), inst, inst.witness)
+        calls.append(_call("extract_witness", transcript))
+    result = run_functions(sources, calls)
+    values = result and result.get("values")
+    if not isinstance(values, list) or len(values) != len(calls):
+        return False, "The functions did not return the required values within the execution limits."
+    # The grader runs in this trusted parent, using only JSON data returned by the
+    # child. A fabricated 'failures: []' or exit status is never grading evidence.
+    outputs = {(call["function"], json.dumps(call["argument"], sort_keys=True)): value
+               for call, value in zip(calls, values)}
+    def answer(function):
+        return lambda argument: outputs[(function, json.dumps(argument, sort_keys=True))]
+    module = SimpleNamespace(**{name: answer(name) for name in
+                               ("incompleteness_witness", "unsoundness_witness", "extract_witness")})
+    failures = check_properties(answer("classify"), module, seed, matrix_seed=SEED)
+    return not failures, _failure_detail(failures)
 
 
 def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
@@ -405,6 +316,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     port = int(os.environ.get("VERIFY_PORT", "18093"))
     # Bind every interface *inside the container*, not the container's loopback. The
     # Workbench reaches this process as `verifier:<port>` over the Compose network, which

@@ -59,4 +59,10 @@ reset:
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+
+# The actual Linux value boundary, using the unchanged 20-second suite limit.
+.PHONY: runtime-test
+runtime-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001 --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 1g -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python tests/hidden/test_execution_boundary.py

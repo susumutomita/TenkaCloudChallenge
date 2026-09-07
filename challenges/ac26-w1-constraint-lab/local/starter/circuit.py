@@ -1,6 +1,13 @@
-"""Constraint evaluation and traces. One of the three files you edit.
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.
+Constraint evaluation and traces. One of the three files you edit.
 
-A constraint is a claim that an expression equals zero. Evaluating it gives the
+A signal is a named variable; a witness is a dictionary assigning each signal
+its value. / 信号は名前付き変数、witnessは信号に値を割り当てた辞書。
+A constraint is a claim that an expression equals zero after taking its remainder
+on division by the prime p. / 制約は、式のpで割った余りを0にする条件。
+A circuit is a list of those conditions. / 回路は制約の一覧。 Evaluating it gives the
 *residual*: zero means satisfied, anything else means broken. A circuit is satisfied
 by a witness exactly when every residual is zero.
 """

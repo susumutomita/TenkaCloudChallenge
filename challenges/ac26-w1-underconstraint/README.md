@@ -1,139 +1,78 @@
 # It passes, but it does not protect
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+## Before you start
 
-**Track:** `advanced-cryptography-2026` · **Order:** 120 · **Chapter:** Week 1 / Underconstraint
-· **Role:** `assignment-companion` · **Time:** 60–90 minutes · **Points:** 300
-· **Required first:** `ac26-w1-constraint-lab`
+You audit an entry check. **Honest inputs pass, but one required check is missing.** Choose **Start → Inspect evidence**, read `deployedCircuit` (the supplied checks), and compare it with A and B below on paper. Then edit `policy.py`.
 
-## The story
+- A **signal** is a variable in an expression. A **witness** is a dictionary assigning every signal a value. A **constraint** checks that an expression has remainder zero. A **circuit** is a list of constraints. **Underconstraint** means missing checks allow unintended values. An `id` is a name identifying one check.
+- The divisor is the displayed prime `p`. `a % p` means the remainder of a divided by p, also called mod. Example: −1 divided by 7 leaves 6. Use integer signal values from 0 through p−1.
+- An **inverse** multiplies a number to remainder 1. With p=7, 3×5=15 leaves 1, so 5 is the inverse of 3. For prime p, `pow(a, -1, p)` works only when `a % p != 0`. Zero has no inverse.
 
-The privacy-preserving credential circuit was two days from production when the audit came back.
-Nothing dramatic: ordinary holders are judged correctly, revoked ones are refused, the numbers all
-line up. But somewhere in the report is a sentence nobody can dismiss — *a forged witness may be
-able to walk around the condition entirely.*
+## Translate entry rules into expressions
 
-Somebody has to build the circuit the policy actually wanted, find the gap, prove it is real, and
-close it without breaking anyone's legitimate access. That is your afternoon.
-
-## The policy
+`revoked` counts revocations (zero means unrevoked). `issuer_ok` is 1 for a recognised issuer, otherwise 0. `ok` marks a zero revocation count; `granted` is 1 for permission. `inv` is a helper value used to express the zero check.
 
 ```text
-grant access iff the revocation counter is zero AND the issuer is recognised
+revoked ── zero check A and B ── ok ── × issuer_ok ── granted
+A: revoked × inv + ok − 1 = 0
+B: revoked × ok          = 0
+Entry: ok × issuer_ok − granted = 0
+0/1 check: b × (b − 1) = 0  (for ok and issuer_ok)
 ```
 
-A circuit has no comparisons. "Is this signal zero?" is a **claim you constrain**, using a helper
-signal `inv` that the prover supplies:
+Every `= 0` means **remainder zero after division by p**. Since p is prime, a product has remainder zero only if a factor has remainder zero. Thus the b check allows only 0 or 1.
 
-```text
-iszero_a:  value * inv + out - 1 = 0
-iszero_b:  value * out           = 0
+Why both lines? If revoked=0, A forces ok=1. Otherwise B forces ok=0, and A makes inv the inverse.
+
+Small example with p=7: revoked=3, inv=5, ok=0 gives A=14→0 and B=0. Removing B permits inv=0, ok=1: A=0 even though the credential is revoked. Removing A permits inv=0, ok=0: B=0, but A=−1→6. That is an **invalid helper value; the entry decision need not be wrong**.
+
+## What do you build and submit?
+
+Edit the four functions in `policy.py`. Its opening docstring defines the dictionary formats. Return **expressions as data for the checker**. Python `if` is allowed, but returning a computed truth value does not supply a constraint.
+
+| Checkpoint | Input → return | What to check |
+|---|---|---|
+| build | `intended_circuit()` → the five intended constraints | A, B, two 0/1 checks, and entry multiplication |
+| audit | `audit(circuit)` → sorted list of missing id strings | Empty list for a complete circuit |
+| exploit | `forge_witness(circuit, params)` → witness dictionary | Each supplied expression has remainder zero; at least one intended expression does not |
+| root-cause | Type diagnosis JSON | Missing id, honest values, changed values |
+| repair | `repair(circuit)` → repaired list | Preserve supplied constraints; add only the missing one |
+| mutation-transfer | Submit the same `policy.py` again | All four functions handle other values and the other missing line |
+
+In `forge_witness`, preserve revoked and issuer_ok from `params`, the dictionary of input numbers. Construct inv, ok and granted. Use each supplied circuit and parameters instead of hard-coding the displayed case.
+
+**root-cause format** (different names below demonstrate the format, not this task's answer):
+```json
+{"missingConstraintId":"c-example","manipulatedSignals":[{"signal":"helper","before":3,"after":0}]}
 ```
+`missingConstraintId` names the absent constraint. `manipulatedSignals` lists only changed signals. For each `signal` name, copy `before` from Inspect evidence → `honestWitnesses.revokedCredential`, and use your counterexample value for `after`. Include every change once; values must be integers from 0 through p−1. With A missing, an incorrect inverse is not limited to one canonical value.
 
-Both are needed. Each alone is satisfiable with a lie — and *which* lie depends on which one you
-keep. The deployed circuit is missing one of them, and which one changes with your seed.
+For the five code checkpoints, each **Submit** button sends the editor source. Only root-cause takes JSON in its answer field. Checkpoints are graded independently; each wrong answer costs 15 points, with a floor of zero. **Run public tests** checks honest values and return shapes. It tries no counterexample, so green alone does not establish a repair.
 
-## How to play
+## How this model relates to zero-knowledge proofs
 
-Start the problem from Participant Portal. The `policy.py` editor appears on the same page.
-Inspect the evidence, edit the file, run the public tests, and submit build / audit / exploit /
-repair / mutation-transfer there. The root-cause answer is a JSON diagnosis in the shape Portal
-shows, assembled and entered into its answer field by you.
-No host terminal or checkout editing is required.
+A **zero-knowledge proof (ZK)** demonstrates a claim without revealing its secret. This exercise checks **expressions against values**, a prerequisite; it does not generate or verify a ZK proof. An invalid helper passing is different from falsely granting access to an unauthorised holder. Finish all six checkpoints: your counterexample must fail after repair while both kinds of honest values still pass.
 
-Only when authoring or verifying straight from the repository, run these in the problem directory:
+## Author verification and runtime
+
+The participant route is Start → Inspect evidence → edit policy.py → public tests → checkpoint Submit. Source goes directly from the editor for five code checks; root-cause alone is a typed JSON diagnosis. This problem keeps its existing two Compose services and public API ports. Only the Workbench is bound to host loopback; the internal verifier derives the per-run exercise inputs. Neither the seed, fixtures, reference nor hidden checks enter the participant image.
+
+The Linux worker executes submitted functions with their inputs and the supplied public evaluator. File opening, network creation and supervisor interference are denied before source executes. The parent checks returned JSON values; successful child exit or printed failure lists cannot declare a verdict. Public tests deliberately check only honest cases and shapes. The operating system restrictions are additional to container limits; Docker owners can still inspect their own environment.
 
 ```bash
-make inspect            # policy, deployed circuit, both honest witnesses
-make test               # public tests
-make reset              # restore starter/policy.py
-make verifier-down      # stop the verifier `inspect` and `test` start for you
+make test                 # public suite through local Compose
+make reference-test       # author-only mutation checks
+make verifier-down        # stop this problem's local containers
 ```
 
-`inspect` and `test` run through compose and start this deployment's verifier first: the
-question's own parameters, deployed circuit and honest witnesses are served by it, not
-derived inside the Workbench (see *Assurance scope* below).
+The six checks retain 300 total points and 15-point wrong-answer penalties. Each has three hints; all 18 hints total 80 points. Actual reader, API, isolation and mutation evidence is recorded in `local/tests/hidden/READER.md`. No live AWS event or independent human timing is claimed.
 
-In the Portal editor or author checkout you edit one file, `local/starter/policy.py`, with four functions:
-`intended_circuit()` · `audit()` · `forge_witness()` · `repair()`.
+No AWS resources are created by this local runtime. Docker consumes local CPU, memory and storage; stop its containers after use. No cloud pricing estimate is needed. The official Week 1 proof-of-exploit exercise and the owner's Week 1 notes informed the teaching sequence. This companion uses its own policy and signal names; it does not reproduce the official assignment solution.
 
-## Scoring
+## Filesystem metadata boundary follow-up
 
-Six checkpoints, scored independently. Wrong answers cost 15 points each.
+The learner's Linux filter also denies file/directory creation, links, renames, removal and metadata writes. Blocking file opens alone did not stop those operations from persisting after a worker exited. The problem-local regression applies the actual filter in 16 disposable children, checks 19 operations return EPERM, and verifies unchanged parent-owned fixture contents, directory entries, permissions, ownership, timestamps and extended attributes. Its temporary fixture is removed afterward. This adds no API, scoring, mathematical rule or execution deadline; existing positive sources and suites remain the acceptance baseline. See `local/tests/hidden/READER.md` for before/after scope and commands.
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `build` | 60 | Your circuit accepts both honest witnesses and rejects every known forgery |
-| `audit` | 50 | You name exactly the missing constraint, and report none on a complete circuit |
-| `exploit` | 60 | Your witness satisfies the deployed circuit and fails the intended one |
-| `root-cause` | 40 | Missing id + every manipulated signal's before/after values, as JSON |
-| `repair` | 50 | Forgery rejected, both honest cases still accepted, no constraint bloat |
-| `mutation-transfer` | 40 | Audit and forgery both work when a *different* constraint is missing |
+## Computational tools and execution time
 
-Hints on four of the six (20 / 25 / 20 / 15). Opening every one still leaves 220 of 300.
-
-## What "exploit" means here, precisely
-
-A forged witness must **satisfy the deployed circuit and fail the intended one**. That structural
-definition is the whole point: it is what "the missing constraint was load-bearing" means, and it
-works no matter which of the two is gone. It also cannot be satisfied by a lucky guess — a witness
-that passes both circuits is claiming nothing false.
-
-## The trap
-
-**The public tests all pass in the starter state.** The starter circuit accepts both honest
-witnesses, so every shape check is green. It also has no is-zero gadget at all, which means `ok` —
-the flag deciding access — is bound by nothing whatsoever.
-
-That is `misconception.happy-path-proves-soundness` in its natural habitat. Underconstraint does
-not break the happy path. That is what makes it dangerous, and why the only way to measure it is
-to build a counterexample.
-
-## Relationship to the official Week 1 exercise
-
-This is an `assignment-companion`: it builds the reading and attacking habit the official exercise
-needs, using a **different business rule and different signal names**, and stops short of the
-exercise's own answer path. No expression, fixture, or solution from the course is reproduced —
-see `GOVERNANCE.md` §2 and §4.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
-and every container in the compose stack cannot be prevented from inspecting hidden material.
-The boundary here is misdelivery, not confidentiality against that person: the Workbench
-container you build and run carries the starter, the public tests and the supplied residual
-evaluator — and no grader, no hidden checks, no reference solution, and no generators. Those
-live only in a second, unpublished container the Workbench reaches over the compose network,
-and in the author-only image `make reference-test` builds.
-
-The fixtures used to ship to you as well, on the grounds that after
-[#533](https://github.com/susumutomita/TenkaCloudChallenge/pull/533) they handed back inputs
-only. That was not right, and it is fixed here: the same module also held both halves of the
-is-zero gadget as constraint dicts, under the exact ids the checkpoints require — which is
-`intended_circuit()`'s answer, and with it `audit()` and `repair()` as a set difference
-against the deployed circuit. The question itself has not moved: the policy, the parameters,
-the deployed circuit and the two honest witnesses are what `make inspect` prints, and the
-Workbench now reads them from the verifier over the compose network instead of computing
-them beside you.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-question comes from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
-verifier. Two of them are specifically the failure modes this problem exists to catch — a forgery
-hard-coded for one of the two possible drops, and a forgery that satisfies the intended circuit
-too, and so demonstrates nothing.
+Available computational standard libraries (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. Import them in your submitted files. Installing packages, file access and network access are unavailable. Each execution of submitted code has a 15-second deadline. Some checks run it twice with different inputs.

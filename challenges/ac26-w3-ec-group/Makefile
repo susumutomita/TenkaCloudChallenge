@@ -65,4 +65,9 @@ reset:
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+
+.PHONY: runtime-test
+runtime-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python -m unittest tests.hidden.test_execution_boundary -v

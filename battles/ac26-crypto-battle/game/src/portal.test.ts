@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /**
  * Portal plugin tests (Issue #486, PR4).
  *
@@ -1101,6 +1102,14 @@ describe("advanced tactics use progressive disclosure", () => {
       const aged = ageProjection(fixtureProjection({ matchRemainingMs: undefined }), 5_000);
       expect(aged?.matchRemainingMs).toBeUndefined();
     });
+  });
+
+  it("offers ROTATE before the first required disclosure, without existing exposure", () => {
+    const base = fixtureProjection({ publicLedger: [] });
+    const order = base.myContracts[0]!;
+    const pending = { ...order, status: "open" as const, privacyConstraint: "must-disclose" as const, allowedMethods: ["leak" as const] };
+    expect(tacticAvailability({ ...base, myContracts: [pending] }).rotate).toBe(true);
+    expect(tacticAvailability({ ...base, myContracts: [{ ...pending, status: "expired" }] }).rotate).toBe(false);
   });
 
   it("keeps every advanced control off a fresh first screen", () => {

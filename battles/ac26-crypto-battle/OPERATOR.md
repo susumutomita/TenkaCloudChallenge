@@ -51,7 +51,8 @@ copy a live match secret into a fixture, replay, log, response, or debrief.
 1. TenkaCloud mints the match secret before first state creation.
 2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
 3. `tick` advances time, phases, expiry, and Order issuance.
-4. `validateOp` rejects malformed, stale, unauthorized, or incorrect moves.
+4. `validateOp` rejects malformed, stale or unauthorized moves. A well-formed
+   PROVE or Vigenère/Rotor/RSA CIPHER miss is accepted and charged by `applyOp`.
 5. `applyOp` changes state only after validation.
 6. `projectForTeam` returns the team's vault and Orders plus the public ledger.
 7. Reset/delete removes both state and the separate match-secret record.
@@ -62,7 +63,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (6, including the fixed endgame hint distribution) and a
+The plugin declares `stateSchemaVersion` (11, including Rotor Orders, packed HUNT counters and latest verdicts) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -155,23 +156,20 @@ the score values that apply to every Order.
 
 ### The disclosure Order and why the match connects
 
-[Issue #740] With `scores.contract` (30) three times `scores.contractLeak`
-(10), a team that can compute never leaks, and every attack needs a leak: a
-live two-team run measured zero attacks in forty minutes. One slot of the
-six-slot Order rotation is therefore a `must-disclose` share Order: LEAK is
-its only method and it pays `scores.contract`, so the exposure is the rules'
-schedule, not a mistake, and every team carries it equally. Consecutive
-disclosures name distinct indices, so three of them on one generation reach
-`threshold`. The slot is one of six, and a duel replaces a raw slot only for
-teams that are paired that round, so an odd roster's bye team advances its
-ordinary plan a slot faster: disclosure timing is per team, not synchronized,
-and the participant copy says so. What every team shares is that the Orders
-keep coming; exposure is read off the public record, not predicted from one's
-own belt. `game/src/interaction.test.ts` plays two competent bots for the
-full match on the defaults and pins that HUNTs land in both directions; a bot
-that ROTATEs ahead of its third disclosure is never hunted and ends lower.
-Re-run that file after changing `contract`, `contractLeak`, `threshold`,
-`shareCount`, `rotateCooldownMs` or the rotation.
+The existing five-task rotation is preserved. Every other ordinary share slot
+requires publication; the alternating share slot still permits LEAK or PROVE.
+The opener remains unchanged. Disclosure indices advance cyclically through
+1..shareCount, so consecutive disclosures have distinct indices. Keeping five
+slots preserves the established Vigenere/Rotor/RSA issuance schedule.
+
+Publication still requires pressing LEAK. Expiry only penalizes; it publishes
+nothing. Disclosure LEAK pays the Order's full rate, including rush. ROTATE is
+visible before the first disclosure even at zero exposure; its normal cooldown
+and voided-Order penalty still apply. Duel byes can shift disclosure timing per
+team, so read opponents' exposure from public records rather than your schedule.
+`game/src/interaction.test.ts` verifies both competent teams land Shamir HUNTs
+without voluntary LEAKs, and that rotating before the third share prevents these
+attacks at a score cost. This is a deterministic test, not a human playtest.
 
 ### Field size and HUNT attempt limits
 
@@ -255,14 +253,14 @@ schemas 1–4 and keeps older results without a score delta; their outcome remai
 visible, but the Portal reports the delta as unrecorded instead of guessing it
 from today's rules. A schema-4 plugin must not read schema-5 rows after rollback.
 
-`metadata.json` reserves **30 KiB per team + 1,536 bytes**. The platform owns the
+`metadata.json` reserves **31 KiB per team + 1,536 bytes**. The platform owns the
 limits below; this problem does not raise them. The local capacity tests retain
 25% headroom and check both the peak and the final state.
 
 | Backend | Platform policy | Default-match capacity |
 | --- | --- | --- |
 | Turso / libSQL | 4 MiB, environment-overridable | 99 teams with at least 25% headroom in the tested route |
-| DynamoDB | 400 KiB item; platform reserves 16 KiB | 11 teams with 25% headroom in the tested route; declaration preflight limit 12 |
+| DynamoDB | 400 KiB item; platform reserves 16 KiB | 12 teams with 25% headroom in the tested route; declaration preflight limit 12 |
 
 ## Rock-paper-scissors lifecycle
 
@@ -377,3 +375,177 @@ Validation: `bun test` and `bun run typecheck` in `game/`, including
 `src/booster.test.ts` (actual reducer/host, existing RPS reservations, JSON
 checkpoints, delay equivalence and real component rendering), plus the local
 browser route recorded in `dev/BOOSTER-PLAYTHROUGH.md`.
+
+### Schema 7: a public-position Vigenère cycle
+
+`caesar-shift` remains the wire task discriminator for compatibility; `rung`
+distinguishes Caesar and Vigenère. New Vigenère tasks and cipher-pair records
+carry public `keyPosition` (zero-based 0..2; displayed as 1..3); compact records
+use `kp`. The derived private key is three integers, visible only on the owning
+team's Order projection. Old Caesar rows keep their scalar keys and omitted
+positions. Schema-6 migration preserves contracts, ledger bytes, HUNT/RPS
+reservations, and the saved booster award; the existing migration chain remains.
+Rollback must not feed schema-7 rows to a pre-Vigenère plugin.
+
+The issue's full-length Vigenère example reveals every key from one known pair.
+This implementation therefore issues one position per Order, with a publicly
+known period and offset, and checks **coverage**, not record count, for the
+participant attack route. A long pair covering a cycle still reveals all keys.
+The server requires public pairs covering all three distinct positions for that
+target/rung/current generation before comparing the submitted key. Repeated
+positions and records from other teams, generations or rungs do not unlock HUNT.
+Caesar retains its existing validator.
+
+This follows the private trusted-judge and time-progression decisions in
+[PR #661](https://github.com/susumutomita/TenkaCloudChallenge/pull/661), and the
+incremental rung contract in [#659 §13](https://github.com/susumutomita/TenkaCloudChallenge/issues/659).
+The owner's [week 2 notes](https://github.com/susumutomita/advanced-cryptography-note/blob/58344a29ea39c25839475ba9a594c115ed89989b/week2/index.html)
+(section 「三つ組は1乗算1回限り」) demonstrate how subtracting public masked values
+exposes relations when a mask repeats. That is related algebra, not a claim
+that Vigenère implements Beaver triples or achieves one-time-pad security.
+No dedicated Vigenère treatment was found in the checked local seminar notes.
+
+The Rotor model below completes the next cipher exercise. The existing
+homomorphic-sum Order already runs in every phase; it is an addition-only
+teaching model and is not full FHE. No additional homomorphic Order is introduced.
+
+
+### Schema 8: Vigenère answer adjudication
+
+A well-formed incorrect Vigenère CIPHER is an accepted move: charge the existing
+`scores.wrongProve` (default 6), persist `Contract.cipherFailed=true`, and publish
+nothing. Subsequent correct answers complete that Order for 0; LEAK remains at
+its normal points, and ROTATE/deadline retain the ordinary one-time expiry
+penalty. Shape/length/alphabet errors are rejected without a failure record.
+This removes the guaranteed six-candidate reward without new point constants,
+clocks or attempt-budget configuration. It does not prevent a lucky first guess.
+
+`TeamState.lastCipher` and the own projection record the actual result/delta;
+SDK `ok` alone is not a correct answer. The browser states the reward forfeiture
+before the answer and offers a zero-point completion after a miss. Schema-7
+migration preserves all Vigenère records, numeric HUNT reservations and booster
+allocation; missing failure flags mean no previously charged miss. Existing
+true flags survive migration, reload, LEAK and ROTATE. Rollback requires a
+schema-8-compatible plugin. Caesar's existing retry adjudication is unchanged.
+
+Free Vigenère material carries the problem's own values, a general formula and
+an unrelated small example. The three paid guide texts, including live-value
+instructions at level 3, reach the Portal only through projected purchased hints.
+
+
+### Schema 9: fixed endgame lightning
+
+`endgameLightning` fixes eligible teams once on the same temporary boundary tick
+used by the hint booster. Actual time advancement remains the original single
+tick, so a late poll does not issue/penalize unseen Orders. The host ticks before
+an operation, fixing eligibility before that operation's score changes. Rank
+cutoff is the second-lowest roster entry for 3+ teams, lowest for two, and none
+for solo practice; ties at the cutoff all receive one card.
+
+Each card is available, armed for one Order, or terminal; targeting writes the
+Order ID, reward and existing deadline atomically with the operation. These
+records survive terminal Order pruning. Only the owning projection exposes the
+card. Ordinary calculation completions share the multiplier, including private
+CIPHER, encrypted addition and masked totals. RPS duel outcomes and all LEAK,
+HUNT, hint and penalty paths keep their existing score rules. No extra award
+occurs at declaration, and no zero-delta score history event is needed.
+
+`answerAttempted=false` is written on newly issued calculation Orders. An accepted
+PROVE miss changes it to true; Vigenère uses its existing `cipherFailed` too.
+Legacy absence is unknown and ineligible, not a made-up empty history. Existing
+CIPHER/FHE/MPC validation rejections still do not write attempt state. A wrong
+answer after declaration does not detach the card. Existing Vigenère forfeiture
+makes the multiplier zero and remains visible; the card is spent on correct
+completion, LEAK, deadline, ROTATE or match end. There is no new penalty/timer.
+
+Migration supports v1–v8, preserving compact roster reservations, Vigenère failure
+flags and booster decisions. Missing allocation is pending before the boundary
+and unavailable after it; it is never reconstructed from a later score. Schema-9
+rows require a compatible plugin on rollback. Verify game/dev tests and types,
+`make agent-gate`, and the `lightning` harness scenario; AWS rehearsal is optional.
+
+
+### Schema 10: small RSA encryption and public-key factor HUNT
+
+Only normal cipher slots scheduled at/after endgame use RSA. Parameters are
+(3,11,3), (5,11,3), (5,13,5), (7,11,7), representing (p,q,e). Derivation stays
+server-side and separated from the Shamir seed domain; n/e project to everyone
+from endgame, while m projects only on its owner's Order until LEAK. The tiny
+set intentionally allows repeats after ROTATE; do not claim key renewal makes
+factoring infeasible. `rsa-pair` stores public n/e/m/c only. Its compact `p` field
+means plaintext, not a prime factor. CIPHER uses the existing BigInt modular
+power helper and failure/zero-retry/lightning scoring paths.
+
+Migration from v9 preserves existing Orders, compact Shamir/sudoku/RPS attempt
+reservations, ledger records, Vigenère failure bits and declared lightning cards.
+Only future normal endgame cipher slots become RSA. Completed Order IDs reuse
+the ledger's exact `teamId-cN` ↔ numeric N codec, while unfamiliar IDs stay
+verbatim and the participant projection returns full strings. Rollback must use
+a plugin that understands all schema-10 encodings, including the RSA hunt log;
+older decoders must not read these rows. No resource, IAM, timer or point value
+is introduced. The measured capacity declaration is updated above.
+
+RSA success reservations encode `r<pairIndex>:<generation>`, where `pairIndex`
+is attacker roster position × fixed roster length + target roster position, written
+in base 36. This preserves ID separation
+without storing long IDs for every attacker/target pair. ROTATE discards only
+retired RSA reservations, since old-generation submissions are rejected anyway.
+Other HUNT history, public records and per-team attacked-generation lists remain.
+
+Every new successful RSA HUNT also appends its exact millisecond timestamp to
+`huntLog`. One compact row per target/generation stores a sorted-roster slot per
+attacker, with zero for absence and an exact offset from the row's base time.
+ROTATE never removes these rows: replay can still name every attacker, target,
+generation and time. Legacy Shamir/sudoku object entries remain readable.
+Earlier schema-10 candidate rows containing only reservations have no recorded
+RSA timestamps; migration preserves those guards but cannot invent past replay
+events. The 99-team test retains all 106,722 new RSA successes across eleven
+generations, including differently timed attacks that require wider encoding.
+
+The RSA HUNT checks distinct prime factors of the current n in either order.
+It never compares an internal canonical d. See `game/src/rsa.test.ts` for the
+complete small parameter/residue sweep, malformed input, private projection,
+actual host scoring, migration, repeated submission and ROTATE regressions;
+`game/src/state-size.test.ts` includes public RSA LEAK and pairwise HUNT traffic.
+The independent packet and browser evidence are in `dev/RSA-READING.md`.
+
+
+### Schema 11: Rotor and lossless HUNT bookkeeping
+
+New normal pressure cipher slots alternate Vigenère and Rotor; issue time fixes
+the task even under a late tick. Existing RSA, Vigenère, scalar Caesar, RPS,
+lightning, booster and failed-CIPHER state retain their rules. A Rotor public pair
+stores only plaintext/ciphertext, owner, generation, Order and publication time.
+The owner's initial positions are derived at projection time, never stored in an
+Order or public artifact. One pair is an entry gate, not a uniqueness predicate.
+Rotor attempts share the existing Shamir/RPS count; Sudoku remains independent.
+
+Schema11 changes the saved representation, with no new public information:
+
+- Public Ledger entries use fixed tuples and the existing sorted match roster.
+  Old short-key objects and literal team/Order/artifact IDs remain readable. Every
+  value, exact publication time, ID and ledger entry order survives projection
+  and replay; unfamiliar IDs are kept verbatim.
+- Shamir, Sudoku, RSA and Rotor successes share the existing dense exact-time
+  audit codec with distinct method tags. If compaction would change a legacy
+  same-millisecond replay order, migration retains that entire old huntLog.
+  Each audit also rejects repeat success,
+  avoiding a duplicate guard. ROTATE retains these records across generations.
+- Classic cipher success and legacy guard-only rows use one bit per fixed roster
+  attacker, grouped by method/target/generation. A guard without a recorded time
+  remains untimed: migration does not invent an event in the replay.
+- The two independent HUNT counters use fixed roster slots and the same lossless
+  safe-integer codec as audit offsets. Counts above3 stay exact. Schema4–10
+  numeric keys are validated; schema1–3 logical keys first use the existing
+  converter. Reserved RPS refunds retain their own old-generation counts.
+- Latest HUNT verdicts use roster tuples. Legacy objects, including absent score
+  deltas, stay readable; an unknown historical delta is never reported as zero.
+
+Migration accepts schemas1–10, preserving existing Vigenère failure flags,
+lightning and booster decisions, RPS predictions and current-generation guards.
+Only a guard with a matching real audit record is removed as redundant. Other
+untimed guards remain; the existing retired-RSA-guard policy is unchanged.
+Malformed identities/counts fail without rewriting the saved row. Mixed-version
+workers must respect stateSchemaVersion11. Roll back only to a worker that
+understands these encodings; never relabel a row as version10. No platform
+configuration or cleanup change accompanies this migration.

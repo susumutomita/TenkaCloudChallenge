@@ -38,9 +38,9 @@
   },
   "difficulty": 5,
   "estimatedDuration": "75-105 分",
-  "shortDescription": "秘密を隠したまま「知っている」と示すには、進むのは速く戻るのは難しい一方通行が要る。曲線上の点に足し算を定義すると、それができる。ただし toy 曲線の多くは (0, 0) を本物の点として含むので、それを無限遠点に流用すると本物と区別できなくなる。",
+  "shortDescription": "署名の土台になる点の計算を作ります。まず7で割った余りで(1,3)が曲線上か確認。特別な点Oと普通の点(0,0)を分け、足し算から大きな数の計算へ進みます。",
   "description": "Week 3 の 2 問目。 前問で作った体の上に楕円曲線の群を組み、 point addition・doubling・scalar multiplication を例外ケースまで含めて実装する。\n\n本問題の toy 曲線は 7 つすべてが b = 0 であり、 したがって **(0, 0) が曲線上の実在の点** (位数 2) である。 単位元を (0, 0) で代用する実装は、 この点と単位元を区別できなくなる。 misconception-infinity-is-zero-coordinate が仮定の話ではなく、 その場で観測できる欠陥になるよう曲線を選んである。 fixture 生成側は 「判別式が 0 でない」 と 「y = 0 の点が存在する」 の両方を満たす曲線だけを持つ (後者は垂直接線の分岐が到達可能であるために必要で、 満たさない候補は候補から外した)。\n\n曲線が小さい (点の数が 23〜47 程度) ため、 hidden test は標本ではなく全数を回す。 on-curve は p^2 通りの座標対すべてを分類し、 addition は相異なる点の全順序対、 doubling は全点、 group axioms は群全体で検査する。 「一般式は合っているが単位元 / P+(-P) / y=0 で壊れる」 実装に隠れる場所が無い。\n\ntrace checkpoint は各 step の accumulator が 「そこまでに消費した下位ビット × P」 に一致することを検査する。 ビット順を逆にする実装はここで落ちる。\n\n最後の checkpoint は secp256k1。 公開されている標準パラメータ上で同じ抽象がそのまま動くことを見る。 検査する関係は 「どこかから写した値と一致するか」 ではなく、 パラメータの定義から従うもの (G が曲線上にある、 n*G = O、 (n-1)*G = -G、 (k+m)G = kG + mG) だけにしてある。\n\nconstant-time 性や side-channel 耐性は主張しない。 double-and-add の trace はビットに依存して分岐し、 それ自体が実鍵では side-channel になる。",
-  "instructions": "## 逆算できない一方通行を、点の足し算で作る\n\n秘密を隠したまま「それを知っている」と示すには、**片方向にしか進めない道** が要ります——進むのは速いのに、戻るのは誰にも速くできない道。曲線上の点 P を k 回足した `kP` は速く計算できます。ところが `kP` と P から `k` を戻す速い方法は、いまも知られていません。この一方通行が、このあとの署名すべて——Ethereum の署名や secp256k1 も——を支えています。\n\n背骨でいえば、k が **自分だけが知る答え**。P = kG を公開しても k は割り出せない、だから k を言わずに「知っている」と示せる。まずはその土台、**点の「足し算」を、例外まで含めて正しく作る** のがこの問題です。\n\n## (0, 0) は無限遠点ではない\n\n足し算には「0 の役」——足しても相手が変わらない点(無限遠点 O)——が要ります。素朴には (0, 0) を O に流用したくなる。ところが練習用の小さな曲線はほとんど b = 0 で、そのとき (0, 0) は方程式を満たす **本物の点** です。`y² = x³ + x (mod 23)` で P = (1, 5) を 2 倍すると 2P = (0, 0)、しかも y = 0 なのでもう一度 2 倍すると O(位数 2 の普通の点)。**O を (0, 0) で表すと、この曲線で本物の点と O を見分けられなくなります。**\n\n## 前提(割り算が不安なら、先に field-inverse へ)\n\n- **数の世界**: 座標はすべて素数 p で割ったあまり。割り算は「掛けて 1 になる相手」を掛ける(逆元。作り方は `ac26-w3-field-inverse`)。`(mod 11)` で 3 の相手は 4 なので 2 ÷ 3 = 8。\n- **言葉**: 無限遠点 O = 足し算の「0 の役」、P + O = P。逆元 −P = (x, −y)。位数 = 何回足すと O に戻るか。群 = 0 の役があり、どの元にも逆があり、足す順を変えても同じ集まり。checkpoint = 採点される小問(8 つ)。\n\n## 点を足す 4 通り(座標を足すのではない)\n\n曲線 `y² = x³ + ax + b (mod p)` の 2 点に第 3 の点を対応させる決まりを「足し算」と **呼ぶことにします**。使う公式はこれだけ(導き方は要りません)。違う 2 点なら **λ = (y₂ − y₁) ÷ (x₂ − x₁)**、同じ点(2 倍)なら **λ = (3x₁² + a) ÷ (2y₁)**、どちらも **x₃ = λ² − x₁ − x₂、y₃ = λ(x₁ − x₃) − y₁**。例外は、x₁ = x₂ かつ y₁ + y₂ ≡ 0 のとき和は **O**。\n\n紙で 1 回(`y² = x³ + x + 6 (mod 11)`、P = (2, 7) を 2 倍): λ = (3·2² + 1) ÷ (2·7) = 13 ÷ 14 ≡ 2 ÷ 3 = 2 × 4 = 8。x₃ = 8² − 2 − 2 = 60 ≡ 5、y₃ = 8(2 − 5) − 7 = −31 ≡ 2。**2P = (5, 2)**(検算 5³ + 5 + 6 = 136 ≡ 4 = 2²)。\n\n## 山は、O を本物の点と混ぜないこと\n\nだから **O は、x も y も `None` の点** で表します。(0, 0) は使えません。`Point.is_infinity` が True になるのは O のときだけ。この 1 点を外すと、上の b = 0 の曲線で崩れます。これがこの問題の芯で、identity checkpoint はここだけを見ています。\n\n## 最初の一手\n\nParticipant Portal で **「起動」** を押すと、同じ画面に **問題エディタ**(`curve.py`)が出ます。\n\n**「証拠を確認」** を押すと 5 つ出ます。①health token(提出しない)②この環境の曲線(p・a・b)③曲線上の点の個数(O を含む群の大きさ)と y = 0 の点の一覧 ④点の最初の 8 個((0, 0) があれば注意書きも)⑤k = 13 の下ごしらえ(13 を 2 進、下の位からのビット `[1, 0, 1, 1]`、ステップ 4、trace 1 行の形。値そのものは出ません)。\n\n**紙で**(提出欄なし): 曲線の式に x = 0, y = 0 を入れ、(0, 0) が曲線上かを確かめる。あるなら上の手順で 2 倍すると何になるかも。ここが分かれば identity checkpoint で迷いません。\n\n## 答えるもの — checkpoint は 8 つ\n\n書き換えるのは `curve.py` だけ。エラー名 `NotOnCurve`・`CurveMismatch`、`Point`・`Curve` のクラス枠、`double_and_add_trace` の枠は入っています。\n\n**約束**(starter のとおり):\n\n- `Curve(p, a, b)`。`Curve.contains(点)` は曲線上かを True/False で返し、**O には必ず True**。`Curve.point(x, y)` は点を作り、曲線上でなければ `NotOnCurve`。`Curve.infinity()` は O。\n- **O は x・y とも `None` の `Point`**。(0, 0) は本物の点なので使えない。`Point.is_infinity` が True なのは O のときだけ。\n- 返す点の x・y は毎回 0 以上 p 未満に。`-P`(`__neg__`)は (x, −y mod p)、`-O` は O。\n- `P + Q`(`__add__`)は上の 4 通り。違う曲線の点どうしは `CurveMismatch`。\n- `P.scalar_mul(k)`(`k * P` や `P * k` でも)は P を k 個足したもの。k = 0 は O、k が負なら `-P` を |k| 倍。**double-and-add** で書く(k を 2 進で下の位から見て、ビットが 1 なら足し、毎回「足す相手」を 2 倍)。1 個ずつ足すと secp256k1 の 256 桁が終わりません。\n- `double_and_add_trace(point, scalar)` は 1 ビット 1 行のリスト。行数は scalar の 2 進の桁数で、**下の位から**。1 行は `{\"index\", \"bit\", \"accumulator_before\", \"addend_before\", \"added\", \"accumulator_after\", \"addend_after\", \"on_curve\"}`(点は O なら文字列 `\"O\"`、それ以外は `\"(x, y)\"`)。ステップ i の直後、`accumulator_after` は「k の下から i+1 桁が表す数 × P」、`addend_after` は「2^(i+1) × P」、`on_curve` は True。k = 13(2 進 1101、下から `[1, 0, 1, 1]`)なら 4 行、`accumulator_after` は 1P → 1P → 5P → 13P、`addend_after` は 2P → 4P → 8P → 16P、`added` は True → False → True → True。\n\n1. **on-curve**(30) — `contains` と `point`。曲線が小さいので **p × p 通りの組すべて** で確認。曲線上でない組は `NotOnCurve`。\n2. **identity**(30) — `infinity()` / `is_infinity` / `__neg__`。P + O = O + P = P、P + (−P) = O、−O = O。(0, 0) がある曲線で、それが O と等しくなってはいけません。\n3. **add**(45) — 違う 2 点の足し算。**相異なる点の組すべて**(順番違いも)。\n4. **double**(45) — 同じ点どうし。**すべての点** で確認し、y = 0 も必ず含む。もとの点を書き換える実装も落ちます。\n5. **scalar**(45) — `scalar_mul`。k = 0、k = 1、負の k も。\n6. **trace**(35) — `double_and_add_trace`。上の形と値で 1 行ずつ。\n7. **properties**(40) — **見たことのない曲線** の全体で、閉じているか・順序を変えても同じか・結合するか・(k + m)P = kP + mP・(k × m)P = k(mP)。違う曲線の点を混ぜたら `CurveMismatch`。\n8. **secp256k1**(30) — 同じコードが、実際に使われている 256 ビットの曲線でも動くか。パラメータは採点側が渡します。\n\n各 checkpoint の **「提出 (+N pt)」** を押すと、そのときの `curve.py` が送られて採点(打ち込む欄なし)。8 つは独立採点、まちがえるごとに −15 点。**「公開テストを実行」** は下見(違う 2 点の足し算と O だけ。2 倍も y = 0 も k 倍も secp256k1 も触りません)、**「初期状態に戻す」** で元の `curve.py` に戻ります。\n\n## ここで作った足し算に、署名がそのまま乗る\n\n例外まで含めて足し算を作り、見たことのない曲線でも群の決まりが成り立ち、256 ビットの実パラメータでも動いたら終わりです。この足し算と k 倍が、次からの署名(`ac26-w3-schnorr` 以降)の土台。なお、ここで書く trace はビットの値で処理が分かれます。本物の鍵ではその分かれ方自体が漏れの手がかりになるので、これは学習用で、そのまま真似する手本ではありません。",
+  "instructions": "## 前提 — 署名に使う「点の計算」を修理する\n\nあなたは署名プログラムの計算担当です。`curve.py` は点を足しても元の点を返す未完成の状態。**「起動」→ 問題エディタ →「証拠を確認」**で自分の曲線を見て、まず点が曲線上かを判定します。「公開テストを実行」で確認し、小問の提出ボタンで採点します。\n\n**楕円曲線**は、ここでは `y² = x³ + a*x + b` を、素数pで割った余りで満たす座標(x,y)の集まりです。p・a・bが曲線の設定です。pは3より大きく、`(4*a**3+27*b**2)%p != 0` を満たす設定が渡されます。この条件は点の足し算を定めるためのものです。\n\n点Gをk回足した点をQ=kGと書きます。これが後の署名の計算の土台です。**小さな練習用曲線では、kを順に試して逆算できます。** 適切な大きな曲線では逆算が難しいと考えられています。この問題で署名やゼロ知識証明そのものを作るわけではありません。\n\n## 数と点の約束\n\n| 名前 | 意味 |\n|---|---|\n| 法p / mod p / `%p` | pで割った余りを使うこと。負の数も0以上p未満へ直す |\n| 数の逆元 | 掛けて余り1になる相手。7で割るなら6の逆元は6（6×6=35+1） |\n| O（無限遠点・単位元） | 足しても相手を変えない特別な点。P+O=P。座標は両方None |\n| −P（点の逆元） | Pと足すとOになる点。(x,(-y)%p)。−O=O |\n| 群 | 足した結果も中に残る・単位元がある・逆元がある・括弧を変えても同じ、を満たす集まり |\n| 位数 | 点ならOへ戻る最小の正の回数。群ならOを含む点の個数 |\n| ビット | 二進表記の一桁（0か1）。2で割った余りを繰り返し読むと下の桁から得られる |\n| checkpoint | 独立に採点される小問。ここでは8問 |\n\nこの点の足し算では、括弧だけでなく順番も交換できます。異なる曲線の点は混ぜません。同じ(p,a,b)で作った別のCurveは同じ曲線です。点の等価性とhash（Pythonが値を辞書などに格納するとき使う整数）も曲線の設定と座標で決めます。等しい点のhashは同じにします。\n\n**割り算の作り方**：分母dを余りに直し、掛けて余り1になる数uを使います。分子vなら `(v*u)%p`。Pythonの `pow(d,-1,p)` はこのuを計算する組み込み関数です。大きなpでも候補を1個ずつ探しません。dが0のときは使えないので、以下の例外を先に分けます。逆元を作るアルゴリズム自体は前の `field-inverse` で扱います。\n\n## Oと(0,0)を分ける\n\n7で割った余りを使う `y²=x³+x` では、(0,0)も式を満たす普通の点です。Oの代わりに使えません。\n\n```text\nP=(1,3) → 2P=(0,0) → 4P=O\n普通の点    普通の点     (None,None)\n```\n\n## 点を足す 4 通り(座標を足すのではない)\n\n曲線 `y² = x³ + ax + b (mod p)` の 2 点に第 3 の点を対応させる決まりを「足し算」と **呼ぶことにします**。使う公式はこれだけ(導き方は要りません)。違う 2 点なら **λ = (y₂ − y₁) ÷ (x₂ − x₁)**、同じ点(2 倍)なら **λ = (3x₁² + a) ÷ (2y₁)**、どちらも **x₃ = λ² − x₁ − x₂、y₃ = λ(x₁ − x₃) − y₁**。例外は、x₁ = x₂ かつ `(y₁+y₂)%p=0` のとき和は **O**。\n\n紙で1回：7で割る曲線 `y²=x³+x` の P=(1,3) を2倍します。分子は `3×1²+1=4`、分母は `2×3=6`。6の逆元は6なので、λは `4×6` を7で割った余り3です。x₃は `3²−1−1=7` の余り0、y₃は `3×(1−0)−3=0`。したがって **2P=(0,0)**。もう一度2倍すると y=0 の例外で **4P=O** です。\n\n## 最初の一手\n\nParticipant Portal で **「起動」** を押すと、同じ画面に **問題エディタ**(`curve.py`)が出ます。\n\n**「証拠を確認」** を押すと 5 つ出ます。①health token(提出しない)②この環境の曲線(p・a・b)③曲線上の点の個数(O を含む群の大きさ)と y = 0 の点の一覧 ④点の最初の 8 個((0, 0) があれば注意書きも)⑤k = 13 の下ごしらえ(13 を 2 進、下の位からのビット `[1, 0, 1, 1]`、ステップ 4、trace 1 行の形。値そのものは出ません)。\n\n**紙で**(提出欄なし): 曲線の式に x = 0, y = 0 を入れ、(0, 0) が曲線上かを確かめる。あるなら上の手順で 2 倍すると何になるかも。Oと座標を持つ点を区別してから、コードへ進みます。\n\n## 答えるもの — checkpoint は 8 つ\n\n書き換えるのは `curve.py` だけ。エラー名 `NotOnCurve`・`CurveMismatch`、`Point`・`Curve` のクラス枠、`double_and_add_trace` の枠は入っています。\n\n**約束**(starter のとおり):\n\n- `Curve(p, a, b)`。`Curve.contains(点)` は曲線上かを True/False で返し、**OにはTrue**。`Curve.point(x, y)` は点を作り、曲線上でなければ `NotOnCurve`。`Curve.infinity()` は O。\n- **O は x・y とも `None` の `Point`**。(0, 0) は本物の点なので使えない。`Point.is_infinity` が True なのは O のときだけ。\n- 返す点の x・y は毎回 0 以上 p 未満に。`-P`(`__neg__`)は (x, −y mod p)、`-O` は O。\n- `P + Q`(`__add__`)は上の 4 通り。違う曲線の点どうしは `CurveMismatch`。\n- `P.scalar_mul(k)`(`k * P` や `P * k` でも)は P を k 個足したもの。k = 0 は O、k が負なら `-P` を |k| 倍。**double-and-add** で書く(k を 2 進で下の位から見て、ビットが 1 なら足し、毎回「足す相手」を 2 倍)。1 個ずつ足すと secp256k1 の256ビットの数が終わりません。\n- `double_and_add_trace(point, scalar)` は0以上の整数scalarが対象です。0なら空リスト。正なら1ビット1行です。負の回数はscalar_mulで扱います。indexは0から始まる整数、bitも整数、addedとon_curveはTrue/Falseです。行数はscalarの2進の桁数で、**下の位から**。1 行は `{\"index\", \"bit\", \"accumulator_before\", \"addend_before\", \"added\", \"accumulator_after\", \"addend_after\", \"on_curve\"}`(点は O なら文字列 `\"O\"`、それ以外は `\"(x, y)\"`)。accumulatorはここまで足した点、addendは今回足す候補の点です。beforeは操作前、afterは操作後。ステップiの直後、`accumulator_after` は「k の下から i+1 桁が表す数 × P」、`addend_after` は「2^(i+1) × P」、`on_curve` は True。k=5(2進101、下から `[1,0,1]`)なら3行です。`accumulator_after` は1P→1P→5P、`addend_after` は2P→4P→8P、`added` はTrue→False→True。\n\n| 小問 | 直す場所 | 確かめる動き |\n|---|---|---|\n| on-curve (30点) | contains / point | 式を満たす点を受け入れ、違う点をNotOnCurveで断る |\n| identity (30点) | infinity / is_infinity / __neg__ | P+O=P、P+(−P)=O。(0,0)をOにしない |\n| add (45点) | __add__ | 違う2点に公式を使う |\n| double (45点) | __add__ | 同じ点を2倍。y=0ならO |\n| scalar (45点) | scalar_mul / __mul__ / __rmul__ | 0倍・負の回数も含め、2倍と足し算を組み合わせる |\n| trace (35点) | double_and_add_trace | 各桁の前後を記録する。0なら空リスト |\n| properties (40点) | 上の操作の組合せ | 括弧・順番・同じ設定の別Curveを使っても結果が一致する |\n| secp256k1 (30点) | 同じコード | 大きな数の設定でも計算が完了する |\n\n各 checkpoint の **「提出 (+N pt)」** を押すと、そのときの `curve.py` が送られて採点(打ち込む欄なし)。8 つは独立採点、まちがえるごとに −15 点。**「公開テストを実行」** は、小さい点の所属・O・足し算・2倍・k倍・計算過程・曲線の比較・画面の点を確認します。未公開の設定や256ビットの計算すべてを保証するものではありません。**「初期状態に戻す」** で元の `curve.py` に戻ります。\n\n## ここで作った足し算に、署名がそのまま乗る\n\n例外まで含めて足し算を作り、見たことのない曲線でも群の決まりが成り立ち、256 ビットの実パラメータでも動いたら終わりです。この足し算と k 倍が、次からの署名(`ac26-w3-schnorr` 以降)の土台。なお、ここで書く trace はビットの値で処理が分かれます。本物の鍵ではその分かれ方自体が漏れの手がかりになるので、これは学習用で、そのまま真似する手本ではありません。\n\n\n\n\n## 実行環境\n\nPython標準ライブラリの次のモジュールを使えます：`collections, copy, dataclasses, decimal, enum, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, re, statistics, time, typing`。追加パッケージのインストールは不要です。採点用のファイルや別プロセスの内容へのアクセス、外部通信、新しいプロセスの作成はできません。この一覧以外のモジュールは読み込めない場合があります。\n",
   "writeup": "## なぜ (0, 0) を単位元に使えないのか\n\nこの問題の toy 曲線は多くが b = 0 で、 その場合 (0, 0) は y^2 = x^3 + ax を満たす。 つまり曲線上の実在の点であり、 しかも y = 0 なので位数 2 の点である。 単位元をこの座標で代用すると、 その点と単位元が区別できなくなる。\n\n「無限遠点だから (0,0) でいいだろう」 は、 曲線を選べば本当に壊れる。 hidden test は (0, 0) が曲線上にある設定で、 それが単位元と等しくないことを名指しで検査する。\n\n## 4 つの場合分け\n\n加算は 1 つの式ではない。\n\n1. どちらかが単位元 → もう一方を返す\n2. x が同じで y が符号反転 → 単位元 (y = 0 の点の doubling を含む)\n3. 同じ点 → 接線の傾き (3x^2 + a) / 2y\n4. それ以外 → 弦の傾き (y2 - y1) / (x2 - x1)\n\n3 を 4 の特殊ケースとして書くと、 分子も分母も 0 になって割れない。 doubling が別式なのは効率のためではなく、 弦が定義できないからである。\n\n## 全数検査\n\n曲線が小さいので、 検査は標本ではなく全数で行う。 on-curve は p^2 通りの座標対すべて、 addition は相異なる点の全順序対、 doubling は全点、 group axioms は群全体。 一般ケースだけ合っている実装が隠れる場所は無い。\n\n## trace がビット順を捕まえる仕組み\n\ndouble-and-add は下位ビットから消費する。 step i の直後、 accumulator は 「下位 i+1 ビットが表す数 × P」 でなければならない。 trace checkpoint はこれを各行で検査するので、 上位ビットから消費する実装は最初の行で落ちる。 「最終結果だけ合っていればよい」 では通らない。\n\n## secp256k1 で何を検査しているか\n\n最後の checkpoint は公開標準パラメータ上で同じ抽象を動かす。 検査する関係は、 どこかから写した期待値との一致ではなく、 パラメータの定義から従うものだけにしてある。\n\n- G が曲線上にある\n- n は群の位数なので n*G = O\n- したがって (n-1)*G = -G、 (n+1)*G = G\n- (k+m)G = kG + mG\n\n写した値が 1 つも要らないので、 転記ミスや出所不明の定数が混入する余地が無い。\n\n## constant-time ではない\n\ndouble-and-add はビットに依存して分岐し、 加算の回数がビットの立ち方で変わる。 実鍵に対しては、 その性質そのものが side-channel になる。 ここでの目的はアルゴリズムを読めるようにすることであり、 production 実装の手本ではない。\n\n## 次につながるところ\n\n次の問題で Schnorr を組む。 署名の検証式は scalar multiplication と点加算だけでできており、 ここで作った群がそのまま土台になる。",
   "tags": [
     "advanced-cryptography-2026",
@@ -83,7 +83,24 @@
         "input": "multiline",
         "label": "曲線上かどうかを判定する",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "on-curve-hint-1",
+            "content": "点を足す前に、使える点か確認します。楕円曲線とは、この問題では座標の組が決まった余りの式を満たす集まりです。式を満たさない組は受け付けません。",
+            "penalty": 3
+          },
+          {
+            "id": "on-curve-hint-2",
+            "content": "7で割った余りを使い、y²=x³+x とします。(1,3)なら左3²=9の余り2、右1³+1=2で一致。(1,1)なら1と2で不一致。一般には (y*y)%p == (x*x*x+a*x+b)%p です。% は割った余りを返します。",
+            "penalty": 3
+          },
+          {
+            "id": "on-curve-hint-3",
+            "content": "問題エディタの curve.py で Curve.contains を開きます。OならTrue、それ以外は self.p・self.a・self.b と point.x・point.y を式へ入れます。Curve.point は座標を余りに直してから判定し、不一致なら NotOnCurve。保存したコードを「曲線上かどうかを判定する」の提出ボタンで確認します。",
+            "penalty": 3
+          }
+        ]
       },
       {
         "id": "identity",
@@ -94,8 +111,18 @@
         "hints": [
           {
             "id": "identity-hint-1",
-            "content": "`inspect` の点の一覧に (0, 0) はあるか。 あるなら、 それを単位元に使うと何が起きるか。",
-            "penalty": 15
+            "content": "普通の数の0のように、足しても相手を変えない特別な点をOと呼びます。これは座標を持つ普通の点とは別です。反対の点−Pを足すとOへ戻ります。",
+            "penalty": 3
+          },
+          {
+            "id": "identity-hint-2",
+            "content": "7で割った余りで P=(1,3) の反対は (1,4)。3+4の余りが0だからです。P+O=P、P+(−P)=O。(0,0)は y²=x³+x を満たす普通の点なので、Oの代用品にできません。",
+            "penalty": 3
+          },
+          {
+            "id": "identity-hint-3",
+            "content": "Curve.infinity は Point(self,None,None) を返します。Point.is_infinity は両座標がNoneのときだけTrue。__neg__ はOならO、普通の点なら(x,(-y)%p)。__add__ では曲線の一致を確認した後、Oとの足し算と反対同士を先に処理し、「単位元と逆元」へ提出します。",
+            "penalty": 3
           }
         ]
       },
@@ -104,7 +131,24 @@
         "input": "multiline",
         "label": "相異なる点を足す",
         "points": 45,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "add-hint-1",
+            "content": "点の足し算は座標を足す操作ではありません。二つの点から、同じ曲線上の別の点を作る決まりです。普通の数で描くと二点を通る直線と曲線の交点を上下反転する図になります。ここでは同じ式を余りで計算します。",
+            "penalty": 3
+          },
+          {
+            "id": "add-hint-2",
+            "content": "y²=x³+x、割る数7で P=(1,3)、Q=(0,0)。λ=(0−3)÷(0−1)。分子の余り4、分母6、6の逆元6なのでλ=4×6の余り3。x₃=3²−1−0の余り1、y₃=3×(1−1)−3の余り4。和は(1,4)。",
+            "penalty": 3
+          },
+          {
+            "id": "add-hint-3",
+            "content": "curve.py の Point.__add__ で、O・反対同士・同じ点を先に分けます。残った異なるxの二点には問題文のλとx₃・y₃の式を使います。入力点を書き換えず、新しい点を返します。「相異なる点を足す」へ提出し、失敗した規則を確認します。",
+            "penalty": 3
+          }
+        ]
       },
       {
         "id": "double",
@@ -115,13 +159,18 @@
         "hints": [
           {
             "id": "double-hint-1",
-            "content": "弦の傾きに P = Q を代入すると分子も分母も 0 になる。 接線の傾きは別に導く必要がある。",
-            "penalty": 20
+            "content": "同じ点を足すと、異なる二点の式ではゼロで割ってしまいます。そのため同じ点専用の式があります。ただしyが0の点は自分自身が反対の点なので、二倍はOです。",
+            "penalty": 3
           },
           {
             "id": "double-hint-2",
-            "content": "y = 0 の点では接線が垂直になる。 その点を 2 倍すると何になるか。",
-            "penalty": 2
+            "content": "y²=x³+x、割る数7、P=(1,3)。λ=(3×1²+1)÷(2×3)=4÷6、6の逆元6を掛けて余り3。x₃=3²−1−1の余り0、y₃=3×(1−0)−3=0。2P=(0,0)。さらに二倍するとOです。",
+            "penalty": 3
+          },
+          {
+            "id": "double-hint-3",
+            "content": "Point.__add__ で同じ点を扱う前に、xが同じで(y₁+y₂)%pが0ならOを返します。それ以外の同じ点には λ=(3*x*x+a)*inverse(2*y) の余りを使います。以後のx₃・y₃は通常の式と共通。「同じ点を足す」へ提出します。",
+            "penalty": 3
           }
         ]
       },
@@ -134,8 +183,18 @@
         "hints": [
           {
             "id": "scalar-hint-1",
-            "content": "k = 0 と k = 1 を先に決める。 負の k は 1 つしか妥当な意味を持たない。",
-            "penalty": 20
+            "content": "kPはPをk回足した点です。一回ずつ足す代わりに、足す相手をP・2P・4Pと倍にします。kを2で割った余りで「今の相手を足すか」を決めれば、大きなkでも短い回数で進めます。",
+            "penalty": 3
+          },
+          {
+            "id": "scalar-hint-2",
+            "content": "5を2で割ると商2・余り1、2は商1・余り0、1は商0・余り1。余りを読む順は1→0→1で、5P=P+4Pです。0P=O、(−3)P=3(−P)。",
+            "penalty": 3
+          },
+          {
+            "id": "scalar-hint-3",
+            "content": "scalar_mul で result=O、addend=自分の点、remaining=abs(scalar) から始めます。負ならaddendを反対の点にします。remainingが0になるまで、余り1ならresultへaddendを足し、addendを二倍、remainingを2で割った商へ。resultを返して「double-and-addでk倍する」へ提出します。",
+            "penalty": 3
           }
         ]
       },
@@ -148,8 +207,18 @@
         "hints": [
           {
             "id": "trace-hint-1",
-            "content": "step i の直後、 accumulator は 「下位 i+1 ビットが表す数 × P」 のはず。 ビットは下位から消費する。",
-            "penalty": 15
+            "content": "計算途中の記録をtraceと呼びます。答えだけでなく「どの倍を足したか」が見えると、点の計算と桁の読み順を別々に点検できます。各行に操作前と操作後の二つの点を残します。",
+            "penalty": 3
+          },
+          {
+            "id": "trace-hint-2",
+            "content": "k=5の余り列は1,0,1。行の後の(result,addend)は(P,2P)→(P,4P)→(5P,8P)。addedはTrue,False,True。各行のindexは0,1,2です。",
+            "penalty": 3
+          },
+          {
+            "id": "trace-hint-3",
+            "content": "double_and_add_trace でscalar_mulと同じ反復を使い、更新前を accumulator_before・addend_before、後を accumulator_after・addend_after に保存します。bitは余り、addedは足したか、on_curveは更新後の点のcontains結果。点は\"O\"か\"(x, y)\"で文字列化し、行リストを「各ビットで何が起きたかを出す」へ提出します。",
+            "penalty": 3
           }
         ]
       },
@@ -158,23 +227,57 @@
         "input": "multiline",
         "label": "見たことのない曲線で群の公理を通す",
         "points": 40,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "properties-hint-1",
+            "content": "少数の正答だけでは、点の足し算がいつでも使えるとは言えません。結果が同じ曲線に残ること、Oと反対の点が働くこと、括弧を動かしても結果が変わらないことを合わせて群の規則と呼びます。この点の足し算では順番も交換できます。",
+            "penalty": 3
+          },
+          {
+            "id": "properties-hint-2",
+            "content": "P+O=P、P+(−P)=O、(P+Q)+R=P+(Q+R)、P+Q=Q+P。k倍との関係は(2+3)P=2P+3P、(2×3)P=2(3P)。曲線の設定が違う点は、この規則で混ぜる対象ではありません。",
+            "penalty": 3
+          },
+          {
+            "id": "properties-hint-3",
+            "content": "curve.py の __eq__・__hash__・__add__ が Curve.params と座標を使っているか確認します。同じ(p,a,b)の別オブジェクトは同じ曲線、違う設定の足し算はCurveMismatch。定数の座標に依存する分岐を外し、「見たことのない曲線で群の公理を通す」へ提出します。",
+            "penalty": 3
+          }
+        ]
       },
       {
         "id": "secp256k1",
         "input": "multiline",
         "label": "実運用パラメータでも同じ抽象を動かす",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "secp256k1-hint-1",
+            "content": "小さな例で作った規則を、大きな数にもそのまま使う段です。secp256k1は実際の署名にも使われる曲線の名前。暗号の安全性には十分に大きな数などの条件が必要で、小さな練習用曲線は鍵を隠せません。",
+            "penalty": 3
+          },
+          {
+            "id": "secp256k1-hint-2",
+            "content": "5Pを作る反復は余り1,0,1の3段。256ビットとは二進表記で最大256桁という意味です。同じ手順なら最大256段で、Pを数そのものの回数だけ足す必要はありません。",
+            "penalty": 3
+          },
+          {
+            "id": "secp256k1-hint-3",
+            "content": "scalar_mul の反復が remaining//2 で進み、割り算が問題文の逆元の方法を使うか確認します。p個すべての候補を探す方法は大きなpに使えません。採点側が渡すCurve.p・a・bをそのまま使い、「実運用パラメータでも同じ抽象を動かす」へ提出します。学習用コードを実鍵の署名に流用しないでください。",
+            "penalty": 3
+          }
+        ]
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "(0, 0) is not the point at infinity",
-      "shortDescription": "To show you know a secret without revealing it, you need a one-way street: fast forward, hard back. Defining an addition on curve points builds one. But most toy curves contain (0, 0) as a real point, so borrowing it for the point at infinity leaves you unable to tell them apart.",
+      "shortDescription": "Build point arithmetic used by signatures. Start by checking (1,3) with remainders after division by 7. Keep the special point O separate from (0,0), then extend addition to large inputs.",
       "description": "Second problem of Week 3. On the field built in the previous problem, assemble the elliptic-curve group: point addition, doubling and scalar multiplication, exception cases included.\n\nAll seven of this problem's toy curves have b = 0, so **(0, 0) is a real point on the curve** (of order 2). An implementation that stands in (0, 0) for the identity can no longer tell that point and the identity apart. The curves are chosen so misconception-infinity-is-zero-coordinate is not a hypothetical but a defect observable on the spot. The fixture generator keeps only curves satisfying both \"non-zero discriminant\" and \"a point with y = 0 exists\" (the latter is needed so the vertical-tangent branch is reachable; candidates without it were dropped).\n\nThe curves are small (23–47 points), so the hidden tests are exhaustive rather than sampled: on-curve classifies all p^2 coordinate pairs, addition takes every ordered pair of distinct points, doubling every point, and the group axioms are checked over the whole group. There is nowhere for an implementation that is \"right in the general formula but broken at the identity / P+(-P) / y=0\" to hide.\n\nThe trace checkpoint verifies that each step's accumulator equals \"the low bits consumed so far × P\". An implementation with the bit order reversed fails here.\n\nThe final checkpoint is secp256k1 — the same abstraction running unchanged on published standard parameters. The relations checked are only those that follow from the parameters' definition (G is on the curve, n*G = O, (n-1)*G = -G, (k+m)G = kG + mG), never \"does it match a value copied from somewhere\".\n\nNo constant-time or side-channel claim is made. The double-and-add trace branches on bits, which on a real key would itself be a side channel.",
-      "instructions": "## A one-way street, built from adding points\n\nTo show you hold a secret without revealing it, you need **a street you can only walk one way** — fast forward, and not fast for anyone to walk back. Adding a curve point P to itself k times, `kP`, is fast. Recovering `k` from `kP` and P has no fast method known to anyone. That one-way street holds up every signature ahead of you — Ethereum's own, and secp256k1.\n\nIn the backbone's terms, k is the answer **only you know**: publish P = kG and no one can back out k, so you can show you know k without saying it. First you build the ground for it — **the point \"addition\", done correctly, exceptional cases included.**\n\n## (0, 0) is not the point at infinity\n\nAddition needs a \"role of zero\" — a point that changes nothing when added, the point at infinity O. The naive move is to reuse (0, 0) for it. But the small practice curves almost all have b = 0, and then (0, 0) satisfies the equation and is a **real point**. On `y² = x³ + x (mod 23)`, doubling P = (1, 5) gives 2P = (0, 0), and since its y = 0, doubling again gives O (an ordinary point of order 2). **Represent O as (0, 0) and you can no longer tell a real point from O on this curve.**\n\n## Before you start (shaky on division? do field-inverse first)\n\n- **The number world**: coordinates are all remainders mod a prime p. Division is multiplying by \"the partner that makes 1\" (the inverse; built in `ac26-w3-field-inverse`). Mod 11 the partner of 3 is 4, so 2 ÷ 3 = 8.\n- **Words**: the point at infinity O = the \"role of zero\", P + O = P. The inverse −P = (x, −y). Order = how many additions return to O. Group = a set with a role of zero, an inverse for each element, and a result independent of the order you add in. checkpoint = one graded question (eight here).\n\n## Four ways to add points (not adding coordinates)\n\nA rule assigns a third point to two points on `y² = x³ + ax + b (mod p)`, and that rule is what we **call** \"adding\". These are the only formulas (no derivation asked). Two different points: **λ = (y₂ − y₁) ÷ (x₂ − x₁)**. A point doubled: **λ = (3x₁² + a) ÷ (2y₁)**. Either way: **x₃ = λ² − x₁ − x₂, y₃ = λ(x₁ − x₃) − y₁**. The exception: when x₁ = x₂ and y₁ + y₂ ≡ 0, the sum is **O**.\n\nOnce on paper (`y² = x³ + x + 6 (mod 11)`, doubling P = (2, 7)): λ = (3·2² + 1) ÷ (2·7) = 13 ÷ 14 ≡ 2 ÷ 3 = 2 × 4 = 8. x₃ = 8² − 2 − 2 = 60 ≡ 5, y₃ = 8(2 − 5) − 7 = −31 ≡ 2. **2P = (5, 2)** (check: 5³ + 5 + 6 = 136 ≡ 4 = 2²).\n\n## The crux: never let O blur into a real point\n\nSo **O is the point whose x and y are both `None`**. (0, 0) cannot serve. `Point.is_infinity` is True only for O. Miss this one point and the b = 0 curve above breaks you. It is the heart of the problem, and the identity checkpoint looks only here.\n\n## First move\n\nIn Participant Portal, select **起動 (Start)**; the problem editor (`curve.py`) appears on the same page.\n\nPress **Inspect evidence**. Five things: ① a health token (not submitted), ② this deployment's curve (p, a, b), ③ how many points are on the curve (group size, O counted) and the y = 0 points, ④ the first eight points (with a note if (0, 0) is among them), ⑤ the setup for k = 13 (13 in binary, bits low-first `[1, 0, 1, 1]`, step count 4, one trace row's shape — the values themselves are not printed).\n\n**On paper** (nothing to submit): put x = 0, y = 0 into the curve equation and see whether (0, 0) is on it; if it is, double it by the steps above. Knowing this makes the identity checkpoint straightforward.\n\n## What you answer — eight checkpoints\n\n`curve.py` is the only file you edit. The error names `NotOnCurve` and `CurveMismatch`, the `Point` and `Curve` skeletons, and the `double_and_add_trace` skeleton are there.\n\n**The contract** (as in the starter):\n\n- `Curve(p, a, b)`. `Curve.contains(point)` returns True/False for being on the curve and is **always True for O**. `Curve.point(x, y)` builds a point, raising `NotOnCurve` if it is not on the curve. `Curve.infinity()` is O.\n- **O is a `Point` whose x and y are both `None`.** (0, 0) is a real point and cannot serve. `Point.is_infinity` is True only for O.\n- Returned x and y are folded into 0..p−1 each time. `-P` (`__neg__`) is (x, −y mod p); `-O` is O.\n- `P + Q` (`__add__`) is the four cases above. Points from different curves raise `CurveMismatch`.\n- `P.scalar_mul(k)` (also `k * P`, `P * k`) is P added k times. k = 0 is O; a negative k multiplies `-P` by |k|. Write it as **double-and-add** (read k in binary from the low bit, add when the bit is 1, double the addend each step). Adding one at a time never finishes secp256k1's 256 digits.\n- `double_and_add_trace(point, scalar)` is a list of one row per bit. Rows equal scalar's binary digit count, **low bit first**. A row is `{\"index\", \"bit\", \"accumulator_before\", \"addend_before\", \"added\", \"accumulator_after\", \"addend_after\", \"on_curve\"}` (points written `\"O\"` for O, else `\"(x, y)\"`). Right after step i, `accumulator_after` is \"the low i+1 bits of k, times P\", `addend_after` is \"2^(i+1) × P\", `on_curve` is True. For k = 13 (binary 1101, low-first `[1, 0, 1, 1]`), four rows: `accumulator_after` runs 1P → 1P → 5P → 13P, `addend_after` runs 2P → 4P → 8P → 16P, `added` runs True → False → True → True.\n\n1. **on-curve** (30) — `contains` and `point`, over **all p × p coordinate pairs**. Pairs not on the curve are refused with `NotOnCurve`.\n2. **identity** (30) — `infinity()` / `is_infinity` / `__neg__`. P + O = O + P = P, P + (−P) = O, −O = O. On a curve with (0, 0), it must not equal O.\n3. **add** (45) — adding two different points, over **every pair of distinct points**, both orders.\n4. **double** (45) — a point added to itself, over **every point**, y = 0 always included. Mutating the given point also fails.\n5. **scalar** (45) — `scalar_mul`, including k = 0, k = 1 and negative k.\n6. **trace** (35) — `double_and_add_trace`, checked row by row against the shape and values above.\n7. **properties** (40) — over the whole of an **unseen curve**: closure, commutativity, associativity, (k + m)P = kP + mP, (k × m)P = k(mP). Mixing two curves' points raises `CurveMismatch`.\n8. **secp256k1** (30) — the same code, over the 256-bit curve in real-world use. The grader supplies the parameters.\n\nEach checkpoint's **提出 (Submit, +N pt)** sends the current `curve.py` and grades it (nothing to type). The eight are graded independently; each wrong try costs 15 points. **Run public tests** is a preview (only adds two distinct points and O — never doubles, never y = 0, never a scalar, never secp256k1); **Restore starter** brings back the original `curve.py`.\n\n## Signatures sit straight on top of this addition\n\nYou are done when the addition handles the exceptions, the group laws hold on a curve you have never seen, and the same code runs on the 256-bit real parameters. This addition and \"k times\" are the ground for the signatures from `ac26-w3-schnorr` on. One caveat: the trace you write branches on each bit's value; with a real key that branching is itself a leak, so this is a learning implementation, not a template to copy.",
+      "instructions": "## Before you start — repair the point arithmetic used by signatures\n\nYou maintain the arithmetic behind a signing program. The unfinished `curve.py` currently returns the original point when asked to add points. Open **Deploy → problem editor → Inspect evidence** to see your curve. Start by deciding whether a pair of coordinates belongs to it. Use **Run public tests**, then a checkpoint's submit button.\n\nHere an **elliptic curve** is the set of pairs (x,y) satisfying `y² = x³ + a*x + b` when both sides are reduced to their remainders after division by a prime p. The settings are p,a,b. The supplied p is greater than 3 and `(4*a**3+27*b**2)%p != 0`; this condition lets us define the point addition below.\n\nAdding a fixed point G to itself k times gives Q=kG. This is a building block for later signatures. **Small classroom curves allow you to recover k by trying possibilities.** For suitably chosen large curves, reversing the calculation is believed difficult. This exercise builds the arithmetic, not a signature or a zero-knowledge proof.\n\n## Names and rules\n\n| Name | Meaning |\n|---|---|\n| modulus p, mod p, `%p` | Take the remainder after division by p. Normalize negative results into 0 through p−1 |\n| inverse of a number | A number that multiplies with it to remainder 1. Under 7, the inverse of 6 is 6: 6×6=35+1 |\n| O, point at infinity, identity | A separate point that changes nothing when added: P+O=P. Both coordinates are None |\n| −P, inverse of a point | The point adding with P to give O: (x,(-y)%p). −O=O |\n| group | A set whose operation stays inside the set, with an identity, inverses and unchanged results when parentheses move |\n| order | For a point: the smallest positive number of additions returning to O. For the group: the number of points, including O |\n| bit | One binary digit, 0 or 1. Repeated division by 2 gives the digits from the bottom through its remainders |\n| checkpoint | One independently scored part. There are eight |\n\nPoint addition here also permits swapping the order of points. Do not add points belonging to different curve settings. Separate Curve instances with the same (p,a,b) describe the same curve. Point equality depends on these settings and the coordinates. Equal points must have equal **hashes**, the integers Python uses when storing values in dictionaries and sets.\n\n**How to divide:** reduce denominator d to its remainder, then find u such that `(d*u)%p=1`. Divide numerator v with `(v*u)%p`. Python's built-in `pow(d,-1,p)` computes u without trying every candidate. Handle the zero-denominator cases below before calling it. The earlier `field-inverse` exercise teaches how to implement that inverse algorithm itself.\n\n## O is different from (0,0)\n\nOn `y²=x³+x` with divisor 7, (0,0) satisfies the equation and is an ordinary point. It cannot represent O.\n\n```text\nP=(1,3) → 2P=(0,0) → 4P=O\nordinary   ordinary   (None,None)\n```\n\n## Four cases of point addition\n\nThis operation is defined by these rules; it is not coordinate-wise addition. You do not need to derive the formulas.\n\n1. O+P=P and P+O=P.\n2. If x₁=x₂ and `(y₁+y₂)%p=0`, return O. This includes doubling a point whose y is zero.\n3. For the same point, use `λ = (3*x₁²+a) / (2*y₁)`.\n4. For two different points, use `λ = (y₂−y₁) / (x₂−x₁)`.\n\nDivision means multiplication by the inverse above. Then calculate `x₃=λ²−x₁−x₂` and `y₃=λ*(x₁−x₃)−y₁`, reducing each to its remainder.\n\nTry P=(1,3) on `y²=x³+x` under 7. For doubling, the numerator is 4 and the denominator is 6. Its inverse is 6, so λ is the remainder of 4×6, which is 3. The new x is the remainder of 3²−1−1=7, which is 0. The new y is 3×(1−0)−3=0. Thus **2P=(0,0)**. Double once more: y=0, so **4P=O**.\n\n## Inspect and implement\n\nInspect displays your curve's p,a,b, the point count including O, points whose y is zero, sample coordinates and the shape of a scalar trace. Its health token is not an answer to submit. First substitute x=0,y=0 into your own equation on paper and decide whether that coordinate pair belongs to the curve.\n\nEdit only `curve.py`, retaining these interfaces:\n\n- `Curve(p,a,b)` and its `params`. `contains(point)` returns a boolean for the equation; O is accepted. `point(x,y)` normalizes coordinates and raises `NotOnCurve` when they do not satisfy it. `infinity()` returns O.\n- `Point.is_infinity` is true only for two None coordinates. Returned ordinary coordinates are integers from 0 through p−1. `__eq__` and `__hash__` use curve settings and coordinates.\n- `__neg__` produces −P. `__add__` uses the four cases and raises `CurveMismatch` when the settings differ. Do not change the input point while computing its double.\n- `scalar_mul(k)`, `k*P` and `P*k` mean the same thing. Zero gives O; a negative k means multiplying −P by |k|. Use **double-and-add**: repeatedly divide k by 2; add the current addend when the remainder is 1, and double the addend every step. One addition per unit of k cannot finish the 256-bit case. secp256k1 is the name of that large curve, whose settings are supplied to your code.\n- `double_and_add_trace(point,scalar)` records nonnegative integer scalars. Zero returns an empty list. Negative scalars are required for scalar multiplication, not for this trace. Each positive scalar produces one row per binary digit, starting at the lowest digit.\n\nEach trace row contains `index`, `bit`, `accumulator_before`, `addend_before`, `added`, `accumulator_after`, `addend_after`, `on_curve`. Indices start at zero. Indices and bits are integers; `added` and `on_curve` are booleans. Render a point as `\"O\"` or `\"(x, y)\"`. The accumulator is the sum so far; the addend is the point available to add at this step. After step i, they represent the low i+1 binary digits times P and `2^(i+1)*P` respectively. For k=5, the bottom-first bits are 1,0,1: the accumulator ends each row at 1P,1P,5P and the addend at 2P,4P,8P.\n\n| Checkpoint | Methods | Observable rule |\n|---|---|---|\n| on-curve (30) | contains / point | Accept points satisfying the equation; reject others with NotOnCurve |\n| identity (30) | infinity / is_infinity / __neg__ | P+O=P and P+(−P)=O; (0,0) is not O |\n| add (45) | __add__ | Add two different points |\n| double (45) | __add__ | Double a point; y=0 gives O |\n| scalar (45) | scalar_mul / __mul__ / __rmul__ | Combine doubling and addition, including zero and negative counts |\n| trace (35) | double_and_add_trace | Record each before/after row; zero has no rows |\n| properties (40) | Combined operations | Moving parentheses or order, and equivalent separate Curve instances, preserve results |\n| secp256k1 (30) | The same implementation | Finish calculations with large integer parameters |\n\nEach **Submit (+N pt)** button sends the current file to its own checkpoint. There is no numeric answer box. Wrong submissions cost 15 points. **Run public tests** covers small examples of membership, O, addition, doubling, scalars, trace rows, curve comparisons and the displayed points. Passing them does not prove every unseen or 256-bit case. **Reset** restores the unfinished starter.\n\nThis arithmetic supports the later Schnorr signature exercises. The teaching trace branches on secret bits; those branches can themselves leak information in real implementations. It is a learning model, not production secret-key code.\n\n## Runtime\n\nThese Python standard-library modules are available: `collections, copy, dataclasses, decimal, enum, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, re, statistics, time, typing`. No additional package installation is needed. Access to grading files or other processes, external networking, and creating new processes is unavailable. Imports outside this list may not be available.\n",
       "writeup": "## Why (0, 0) cannot be the identity\n\nMost of the toy curves here have b = 0, and then (0, 0) satisfies y^2 = x^3 + ax. It is a real point on the curve, and since y = 0 it has order two. Borrow that coordinate for the identity and the two become indistinguishable.\n\n\"It is the point at infinity, so (0, 0) will do\" genuinely breaks on the right curve. The hidden tests pick curves where (0, 0) is on the curve and check by name that it does not compare equal to the identity.\n\n## Four cases, not one formula\n\n1. either side is the identity, so return the other;\n2. same x, opposite y, so the result is the identity (this includes doubling a point with y = 0);\n3. the same point, so the slope is the tangent's, (3x^2 + a) / 2y;\n4. anything else, so the slope is the chord's, (y2 - y1) / (x2 - x1).\n\nWriting case 3 as a special case of case 4 gives 0/0. Doubling has its own formula not for speed but because the chord is not defined there.\n\n## Exhaustive, not sampled\n\nThe curves are small, so the checks are exhaustive: every coordinate pair is classified, every ordered pair of distinct points is added, every point is doubled, and the group axioms are checked over the whole group. There is nowhere for an implementation that only handles the generic case to hide.\n\n## How the trace catches bit order\n\nDouble-and-add consumes bits least significant first. Immediately after step i, the accumulator must equal the number formed by the low i+1 bits, times P. The trace checkpoint verifies that on every row, so an implementation consuming bits the other way fails on the first one. Getting only the final answer right is not enough.\n\n## What the secp256k1 checkpoint actually checks\n\nThe last checkpoint runs the same abstraction over the published standard parameters. Every relation it checks follows from the definition of those parameters rather than matching a value copied from somewhere:\n\n- G is on the curve;\n- n is the group's order, so n*G is the identity;\n- therefore (n-1)*G = -G and (n+1)*G = G;\n- (k+m)G = kG + mG.\n\nNo transcribed expected value is needed, so no mistyped or unsourced constant can creep in.\n\n## Not constant-time\n\nDouble-and-add branches on the scalar's bits, and how many additions it performs depends on how those bits fall. Against a real key that property is itself a side channel. The goal here is a legible algorithm, not a model for production.\n\n## Where this leads\n\nThe next problem builds Schnorr. Its verification equation is nothing but scalar multiplication and point addition, so this group is the floor it stands on.",
       "learningGoals": [
         "Decide whether a point is on the curve",
@@ -189,7 +292,21 @@
       "checks": [
         {
           "id": "on-curve",
-          "label": "Decide what is on the curve"
+          "label": "Decide what is on the curve",
+          "hints": [
+            {
+              "id": "on-curve-hint-1",
+              "content": "Before adding points, check that they belong. Here an elliptic curve is a collection of coordinate pairs satisfying a remainder equation. Reject pairs outside it."
+            },
+            {
+              "id": "on-curve-hint-2",
+              "content": "Use remainders after division by 7 and y²=x³+x. For (1,3), 3²=9 leaves 2 and 1³+1=2: equal. For (1,1), 1 differs from 2. Generally (y*y)%p == (x*x*x+a*x+b)%p; % returns the remainder."
+            },
+            {
+              "id": "on-curve-hint-3",
+              "content": "In curve.py, implement Curve.contains: True for O; otherwise use self.p, self.a, self.b, point.x and point.y in the equation. Curve.point reduces coordinates first and raises NotOnCurve on a mismatch. Submit “Decide what is on the curve”."
+            }
+          ]
         },
         {
           "id": "identity",
@@ -197,13 +314,35 @@
           "hints": [
             {
               "id": "identity-hint-1",
-              "content": "Is (0, 0) in the point list Portal editor `inspect` printed? If it is, what happens when you use it as the identity?"
+              "content": "O is a special point playing the role of zero: adding it changes nothing. It is separate from ordinary coordinate pairs. Adding the opposite point −P returns O."
+            },
+            {
+              "id": "identity-hint-2",
+              "content": "With divisor 7, the opposite of P=(1,3) is (1,4), since 3+4 leaves zero. P+O=P and P+(−P)=O. (0,0) satisfies y²=x³+x, so it cannot stand for O."
+            },
+            {
+              "id": "identity-hint-3",
+              "content": "Curve.infinity returns Point(self,None,None). Point.is_infinity is True only when both coordinates are None. __neg__ returns O for O, otherwise (x,(-y)%p). In __add__, check matching curves before handling O and opposite points. Submit “The identity and the inverse”."
             }
           ]
         },
         {
           "id": "add",
-          "label": "Add two different points"
+          "label": "Add two different points",
+          "hints": [
+            {
+              "id": "add-hint-1",
+              "content": "Point addition does not add coordinates. It maps two points to another on the same curve. Over ordinary numbers, a line through the points meets the curve again; reflecting that intersection gives the sum. Here the same formulas use remainders."
+            },
+            {
+              "id": "add-hint-2",
+              "content": "On y²=x³+x with divisor 7, P=(1,3), Q=(0,0): λ=(0−3)/(0−1). The remainders are 4 and 6; inverse(6)=6, so λ leaves 3. x₃=3²−1−0 leaves 1; y₃=3(1−1)−3 leaves 4. The sum is (1,4)."
+            },
+            {
+              "id": "add-hint-3",
+              "content": "In Point.__add__, handle O, opposites and equal points first. For the remaining pair with distinct x coordinates, use the statement’s λ, x₃ and y₃ formulas. Return a new point without changing either input. Submit “Add two different points” and inspect any failed rule."
+            }
+          ]
         },
         {
           "id": "double",
@@ -211,11 +350,15 @@
           "hints": [
             {
               "id": "double-hint-1",
-              "content": "Substituting P = Q into the chord's slope gives 0/0. The tangent's slope has to be derived separately."
+              "content": "Adding a point to itself would divide by zero in the distinct-point formula. Use the separate doubling formula. A point with y=0 is its own opposite, so doubling it gives O."
             },
             {
               "id": "double-hint-2",
-              "content": "Where y = 0 the tangent is vertical. What is that point plus itself?"
+              "content": "For y²=x³+x, divisor 7, P=(1,3): λ=(3×1²+1)/(2×3)=4/6. Multiply by inverse(6)=6 to get remainder 3. x₃=3²−1−1 leaves 0; y₃=3(1−0)−3=0. Thus 2P=(0,0); doubling again gives O."
+            },
+            {
+              "id": "double-hint-3",
+              "content": "Before the equal-point branch in Point.__add__, return O when x matches and (y₁+y₂)%p is zero. Otherwise use the remainder of (3*x*x+a)*inverse(2*y) for λ. The x₃,y₃ formulas are unchanged. Submit “Add a point to itself”."
             }
           ]
         },
@@ -225,7 +368,15 @@
           "hints": [
             {
               "id": "scalar-hint-1",
-              "content": "Settle k = 0 and k = 1 first. A negative k has only one sensible meaning."
+              "content": "kP means adding P k times. Instead of one addition per copy, double the addend: P, 2P, 4P. Remainders when dividing k by two tell you which addends to include, so large k needs few steps."
+            },
+            {
+              "id": "scalar-hint-2",
+              "content": "Divide 5 by two: quotient 2/remainder 1; then 1/0; then 0/1. Read remainders 1→0→1: 5P=P+4P. Also 0P=O and (−3)P=3(−P)."
+            },
+            {
+              "id": "scalar-hint-3",
+              "content": "In scalar_mul, start result=O, addend=self, remaining=abs(scalar). Negate addend for a negative scalar. Until remaining is zero, add addend to result if the remainder is one, double addend, and replace remaining by its quotient after division by two. Return result and submit “Multiply by k with double-and-add”."
             }
           ]
         },
@@ -235,17 +386,53 @@
           "hints": [
             {
               "id": "trace-hint-1",
-              "content": "After step i the accumulator should be the low i+1 bits, as a number, times P. Bits are consumed least significant first."
+              "content": "A trace records intermediate computation. Seeing which doubled point was added separates point-arithmetic errors from digit-order errors. Each row records the accumulator and addend before and after the operation."
+            },
+            {
+              "id": "trace-hint-2",
+              "content": "For k=5 the remainders are 1,0,1. After each row, (result,addend) is (P,2P)→(P,4P)→(5P,8P). added is True,False,True; index is 0,1,2."
+            },
+            {
+              "id": "trace-hint-3",
+              "content": "In double_and_add_trace, use the scalar_mul loop. Save old points in accumulator_before/addend_before and new ones in accumulator_after/addend_after. bit is the remainder; added records whether addition occurred; on_curve checks the resulting accumulator. Render points as \"O\" or \"(x, y)\" and submit “Show what each bit did”."
             }
           ]
         },
         {
           "id": "properties",
-          "label": "Hold the axioms on a curve you have not seen"
+          "label": "Hold the axioms on a curve you have not seen",
+          "hints": [
+            {
+              "id": "properties-hint-1",
+              "content": "A few correct answers do not establish a reliable operation. Closure, an identity, inverses and associativity are the group rules. This point addition is also commutative: swapping operands changes nothing."
+            },
+            {
+              "id": "properties-hint-2",
+              "content": "P+O=P; P+(−P)=O; (P+Q)+R=P+(Q+R); P+Q=Q+P. Scalar relationships include (2+3)P=2P+3P and (2×3)P=2(3P). Points from different curve settings cannot be combined under these rules."
+            },
+            {
+              "id": "properties-hint-3",
+              "content": "Check that __eq__, __hash__ and __add__ use Curve.params and coordinates. Separate objects with the same (p,a,b) represent the same curve; addition across different settings raises CurveMismatch. Remove branches tied to fixed coordinates and submit “Hold the axioms on a curve you have not seen”."
+            }
+          ]
         },
         {
           "id": "secp256k1",
-          "label": "Run the same abstraction on real parameters"
+          "label": "Run the same abstraction on real parameters",
+          "hints": [
+            {
+              "id": "secp256k1-hint-1",
+              "content": "Now apply the same rules to large numbers. secp256k1 names a curve used in real signatures. Cryptographic security needs suitable large parameters; small classroom curves do not hide a key."
+            },
+            {
+              "id": "secp256k1-hint-2",
+              "content": "For 5P, remainders 1,0,1 take three iterations. A 256-bit integer has at most 256 binary digits, so the same loop takes at most 256 iterations, not one addition for every copy of P."
+            },
+            {
+              "id": "secp256k1-hint-3",
+              "content": "Check that scalar_mul advances with remaining//2 and division uses the inverse procedure in the statement. Enumerating p possible inverses cannot handle large p. Use the supplied Curve.p,a,b and submit “Run the same abstraction on real parameters”. Do not reuse this learning code for real signing keys."
+            }
+          ]
         }
       ]
     }

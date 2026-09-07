@@ -1,111 +1,92 @@
 # 満たす性質、破る性質
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+3 つの小さな入力検査プログラムを監査します。正しいのに境界検査で落ちる値、
+範囲外なのに検査を通る値、記録から読み取れる証拠の値を示します。その上で
+3 性質を分類し、未見の数値でも同じ関数を動かします。学ぶのは反例と、完全性・
+入力の妥当性・記録の開示の違いです。本物のゼロ知識プロトコルや、公開された式が
+解を隠すという主張ではありません。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 20 · **Chapter:** Bridge 0 / Security
-Properties · **Role:** `diagnostic` · **想定時間:** 30〜45 分 · **配点:** 200
-· **推奨前提:** `ac26-bridge-experiment`
+## 参加者の経路
 
-## ストーリー
+Participant Portal で「起動」→「証拠を確認」を選び、`statement`、`verifiers`、
+`transcript` を本文の式表と比べます。問題エディタで `classify.py` と
+`counterexamples.py` を編集します。5 つの「提出」は、そのファイルの関数から
+提出値を作ります。ターミナルは不要です。日英の本文に必要式・小例・画面の検査名を
+置き、全欄に 3 段のヒントを用意しています。
 
-3 つの toy verifier が監査に持ち込まれました。別々のチームが書き、すべて出荷済みで、すべてテストが
-緑でした。あなたの仕事は「どれにバグがあるか」を言うことではありません。全部あります。**それぞれが
-まだ何を保証していて、何をもう保証していないか**を述べ、その主張を証明することです。
+公開テストは戻り値の形だけを確認し、意図的に誤った starter も通ります。
+性質の正しさは提出時に判定します。`incompleteness` は画面と別の境界条件を
+受け取るので、引数から計算する必要があります。`transfer` はこの起動で公開された
+検証者の名前を維持し、条件や記録の数値を変えます。新規配置で名前や値が変わる
+場合がありますが、同じ配置の再起動で変わるとは限りません。
 
-この区別がすべてです。Week 1 以降、completeness・soundness・privacy・zero-knowledge は全員が意味を
-共有している前提で使われます。定義の暗記は実物の protocol に触れた瞬間に崩れます。他の 2 つを保った
-まま 1 つだけを壊してみせることは崩れません。
+| 採点欄 | 点 | 確認する証拠 |
+| --- | ---: | --- |
+| incompleteness | 40 | 下端を含まない検査が拒否する正しい入力 |
+| unsoundness | 45 | 式だけの検査が受理する範囲外の入力 |
+| privacy-leak | 40 | 渡された記録から読み取った証拠の値 |
+| property-matrix | 35 | 公開された3つの名前それぞれの3性質 |
+| transfer | 40 | 未見の数値にも通用する同じ関数 |
 
-## 主張
+誤答は 1 回 10 点の減点。各欄のヒントは 3・3・4 点で、合計 50 点です（基礎点 200）。
+最後の問いでは、どの修復が入力の受理を変え、どれが記録の開示を変えるか説明します。
 
-3 つの verifier はどれも同じ statement を検査します。
+## 実行構成と境界
 
-```text
-a*w + b == c (mod p) かつ lo <= w <= hi を満たす w を知っている
+Compose は loopback にだけ公開する Workbench と、内部ネットワーク上の非公開
+verifier を起動します。Workbench image には公開教材と制限付き関数実行器だけを
+置き、fixture 生成器・非公開検査・参考解答・配置 seed は含めません。`FLAG_SEED`
+を受け取るのは verifier だけです。
+
+verifier の親プロセスが入力を生成し、新しい子プロセスで提出関数を動かし、
+返った JSON の値を親が検査します。子の終了コードや `{"failures": []}` という
+出力は採点結果ではありません。子へ渡すのはソースと関数の入力だけで、seed・
+期待値・検査器は渡しません。入力と標準ライブラリを読んだ後、Linux seccomp で
+ファイルを開く操作・exec・ネットワーク・他プロセスへの干渉を拒否します。
+親の同一 UID によるメモリ参照も拒否し、時間・メモリ・出力・プロセス数を制限します。
+成功時もタイムアウト時も子のプロセスグループを回収します。固定した Linux image
+で適用し、macOS の作者ホストで弱い実行方法に黙って置き換えません。
+
+公開 proxy が接続するのは固定した内部 `/public`・`/prepare`・`/verify` だけです。
+任意パスは転送しません。prepare 失敗時に子の未見入力を返さず、transfer 失敗時は
+親の検査が示す性質のメッセージだけを返します。参加者が自分の出力を偽装しても
+採点成功にはならず、エディタ経由で非公開検査を import することもできません。
+
+Docker を管理できる利用者はコンテナを調査・変更できます。これは自習用の構成で、
+運用者からの秘匿ではありません。関数実行はこの算術教材用で、汎用のファイル・
+ネットワーク操作サービスではありません。非公開教材や参考解答を参加者 image に
+含めないことは、別途維持する境界です。
+
+## ローカル検証とリソース
+
+この問題のディレクトリで実行します。
+
+```sh
+make test                 # Compose経由の公開の型検査・エディタAPI検査
+make inspect              # Compose経由の公開値
+make reference-test       # 作者用mutationとLinux実行境界の回帰
+make verifier-down        # この問題のComposeコンテナとネットワークを停止
 ```
 
-意図的に小さな整数演算だけです。proof system も library も使いません。考える対象がすべて 1 画面に
-収まるので、難所は性質のほうであって配管ではありません。
+反復練習のため `make test` の verifier は teardown まで動きます。
+`make reference-test` は作者用 image をビルドし、使い捨てコンテナで実行します。
+Linux 回帰では公開名を保つ未見入力、偽の採点出力、非公開ファイル・全プロセスの環境、
+ネットワーク、exec、親への干渉、タイムアウト、子の回収を検査します。
+カタログ検証は別で、リポジトリ直下の `make install && make agent-gate` です。
+それだけでは実行経路の確認にはなりません。
 
-## 遊び方
+このローカル問題は AWS リソースを作りません。2 コンテナがローカルの CPU・メモリ・
+ディスクを使い、停止後も image と build cache は残ります。ホストされたイベントでは
+platform の計算・保存・ネットワークが課金対象になり得るので、配置の teardown で
+停止します。実 AWS や第三者の実行は今回の検証ゲートにしていません。
 
-Participant Portal で問題を起動すると、理論説明と 2 つのエディタが問題文と同じ画面に表示されます。
-証拠の確認、編集、公開テスト、5 checkpoint の提出まで Portal 内で完結します。ホスト側のターミナルや
-checkout のファイル操作は必要ありません。
+講義・本人ノートの根拠、独立初読のつまずき、HTTP 証拠は作者専用の
+`local/tests/hidden/READER.md` に記録しています。
 
-リポジトリから直接作問・検証する場合だけ、問題ディレクトリで次を実行できます。
+## ファイル属性操作の隔離追加
 
-```bash
-make inspect                    # 自分の statement、各 verifier の検査内容、公開 transcript
-make test                       # 公開テスト
-make test-one ID=classify       # 1 つだけ再実行する
-make reset                      # starter 2 ファイルを元に戻す
-```
+Linuxの提出コード用filterで、ファイル・ディレクトリの作成、リンク、名前変更、削除、属性変更も拒否します。ファイルopenだけの禁止では、子の終了後にこれらの変更が残りました。問題内の回帰は実filterを16個の使い捨て子プロセスへ適用し、19操作のEPERMと、親が所有する一時fixtureの内容・一覧・権限・所有者・時刻・拡張属性が変わらないことを確認します。一時fixtureも最後に削除します。API・得点・数学的な正答条件・実行期限は変更せず、既存の正答コードと検査を維持します。before/afterの範囲とコマンドは `local/tests/hidden/READER.md` に記録しています。
 
-Portal のエディタまたは作問用 checkout で編集するのは 2 ファイルです。
+## 計算用の道具と実行時間
 
-- `local/starter/classify.py` — 各 verifier は complete か。sound か。private か。
-- `local/starter/counterexamples.py` — `False` と書いた性質をすべて証明する。
-
-## 採点
-
-5 つの checkpoint を独立に採点します。誤答は 1 回 10 点減点です。
-
-| Checkpoint | 配点 | 提出するもの |
-|---|---:|---|
-| `incompleteness` | 40 | 正当な witness でありながら reject される値 |
-| `unsoundness` | 45 | 主張の範囲外なのに accept される witness |
-| `privacy-leak` | 40 | transcript だけから復元した witness |
-| `property-matrix` | 35 | 3 × 3 の分類表 |
-| `transfer` | 40 | 自分の 2 ファイル。未知の instance で実行されます |
-
-hint は 5 つ中 3 つにあります (15 / 15 / 12 + 8)。すべて開いても 200 点中 150 点が残ります。
-
-## この問題を成立させている規則
-
-**示せないラベルは数えません。**
-
-verifier を unsound と書くのは 1 行です。hidden test は matrix の `False` すべてを対応する反例と
-突き合わせるので、範囲内の値を unsoundness の証拠として出しても通りません。何も示していないからです。
-逆に、matrix が矛盾していれば反例だけでも通りません。分類できない破壊は理解ではないからです。
-
-`transfer` checkpoint は、**あなたの**分類と**あなたの**生成器を、見たことのない seed 由来の instance
-に対して実行します。たまたま通った値は残りませんが、statement を解く式は残ります。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
-Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
-秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナには starter と公開テスト
-しか入っておらず、fixture も hidden test も参照解答も verifier 本体も入っていません。
-それらは Workbench がネットワーク越しに話す、公開されていない second container と、
-`make reference-test` が build する author 専用 image にだけあります。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。手元のコンテナだけです。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した提出 6 種類に加え、verifier 自体を狙った
-2 種類があり、すべて検出される必要があります。
-
-後の週にも効く設計上の注意を 1 つ。不完全な verifier の欠陥は range 下限が strict なことですが、
-witness が range の内側にある instance では正しい verifier と完全に同じ挙動をします。不完全性は
-実在するのに観測できません。そのため `incompleteness` checkpoint は、正当な witness が `lo` に一致
-する hidden boundary instance で提出した生成器を評価します。その答えを `inspect` に表示はしません。
-性質が壊れていることと、それを示せることは別の問題であり、後者を成立させるのは学習者ではなく作問者の
-責任です。
-
-公開される 3 つの protocol 名は、deploy seed から選んで並べ替えた中立な alias です。別 deploy では
-名前も順序も変わります。`P1` / `P2` / `P3` の位置を覚えるのではなく、観察した挙動を分類してください。
+計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。

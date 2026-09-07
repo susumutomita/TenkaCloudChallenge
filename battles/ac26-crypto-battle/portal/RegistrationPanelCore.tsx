@@ -223,6 +223,11 @@ export function contractsForMethod(
 }
 
 /** Builds and submits a LEAK op. Exported for direct testing -- see this file's header. */
+export function submitDeclareLightning(client: PortalCoordinationClient, contractId: string): Promise<PortalCoordinationOutcome> {
+  const op: CryptoBattleOp = { kind: "declare-lightning", contractId };
+  return client.submitOp(op);
+}
+
 export function submitLeak(client: PortalCoordinationClient, contractId: string): Promise<PortalCoordinationOutcome> {
   const op: CryptoBattleOp = { kind: "leak", contractId };
   return client.submitOp(op);

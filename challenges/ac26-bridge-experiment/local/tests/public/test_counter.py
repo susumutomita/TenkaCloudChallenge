@@ -103,7 +103,7 @@ def test_count_matches_a_direct_check_on_small_ranges() -> None:
 def test_count_worked_example_from_the_statement() -> None:
     count = getattr(counter, "count_no_walkback", None)
     assert callable(count), "count_no_walkback must be defined in counter.py"
-    assert count(6, 1, 10) == 7, "step 6 on ring sizes 1..10 must count 7 (the statement's example)"
+    assert count(6, 1, 9) == 6, "step 6 on ring sizes 1..9 must count 6 (the statement's example)"
 
 
 def test_first_entry_is_start_plus_step() -> None:

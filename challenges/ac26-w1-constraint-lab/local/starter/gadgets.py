@@ -1,7 +1,12 @@
-"""Gadgets: turning a program condition into constraints. The third file you edit.
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.
+Gadgets: turning a program condition into constraints. The third file you edit.
 
+A constraint is an expression required to have remainder zero.
+A signal is a named variable; a witness assigns values to those variables.
 A gadget is a small group of constraints that together force a signal to behave a
-certain way. Naming a signal `flag` does not make it a boolean; a constraint does.
+certain way. / 制約は余り0にする式。信号は変数、witnessは値の割当、gadgetは制約の部品。 Naming a signal `flag` does not make it a boolean; a constraint does.
 
 The grader substitutes values into what these functions return using its own
 evaluator, which knows exactly the five documented kinds (mul, add, const, boolean,
@@ -15,8 +20,8 @@ from __future__ import annotations
 def boolean_constraint(signal: str) -> dict:
     """Constraints forcing `signal` to be 0 or 1, and nothing else.
 
-    Return a single constraint dict. The starter returns a constraint that every
-    value satisfies, so `flag = 2` sails through.
+    Return a single constraint dict. The starter allows only zero, rejecting
+    the valid value one / 初期版は0だけを許し、正しい1を拒否してしまいます。
     """
     return {"id": f"bool-{signal}", "kind": "const", "signal": signal, "value": 0}
 
@@ -39,12 +44,17 @@ def range_constraints(signal: str, bits: int) -> list[dict]:
         from `signal`.
       - bits is between 1 and 6, and 2**bits < p always holds.
 
-    Idea: every number in 0..7 is b0 + 2*b1 + 4*b2 with b0, b1, b2 each 0 or 1
+    Idea (p=11 for this example): every number in 0..7 is b0 + 2*b1 + 4*b2 with b0, b1, b2 each 0 or 1
     (5 = 1 + 0*2 + 1*4), and 0/1 digits can only ever add up to 0..7. Doubling is
     an `add` with the same signal on both sides:
-        {"id": "t1", "kind": "add", "left": "b1", "right": "b1", "out": "t1"}
-    says t1 = 2 * b1. In the example the last constraint's `out` is `signal` itself;
+        {"id": "t1", "kind": "add", "left": "b2", "right": "b2", "out": "t1"}
+    says t1 = 2 * b2. In the example the last constraint's `out` is `signal` itself;
     any set of constraints that pins `signal` to exactly 0 .. 2**bits - 1 is accepted.
+
+    General construction: read digits highest first; double the current value,
+    then add the next digit. For 5: (1*2+0)*2+1. Each doubling and each sum is add;
+    constrain each digit with boolean. This uses 3*bits-2 rows. For bits=1,
+    constrain signal directly with boolean. / 上の桁から2倍して次の桁を足します。
 
     The starter returns nothing, so every value is admitted.
     """
@@ -57,7 +67,7 @@ def range_witness(signal: str, value: int, bits: int) -> dict[str, int]:
     `value` is in 0 .. 2**bits - 1. Return {signal: value, <aux name>: <its value>, ...}:
     the grader substitutes exactly this dict into your range_constraints and expects
     every residual to be 0. For the 3-bit idea above and value 5 that is
-    {"x": 5, "b0": 1, "b1": 0, "b2": 1, "t1": 0, ...}. Digit i of `value` is
+    {"x": 5, "b0": 1, "b1": 0, "b2": 1, "t1": 2, ...}. Digit i of `value` is
     `(value // 2**i) % 2` (divide by 2**i, take the remainder by 2).
 
     The starter returns an empty dict.

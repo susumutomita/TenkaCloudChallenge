@@ -12,7 +12,9 @@
  * converts `CryptoBattleConfig.prime` to `bigint` before calling in here.
  */
 
-import { type CipherRung, rungSpec } from "./ladder.ts";
+import { type CipherKey, type CipherRung, rungSpec } from "./ladder.ts";
+import type { RotorPositions } from "./rotor.ts";
+import { inv } from "./field.ts";
 import { deriveBigInt, deriveBytes, deriveStream } from "./prng.ts";
 import { share, type Share } from "./shamir.ts";
 import type { PrivacyConstraint } from "./methods.ts";
@@ -36,6 +38,28 @@ export interface FieldConfig {
 /** This team's secret for this generation, as a field element. */
 export function deriveSecret(seed: string, teamId: string, generation: number, p: bigint): bigint {
   return deriveBigInt(seed, `secret:${teamId}:${generation}`, generation, p);
+}
+
+/** Finite teaching examples, not a secure key space. Kept off the participant bundle. */
+export const RSA_PARAMETERS = [[3, 11, 3], [5, 11, 3], [5, 13, 5], [7, 11, 7]] as const;
+
+export function deriveRsaKey(seed: string, teamId: string, generation: number) {
+  const index = Number(deriveBigInt(seed, `rsa-key:${teamId}:${generation}`, 0, BigInt(RSA_PARAMETERS.length)));
+  const [p, q, e] = RSA_PARAMETERS[index]!;
+  return { n: p * q, e, p, q, d: Number(inv(BigInt(e), BigInt((p - 1) * (q - 1)))) };
+}
+
+export function deriveRsaPlaintext(seed: string, contractId: string): number {
+  return 2 + Number(deriveBigInt(seed, `rsa-plaintext:${contractId}`, 0, 8n));
+}
+
+/** Independent generation key: neither additive shifts nor RSA parameters. */
+export function deriveRotorPositions(seed: string, teamId: string, generation: number): RotorPositions {
+  const [a, b] = deriveStream(seed, `rotor-key:${teamId}:${generation}`, 2, 4n);
+  return { a: Number(a), b: Number(b) };
+}
+export function deriveRotorPlaintext(seed: string, contractId: string): readonly number[] {
+  return deriveStream(seed, `rotor-plaintext:${contractId}`, 4, 4n).map(Number);
 }
 
 /** The `t - 1` Shamir polynomial coefficients (c1..c_{t-1}) for this team/generation. */
@@ -85,13 +109,18 @@ export function deriveTeamGeneration(
  * and a team that draws it and leaks a pair has published its key in the
  * clearest possible way. That is the rung's lesson, not a bug to design around.
  */
+export function deriveCipherKey(seed: string, teamId: string, generation: number, rung: "caesar"): number;
+export function deriveCipherKey(seed: string, teamId: string, generation: number, rung: CipherRung): CipherKey;
 export function deriveCipherKey(
   seed: string,
   teamId: string,
   generation: number,
   rung: CipherRung,
-): number {
+): CipherKey {
   const spec = rungSpec(rung);
+  if (rung === "vigenere") {
+    return Array.from({ length: spec.keyLength }, (_, i) => Number(deriveBigInt(seed, `cipher-key:${rung}:${teamId}:${generation}:${i}`, generation) % BigInt(spec.symbols.length)));
+  }
   const roll = deriveBigInt(seed, `cipher-key:${rung}:${teamId}:${generation}`, generation);
   return Number(roll % BigInt(spec.symbols.length));
 }
@@ -252,6 +281,7 @@ export interface ContractPlan {
    * on. Undefined for every other task kind.
    */
   readonly rung?: CipherRung;
+  readonly keyPosition?: number;
 }
 
 /**
@@ -282,6 +312,7 @@ export function deriveContractPlan(
   teamId: string,
   sequenceIndex: number,
   config: Pick<FieldConfig, "prime" | "shareCount">,
+  progression?: { readonly elapsedMs: number; readonly buildToPressureMs: number; readonly pressureToEndgameMs?: number },
 ): ContractPlan {
   const RUSH_MODULUS = 5n;
   // [Issue #659 §13] The ladder Order takes a slot in the rotation rather than
@@ -300,10 +331,6 @@ export function deriveContractPlan(
     { taskKind: "homomorphic-sum" },
     { taskKind: "zk-sudoku" },
     { taskKind: "masked-total" },
-    // [Issue #740] The disclosure slot. Last in the cycle so the first five
-    // Orders after the opener still show every mechanism once before the
-    // rules start demanding shares.
-    { taskKind: "reveal-share", mustDisclose: true },
   ];
   // [Issue #689] The very first Order is fixed, for every team and every seed.
   //
@@ -330,14 +357,21 @@ export function deriveContractPlan(
   const kind: ContractKind = kindRoll % RUSH_MODULUS === 0n ? "rush" : "standard";
   const indexRoll = deriveBigInt(seed, `contract-index:${teamId}`, sequenceIndex, config.prime);
   const slot = TASK_ROTATION[sequenceIndex % TASK_ROTATION.length] ?? { taskKind: "reveal-share" as const };
-  const taskKind = slot.taskKind;
+  // Alternate the existing share slot; keep cipher/Rotor/RSA issuance unchanged.
+  const cycle = Math.floor(sequenceIndex / TASK_ROTATION.length);
+  const mustDisclose = slot.taskKind === "reveal-share" && cycle % 2 === 1;
   // [Issue #740] A disclosure names the next index in 1..shareCount, counted
   // per cycle, so consecutive disclosures never repeat an index: the k-th
   // disclosure on a generation is the k-th distinct share out. A free share
   // Order keeps its seeded roll.
-  const shareIndex = slot.mustDisclose
-    ? (Math.floor(sequenceIndex / TASK_ROTATION.length) % config.shareCount) + 1
+  const shareIndex = mustDisclose
+    ? (Math.floor(cycle / 2) % config.shareCount) + 1
     : Number(indexRoll % BigInt(config.shareCount)) + 1;
+  const taskKind = slot.taskKind === "caesar-shift" && kind === "standard" && progression?.pressureToEndgameMs !== undefined
+    && progression.elapsedMs >= progression.pressureToEndgameMs ? "rsa-encrypt"
+    : slot.taskKind === "caesar-shift" && kind === "standard" && progression !== undefined
+      && progression.elapsedMs >= progression.buildToPressureMs && Math.floor(sequenceIndex / TASK_ROTATION.length) % 2 === 1
+      ? "rotor-encrypt" : slot.taskKind;
   // FHE, MPC and the sudoku proof publish nothing reconstructable by
   // construction, so their Orders state that rule rather than rolling for it.
   // [Issue #659] A ladder Order never forbids disclosure. The decision it puts
@@ -347,9 +381,9 @@ export function deriveContractPlan(
   // [Issue #709] The share Order is always the open one now: its PROVE-only
   // variant became the `zk-sudoku` slot in the rotation above, so the privacy
   // roll it used to make has nothing left to decide.
-  const privacyConstraint: PrivacyConstraint = slot.mustDisclose
+  const privacyConstraint: PrivacyConstraint = mustDisclose
     ? "must-disclose"
-    : taskKind === "caesar-shift" || taskKind === "reveal-share"
+    : taskKind === "rotor-encrypt" || taskKind === "rsa-encrypt" || taskKind === "caesar-shift" || taskKind === "reveal-share"
       ? "none"
       : "no-raw-disclosure";
   return {
@@ -357,14 +391,10 @@ export function deriveContractPlan(
     taskKind,
     requestedShareIndices: [shareIndex],
     privacyConstraint,
-    // [Issue #659 §12-B] Which rung, resolved by TIME rather than by a team's
-    // own choice. #659 leaves this open and leans toward letting a team pick
-    // ("いま点を稼ぐか、将来のために強くなるか" is a real investment decision),
-    // but that needs per-team ladder progression, an unlock op and a UI of its
-    // own. §13 scopes this slice to settling the SHAPE with one rung, and with
-    // exactly one rung there is nothing to choose between yet. Phase-based
-    // reuses `build → pressure → endgame` and adds no new time concept, which
-    // is the rule #659 §9 already set.
-    ...(taskKind === "caesar-shift" ? { rung: "caesar" as const } : {}),
+    // #661 adopted time-based progression. Use the scheduled issue time,
+    // never the delayed caller's current phase. Existing Orders keep their rung.
+    ...(taskKind === "caesar-shift" ? progression !== undefined && progression.elapsedMs >= progression.buildToPressureMs
+      ? { rung: "vigenere" as const, keyPosition: Math.floor(sequenceIndex / TASK_ROTATION.length) % 3 }
+      : { rung: "caesar" as const } : {}),
   };
 }

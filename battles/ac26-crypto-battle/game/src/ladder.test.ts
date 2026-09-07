@@ -1,3 +1,5 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
 import { describe, expect, test } from "bun:test";
 import { deriveCipherKey, derivePlaintext } from "./fixtures.ts";
 import {
@@ -47,8 +49,8 @@ function ladderOrder(state: CryptoBattleState, teamId: string): Contract {
  */
 function projected(state: CryptoBattleState, teamId: string, contractId: string) {
   const task = projectForTeam(state, teamId).myContracts.find((c) => c.id === contractId)?.task;
-  if (task?.kind !== "caesar-shift") throw new Error("test setup: expected a ladder Order");
-  return task;
+  if (task?.kind !== "caesar-shift" || typeof task.myKey !== "number") throw new Error("test setup: expected a ladder Order");
+  return { ...task, myKey: task.myKey };
 }
 
 /** The answer a participant would produce with pencil and paper. */
@@ -170,9 +172,9 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     // `state.publicLedger` holds the compact persisted form (`StoredArtifact`,
     // see ledger-codec.ts) -- `k`/`tm`/`r`/`p`/`x` below are that form's own
     // field names, not `PublicArtifact`'s.
-    const posted = state.publicLedger.at(-1);
+    const posted = state.publicLedger.map(artifactFields).at(-1);
     if (posted?.k !== "cipher-pair") throw new Error("expected a cipher pair on the ledger");
-    expect(posted.tm).toBe("teamA");
+    expect(storedTeamId(posted, state.teams)).toBe("teamA");
     expect(posted.r).toBe(RUNG);
     if (order.task.kind !== "caesar-shift") throw new Error("expected a ladder Order");
     expect(posted.p).toEqual(order.task.plaintext);
@@ -187,7 +189,7 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     const order = ladderOrder(state, "teamA");
     state = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
 
-    const pair = state.publicLedger.find((a) => a.k === "cipher-pair");
+    const pair = state.publicLedger.map(artifactFields).find((a) => a.k === "cipher-pair");
     if (pair?.k !== "cipher-pair") throw new Error("expected a cipher pair");
     const modulus = rungSpec(pair.r).symbols.length;
     // (c - p) mod n, from the first column. That is the entire attack.
@@ -196,7 +198,7 @@ describe("LEAK: the pair goes public, and on this rung the pair IS the key", () 
     const op = { kind: "hunt-cipher" as const, targetTeamId: "teamA", generation: 1, rung: pair.r, recoveredKey: recovered };
     expect(validateOp(state, "teamB", op)).toEqual({ ok: true });
     // And it is genuinely the key the judge derived, not a coincidence.
-    expect(recovered).toBe(deriveCipherKey(state.seed, "teamA", 1, pair.r));
+    expect(deriveCipherKey(state.seed, "teamA", 1, pair.r)).toEqual(recovered);
   });
 });
 
@@ -355,7 +357,7 @@ describe("the registry is shaped for the rungs that come next", () => {
       expect(spec.huntBonus).toBeGreaterThan(0);
       // The rung has to be able to encrypt and render its own alphabet.
       const plaintext = derivePlaintext("seed", "c0", rung);
-      expect(toSymbols(encryptWithRung(plaintext, 1, rung), rung)).toHaveLength(plaintext.length);
+      expect(toSymbols(encryptWithRung(plaintext, deriveCipherKey("seed", "team", 1, rung), rung), rung)).toHaveLength(plaintext.length);
     }
   });
 });

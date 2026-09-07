@@ -1,204 +1,105 @@
-"""あなたが編集する唯一のファイル。
+"""aggregate.py — 4関数を育て、同じファイルを8欄へ提出 / one file, eight checkpoints.
+計算用標準ライブラリ（math, fractions, statistics, random 等）は事前読み込み済み。
+使用可能一覧は問題文の Python 補助欄。追加ファイル/ネットワーク読み込みは不可。
 
-複数の組織が、 それぞれ **インシデント件数 count** と **深刻度 severity** を
-持っている。 どちらも外に出したくない。 全員が欲しいのは合計スコアだけ。
 
-    score = sum_i (count_i * severity_i) + bias        (bias は公開、 mod p)
+起動 → 証拠を確認 → planを編集 → 公開テスト → planを提出。
+Start → Inspect evidence → edit plan → Run public tests → submit plan.
+planだけ先に提出できる。スコア側の公開テストはaggregate完成後に確認する。
+Plan may be submitted first; the public score test needs aggregate later.
+戻り値とopen_batchの順序付き列はlist/tuple同値（入れ子の外側・内側も）。例はlist。
+Returns and open_batch inputs accept lists or tuples, including nested levels; examples use lists.
 
-新しい概念は無い。 前の 3 問で作った部品を組み立てる。
+本問の加法的シェア（additive share）は、全破片の合計を素数pで割った余りが元の数になる分割。
+Pythonでは余りを % p と書く。p7で[5,4]は2を表す。
+An additive sharing represents sum(pieces) % p; with p7, [5,4] represents2.
 
-    秘密の分割         各組織の 2 つの数字は、すでに share の形で配られている
-    公開定数の足し算   bias を足すのは 1 人だけ (linear-shares の規則)
-    Beaver 掛け算      count_i * severity_i は両方の因子が秘密。 組織ごとに 1 回
+組織iの入力 counts[i] と severities[i] はそれぞれn破片。
+位置jは処理者の番号で、組織iの番号とは別。本問は組織数k=処理者数n。
+Organization i's count and severity each have n pieces. Piece-owner j and input-owner
+organization i are distinct roles; this model uses k=n=spec['parties'].
 
-新しいのは **コスト** の見方だけ。
+Beaver三つ組 triple_list[i] はa,b,cの破片（復元するとc=a*bの余り）。
+マスクa,bは積ごとに新しく使う。公開する差の破片を各位置で作る:
+Each product receives a fresh Beaver triple: reconstructed c=(a*b)%p.
+For each organization i, t=triple_list[i], and each piece j:
+    ds[j] = (counts[i][j] - t['a'][j]) % p
+    es[j] = (severities[i][j] - t['b'][j]) % p
+io.open_batch([ds0,es0,ds1,es1,...])は同じ順序で[d0,e0,d1,e1,...]を返す。
+One actual call is one round, regardless of how many values it opens.
 
-## 語彙 1: spec — `plan` と `aggregate` が受け取る辞書
+開示後、各組織の三つ組tを取り直して積の破片を作る:
+After opening, select that organization's own t again:
+    product[j] = (t['c'][j] + d*t['b'][j] + e*t['a'][j]) % p
+簡単な実装例では公開項d*eを1位置に加える。各積を位置ごとに合計しbiasも全体に1回加える。
+For a simple implementation add public d*e at one position; sum products, then add bias once.
+一般には調整r_jの合計が公開定数とmod pで一致すればよい。
+Offsets r_j at several positions also work when their sum equals the public constant modulo p.
+Reason: x=a+d, y=b+e, so xy=c+d*b+e*a+d*e.
 
-    "p"        int   法 (素数)
-    "parties"  int   **組織の数。 list ではなく整数**。 share の本数も同じ数
-    "bias"     int   公開されている加算定数
+p7の表 / p7 example (organization i → list indexed by owner j):
+ i  counts severity  a      b      c      ds→d      es→e     product
+ 0  [5,4]  [6,4]   [2,6] [3,6] [4,5]  [3,5]→1   [3,5]→1   [3,3]
+ 1  [3,5]  [2,2]   [1,2] [4,4] [6,4]  [2,3]→5   [5,5]→3   [2,2]
+Open [ds0,es0,ds1,es1] once → [1,1,5,3]. Products sum to [5,5].
+Add bias1 once → [6,5] → score4=(2*3+1*4+1)%7.
 
-`spec["parties"]` は整数なので `len()` は使えない。 share の list に対しては
-`len(sharing)` が使える。
+privacyはopen_batchで開いた値を重複込みで数える。順序は自由。
+[1,1,5,3]と[3,1,5,1]は同じ開示、[1,5,3]では1が1個足りない。
+Privacy checks the opened-value multiset (order ignored, repetitions retained).
+Cost checks 2k values in one round. Triple reuse can still open2k values: it leaks
+because d0-d1=x0-x1 when the same a masks two inputs, not because of its count.
 
-## 語彙 2: aggregate が受け取るもの
-
-    counts[i]        組織 i の count の share      (長さ n の list)
-    severities[i]    組織 i の severity の share   (長さ n の list)
-    triple_list[i]   {"a": [...], "b": [...], "c": [...]}   c = a*b。 3 つとも share
-    spec             上記の辞書
-    io               開示の唯一の窓口 (下記)
-
-## 語彙 3: io — 開示できる唯一の手段
-
-    io.open_batch(sharings: list[list[int]]) -> list[int]
-
-渡した share を **全部まとめて開示** し、 対応する値を **同じ順序で** 返す。
-そして **1 回の呼び出しが 1 ラウンド** として数えられる。
-
-    io.open_batch([sharing_a, sharing_b])   -> [value_a, value_b]      1 ラウンド
-    io.open_batch([sharing_a])
-    io.open_batch([sharing_b])              -> 同じ値が返る            2 ラウンド
-
-どうまとめるかは **設計判断** で、 聞かれるのではなく **測られる**。
-`aggregate` が返すのは **開いていない share**。 最終スコアは採点側が開く。
-
-## 採点は 3 つを別々に測る
-
-正しくて高い / 正しくて漏れる / 秘匿できていて間違い —— どれも実際に起こる。
-1 つの判定にまとめると、 自分が作ったのがどれか分からなくなるので分けてある。
-
-    multiply   スコアが平文計算と一致するか (正しさ)
-    privacy    実際に開示した値の集合が、 開示してよい集合と厳密に一致するか
-    cost       実測のラウンド数と、 plan に書いた見積りが一致するか
-
-## どの関数にも共通の約束
-
-  - 返す share の list は長さ n、 要素はすべて `% p` で 0..p-1 に正規化する。
-  - p と組織数は起動ごとに変わる。 数値を書き込まず、 spec から取る。
-
-この問題に、 JSON を手入力する checkpoint は無い。 4 つとも関数を書く。
+これは開示窓口と算術の模型。Pythonは全破片を持つので自分で復元できる。
+This is an opening-channel/arithmetic model, not confidentiality against this Python
+program, which receives all shares. Return unopened score shares; the grader reconstructs.
 """
-
-from __future__ import annotations
 
 
 def plan(spec: dict) -> dict:
-    """プロトコルを書く **前** に、コストを見積もる。
+    """spec={'p': prime, 'parties': integer k, 'bias': public integer}.
 
-    **見積りの中身はこの問題の主題**なので、数は書いていない。 代わりに、
-    採点のしかたと考える順序を書く。
-
-    返り値の形:
-        {"multiplications": int, "triples": int, "rounds": int} の 3 キーちょうど。
-
-    それぞれの意味:
-        multiplications  秘密どうしの掛け算が何回必要か
-        triples          そのために三つ組が何組必要か
-        rounds           開示のために何ラウンドの往復が必要か
-
-    採点のしかた:
-        3 つとも別々に検査される。 さらに `rounds` は、後の cost checkpoint で
-        **実際に走らせたときの実測値と突き合わされる**。 見積りだけ小さく書いて
-        実装が違えば、そこで落ちる。
-
-    考える順序:
-        1. 式 `score = sum_i (count_i * severity_i) + bias` に、秘密どうしの
-           掛け算はいくつあるか (bias は公開定数なので掛け算ではない)
-        2. Beaver 掛け算 1 回につき三つ組はいくつ要るか。 使い回してよいか
-           (同じマスクで 2 つの秘密を覆うと、 2 つの開示値の差が 2 つの秘密の
-            差になる)
-        3. 開示する値どうしに依存関係はあるか。 組織 i の差分を計算するのに、
-           組織 j の値は要るか
-        4. 要らないなら、それらは同時に計算できる。 `io.open_batch` は渡した
-           share を全部まとめて開示して 1 ラウンドと数える
-
-    ありがちな失敗:
-      - 3 つとも同じ数を答える (バッチ化を考えていないことになる)
-      - 組織数を数値で書き込む (`spec["parties"]` から取る)
+    3キーの整数辞書で積数・三つ組数・最小ラウンドを見積もる。
+    Return exactly three integer fields: multiplications, triples, rounds.
+    k independent products each need a triple and two masked openings; consider which
+    differences need to wait for another product before they can be batched.
     """
     return {"multiplications": 0, "triples": 0, "rounds": 0}
 
 
 def share_inputs(secrets: list[int], randoms: list[list[int]], p: int) -> list[list[int]]:
-    """複数の秘密を、それぞれ 1 人 1 個ずつの share に分ける。
+    """各secretの先頭にはrandoms[i]を%pで並べ、最後を(secret-sum(head))%pへ。
 
-    この関数は算術だけ。 ac26-w2-secret-sharing でやったことを、
-    複数の秘密に対してまとめて行う。
-
-    手順:
-      1. `secrets` を index つきで回す
-      2. `randoms[index]` (先頭 n-1 個ぶん) を `% p` して、そのまま先頭に置く
-      3. 最後の 1 個を「secret から、それまでの合計を引いた値」にする
-      4. その list を結果に追加し、全部終わったら返す
-
-    式:
-        head = [value % p for value in randoms[index]]
-        out[index] = [*head, (secrets[index] - sum(head)) % p]
-
-    例: p=101, secret=5, randoms[index]=[70, 40]
-        head = [70, 40]、 最後 = (5 - 110) % 101 = 97
-        sharing = [70, 40, 97]、 検算 207 % 101 = 5
-
-    返り値の形:
-        share の list の list。 `out[i]` の長さは `spec["parties"]`。
-
-    ありがちな失敗:
-      - `randoms` を使わず自前で乱数を作る。 採点は「渡された乱数がそのまま
-        先頭に並んでいるか」を確認するので落ちる
-      - `% p` を忘れる
+    Use the supplied randoms[i] modulo p as the first pieces; append the modular
+    complement. Output length per secret is len(randoms[i])+1, with no spec argument.
+    secret2, randoms[i]=[5], p7 → [5,4]. Return canonical integer pieces in 0..p-1.
     """
     return []
 
 
 def add_public(shares: list[int], constant: int, p: int) -> list[int]:
-    """公開定数を、共有された値に足す。返すのはその share。
+    """全体にconstantを1回加えた破片 / shares of the original value plus constant.
 
-    ac26-w2-linear-shares の `add_constant` と同じもの。 大きなプロトコルの
-    中に再登場している。
-
-    採点のしかた:
-        (1) 合計が `(x + constant) % p` であること
-        (2) 長さ n、 要素はすべて 0..p-1
-        (3) **合計が `(x + n*constant) % p` になっていたら明示的に落とす**
-
-    考える順序:
-        全員が constant を足すと、合計に constant が何回入るか。
-        欲しいのは何回か。
-
-    ありがちな失敗:
-      - 全員に足す (下の出荷時のコードは入力をそのまま返すので、そもそも
-        定数が 1 回も入っていない)
-      - 組織ごとに足す (`aggregate` の中で使うときの話。 bias は最後に
-        1 回だけ足す)
+    Adding to one chosen piece works. p7: [5,4] + public1 → [6,4] →3;
+    adding1 to both pieces gives [6,5] →4. Return an ordered sequence of canonical integer pieces.
     """
     return list(shares)
 
 
-def aggregate(counts, severities, triple_list, spec, io) -> list[int]:
-    """プロトコル本体。score の share を返す。開示はしない。
+def aggregate(counts: list[list[int]], severities: list[list[int]],
+              triple_list: list[dict], spec: dict, io) -> list[int]:
+    """全積を足してbiasを1回加えたスコアの破片を返す。最終スコアは開かない。
 
-    **組み合わせ方とラウンド数の見積りがこの問題の主題**なので、手順は
-    書いていない。 代わりに、部品の呼び出し方と採点のしかたを書く。
+    Return n canonical integer pieces of sum_i(count_i*severity_i)+bias modulo p.
+    For each i, use triple_list[i] to prepare its d/e sharing at every owner position j.
+    Collect all differences before io.open_batch. Its returned values follow your order.
+    Select triple_list[i] AGAIN in the product loop; the previous loop's final triple
+    does not belong to every organization. Use the formula above, sum by position,
+    and add bias once (add_public can help).
 
-    部品の呼び出し方 (1 つの積について):
-        d_i の share = counts[i] から triple_list[i]["a"] を引いたもの (ローカル)
-        e_i の share = severities[i] から triple_list[i]["b"] を引いたもの (ローカル)
-        d_i, e_i を開示したあと、
-        積の share = triple_list[i]["c"] + d_i*triple_list[i]["b"]
-                     + e_i*triple_list[i]["a"] + d_i*e_i
-        最後の d_i*e_i は **公開値どうしの積 = 公開定数**。 share ではない
-
-    開示のしかた:
-        `io.open_batch(sharings)` に share の list を渡すと、値の list が
-        **同じ順序で** 返る。 1 回の呼び出しが 1 ラウンド。
-
-    採点のしかた (3 つが別々に測られる):
-        multiply  返した share を開くと、平文で計算したスコアと一致するか
-        privacy   **実際に `open_batch` に渡した share の集合**が、供給された
-                  三つ組から決まる差分の集合と **厳密に一致** するか。
-                  ブラックリストではなく厳密一致なので、三つ組の使い回しは
-                  「正しいのに落ちる」形でここに出る
-        cost      実測のラウンド数と `plan()["rounds"]` が一致し、かつ開示した
-                  share の総数がちょうど 2 * 組織数 であるか
-
-    考える順序:
-        1. k 個の積それぞれについて、開示したい share は何個か
-        2. それらは互いに依存しているか。 組織 i の差分に組織 j の値は要るか
-        3. 依存していないなら、`open_batch` を何回呼ぶのが最小か
-        4. 積が k 個できたあと、それらをどう 1 つの share にまとめるか
-        5. `bias` はどこで、誰が足すか
-
-    返り値の形:
-        長さ `spec["parties"]` の list。 要素は 0..p-1 の整数。
-        **開いていない share** を返すこと (開くと privacy と cost の両方が落ちる)。
-
-    ありがちな失敗:
-      - `io.open_batch` を積ごとに呼ぶ (正しく秘匿もできるが、cost が落ちる)
-      - 三つ組を 1 組だけ使い回す (正しくラウンドも 1 回だが、privacy が落ちる)
-      - 入力そのものや途中の合計、最終スコアを開示する
-      - `spec["parties"]` を list だと思って `len()` を取る (整数なので例外になる)
-      - `d` と `e` の対応を取り違える (`open_batch` は渡した順序で返す)
+    multiply checks the score; result checks re-sharing/order/input-delta relations;
+    privacy checks only the supplied triples' d/e values were opened, with multiplicity;
+    cost checks one actual batch of2k values and agreement with plan; transfer checks
+    all four functions under other arguments. No source-text or literal-count rule.
     """
     return [0] * spec["parties"]

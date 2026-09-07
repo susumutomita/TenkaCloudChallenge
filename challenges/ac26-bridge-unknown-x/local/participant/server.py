@@ -21,16 +21,16 @@ import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import block_network, protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-bridge-unknown-x"
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 PORT = int(os.environ.get("WORKBENCH_PORT", "18140"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
@@ -58,6 +58,7 @@ CHECKPOINTS = (
 
 
 def _limits() -> None:
+    block_network()
     if sys.platform.startswith("linux"):
         resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
@@ -67,14 +68,14 @@ def _limits() -> None:
 # BEGIN GENERATED PORTAL EDITOR API
 _WORKBENCH = PortalEditorSupport(
     root=ROOT,
-    seed=SEED,
+    seed=None,
     problem_id='ac26-bridge-unknown-x',
     problem_name='x を知らないまま、足し算が済む',
     problem_name_en='The addition finishes without ever knowing x',
-    description='手元の Python で 1 行打って、出た値を貼る。11 行で、(a + x) + (b + x) = (a + b) + 2x — x を一度も知らないまま足し算が済むこと、覆われた値 1 つからは候補が 1 つも絞れないのに同じ覆いの 2 つからは差だけが漏れること、そして掛け算だけは x² が余って同じ渡し方では通らないことを、自分の手で出した数だけで確かめる。',
-    description_en='Type one line in your own Python, paste the value it prints. Eleven lines: (a + x) + (b + x) = (a + b) + 2x — the addition finishes without anyone ever knowing x, one covered value rules out none of the candidates while two under the same cover leak their difference, and multiplication alone leaves an extra x² the same trick cannot carry — on numbers you produced yourself.',
-    checkpoint_labels={'covered': '覆いをかぶせた 2 つの数', 'sum-covered': 'x を知らない人の足し算', 'huge': '覆いを 15 桁にした両辺の差', 'held': '返ってくる数と、かぶっている覆いの総量', 'recover': '覆いを外して出てきた合計', 'guesses': '生き残る a の候補の数', 'gap': '共通の覆いが漏らす差', 'product': '掛け算 — 積・x² 以外の項・その差'},
-    checkpoint_labels_en={'covered': 'The two covered numbers', 'sum-covered': 'The addition done by someone who never learns x', 'huge': "The two sides' difference with the fifteen-digit cover", 'held': 'What comes back, and the total cover inside it', 'recover': 'The total after taking the cover off', 'guesses': 'How many candidates for a survive', 'gap': 'The difference the shared cover leaks', 'product': 'The multiplication — product, every term but x², their difference'},
+    description='覆った 2 数を足す役と、覆いを外す役を比べます。紙か Portal のエディタで計算し、8 欄を提出。後半は候補の数え上げ、同じ覆いが漏らす差、積に残る項を調べます。',
+    description_en='Compare adding covered numbers with removing their cover. Calculate on paper or in the Portal editor and submit eight answers, then investigate candidates, the difference a reused cover reveals, and extra terms in a product.',
+    checkpoint_labels={'covered': 'covered — 覆いをかぶせる', 'sum-covered': 'sum-covered — 覆ったまま足す', 'huge': 'huge — 大きい覆いでも式は同じか', 'held': 'held — 返事と覆いの総量', 'recover': 'recover — 元の合計を受け取る', 'guesses': 'guesses — 生き残る候補を数える', 'gap': 'gap — 同じ覆いが漏らす差', 'product': 'product — 積と残る項を調べる'},
+    checkpoint_labels_en={'covered': 'covered — Put on the cover', 'sum-covered': 'sum-covered — Add the covered numbers', 'gap': 'gap — The difference a shared cover leaks', 'huge': 'huge — Compare with a large cover', 'held': 'held — The reply and total cover', 'recover': 'recover — Recover the original sum', 'guesses': 'guesses — Count surviving candidates', 'product': 'product — Examine the product and leftover'},
     submitted_files=('unknown_x_drill.py',),
     code_checkpoints=(),
     checkpoints=CHECKPOINTS,
@@ -216,7 +217,49 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 
+def load_public_snapshot() -> dict[str, object]:
+    """Trusted supervisor fetch; learner subprocesses receive only these public fields."""
+    url = os.environ.get("VERIFIER_PUBLIC_URL")
+    if not url:
+        raise RuntimeError("VERIFIER_PUBLIC_URL is required")
+    with urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        raw = response.read(MAX_BODY_BYTES + 1)
+    if len(raw) > MAX_BODY_BYTES:
+        raise RuntimeError("public evidence exceeds the size limit")
+    payload = json.loads(raw)
+    if not isinstance(payload, dict) or not isinstance(payload.get("public"), dict):
+        raise RuntimeError("invalid public evidence")
+    return {key: payload[key] for key in ("public", "assignments")}
+
+
+def load_sealing_key() -> bytes:
+    """Fetch only the derived key from the unpublished verifier, before serving learners."""
+    target = urlsplit(VERIFIER_URL)
+    if target.scheme not in ("http", "https") or not target.netloc:
+        raise RuntimeError("VERIFIER_URL is required")
+    # Fixed internal path: participant request paths and query strings never flow here.
+    url = urlunsplit((target.scheme, target.netloc, "/workbench-key", "", ""))
+    with urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+        raw = response.read(1025)
+    if len(raw) > 1024:
+        raise RuntimeError("invalid workbench key response")
+    payload = json.loads(raw)
+    value = payload.get("key") if isinstance(payload, dict) else None
+    if not isinstance(value, str) or len(value) != 64:
+        raise RuntimeError("invalid workbench key response")
+    try:
+        key = bytes.fromhex(value)
+    except ValueError:
+        raise RuntimeError("invalid workbench key response") from None
+    if len(key) != 32:
+        raise RuntimeError("invalid workbench key response")
+    return key
+
+
 def main() -> None:
+    protect_supervisor()
+    _WORKBENCH.sealing_key = load_sealing_key()
+    _WORKBENCH.public_payload = load_public_snapshot()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

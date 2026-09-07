@@ -1,3 +1,8 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
+import { decodeHuntLog } from "./hunt-log.ts";
+import { readLastHunt } from "./hunt-result.ts";
+import { expandHuntAttempts } from "./hunt-budget.ts";
 import { describe, expect, test } from "bun:test";
 import { decodeLedger } from "./ledger-codec.ts";
 import { reconstruct } from "./shamir.ts";
@@ -319,13 +324,13 @@ describe("leak", () => {
     expect(next.publicLedger).toHaveLength(
       contract.task.kind === "reveal-share" ? contract.task.shareIndices.length : 0,
     );
-    const posted = next.publicLedger[0];
+    const posted = next.publicLedger.map(artifactFields)[0];
     if (!posted) throw new Error("expected a posted artifact");
     // `next.publicLedger` holds the compact persisted form (`StoredArtifact`,
     // see ledger-codec.ts): `k`/`tm`/`g`/`i`/`v` below are that form's own
     // field names.
     if (posted.k !== "share") throw new Error("expected a share artifact");
-    expect(posted.tm).toBe("teamA");
+    expect(storedTeamId(posted, state.teams)).toBe("teamA");
     expect(posted.g).toBe(1);
     const teamShare = state.teams.teamA?.shares.find((s) => s.index === posted.i);
     if (!teamShare) throw new Error("expected a matching share on the team");
@@ -345,7 +350,7 @@ describe("leak", () => {
     expect(contract.leakPoints).toBe(contract.points);
     const next = applyOp(state, "teamA", { kind: "leak", contractId: contract.id });
     expect(next.teams.teamA?.score).toBe(contract.points);
-    expect(next.publicLedger.some((a) => a.k === "share" && a.tm === "teamA")).toBe(true);
+    expect(decodeLedger(next.publicLedger, next.teams).some((a) => a.kind === "share" && a.teamId === "teamA")).toBe(true);
   });
 
   test("the same contract cannot be leaked twice", () => {
@@ -360,7 +365,7 @@ describe("hunt", () => {
   test("recovering the actual secret succeeds and moves both scores", () => {
     let state = tick(startedMatch(CTX), 0);
     state = leakThreshold(state, "teamB");
-    const leaked = decodeLedger(state.publicLedger).filter((a) => a.teamId === "teamB").filter(isShareArtifact);
+    const leaked = decodeLedger(state.publicLedger, state.teams).filter((a) => a.teamId === "teamB").filter(isShareArtifact);
     const shares = leaked.map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
     const recoveredSecret = reconstruct(shares, BigInt(state.config.prime));
     const teamB = state.teams.teamB;
@@ -383,7 +388,7 @@ describe("hunt", () => {
     // huntLog (Issue #486 PR5) is timestamped from the real match clock, not
     // a silent `?? 0` fallback -- see applyHunt's own comment.
     if (state.nowMs === undefined) throw new Error("expected state.nowMs to be set after tick()");
-    expect(next.huntLog).toEqual([
+    expect(decodeHuntLog(next)).toEqual([
       { attackerTeamId: "teamA", targetTeamId: "teamB", generation: 1, atMs: state.nowMs },
     ]);
   });
@@ -463,7 +468,7 @@ describe("hunt", () => {
     const next = applyOp(scored, "teamA", wrong);
     expect(next.teams.teamA?.score).toBe(40 - DEFAULT_CONFIG.scores.wrongHunt);
     expect(next.successfulHunts).toEqual([]);
-    expect(Object.values(next.huntAttempts)).toEqual([1]);
+    expect(Object.values(expandHuntAttempts(next))).toEqual([1]);
   });
 
   // [Issue #696] The two knobs that only make sense together. Shrinking the
@@ -492,7 +497,7 @@ describe("hunt", () => {
     const state = tick(startedMatch(CTX), 0);
     const wrong: CryptoBattleOp = { kind: "hunt", targetTeamId: "teamB", generation: 1, recoveredSecret: "0" };
     const next = applyOp(state, "teamA", wrong);
-    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss", points: 0 });
+    expect(readLastHunt(next, next.teams.teamA!.lastHunt!)).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss", points: 0 });
 
     const view = projectForTeam(next, "teamA");
     expect(view.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "miss", points: 0 });
@@ -507,7 +512,7 @@ describe("hunt", () => {
   test("a hit is written as a hit, and it spends an attempt too", () => {
     let state = tick(startedMatch(CTX), 0);
     state = leakThreshold(state, "teamB");
-    const shares = decodeLedger(state.publicLedger)
+    const shares = decodeLedger(state.publicLedger, state.teams)
       .filter((a) => a.teamId === "teamB")
       .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
@@ -518,7 +523,7 @@ describe("hunt", () => {
       generation: 1,
       recoveredSecret: recoveredSecret.toString(),
     });
-    expect(next.teams.teamA?.lastHunt).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "hit", points: DEFAULT_CONFIG.scores.huntBonus });
+    expect(readLastHunt(next, next.teams.teamA!.lastHunt!)).toEqual({ targetTeamId: "teamB", generation: 1, outcome: "hit", points: DEFAULT_CONFIG.scores.huntBonus });
     expect(projectForTeam(next, "teamA").lastHunt?.outcome).toBe("hit");
     expect(projectForTeam(next, "teamA").huntAttempts.teamB?.spent).toBe(1);
   });
@@ -581,7 +586,7 @@ describe("hunt", () => {
   test("hunt penalty never drops a team's score below 0", () => {
     let state = tick(startedMatch(CTX), 0);
     state = leakThreshold(state, "teamB");
-    const shares = decodeLedger(state.publicLedger)
+    const shares = decodeLedger(state.publicLedger, state.teams)
       .filter((a) => a.teamId === "teamB")
       .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
@@ -604,7 +609,7 @@ describe("hunt", () => {
     const ctx = { eventId: "pipe-collision", teamIds: ["a|b", "c", "a", "b|c"] };
     let state = tick(startedMatch(ctx), 0);
     state = leakThreshold(state, "c");
-    const shares = decodeLedger(state.publicLedger)
+    const shares = decodeLedger(state.publicLedger, state.teams)
       .filter((a) => a.teamId === "c")
       .filter(isShareArtifact)
       .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));

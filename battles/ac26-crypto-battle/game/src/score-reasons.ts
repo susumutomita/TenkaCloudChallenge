@@ -1,3 +1,4 @@
+import { contractId } from "./ledger-codec.ts";
 import type { CryptoBattleOp, CryptoBattleState } from "./types.ts";
 
 /** Public classification only. Never copy an answer, recovered secret, proof, or target ID. */
@@ -36,11 +37,14 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
     case "rps-commit":
     case "rps-open": return "duel";
     case "hunt":
+    case "hunt-rotor":
+    case "hunt-rsa":
     case "hunt-cipher":
     case "hunt-sudoku":
     case "hunt-rps": return otherTeam ? "hunted" : "hunt";
     case "rotate": return "rotate";
     case "reveal-hint": return "hint";
+    case "declare-lightning":
     case "ready":
     case "start": return "coordination";
   }
@@ -49,8 +53,8 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
 /** Public completion IDs survive the tick's terminal-Order pruning. */
 function newDuelPoints(before: CryptoBattleState, after: CryptoBattleState, teamId: string): number {
   let points = 0;
-  const completed = new Set(after.teams[teamId]?.completedContractIds);
-  const previous = new Set(before.teams[teamId]?.completedContractIds);
+  const completed = new Set(after.teams[teamId]?.completedContractIds.map(c => contractId({ tm: teamId, c })));
+  const previous = new Set(before.teams[teamId]?.completedContractIds.map(c => contractId({ tm: teamId, c })));
   const retained = new Map(after.contracts.map(order => [order.id, order]));
   for (const order of before.contracts) {
     if (order.teamId !== teamId || order.task.kind !== "rps-duel" || order.status !== "open") continue;

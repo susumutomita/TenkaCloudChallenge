@@ -34,6 +34,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w2-private-aggregate"
@@ -47,6 +48,8 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# Allow the verifier its computation budget plus transport overhead.
+VERIFIER_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -80,8 +83,8 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w2-private-aggregate',
     problem_name='掛け算は 5 回、通信は 1 回',
     problem_name_en='Five multiplications, one round',
-    description='複数組織が件数と深刻度を出さずに加重リスクスコアだけを得る。Week 2 の 4 問を 1 つの application へ束ねる。乗算の数と round の数は同じではない。',
-    description_en="Several organizations want a weighted risk score without handing over their incident counts or severities. Week 2's four problems, assembled into one application — where the number of multiplications and the number of rounds are not the same number.",
+    description='件数と深刻度の破片から集計を組み、正しさ・開示した値・通信ラウンドを別々に確かめる。まず1つの見積もり関数から。',
+    description_en='Build a shared incident summary and check correctness, opened values and communication rounds separately. Start with one estimate function.',
     checkpoint_labels={'plan': '書く前にコストを見積もる', 'share-inputs': '秘密を分割する', 'linear': '公開された定数を足す', 'multiply': '秘密同士の積を組み上げる', 'result': '関係が成り立つことを示す', 'privacy': 'mask 差以外を公開しない', 'cost': '見積もりと実測を一致させる', 'transfer': '見たことのない設定でも成立させる'},
     checkpoint_labels_en={'plan': 'Estimate the cost before writing it', 'share-inputs': 'Split the secrets', 'linear': 'Add a value everyone already knows', 'multiply': 'Build the products of two secrets', 'result': 'Show the relations hold', 'privacy': 'Reveal the masked differences and nothing else', 'cost': 'Make the estimate match the measurement', 'transfer': 'Hold up in settings you have not seen'},
     submitted_files=('aggregate.py',),
@@ -118,7 +121,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -236,6 +239,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

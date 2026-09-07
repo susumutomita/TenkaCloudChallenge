@@ -1,8 +1,13 @@
+import RotorMaterials from "./RotorMaterials.tsx";
+import RsaMaterials from "./RsaMaterials.tsx";
+import Lightning from "./Lightning.tsx";
+import VigenereMaterials from "./VigenereMaterials.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PortalCoordinationClient, PortalCoordinationOutcome, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { isCryptoBattleProjection, usePolledProjection } from "./coordination.ts";
 import {
   submitCipher,
+  submitDeclareLightning,
   submitFhe,
   submitLeak,
   submitMpc,
@@ -13,7 +18,7 @@ import {
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import ConceptExplanation from "./ConceptExplanation.tsx";
-import { RpsHuntStatus } from "./RpsHunt.tsx";
+import { RpsHuntStatus, RpsOrderPrediction } from "./RpsHunt.tsx";
 import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
 import HuntPanel from "./HuntPanel.tsx";
@@ -524,7 +529,7 @@ export function huntFeedback(
   next: CryptoBattleProjection | undefined,
   targetTeamId: string,
   locale: Locale,
-  via?: "sudoku",
+  via?: "sudoku" | "rotor",
 ): FeedbackDraft {
   const copy = FAST_MOVE_COPY[locale];
   const outcome = next?.lastHunt;
@@ -533,7 +538,7 @@ export function huntFeedback(
   // hit must not be reported as a recovered solution.
   const matches = outcome !== undefined && outcome.targetTeamId === targetTeamId && (outcome.via ?? undefined) === via;
   if (next !== undefined && matches && outcome?.outcome === "hit") {
-    const body = via === "sudoku" ? copy.huntSudokuBody : copy.huntBody;
+    const body = via === "rotor" ? (locale === "ja" ? "相手のRotorの初期位置が一致し、攻撃が成功しました。" : "The recovered Rotor initial positions match; the attack succeeded.") : via === "sudoku" ? copy.huntSudokuBody : copy.huntBody;
     return { kind: "hunt", title: copy.huntSuccess, body: outcome.points === undefined ? `${body} ${copy.huntUnknownPoints()}` : body, reward: outcome.points };
   }
   if (next !== undefined && matches && outcome?.outcome === "miss") {
@@ -563,6 +568,7 @@ export function proveFeedback(
 ): FeedbackDraft {
   const copy = FAST_MOVE_COPY[locale];
   const outcome = next?.lastProve;
+  points = outcome?.points ?? points;
   if (next !== undefined && outcome?.contractId === contractId && outcome.outcome === "hit") {
     const reveal = next.publicLedger.find(
       (a): a is SudokuRevealArtifact => a.kind === "sudoku-reveal" && a.contractId === contractId,
@@ -574,6 +580,26 @@ export function proveFeedback(
     return { kind: "error", title: copy.proveMiss, body: copy.proveMissBody(next.wrongProveCost) };
   }
   return { kind: "error", title: copy.proveUnread, body: copy.proveUnreadBody };
+}
+
+/** A well-formed Vigenère miss is accepted and charged, so SDK ok alone is insufficient. */
+export function cipherFeedback(next: CryptoBattleProjection | undefined, contractId: string, locale: Locale): FeedbackDraft {
+  const last = next?.lastCipher;
+  if (!last || last.contractId !== contractId) return { kind: "error", title: locale === "ja" ? "CIPHERを送信しました" : "CIPHER submitted",
+    body: locale === "ja" ? "裁定を読み取れませんでした。お題とスコアを確認してください。" : "Could not read the verdict. Check the Order and score." };
+  if (last.outcome === "miss") return { kind: "error", title: locale === "ja" ? "暗号の答えが違います" : "Incorrect ciphertext",
+    body: locale === "ja" ? `${last.points} 点。このお題は以後0点で再挑戦できます。期限内に正しく完了すれば、期限切れの減点を避けられます。` : `${last.points} pt. Retry this Order for 0 points. Completing it correctly before its deadline avoids the expiry penalty.` };
+  return { kind: "prove", title: FAST_MOVE_COPY[locale].cipherSuccess, reward: last.points,
+    body: last.points === 0 ? locale === "ja" ? "+0 点 · 正しく完了しました。公開せず、期限切れの減点もありません。" : "+0 pt · Correctly completed without publication or an expiry penalty."
+      : FAST_MOVE_COPY[locale].cipherBody(last.points) };
+}
+
+export function CipherScoring({ order, wrongCost, locale }: { readonly order: ContractProjection; readonly wrongCost: number; readonly locale: Locale }) {
+  return <p className="tc-card-warn" data-testid="cipher-scoring">{locale === "ja"
+    ? order.cipherFailed ? `このお題は0点で再挑戦 · 誤答 −${wrongCost} 点。期限内に正しく完了すれば期限切れ減点を避けられます。`
+      : `正解 +${order.points} 点 / 誤答 −${wrongCost} 点、このお題は以後0点で再挑戦。未入力・範囲外は誤答に数えません。`
+    : order.cipherFailed ? `Retry for 0 points · wrong answer −${wrongCost} pt. Correct completion before the deadline avoids expiry penalties.`
+      : `Correct +${order.points} pt / wrong answer −${wrongCost} pt, then retry this Order for 0 points. Empty/out-of-range input is not a wrong answer.`}</p>;
 }
 
 function ownExposedShareCount(projection: CryptoBattleProjection | null): number {
@@ -678,7 +704,7 @@ export function exposureRows(projection: CryptoBattleProjection | null): readonl
  * `tacticAvailability` below is shaped this way.
  */
 export function rotateVoidCount(projection: CryptoBattleProjection | null): number {
-  return openOrders(projection).length;
+  return openOrders(projection).filter(order => order.task.kind !== "rps-duel").length;
 }
 
 
@@ -738,7 +764,8 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
     sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
     rpsHunt: (projection?.rpsHunt?.targets.length ?? 0) > 0,
-    rotate: ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined,
+    rotate: (projection?.myContracts.some(order => order.status === "open" && order.privacyConstraint === "must-disclose") ?? false) || ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
+      || (projection?.publicRsaKeys?.some(key => key.teamId === projection.vault.teamId && key.generation === projection.vault.generation) ?? false),
   };
 }
 
@@ -843,6 +870,7 @@ ${SUCCESS_CSS}
 .tc-secondary-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:10px}
 .tc-tactics{border:1px solid #cfd8e3;border-radius:10px;background:#eef3f8}.tc-tactics>summary{cursor:pointer;padding:10px 12px;font-size:12px;font-weight:900}.tc-tactics>summary span{display:block;margin-top:3px;color:#5f6b7a;font-size:11px;font-weight:500}.tc-tactics-body{display:grid;gap:10px;padding:0 10px 10px}
 .tc-hunt-card,.tc-rotate-card{border:1px solid #cfd8e3;border-radius:10px;padding:10px;background:#fff}
+.tc-hunt-workspace{scroll-margin-top:calc(48vh + 24px)}
 .tc-card-title{font-size:12px;font-weight:900;letter-spacing:.07em}.tc-card-hint{font-size:11px;color:#5f6b7a;margin:3px 0 8px}.tc-card-warn{font-size:11px;font-weight:700;color:#a4341c;margin:0 0 8px}
 .tc-target-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px}
 .tc-target-chip{border:1px solid #b6c2cf;border-radius:999px;background:#fff;padding:6px 9px;cursor:pointer;font-size:11px}
@@ -968,6 +996,10 @@ export function ageProjection(
     matchRemainingMs:
       projection.matchRemainingMs === undefined ? undefined : drop(projection.matchRemainingMs),
     ...ageHintBooster(projection, elapsedMs),
+    ...(projection.lightning ? { lightning: { ...projection.lightning,
+      remainingMs: drop(projection.lightning.remainingMs),
+      startsInMs: projection.lightning.startsInMs === undefined ? undefined : drop(projection.lightning.startsInMs),
+    } } : {}),
     vault: {
       ...projection.vault,
       rotateCooldownRemainingMs: drop(projection.vault.rotateCooldownRemainingMs),
@@ -1233,6 +1265,16 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
+      <Lightning projection={projection} order={selectedOrder} locale={locale} busy={submitting}
+        onSelect={id => { setSelectedOrderId(id); setProveOpen(false); }}
+        onDeclare={id => void run(() => submitDeclareLightning(client, id), next => ({
+          kind: next?.lightning?.status === "armed" && next.lightning.contractId === id ? "hint" : "error",
+          title: locale === "ja" ? "ライトニングの指定" : "Lightning declaration",
+          body: next?.lightning?.status === "armed" && next.lightning.contractId === id
+            ? locale === "ja" ? `このお題の計算正解で +${next.lightning.points} 点。続けて解答してください。` : `A correct calculation on this Order earns +${next.lightning.points}. Continue to your answer.`
+            : locale === "ja" ? "指定結果を読み取れませんでした。お題とカードの状態を確認してください。" : "Could not read the declaration result. Check the Order and card.",
+        }))} />
+
       {primaryActionsVisible && selectedOrder?.task.kind !== "zk-sudoku" && (
       <div>
         {proveOpen ? <div className="tc-chosen-method">
@@ -1266,7 +1308,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </p>
         )}
         <div className="tc-primary-actions">
-          {selectedOrder?.task.kind === "caesar-shift" && selectedOrder.allowedMethods.includes("cipher") && <button
+          {(selectedOrder?.task.kind === "rotor-encrypt" || selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && selectedOrder.allowedMethods.includes("cipher") && <button
             type="button"
             className="tc-action tc-prove-button"
             aria-controls="tc-cipher-answer"
@@ -1275,9 +1317,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
               cipherInputRef.current?.scrollIntoView({ block: "center" });
             }}
           >
-            <span className="tc-action-heading"><span>{locale === "ja" ? "計算して暗号化する" : "Calculate the encrypted row"}</span><b>+{selectedOrder.points} {locale === "ja" ? "点" : "pt"}</b></span>
-            <small>{locale === "ja" ? "CIPHER · 各数字に鍵を足す" : "CIPHER · Add the key to each value"}</small>
-            <span className="tc-action-risk">{locale === "ja" ? "元の列と暗号の組は公開しません。" : "The plaintext/ciphertext pair stays private."}</span>
+            <span className="tc-action-heading"><span>{locale === "ja" ? "計算して暗号化する" : selectedOrder.task.kind === "rsa-encrypt" ? "Calculate the encrypted number" : "Calculate the encrypted row"}</span><b>+{selectedOrder.points} {locale === "ja" ? "点" : "pt"}</b></span>
+            <small>{selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "CIPHER · 表を引き、位置を進める" : "CIPHER · Look up tables and advance positions") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "CIPHER · 繰り返し掛けて余りを取る" : "CIPHER · Multiply repeatedly and take remainders") : (locale === "ja" ? "CIPHER · 各数字に鍵を足す" : "CIPHER · Add the key to each value")}</small>
+            <span className="tc-action-risk">{selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "元の数と暗号の答えは公開しません。" : "The original and encrypted answer stay private.") : (locale === "ja" ? "元の列と暗号の組は公開しません。" : "The plaintext/ciphertext pair stays private.")}</span>
           </button>}
           {leakAllowed && <button
             type="button"
@@ -1296,8 +1338,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 title: copy.leakSuccess,
                 reward: selectedOrder.leakPoints,
                 body:
-                  selectedOrder.task.kind === "caesar-shift"
-                    ? copy.leakPairBody(selectedOrder.leakPoints, selectedOrder.task.pairsToBreak)
+                  selectedOrder.task.kind === "rotor-encrypt"
+                    ? (locale === "ja" ? "元の4文字と暗号の4文字を公開しました。1組で初期位置を特定される場合もあります。" : "Published the four original and encrypted digits. Even one pair may reveal the initial positions.")
+                    : selectedOrder.task.kind === "rsa-encrypt"
+                    ? (locale === "ja" ? "元の数 m と暗号の答え c を公開しました。公開鍵だけでも因数分解で攻撃できます。" : "Published original m and encrypted answer c. The public key alone already allows a factoring attack.")
+                    : selectedOrder.task.kind === "caesar-shift"
+                    ? selectedOrder.task.rung === "vigenere"
+                      ? `+${selectedOrder.leakPoints} · ${locale === "ja" ? `鍵の位置${(selectedOrder.task.keyPosition ?? 0) + 1}の元と答えを公開しました。異なる3位置が揃うと全鍵が分かります。` : `Published the original and answer at key position ${(selectedOrder.task.keyPosition ?? 0) + 1}. Three distinct positions reveal all keys.`}`
+                      : copy.leakPairBody(selectedOrder.leakPoints, selectedOrder.task.pairsToBreak)
                     : copy.leakBody(
                         selectedOrder.leakPoints,
                         selectedOrder.task.kind === "reveal-share" ? selectedOrder.task.shareIndices : [],
@@ -1357,7 +1405,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !fheR.trim() || !fheY.trim()}
             onClick={() => void run(
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
-              () => ({ kind: "prove", title: copy.fheSuccess, body: copy.fheBody(selectedOrder.points), reward: selectedOrder.points, lesson: copy.fheLesson }),
+              (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.fheSuccess, body: copy.fheBody(points), reward: points, lesson: copy.fheLesson }; },
             )}
           >{submitting ? copy.running : `${copy.fhe} · +${selectedOrder.points}`}</button>
         </div>
@@ -1374,9 +1422,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
         The cost of NOT doing the calculation is stated here rather than left to
         the LEAK button, because this is the moment the choice is actually made.
       */}
-      {selectedOrder?.task.kind === "caesar-shift" && (
+      {(selectedOrder?.task.kind === "rotor-encrypt" || selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && (
         <div id="tc-cipher-answer" className="tc-input-panel">
-          <strong style={{ fontSize: "12px" }}>{copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
+          <strong style={{ fontSize: "12px" }}>{selectedOrder.task.kind === "rotor-encrypt" ? "Rotor · CIPHER" : selectedOrder.task.kind === "rsa-encrypt" ? "RSA · CIPHER" : copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
+          {selectedOrder.task.kind === "caesar-shift" && selectedOrder.task.rung === "vigenere" && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
+          {selectedOrder.task.kind === "rotor-encrypt" ? <RotorMaterials task={selectedOrder.task} locale={locale} /> : selectedOrder.task.kind === "rsa-encrypt" ? <RsaMaterials task={selectedOrder.task} locale={locale} /> : selectedOrder.task.rung === "vigenere" ? <VigenereMaterials task={selectedOrder.task} locale={locale} /> : <>
           <div className="tc-lesson">
             <div className="tc-lesson-use">{copy.cipherUse}</div>
             <div className="tc-lesson-why">{copy.cipherWhy}</div>
@@ -1396,15 +1446,17 @@ export default function FastMovePanel(props: PortalSlotProps) {
               </span>
             </li>
             <li><DieRow values={selectedOrder.task.plaintext} size={28} /></li>
-            <li>{copy.cipherKey}: <code>{selectedOrder.task.myKey}</code></li>
+            <li>{copy.cipherKey}: <code>{String(selectedOrder.task.myKey)}</code></li>
           </ul>
           <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
+          </>}
+          {(selectedOrder.task.kind === "rsa-encrypt" || selectedOrder.task.kind === "rotor-encrypt") && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
           <input
             ref={cipherInputRef}
             aria-label="fast-cipher-answer"
             value={cipherAnswer}
             onChange={(event) => setCipherAnswer(event.target.value)}
-            placeholder={copy.cipherAnswer}
+            placeholder={selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "暗号の4文字（0〜3、空白区切り）" : "Four encrypted digits (0–3, spaces)") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : copy.cipherAnswer}
           />
           <button
             type="button"
@@ -1412,7 +1464,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !cipherAnswer.trim()}
             onClick={() => void run(
               () => submitCipher(client, selectedOrder.id, cipherAnswer.trim().split(/\s+/)),
-              () => ({ kind: "prove", title: copy.cipherSuccess, body: copy.cipherBody(selectedOrder.points), reward: selectedOrder.points }),
+              (next) => cipherFeedback(next, selectedOrder.id, locale),
             )}
           >{submitting ? copy.running : `${copy.cipher} · +${selectedOrder.points}`}</button>
         </div>
@@ -1426,6 +1478,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "rps-duel" && selectedOrder.allowedMethods.includes("duel") && <RpsDuel
         key={`${projection.vault.teamId}:${selectedOrder.id}`} order={selectedOrder} locale={locale} submitting={submitting}
         opponentName={projection.teams[selectedOrder.task.opponentTeamId]?.teamName ?? selectedOrder.task.opponentTeamId}
+        prediction={<RpsOrderPrediction order={selectedOrder} projection={projection} locale={locale} submitting={submitting}
+          onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
         onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
       {selectedOrder?.task.kind === "masked-total" && (
@@ -1442,7 +1496,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !mpcPartial.trim()}
             onClick={() => void run(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
-              () => ({ kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(selectedOrder.points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: selectedOrder.points, lesson: copy.mpcLesson }),
+              (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: points, lesson: copy.mpcLesson }; },
             )}
           >{submitting ? copy.running : `${copy.mpc} · +${selectedOrder.points}`}</button>
           <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />
@@ -1606,7 +1660,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
 
       <HuntPanel projection={projection} locale={locale} submitting={submitting}
         onSubmit={(op) => run(() => client.submitOp(op), (next) => {
-          if (op.kind === "hunt" || op.kind === "hunt-sudoku") return huntFeedback(next, op.targetTeamId, locale, op.kind === "hunt-sudoku" ? "sudoku" : undefined);
+          if (op.kind === "hunt" || op.kind === "hunt-sudoku" || op.kind === "hunt-rotor") return huntFeedback(next, op.targetTeamId, locale, op.kind === "hunt-rotor" ? "rotor" : op.kind === "hunt-sudoku" ? "sudoku" : undefined);
+          if (op.kind === "hunt-rsa" && !next?.completedHunts?.some(h => h.via === "rsa" && h.targetTeamId === op.targetTeamId && h.generation === op.generation)) return { kind: "error", title: copy.rejected, body: copy.unavailable };
+          if (op.kind === "hunt-rsa") return { kind: "hunt", title: copy.huntSuccess, body: locale === "ja" ? "公開nの素数2個が一致し、攻撃が成功しました。" : "The two prime factors match public n; the attack succeeded.", reward: next ? projection.huntWinPoints : undefined };
           if (op.kind === "hunt-cipher") return { kind: "hunt", title: copy.huntSuccess, body: copy.huntCipherBody, reward: next ? rungSpec(op.rung).huntBonus : undefined };
           return next ? { kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings." } : { kind: "error", title: copy.rejected, body: copy.unavailable };
         })} />
@@ -1614,6 +1670,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         {tactics.rotate && <div className="tc-rotate-card">
           <div className="tc-card-title">{locale === "ja" ? "自分の防御 · 秘密を作り直す（ROTATE）" : "Defend yourself · Replace your secrets (ROTATE)"}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
+          {projection.publicRsaKeys?.length ? <p className="tc-card-hint">{locale === "ja" ? "RSAの新しい公開n/eも全員に見えます。小さい鍵の数は再登場する場合があり、ROTATEで因数分解を防げるわけではありません。" : "Everyone also sees the new RSA n/e. Tiny key numbers can recur; ROTATE does not prevent factoring."}</p> : null}
           {sudokuPressure === "hunted" && <div className="tc-card-hint">{copy.rotateSudokuHunted}</div>}
           {sudokuPressure === "exhausted" && <div className="tc-card-hint">{copy.rotateSudokuExhausted}</div>}
           {/*

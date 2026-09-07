@@ -9,15 +9,9 @@ The subject is one line of school algebra:
 
     (a + x) + (b + x) = (a + b) + 2x
 
-The left side becomes the right side without anyone knowing what x is. That is the whole
-foundation of this course: hiding a number under a cover, and computing anyway. The drill
-walks it three times -- with a small x you can see, with a huge x you cannot, and from the
-point of view of someone who only holds the covered values and never learns the cover.
-
-The last two lines turn to multiplication and find the wall: (a + x)(b + x) carries an x²
-term, so the same trick does not survive a product. That wall is why Beaver triples exist
-in secret computation and why bootstrapping exists in homomorphic encryption. A learner
-who meets it here, in one line of expansion, has met it before it has a name.
+The equality checks arithmetic correctness, not secrecy. The separate candidate
+experiment uses the complete remainder range. Reusing a cover reveals at least the
+difference; multiplying requires both cross terms and the square of the cover.
 
 Nothing here is cryptographic. The numbers are small so they can be checked by hand.
 """
@@ -85,13 +79,13 @@ def setting(seed: str) -> dict:
     while x in (a, b, 1):
         x = x % 15 + 3
 
-    # The huge cover: the same algebra, at a size no one can eyeball. This is the step
-    # where "I could just work out x" stops being available.
+    # The huge cover: the same algebra with larger operands; this tests correctness,
+    # not the difficulty of guessing a value.
     huge = _draw(seed, "huge", 10**14, 10**15)
 
     # The modulus for the "what can the holder rule out" line. Small enough to enumerate.
     n = _draw(seed, "n", 17, 41)
-    while n <= a + b + 2 * x:      # every candidate must fit, so the count is honest
+    while n <= a + b + 2 * x:      # keep the earlier integer observations within the remainder range
         n += 8
 
     covered = (a + x, b + x)
@@ -109,20 +103,22 @@ def setting(seed: str) -> dict:
 
     # How many values of a are consistent with ONE covered value a + x, when x is unknown
     # and could be anything in Z_n. The answer is n: every candidate has exactly one cover
-    # producing this number, so a single covered value rules nothing out.
+    # producing this number, so this distinct full-range model rules no candidate out.
     #
     # "ONE" is load-bearing. Both covered values here share the same cover, so anyone
     # holding both can subtract them and the cover cancels: (a + x) - (b + x) = a - b.
-    # The difference leaks even though neither value alone says anything. That is not a
+    # The difference leaks; this does not claim the original narrow ranges hide every
+    # property of each value. That is not a
     # flaw to hide -- it is the next problem's entire subject, and the learner meets it
-    # here, one line after being told a single value is safe. `gap` below is that leak.
+    # here, after the separate candidate experiment. `gap` below is that leak.
     first_covered = covered[0] % n
     guesses = sum(1 for cand_a in range(n)
                   if any((cand_a + cand_x) % n == first_covered for cand_x in range(n)))
     gap = covered[0] - covered[1]          # == a - b, with x gone
 
     # The wall. Expanding (a + x)(b + x) gives ab + (a + b)x + x², and that x² is a term
-    # nobody holding only covered values can produce or cancel.
+    # the expansion contains in addition to (a+b)*x. Both terms must be removed
+    # to recover ab; this is not an impossibility result for multiplication.
     prod_covered = covered[0] * covered[1]
     prod_expected_without_square = a * b + (a + b) * x
     leftover = prod_covered - prod_expected_without_square      # == x * x
@@ -174,7 +170,8 @@ def normalize_answer(line: str, raw: object):
             parts = list(raw)
         else:
             return None
-        if len(parts) != width:
+        # Integer answers are exact: int(float) would silently accept a truncated value.
+        if len(parts) != width or any(type(part) not in (int, str) for part in parts):
             return None
         try:
             return tuple(int(part) for part in parts)

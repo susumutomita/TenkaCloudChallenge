@@ -1,37 +1,8 @@
-"""This deployment's numbers, and the twelve values the drill expects.
+"""Private generator for tiny, hand-computable Schnorr instances.
 
-Everything the learner types is decided here from FLAG_SEED: a small prime-order curve,
-a trial field element, a second point, a key pair, a nonce, a challenge, a *second* key
-that signed twice with one nonce, and a second curve for the transfer line. The learner
-never sees the expected values — they see the assignment statements (``show.py``) and
-produce the values with their own Python, one line at a time.
-
-The curves are the same verified prime-order toy curves used by ac26-w3-schnorr: the
-generator's order is prime, so every non-zero scalar is usable and ``s = r + e*x mod n``
-behaves like the real thing. They are deliberately not the course assignment's test
-curve (the independent-reimplementation rule): the procedure is the same, the numbers
-are not.
-
-Nothing here is constant-time or random in the cryptographic sense. Toy parameters are
-for observability.
-
-This module hands back the PUBLIC state only (what ``show.py`` prints). It no longer
-computes or exports the twelve lines' expected values as their own callable result:
-before #537, that dict shipped here and could be read back with one import, which was
-the entire drill for free. ``verifier/expected.py`` recomputes each checkpoint's value
-from this public state at grading time instead.
-
-Issue 543/537, second half: this module does not ship in the ``participant`` Docker
-stage any more either (see ../Dockerfile). Moving the expected values out was not
-enough, because the drill *is* ``ec_add`` / ``ec_mul`` / ``order_of`` and this module
-needs working implementations of exactly those to derive the deployment's public
-numbers -- so shipping it handed a learner ``add-points``, ``double`` and ``order``
-outright for the price of one import, and with ``order_of`` the three lines built on
-the order, all with no comparison anywhere near them. ``show.py`` and the public tests
-now read :func:`public_payload` from the verifier's ``GET /public`` over the
-Compose-internal network instead. See #543 (option B2) and
-scripts/ac26-w3-schnorr-drill.test.ts for the regression test pinning both the values
-this move must not change and the stage the file may not re-enter.
+Only public_payload crosses to the participant process. Arithmetic, seed and private
+keys stay here. Coordinate primes and generator orders are small so the point table
+can be computed by hand; these groups offer no cryptographic security.
 """
 
 from __future__ import annotations
@@ -41,11 +12,8 @@ import hashlib
 # (p, a, b, gx, gy, n): the listed generator has exactly the stated PRIME order. A test
 # recomputes all of that from scratch rather than trusting this table.
 TOY_GROUPS = (
-    (23, 1, 4, 0, 2, 29),
-    (23, 5, 1, 0, 1, 31),
-    (29, 5, 7, 0, 6, 37),
-    (31, 0, 3, 1, 2, 43),
-    (31, 1, 3, 1, 6, 41),
+    (5, 2, 1, 0, 1, 7),
+    (7, 1, 1, 0, 1, 5),
 )
 
 # The checkpoint ids, in drill order. server.py, show.py, the tests and metadata.json all
@@ -151,18 +119,14 @@ def setting(seed: str) -> dict:
         Q = ec_mul(k + 1, G, p, a)
     x = _draw(seed, "x", 2, n - 2)
     r = _draw(seed, "r", 2, n - 2)
-    e = _draw(seed, "e", 2, n - 2)
-    # s = r + e*x must not be 0 mod n (line 10 would print None, s*G = O — true but useless
-    # to paste), and must not coincide with a number already on the screen (x, r, e), so
-    # that the pasted value is always one the learner computed. Moving e by one keeps
-    # every other line.
-    while (r + e * x) % n in (0, x, r, e):
-        e = e + 1 if e < n - 2 else 2
+    # Select a practice record whose verification point has coordinates.
+    choices = [candidate for candidate in range(1, n) if (r + candidate * x) % n != 0]
+    e = choices[_draw(seed, "e", 0, len(choices) - 1)]
 
     # A different key that reused its nonce: two challenges, two responses, secret hidden.
     x_attack = _draw(seed, "x-attack", 2, n - 2)
     if x_attack == x:
-        x_attack = (x_attack % (n - 3)) + 2
+        x_attack = x_attack + 1 if x_attack < n - 2 else 2
     r_attack = _draw(seed, "r-attack", 2, n - 2)
     e1 = _draw(seed, "e1", 1, n - 1)
     e2 = _draw(seed, "e2", 1, n - 1)
@@ -172,22 +136,18 @@ def setting(seed: str) -> dict:
     s2 = (r_attack + e2 * x_attack) % n
     P_attack = ec_mul(x_attack, G, p, a)
 
-    # The transfer curve: a different entry of the table, and its own x, r, e.
-    j = (i + 1 + _draw(seed, "curve-2", 0, len(TOY_GROUPS) - 2)) % len(TOY_GROUPS)
-    p2, a2, b2, gx2, gy2, n2 = TOY_GROUPS[j]
-    G2 = (gx2, gy2)
-    x2 = _draw(seed, "x2", 2, n2 - 2)
-    r2 = _draw(seed, "r2", 2, n2 - 2)
-    e2p = _draw(seed, "e2p", 2, n2 - 2)
-    while (r2 + e2p * x2) % n2 in (0, x2, r2, e2p):
-        e2p = e2p + 1 if e2p < n2 - 2 else 2
+    # A fresh key for the challenge-first construction; its secret is not projected.
+    final_keys = [key for key in range(1, n) if key not in (x, x_attack)]
+    x_final = final_keys[_draw(seed, "final-key", 0, len(final_keys) - 1)]
+    P_final = ec_mul(x_final, G, p, a)
+    ef = _draw(seed, "final-challenge", 1, n - 1)
 
     public = {
         "p": p, "a": a, "b": b, "G": G, "Gx": gx, "Gy": gy,
         "t": t, "Q": Q, "Qx": Q[0], "Qy": Q[1],
         "x": x, "r": r, "e": e,
         "P1": P_attack, "e1": e1, "s1": s1, "e2": e2, "s2": s2,
-        "p2": p2, "a2": a2, "b2": b2, "G2": G2, "x2": x2, "r2": r2, "e2p": e2p,
+        "P2": P_final, "ef": ef,
     }
     return {"public": public}
 
@@ -203,9 +163,8 @@ def assignments(seed: str) -> str:
         f"x, r, e = {pub['x']}, {pub['r']}, {pub['e']}",
         f"P1 = ({pub['P1'][0]}, {pub['P1'][1]})",
         f"e1, s1, e2, s2 = {pub['e1']}, {pub['s1']}, {pub['e2']}, {pub['s2']}",
-        f"p2, a2, b2 = {pub['p2']}, {pub['a2']}, {pub['b2']}",
-        f"G2 = ({pub['G2'][0]}, {pub['G2'][1]})",
-        f"x2, r2, e2p = {pub['x2']}, {pub['r2']}, {pub['e2p']}",
+        f"P2 = ({pub['P2'][0]}, {pub['P2'][1]})",
+        f"ef = {pub['ef']}",
     ]
     return "\n".join(lines)
 
@@ -214,7 +173,7 @@ def assignments(seed: str) -> str:
 #: no tuple, so a payload that has been through the verifier's ``GET /public`` hands
 #: these back as two-element lists; consumers turn them back into tuples with this list
 #: rather than restating it, so adding a public point cannot leave one of them behind.
-PUBLIC_POINT_KEYS = ("G", "Q", "P1", "G2")
+PUBLIC_POINT_KEYS = ("G", "Q", "P1", "P2")
 
 
 def public_payload(seed: str) -> dict:
@@ -241,7 +200,7 @@ def public_payload(seed: str) -> dict:
         },
         "pointKeys": list(PUBLIC_POINT_KEYS),
         "assignments": assignments(seed),
-        "lines": list(LINES),
+        "lines": list(GRADED),
     }
 
 
@@ -260,6 +219,8 @@ def normalize_answer(line: str, raw: object):
         else:
             return None
         if len(parts) != 2:
+            return None
+        if any(type(part) is not int and not isinstance(part, str) for part in parts):
             return None
         try:
             return (int(parts[0]), int(parts[1]))

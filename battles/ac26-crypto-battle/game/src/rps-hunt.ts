@@ -1,7 +1,9 @@
-/** Predictions use public misuse evidence and settle only after simultaneous publication. */
+import { artifactFields } from "./ledger-codec.ts";
+import { huntCount, changeHuntCount } from "./hunt-budget.ts";
+/** Predictions use public repeated-r records and settle only after simultaneous publication. */
 import { isHand } from "./commitment.ts";
 import { huntKey, storedHuntKey, pruneRetiredHuntAttempts, predictionKey, predictionTeam } from "./hunt-key.ts";
-import { decodeArtifact } from "./ledger-codec.ts";
+import { storedTeamId, decodeArtifact } from "./ledger-codec.ts";
 import type { Contract, CryptoBattleOp, CryptoBattleState, RpsHuntProjection, RpsHuntResult, RpsOpenArtifact, ValidateResult } from "./types.ts";
 
 type HuntOp = Extract<CryptoBattleOp, { kind: "hunt-rps" }>;
@@ -10,10 +12,10 @@ type HuntOp = Extract<CryptoBattleOp, { kind: "hunt-rps" }>;
 export function rpsReuseEvidence(state: CryptoBattleState, teamId: string): readonly RpsOpenArtifact[] {
   const seen = new Map<number, RpsOpenArtifact>();
   for (let i = state.publicLedger.length - 1; i >= 0; i--) {
-    const a = state.publicLedger[i]!;
-    if (a.k !== "rps-open" || a.tm !== teamId) continue;
+    const a = artifactFields(state.publicLedger[i]!);
+    if (a.k !== "rps-open" || storedTeamId(a, state.teams) !== teamId) continue;
     const previous = seen.get(a.r);
-    const record = decodeArtifact(a) as RpsOpenArtifact;
+    const record = decodeArtifact(a, state.teams) as RpsOpenArtifact;
     if (previous && previous.duelId !== record.duelId) return [record, previous];
     seen.set(a.r, record);
   }
@@ -27,7 +29,9 @@ function canPredict(state: CryptoBattleState, c: Contract): boolean {
   if (c.task.kind !== "rps-duel") return false;
   const duelId = c.task.duelId;
   return c.status === "open" && c.expiresAtMs > (state.nowMs ?? 0)
-    && c.rps?.commitment !== undefined && c.rps.opening === undefined
+    // A hand held privately by the judge has not been published. The final
+    // opening completes both Orders in the same state transition as publication.
+    && c.rps?.commitment !== undefined
     && state.contracts.some(other => other.task.kind === "rps-duel" && other.task.duelId === duelId && other.teamId !== c.teamId && other.status === "open");
 }
 
@@ -37,11 +41,11 @@ export function validateRpsHunt(state: CryptoBattleState, attacker: string, op: 
   if (!state.teams[attacker] || !state.teams[op.targetTeamId] || op.targetTeamId === attacker) return { ok: false, error: "Choose another team for the prediction." };
   if (!isHand(op.predictedHand)) return { ok: false, error: "The predicted hand must be 1, 2 or 3." };
   const order = targetOrder(state, op.targetTeamId, op.duelId);
-  if (!order || !canPredict(state, order)) return { ok: false, error: "Predict after the target seals a number and before they open it." };
+  if (!order || !canPredict(state, order)) return { ok: false, error: "Predict after the target seals a number and before both hands become public." };
   if (order.rps?.predictions?.[predictionKey(state, attacker)]) return { ok: false, error: "Your prediction for this duel was already submitted; it cannot be replaced." };
   if (rpsReuseEvidence(state, op.targetTeamId).length < 2) return { ok: false, error: "Two public openings from different duels must show the same hiding number." };
   const key = storedHuntKey(state, huntKey(attacker, op.targetTeamId, state.teams[op.targetTeamId]!.generation));
-  if ((state.huntAttempts[key] ?? 0) >= state.config.maxHuntAttemptsPerTarget) return { ok: false, error: "No shared HUNT attempts remain for this target generation." };
+  if ((huntCount(state, key) ?? 0) >= state.config.maxHuntAttemptsPerTarget) return { ok: false, error: "No shared HUNT attempts remain for this target generation." };
   return { ok: true };
 }
 
@@ -55,7 +59,7 @@ export function applyRpsHunt(state: CryptoBattleState, attacker: string, op: Hun
   const key = storedHuntKey(state, huntKey(attacker, op.targetTeamId, generation));
   return {
     ...state,
-    huntAttempts: { ...state.huntAttempts, [key]: (state.huntAttempts[key] ?? 0) + 1 },
+    huntAttempts: changeHuntCount(state, key, 1),
     contracts: state.contracts.map(c => c.id === order.id ? { ...c, rps: { ...c.rps, predictions: { ...c.rps?.predictions, [predictionKey(state, attacker)]: [hand, generation] } } } : c),
   };
 }
@@ -64,7 +68,8 @@ export function applyRpsHunt(state: CryptoBattleState, attacker: string, op: Hun
 export function settleRpsHunts(state: CryptoBattleState, ids: readonly string[], atMs: number, cancel: boolean): CryptoBattleState {
   const affected = new Set(ids);
   if (!state.contracts.some(c => affected.has(c.id) && c.rps?.predictions)) return state;
-  const teams = { ...state.teams }, huntAttempts = { ...state.huntAttempts };
+  const teams = { ...state.teams };
+  let huntAttempts = state.huntAttempts;
   let retiredReservation = false;
   const contracts = state.contracts.map((c): Contract => {
     if (!affected.has(c.id) || c.task.kind !== "rps-duel" || !c.rps?.predictions) return c;
@@ -83,9 +88,9 @@ export function settleRpsHunts(state: CryptoBattleState, ids: readonly string[],
       teams[attacker] = { ...team, score, lastRpsHunt };
       if (cancel) {
         const key = storedHuntKey(state, huntKey(attacker, c.teamId, generation));
-        const count = huntAttempts[key];
+        const count = huntCount({ ...state, huntAttempts }, key);
         if (!count) throw new Error("RPS cancellation has no reserved attempt");
-        if (count === 1) delete huntAttempts[key]; else huntAttempts[key] = count - 1;
+        huntAttempts = changeHuntCount({ ...state, huntAttempts }, key, -1);
       }
     }
     const { predictions, ...rps } = c.rps;
@@ -107,7 +112,7 @@ export function projectRpsHunt(state: CryptoBattleState, reader: string): RpsHun
     let evidence = evidenceByTeam.get(c.teamId);
     if (!evidence) { evidence = rpsReuseEvidence(state, c.teamId); evidenceByTeam.set(c.teamId, evidence); }
     if (evidence.length < 2) continue;
-    targets.push({ targetTeamId: c.teamId, duelId: c.task.duelId, generation: state.teams[c.teamId]!.generation, commitment: c.rps!.commitment!, remainingMs: c.expiresAtMs - state.nowMs!, evidence });
+    targets.push({ targetTeamId: c.teamId, duelId: c.task.duelId, generation: state.teams[c.teamId]!.generation, commitment: c.rps!.commitment!, openingHeld: c.rps?.opening !== undefined, remainingMs: c.expiresAtMs - state.nowMs!, evidence });
   }
   const lastResult = state.teams[reader]!.lastRpsHunt;
   return { targets, pending, winPoints: state.config.scores.huntBonus, ...(lastResult ? { lastResult } : {}) };

@@ -1,5 +1,5 @@
 import type { CryptoBattleProjection, HuntBudgetProjection, CipherPairArtifact, SudokuRevealArtifact } from "../game/src/types.ts";
-import { rungSpec, type CipherRung } from "../game/src/ladder.ts";
+import { exposedKeyPositions, rungSpec, type CipherRung } from "../game/src/ladder.ts";
 
 /** Distinct public share indices, grouped by opponent and current generation. */
 export function ledgerTargets(projection: CryptoBattleProjection | null) {
@@ -40,6 +40,7 @@ export interface CipherHuntCandidate {
   readonly rung: CipherRung;
   readonly pairs: readonly CipherPairArtifact[];
   readonly pairsToBreak: number;
+  readonly keyPositions: readonly number[];
 }
 
 /** Current-generation pairs, deduplicated by Order, against each rung's public threshold. */
@@ -59,11 +60,12 @@ export function cipherHuntCandidates(
       generation: entry.generation,
       rung: entry.rung,
       pairs: [],
+      keyPositions: [],
       pairsToBreak: rungSpec(entry.rung).pairsToBreak,
     };
-    if (!current.pairs.some(pair => pair.contractId === entry.contractId)) byKey.set(key, { ...current, pairs: [...current.pairs, entry] });
+    if (!current.pairs.some(pair => pair.contractId === entry.contractId)) byKey.set(key, { ...current, pairs: [...current.pairs, entry], keyPositions: exposedKeyPositions([...current.pairs, entry], entry.rung) });
   }
-  return [...byKey.values()].filter((c) => c.pairs.length >= c.pairsToBreak);
+  return [...byKey.values()].filter((c) => c.keyPositions.length >= rungSpec(c.rung).keyLength);
 }
 
 

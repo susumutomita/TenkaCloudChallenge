@@ -49,9 +49,9 @@ MUTATIONS: dict[str, tuple[str, str]] = {
         "    return ((s1 - s2) * pow(e1 - e2, n - 2, n)) % n",
         "    return ((s2 - s1) * pow(e1 - e2, n - 2, n)) % n",
     ),
-    "transfer kept the first curve's order": (
-        "    n2 = order(G2, p2, a2)\n    return (r2 + e2p * x2) % n2",
-        "    return (r2 + e2p * x2) % 29",
+    "construction added instead of subtracting the public point": (
+        "    negB = None if B is None else (B[0], -B[1] % p)",
+        "    negB = B",
     ),
 }
 
@@ -86,7 +86,7 @@ def main() -> int:
             return 1
         mutant = _load(REFERENCE.replace(old, new, 1))
         try:
-            failures = check_schnorr_drill.run(mutant, SEED)
+            failures = [failure for i in range(32) for failure in check_schnorr_drill.run(mutant, f"{SEED}-{i}")]
         except Exception as error:  # noqa: BLE001 - a crashing mutant is killed
             failures = [f"raised {type(error).__name__}"]
         if failures:
@@ -121,7 +121,15 @@ def main() -> int:
         "nonce-reuse accepts another deployment's secret": ("nonce-reuse", other["nonce-reuse"]),
         "transfer accepts the first curve's response": ("transfer", exp["response"]),
     }
+    checked_near_misses = 0
     for name, (line, value) in near_misses.items():
+        if value == exp[line] or isinstance(value, list) and tuple(value) == exp[line]:
+            # Tiny groups can make a copied value correct. It must then be accepted;
+            # provenance of a coinciding number is not a grading rule.
+            print(f"COINCIDES (valid value, no rejection claim): {name}")
+            continue
+
+        checked_near_misses += 1
         if evaluate(line, value):
             print(f"SURVIVED verifier: {name}")
             survivors.append(name)
@@ -136,7 +144,7 @@ def main() -> int:
     if survivors:
         print(f"{len(survivors)} mutation(s) survived.")
         return 1
-    print(f"All {len(MUTATIONS) + len(near_misses)} mutations killed.")
+    print(f"All {len(MUTATIONS) + checked_near_misses} mutations killed.")
     return 0
 
 

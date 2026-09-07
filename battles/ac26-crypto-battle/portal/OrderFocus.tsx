@@ -1,3 +1,4 @@
+import { exposedKeyPositions } from "../game/src/ladder.ts";
 import type { ContractProjection, CryptoBattleProjection } from "../game/src/types.ts";
 import { taskLabel } from "./orderTask.ts";
 
@@ -21,7 +22,18 @@ export function orderHeading(order: ContractProjection, locale: Locale): string 
 
 /** Count only distinct indices of this team's current generation, including this request. */
 export function disclosurePreview(projection: CryptoBattleProjection, order: ContractProjection, locale: Locale): string {
+  if (order.task.kind === "rotor-encrypt") return locale === "ja" ? "元の4文字と暗号の4文字を公開。同じ初期位置を使うため、1組だけでも初期位置を特定される場合があります。" : "Publishes the four original and encrypted digits. Reused initial positions may be recoverable from even one pair.";
+  if (order.task.kind === "rsa-encrypt") return locale === "ja"
+    ? "元の数 m と暗号の答え c を公開。小さい n は公開鍵だけで因数分解して攻撃できます。"
+    : "Publishes original m and encrypted answer c. This tiny n can already be factored using the public key alone.";
   if (order.task.kind === "caesar-shift") {
+    if (order.task.rung === "vigenere") {
+      const pairs = projection.publicLedger.filter(a => a.kind === "cipher-pair" && a.teamId === projection.vault.teamId && a.generation === projection.vault.generation && a.rung === "vigenere").filter(a => a.kind === "cipher-pair");
+      const before = exposedKeyPositions(pairs, "vigenere");
+      const after = exposedKeyPositions([...pairs, order.task], "vigenere");
+      return locale === "ja" ? `鍵の位置${(order.task.keyPosition ?? 0) + 1}を公開。公開された位置 ${before.length} → ${after.length}/3。${after.length === 3 ? "全鍵を回収される材料が揃います。" : "異なる3位置が揃うと全鍵を回収されます。"}`
+        : `Publishes key position ${(order.task.keyPosition ?? 0) + 1}. Covered positions ${before.length} → ${after.length}/3. ${after.length === 3 ? "All keys become recoverable." : "All three distinct positions reveal the entire key."}`;
+    }
     return locale === "ja"
       ? `元の数と暗号の組を公開。${order.task.pairsToBreak} 組で相手に鍵を復元されます。`
       : `Publishes the original and encrypted row. ${order.task.pairsToBreak} pair(s) reveal your key.`;

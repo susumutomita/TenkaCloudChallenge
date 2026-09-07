@@ -1,0 +1,67 @@
+{
+  "run": "2026-09-07 before",
+  "syntheticSeed": "private-aggregate-reader-716",
+  "readerSha256": "68f80983819ee810e543608dda56cfbc105488a58a1d4de2ce39b41aa6ea79a3",
+  "results": [
+    {
+      "case": "reader",
+      "checkpointId": "plan",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "share-inputs",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "linear",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "multiply",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "result",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "privacy",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "cost",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "transfer",
+      "correct": true
+    },
+    {
+      "case": "verdict-spoof",
+      "checkpointId": "multiply",
+      "correct": true
+    },
+    {
+      "case": "observation-rewrite",
+      "checkpointId": "privacy",
+      "correct": true
+    },
+    {
+      "case": "observation-rewrite",
+      "checkpointId": "cost",
+      "correct": true
+    },
+    {
+      "case": "public-stdout-spoof",
+      "passed": true,
+      "output": "== test_aggregate.py ==\n{\"failures\": []}"
+    }
+  ]
+}

@@ -17,6 +17,7 @@
 name: ac26-w3-fft-domain
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -67,6 +68,7 @@ services:
       - workshop-host
 
   verifier:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

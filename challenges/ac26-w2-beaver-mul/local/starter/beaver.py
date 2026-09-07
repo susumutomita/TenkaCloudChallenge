@@ -1,108 +1,81 @@
-"""あなたが編集する唯一のファイル。
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。公開テストの実行は15秒、採点の実行は20秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Public tests allow 15 seconds; grading allows 20 seconds.
+Beaver乗算：ここに4関数を書き、5つの採点欄へ同じファイルを提出します。
+Beaver multiplication: implement four functions here; all five checks use this file.
 
-## この問題で使う仕組み (前提知識は不要)
+share（シェア）は数の持ち分、partyはその持ち主です。各リストの同じ位置が
+同じpartyを表します。全shareの合計を素数pで割った余りが元の数です。
+A share is one piece; a party holds one row. Corresponding list positions belong
+to the same party. The original value is the total remainder after division by p.
 
-共有されている値どうしの掛け算は、 各自では計算できない。 展開すると
-`a_0*b_1` のような **交差項** (party 0 の値と party 1 の値の積) が出るからで、
-どちらの party も片方しか持っていない。
+このPython教材は全partyの行をまとめて扱う算術模型です。実MPCでは各partyが
+自分の行だけを持ちます。この模型は通信や秘匿性全体を検証するものではありません。
+This program simulates every party's arithmetic. A real MPC party holds its own
+row only. This exercise does not certify communication or whole-protocol privacy.
 
-Beaver の三つ組は、 その難しさを **前もって**払っておく道具。 中身は誰も
-知らないが `c = a*b` の関係だけが保証された 3 つの値を、 入力とは無関係に
-作り置きしておく。 本番ではこうする。
+前処理の三つ組 / preprocessed triple:
+    c = (a*b) % p; share lists a_shares, b_shares, c_shares
+手順 / stages:
+    d_shares = mask(x_shares, a_shares, p)
+    e_shares = mask(y_shares, b_shares, p)
+    d = open_value(d_shares, p)        # public integer / 公開整数
+    e = open_value(e_shares, p)        # public integer / 公開整数
+    out = combine(c_shares, a_shares, b_shares, d, e, p)
 
-    1. 各自が自分の share で  [d] = [x] - [a],  [e] = [y] - [b]   (通信なし)
-    2. d と e を開示する                                          (1 ラウンド)
-    3. 公開された d, e で  [x*y] = [c] + d*[b] + e*[a] + d*e      (通信なし)
+展開 / expansion, taking all remainders modulo p:
+    x*y = (a+d)*(b+e) = c + d*b + e*a + d*e
+各partyは自分のa/b/cのshareとd/eを使います。最後のd*eは公開定数なので、
+追加分の合計がd*eになるようにします。簡単な方法はparty 0にだけ足すことです。
+Each party uses its a/b/c row and public d/e. The extra public term must enter
+once in the total. Adding it to party 0 only is one simple valid distribution.
 
-なぜ d を公開してよいか: `d = x - a` で a は誰も知らないランダム値なので、
-d は x について何も語らない (一度きりのマスクを掛けた値)。 e も同じ。
+p=7の例 / example (all lists have n=3):
+    x=[3,4,5], y=[1,5,4], a=[1,2,6], b=[2,3,1], c=[4,2,6]
+    d_shares=[2,2,6] -> d=3; e_shares=[6,2,3] -> e=4
+    first three terms / 最初の3項: [0,5,5]
+    add d*e to party 0 / 0番へだけ追加: [5,5,5] -> total % 7 = 1
+    x*y = 5*3 -> remainder / 余り 1
 
-なぜ step 3 が通信なしか: d と e が公開値になった後は、 `d*[b]` も `e*[a]` も
-「公開定数 × share」で、 前の問題で 0 ラウンドと分類した操作だから。
+同じ長さのshareリストが渡ります。pは引数、人数はlenで取り、返す各整数は
+0以上p未満にしてください。sumは合計、lenは長さ、% pはpで割った余りです。
+Lists passed together have equal lengths. Use p and list lengths from arguments.
+Return integers in 0..p-1. sum adds a list, len counts it, and % p takes a remainder.
 
-数値例 (p=101, x=7, y=9, 三つ組 a=3, b=5, c=15):
-
-    d = 7 - 3 = 4,  e = 9 - 5 = 4
-    c + d*b + e*a + d*e = 15 + 20 + 12 + 16 = 63 = 7*9
-
-最後の `d*e` は **公開値どうしの積** なので share ではない。 他の 3 項と
-種類が違う。 ここが `combine` の主題。
-
-## 4 つの関数の役割
-
-    mask / open_value   機械的な算術。 式は下の docstring にある
-    combine             式は書いてあるが、 d*e をどう扱うかは書いていない
-    rounds              自分で判断する
-
-## どの関数にも共通の約束
-
-  - list を返す関数は長さ n、 要素はすべて `% p` で 0..p-1 に正規化する。
-  - p と n は起動ごとに変わる。 数値を書き込まず、 引数と `len()` から取る。
-
-## 引数と返り値の形 (share なのか、公開値なのか)
-
-    mask(value_shares, mask_shares, p) -> list[int]   引数は 2 つとも share
-    open_value(shares, p)              -> int         返るのは **整数ひとつ**
-    combine(c_shares, a_shares, b_shares, d, e, p) -> list[int]
-        c_shares / a_shares / b_shares は share (長さ n の list)
-        d / e は **開示済みの公開整数**。 share ではない
-    rounds()                           -> int         1 以上でなければ落ちる
-
-この問題に、 JSON を手入力する checkpoint は無い。 4 つとも関数を書く。
+実手順で差を安全に公開するには、入力と独立な一様乱数a/bを一度だけ使い、
+観測者がa/bを復元できないことが必要です。全リストを見せるこの教材とは別の条件です。
+Real opening privacy requires independent uniform masks used once, hidden from
+that observer. That condition differs from this all-rows-visible teaching view.
 """
 
 from __future__ import annotations
 
 
 def mask(value_shares: list[int], mask_shares: list[int], p: int) -> list[int]:
-    """[value] - [mask] を share のまま計算する。プロトコルの 1 歩目。
+    """差のshareを作る / Form difference shares without opening the inputs.
 
-    この関数は算術だけ。 通信は要らない (各 party が自分の行だけを触る)。
+    式 / formula: out[i] = (value_shares[i] - mask_shares[i]) % p
+    p=7: [3,4,5] minus [1,2,6] -> [2,2,6]. 5-6=-1 -> remainder 6.
 
-    手順:
-      1. 2 つの list を同じ位置どうしで組にする
-      2. 各組について引き算して `% p` する
-      3. 長さ n の list にして返す
-
-    式:
-        out[i] = (value_shares[i] - mask_shares[i]) % p
-
-    なぜ正しいか:
-        sum(out) = sum(value_shares) - sum(mask_shares) = value - mask (mod p)
-
-    例: p=101, [x]=[30, 40, 39] (x = 109 % 101 = 8), [a]=[10, 20, 74] (a = 3)
-        out = [20, 20, (39 - 74) % 101] = [20, 20, 66]
-        検算: 20 + 20 + 66 = 106、 106 % 101 = 5 = 8 - 3
-
-    ありがちな失敗:
-      - `% p` を忘れて -35 のような負の値を返す
-        (Python の `%` は負の値でも 0..p-1 を返すので、付けるだけでよい)
-      - 長さの違う list を `zip` して短いほうに切り詰める
+    各行をforで計算し、長さnのリストを返します。合計は返しません。
+    Compute each matching row in a loop; return n rows, not their total.
+    Run public tests / 「公開テストを実行」 → Submit checkpoint mask.
     """
     return list(value_shares)
 
 
 def open_value(shares: list[int], p: int) -> int:
-    """share の背後にある値を全員に見せる。返すのは整数ひとつ。
+    """差を公開整数へ戻す / Reconstruct the difference as one public integer.
 
-    この関数も算術だけ。 呼ばれるのは d と e に対してだけで、 どちらも
-    「秘密を、誰も知らない一度きりのマスクで覆った値」なので、 開示しても
-    元の秘密については何も分からない。
+    式 / formula: sum(shares) % p
+    p=7: [2,2,6] -> 10 -> remainder / 余り 3.
 
-    手順:
-      1. share を全部足す
-      2. `% p` して 0..p-1 の整数ひとつを返す (list ではない)
-
-    式:
-        value = sum(shares) % p
-
-    例: p=101, shares=[20, 20, 66] -> 106 % 101 = 5
-
-    ありがちな失敗:
-      - `% p` を忘れる。 返した値は次の式で **係数** として使われるので、
-        `d * b_i` が跳ね上がり、原因から遠い場所 (combine) で結果が合わなくなる
-      - list を返す (combine の d / e は整数を期待している)
-      - 人数を仮定して `shares[0] + shares[1] + shares[2]` と書く
+    10も同じ余りを表しますが、関数の返り値は0..p-1にそろえる約束です。
+    これは返値の形式の条件で、後段の積が必ずずれるという意味ではありません。
+    10 represents the same residue, but this function promises the canonical
+    range 0..p-1; it is not a claim that the later product must otherwise change.
+    Return one integer, not a list / リストではなく整数1個。
+    Run public tests / 「公開テストを実行」 → Submit checkpoint open.
     """
     return 0
 
@@ -115,64 +88,33 @@ def combine(
     e: int,
     p: int,
 ) -> list[int]:
-    """開示された d, e と三つ組の share から、x*y の share を組み立てる。
+    """三つ組の各行と公開d/eで積のshareを作る / Assemble product shares.
 
-    **ここがこの問題の中心**。 式は与える。 与えないのは、 4 つの項のうち
-    1 つをどう扱うかの判断。
+    各行 / each row: (c_shares[i] + d*b_shares[i] + e*a_shares[i]) % p
+    最後の公開定数d*eが合計に一度分だけ入るようにします。party 0へだけ足す
+    方法なら、i=0の行へd*eを追加してから% pします。別の配り方でも合計が同じなら可。
+    The extra public term must contribute d*e once to the total. One method adds
+    d*e only to row i=0 before taking % p. Other correct distributions are valid.
 
-    使う式:
-        x*y = c + d*b + e*a + d*e
-
-    導出 (d = x - a, e = y - b より x = a + d, y = b + e):
-        x*y = (a + d)(b + e) = a*b + a*e + d*b + d*e = c + e*a + d*b + d*e
-
-    項ごとに「誰が計算できるか」:
-        c     share。 各自が自分の c_i を出す
-        d*b   d は公開値、 b は share -> 各自が d * b_i を計算 (公開定数 × share)
-        e*a   同じく各自が e * a_i を計算
-        d*e   **公開値 × 公開値 = 公開定数**。 share ではない。 他の 3 つと種類が違う
-
-    採点のしかた:
-        (1) 返した list の合計が `(x*y) % p` であること
-        (2) 長さ n、 要素はすべて 0..p-1
-        (3) **合計が `(x*y + (n-1)*d*e) % p` になっていたら明示的に落とす**。
-            fixture は d != 0 かつ e != 0 を強制している —— もし d*e = 0 なら
-            この 2 つが区別できず、間違った実装が正しいと判定されてしまうため。
-
-    考える順序:
-        1. 上の 3 項だけを各自が計算したとき、合計はいくつか
-           (答えは c + d*b + e*a。 x*y との差はちょうど d*e)
-        2. その差を埋めるには d*e を足す。 では **誰が** 足すのか
-        3. 前の問題で公開定数を扱ったときの規則を思い出す
-
-    注意: `d` は `b` に、 `e` は `a` に掛かる。 取り違えると一般には x*y に
-    ならない (d == e の設定ではたまたま通ってしまうので気付きにくい)。
-
-    返り値の形:
-        長さ n の list。 要素は 0..p-1 の整数。
-
-    ありがちな失敗:
-      - `d*e` を足し忘れる (合計が x*y - d*e になる)
-      - `d*e` を全員に足す (合計が (n-1)*d*e だけずれる)
-      - `d` / `e` を list として扱う (どちらも開示済みの整数)
+    p=7, a=[1,2,6], b=[2,3,1], c=[4,2,6], d=3, e=4:
+        before / 追加前 [0,5,5]; after / 追加後 [5,5,5]; total % 7 = 1.
+        adding to everybody / 全員へ追加 [5,3,3] -> 4 (wrong / 不正解).
+    dはbに、eはaに掛けます。d/eは整数、a/b/cはリストです。
+    d multiplies b; e multiplies a. d/e are integers; a/b/c are lists.
+    Return n canonical integers / 長さn、各要素0..p-1のリスト。
+    Run public tests / 「公開テストを実行」 → Submit checkpoint combine.
     """
     return list(c_shares)
 
 
 def rounds() -> int:
-    """Beaver 掛け算 1 回に必要な開示ラウンド数を返す。
+    """2つの差をまとめて公開する最小ラウンド数 / Minimum batched opening rounds.
 
-    採点のしかた:
-        1 以上の整数であることを要求する。 0 を返すと「掛け算は各自でできる」
-        と言っていることになり、明示的に落とされる (この問題が存在する理由
-        そのものを否定する答えなので)。
-
-    考える順序:
-        1. 上のプロトコルで、開示している値はいくつあるか
-        2. その 2 つの計算は互いに依存しているか。 d を出すのに e は要るか
-        3. 依存していないなら、同じ 1 回のやり取りでまとめて送れるか
-
-    返り値の形:
-        整数ひとつ (bool は不可)。
+    dの計算にeは不要、eの計算にもdは不要なので、同じ段階で送れます。
+    公開値2個、最小1ラウンド。Python関数の呼び出し回数とは区別します。
+    Neither difference needs the other to be opened first. Two opened values,
+    one minimum round; distinguish that from two Python function calls.
+    Return an integer (not bool) / 整数で返す (boolは不可)。
+    The protocol/transfer checkpoints reuse this file / 新しい関数の追加は不要。
     """
     return 0

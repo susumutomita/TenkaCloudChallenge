@@ -60,3 +60,4 @@ reset:
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm $(IMAGE)-author python -m unittest discover -s tests/hidden -p test_workbench.py -v

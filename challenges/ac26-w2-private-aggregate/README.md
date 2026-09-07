@@ -1,142 +1,60 @@
 # Five multiplications, one round
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+Implement a combined incident score from additive shares. Each organization supplies a count and a severity. The same program must calculate their products, preserve the permitted opening transcript, and batch the independent openings into one modeled round.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 250 · **Chapter:** Week 2 / Private
-Aggregation Synthesis · **Role:** `synthesis` · **Time:** 75–105 minutes · **Points:** 300
-· **Required first:** `ac26-w2-privacy-audit` · **Status:** draft — see "Week 2 alignment"
+This is an independent, unofficial companion to Advanced Cryptography Program 2026. It is not affiliated with or endorsed by the course. This problem implements an arithmetic/opening-channel model, not a deployed MPC protocol.
 
-## The story
+## Participant route
 
-Several organizations have been comparing notes about incidents, badly — over lunch, in
-generalities, nobody willing to be the one who says a number first. What they actually want is a
-single figure:
+Start in Participant Portal, select **Inspect evidence**, and edit `aggregate.py`. Begin with `plan(spec)` and submit **Estimate the cost before writing it**. Plan is independently gradable before the other functions exist. **Run public tests** checks a plan shape and one score example; its score check remains incomplete until aggregate is written.
 
-```text
-score = sum_i (count_i * severity_i) + bias        (bias public, mod p)
-```
+The statement supplies definitions, owner/organization index tables, all required formulas, and a p=7 example. Complete `share_inputs`, `add_public`, and `aggregate`, then submit each checkpoint from the same editor. Every field uses current source; no terminal, separate editor, manual JSON answer or new endpoint is needed.
 
-Both factors of every product are secret, and they belong to different people. This is the whole of
-Week 2 in one expression.
-
-## What you build
-
-Everything you reveal goes through one handle:
-
-```python
-io.open_batch([sharing_a, sharing_b])   # -> [value_a, value_b]   1 round
-io.open_batch([sharing_a])
-io.open_batch([sharing_b])              # -> same values          2 rounds
-```
-
-One call is one round. How you group your openings is a design decision, and it is **measured**,
-not asked about.
-
-## Participant Portal workflow
-
-1. Start the problem in Participant Portal; the problem editor appears on the same page.
-2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
-3. Edit the starter source in the Portal editor.
-4. Select **Run public tests** and fill any direct-answer fields from the evidence.
-5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
-
-No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
-checkpoints use the current editor source. Direct answers are bound to the current deployment
-seed, so a value copied from another deployment is rejected.
-
-## Scoring
-
-Eight checkpoints, scored independently. Wrong answers cost 15 points each.
-
-| Checkpoint | Points | What is checked |
+| Checkpoint | Points | Evidence |
 |---|---:|---|
-| `plan` | 35 | Multiplications, triples and rounds, estimated before implementing |
-| `share-inputs` | 30 | One canonical share per party, reconstructing to the secret |
-| `linear` | 30 | A public constant folded in by exactly one party |
-| `multiply` | 55 | The score matches the plain computation |
-| `result` | 35 | Re-sharing, permutation, and a known input delta |
-| `privacy` | 40 | The masked differences were revealed, and nothing else |
-| `cost` | 35 | The estimate matches the measurement |
-| `transfer` | 40 | All of it, under a seed you have never been shown |
+| plan | 35 | Exactly three integer estimates: products, fresh triples and rounds |
+| share-inputs | 30 | Supplied random pieces followed by the modular complement |
+| linear | 30 | A sharing reconstructing to the original value plus a public constant |
+| multiply | 55 | Returned score shares match the plain expression |
+| result | 35 | Re-sharing/order invariance and the count-change relation |
+| privacy | 40 | Opened values equal the supplied triples' masked differences, counting duplicates |
+| cost | 35 | One actual opening batch, 2k values, matching plan |
+| transfer | 40 | All four functions under other moduli, counts and inputs |
 
-Every one of the 8 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 24 still leaves 160 of 300.
+Wrong submissions cost 15 points. Each checkpoint has three hints: mechanism, small example/formula, then actions using the actual arguments and Portal controls. Existing IDs, points and hint penalties are unchanged.
 
-## Two of the three numbers are the same
+## Arithmetic and observations
 
-`k` organizations means `k` multiplications and `k` triples. It does **not** mean `k` rounds: no
-product's `d` and `e` depends on any other product's result, so all of them fit in one opening.
+For each organization i and piece-owner j, form differences from `counts[i]`, `severities[i]`, and that organization's `triple_list[i]`. After opening d/e, form `c_j+d*b_j+e*a_j` and add the public d*e term once across owners. This is the expansion of `(a+d)*(b+e)`. Sum product pieces by position and add bias once. The p7 example reconstructs 4 from returned shares [6,5].
 
-An implementation that opens per multiplication is correct, is private, and costs `k` times the
-latency. That is the point — rounds track multiplicative **depth**, not multiplication count. This
-expression has depth 1, so the round count stays at one however wide it grows. A circuit of depth
-`D` costs `D` rounds.
+Products are independent, so their 2k masked differences can be opened in one call to `io.open_batch`. The cost model counts calls and opened values separately. Opening per product can remain correct and satisfy the opening-value criterion while failing the one-round target. Reusing a triple can remain correct and still open 2k values while exposing a difference of inputs. Privacy and cost therefore have independent verdicts.
 
-## Why reusing a triple is not a correctness bug
+Lists and tuples are equivalent ordered sequences for returns and opening inputs, including both levels of share_inputs. Offsets at several owners are valid when their modular sum equals the public constant. Booleans, floating-point values, wrong lengths and noncanonical elements fail the parent checks.
 
-Beaver multiplication works with any valid triple, so reusing one across every product still gives
-the right score. Every correctness test you can write passes.
+The opening criterion compares the **multiset of reconstructed opened values**: order may differ, but repeated values count with multiplicity. It does not require one particular source layout or attest execution of a function body. Correct arithmetic alternatives, another owner for a public term, and output redistribution with the same total are accepted.
 
-What breaks is privacy. With one `a` masking both `x₁` and `x₂`, the opened `d₁ - d₂` **is**
-`x₁ - x₂` — a difference of secrets, sitting in the transcript.
+## What the model does and does not protect
 
-The hidden tests match the multiset of opened values exactly against the masked differences the
-supplied triples imply. Being an exact match rather than a blacklist, one check catches "used
-another product's triple", "revealed something extra", and "revealed something short".
+All shares are present in one Python program. It can reconstruct its arguments locally. The modeled observer sees the values requested through `io.open_batch`; the checkpoint does not certify all Python information flows, distributed secrecy, side-channel resistance, collusion handling, or real network round trips.
 
-## Correctness, privacy and cost are graded separately
+Fresh independent uniform masks unknown to an observer explain the ideal arithmetic argument. Fixture generation is deterministic toy data, not a cryptographic randomness guarantee; zero masks are allowed. Publishing a final score still reveals whatever follows from that score.
 
-An implementation can be correct and expensive, correct and leaky, or private and wrong. Folded
-into a single verdict, you could not tell which of those you built. So they are three checkpoints.
+The Workbench retains the existing parent-owned seed/tcw1 preparation contract. Hidden fixtures and grading code stay in the unpublished verifier image. On Linux, learner code runs in a separate process with a clean environment, closed inherited descriptors and restrictions on file access and metadata changes, program/network access, process interference, scheduler writes and persistent IPC. The trusted parent validates returned values, receives opening requests, and records every accepted batch itself. Learner counters, monkeypatches and printed verdicts are not grading authority. Fresh request identifiers prevent stale/preprinted replies; they do not attest function execution. Existing 25-second evaluation deadlines remain, with bounded source/output and process-group cleanup. Tini reaps orphaned descendants.
 
-## What the published output leaks by definition
+These restrictions are tested for the stated surfaces; they do not defend against an owner of the Docker daemon or replace a hardened multi-tenant execution platform. No seed, hidden input, exception body or reference output is returned in failure feedback. Public initialization diagnostics use validated source filename, line and exception type only.
 
-Once the score is published, whatever follows from the score is public. At `k = 1`, `score - bias`
-is that organization's product outright. With small `k` and a narrow severity range, the candidate
-counts narrow a lot.
+## Local verification and resources
 
-MPC guarantees the *process* adds no leakage. It does not guarantee the output reveals nothing —
-that needs a different mechanism, such as perturbing or thresholding what you publish.
+`make test` runs the public checks against the starter or your local edits; unimplemented starter score functions are expected to fail. `make reference-test` runs the original nine mutation cases and Linux execution/observation regressions in the author image. `make agent-gate` from the repository root validates catalog contracts; it is not runtime proof.
 
-## Threat model
+The default Compose entry is `local/docker-compose.yml`, with host-loopback Workbench 18099 and an unpublished verifier on its internal network. Both services run as non-root and use an init process. The dedicated acceptance run used project `ac26-private-aggregate-reader-716`, localhost 18153 and synthetic seed `private-aggregate-reader-716`. See `local/tests/hidden/READER.md` for commands, before/after evidence and the retained real-Portal-components harness.
 
-Honest-but-curious, no collusion, toy field, values small enough to check by hand. Not a security
-claim and not a model of a real deployment.
+This local problem creates no AWS resources. Docker CPU, memory, images and containers consume local resources; stop its own Compose project with `make verifier-down` or the exact project-specific down command. Never stop another running project.
 
-## Week 2 alignment
+## Course evidence
 
-Week 2's material was not published upstream at the commit `curriculum.md` records, so
-`courseAlignment` pins `week2/README.md` with `kind: "placeholder"`, and `status` stays `draft`.
-The pin records the *absence* of material at that commit rather than an alignment to it — which is
-what lets `bun run course:drift` report `PUBLISHED` the day the material appears. #219 reconciles
-the row before this leaves draft.
+The existing metadata alignment/status pin is retained. It records the earlier course snapshot, not a claim that Week 2 remains unpublished. This revision read the current official `week2/problems/toy-mpc/README.md` and the author's Week 2 notes on additive sharing, fresh Beaver triples, opening choices and communication cost. Exact paths, commits and hashes are recorded in `local/tests/hidden/source-readings.json`. Boolean MPC, OT and a real distributed deployment are outside this arithmetic synthesis problem.
 
-## Assurance scope
+## Python helpers
 
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
-no reference solution, no verifier. Those live only in a second, unpublished container the
-Workbench reaches over the compose network, and in the author-only image `make reference-test`
-builds.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: nine broken implementations. Two of them —
-triple reuse and per-multiplication opening — produce **exactly the right score**, so a suite that
-only checked the answer would let both through and the problem would be grading arithmetic.
+The computation helpers `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing` can be imported. They are loaded before your code runs. Loading other modules or accessing files/network is unsupported. Public and submitted runs each allow up to25 seconds.

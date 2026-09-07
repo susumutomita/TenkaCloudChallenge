@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

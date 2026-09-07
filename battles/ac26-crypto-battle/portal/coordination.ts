@@ -1,3 +1,5 @@
+import { rotorRow, rotorPositions } from "../game/src/rotor.ts";
+import { isRsaPublicKey } from "../game/src/rsa.ts";
 /**
  * Shared portal-plugin helpers for ac26-crypto-battle (Issue #486, PR4).
  *
@@ -77,6 +79,15 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     if (!Array.isArray(v.myContracts) || v.myContracts.some(c => !c || !Array.isArray(c.hints)
       || c.hints.some((h: { regularCost?: unknown }) => !h || !duration(h.regularCost)))) return false;
   }
+  if (v.lightning !== undefined) {
+    const card = v.lightning as Record<string, unknown>;
+    const duration = (n: unknown) => typeof n === "number" && Number.isFinite(n) && n >= 0;
+    if (!card || typeof card !== "object" || !["waiting", "scheduled", "unavailable", "ineligible", "available", "armed", "spent", "unused-expired"].includes(String(card.status))
+      || !duration(card.startAfterMs) || !duration(card.remainingMs)
+      || (card.startsInMs !== undefined && !duration(card.startsInMs))) return false;
+    if ((card.status === "armed" || card.status === "spent") && (typeof card.contractId !== "string" || card.contractId.length === 0 || !duration(card.points))) return false;
+    if (card.status === "spent" && !["hit", "leak", "deadline", "rotate", "ended"].includes(String(card.outcome))) return false;
+  }
   // [Issue #645] The modulus is required, not optional. The FHE and MPC panels
   // cannot state a solvable problem without it, and a payload from a
   // pre-#645 dispatcher (a mixed-version rollout) would otherwise be accepted
@@ -120,9 +131,28 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // closed to "unknown data format" rather than render `NaN`/`undefined`
   // arithmetic as a silently wrong countdown.
   if (v.myContracts.some((c) => typeof (c as { remainingMs?: unknown }).remainingMs !== "number")) return false;
+  if (v.myContracts.some(c => c.lightningEligible !== undefined && typeof c.lightningEligible !== "boolean")) return false;
   if (!Array.isArray(v.publicLedger)) return false;
 
   if (typeof v.teams !== "object" || v.teams === null) return false;
+  if (v.myContracts.some(c => c.task?.kind === "rotor-encrypt" && (!rotorRow(c.task.plaintext) || !rotorPositions(c.task.myInitial)))) return false;
+  if (v.publicLedger.some((a: Record<string, unknown>) => a?.kind === "rotor-pair" && (a.method !== "leak" || !rotorRow(a.plaintext) || !rotorRow(a.ciphertext) || "myInitial" in a))) return false;
+  const rsaValue = (n: unknown, max: number) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0 && n < max;
+  if (v.myContracts.some(c => c.task?.kind === "rsa-encrypt" && (!isRsaPublicKey(c.task) || !rsaValue(c.task.plaintext, c.task.n)))) return false;
+  if (v.publicRsaKeys !== undefined) {
+    if (!Array.isArray(v.publicRsaKeys)) return false;
+    const seen = new Set<string>(), teams = v.teams as Record<string, { generation?: unknown }>;
+    for (const raw of v.publicRsaKeys) {
+      if (!raw || typeof raw !== "object") return false;
+      const key = raw as Record<string, unknown>;
+      if (!isRsaPublicKey(key) || typeof key.teamId !== "string" || !Object.hasOwn(teams, key.teamId)
+        || typeof key.generation !== "number" || !Number.isSafeInteger(key.generation) || key.generation < 1 || teams[key.teamId]?.generation !== key.generation
+        || seen.has(key.teamId)) return false;
+      seen.add(key.teamId);
+    }
+  }
+  if (v.publicLedger.some((a: Record<string, unknown>) => a?.kind === "rsa-pair" && (!isRsaPublicKey(a) || a.method !== "leak"
+    || !rsaValue(a.plaintext, a.n) || !rsaValue(a.ciphertext, a.n)))) return false;
   // [Issue #709] Every team's puzzle -- what the sudoku HUNT card draws.
   if (typeof v.publicPuzzles !== "object" || v.publicPuzzles === null) return false;
 
@@ -139,7 +169,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // reach the HUNT cards' array methods or turn into a fabricated completion.
   if (v.completedHunts !== undefined) {
     if (!Array.isArray(v.completedHunts)) return false;
-    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true };
+    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true, vigenere: true, rsa: true, rotor: true };
     for (const entry of v.completedHunts) {
       if (typeof entry !== "object" || entry === null) return false;
       if (typeof entry.targetTeamId !== "string" || entry.targetTeamId.length === 0) return false;
@@ -157,6 +187,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
       && typeof (x as Record<string, unknown>).generation === "number";
     for (const t of h.targets) {
       if (!identified(t) || typeof t.commitment !== "number" || typeof t.remainingMs !== "number" || !Array.isArray(t.evidence)) return false;
+      if (t.openingHeld !== undefined && typeof t.openingHeld !== "boolean") return false;
       for (const a of t.evidence) if (!a || a.kind !== "rps-open" || typeof a.contractId !== "string" || typeof a.id !== "string" || !hand(a.hand) || typeof a.randomness !== "number" || typeof a.commitment !== "number") return false;
     }
     for (const p of h.pending) if (!identified(p) || !hand(p.predictedHand)) return false;
@@ -171,11 +202,19 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     if (last.outcome !== "hit" && last.outcome !== "miss") return false;
     if (last.points !== undefined && (typeof last.points !== "number" || !Number.isFinite(last.points))) return false;
   }
+  if (v.lastCipher !== undefined) {
+    const last = v.lastCipher as Record<string, unknown>;
+    if (!last || typeof last !== "object" || typeof last.contractId !== "string"
+      || !["hit", "miss"].includes(String(last.outcome))
+      || typeof last.points !== "number" || !Number.isFinite(last.points)) return false;
+  }
+  if (v.myContracts.some(c => c.cipherFailed !== undefined && typeof c.cipherFailed !== "boolean")) return false;
   // [Issue #709] Same shape, same reason: the PROVE banner keys on it.
   if (v.lastProve !== undefined) {
     const last = v.lastProve as Record<string, unknown> | null;
     if (typeof last !== "object" || last === null) return false;
     if (last.outcome !== "hit" && last.outcome !== "miss") return false;
+    if (last.points !== undefined && (typeof last.points !== "number" || !Number.isFinite(last.points) || last.points < 0)) return false;
   }
 
   return true;

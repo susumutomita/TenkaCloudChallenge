@@ -1,119 +1,105 @@
-# Type one line, paste the value — the addition that finishes without knowing x
+# Computing with a cover — then testing its limits
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> This is an independent, unofficial companion to the Advanced Cryptography Program
+> 2026, without affiliation or endorsement. The problem text and implementation are
+> independently authored. Questions belong in TenkaCloud, not with course operators.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 12 · **Chapter:** Bridge 0 /
-Computing Under a Cover · **Role:** `diagnostic` · **Time:** 20–30 minutes · **Points:** 100
-· **Status:** draft — new companions need human play evidence (#465) before leaving draft
+Track `advanced-cryptography-2026`, order 12, difficulty 1, 20–30 minutes, 100 points.
 
-## What this is
+## Participant route
 
-The catalog's difficulty-1 entrance step. Not a write-a-function problem: you open your own
-`python3`, paste the numbers the Portal's "Inspect evidence" shows you, and then **type one
-line, paste the value it prints**, eleven times. The subject is one line of school algebra —
-`(a + x) + (b + x) = (a + b) + 2x` — the line the whole course stands on: an addition that
-finishes without anyone knowing x.
+Start the problem and press **Inspect evidence**. Calculate on paper or with the
+optional `unknown_x_drill.py` editor; no terminal setup is required. Submit the
+covered pair first and check for solved. The eight answer fields follow the same
+experiment: cover, add, compare with a large cover, account for the cover, recover,
+count candidates under a separate remainder rule, observe a difference leak, and
+analyze the expanded product.
 
+The Japanese and English statements give the required formulas and small worked
+examples. Each field has three hints: mechanism, example, and actions named after
+the actual screen controls. Hint penalties total 28 points; a wrong answer costs 5.
+The final ungraded extension replaces the shared cover with distinct covers u/v
+and asks what changes in the sum, difference, and product.
+
+The optional public tests first check a published small example, then print the
+learner's results on the current public inputs. That output does not grade those
+results. All eight checkpoints grade manual values; no checkpoint grades the
+source file or credits a public-test PASS.
+
+| Checkpoint | Points | Grading evidence |
+|---|---:|---|
+| covered | 10 | Ordered pair of covered numbers |
+| sum-covered | 10 | Their integer sum |
+| huge | 15 | Difference of the two expressions with the large cover |
+| held | 10 | Returned sum and total cover, in that order |
+| recover | 10 | Original sum after removing both covers |
+| guesses | 15 | Candidate count in the full remainder range |
+| gap | 15 | Signed difference of the covered values |
+| product | 15 | Product, terms excluding x², and their difference |
+
+The candidate experiment explicitly permits both candidates over `0..n−1`; it is
+not a secrecy proof for the generator's narrow integer ranges. Counting compatible
+candidates differs from an equal-probability claim. The product experiment shows
+that the addition correction `2*x` cannot be reused unchanged: removing x² alone
+also leaves `(a+b)*x`. This is not a multiplication impossibility result or a
+derivation of bootstrapping. Some answers coincide across experiments, so the text
+does not promise that every other learner's numerical answer will fail.
+
+## Runtime and authority
+
+Compose builds a participant Workbench and a separate unpublished verifier. Only
+the verifier image contains `fixtures/` and the expected-value derivation;
+`reference/` and `mutation.py` are author-stage additions. The verifier receives
+the per-run `FLAG_SEED` and serves only the public inputs through `/public`.
+
+The Workbench receives no fixture seed in its container environment, including
+PID 1 and healthcheck processes. Before listening, its Python supervisor protects
+its process and fetches a derived signing key and a public-input snapshot from
+fixed internal routes. The key is never returned through the public APIs. The
+existing `tcw1` submission format binds a value to its checkpoint and run; the
+verifier still checks the value itself. Raw, altered, cross-checkpoint, and
+cross-run sealed submissions are rejected. Tuple entries must be exact integers,
+not fractions truncated into an answer.
+
+Learner processes launched by **Run public tests** receive only public data. The
+pinned Linux image supplies libseccomp; its filter blocks network access and
+reading or disrupting the protected supervisor. A failed restriction aborts the
+learner run. The launcher closes inherited descriptors and kills its process
+group after completion or timeout. This is an additional process restriction,
+not a claim to sandbox arbitrary programs against every kernel attack.
+
+Local execution remains self-paced practice for the person who controls Docker.
+That person can inspect verifier images and alter the stack; this setup is not an
+exam, ranking, or certification authority against its administrator. Direct CLI
+runs outside the Workbench launcher do not receive its process restrictions.
+
+Only the Workbench publishes a host port, `127.0.0.1:18140`; the verifier has no host
+port. Both run non-root with read-only root filesystems, dropped capabilities,
+no-new-privileges, and bounded memory/PIDs/CPU. No AWS resources or cloud account
+are required. Local Docker CPU, memory, images, and disk remain in use until the
+operator stops the project or removes its images.
+
+## Author verification and teardown
+
+From this problem directory, with an author-only synthetic `FLAG_SEED`:
+
+```sh
+make reference-test
+make test
+make inspect
+make verifier-down
 ```
-1  c1, c2 = a + x, b + x       lay the cover on                        covered
-2  c1 + c2                     add without knowing                     sum-covered
-3  (a + b) + 2 * x             the all-knowing expression             (no answer field)
-4  c1 + c2 == ...              the agreement check                    (no answer field)
-5  huge in place of x          the fifteen-digit cover, as a diff      huge
-6  held = c1 + c2; (held, 2x)  what the other side holds               held
-7  held - 2 * x                take the cover off                      recover
-8  count the candidates        nothing narrows                         guesses
-9  c1 - c2                     the shared cover leaks the difference   gap
-10 (c1*c2, ab+(a+b)x, diff)    multiplication leaves x²                product
-11 diff == x * x               the wall, touched before it has a name (no answer field)
-```
 
-Every line comes with "what this line means"; every matching value unlocks "read after it
-matches". Eight of the eleven lines have an answer field — the platform's per-problem maximum;
-two of the other three only display a `True` whose content the line before them already
-carries, and line 3 prints the same number as line 2.
+`reference-test` runs the existing 25 mutations plus bootstrap, exact-answer, and
+Linux process-boundary tests in the author image. `test` and `inspect` use the
+unpublished verifier for public inputs. The starter intentionally fails until
+filled in. To exercise the live Workbench boundary tests, set
+`UNKNOWN_X_WORKBENCH_URL` to the dedicated loopback URL and run
+`local/tests/hidden/test_isolation.py`; the seed probe returns booleans only.
 
-## Why the numbers are small and seed-derived
-
-a and b are single digits, the small cover is at most two digits, and the candidate count in
-line 8 stays below sixty — every line is checkable by hand or at a glance. The huge cover is
-fifteen digits precisely so nothing about it is checkable by eye, which is that line's point.
-All values come from this deployment's `FLAG_SEED`; the statement's worked example (a = 5,
-b = 3, x = 2, huge = 10⁶, n = 13) is outside the generation range (x is at least 3, huge
-always fifteen digits, n at least 17), so no deployment can be solved by copying the
-statement. There is one right value per line per seed; only the value your own Python
-printed passes.
-
-Mod is deliberately not a topic here: line 8's `% n` gets a one-sentence inline gloss and
-nothing more. The clock world itself is the next problem (`ac26-bridge-clock`).
-
-## Participant Portal
-
-1. Start the problem in the Participant Portal. The problem editor appears on the same page.
-2. Press **Inspect evidence**: the numbers are printed as Python assignment statements. Paste
-   them into `python3` first.
-3. Type line 1, paste the value into the first answer field, submit. Read the sentence for
-   that value. Continue to line 11. **Each answer field is a single-line input.**
-4. If you cannot open Python: fill in the functions of `unknown_x_drill.py` in the editor
-   and press **Run public tests** — it prints your functions' values on this deployment's
-   numbers, which is exactly what the REPL would print.
-
-Direct answers are bound to the current deployment seed, so values copied from another
-deployment are rejected.
-
-## Scoring
-
-Eight checkpoints, graded independently. A wrong answer costs 5 points.
-
-| Checkpoint | Points | Evidence kind | What it checks |
-|---|---:|---|---|
-| `covered` | 10 | construct | the pair (a + x, b + x) — all the other side receives |
-| `sum-covered` | 10 | construct | c1 + c2, the addition done in ignorance of x |
-| `huge` | 15 | predict | the two sides' difference with a fifteen-digit cover |
-| `held` | 10 | construct | what returns, paired with the cover total 2x |
-| `recover` | 10 | construct | the cover taken off — a + b, never shown to anyone |
-| `guesses` | 15 | trace | the candidate count: nothing narrows |
-| `gap` | 15 | counterexample | c1 − c2: the difference two values under one cover leak |
-| `product` | 15 | counterexample | the multiplication's leftover — exactly x² |
-
-One hint per checkpoint (penalty 3–5), naming the usual slip on that line.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon
-and every image in the compose stack cannot be prevented from inspecting hidden material.
-The boundary here is misdelivery, not confidentiality against that person: the participant
-Workbench image contains the Portal editor API, the starter and the public tests only.
-This problem's `fixtures/generate.py` derives the expected values in the same function as
-the public numbers, so the module ships only in the separate, unpublished verifier image
-(Issue 537/543 option B2); the Workbench fetches this deployment's public half from the
-verifier's `GET /public` over the Compose-internal network. `reference/` and `mutation.py`
-are added only to the `author` stage.
-
-Only the Workbench is published, at host `127.0.0.1:18140`; the verifier has no host port.
-Both services run non-root with a read-only root filesystem, no capabilities, `no-new-
-privileges`, and bounded memory/PIDs. A checkpoint can only credit the id it echoes, results
-do not leak expected values, and the fixtures come from this deployment's seed so a memorized
-answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer at all, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: eleven broken references (the cover never laid
-on, the cover counted once in three separate places, the candidate count without the wrap,
-the expansion missing its cross terms, the wall compared against 2x, …) that the hidden
-suite must kill, plus fourteen verifier-level near-misses — the plain pair, the returned sum
-unopened, the "surely it narrows to one" guess, a truncated tuple, a boolean, another
-deployment's answer — that the value grader must refuse. `make test` and `make inspect` run
-through Compose because the participant image has no `fixtures/`: the public numbers come
-from the verifier's `GET /public`.
+At the repository root, `make install && make agent-gate` validates the catalog;
+it does not exercise HTTP or prove the runtime boundary. Recorded reader findings,
+source basis, and participant acceptance are in
+[local/tests/hidden/READER.md](local/tests/hidden/READER.md). Stop only the Compose
+project used for the exercise; `make verifier-down` targets this problem's default
+project. No release, cloud deployment, or shared-environment action is needed.

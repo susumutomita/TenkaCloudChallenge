@@ -3,8 +3,8 @@
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
     on a missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
+  - Submitted source is initialized in a fresh isolated worker. The source tree is never
+    written to; the parent checks its returned values against the field rules.
   - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
     capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
     checkpoint instead of the verifier.
@@ -38,9 +38,7 @@ import hmac
 import json
 import os
 import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -48,6 +46,9 @@ from urllib.parse import parse_qs, urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import public_payload
+from tests.hidden import check_field
+from participant.execution import LearnerError, LearnerSession
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-field-inverse"
@@ -104,48 +105,6 @@ def _limits() -> None:
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-from tests.hidden import check_field
-checkers = tuple(getattr(check_field, name) for name in {phases!r})
-
-# Keep the private callable references, then drop the answer packages and the problem
-# root before importing participant code -- the same guard
-# cs-transaction-visibility-audit's verifier applies, and ac26-w3-passkey-assertion's,
-# for the same reason. `fixtures/` and `tests/hidden/` are on disk *in this image*
-# because grading needs them, so without this the submission itself could import exactly
-# what the participant image stopped shipping (Issue 543 option B2): `fixtures.generate`
-# defines `egcd` and `egcd_rows` complete, which is worth this problem's `egcd-trace`
-# checkpoint on its own -- measured at 35 of 200 points. `check_field` imports what it
-# needs at module scope, so removing these does not affect grading.
-#
-# This closes the one-import path, not the filesystem: a submission that deliberately
-# puts the root back on `sys.path` can still reach those files. Local mode is
-# honor-system verification for whoever controls the image -- see TEMPLATE.md
-# "Assurance scope".
-for module_name in tuple(sys.modules):
-    if module_name in ("fixtures", "tests") or module_name.startswith(("fixtures.", "tests.")):
-        sys.modules.pop(module_name, None)
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-sys.path.insert(0, {workspace!r})
-
-try:
-    import field
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-failures = []
-for checker in checkers:
-    failures.extend(checker(field, {seed!r}))
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
 
@@ -168,47 +127,15 @@ def _run_submission(
         return False, None
     if len(source) > MAX_BODY_BYTES:
         return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "field.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    failures = []
+    try:
+        with LearnerSession({'field.py': source}, timeout=RUN_TIMEOUT_SECONDS) as session:
+            module = session.module()
+            for name in phases:
+                failures.extend(getattr(check_field, name)(module, seed))
+    except Exception:
+        return False, 'The submitted operations did not satisfy the required field rules.'
+    return not failures, _failure_message(failures)
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
@@ -385,6 +312,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
+    protect_supervisor()
     port = int(os.environ.get("VERIFY_PORT", "18146"))
     # Bind every interface *inside the container*, not the container's loopback: the
     # Workbench reaches this process as `verifier:<port>` over the Compose network, which

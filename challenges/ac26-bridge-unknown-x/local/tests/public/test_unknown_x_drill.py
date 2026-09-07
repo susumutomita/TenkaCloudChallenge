@@ -1,9 +1,8 @@
 """Public tests — readable, and deliberately not the grader.
 
-Two parts. Part 1 checks the eleven functions on the STATEMENT example (a = 5, b = 3,
+Two parts. Part 1 checks the eleven functions on the published example (a = 5, b = 3,
 x = 2, huge = 10**6, n = 13 — numbers no deployment can draw: x is never 2, huge is
-always fifteen digits, n is always 17 or more), whose answers are printed in the
-statement — so it can say PASS / FAIL. Part 2 prints what your functions return on
+at least fifteen digits, n is always 17 or more), whose expected results are printed by this public test — so it can say PASS / FAIL. Part 2 prints what your functions return on
 THIS deployment's numbers, which is exactly what your own python3 would print for each
 drill line. Those are the values you paste into the answer fields. Nothing here knows
 whether they are right; the Portal does.
@@ -17,6 +16,7 @@ Run with `make test`, or press "Run public tests" in the Portal editor.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -45,7 +45,7 @@ LINES = (
     "wall",
 )
 
-# The statement's worked example. Excluded from every deployment (x is never 2, huge
+# The public test's worked example. Excluded from every deployment (x is never 2, huge
 # never this small, n never below 17), so these fixed values spoil nothing seed-specific.
 L = dict(a=5, b=3, x=2, huge=10**6, n=13)
 
@@ -103,6 +103,9 @@ def part2() -> None:
     for line in LINES:
         try:
             value = calls[line]()
+            # Keep output formatting failures local to this answer, like calculation errors.
+            if isinstance(value, (tuple, list)):
+                value = json.dumps(value)
         except Exception as error:  # noqa: BLE001 - show the learner what broke
             value = f"(error: {type(error).__name__})"
         if value is None:
@@ -111,7 +114,7 @@ def part2() -> None:
 
 
 def main() -> int:
-    print("== part 1: the statement example (a = 5, b = 3, x = 2, huge = 10**6, n = 13) ==")
+    print("== part 1: the published example (a = 5, b = 3, x = 2, huge = 10**6, n = 13) ==")
     ok = part1()
     part2()
     print()

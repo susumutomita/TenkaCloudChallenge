@@ -11,8 +11,7 @@ Security contract:
     expected values, or reference output.
   - Malformed input produces a failed checkpoint, never a crashed process.
 
-Issue 537/543 (option B2): this problem's `fixtures/generate.py` computes the ten
-lines' expected values inside `setting(seed)`, in the same function as the public
+Issue 537/543 (option B2): this problem's `fixtures/generate.py` computes expected values inside `setting(seed)`, in the same function as the public
 numbers. That module therefore ships only in this verifier image (and the author
 stage), never in the participant Workbench image a learner's own `make build`
 produces. The participant side reads this deployment's public half — the assignment
@@ -35,7 +34,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import GRADED, LINES, assignments, normalize_answer, setting
+from fixtures.generate import GRADED, LINES, assignments, normalize_answer, setting, valid_reuse
 from verifier.expected import expected_for
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +47,7 @@ REQUEST_TIMEOUT_SECONDS = 15
 
 #: No checkpoint runs learner code. The editor file is a scratchpad whose public test
 #: prints the learner's own values; the grade is the pasted value, nothing else. Eight
-#: of the ten drill lines have an answer field (the platform's maximum per problem).
+#: independent fields have an answer field (the platform's maximum per problem).
 CHECKPOINTS = GRADED
 MANUAL_CHECKPOINTS = GRADED
 
@@ -57,8 +56,8 @@ def _check_line(line: str, submission: object) -> bool:
     """The value the learner pasted for one drill line, against this deployment's value.
 
     A tuple may arrive as `[a, b, c]`, `(a, b, c)` or `a, b, c`; an integer as a number
-    or a digit string. The comparison is exact: there is one right value per line per
-    seed, and it is the value the line prints when typed against this seed's numbers.
+    or a digit string. Seven fields have a unique computed value. The reuse construction is checked
+    against its public equations and accepts all valid alternatives.
     """
     if line not in GRADED or line not in LINES:
         return False
@@ -66,13 +65,18 @@ def _check_line(line: str, submission: object) -> bool:
     if isinstance(answer, str):
         try:
             answer = json.loads(answer)
-        except json.JSONDecodeError:
+        except ValueError:
             answer = answer.strip()
     if isinstance(answer, bool) or answer is None:
         return False
-    got = normalize_answer(line, answer)
+    try:
+        got = normalize_answer(line, answer)
+    except ValueError:
+        return False
     if got is None:
         return False
+    if line == "reuse":
+        return valid_reuse(setting(SEED)["public"], got)
     expected = expected_for(SEED)[line]
     return got == expected
 
@@ -92,6 +96,10 @@ def public_payload(seed: str) -> dict[str, object]:
     behind — only the `public` key travels.
     """
     return {"assignments": assignments(seed), "public": setting(seed)["public"]}
+
+
+def workbench_sealing_key() -> bytes:
+    return hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode()).digest()
 
 
 def _b64decode(value: str) -> bytes:
@@ -116,7 +124,7 @@ def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
             return None
         payload = _b64decode(encoded_payload)
         signature = _b64decode(encoded_signature)
-        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        key = workbench_sealing_key()
         expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
         if not hmac.compare_digest(signature, expected_signature):
             return None
@@ -135,6 +143,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
         path = urlsplit(self.path).path
+        if path == "/workbench-key":
+            # Internal bootstrap only; the public Workbench never proxies this path.
+            self._respond(200, {"key": workbench_sealing_key().hex()})
+            return
         # Compose's healthcheck and this deployment's public half, and nothing else.
         # The Portal editor routes live in participant/server.py: serving any of them
         # from here would put this image back on the participant's reading path, which

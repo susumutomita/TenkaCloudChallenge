@@ -70,25 +70,25 @@ def main() -> None:
     order_two = [tuple(coords) for coords in payload["orderTwoPoints"]]
     scalar = int(os.environ.get("K") or 0) or 13
 
-    print("health token :", payload["healthToken"])
-    print(f"curve        : y^2 = x^3 + {a}x + {b}  (mod {p})")
-    print(f"affine points: {len(every)}  (plus the identity, so the group has {len(every) + 1})")
-    print("vertical tangent at:", order_two or "nowhere")
+    print("検査用の値（提出しない） / health check value:", payload["healthToken"])
+    print(f"曲線 / curve: y^2 = x^3 + {a}x + {b}  ({p}で割った余り / remainders under {p})")
+    print(f"座標を持つ点 / coordinate pairs: {len(every)}  (Oを含めると / including O: {len(every) + 1})")
+    print("2倍するとOになるy=0の点 / points with y=0:", order_two or "なし / none")
     print()
-    print("the first few points:")
+    print("最初の数個の点 / first coordinate pairs:")
     for coords in every[:8]:
         print(f"  {coords}")
     if (0, 0) in every:
         print()
-        print("  Note (0, 0) in that list. It is an ordinary point of order two on this")
-        print("  curve, which is why the identity cannot be represented by it.")
+        print("  (0,0)は座標を持つ点で、2倍するとOです。Oとは違います。")
+        print("  (0,0) is an ordinary point; doubling it gives O. It is not O.")
     print()
     bits = [(scalar >> index) & 1 for index in range(max(scalar.bit_length(), 1))]
-    print(f"double-and-add for k = {scalar}:")
-    print(f"  {scalar} = 0b{scalar:b}, so there are {len(bits)} steps")
-    print(f"  bits, least significant first: {bits}")
+    print(f"2倍と足し算の記録 / double-and-add for k = {scalar}:")
+    print(f"  2進表記 / binary: {scalar} = {scalar:b}; {len(bits)}桁 / steps")
+    print(f"  2で割った余りを下の桁から / bits from repeated division by 2: {bits}")
     print()
-    print("  your trace returns one row per step, each shaped:")
+    print("  1段階につき1行 / return one row per step:")
     print("    {'index', 'bit', 'accumulator_before', 'addend_before',")
     print("     'added', 'accumulator_after', 'addend_after', 'on_curve'}")
     print("  with points rendered as 'O' for the identity and '(x, y)' otherwise.")

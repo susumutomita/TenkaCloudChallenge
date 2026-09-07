@@ -1,9 +1,7 @@
-"""Public tests: shape, and one successful transfer.
+"""Public shape and small arithmetic checks run by a trusted parent.
 
-They check that a message arrives and that the gate returns bits. They do not check
-that the sender kept anything, and they do not check that the gate hid anything.
-Both of those are properties of a distribution, not of one run -- which is exactly
-why a protocol can pass every test here and still be broken.
+These examples do not prove security of a cryptographic protocol. The private
+checkpoints also examine complete finite distributions of specified observations.
 """
 
 from __future__ import annotations
@@ -15,9 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "starter"))
-
-import oblivious  # noqa: E402
+from participant.execution import LearnerError, LearnerSession  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -56,21 +52,22 @@ def _load_public_evidence() -> dict:
     return public_payload(SEED)
 
 
-PUBLIC = _load_public_evidence()
-GRP = PUBLIC["group"]
-KEY = PUBLIC["senderKey"]
-SES = PUBLIC["session"]
+PUBLIC = {}
+GRP = {}
+KEY = {}
+SES = {}
+oblivious = None
 
 
 def test_request_is_in_the_group() -> None:
     req = oblivious.request(GRP, KEY["public"], SES["choice"], SES["blind"])
-    assert isinstance(req, int)
+    assert type(req) is int
     assert 0 <= req < GRP["p"]
 
 
 def test_blind_range_returns_two_bounds() -> None:
     low, high = oblivious.blind_range(GRP)
-    assert isinstance(low, int) and isinstance(high, int)
+    assert type(low) is int and type(high) is int
     assert low <= high
 
 
@@ -95,53 +92,81 @@ def test_the_chosen_message_comes_back() -> None:
 def test_gate_masks_returns_two_bits() -> None:
     masks = oblivious.gate_masks((0, 1))
     assert len(masks) == 2
-    assert all(m in (0, 1) for m in masks)
+    assert all(type(m) is int and m in (0, 1) for m in masks)
 
 
 def test_offer_returns_two_messages() -> None:
-    assert len(oblivious.offer(1, 0)) == 2
+    pair=oblivious.offer(1,0)
+    assert isinstance(pair,list) and len(pair)==2
+    assert all(type(value) is int and value in (0,1) for value in pair)
 
 
 def test_output_share_returns_a_bit() -> None:
-    assert oblivious.output_share(1, 1, 0, 0) in (0, 1)
+    value = oblivious.output_share(1, 1, 0, 0)
+    assert type(value) is int and value in (0, 1)
 
 
 def test_needs_transfer_returns_a_boolean() -> None:
     assert isinstance(oblivious.needs_transfer("and"), bool)
 
 
-def main() -> int:
-    only = ""
-    if "--only" in sys.argv:
-        index = sys.argv.index("--only")
-        only = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
-    failures = 0
-    selected = 0
-    for name, fn in sorted(globals().items()):
-        if not name.startswith("test_") or not callable(fn):
-            continue
-        if only and only not in name:
-            continue
-        selected += 1
+def test_small_group_selected_keys_agree() -> None:
+    grp={'p':7,'q':3,'g':2}
+    for choice in (0,1):
+        req=oblivious.request(grp,4,choice,1)
+        assert req==(2 if choice==0 else 1), 'use the choice-dependent request formula'
+        cts=oblivious.encrypt(grp,2,4,req,3,5)
+        assert isinstance(cts,list) and len(cts)==2 and all(type(v) is int for v in cts)
+        got=oblivious.unwrap(grp,4,choice,1,cts)
+        assert type(got) is int and got==(3 if choice==0 else 5), 'recover the selected message'
+
+
+def test_small_and_example_reconstructs() -> None:
+    masks=oblivious.gate_masks((0,1))
+    v1=oblivious.offer(1,masks[0])[1]
+    v0=oblivious.offer(0,masks[1])[1]
+    z0=oblivious.output_share(1,1,masks[0],v0)
+    z1=oblivious.output_share(0,1,masks[1],v1)
+    assert type(z0) is int and type(z1) is int and z0 in (0,1) and z1 in (0,1)
+    assert z0 ^ z1 == 0, 'the combined AND output must be zero for the displayed example'
+
+
+def run_cases(module, public, only=''):
+    global oblivious, PUBLIC, GRP, KEY, SES
+    oblivious, PUBLIC = module, public
+    GRP,KEY,SES=public['group'],public['senderKey'],public['session']
+    transcript=[]
+    failures=selected=0
+    for name,fn in sorted(globals().items()):
+        if not name.startswith('test_') or not callable(fn):continue
+        if only and only not in name:continue
+        selected+=1
         try:
             fn()
-            print(f"PASS {name}")
+            transcript.append('PASS '+name)
         except AssertionError as error:
-            failures += 1
-            print(f"FAIL {name}: {error or 'assertion failed'}")
-        except Exception as error:  # noqa: BLE001
-            failures += 1
-            print(f"FAIL {name}: raised {type(error).__name__}")
-    print()
-    if selected == 0:
-        print(f"no public test matched --only {only!r}")
+            failures+=1;transcript.append(f'FAIL {name}: {error or "assertion failed"}')
+        except Exception as error:
+            failures+=1;transcript.append(f'FAIL {name}: raised {type(error).__name__}')
+    if not selected:return False,f'no public test matched --only {only!r}'
+    transcript.append('public tests: '+('all passed' if not failures else f'{failures} failed'))
+    return failures==0,'\n'.join(transcript)
+
+
+def main() -> int:
+    only=''
+    if '--only' in sys.argv:
+        index=sys.argv.index('--only');only=sys.argv[index+1] if index+1<len(sys.argv) else ''
+    directory=Path(os.environ.get('SUBMISSION_DIR',str(ROOT/'starter')))
+    learner=LearnerSession({'oblivious.py':(directory/'oblivious.py').read_text()})
+    try:
+        public=_load_public_evidence()
+        with learner:passed,output=run_cases(learner.module(),public,only)
+        print(output)
+        return 0 if passed else 1
+    except (LearnerError,OSError,ValueError):
+        print(learner.initialization_diagnostic or 'The submitted functions could not be evaluated.')
         return 1
-    print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
-    print()
-    print("Nothing above checks that the sender kept a message, or that the gate hid")
-    print("a bit. Those are the two things this problem is actually about.")
-    return 1 if failures else 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__=='__main__':raise SystemExit(main())

@@ -1,136 +1,113 @@
 # Multiplication is the one that has to talk
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> This is an independent, unofficial companion to Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course. Statements, examples and code
+> are independently written; questions belong in TenkaCloud, not with course operators.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 230 · **Chapter:** Week 2 / Beaver Triples
-· **Role:** `mechanism` · **Time:** 40–60 minutes · **Points:** 200
-· **Required first:** `ac26-w2-linear-shares` · **Status:** draft — see "Week 2 alignment"
+**Week 2 · Beaver triples · 40–60 minutes · 200 points · draft**
+Prerequisite: `ac26-w2-linear-shares`.
 
-## The story
+## Start in Participant Portal
 
-The auditors can now add, scale, and combine their split-up figures without ever meeting. One
-thing still defeats them: multiplying two numbers that are *both* split. Every attempt turns into
-"well, first you tell me yours", which is the thing they built the scheme to avoid.
+Start the problem, open `beaver.py` in the editor, and implement `mask` first.
+**Inspect evidence** shows this deployment's modulus and share layout. **Run public
+tests** reports each function's result; unfinished functions may still fail while
+`mask` passes. Submit the `mask` checkpoint, then complete the other functions and
+submit the remaining checkpoints. Every checkpoint uses the current source in the
+same editor. There are no manual JSON answers and no required terminal commands.
 
-Someone points out that the hard part does not depend on the numbers. You can grind out the
-awkward material in advance — the week before, overnight, whenever — and then the meeting itself
-is short.
+The statement and starter define party, share, modulus, opening, preprocessing and
+round. They provide the formulas and a complete one-digit worked table. Each of the
+five checkpoints has three hints: mechanism → example/formula → editor procedure.
+Wrong answers cost 10 points; the existing hint penalties are unchanged. Opening all
+15 hints leaves 102 of 200 points.
 
-## The construction
+| ID | Points | Output and completion |
+| --- | ---: | --- |
+| `mask` | 40 | n integers in `0..p−1`, reconstructing to the masked difference |
+| `open` | 30 | One integer in `0..p−1`, reconstructing the shares |
+| `combine` | 65 | n integers whose sum modulo p is the product |
+| `protocol` | 30 | The functions compose, and `rounds()` reports the minimum count, 1 |
+| `transfer` | 35 | The same functions work with other moduli, party counts and triples |
 
-A preprocessed triple `(a, b, c)` with `c = a*b`, shared out ahead of time and independent of
-both inputs:
+## Arithmetic and its limits
+
+A share is a piece of a number; all pieces sum to the number modulo the prime p.
+Prepare shares of a, b and `c=a*b % p`. Open the two differences `d=x-a` and `e=y-b`
+modulo p, then expand:
 
 ```text
-d = x - a        e = y - b              each party, locally
-open d, open e                          one round of talking
-x*y = c + d*b + e*a + d*e               linear again, d and e now public
+x*y = (a+d)*(b+e) = c + d*b + e*a + d*e   (modulo p)
+out_i = (c_i + d*b_i + e*a_i) % p
 ```
 
-Three of those four terms are handled exactly the way the previous problem handled them. **The
-fourth is not a sharing at all.**
+The public constant d*e contributes once to the **total**, for example by adding it
+to party 0 only. Other distributions with the same total are accepted. In the
+statement's p=7 example, d=3/e=4 give `[0,5,5]` before the constant and `[5,5,5]`
+after it; the total remainder 1 matches `5*3`. Adding to every row instead gives
+`[5,3,3]`, total remainder 4. Returning a tuple in place of a list, a bool, or a
+noncanonical integer violates the declared return type or range.
 
-## Participant Portal workflow
+The `open` range is a representation contract. An unreduced total can still produce
+the same modular product downstream; it is not inherently an incorrect residue.
+The two openings do not depend on each other, so their messages can be batched into
+one round. `rounds()` asks for this minimum, not an arbitrary slower protocol.
 
-1. Start the problem in Participant Portal; the problem editor appears on the same page.
-2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
-3. Edit the starter source in the Portal editor.
-4. Select **Run public tests** and fill any direct-answer fields from the evidence.
-5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
+This program is a central arithmetic model. Inspect displays full lists, so their
+underlying values can be reconstructed. Real MPC gives each party its own share.
+For a hidden difference to preserve privacy, the mask must be independent and
+uniform, unavailable for the observer to reconstruct, and used once. For any fixed
+d, every candidate x has exactly one `a=(x-d)%p`, with equal probability under these
+conditions. Merely being unknown is insufficient. Correct arithmetic does not
+establish secure preprocessing, authenticated communication or protection against
+malicious parties. The exercise's nondegenerate test fixtures are chosen to expose
+arithmetic errors, not to model the full distribution of real masks.
 
-No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
-checkpoints use the current editor source. Direct answers are bound to the current deployment
-seed, so a value copied from another deployment is rejected.
+Explain what cancels in `d1-d2` if the same a is reused. Then distinguish the number
+of independent multiplications, the number of triples consumed, and the number of
+batched communication layers before continuing to `ac26-w2-private-aggregate`.
 
-## Scoring
+## Alignment
 
-Five checkpoints, scored independently. Wrong answers cost 10 points each.
+`courseAlignment` pins the published Week 2 lecture README and toy-mpc assignment
+at `a3aa4b56fa88fbe803b57d320fbc87c1a203b480`, with kinds `lecture` and `assignment`.
+Part A covers additive sharing and Beaver multiplication; this independent problem
+splits that multiplication into four functions. It does not implement Part B's OT
+or Boolean MPC. The author evidence in `local/tests/hidden/READER.md` also records
+reading the owner's Week 2 notes and the exact revisions used.
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `mask` | 40 | `x - a` reconstructs correctly, across four settings |
-| `open` | 30 | A canonical field element in `[0, p)`, not merely a congruent one |
-| `combine` | 65 | Reconstructs to `x*y` — and the classic wrong answer is named |
-| `protocol` | 30 | Your own four pieces run end to end, plus the round count |
-| `transfer` | 35 | All of it under a seed you have never been shown |
+## Runtime boundary and author checks
 
-Every one of the 5 checkpoints carries three hints (hint 1 = what is being asked, hint 2 = how to think about it, hint 3 = a walkthrough you can follow to a solution). Each checkpoint's hint penalties stay inside its 50% cap; opening all 15 still leaves 102 of 200.
+The Workbench image contains public materials, while the unpublished verifier image
+contains fixtures and the private checker. Both servers run as a non-root user,
+with Tini as PID 1. The trusted Workbench keeps the existing deployment seed and
+`tcw1` preparation contract. Each learner process receives an explicit clean
+environment and only source plus function arguments, with unrelated file descriptors
+closed. Before learner code runs, Linux seccomp denies file opens, network access,
+execution, process signalling and persistent System V IPC. Resource limits, a wall
+clock deadline and process-group cleanup bound execution; Tini reaps descendants.
 
-## The term that is not like the others
+Public and private checkers run in the trusted parent and judge returned values.
+Learner stdout and exit status are not grading verdicts. Fresh per-call IDs reject
+stale/preprinted replies; they **do not attest that a Python function executed**.
+The parent remains responsible for the arithmetic. Feedback excludes hidden inputs
+and arbitrary learner logs; public initialization errors show only the submitted
+filename, line and exception type.
 
-`c + d*b + e*a` is linear in the shares, so each party computes its own row and stops. `d*e` is a
-**public scalar**, and exactly one party folds it in. If everyone adds it, the shares sum to
-`x*y + (n-1)*d*e`.
+These are tested process restrictions, not a guarantee against someone controlling
+Docker or the host. This is a self-study arithmetic exercise, not certification of
+real-world MPC security. No cloud account or AWS resources are used.
 
-That is the same rule as adding a public constant in the previous problem — but it arrives in the
-middle of a protocol, next to three terms that genuinely are per-party, which is why it is so much
-easier to miss here.
+`make reference-test` runs eight mutation cases and the Linux execution-boundary
+suite in the author image. The repository's `make install && make agent-gate`
+validates catalog metadata separately. Reproducible real Portal component/API
+acceptance and the original reader's writeup-exposure limitation are recorded in
+`local/tests/hidden/READER.md`.
 
-It also hides well:
+## Filesystem metadata boundary follow-up
 
-- at `n = 1` it is **indistinguishable** from correct;
-- whenever `d` or `e` happens to be zero, `d*e` vanishes and it is again indistinguishable.
+The learner's Linux filter also denies file/directory creation, links, renames, removal and metadata writes. Blocking file opens alone did not stop those operations from persisting after a worker exited. The problem-local regression applies the actual filter in 16 disposable children, checks 19 operations return EPERM, and verifies unchanged parent-owned fixture contents, directory entries, permissions, ownership, timestamps and extended attributes. Its temporary fixture is removed afterward. This adds no API, scoring, mathematical rule or execution deadline; existing positive sources and suites remain the acceptance baseline. See `local/tests/hidden/READER.md` for before/after scope and commands.
 
-The hidden fixtures force `d ≠ 0` and `e ≠ 0` for exactly that reason, and the wrong total is
-named explicitly rather than being left to an inequality. Those parameters are chosen for
-observability — a real protocol draws a uniform mask and tolerates `d = 0`.
+## Computational tools and execution time
 
-## Why d and e are safe to publish
-
-`a` is uniform, made during preprocessing, and held by nobody in the clear. So `d = x - a` is `x`
-under a one-time mask and reveals nothing about `x`.
-
-Reuse the triple and that stops being true: the same `a` would mask two different secrets. This is
-why each multiplication consumes its own triple, and why the offline cost scales with the number
-of multiplications rather than being paid once.
-
-## The round count is one, not zero
-
-`d` and `e` open together, so a Beaver multiplication costs **one** round. Preprocessing does not
-buy silence; it moves the input-independent work offline. A multiplication circuit of depth `D`
-costs `D` rounds, which is why MPC latency tracks multiplicative depth rather than gate count.
-
-## Where this leads
-
-With multiplication in hand, any arithmetic circuit can be evaluated under MPC. What remains is
-which openings leak what — the last two problems of Week 2.
-
-## Week 2 alignment
-
-Week 2's material was not published upstream at the commit `curriculum.md` records, so
-`courseAlignment` pins `week2/README.md` with `kind: "placeholder"`, and `status` stays `draft`.
-The pin records the *absence* of material at that commit rather than an alignment to it — which is
-what lets `bun run course:drift` report `PUBLISHED` the day the material appears. #219 reconciles
-the row before this leaves draft.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
-no reference solution, no verifier. Those live only in a second, unpublished container the
-Workbench reaches over the compose network, and in the author-only image `make reference-test`
-builds.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: six broken submissions plus one aimed at the
-verifier. Three of the six are near-miss forms of the public-scalar trap — folded into every
-share, dropped entirely, and the two cross terms swapped — because each of those reconstructs to
-something different and a test that only catches one is not enough.
+Available computational standard libraries (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. Import them in your submitted files. Installing packages, file access and network access are unavailable. Public tests allow 15 seconds; grading allows 20 seconds.

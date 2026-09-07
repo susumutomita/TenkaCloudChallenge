@@ -28,6 +28,8 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
+    case "rsa-encrypt": return `rsa m=${task.plaintext}/n=${task.n}/e=${task.e}`;
     case "rps-duel": return `rps vs ${task.opponentTeamId}`;
     case "reveal-share":
       return `shares[${task.shareIndices.join(",")}]`;
@@ -48,6 +50,8 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
+    "rotor-encrypt": "進む車輪で4文字を暗号にする",
+    "rsa-encrypt": "公開鍵で1個の数を暗号にする",
     "rps-duel": "手を隠して、相手とじゃんけん",
     "reveal-share": "かけらを公開するか、秘密を守って証明する",
     "homomorphic-sum": "暗号文のまま足す",
@@ -62,6 +66,8 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "rotor-encrypt": "Encrypt four digits with advancing wheels",
+    "rsa-encrypt": "Encrypt one number with a public key",
     "rps-duel": "Seal your hand, then play rock-paper-scissors",
     "reveal-share": "account for a share",
     "homomorphic-sum": "add without decrypting",
@@ -73,7 +79,9 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
 
 /** What this Order asks for, in one participant-readable phrase. */
 export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
-  return TASK_LABELS[locale][task.kind];
+  return task.kind === "caesar-shift" && task.rung === "vigenere"
+    ? locale === "ja" ? "3個の鍵を順に使って暗号にする" : "Encrypt with a repeating three-key cycle"
+    : TASK_LABELS[locale][task.kind];
 }
 
 /**
@@ -83,6 +91,8 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "rotor-encrypt": return `Rotor · ${task.plaintext.join(" ")}`;
+    case "rsa-encrypt": return `RSA · m=${task.plaintext}, n=${task.n}, e=${task.e}`;
     case "rps-duel": return locale === "ja" ? "① 数字を封じる → ② 両者が開く" : "1. Seal a number → 2. Both open";
     case "reveal-share":
       return `${locale === "ja" ? "かけら" : "share"} [${task.shareIndices.join(", ")}]`;
@@ -91,6 +101,7 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
     case "masked-total":
       return locale === "ja" ? `${task.partyCount} 拠点` : `${task.partyCount} offices`;
     case "caesar-shift":
+      if (task.rung === "vigenere") return locale === "ja" ? `Vigenère · 3個の鍵を繰り返す · 今回は鍵${(task.keyPosition ?? 0) + 1}` : `Vigenère · repeat three keys · use key ${(task.keyPosition ?? 0) + 1}`;
       // A COUNT, not the symbols. The symbols are drawn on the card by
       // `DieRow` (see DieFace.tsx on why they are drawn and not typed), so
       // repeating them here as text would print the tofu this replaced.
@@ -117,6 +128,8 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
  */
 export function ledgerKindLabel(artifact: PublicArtifact): string {
   switch (artifact.kind) {
+    case "rotor-pair": return "Rotor pair (LEAK)";
+    case "rsa-pair": return "RSA pair (LEAK)";
     case "rps-commit": return "RPS / COMMIT";
     case "rps-open": return "RPS / OPEN";
     case "share":
@@ -147,6 +160,8 @@ const LEDGER_COPY = {
 export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string {
   const copy = LEDGER_COPY[locale];
   switch (artifact.kind) {
+    case "rotor-pair": return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")}`;
+    case "rsa-pair": return `n=${artifact.n}, e=${artifact.e} · ${artifact.plaintext} → ${artifact.ciphertext}`;
     case "rps-commit": return `c = ${artifact.commitment}`;
     case "rps-open": return `c = ${artifact.commitment} · ${locale === "ja" ? "手 m" : "hand m"} = ${artifact.hand} · ${locale === "ja" ? "隠す数 r" : "hiding number r"} = ${artifact.randomness}`;
     case "share":
@@ -185,7 +200,9 @@ export function ledgerPayload(artifact: PublicArtifact, locale: Locale): string 
       // Values, spelled out. This is the one-line TEXT rendering of a ledger
       // row (a table cell, an operator's log); the board draws the same pair as
       // symbols. Numbers read the same in every language and cannot go tofu.
-      return `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
+      return artifact.rung === "vigenere"
+        ? `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} · Vigenère · ${locale === "ja" ? "鍵の位置" : "key position"} ${(artifact.keyPosition ?? 0) + 1}/3`
+        : `${artifact.plaintext.join(" ")} → ${artifact.ciphertext.join(" ")} (${rungSpec(artifact.rung).pairsToBreak} ${copy.breaksAt})`;
     case "sudoku-reveal":
       // [Issue #709] Which group was opened, its four digits, and the tag that
       // names the relabelling. The tag is on the row on purpose: two rows

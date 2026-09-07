@@ -1,120 +1,99 @@
 # What it holds, what it breaks
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+Audit three small input-checking programs. Find a valid value that a boundary check
+rejects, construct an out-of-range value that a missing check accepts, and read a
+witness from a record. Then classify each program and make the same functions work
+on unseen numeric inputs. This teaches counterexamples and the difference between
+completeness, input validity, and record disclosure; it is not a real zero-knowledge
+protocol or a claim that these public equations hide their solutions.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 20 · **Chapter:** Bridge 0 / Security
-Properties · **Role:** `diagnostic` · **Time:** 30–45 minutes · **Points:** 200
-· **Recommended first:** `ac26-bridge-experiment`
+## Participant route
 
-## The story
+Start the problem in Participant Portal, select **Inspect evidence**, and compare
+`statement`, `verifiers`, and `transcript` with the formula table in the statement.
+Edit `classify.py` and `counterexamples.py` in the problem editor. All five Submit
+buttons derive their submission values from those files. No terminal is required.
+The Japanese and English statements supply the needed formulas, small examples,
+three hint steps per checkpoint, and the meaning of each Inspect check name.
 
-Three toy verifiers arrive for audit, written by three different teams, all shipped, all with a
-green test run behind them. Your job is not to say which one is buggy — they all are. It is to
-say **what each one still guarantees and what it no longer does**, and to prove each claim.
+Public tests check return-value shapes; the intentionally wrong starter passes.
+Submitting checks the property. A correct `incompleteness` function must calculate
+from its argument: this checkpoint supplies a different boundary statement from
+Inspect. `transfer` keeps the deployment's public verifier names while changing the
+numeric statements and transcripts. A fresh deployment can change names and values;
+restarting the same one need not do so.
 
-That distinction is the whole point. From Week 1 onward, completeness, soundness, privacy, and
-zero-knowledge get used as if everyone agrees what they mean. Memorizing the definitions does not
-survive contact with a real protocol. Breaking one property while the other two hold does.
+| Checkpoint | Points | Evidence |
+| --- | ---: | --- |
+| incompleteness | 40 | A valid input rejected by the strict lower-bound check |
+| unsoundness | 45 | An out-of-range input accepted by the equation-only check |
+| privacy-leak | 40 | The witness read from the supplied record |
+| property-matrix | 35 | Three booleans for each of the three public verifier names |
+| transfer | 40 | The same functions passing unseen numeric cases |
 
-## The claim
+Each wrong attempt costs 10 points. Each checkpoint has three hints costing 3, 3,
+and 4 points, so all hints together cost 50 of the 200 base points. The closing
+questions ask which repair changes input acceptance and which changes disclosure.
 
-All three verifiers check the same statement:
+## Runtime and boundary
 
-```text
-I know w such that   a*w + b == c  (mod p)   and   lo <= w <= hi
+Compose runs a loopback-published Workbench and an unpublished verifier on an
+internal network. The Workbench image contains public materials and a restricted
+function evaluator, with no fixture generator, hidden checker, reference answer,
+or deployment seed. Only the verifier receives `FLAG_SEED`.
+
+The verifier parent generates cases, runs submitted functions in a fresh child,
+and checks their returned JSON values itself. Neither a child exit code nor printed
+`{"failures": []}` is a grade. The child receives only source and function inputs,
+not the seed, expected results, or checker. After loading its inputs and standard
+library, Linux seccomp denies file opening, exec, networking, and interference with
+other processes. Supervisors disable same-UID memory inspection; time, memory,
+output and process limits apply. Both success and timeout clean up the child's
+process group. These restrictions are enforced in the pinned Linux image and are
+not silently replaced by weaker execution on a macOS author host.
+
+The public proxy uses fixed internal `/public`, `/prepare`, and `/verify` routes.
+It does not relay arbitrary paths. Failed preparation never echoes the child's
+unseen input values; failed transfer reports only the checker's property messages.
+A participant can see public inputs and their own output, but cannot turn that
+output into an authoritative success or import the hidden checker through the editor.
+
+Local Docker administrators can inspect or alter their containers. This is a
+self-study runtime, not confidentiality against its operator. Code evaluation is
+limited to this arithmetic exercise, not a general Python filesystem/network sandbox
+service. No hidden or reference materials belong in the participant image.
+
+## Local checks and resources
+
+From this problem directory:
+
+```sh
+make test                 # public shapes and the live editor adapter, via Compose
+make inspect              # public evidence, via Compose
+make reference-test       # author-only mutations and Linux boundary regressions
+make verifier-down        # stop this problem's Compose containers and networks
 ```
 
-Small integer arithmetic on purpose. No proof system, no library — everything you reason about
-fits on one screen, so the difficulty is the properties, not the plumbing.
+`make test` leaves its verifier running for repeated practice until teardown.
+`make reference-test` builds a separate author image and uses disposable containers.
+Linux boundary regressions cover public-name transfer, forged verdicts, private file
+and process-environment access, networking, exec, supervisor interference, timeout,
+and child cleanup. Catalog checks are separate: run `make install && make agent-gate`
+from the repository root. They do not prove the runtime.
 
-## How to play
+This local problem creates no AWS resources. Its two containers consume local CPU,
+memory and disk; images and build caches remain after containers are stopped.
+For a hosted event, platform compute/storage and any platform networking can incur
+cost until the deployment is removed. Use the platform's deployment teardown to stop
+it. Live AWS and third-party acceptance were not used as verification gates here.
 
-Start the problem in Participant Portal. The theory and both editors appear on the same page.
-Inspect the evidence, edit both files, run public tests, and submit all five checkpoints there.
-No host terminal or checkout editing is required.
+Author-only source rationale, independent reader findings and HTTP evidence are in
+`local/tests/hidden/READER.md`.
 
-Authors working directly from the repository can still run these commands from the problem
-directory:
+## Filesystem metadata boundary follow-up
 
-```bash
-make inspect                    # your statement, what each verifier checks, a public transcript
-make test                       # public tests
-make test-one ID=classify       # iterate on one of them
-make reset                      # restore both starter files
-```
+The learner's Linux filter also denies file/directory creation, links, renames, removal and metadata writes. Blocking file opens alone did not stop those operations from persisting after a worker exited. The problem-local regression applies the actual filter in 16 disposable children, checks 19 operations return EPERM, and verifies unchanged parent-owned fixture contents, directory entries, permissions, ownership, timestamps and extended attributes. Its temporary fixture is removed afterward. This adds no API, scoring, mathematical rule or execution deadline; existing positive sources and suites remain the acceptance baseline. See `local/tests/hidden/READER.md` for before/after scope and commands.
 
-The Portal editor and author checkout both edit two files:
+## Computational tools and execution time
 
-- `local/starter/classify.py` — for each verifier, is it complete? sound? private?
-- `local/starter/counterexamples.py` — prove every property you marked `False`.
-
-## Scoring
-
-Five checkpoints, scored independently. Wrong answers cost 10 points each.
-
-| Checkpoint | Points | What you submit |
-|---|---:|---|
-| `incompleteness` | 40 | A witness that is genuinely valid, yet one verifier rejects |
-| `unsoundness` | 45 | A witness outside the claimed range that one verifier accepts |
-| `privacy-leak` | 40 | The witness, recovered from a transcript alone |
-| `property-matrix` | 35 | The full 3 × 3 classification |
-| `transfer` | 40 | Both of your files, run against instances you have never seen |
-
-Hints are available on three of the five (15 / 15 / 12 + 8). Opening every one still leaves 150
-of 200.
-
-## The rule that makes this work
-
-**A label you cannot demonstrate does not count.**
-
-Marking a verifier unsound is one line of typing. The hidden tests cross-check every `False` in
-your matrix against the matching counterexample, so a value that is inside the range submitted as
-proof of unsoundness fails — it demonstrates nothing. Equally, a counterexample without a
-consistent matrix fails, because producing a break you cannot classify is not understanding
-either.
-
-The `transfer` checkpoint then runs **your** classification and **your** generators against
-instances derived from a seed you never see. A value that happened to work once will not survive
-it; an expression that solves the statement will.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
-no reference solution, no verifier. Those live only in a second, unpublished container the
-Workbench reaches over the compose network, and in the author-only image `make reference-test`
-builds.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources. A container on your machine.
-
-## For authors
-
-`make reference-test` runs the mutation suite: six broken submissions plus two aimed at the
-verifier itself, all of which must be caught.
-
-One design note worth carrying to the later weeks. The incomplete verifier uses a strict lower
-bound, and on any instance whose witness sits strictly inside the range it behaves exactly like a
-correct verifier — the incompleteness is real but unobservable. The `incompleteness` checkpoint
-therefore evaluates the submitted generator on a hidden boundary instance whose honest witness is
-exactly `lo`; that boundary answer is not printed by `inspect`. A property being broken and a
-property being demonstrable are different things, and making the second one true is the author's
-job, not the learner's.
-
-The three public protocol labels are neutral aliases selected and shuffled from this deployment's
-seed. Classify behavior, not a remembered `P1` / `P2` / `P3` position: another deployment receives
-different labels in a different order.
+Available computational standard libraries (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.

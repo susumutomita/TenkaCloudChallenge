@@ -1,3 +1,9 @@
+import { expandSuccessfulHunts } from "./hunt-success.ts";
+import { artifactFields } from "./ledger-codec.ts";
+import { decodeLedger, encodeLedger } from "./ledger-codec.ts";
+import { decodeHuntLog } from "./hunt-log.ts";
+import { readLastHunt } from "./hunt-result.ts";
+import { expandHuntAttempts } from "./hunt-budget.ts";
 import { expect, test } from "bun:test";
 import { buildScenario } from "../../dev/scenarios.ts";
 import { buildSudokuHuntOp } from "./playtest.ts";
@@ -14,18 +20,22 @@ function wrongShare(state: CryptoBattleState, target: string): CryptoBattleOp {
 }
 /** v4's real compaction is unchanged; only the new result delta is absent. */
 function oldRow(state: CryptoBattleState): CryptoBattleState {
-  return JSON.parse(JSON.stringify({ ...state, teams: Object.fromEntries(Object.entries(state.teams).map(([id, team]) => {
+  return JSON.parse(JSON.stringify({ ...state, publicLedger: encodeLedger(decodeLedger(state.publicLedger, state.teams)), huntLog: decodeHuntLog(state), successfulHunts: completeGuards(state), huntAttempts: expandHuntAttempts(state), teams: Object.fromEntries(Object.entries(state.teams).map(([id, team]) => {
     if (!team.lastHunt) return [id, team];
-    const { points: _newField, ...lastHunt } = team.lastHunt;
+    const { points: _newField, ...lastHunt } = readLastHunt(state, team.lastHunt);
     return [id, { ...team, lastHunt }];
   })) }));
 }
+function completeGuards(state: CryptoBattleState) {
+  return [...new Set([...expandSuccessfulHunts(state), ...decodeHuntLog(state).flatMap(e => e.via === undefined ? [JSON.stringify([e.attackerTeamId, e.targetTeamId, e.generation])] : e.via === "sudoku" ? [JSON.stringify(["sudoku", e.attackerTeamId, e.targetTeamId, e.generation])] : [])])].sort();
+}
+function semanticState(state: CryptoBattleState) { return { ...state, publicLedger: decodeLedger(state.publicLedger, state.teams), huntAttempts: expandHuntAttempts(state), huntLog: decodeHuntLog(state), successfulHunts: completeGuards(state) }; }
 function roundTrip(state: CryptoBattleState) {
   const v4 = oldRow(state), serialized = JSON.stringify(v4);
   expect(Object.keys(v4.huntAttempts).length).toBeGreaterThan(0);
-  expect(v4.publicLedger.some(a => typeof a.c === "number")).toBe(true);
+  expect(v4.publicLedger.map(artifactFields).some(a => typeof a.c === "number")).toBe(true);
   const v5 = migrateState(JSON.parse(serialized), 4);
-  expect(v5).toEqual(v4);
+  expect(semanticState(v5)).toEqual(semanticState(v4));
   expect(JSON.stringify(v4)).toBe(serialized);
   for (const team of Object.keys(v4.teams)) expect(projectForTeam(v5, team)).toEqual(projectForTeam(v4, team));
   return { v4, v5 };
@@ -37,7 +47,7 @@ test("v4 nonempty Shamir and Sudoku counters, numeric ledger IDs and completed a
   const sudoku = buildSudokuHuntOp(projectForTeam(state, "bravo"), "alpha");
   if (!sudoku) throw new Error("fixture must have public sudoku evidence");
   state = move(state, "bravo", sudoku);
-  expect(state.huntAttempts).toEqual({ '[1,0,1]': 1, '["sudoku",1,0,1]': 1 });
+  expect(expandHuntAttempts(state)).toEqual({ '[1,0,1]': 1, '["sudoku",1,0,1]': 1 });
   const { v4, v5 } = roundTrip(state);
   const before = projectForTeam(v5, "bravo");
   expect(before.huntAttempts.alpha?.spent).toBe(1);
@@ -46,7 +56,7 @@ test("v4 nonempty Shamir and Sudoku counters, numeric ledger IDs and completed a
   expect(before.lastHunt?.points).toBeUndefined();
   const op = wrongShare(v5, "alpha");
   const next = move(tick(v5, v5.nowMs! + 1), "bravo", op);
-  expect(next).toEqual(move(tick(v4, v4.nowMs! + 1), "bravo", op));
+  expect(semanticState(next)).toEqual(semanticState(move(tick(v4, v4.nowMs! + 1), "bravo", op)));
   expect(projectForTeam(next, "bravo").huntAttempts.alpha?.spent).toBe(2);
   expect(projectForTeam(next, "bravo").lastHunt?.points).toBeDefined();
 });
@@ -56,7 +66,7 @@ test("v4 RPS reservations preserve roster-indexed predictions and shared budgets
   state = move(state, "alpha", wrongShare(state, "bravo"));
   const target = projectForTeam(state, "alpha").rpsHunt!.targets[0]!;
   state = move(state, "alpha", { kind: "hunt-rps", targetTeamId: "bravo", duelId: target.duelId, predictedHand: 2 });
-  expect(state.huntAttempts).toEqual({ '[0,1,1]': 2 });
+  expect(expandHuntAttempts(state)).toEqual({ '[0,1,1]': 2 });
   const b = state.contracts.find(c => c.teamId === "bravo" && c.task.kind === "rps-duel" && c.task.duelId === target.duelId)!;
   const a = state.contracts.find(c => c.teamId === "alpha" && c.task.kind === "rps-duel" && c.task.duelId === target.duelId)!;
   expect(b.rps?.predictions).toEqual({ '0': [2, 1] });
@@ -68,7 +78,7 @@ test("v4 RPS reservations preserve roster-indexed predictions and shared budgets
     ["alpha", { kind: "rps-open", contractId: a.id, hand: 1, randomness: 1 }],
   ] as const) {
     v4 = move(v4, team, op); v5 = move(v5, team, op);
-    expect(v5).toEqual(v4);
+    expect(semanticState(v5)).toEqual(semanticState(v4));
   }
   const after = projectForTeam(v5, "alpha");
   expect(after.rpsHunt!.pending).toEqual([]);

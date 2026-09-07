@@ -1,328 +1,111 @@
-"""あなたが編集する唯一のファイル。
+"""oblivious.py の8関数を編集し、公開テスト→各小問の提出で確かめます。
+計算用標準ライブラリ（math, fractions, statistics, random 等）は事前読み込み済み。
+完全な一覧は問題文の Python 補助欄。追加ファイル/ネットワーク読み込みは不可。
+公開・提出の1回の実行時間は20秒以内です。
 
-ここまでの Week 2 の問題は、 どれも「三つ組は誰かが前もって用意してある」
-ことにしていた。 **では、 その誰かがいないときは。** 互いに何も信用していない
-2 者が、 何も共有していない状態から一緒に計算を始めるための原始的な部品が
-**Oblivious Transfer (OT)** で、 これが 1 つあれば任意のブール回路を 2 者間で
-計算できる (GMW)。
 
-## Part 1: 転送そのもの
+OT（紛失通信）は送り手の2通から受け手が1通を選び、選択を送り手に隠し、
+残りを受け手に渡さないための部品です。ここでは両役を同じ画面で計算します。
+この小さい数では指数の総当たりが可能で、実際の秘密性は主張しません。
 
-送り手が 2 つのメッセージを持ち、 受け手が 1 つを選ぶ。 終わったあと:
+余りは % p、べき乗の余りは pow(g,t,p)。p=2q+1でp,qは素数。
+gを繰り返し掛けるとq個で1に戻る集合を部分群、周期qを位数と呼びます。
+gは生成元。grpのキーはp,q,g。送り手aは1..q-1、A=pow(g,a,p)。
+受け手の乱数tがblind、選択ビットchoiceは0/1です。
 
-  - 受け手は **選んだほうだけ** を持ち、 もう一方については何も分からない
-  - 送り手は **どちらが選ばれたのか** を知らない
+必要な式（ここだけの ^ はPythonと同じXOR。べき乗はpow）:
+  B = pow(g,t,p)                         choice0
+  B = A * pow(g,t,p) % p                 choice1
+  K0 = derive_key(grp,pow(B,a,p))
+  K1 = derive_key(grp,pow(B*pow(A,p-2,p)%p,a,p))
+  K  = derive_key(grp,pow(A,t,p))
+  encrypt: (m0 ^ K0, m1 ^ K1)
+  unwrap: ciphertexts[choice] ^ K
+Aの逆元はAとの積の余りが1になる数。素数p、非零Aではpow(A,p-2,p)。
 
-使う群は `p = 2q + 1` (どちらも素数) の `Z_p^*` の中の **位数 q の部分群** で、
-`g` はその生成元。 `grp` は次の 3 キーを持つ辞書:
+p7,q3,g2,a2ならA4、逆元2。t1なら:
+  choice0 B2 -> 鍵の元4,2   choice1 B1 -> 鍵の元1,4
+  受け手の鍵の元はどちらも4。選んだ側が一致する。
+2進数は右から1,2,4の桁。011=0×4+1×2+1×1=3。
+XORはその桁が同じなら0、違えば1。3(011)^5(101)=6(110)、6^5=3。
+整数のXORは余りの足し算ではありません。derive_keyは配布済みの鍵変換です。
 
-    "p"  int   法
-    "q"  int   部分群の位数
-    "g"  int   位数 q の部分群の生成元
+一様は候補が同確率、分布は観測値の確率。t=0,1,2を一様に選ぶと、
+Bはchoice0で[1,2,4]、choice1で[4,1,2]。各値1/3で区別できません。
+blind_rangeは連続するq整数の両端(low,high)。high-low+1=q。
+0..q-1が一例。q..2q-1も一周期なので可。1..q-1では1個欠けます。
+集合が同じだけでは足りません。[1,1,2]と[1,2,2]では1の確率が違います。
 
-プロトコル (Diffie-Hellman 風の標準構成):
+ビットは整数0/1。AND(&)は両方1なら1、XOR(^)は違うなら1。
+秘密をXORで戻す持ち分がXORシェア: x=x0^x1、y=y0^y1。
+ANDの展開は (x0&y0)^(x1&y1)^(x0&y1)^(x1&y0)。
+相手と組になる最後の2交差項をOTで運ぶGMW方式の模型です。
 
-    送り手が公開:  A = g^a mod p          (a は送り手の秘密指数)
-    受け手が送る:  B = g^t mod p          (メッセージ 0 が欲しいとき)
-                   B = A * g^t mod p      (メッセージ 1 が欲しいとき)
-    送り手が返す:  m_0 を鍵 H(B^a) で、 m_1 を鍵 H((B/A)^a) で暗号化
-    受け手が開く:  鍵 H(A^t) で
+マスクは値をXORで覆う乱数ビット。randomnessは独立一様な2個。
+  m0,m1 = randomness[0],randomness[1]
+  offer(u,m) = (m,m^u)                  -> 相手がvで選ぶとm^(u&v)
+  1番が受信 v1 = offer(x0,m0)[y1]      0番が受信 v0 = offer(x1,m1)[y0]
+  output_share(xi,yi,mi,vi) = (xi&yi)^mi^vi
+例x0=1,x1=0,y0=y1=1,m0=0,m1=1: v0=v1=1、z0=z1=0、z0^z1=x&y=0。
+同じマスクを使うとz0=(x0^x1)&y0。y0=1ならx1=z0^x0で漏れます。
 
-どちらの枝を通っても、 送り手の 2 つの鍵のうち **ちょうど 1 つ** が
-`H(A^t) = H(g^(a*t))` に一致する。 もう一方を作るには離散対数を解く必要がある。
-暗号化と復号は XOR。 鍵の導出は `derive_key` を **両側で** 使うこと
-(ハッシュの流儀を当てる問題ではない)。
+gate-privacyの観測は(received,own output)だけ。自分の入力を固定し、
+相手の入力を変え、乱数4通りの出現回数が同じか両側から比べます。
+手順を守り観測から推測するsemi-honestモデルと正しいOTを前提とする模型で、
+全通信・任意Pythonの実行の秘密性を証明するものではありません。
 
-`B/A` は **掛け算**。 群の演算は乗法なので `B/A = B * A^-1 mod p` で、
-`A^-1` は `pow(A, p - 2, p)` (p が素数なのでフェルマーの小定理)。 `B - A` ではない。
-
-**`blind` がどの範囲から引かれるか** は飾りではない。 受け手の秘匿は「1 通の
-メッセージ」の性質ではなく **B の分布** の性質で、 8 つの関数のうち 1 つは
-どの入力でも正しく動きながら相手に秘密を渡してしまう。 公開テストは
-どれがそれかを教えない。
-
-## Part 2: AND ゲート (GMW)
-
-`x = x0 ^ x1`、 `y = y0 ^ y1` と分け、 party 0 が `(x0, y0)`、 party 1 が
-`(x1, y1)` を持つ。 XOR は各自が自分の行を XOR するだけ。 AND は違う。
-
-    (x0 ^ x1) & (y0 ^ y1) = x0y0 ^ x1y1 ^ x0y1 ^ x1y0
-
-最初の 2 項は各自で計算できる。 残る 2 つが **クロス項** で、 1 つにつき
-転送を 1 回使って買う。 各 party は自分のビットとマスクから作った 2 つの
-メッセージを転送に載せ、 相手は **自分のビットを添字にして** 1 つ取る。
-
-ゲートは次の順で走る (採点側がこの順で呼ぶ):
-
-    mask_0, mask_1 = gate_masks(randomness)
-    party 1 が受け取る値 = offer(x0, mask_0)[y1]
-    party 0 が受け取る値 = offer(x1, mask_1)[y0]
-    z0 = output_share(x0, y0, mask_0, party 0 が受け取った値)
-    z1 = output_share(x1, y1, mask_1, party 1 が受け取った値)
-    要求: z0 ^ z1 == (x0 ^ x1) & (y0 ^ y1)
-
-## `needs_transfer` が受け取る文字列 (全 2 種)
-
-    "xor"   XOR ゲート
-    "and"   AND ゲート
-
-この 2 つだけ。 返り値は **bool** (0 / 1 の整数ではない)。
-
-## 返り値の形
-
-    request(grp, public, choice, blind)            -> int    (0..p-1、 部分群の元)
-    blind_range(grp)                               -> (low, high)  **両端を含む**
-    encrypt(grp, secret, public, req, m0, m1)      -> (int, int)
-    unwrap(grp, public, choice, blind, cts)        -> int
-    gate_masks(randomness)                         -> (bit, bit)
-    offer(own_bit, mask)                           -> (bit, bit)
-    output_share(own_x, own_y, own_mask, received) -> bit
-    needs_transfer(gate)                           -> bool
-
-`p` / `q` / `g` は起動ごとに変わる。 数値を書き込まず、 必ず `grp` から取ること。
-べき乗は `pow(底, 指数, p)` を使う (`**` だと巨大な整数になる)。
-
-この問題に、 JSON を手入力する checkpoint は無い。 8 つとも関数を書く。
+2個の戻り値はタプル (u,v) またはリスト [u,v]。各要素は整数。
+ビットは整数0/1でbool不可。needs_transferだけbool: xorはFalse、andはTrue。
+6欄すべてコード提出。unseenも同じ8関数を別の引数で動かします。
 """
-
 from __future__ import annotations
-
 from participant.ot import derive_key
 
 
 def request(grp: dict[str, int], public: int, choice: int, blind: int) -> int:
-    """受け手が送り手へ送る 1 個の値。choice を漏らしてはいけない。
-
-    この関数は上の式のとおり。 主題は次の blind_range のほう。
-
-    手順:
-      1. `p, g = grp["p"], grp["g"]` を取る
-      2. `blinded = pow(g, blind, p)` を計算する
-      3. choice が 0 ならそれをそのまま返す
-      4. choice が 0 でなければ、送り手の公開鍵 `public` を掛けて `% p` する
-
-    式:
-        choice = 0 -> B = g^blind mod p
-        choice = 1 -> B = public * g^blind mod p
-
-    例: p=11, q=5, g=3, a=2 なので A=9、 blind=3
-        blinded = 3^3 % 11 = 27 % 11 = 5
-        choice 0 -> 5          部分群 {1,3,9,5,4} の元
-        choice 1 -> 9*5 = 45 % 11 = 1   これも部分群の元
-
-    採点は、返した値が 0..p-1 に入り、`pow(値, q, p) == 1` (= 位数 q の部分群の
-    元) であり、上の式のとおり choice を符号化していることを見る。
-
-    ありがちな失敗:
-      - `p` や `g` を数値で書き込む (群は起動ごとに変わる)
-      - `**` でべき乗して巨大な整数を作る
-      - 掛け算のあとの `% p` を忘れる
-    """
+    """上のBの式を適用。p7,g2,A4,t1ではchoice0→2、choice1→1。
+    grpからp,g、publicからA、blindからtを取り、整数の余りを返す。"""
     return 1
 
 
-def blind_range(grp: dict[str, int]) -> tuple[int, int]:
-    """`blind` を引く範囲を、両端を含む (low, high) で返す。
-
-    **ここがこの問題の山**なので、答えは書いていない。 代わりに、採点のしかたと
-    考える順序を書く。
-
-    採点のしかた:
-        プロトコルは **走らせない**。 宣言されたこの範囲のすべての blind に
-        ついて、choice 0 と choice 1 それぞれで `request` が作りうる値を集め、
-        その **2 つの集合を比較** する。 要求は 2 つ:
-          (1) 範囲の幅 `high - low + 1` が部分群の大きさ `grp["q"]` と一致する
-          (2) 各 choice のもとで、作りうる値が部分群の **全体** (q 個) を走る
-              —— これが無いと、引数を無視して定数を返す実装が
-              「2 つの集合が完全に一致する」を満たしてしまう。 一致はするが
-              何も転送していない
-        そのうえで、2 つの集合が一致しなければ落ちる。
-
-    考える順序:
-        1. `g^t` が部分群の全体を走るには、t が何通り必要か
-        2. その範囲から 1 つ値を落とすと、choice 0 側と choice 1 側で
-           **落ちる元が違う**。 紙の上で小さい群を作って確かめる
-        3. 落ちた 2 つの元は、それが出た時点で choice をそのまま名指しする
-        4. 「秘密の指数だから 0 は除く」という習慣は、ここでは正しいか
-
-    返り値の形:
-        整数 2 個のタプル `(low, high)`。 両端を **含む**。
-
-    ありがちな失敗:
-      - 幅が q より 1 小さい範囲を返す。 1 回の転送は成功し、正しさのテストも
-        全部通り、それでも受け手の秘匿だけが壊れる
-      - `q` を数値で書き込む (`grp["q"]` から取る)
-    """
-    return (1, grp["q"] - 1)
+def blind_range(grp: dict[str, int]) -> tuple[int, int] | list[int]:
+    """同確率で選ぶ連続q個の両端。p7,q3では(0,2)や(3,5)が一周期。
+    下の範囲は1個欠ける。幅と、要求の値ごとの出現回数を確かめる。"""
+    return (1, grp['q'] - 1)
 
 
-def encrypt(
-    grp: dict[str, int], secret: int, public: int, req: int, message_0: int, message_1: int
-) -> tuple[int, int]:
-    """送り手の返信。2 つのメッセージを、枝ごとに独立な鍵で暗号化する。
-
-    この関数は上の式のとおり。
-
-    手順:
-      1. `p = grp["p"]` を取る
-      2. choice 0 用の鍵を、受け取った `req` を送り手の秘密指数でべき乗した
-         群の元から `derive_key` で作る
-      3. choice 1 用の鍵を、`req` から公開鍵を割り戻した元を同じくべき乗して作る
-      4. それぞれのメッセージと XOR して、2 個のタプルで返す
-
-    式:
-        key_0 = derive_key(grp, req^secret mod p)
-        unshifted = req * public^(p-2) mod p              (= B / A)
-        key_1 = derive_key(grp, unshifted^secret mod p)
-        return (message_0 ^ key_0, message_1 ^ key_1)
-
-    例: p=11, q=5, g=3, secret=2 なので public=9、 blind=3
-        choice 0 のとき req=5 -> key の元 K_0 = 5^2 % 11 = 3、
-                                 B/A = 5 * 5 = 3、 K_1 の元 = 3^2 = 9
-        choice 1 のとき req=1 -> K_0 の元 = 1、 B/A = 5、 K_1 の元 = 5^2 % 11 = 3
-
-    採点は、返した 2 個が **宣言どおりのこの 2 鍵構成** であることまで見る。
-    可逆な符号化で「受け手の鍵で XOR してみたら壊れている」だけを作っても、
-    送り手の秘匿を示したことにはならないため。
-
-    ありがちな失敗:
-      - `B/A` を `req - public` と書く (群の演算は掛け算)
-      - `derive_key` を使わず自作のハッシュを使う
-      - `% p` を忘れる
-    """
+def encrypt(grp: dict[str, int], secret: int, public: int, req: int,
+            message_0: int, message_1: int) -> tuple[int, int] | list[int]:
+    """K0=H(B^a)、K1=H((B/A)^a)を作り、それぞれのメッセージとXOR。
+    ここで^は数学のべき乗。コードはpow。B/Aを作った後もsecret乗が必要。"""
     return (message_0, message_1)
 
 
-def unwrap(
-    grp: dict[str, int], public: int, choice: int, blind: int, ciphertexts: tuple[int, int]
-) -> int:
-    """受け手が、選んだほうのメッセージを取り出す。作れる鍵はちょうど 1 つ。
-
-    この関数も上の式のとおり。
-
-    手順:
-      1. 受け手が作れる唯一の鍵を、送り手の公開鍵を自分の blind でべき乗した
-         群の元から `derive_key` で作る
-      2. 自分が選んだほうの暗号文と XOR して返す
-
-    式:
-        key = derive_key(grp, public^blind mod p)
-        return ciphertexts[choice] ^ key
-
-    なぜ 1 つで足りるか (p=11, g=3, a=2 で A=9、 t=3。 受け手の鍵の元は
-    A^t = 9^3 % 11 = 3):
-        choice 0: 送り手の K_0 の元 = 3 -> 一致。 K_1 の元 = 9 -> 一致しない
-        choice 1: 送り手の K_0 の元 = 1 -> 一致しない。 K_1 の元 = 3 -> 一致
-    どちらの枝でも一致するのはちょうど 1 つ。 もう一方を作るには A = g^a から
-    a を取り出す、つまり離散対数を解く必要がある。
-
-    返り値の形:
-        整数ひとつ。
-
-    ありがちな失敗:
-      - `ciphertexts[0]` を決め打ちする (choice に応じて選ぶ)
-      - 鍵を 2 つ作ろうとする (受け手が作れるのは 1 つだけ)
-    """
+def unwrap(grp: dict[str, int], public: int, choice: int, blind: int,
+           ciphertexts: tuple[int, int] | list[int]) -> int:
+    """H(pow(public,blind,p))を、選んだciphertexts[choice]とXORする。
+    p7,A4,t1ならH(4)。数学の鍵の一致と実用の秘密性は別の条件。"""
     return 0
 
 
-def gate_masks(randomness: tuple[int, int]) -> tuple[int, int]:
-    """AND ゲートの 2 回の転送それぞれが使うマスクを返す。
-
-    **ここが Part 2 の主題**なので、答えは書いていない。
-
-    採点のしかた:
-        正しさとは **別に** 測られる。 まず、どう返してもゲートが正しく
-        再構成できるかを 64 通り全部で確認する。 そのうえで別の checkpoint が、
-        自分の入力を固定したまま **相手の入力だけを変え**、乱数を総当たりして、
-        各 party の view (受け取った値と自分の出力 share) の分布が変わらないかを
-        見る。 party 0 と party 1 の **両方向** で見る。
-
-    考える順序:
-        1. マスクは XOR で打ち消し合う。 だから 1 個を 2 回使っても
-           z0 ^ z1 は変わらない —— 再構成は成功する
-        2. では 1 個を 2 回使ったとき、party 0 **の中だけ** で何が起きるか。
-           z0 の式を展開して、マスクがどこで消えるかを追う
-        3. 消えた後に残った式が相手のビットを含んでいたら、それは何を意味するか
-        4. `randomness` が 2 個渡されているのはなぜか
-
-    返り値の形:
-        ビット 2 個のタプル。 各要素は 0 か 1。
-
-    ありがちな失敗:
-      - 出荷時の下のコードのように 1 個を 2 回使う。 ゲートは正しいまま、
-        隠すのをやめる。 正しさの checkpoint は通り、秘匿の checkpoint だけが落ちる
-    """
+def gate_masks(randomness: tuple[int, int]) -> tuple[int, int] | list[int]:
+    """供給された独立一様な2ビットを別々のマスクに使う。
+    (0,1)を(0,0)にすると復元は合っても手元でマスクが消えてしまう。"""
     return (randomness[0], randomness[0])
 
 
-def offer(own_bit: int, mask: int) -> tuple[int, int]:
-    """転送に載せる 2 つのメッセージ。相手が自分のビットを添字にして 1 つ取る。
-
-    **クロス項の運び方がこの問題の主題**なので、答えは書いていない。
-
-    仕組み:
-        相手はこのタプルを `[相手のビット]` で引く。 つまり相手のビットが 0 なら
-        0 番目、1 なら 1 番目を受け取る。 相手が受け取った値に
-        「自分のビット AND 相手のビット」がちょうど入るように、2 つを作る。
-
-    考える順序:
-        1. 相手のビットが 0 のとき、相手に渡したい値は何か
-           (0 との AND は常に 0 なので、クロス項は何も足さない)
-        2. 相手のビットが 1 のとき、相手に渡したい値は何か
-           (1 との AND は自分のビットそのもの)
-        3. どちらの場合も、渡した値そのものから自分のビットが読めては困る。
-           そのために `mask` が渡されている
-
-    返り値の形:
-        ビット 2 個のタプル。 添字 0 が「相手のビットが 0 のとき」、
-        添字 1 が「相手のビットが 1 のとき」。
-
-    ありがちな失敗:
-      - mask を使わずに `(0, own_bit)` を返す。 クロス項は正しく運ばれるが、
-        相手に自分のビットがそのまま見える
-    """
+def offer(own_bit: int, mask: int) -> tuple[int, int] | list[int]:
+    """(mask,mask^own_bit)。own_bit1,mask0なら(0,1)。
+    相手の選択ビットvに応じ、mask^(own_bit&v)が渡る。"""
     return (0, 0)
 
 
 def output_share(own_x: int, own_y: int, own_mask: int, received: int) -> int:
-    """自分の出力 share。自分の行、自分が使ったマスク、受け取った値から作る。
-
-    **マスクの打ち消し先がこの問題の主題**なので、答えは書いていない。
-
-    採点のしかた:
-        `z0 ^ z1 == (x0 ^ x1) & (y0 ^ y1)` が、`(x0, x1, y0, y1)` と乱数 2 個の
-        **64 通り全部** で成り立つことを要求する。 seed から来る 1 つの配置だけ
-        では足りない。
-
-    考える順序:
-        1. 展開式 `x0y0 ^ x1y1 ^ x0y1 ^ x1y0` のうち、自分だけで計算できるのは
-           どの項か
-        2. 自分が **受け手として** 受け取った値には、どのクロス項が入っているか
-        3. 自分が **送り手として** 使ったマスクは、いまどこにあるか。 2 者ぶんを
-           XOR したときに消えるためには、自分の share に何が要るか
-        4. 3 つを XOR したとき、クロス項 4 つが過不足なく残るか
-
-    返り値の形:
-        ビットひとつ (0 か 1)。
-
-    ありがちな失敗:
-      - 自分のマスクを入れ忘れる。 2 者ぶんを XOR したときにマスクが片方だけ
-        残り、再構成が壊れる
-    """
+    """(own_x&own_y)^own_mask^receivedを返す。1,1,0,1なら0。
+    自分の積、自分のマスク、受信値を1回ずつ入れ、両者でマスクを打ち消す。"""
     return 0
 
 
 def needs_transfer(gate: str) -> bool:
-    """このゲートは 2 者が通信する必要があるか。
-
-    引数に来る文字列は "xor" と "and" の 2 つだけ (冒頭の docstring 参照)。
-
-    考える順序:
-        XOR-share の上で、そのゲートの出力 share を各 party の持ち物だけの式で
-        書けるか。 書けるなら通信は要らない。 書けないなら、どこで詰まるか。
-
-    返り値の形:
-        bool (`True` / `False`)。 0 / 1 の整数では落ちる。
-    """
+    """引数はxor/andのみ。XORシェアのxorは手元だけ(False)、andは通信(True)。"""
     return True

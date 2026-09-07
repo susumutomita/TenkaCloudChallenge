@@ -13,6 +13,7 @@ reading its own slot. Reporting a violation on those is as wrong as missing a re
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -41,7 +42,11 @@ def _run(seed: str, label: str, program_id: str):
 def _expected_index(sp, program_id: str) -> int:
     """Where the violation actually sits, computed from the run rather than assumed."""
     run = execute(program(sp, program_id), sp)
-    allowed = {*sp.public_inputs, *sp.masked, sp.result}
+    return _first_index(run, spec_as_public(sp))
+
+
+def _first_index(run, public_spec) -> int:
+    allowed = {*public_spec['publicInputs'], *public_spec['masked'], public_spec['result']}
     for index, event in enumerate(run.events):
         kind = event["kind"]
         if kind == "open" and event["label"] not in allowed:
@@ -94,7 +99,7 @@ def _check_programs(module, seed: str, program_ids: tuple[str, ...]) -> list[str
                 continue
             if got.get("kind") != expected:
                 failures.append("the violation was found but named as the wrong kind")
-            if got.get("index") != _expected_index(sp, program_id):
+            if type(got.get("index")) is not int or got["index"] != _expected_index(sp, program_id):
                 failures.append("the violation was named but not located at the right event")
     return failures
 
@@ -111,7 +116,7 @@ def check_allowed(module, seed: str) -> list[str]:
         if not isinstance(got, list) or any(not isinstance(item, str) for item in got):
             failures.append("allowed_opens did not return a list of labels")
             continue
-        if sorted(got) != sorted(sp.allowed_opens()):
+        if got != sorted(sp.allowed_opens()):
             failures.append("the allowed-open set does not match the specification")
     return failures
 
@@ -146,7 +151,7 @@ def check_transcript(module, seed: str) -> list[str]:
         if party not in sp.parties:
             failures.append("derive_secret named something that is not a party")
             continue
-        if got["value"] != sp.private[party]:
+        if type(got['value']) is not int or not 0 <= got['value'] < sp.p or got["value"] != sp.private[party]:
             failures.append("the recovered value is not that party's private input")
     return failures
 
@@ -164,7 +169,17 @@ def check_repair(module, seed: str) -> list[str]:
         clean = execute(program(sp, "alpha"), sp)
         for program_id in PROGRAM_IDS:
             try:
-                fixed = module.repair(list(program(sp, program_id)), dict(public_spec))
+                original = program(sp, program_id)
+                fixed = module.repair(list(original), dict(public_spec))
+                allowed = set(sp.allowed_opens())
+                expected = [op for op in original if not (
+                    op[0] in ('open', 'emit', 'fail') and op[1] not in allowed
+                    or op[0] == 'peek' and op[1] != op[2])]
+                # Operation tuples cross the worker boundary as JSON arrays. Compare
+                # their values without requiring arrays to turn back into tuples.
+                if not isinstance(fixed, list) or json.dumps(fixed) != json.dumps(expected):
+                    failures.append('repair must remove only prohibited observations and preserve the other operations in order')
+                    continue
                 run = execute(list(fixed), sp)
             except Exception as error:  # noqa: BLE001
                 return [f"repairing a program raised {type(error).__name__}"]
@@ -205,6 +220,8 @@ def check_mutation(module, seed: str) -> list[str]:
                 failures.append("a renamed clean run was reported as a violation")
             elif expected is not None and (not isinstance(got, dict) or got.get("kind") != expected):
                 failures.append("renaming the labels changed the verdict")
+            elif expected is not None and (type(got.get('index')) is not int or got['index'] != _first_index(run, public_spec)):
+                failures.append('the violation position was not recounted after the events moved')
     return failures
 
 

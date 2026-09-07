@@ -83,10 +83,9 @@ def share_randomness(seed: str, label: str, count: int, p: int, secret: int) -> 
 def rerandomization_randomness(seed: str, label: str, count: int, p: int) -> list[int]:
     """A draw whose zero-sharing changes at least one share.
 
-    This is the contract the statement states for the rerandomize checkpoint: the
-    randomness handed to the learner is never all zeros, so following the procedure
-    always moves at least one share and the "not identical to the input" relation is
-    satisfiable by construction.
+    This helper supplies the nonzero test case, where at least one share must
+    change. The grader separately exercises an all-zero draw, which is legal and
+    must leave the supplied shares unchanged.
     """
     return _non_degenerate_randomness(
         seed,
@@ -107,8 +106,9 @@ def reference_shares(seed: str, label: str = "public") -> list[int]:
 def line_slope(seed: str, label: str, p: int) -> int:
     """The one randomness value `share_line` receives: a slope in 1 .. p-1.
 
-    Never 0: with slope 0 all three points equal the secret, and a `reconstruct_line`
-    that never walks back to x = 0 would pass that case by accident.
+    The nonzero baseline catches reconstruction that merely returns a y value.
+    The grader additionally reconstructs a zero-slope draw, where equal y values
+    are legal; the full input domain remains 0 .. p-1.
     """
     s = _stream(seed, f"line:{label}")
     return _pick(s, 0, 1, p - 1)

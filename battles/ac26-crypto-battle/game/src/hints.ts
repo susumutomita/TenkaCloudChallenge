@@ -1,3 +1,6 @@
+import { vigenereGuide } from "./vigenere-guide.ts";
+import { rotorGuide } from "./rotor-guide.ts";
+import { rsaGuide } from "./rsa-guide.ts";
 /**
  * [Issue #659 §9/§13] The hint ladder: what a team may buy when an Order is in
  * front of them and they do not know how to start.
@@ -168,6 +171,11 @@ LEAK publishes a share. Recovering a secret from enough shares is the HUNT attac
     {
       id: "reveal-share/2",
       text: (ctx) => {
+        if (!ctx.allowedMethods.includes("prove")) return {
+          ja: `例：同じ世代の #1 と #2 が公開済みなら 2 個です。#3 を LEAK すると 2 + 1 = 3 個。同じ #2 をもう一度出すなら 2 + 0 = 2 個です。数えるのは異なる番号です。この試合では ${ctx.threshold} 個で秘密を戻せます。未回答で期限切れにすると公開数は増えず、失効の減点を受けます。ROTATE（秘密を作り直す）なら現世代の公開数は 0 個に戻りますが、未回答のお題が無効になり減点されます。`,
+          en: `Example: public #1 and #2 from one generation count as 2 shares. LEAK #3: 2 + 1 = 3. Publish #2 again: 2 + 0 = 2. Count distinct indices. This match needs ${ctx.threshold} shares to recover the secret. Leaving the Order unanswered adds no exposure but incurs its expiry penalty. ROTATE (replace your secret set) resets the current generation's exposure to 0, but voids unanswered secret-bound Orders with a penalty.`,
+        };
+
         const termsJa = Array.from({ length: ctx.threshold - 1 }, (_, i) => `係数${i + 1} × ${Array(i + 1).fill("番号").join(" × ")}`);
         const termsEn = Array.from({ length: ctx.threshold - 1 }, (_, i) => `coefficient${i + 1} × ${Array(i + 1).fill("index").join(" × ")}`);
         return {
@@ -329,17 +337,25 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
       },
     },
   ],
+  "rotor-encrypt": ([0, 1, 2] as const).map(rung => ({ id: `rotor-encrypt/${rung + 1}`, text: (ctx: HintContext) => {
+    if (ctx.task.kind !== "rotor-encrypt") throw new Error("Rotor hint on another task");
+    return rotorGuide(ctx.task, rung);
+  } })),
+  "rsa-encrypt": ([0, 1, 2] as const).map(rung => ({ id: `rsa-encrypt/${rung + 1}`, text: (ctx: HintContext) => {
+    if (ctx.task.kind !== "rsa-encrypt") throw new Error("RSA hint on another task");
+    return rsaGuide(ctx.task, rung);
+  } })),
   "caesar-shift": [
     {
       id: "caesar-shift/1",
-      text: () => ({
+      text: (ctx) => ctx.task.kind === "caesar-shift" && ctx.task.rung === "vigenere" ? vigenereGuide(ctx.task, 0) : ({
         ja: "目的：元の記号の列（平文）を、別の列（暗号文）へ変えます。記号を輪に並べ、全部を同じ数だけ先へずらすシーザー暗号です。ずらす数が秘密の『鍵』。最後の次は先頭に戻ります。\n同じ数だけ逆へ戻せば平文に戻ります。方式は公開され、秘密は鍵だけです。元と後の記号を1組知られると、その間を何個進むか数えて鍵を求められます。\nまずこの1題の3段だけ読み、計算して提出します。",
         en: "Goal: change the original row (plaintext) into an encrypted row (ciphertext). Caesar encryption arranges symbols in a circle and shifts every symbol forward by the same number: the secret key. After the last symbol, wrap to the first.\nShifting back by that key recovers the plaintext. The method is public; only the key is secret. One known original/encrypted pair reveals the shift by counting steps.\nRead this Order's three rungs, calculate and submit before moving to another Order.",
       }),
     },
     {
       id: "caesar-shift/2",
-      text: () => ({
+      text: (ctx) => ctx.task.kind === "caesar-shift" && ctx.task.rung === "vigenere" ? vigenereGuide(ctx.task, 1) : ({
         ja: "式：記号の並び順に0から番号をつけます。サイコロの面1〜6なら、計算用の番号は0〜5です。\n暗号の番号 = (元の番号 + 鍵) を記号の種類数で割った余り。この『割った余り』を mod と書きます。鍵も0〜種類数−1なので、足した数が種類数以上なら種類数を1回引けば足ります。\n一桁の例：5種類・鍵3・元の番号4,1なら、4+3=7→7−5=2、1+3=4。答えの番号は2,4です。本番は次の段の種類数と鍵を使います。",
         en: "Formula: number symbols from 0 in their displayed order. Die faces 1–6 have calculation values 0–5.\nEncrypted value = (original value + key), taking the remainder after dividing by the number of symbols. We write remainder as mod. The key is also between 0 and symbol-count−1, so subtracting the count once suffices whenever the sum reaches it.\nOne-digit example: 5 symbols, key 3, originals 4,1. 4+3=7→7−5=2; 1+3=4. The answer is 2,4. For your Order use the count and key in the next rung.",
       }),
@@ -348,6 +364,7 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
       id: "caesar-shift/3",
       text: (ctx) => {
         if (ctx.task.kind !== "caesar-shift") throw new Error("caesar-shift/3 rendered against a non-caesar Order");
+        if (ctx.task.rung === "vigenere") return vigenereGuide(ctx.task, 2);
         const n = ctx.task.symbols.length;
         const key = ctx.task.myKey;
         const values = ctx.task.plaintext;

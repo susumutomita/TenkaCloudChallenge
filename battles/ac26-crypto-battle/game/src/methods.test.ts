@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /** Issue #645 Phase 1: the submission-method registry and the Order gate it feeds. */
 
 import { describe, expect, test } from "bun:test";
@@ -171,7 +172,7 @@ describe("the Order gate runs for every method", () => {
       (c) => c.allowedMethods.includes("leak") && c.task.kind === "reveal-share",
     );
     const afterLeak = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
-    for (const artifact of afterLeak.publicLedger) {
+    for (const artifact of afterLeak.publicLedger.map(artifactFields)) {
       expect(artifact.m).toBe("leak");
       expect(artifact.k).toBe("share");
     }
@@ -181,7 +182,7 @@ describe("the Order gate runs for every method", () => {
     );
     if (!proveOrder) throw new Error("expected an open order for teamB");
     const afterProve = applyOp(afterLeak, "teamB", buildProveSudokuOp(projectForTeam(afterLeak, "teamB").vault, proveOrder.id));
-    const reveal = afterProve.publicLedger.find((a) => a.k === "sudoku-reveal");
+    const reveal = afterProve.publicLedger.map(artifactFields).find((a) => a.k === "sudoku-reveal");
     expect(reveal?.m).toBe("prove");
   });
 

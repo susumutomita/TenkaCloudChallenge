@@ -26,6 +26,7 @@ import { describe, expect, test } from "bun:test";
 import { commit } from "./commitment.ts";
 import {
   buildCipherOp,
+  buildClearingOp,
   buildFheOp,
   buildLeakOp,
   buildMpcOp,
@@ -107,6 +108,9 @@ class Bot {
         return buildLeakOp(order.id);
       case "zk-sudoku":
         return freshPermutation(view.vault) ? buildProveSudokuOp(view.vault, order.id) : undefined;
+      case "rotor-encrypt":
+      case "rsa-encrypt":
+        return buildClearingOp(order, view.vault, view.prime);
       case "caesar-shift":
         return buildCipherOp(order);
       case "homomorphic-sum":

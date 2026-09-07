@@ -1,0 +1,70 @@
+{
+  "run": "2026-09-07 after",
+  "syntheticSeed": "private-aggregate-reader-716",
+  "readerSha256": "68f80983819ee810e543608dda56cfbc105488a58a1d4de2ce39b41aa6ea79a3",
+  "results": [
+    {
+      "case": "reader",
+      "checkpointId": "plan",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "share-inputs",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "linear",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "multiply",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "result",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "privacy",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "cost",
+      "correct": true
+    },
+    {
+      "case": "reader",
+      "checkpointId": "transfer",
+      "correct": true
+    },
+    {
+      "case": "verdict-spoof",
+      "checkpointId": "multiply",
+      "correct": false,
+      "message": "The submitted functions could not be evaluated."
+    },
+    {
+      "case": "observation-rewrite",
+      "checkpointId": "privacy",
+      "correct": false,
+      "message": "the run revealed a value it was supposed to protect"
+    },
+    {
+      "case": "observation-rewrite",
+      "checkpointId": "cost",
+      "correct": false,
+      "message": "the openings were not batched into a single round; the claimed round count does not match what the run cost; the number of opened sharings does not match one triple per product"
+    },
+    {
+      "case": "public-stdout-spoof",
+      "passed": false,
+      "output": "Public functions could not be evaluated; check the submitted source."
+    }
+  ]
+}

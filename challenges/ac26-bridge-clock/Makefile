@@ -9,7 +9,7 @@
 # FLAG_SEED is injected by the platform at deploy. The default below exists only so an
 # author can run the problem straight out of a checkout.
 FLAG_SEED ?= local-dev-seed
-IMAGE := ac26-bridge-clock
+IMAGE ?= ac26-bridge-clock
 COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p $(IMAGE)
 
 # starter/ is bind-mounted read-only: the learner edits their checkout, the container
@@ -41,11 +41,11 @@ verifier-down:
 	$(COMPOSE) down
 
 test: build verifier-up
-	$(RUN) python tests/public/test_clock_drill.py
+	$(RUN) python participant/cli_test.py
 
 test-one: build verifier-up
 	@test -n "$(ID)" || (echo "usage: make test-one ID=<test name substring>" && exit 1)
-	$(RUN) python tests/public/test_clock_drill.py --only $(ID)
+	$(RUN) python participant/cli_test.py --only $(ID)
 
 inspect: build verifier-up
 	$(RUN) python show.py
@@ -60,3 +60,5 @@ reset:
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+
+	docker run --rm $(IMAGE)-author python -m unittest discover -s tests/hidden -p "test_*.py" -v

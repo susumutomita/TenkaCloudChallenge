@@ -1,167 +1,143 @@
 # A set of things that must be zero
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> This is an independent, unofficial companion to Advanced Cryptography Program 2026.
+> It is not affiliated with or endorsed by the course or its operators. The problem,
+> code, fixtures, and examples were written independently. Questions go to TenkaCloud.
 
 **Track:** `advanced-cryptography-2026` · **Order:** 110 · **Chapter:** Week 1 / Arithmetic
 Circuits · **Role:** `mechanism` · **Time:** 60–90 minutes · **Points:** 200
 · **Recommended first:** `ac26-bridge-experiment`, `ac26-bridge-properties`
 
-## The story
+## Participant route
 
-The new policy engine does not decide access with if-statements. It expresses the decision as an
-arithmetic circuit, so that every decision can be audited afterwards by anyone, without trusting
-the service that made it.
+An entry-condition checker only says “rejected.” Make it show each condition's result
+and identify the first violation. Select **Start → Inspect evidence** in the Portal.
+The editor shows the divisor `p`, the ordered `circuit`, and two value assignments:
+`honestWitness` and `brokenWitness`. Substitute the broken values from the first row.
+The first nonzero result is the clue for `first-broken`; you can start on paper.
 
-Which is excellent, except that the monitor prints one line: `PASS` or `FAIL`. When a request is
-denied and someone asks *why*, nobody can answer. You are finishing the audit tooling.
+A **constraint** requires an expression to equal zero; a **circuit** is a list of
+constraints. Its variables are **signals**. A **witness** assigns their values, and a
+**residual** is the expression's result. All calculations use remainders after division
+by a prime `p`, from 0 through `p−1`: Python's `value % p` normalizes the result.
+For `x=2,y=3,z=5`, the sum condition `x+y−z` is zero. If the separately proposed `z`
+is 6, it is −1, whose remainder for `p=7` is 6, so the condition fails.
 
-## The idea you are here for
+| kind | Expression before normalization |
+|---|---|
+| `mul` | left × right − out |
+| `add` | left + right − out |
+| `const` | signal − value |
+| `boolean` | b × (b − 1) |
+| `member` | product of (signal − a), one factor per allowed value a |
 
-A circuit is not a program. It is **a set of expressions that must all equal zero**. A witness is
-just an assignment of a value to each signal. "This witness satisfies the circuit" means every
-residual is zero — and the residual is what tells you *which* claim failed when one does.
+Prime `p` matters: a zero product of remainders has a zero factor. Thus the Boolean
+expression permits only zero and one; the membership expression permits any listed
+value. The analogous claim fails for a composite divisor: 2×3 has remainder zero modulo 6.
+This task directly substitutes visible values. It teaches a representation used in
+cryptographic proofs; it does not implement a private or succinct proof itself.
 
-Five constraint kinds, all evaluated over `F_p`:
+Edit `field.py`, `circuit.py`, and `gadgets.py` in the Portal, then select **Run public
+tests**. Submit the four code questions from their rows; the editor supplies all three
+files. For `first-broken`, enter JSON with keys `constraintId` and `residual`, for example
+`{"constraintId":"row_id","residual":6}`, using your displayed instance. Note that a
+trace row uses `id`, while the answer uses `constraintId`. All five correct completes
+the exercise. No host terminal is required.
 
-```text
-mul      left * right - out
-add      left + right - out
-const    signal - value
-boolean  signal * (signal - 1)
-member   product over allowed of (signal - a)
-```
-
-## How to play
-
-Start the problem from Participant Portal. The three-file editor appears on the same page.
-Inspect the evidence, edit the files, run the public tests, and submit residuals / boolean /
-membership / range there. The first-broken answer is the first violated
-constraint's id **and its non-zero residual**, read from the broken witness's trace and entered as
-JSON in the Portal. No host terminal or checkout editing is required.
-
-Only when authoring or verifying straight from the repository, run these in the problem directory:
-
-```bash
-make inspect              # your field, circuit, honest witness, broken witness
-make test                 # public tests
-make test-one ID=trace    # iterate on one of them
-make reset                # restore all three starter files
-```
-
-In the Portal editor or author checkout you edit three files: `local/starter/field.py` (arithmetic in
-`F_p`), `local/starter/circuit.py` (residuals and traces), `local/starter/gadgets.py` (turning a
-condition into constraints).
+For the final range question, use zero/one digits: with three digits, prime `p=11`, and
+value 5, the digits 1,0,1 combine as `(1×2+0)×2+1=5`. Constrain each digit with Boolean;
+use additions for doubling and the next digit, ending on the original signal. Build the
+matching witness with `(value // 2**i) % 2` and all intermediate values. One digit needs
+only a Boolean constraint. Generally this uses `3×bits−2` constraints, within `5×bits`.
+The statement supplies these formulas before the implementation task. The closing
+question asks how an invalid value could pass if a digit's Boolean constraint disappeared.
 
 ## Scoring
 
-Five checkpoints, scored independently. Wrong answers cost 10 points each.
-
-| Checkpoint | Points | What is checked |
+| Checkpoint | Points | Evidence |
 |---|---:|---|
-| `residuals` | 45 | Your evaluator over three hidden primes, a six-constraint circuit using all five kinds, handed over in a seed-derived order; residual rows on a broken witness; missing signals |
-| `first-broken` | 40 | `{ "constraintId": ..., "residual": ... }` for the first violation in the public broken witness |
-| `boolean` | 35 | Your boolean gadget, swept over **every** element of the field by the reference evaluator |
-| `membership` | 30 | Your membership gadget, swept over the field, for allowed sets of size 1–5 |
-| `range` | 50 | Your `range_constraints` / `range_witness`: every in-range value passes with your own witness, and the set of values the gadget admits under *any* assignment of your auxiliary signals is computed exactly and must be 0 .. 2^bits − 1 and nothing else — on widths 1–2, 3–4 and 5–6 bits |
+| `residuals` | 45 | Normalization, each residual, trace order, missing-signal errors on unseen prime fields |
+| `first-broken` | 40 | The first violated public row and its nonzero normalized residual |
+| `boolean` | 35 | Submitted constraint admits exactly zero and one |
+| `membership` | 30 | Submitted constraints admit exactly the listed values |
+| `range` | 50 | Every in-range value has a valid witness; no auxiliary assignment admits an out-of-range value |
 
-Hints on four of the five (15 / 15 / 10 / 10 + 10). Opening every one still leaves 140 of 200.
+Wrong answers cost 10 points. Every checkpoint has three hints: mechanism, small worked
+example, then actions using actual screen/file names. All 15 hints cost 60 points total.
 
-The three gadget checkpoints are judged by the hidden checker's **reference evaluator**, which
-knows exactly the five documented kinds. The participant's own `evaluate` is never consulted for
-a gadget, so a kind it alone understands does not pass. The range gadget may use only `boolean` /
-`add` / `mul` / `const`, at most 5 × bits constraints: listing 2^bits values with `member` fails
-the kind rule, spelling the product out by hand fails the budget from 3 bits up, and a hard-coded
-width fails on the other widths. Out-of-range rejection is decided by computing the set of values
-the gadget admits — every solution of its constraints is enumerated, branching at the boolean-pinned
-signals and propagating `add` / `mul` / `const` in closed form, so every field element outside the
-range is covered and never a sample of them (a 200k-assignment budget per width; exceeding it is a
-deterministic message) — not by trusting the witness function.
+Gadgets are evaluated by the trusted checker's evaluator, which knows the five documented
+kinds. A custom kind in the submitted evaluator cannot extend it. Range permits only
+`boolean`, `add`, `mul`, and `const`, at most `5×bits` constraints. Widths cover 1–6 bits,
+with `2**bits < p`. Its existing exact search, including the fallback that fixes each
+out-of-range value, retains its 200,000-assignment budget per width. Unconstrained padding
+and an extra value hidden behind a Boolean selector are rejected; valid doubling and
+constant-weight constructions remain accepted. One public example passing does not prove
+that every invalid assignment is excluded.
 
-## Four ways to be wrong that the public tests will not catch
+## Runtime and safety boundary
 
-1. **`-1` is not zero, and neither is `p-1`.** They are the same field element. An evaluator that
-   returns the raw subtraction looks right until an intermediate value goes negative.
-2. **Naming a signal `flag` does not make it a boolean.** Only a constraint binds a value. This is
-   why the boolean checkpoint sweeps the whole field rather than trying `2` — a test that only
-   tries `2` passes an implementation that merely checks `b < 2`.
-3. **One valid witness proves nothing.** An under-constrained circuit still gives every residual
-   zero on an honest witness. A membership gadget that pins only `allowed[0]` passes whenever the
-   visible example happens to use that value.
-4. **A range gadget that accepts its own witnesses can still admit everything.** The public tests
-   substitute *your* witness into *your* constraints and see zeros. Drop the boolean constraints on
-   the digits, or never link the digit sum to the signal, and that still holds — while any value
-   at all now has some auxiliary assignment that satisfies the gadget. Only the search over every
-   assignment tells those apart, which is why the hidden verifier does one.
+Compose runs two non-root, read-only services. Workbench publishes only on
+`127.0.0.1:18093`; the verifier has no published port and communicates over the internal
+network. Only the verifier receives `FLAG_SEED`. The participant image has the starter,
+public tests, and adapter, with no fixture generator, hidden checker, or reference solution.
 
-## Relationship to the official Week 1 exercise
+Public tests and private grading execute learner functions in a separate Linux process.
+The trusted parent inspects returned JSON values; learner stdout is never a grade. The
+private checker keeps its bounded subprocess and exact search. Before learner code runs,
+the worker receives only source and function inputs, uses a seed-free environment, and
+installs process restrictions that deny opening files, network access, program execution,
+and signals/resource changes targeting the supervisor. This covers `/proc/1/environ`
+as well as other process environments. Missing Linux isolation fails closed. Preloaded
+standard-library modules support this exercise; imports needing another file are denied.
 
-This is a `mechanism` problem: it builds the reading skill the official exercise assumes, and
-deliberately stops short of it. The official exercise attacks underconstraint; doing that requires
-being able to see which condition became which expression, which is the trace you build here. No
-expression, fixture, or solution from the course is reproduced — see `GOVERNANCE.md` §2.
+The value channel has a 15-second deadline, bounded frames/logs, and CPU/memory/process
+limits. The private grader retains its 20-second limit. Process groups are removed on
+completion or timeout, including nested children. Property-level failed-code messages
+are capped at 1,900 characters; manual-answer failures carry no explanation. These
+controls were exercised with synthetic probes, not asserted as a guarantee against every
+host or kernel attack. The Docker administrator can inspect the verifier; local execution
+does not keep secrets from someone who controls Docker. A hosted competition must keep
+that authority outside the participant's control.
 
-## Assurance scope
+## Local verification and teardown
 
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
-no reference solution, no verifier. Those live only in a second, unpublished container the
-Workbench reaches over the compose network, and in the author-only image `make reference-test`
-builds.
+Author commands, from this problem directory:
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+```bash
+make inspect                   # public evidence from the running verifier
+make test                      # public tests against your edited starter files
+make test-one ID=trace          # narrow the public suite
+make reference-test            # author-only mutation and Linux boundary suites
+python3 local/probes/range_exactness.py  # pure exact-search cross-check
+make verifier-down             # stop this problem's Compose services and networks
+```
 
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+The shipped starter intentionally fails until repaired. `make reset` restores all three
+tracked starter files and discards your edits. `make reference-test` builds the author
+image, which contains reference and hidden material; it is not a participant image. Its
+mutation suite covers broken implementations and a valid-range control, followed by actual
+Linux isolation checks. `range_exactness.py` compares 400 small random gadgets with brute
+force and checks three legitimate constructions. The repository-root `make install` and
+`make agent-gate` validate metadata/catalog contracts separately.
 
-## Cost
+The author-only [reader record](local/tests/hidden/READER.md) documents the first reading,
+unchanged reader code, actual HTTP/Portal route, and negative boundary tests. No AWS event
+or independent human playtest is claimed. The official Week 1 exploit exercise is the next
+application: recognizing which expression enforces a condition, and which condition is
+missing. No course fixtures or solutions were copied.
 
-Zero. No cloud account, no AWS resources. A container on your machine.
+## Resources and cost
 
-## For authors
+This local problem creates no AWS resources and has no AWS Region dependency. The two
+containers consume local CPU, memory, temporary disk, and image/build-cache space for the
+expected 60–90 minute session. Services remain running until `make verifier-down` (or
+platform teardown). Docker images and build cache remain afterwards and can be removed
+separately by their owner; no fixed monetary cost is claimed.
 
-`make reference-test` runs the mutation suite: nineteen broken submissions plus six near-misses
-sent through the verifier itself, all of which must be caught — and a mutation aimed at a specific
-rule (an invented kind, an id-sorted trace, a sign-flipped residual, a `member` listing, the
-product chain, an unlinked digit sum, a free-signal padding that must exhaust the search budget, a
-boolean selector that hides exactly one extra out-of-range value) must be killed by *that* rule's
-message, not by an unrelated one. Both the position and residual
-of the broken constraint are seed-derived, so neither a constraint-name guess nor a two-choice
-answer carries across deploys.
+## Filesystem metadata boundary follow-up
 
-The hidden circuit is the public one plus a `member` constraint on a sixth signal (`tier`), so it
-uses all five kinds, and it is handed to `trace` / `first_broken` in a seed-derived order that is
-never the identity or its reverse — an implementation that sorts by id fails on the promise the
-statement makes. Each hidden label breaks a different kind (arithmetic / member / boolean), and
-the expected first violation is derived from the reference evaluator over the given order.
+The learner's Linux filter also denies file/directory creation, links, renames, removal and metadata writes. Blocking file opens alone did not stop those operations from persisting after a worker exited. The problem-local regression applies the actual filter in 16 disposable children, checks 19 operations return EPERM, and verifies unchanged parent-owned fixture contents, directory entries, permissions, ownership, timestamps and extended attributes. Its temporary fixture is removed afterward. This adds no API, scoring, mathematical rule or execution deadline; existing positive sources and suites remain the acceptance baseline. See `local/tests/hidden/READER.md` for before/after scope and commands.
 
-The range width is 1–2 / 3–4 / 5–6 bits by label, so every deployment covers the one-bit case
-that needs no adder chain and the widest case where a per-digit doubling chain (26 constraints at
-6 bits) sits just under the 5 × bits budget. Both that construction and the constant-weights one
-(`const` powers of two, `mul`, `add`) pass; the reference uses the Horner form (3 × bits − 2).
-2^6 = 64 is below every prime in `PRIMES`, so `2^bits < p` needs no per-field clamp.
+## Computational tools and execution time
 
-The out-of-range half of the range check is exact, not sampled. `check_range` enumerates every
-solution of the submitted constraints — a backtracking search that branches only where a single
-constraint has one unassigned signal (a `boolean` gives two candidates, a `const` or a
-single-occurrence `add` / `mul` one), so a decomposition gadget costs 2^bits leaves — and collects
-the signal's value at each leaf; when a branch leaves a signal that no single constraint pins, the
-same search decides each field element in 2^bits .. p − 1 on its own with the signal fixed. The
-admitted set must equal 0 .. 2^bits − 1. An earlier version tried only four sampled out-of-range
-values, and a review showed a gadget that hides exactly one extra value (2^bits + 1) behind a
-boolean selector slipping through; `local/probes/range_exactness.py` replays that gadget, the
-three honest constructions, and a brute-force cross-check of the search on random small gadgets,
-and `mutation.py` carries the selector as a mutant. At 6 bits the honest constructions need about
-800–1,400 assignments per width (a few milliseconds); exhausting the budget costs about 0.6 s per
-width, well inside the verifier's 20 s limit.
-
-`transfer` (a re-run of the whole suite on another seed) was removed in wave 5: it was earned by
-transcription alone. The hidden labels already grade on fields, orderings and widths the visible
-instance never shows.
+Available computational standard libraries (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.

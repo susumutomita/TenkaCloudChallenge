@@ -50,7 +50,7 @@ def _run(module, seed: str, label: str):
 
 def _valid_sharing(value: object, n: int, p: int) -> bool:
     return (
-        isinstance(value, list)
+        isinstance(value, (list, tuple))
         and len(value) == n
         and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v < p for v in value)
     )
@@ -64,7 +64,7 @@ def check_plan(module, seed: str) -> list[str]:
             got = module.plan(st.as_public())
         except Exception as error:  # noqa: BLE001
             return [f"plan raised {type(error).__name__}"]
-        if not isinstance(got, dict):
+        if type(got) is not dict or set(got) != {"multiplications", "triples", "rounds"} or any(type(v) is not int for v in got.values()):
             failures.append("plan did not return a cost estimate")
             continue
         if got.get("multiplications") != st.parties:
@@ -91,7 +91,7 @@ def check_share_inputs(module, seed: str) -> list[str]:
             got = module.share_inputs(list(secrets), [list(r) for r in randoms], st.p)
         except Exception as error:  # noqa: BLE001
             return [f"share_inputs raised {type(error).__name__}"]
-        if not isinstance(got, list) or len(got) != len(secrets):
+        if not isinstance(got, (list, tuple)) or len(got) != len(secrets):
             failures.append("share_inputs did not return one sharing per secret")
             continue
         for index, sharing in enumerate(got):
@@ -126,7 +126,7 @@ def check_add_public(module, seed: str) -> list[str]:
         total = reconstruct(got, st.p)
         if total != (secret + st.bias) % st.p:
             failures.append("adding a public constant did not shift the value by it")
-        if total == (secret + st.parties * st.bias) % st.p and st.bias % st.p:
+        if total != (secret + st.bias) % st.p and total == (secret + st.parties * st.bias) % st.p and st.bias % st.p:
             failures.append("the public constant was added to every share instead of one")
     return failures
 
@@ -137,7 +137,7 @@ def check_correct(module, seed: str) -> list[str]:
         try:
             st, _io, out = _run(module, seed, label)
         except ForbiddenOpen as error:
-            return [f"the protocol tried to reveal something it may not: {error}"]
+            return ["the protocol tried to reveal an invalid sharing"]
         except Exception as error:  # noqa: BLE001
             return [f"the protocol raised {type(error).__name__}"]
         if not _valid_sharing(out, st.parties, st.p):
@@ -213,8 +213,7 @@ def check_cost(module, seed: str) -> list[str]:
         if not isinstance(claimed, dict) or claimed.get("rounds") != io.rounds:
             failures.append("the claimed round count does not match what the run cost")
         if sum(io.batch_sizes) != 2 * st.parties:
-            # Two openings per multiplication, no more and no fewer. Fewer means a
-            # triple was reused; more means something extra was revealed.
+            # Counts and triple ownership are separate; reuse can still open 2k values.
             failures.append("the number of opened sharings does not match one triple per product")
     return failures
 

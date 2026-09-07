@@ -32,10 +32,7 @@ import hashlib
 import hmac
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -52,9 +49,6 @@ MAX_BODY_BYTES = 256 * 1024
 #: Below the participant server's 15-second proxy timeout, so a timed-out run reaches the
 #: participant with its message instead of an empty verdict.
 RUN_TIMEOUT_SECONDS = 12
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
 #: Cap for the verdict's optional human-readable failure summary. Kept under the
 #: platform's 2000-character message limit with room to spare.
 MAX_MESSAGE_CHARS = 1900
@@ -88,27 +82,11 @@ TWO_OF_THREE_TIMEOUT_MESSAGE = (
 MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 
 
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn` and
-# aborts the exec, so on a macOS checkout every submission run failed — including
-# the reference. The lab runs on Linux, where the cap does apply, so skipping it on
-# Darwin does not change what participants run. See the same note in
-# ac26-bridge-experiment's verifier.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
 def _check_threshold(submission: object) -> bool:
     """How many shares are needed, and two secrets consistent with one short of that.
 
-    Naming the number alone is a guess; the two witnesses are what show that n-1
-    shares carry no information about which secret was split.
+    The two witnesses demonstrate compatibility; unchanged probabilities additionally
+    require the documented independent uniform randomness assumptions.
     """
     answer = submission
     if isinstance(answer, str):
@@ -120,7 +98,7 @@ def _check_threshold(submission: object) -> bool:
         return False
     cfg = setting(SEED)
     p, n = cfg["p"], cfg["n"]
-    if answer.get("sharesNeeded") != n:
+    if type(answer.get("sharesNeeded")) is not int or answer["sharesNeeded"] != n:
         return False
     partial = answer.get("partial")
     completions = answer.get("completions")
@@ -128,50 +106,18 @@ def _check_threshold(submission: object) -> bool:
         return False
     if not isinstance(completions, list) or len(completions) != 2:
         return False
-    try:
-        head = [int(v) % p for v in partial]
-        pairs = [(int(c["secret"]) % p, int(c["lastShare"]) % p) for c in completions]
-    except (TypeError, ValueError, KeyError):
+    def field_element(value: object) -> bool:
+        return type(value) is int and 0 <= value < p
+
+    if not all(field_element(value) for value in partial):
         return False
-    if pairs[0][0] == pairs[1][0]:
-        return False  # two different secrets, or it demonstrates nothing
-    return all((sum(head) + last) % p == secret for secret, last in pairs)
-
-
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_sharing
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import sharing
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-phases = {phases!r}
-if phases:
-    failures = []
-    for name in phases:
-        failures.extend(getattr(check_sharing, name)(sharing, {seed!r}))
-else:
-    failures = check_sharing.run(sharing, {seed!r})
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
+    if not all(isinstance(item, dict) and field_element(item.get("secret"))
+               and field_element(item.get("lastShare")) for item in completions):
+        return False
+    if completions[0]["secret"] == completions[1]["secret"]:
+        return False
+    return all((sum(partial) + item["lastShare"]) % p == item["secret"]
+               for item in completions)
 
 
 def _failure_message(failures: list[object]) -> str | None:
@@ -191,61 +137,33 @@ def _run_submission(
     seed: str,
     timeout_message: str | None = None,
 ) -> tuple[bool, str | None]:
-    """Run the named hidden phases against the submitted source in a throwaway workspace.
+    """Compare untrusted JSON values in the trusted supervisor, never learner stdout.
 
-    `timeout_message` is surfaced only when the child hit the wall-clock limit; every
-    other way of not producing a verdict stays silent.
+    Values owns one total deadline and each worker cleans its process group in finally.
+    Keeping the checks here avoids killing an intermediate runner before it can reap
+    or terminate the learner's descendants. Inputs and call counts are fixture-bounded.
     """
-    source = submission
-    if isinstance(source, dict):
-        source = source.get("sharing.py")
-    if not isinstance(source, str) or not source.strip():
+    source = submission.get("sharing.py") if isinstance(submission, dict) else submission
+    if not isinstance(source, str) or not source.strip() or len(source.encode()) > MAX_BODY_BYTES:
         return False, None
-    if len(source) > MAX_BODY_BYTES:
-        return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "sharing.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except subprocess.TimeoutExpired:
+    if sys.platform != "linux":
+        return False, "the execution environment is unavailable"
+    from tests.hidden import check_sharing
+    from verifier.values import Values
+    import time
+    started = time.monotonic()
+    try:
+        module = Values(source, seed, phases)
+        failures = []
+        for phase in phases:
+            failures.extend(getattr(check_sharing, phase)(module, seed))
+        if time.monotonic() - started >= RUN_TIMEOUT_SECONDS:
             return False, timeout_message
-        except (OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+        return (False, _failure_message(failures)) if failures else (True, None)
+    except Exception:
+        if time.monotonic() - started >= RUN_TIMEOUT_SECONDS:
+            return False, timeout_message
+        return False, "sharing.py could not produce the required values"
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
@@ -412,6 +330,8 @@ def main() -> None:
     #
     # This service is not published to the host at all (see ../docker-compose.yml), so
     # `lab` -- which has no gateway -- is the only way in.
+    from participant.isolation import protect_supervisor
+    protect_supervisor()
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()  # noqa: S104 - see above
 
 

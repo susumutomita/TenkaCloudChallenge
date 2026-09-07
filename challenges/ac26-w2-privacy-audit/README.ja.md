@@ -1,145 +1,71 @@
-# 答えは合っている。それだけだ
+# 公開してよいものと、実際に見せたものを比べる
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+> Advanced Cryptography Program 2026 の非公式・独立した補助教材です。講座運営者との提携・承認はありません。実装と例は独自に作成しています。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 240 · **Chapter:** Week 2 / Privacy Audit
-· **Role:** `transfer` · **想定時間:** 60〜75 分 · **配点:** 300
-· **必須前提:** `ac26-w2-beaver-mul` · **Status:** draft — 後述の「Week 2 の対応づけ」を参照
+同じ正しい重み付き合計を返す 7 実装のうち、4 つが途中で余計な値を見せています。監査器を書き、部分和から入力が復元できる実害を示し、漏れる操作だけを取り除きます。
 
-## ストーリー
+## 参加者の進め方
 
-3 つのチームが同じものを作りました。3 party の加重リスク合計を、誰も他人の数字を見ずに計算する。
-3 つとも納品されました。3 つとも正しい数値を返します。correctness suite はどれも緑です。
+**起動 → 証拠を確認 → auditor.py を編集 → 公開テストを実行 → 採点欄へ提出**。7 欄とも同じソースを送ります。JSON 手入力欄とローカルのターミナル操作はありません。まず `allowed_opens` だけ書き、この欄を提出できます。
 
-privacy review の結果は、同じではありませんでした。
+| 採点欄 | 関数 | 確かめること |
+|---|---|---|
+| allowed-opens | allowed_opens | 許可した名前を重複なく並べる |
+| opened-secret | first_violation | 余計な公開 |
+| cross-party | first_violation | 他人の保管場所の読み取り |
+| log-leak | first_violation | ログ・失敗の文からの漏れ |
+| transcript | derive_secret | 私的な入力の復元 |
+| repair | repair | 禁止した操作だけの除去 |
+| mutation | first_violation | 名前・順序が変わっても同じ規則で判断 |
 
-## 何を監査するのか
+本文とスターターに必要な語・式・入力の形を示し、ヒントは仕組み→小例または数式→実際の画面名を使う手順の 3 段です。公開テストにも p=7 の復元と短い修復例があります。全欄の正解表示が完了です。配点は 300 点、誤答は 15 点減点。既存のヒント減点は維持しています。
 
-ここでの program は Python source ではなく**操作列**で、runtime がそれを実行し、外部から観測できる
-ものを記録します。
+## 数学とのつながり
+
+MPC（秘密計算）は複数人が入力を隠して共同で計算する方法。秘密分散で各人に渡す数がシェアで、シェアから値を復元して見せることが公開（open）です。この監査器は公開された出来事を扱い、シェア配布の通信は実装しません。
+
+全体 T と、最後の人以外の部分和 S を比べます。各式を素数 p で割った余りにします。
 
 ```text
-open    値が全員に公開される
-peek    ある party が誰かの raw share slot を読む
-emit    値を載せた log 行
-fail    値を載せた失敗経路
-output  protocol が宣言した結果
+T = w0*x0 + w1*x1 + w2*x2
+S = w0*x0 + w1*x1
+T-S = w2*x2
+x2 = ((T-S) * pow(w2,-1,p)) % p
 ```
 
-手元の算術は event を 1 つも出しません。この非対称性が主題です。protocol は、どれだけ計算したかで
-はなく、何を公開したかで評価されます。
+重み w は入力を何倍するか。逆元 u は `w*u % p = 1` になる数で、`1 <= w < p` なら存在します。p=7、T=2、S=4、w=3 なら差は 5。`3*5 % 7 = 1` なので逆元は 5、入力は `5*5 % 7 = 4` と復元できます。
 
-実装は 7 つ。4 つが漏らします。3 つは漏らしません。そのうち 2 つが厄介な方です。
+最終結果は意図して公開する情報です。秘密を守るとは、結果が何も伝えないことではなく、合意した結果を超えて途中の秘密を余計に伝えないこと。マスクで隠した値には、観測者が知らない独立で一様な使い捨て乱数という仮定が必要です。この教材の監査器は仕様の認定を使い、乱数の品質を証明しません。
 
-## Participant Portal での進め方
+## 二つの教材入力
 
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
-2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
-3. Portal のエディタで starter のソースを編集する。
-4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
-5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
+公式 [Week 2 toy-mpc](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/a3aa4b56fa88fbe803b57d320fbc87c1a203b480/week2/problems/toy-mpc/README.md) は、Beaver 乗算の正しい積と、マスクした値だけの公開を検査します。作者の Week 2 ノートは、最終出力から分かる情報と途中の漏れを分け、開示を監査する体験につなげています。この両方を説明の入力にしました。プレー中に別画面を開く必要はありません。既存 courseAlignment は公開済みの講義・課題を固定しており、その参照と draft 状態は維持します。
 
-checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
-エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
-値は拒否されます。
+## ローカル検証と運用
 
-## 採点
+```bash
+make test
+make test-one ID=recovery-p7
+make reference-test
+make verifier-down
+```
 
-7 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
+`make test` は公開例、`make reference-test` は作問者用の誤実装検査と Linux 実行境界テストです。参加者 image には starter と公開テストを入れ、生成器・非公開採点・参照解答は別の verifier / author image に置きます。実読解・実行証拠の境界は `local/tests/hidden/READER.md` に記録します。
 
-| Checkpoint | 配点 | 何を検査するか |
-|---|---:|---|
-| `allowed-opens` | 35 | 仕様が公開を許す label の集合 |
-| `opened-secret` | 45 | 中間値の open。種類と位置の両方 |
-| `cross-party` | 45 | 自分ではなく他人の slot を読んだ party |
-| `log-leak` | 45 | log 行や error message から出た raw 値 |
-| `transcript` | 40 | 指摘ではなく、復元された private 値 |
-| `repair` | 50 | 違反の除去と、正当な観測の保持 |
-| `mutation` | 40 | rename・並べ替え・未知 seed でも同じ判定 |
+Portal の既存 Compose / エディタ / verify 契約を使い、新しい endpoint や採点種別はありません。Workbench のホスト公開は loopback のみ、verifier は Compose 内の隔離ネットワークのみ。この問題は AWS リソースを作らず、必須 AWS Region もありません。起動中はローカル CPU・メモリを使います。Portal で停止するか、ローカルでは `make verifier-down` で終了します。
 
-hint は 7 個の checkpoint すべてに 3 段ずつあります (hint1 = 何をしたいのか / hint2 = どう考えるか / hint3 = 読めば解けるウォークスルー)。減点は各 checkpoint の配点の 50% 以内で、21 個すべてを開いても 300 点中 159 点が残ります。
+## 保証の範囲
 
-## 偽陽性は見逃しと同じだけ失点する
+親プロセスが数学と監査の条件を最終判定します。提出 Python は秘密の環境変数を受け継がない、時間・メモリ・出力量を制限した Linux 子プロセスで動き、関数の入力と未検証の JSON 値だけを交換します。毎回新しい呼出し ID で事前印字を拒否しますが、値が Python の return 文から来たことを証明する仕組みではありません。同じ正しい値を別の方法で計算する実装も受け入れます。提出コードが印字した成功判定を、そのまま採点の権威にはしません。
 
-どの checkpoint も漏れる実装と clean な実装を混ぜてあり、clean 側は「全部挙げる」を罰するように
-選んであります。
+検査するのは与えられた仕様と有限の記録です。本物の MPC 全体の安全性、乱数の品質、全実行の性質を証明しません。固定 seed は再現可能な教材データ用で、使い捨てマスクの説明は仕様が認定する理想的な前提です。
 
-- 1 つは仕様が公開している **weight** を log に出します。
-- 1 つは party が**自分の** slot を読みます。party がやって当然のことです。
+Docker の管理者は自分のコンテナを調べたり変更したりできます。このローカル分離は、その管理者から採点資料を隠す保証ではありません。デプロイの認証と競技の採点権限は親プラットフォームが担当します。
 
-どちらも違反ではありません。何が公開されてよいかは仕様が決めるのであって、操作の種類が決めるので
-はありません。両方を挙げる監査器は、本物の漏洩を全部見つけた上で不合格になります。
+## ファイル属性操作の隔離追加
 
-## なぜ program が code ではなく data なのか
+Linuxの提出コード用filterで、ファイル・ディレクトリの作成、リンク、名前変更、削除、属性変更も拒否します。ファイルopenだけの禁止では、子の終了後にこれらの変更が残りました。問題内の回帰は実filterを16個の使い捨て子プロセスへ適用し、19操作のEPERMと、親が所有する一時fixtureの内容・一覧・権限・所有者・時刻・拡張属性が変わらないことを確認します。一時fixtureも最後に削除します。API・得点・数学的な正答条件・実行期限は変更せず、既存の正答コードと検査を維持します。before/afterの範囲とコマンドは `local/tests/hidden/READER.md` に記録しています。
 
-`reconstruct` という語を grep する監査器は、rename・wrapper・helper 経由の呼び出しで破れます。
-program を操作列にすると、監査対象は**実行が実際に行った操作**になります。だから mutation
-checkpoint は全 label を rename し、独立な open を移動し、見たことのない seed で回せます。protocol
-は変わっていないので判定も変わってはなりません。label の文字列や、前回違反があった位置を覚えた
-監査器は、ここで自分自身と矛盾します。
+## 計算用の道具と実行時間
 
-## なぜ指摘だけでは足りないのか
-
-過剰に open する実装の transcript には、部分和と合計の両方があります。その差は最後の party の加重
-寄与であり、weight は公開されていて `p` は素数です。引き算 1 回と逆元 1 回で、その party の private
-値がそのまま出ます。
-
-復元するまでは「これは漏れている」はコードについての主張です。復元した後は、誰かのデータについての
-事実になります。
-
-## なぜ「全部消す」が修復ではないのか
-
-観測可能な操作を全部消しても漏洩は止まり、program は合計を返し続けます。そこで repair checkpoint は、
-仕様が観測を許すものが修復後も**すべて残っている**ことまで要求します。修復とは、違反だけを取り除く
-ことです。
-
-## threat model
-
-honest-but-curious、collusion なし。toy field、3 party、手で検算できる大きさの値です。これは
-simulator で観測できる leakage contract であって、security の主張でも、実運用 MPC のモデルでも
-ありません。
-
-同じ view でも、collusion を許す model の下では判定が変わります。安全性の判断は仮定に対して行うもの
-であって、コードに対して行うものではありません。
-
-## 次につながるところ
-
-ここで引いた分離 — 出力の正しさと、生成過程の観測可能性 — は Week 6 の co-SNARK privacy audit で
-そのまま使います。
-
-## Week 2 の対応づけ
-
-Week 2 の教材は `curriculum.md` が記録している commit の時点で未公開です。`courseAlignment` は
-`week2/README.md` を `kind: "placeholder"` で pin し、`status` は `draft` のままです。この pin は
-対応づけではなく、その commit 時点で教材が存在しなかったという事実を記録します。これにより
-`bun run course:drift` は教材公開の日に `PUBLISHED` を報告できます。#219 が対応づけを確定してから
-draft を外します。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
-Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
-秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナには starter と公開テスト
-しか入っておらず、fixture も hidden test も参照解答も verifier 本体も入っていません。
-それらは Workbench がネットワーク越しに話す、公開されていない second container と、
-`make reference-test` が build する author 専用 image にだけあります。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した監査器 7 種類と verifier を狙った 1 種類が
-あります。7 つのうち 2 つは見逃しではなく過剰検出です。見逃しだけを罰する suite は、すべての実行を
-違反と判定する監査器を通してしまうためです。
+計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コードの実行は20秒までです。

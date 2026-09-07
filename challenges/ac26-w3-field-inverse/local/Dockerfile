@@ -2,7 +2,10 @@
 # because a base image moved underneath them.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN apt-get update && apt-get install -y --no-install-recommends libseccomp2 && rm -rf /var/lib/apt/lists/*
+RUN useradd --uid 1000 --create-home learner
 WORKDIR /problem
+USER learner
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
 # Participant Workbench: public materials only, and NOT `fixtures/`, `tests/hidden/` or
@@ -21,7 +24,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # composite one, and the worked extended-Euclid trace -- from the verifier's
 # `GET /public` over the Compose-internal network instead (see participant/server.py,
 # show.py, and tests/public/test_field.py).
+# Compile the small CPython adapter without adding a compiler to runtime images.
+FROM base AS native-build
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+COPY participant/native_driver.c /tmp/native_driver.c
+RUN gcc -O2 -Wall -shared -fPIC $(python3-config --includes) /tmp/native_driver.c -o /tmp/_native_driver.so
+
 FROM base AS participant
+COPY --from=native-build /tmp/_native_driver.so ./participant/_native_driver.so
 COPY tests/public/ ./tests/public/
 COPY participant/ ./participant/
 COPY starter/ ./starter/
@@ -34,6 +45,8 @@ CMD ["python", "participant/server.py"]
 # tests and the answer-sealing adapter, but no modulus derivation, no extended Euclid,
 # and no hidden checker.
 FROM base AS verifier
+COPY --from=native-build /tmp/_native_driver.so ./participant/_native_driver.so
+COPY participant/execution.py participant/isolation.py participant/worker.py ./participant/
 COPY fixtures/ ./fixtures/
 COPY tests/hidden/ ./tests/hidden/
 COPY verifier/ ./verifier/

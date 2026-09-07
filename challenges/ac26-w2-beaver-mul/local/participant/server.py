@@ -33,6 +33,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w2-beaver-mul"
@@ -42,10 +43,13 @@ VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
 MAX_BODY_BYTES = 256 * 1024
 RUN_TIMEOUT_SECONDS = 20
+PUBLIC_TEST_TIMEOUT_SECONDS = 15
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# A bounded 20-second grading run may outlive the client body-read budget.
+VERIFIER_TIMEOUT_SECONDS = 25
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -70,15 +74,15 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w2-beaver-mul',
     problem_name='掛け算だけが話を必要とする',
     problem_name_en='Multiplication is the one that has to talk',
-    description='shared 値同士の掛け算だけは手元で終わらない。前処理で作った三つ組を使って、通信を 1 round に押し込む。最後の項が他の 3 つと違う扱いを要求する。',
-    description_en='Multiplying two shared values is the one thing that cannot finish locally. A triple made in advance pushes the talking down to a single round — and the last of the four terms wants different treatment from the other three.',
-    checkpoint_labels={'mask': '秘密を前処理済みの値で隠す', 'open': '隠した差分を公開する', 'combine': '公開された 2 つの値から積を組み立てる', 'protocol': '通しで走らせて必要な round を述べる', 'transfer': '見たことのない設定でも成立させる'},
-    checkpoint_labels_en={'mask': 'Hide a secret behind a preprocessed value', 'open': 'Publish the masked difference', 'combine': 'Build the product from the two published values', 'protocol': 'Run it end to end and state the rounds', 'transfer': 'Hold up in settings you have not seen'},
+    description='分け持った数の掛け算を、前もって作った三つ組と2つの公開値で組み立てます。4つのPython関数を書き、公開定数の足し方と通信の段数を確かめます。',
+    description_en='Build multiplication on shared numbers using a prepared triple and two opened differences. Implement four Python functions and check how a public constant is added and how opening rounds are counted.',
+    checkpoint_labels={'mask': '対応する断片を引いて差を作る', 'open': '差の断片を集めて1つの値に戻す', 'combine': '三つ組の断片と公開値から積を組み立てる', 'protocol': '関数をつなぎ、通信の最小回数を数える', 'transfer': '別の人数と割る数でも計算する'},
+    checkpoint_labels_en={'mask': 'Subtract matching pieces to form a difference', 'open': 'Collect difference pieces into one value', 'combine': 'Assemble the product from triple pieces and public values', 'protocol': 'Connect the functions and count the minimum rounds', 'transfer': 'Calculate with other party counts and moduli'},
     submitted_files=('beaver.py',),
     code_checkpoints=('mask', 'open', 'combine', 'protocol', 'transfer'),
     checkpoints=('mask', 'open', 'combine', 'protocol', 'transfer'),
     max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
+    run_timeout_seconds=PUBLIC_TEST_TIMEOUT_SECONDS,
     max_output_bytes=MAX_OUTPUT_BYTES,
     limit_fn=_limits,
 )
@@ -108,7 +112,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -226,6 +230,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

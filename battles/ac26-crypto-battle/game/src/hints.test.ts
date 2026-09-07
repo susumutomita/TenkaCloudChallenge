@@ -57,7 +57,7 @@ function ctxFor(projection: CryptoBattleProjection, order: ContractProjection): 
 function oneOrderPerKind(): { projection: CryptoBattleProjection; order: ContractProjection }[] {
   let state = startedMatch();
   const seen = new Map<OrderTaskKind, { projection: CryptoBattleProjection; order: ContractProjection }>();
-  for (let round = 0; round < 12 && seen.size < Object.keys(HINT_LADDER).length; round += 1) {
+  for (let round = 0; round < 18 && seen.size < Object.keys(HINT_LADDER).length; round += 1) {
     const projection = projectForTeam(state, "teamA");
     for (const order of projection.myContracts) {
       if (!seen.has(order.task.kind)) seen.set(order.task.kind, { projection, order });
@@ -377,6 +377,9 @@ describe("the disclosure Order's hints walk the only method it accepts", () => {
       expect(last).toContain("LEAK");
       expect(last).toContain("ROTATE");
       expect(last).not.toContain("PROVE");
+      expect(rungs[1]?.[locale]).toContain("2 + 1 = 3");
+      expect(rungs[1]?.[locale]).toContain("2 + 0 = 2");
+      expect(rungs[1]?.[locale]).toContain("LEAK");
       // And the opening rung does not promise the route this Order refuses.
       expect(rungs[0]?.[locale] ?? "").not.toContain("PROVE");
     }

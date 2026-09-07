@@ -1,64 +1,27 @@
 /**
- * [Issue #659 §2/§13] The cipher ladder: the rungs a team climbs, and what
- * each rung costs to break.
+ * #659 / #661: time-based cipher ladder, with public methods and private keys.
+ * Build uses Caesar; normal pressure alternates Vigenère and Rotor.
+ * Endgame rush cipher slots retain Vigenère.
+ * Normal endgame cipher slots are the separate rsa-encrypt task (rsa.ts).
+ * Vigenère Orders deliberately expose one public key position at a time.
+ * Three different positions disclose the cycle; repeated copies of one do not.
+ * A full known plaintext/ciphertext pair covering a cycle WOULD reveal all keys.
+ * These classical ciphers provide no modern chosen-plaintext security.
  *
- * ## What this is for
- *
- * The Battle's other Orders are all built on one secret and one break: three
- * Shamir shares reconstruct it. That teaches a threshold, and it teaches it
- * once. The ladder teaches the thing underneath — **how much you can publish
- * before your key is gone** — by making that number differ from rung to rung:
- *
- *     rung       pairs to break   the break itself        what it teaches
- *     Caesar     1                one subtraction         a weak cipher dies from one leak
- *     Vigenère   several          spot the period first   a longer key survives more
- *     RSA        —                factor the modulus      one-wayness
- *     homomorphic  never          —                       what modern ciphers buy you
- *
- * Nobody is told "Caesar is weak". They LEAK one pair, lose the key ten seconds
- * later, and learn it. Later, on a higher rung, they leak a pair and nothing
- * happens — and THAT is the lesson about CPA resistance, arrived at by failing
- * to break something rather than by reading a definition.
- *
- * ## Why this file is a registry and not a Caesar implementation
- *
- * #659 §13 scopes this slice to 「`caesar-shift` を 1 段だけ足して形を確定 →
- * 量産」 — add one rung to settle the SHAPE, then mass-produce. So everything a
- * rung differs by lives in {@link CipherRungSpec} as data: its symbols, its
- * modulus, how many published pairs break it, and what breaking it pays. A
- * second rung should be a new entry here plus a case in {@link encryptWithRung},
- * not a new concept anywhere else.
- *
- * ## Kerckhoffs's principle is a game rule here, not just a slogan
- *
- * The method is printed on the Order (see `buildOrderTask`). Hiding it would
- * only mean five minutes spent guessing what to do, and it would teach the
- * opposite of the intended lesson. Every team knows every algorithm; the teams
- * that keep their key survive, and the team that publishes one pair on the
- * bottom rung does not. #659 §5: 「秘密にすべきは方式ではなく鍵」.
- *
- * ## Language neutrality
- *
- * The plaintext is a run of PICTURES, never words (#659 §3). A Japanese or
- * English speaker reads ⚀⚁⚂ identically, so neither is handed an advantage the
- * cryptography did not give them. The symbol count IS the modulus, which makes
- * it the difficulty knob: mod 3 is mental arithmetic, mod 9 needs paper.
- *
- * ## Browser-safe on purpose
- *
- * The Portal imports this module for real — it renders the symbols and reads a
- * rung's break threshold — so nothing here may reach Node-only code. The two
- * functions that derive from the match seed (`deriveCipherKey`,
- * `derivePlaintext`) therefore live in `fixtures.ts` with the rest of the
- * seed-derived material, because `prng.ts` imports `node:crypto` and pulling it
- * into the SPA bundle breaks the build outright.
+ * Browser-safe: only arithmetic, input shape and public material coverage live
+ * here. Seed-derived keys and plaintexts remain server-side in fixtures.ts.
+ * Rotor has a separate stateful task in rotor.ts; the existing encrypted-addition
+ * Order is an addition-only teaching model, not full FHE.
  */
 
-/** The rungs that exist today. A new rung is a new member here. */
-export type CipherRung = "caesar";
+/** The shift-cipher rungs. RSA has its own public-key task shape in rsa.ts. */
+export type CipherRung = "caesar" | "vigenere";
+export type CipherKey = number | readonly number[];
 
 export interface CipherRungSpec {
   readonly rung: CipherRung;
+  /** Number of independently chosen shifts in one cycle. */
+  readonly keyLength: number;
   /**
    * The alphabet, in order. Position IS the numeric value, so `symbols[2]` is
    * the symbol for 2, and the length is the modulus.
@@ -87,20 +50,7 @@ export interface CipherRungSpec {
    * settles how long a person actually takes.
    */
   readonly plaintextLength: number;
-  /**
-   * What breaking this rung pays the attacker.
-   *
-   * Deliberately far below `scores.huntBonus`, and asymmetric with the victim's
-   * penalty. A Shamir HUNT is five minutes of Lagrange interpolation and pays
-   * 25; recovering a Caesar key is one subtraction. Paying both the same would
-   * make the bottom rung the only thing worth hunting and turn #659 §2's
-   * 「弱い相手は安く狩れて、強い相手は狩れない」 — a judgement about whether a
-   * target is worth your time — into a reflex.
-   *
-   * The victim still pays the full `scores.huntPenalty`: cheap to break is not
-   * the same as cheap to lose, and it is the victim's side of this that keeps
-   * the confirmed ordering 「LEAK して狩られる −2」 intact on every rung.
-   */
+  /** Attacker reward: Caesar's #661 exception is 8; Vigenère uses #659's 25. */
   readonly huntBonus: number;
 }
 
@@ -124,15 +74,26 @@ const DICE: readonly string[] = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 export const CIPHER_RUNGS: Readonly<Record<CipherRung, CipherRungSpec>> = {
   caesar: {
     rung: "caesar",
+    keyLength: 1,
     symbols: DICE,
     pairsToBreak: 1,
     plaintextLength: 12,
     huntBonus: 8,
   },
+  vigenere: {
+    rung: "vigenere",
+    keyLength: 3,
+    symbols: DICE,
+    // Each issued Order is one position of the public three-position cycle.
+    // Three DISTINCT positions, not three arbitrary records, reveal the key.
+    pairsToBreak: 3,
+    plaintextLength: 1,
+    huntBonus: 25,
+  },
 };
 
 /** Every rung, in ladder order (weakest first). */
-export const ALL_CIPHER_RUNGS: readonly CipherRung[] = ["caesar"];
+export const ALL_CIPHER_RUNGS: readonly CipherRung[] = ["caesar", "vigenere"];
 
 export function rungSpec(rung: CipherRung): CipherRungSpec {
   return CIPHER_RUNGS[rung];
@@ -146,13 +107,17 @@ export function rungSpec(rung: CipherRung): CipherRungSpec {
  */
 export function encryptWithRung(
   plaintext: readonly number[],
-  key: number,
+  key: CipherKey,
   rung: CipherRung,
+  keyPosition = 0,
 ): readonly number[] {
   const modulus = rungSpec(rung).symbols.length;
+  if (!validCipherKey(key, rung)) throw new Error("encryptWithRung: invalid key");
   switch (rung) {
     case "caesar":
-      return plaintext.map((value) => (value + key) % modulus);
+      return plaintext.map((value) => (value + cipherKeyAt(key, 0)) % modulus);
+    case "vigenere":
+      return plaintext.map((value, i) => (value + cipherKeyAt(key, keyPosition + i)) % modulus);
     default: {
       const exhaustive: never = rung;
       throw new Error(`encryptWithRung: unhandled rung ${String(exhaustive)}`);
@@ -180,6 +145,7 @@ export function parseAnswer(
   rung: CipherRung,
 ): readonly number[] | undefined {
   const { symbols } = rungSpec(rung);
+  if (!Array.isArray(raw) || raw.some(token => typeof token !== "string")) return undefined;
   const values: number[] = [];
   for (const token of raw) {
     const trimmed = token.trim();
@@ -194,4 +160,29 @@ export function parseAnswer(
     values.push(numeric);
   }
   return values;
+}
+
+/** These helpers only check public input shape, never recover an answer. */
+export function isCipherRung(value: unknown): value is CipherRung {
+  return typeof value === "string" && Object.hasOwn(CIPHER_RUNGS, value);
+}
+export function validCipherKey(value: unknown, rung: CipherRung): value is CipherKey {
+  const spec = rungSpec(rung);
+  const part = (n: unknown) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n < spec.symbols.length;
+  return rung === "caesar" ? part(value)
+    : Array.isArray(value) && value.length === spec.keyLength && value.every(part);
+}
+export function cipherKeyAt(key: CipherKey, position: number): number {
+  if (typeof key === "number") return key;
+  const value = key[position % key.length];
+  if (value === undefined) throw new Error("cipherKeyAt: missing key position");
+  return value;
+}
+/** Only public material coverage. Repeated records at one position add no coverage. */
+export function exposedKeyPositions(
+  pairs: readonly { readonly plaintext: readonly number[]; readonly keyPosition?: number }[],
+  rung: CipherRung,
+): readonly number[] {
+  const length = rungSpec(rung).keyLength;
+  return [...new Set(pairs.flatMap(pair => pair.plaintext.map((_, i) => ((pair.keyPosition ?? 0) + i) % length)))].sort();
 }

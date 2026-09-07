@@ -34,6 +34,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w2-oblivious-transfer"
@@ -48,6 +49,9 @@ MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
+#: The verifier owns a 20-second suite; allow its verdict and cleanup to return.
+#: This outbound wait is separate from the untrusted client's body-read deadline.
+VERIFIER_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -79,8 +83,8 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w2-oblivious-transfer',
     problem_name='選んだことを言わずに、選ぶ',
     problem_name_en='Choosing without saying which',
-    description='公式 Week 2 Part B の oblivious transfer と GMW secret AND を 1 つの問題で組む。正しく動くことと、相手に秘密を渡さないことを別々に確かめる。',
-    description_en='Build the official Week 2 Part B topics — oblivious transfer and a GMW secret AND — in one problem, and test correctness separately from whether either party learns a secret.',
+    description='2通から1通を選ぶ要求を、相手に選択を伝えずに作る。小さい数で鍵の一致と観測の確率を確かめ、2回の転送でANDのシェアを組み立てます。',
+    description_en='Build a request for one of two messages without naming the choice. Use small numbers to compare keys and observation probabilities, then build AND shares with two transfers.',
     checkpoint_labels={'request': 'choice を隠した request を作る', 'choice-privacy': 'choice が request から読めない範囲を選ぶ', 'transfer': '片方だけを渡す', 'and-gate': '転送 2 回で AND を作る', 'gate-privacy': 'ゲートが相手の秘密を渡さないようにする', 'unseen': '見たことのない群でも成立させる'},
     checkpoint_labels_en={'request': 'Build a request that hides the choice', 'choice-privacy': 'Pick a range that keeps the choice unreadable', 'transfer': 'Hand over exactly one of the two', 'and-gate': 'Build AND from two transfers', 'gate-privacy': "Stop the gate handing over the other party's secret", 'unseen': 'Hold up in groups you have not seen'},
     submitted_files=('oblivious.py',),
@@ -117,7 +121,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -235,6 +239,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Bind every interface *inside the container*, not the container's loopback. A published
     # port is forwarded to the container's bridge address, so a server listening only on
     # 127.0.0.1 inside the container accepts nothing from outside it.

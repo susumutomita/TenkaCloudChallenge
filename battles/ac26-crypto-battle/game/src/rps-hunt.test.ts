@@ -1,3 +1,6 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
+import { huntCount, expandHuntAttempts } from "./hunt-budget.ts";
 import { scoreReasons } from "./score-reasons.ts";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
@@ -7,7 +10,8 @@ import { commit, type Hand } from "./commitment.ts";
 import { huntKey, storedHuntKey } from "./hunt-key.ts";
 import { rpsReuseEvidence } from "./rps-hunt.ts";
 import type { CryptoBattleOp, CryptoBattleState } from "./types.ts";
-import RpsHunt, { RpsHuntCandidate, RpsHuntStatus } from "../../portal/RpsHunt.tsx";
+import RpsHunt, { RpsHuntCandidate, RpsHuntStatus, RpsOrderPrediction } from "../../portal/RpsHunt.tsx";
+import RpsDuel from "../../portal/RpsDuel.tsx";
 import { isCryptoBattleProjection } from "../../portal/coordination.ts";
 import { tacticAvailability, ageProjection } from "../../portal/FastMovePanel.tsx";
 
@@ -45,7 +49,7 @@ describe("RPS prediction gates",()=>{
     for(const s of [seal(start(),"b",2,2),seal(history(1),"b",2,2),seal(history(2,4),"b",2,2)]) expect(validateOp(s,"a",prediction(s)).ok).toBe(false);
     const s=ready(); expect(rpsReuseEvidence(s,"b").map(a=>a.randomness)).toEqual([2,2]);
     expect(validateOp(s,"a",prediction(s))).toEqual({ok:true});
-    const one=s.publicLedger.find(a=>a.k==="rps-open"&&a.tm==="b")!;
+    const one=s.publicLedger.map(artifactFields).find(a=>a.k==="rps-open"&&storedTeamId(a,s.teams)==="b")!;
     expect(validateOp({...s,publicLedger:[one,one]},"a",prediction(s)).ok).toBe(false);
   });
   test("rejects unsealed, self, unknown, malformed, late and ended targets",()=>{
@@ -69,9 +73,9 @@ describe("RPS prediction gates",()=>{
   test("shares the Shamir attempt budget in both directions",()=>{
     let s=ready(); const wrong=String((BigInt(s.teams.b!.secret)+1n)%BigInt(s.config.prime));
     const shamir={kind:"hunt" as const,targetTeamId:"b",generation:1,recoveredSecret:wrong};
-    s=move(s,"a",shamir); const key=storedHuntKey(s,huntKey("a","b",1)); expect(s.huntAttempts[key]).toBe(1);
-    s=move(s,"a",prediction(s)); expect(s.huntAttempts[key]).toBe(2);
-    s=move(s,"a",shamir); expect(s.huntAttempts[key]).toBe(3);
+    s=move(s,"a",shamir); const key=storedHuntKey(s,huntKey("a","b",1)); expect(huntCount(s,key)).toBe(1);
+    s=move(s,"a",prediction(s)); expect(huntCount(s,key)).toBe(2);
+    s=move(s,"a",shamir); expect(huntCount(s,key)).toBe(3);
     expect(validateOp(s,"a",shamir).ok).toBe(false);
     const next=ready(); expect(validateOp({...next,huntAttempts:s.huntAttempts},"a",prediction(next)).ok).toBe(false);
     expect(projectForTeam(s,"a").huntAttempts.b?.spent).toBe(3);
@@ -122,19 +126,19 @@ describe("prediction privacy and delayed settlement",()=>{
     if(targetOpened) s=open(s,"b",2,2);
     const expired=order(s,"b").expiresAtMs, count=s.publicLedger.length;
     s=tick(s,expired);
-    expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",1))]).toBeUndefined();
+    expect(huntCount(s, storedHuntKey(s,huntKey("a","b",1)))).toBeUndefined();
     expect(s.teams.a!.lastRpsHunt).toMatchObject({outcome:"cancelled",points:0});
     expect(s.teams.a!.lastRpsHunt).not.toHaveProperty("actualHand");
     expect(s.publicLedger).toHaveLength(count); expect(s.contracts.every(c=>!c.rps?.predictions)).toBe(true);
-    s=tick(s,expired+1); expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",1))]).toBeUndefined();
+    s=tick(s,expired+1); expect(huntCount(s, storedHuntKey(s,huntKey("a","b",1)))).toBeUndefined();
   });
   test("cancellation refunds the acceptance generation and preserves newer attempts",()=>{
     let s=ready(); s=move(s,"a",prediction(s)); s=move(s,"b",{kind:"rotate"});
     const wrong=String((BigInt(s.teams.b!.secret)+1n)%BigInt(s.config.prime));
     s=move(s,"a",{kind:"hunt",targetTeamId:"b",generation:2,recoveredSecret:wrong});
     s=tick(s,order(s,"b").expiresAtMs);
-    expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",1))]).toBeUndefined();
-    expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",2))]).toBe(1);
+    expect(huntCount(s, storedHuntKey(s,huntKey("a","b",1)))).toBeUndefined();
+    expect(huntCount(s, storedHuntKey(s,huntKey("a","b",2)))).toBe(1);
   });
 });
 
@@ -171,14 +175,66 @@ test("old projections retain existing controls without requiring the new optiona
   expect(renderToStaticMarkup(createElement(RpsHuntStatus,{projection:old,locale:"ja"}))).toBe("");
 });
 
-test("a fresh hunter cannot predict after the target has privately opened", () => {
+test("a fresh hunter can predict while only the judge holds the target opening", () => {
   let s = ready(["a", "b", "c", "d"]);
   const target = order(s, "b"), peer = target.task.opponentTeamId;
   s = seal(s, peer, 1, 7);
   const op = prediction(s);
   s = open(s, "b", 2, 2);
+  expect(validateOp(s, "c", op)).toEqual({ ok: true });
+  const view = projectForTeam(s, "c");
+  const projected = view.rpsHunt!.targets.find(t => t.targetTeamId === "b")!;
+  expect(projected.openingHeld).toBe(true);
+  expect(projected).not.toHaveProperty("hand");
+  expect(projected).not.toHaveProperty("randomness");
+  expect(view.publicLedger.filter(a => a.kind === "rps-open" && a.duelId === target.task.duelId)).toEqual([]);
+  s = move(s, "c", op);
+  expect(projectForTeam(s, "c").rpsHunt!.lastResult).toBeUndefined();
   expect(validateOp(s, "c", op).ok).toBe(false);
-  expect(projectForTeam(s, "c").rpsHunt!.targets.some(t => t.targetTeamId === "b")).toBe(false);
+  s = open(s, peer, 1, 7);
+  expect(s.teams.c!.lastRpsHunt).toMatchObject({ outcome: "hit", points: 25 });
+  expect(validateOp(s, "a", op).ok).toBe(false);
+});
+
+test("a prediction and final opening revalidate safely in either winning-write order", () => {
+  let snapshot = seal(ready(), "a", 1, 7);
+  const predictionOp = prediction(snapshot);
+  snapshot = open(snapshot, "b", 2, 2);
+  const openingOp: CryptoBattleOp = { kind: "rps-open", contractId: order(snapshot, "a").id, hand: 1, randomness: 7 };
+  expect(validateOp(snapshot, "a", predictionOp).ok).toBe(true);
+  expect(validateOp(snapshot, "a", openingOp).ok).toBe(true);
+  // The host retries a losing state version by reading and validating again.
+  const predictionFirst = move(snapshot, "a", predictionOp);
+  const both = move(predictionFirst, "a", openingOp);
+  expect(both.teams.a!.lastRpsHunt).toMatchObject({ outcome: "hit", points: 25 });
+  const openingFirst = move(snapshot, "a", openingOp);
+  expect(validateOp(openingFirst, "a", predictionOp).ok).toBe(false);
+  expect(openingFirst.teams.a!.lastRpsHunt).toBeUndefined();
+  expect(projectForTeam(openingFirst, "a").rpsHunt!.targets).toEqual([]);
+  expect(validateOp(tick(snapshot, order(snapshot, "a").expiresAtMs), "a", predictionOp).ok).toBe(false);
+});
+
+test("the active RPS answer presents optional prediction before its own opening control", () => {
+  let s = seal(ready(), "a", 1, 7);
+  s = open(s, "b", 2, 2);
+  const p = projectForTeam(s, "a");
+  const selected = p.myContracts.find(c => c.id === order(s, "a").id)!;
+  const props = { projection: p, locale: "ja" as const, submitting: false, onSubmit: async () => {} };
+  const html = renderToStaticMarkup(createElement(RpsDuel, {
+    order: selected, opponentName: "b", locale: "ja", submitting: false, onSubmit: async () => {},
+    prediction: createElement(RpsOrderPrediction, { ...props, order: selected }),
+  }));
+  expect(html).toContain("相手の手は審判が預かっています");
+  expect(html).toContain("受付中");
+  expect(html).toContain("予測せず、通常の回答を続けてもかまいません");
+  expect(html).toContain("手と r を毎回独立に等確率で選ぶ場合");
+  expect(html).toContain("的中率も3分の1");
+  expect(html.indexOf("予測を審判へ預ける")).toBeLessThan(html.indexOf(">手を審判へ渡す</button>"));
+  const pending = move(s, "a", prediction(s));
+  const accepted = renderToStaticMarkup(createElement(RpsOrderPrediction, { ...props, order: selected, projection: projectForTeam(pending, "a") }));
+  expect(accepted).toContain("予測を受け付けました");
+  expect(accepted).toContain("まだ採点していません");
+  expect(accepted).not.toContain("予測を審判へ預ける");
 });
 
 test("a wrong prediction at zero points reports the actual zero deduction", () => {
@@ -194,6 +250,7 @@ test("prediction controls reject malformed payloads and expire between polls", (
   expect(isCryptoBattleProjection(p)).toBe(true);
   const { rpsHunt, ...old } = p;
   expect(isCryptoBattleProjection(old)).toBe(true);
+  expect(isCryptoBattleProjection({ ...p, rpsHunt: { ...rpsHunt, targets: [{ ...rpsHunt!.targets[0], openingHeld: "true" }] } })).toBe(false);
   for (const bad of [null, {}, { ...rpsHunt, targets: null }, { ...rpsHunt, pending: [null] }, { ...rpsHunt, targets: [{ ...rpsHunt!.targets[0], evidence: [null] }] }, { ...rpsHunt, lastResult: { outcome: "other" } }]) expect(isCryptoBattleProjection({ ...p, rpsHunt: bad })).toBe(false);
   const aged = ageProjection(p, p.rpsHunt!.targets[0]!.remainingMs + 1)!;
   expect(aged.rpsHunt!.targets[0]!.remainingMs).toBe(0);

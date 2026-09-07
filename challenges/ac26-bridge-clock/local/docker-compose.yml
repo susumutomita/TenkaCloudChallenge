@@ -12,6 +12,8 @@
 name: ac26-bridge-clock
 services:
   workbench:
+    # Reap orphaned learner descendants after the supervisor ends their process group.
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -19,7 +21,7 @@ services:
       # stage -- `author` -- which carries fixtures/, reference/ and mutation.py.
       target: participant
     environment:
-      FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
+      # The protected supervisor fetches a derived key; no seed is injected here.
       WORKBENCH_PORT: "18141"
       VERIFIER_URL: http://verifier:18151/verify
       VERIFIER_PUBLIC_URL: http://verifier:18151/public

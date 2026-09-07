@@ -1,34 +1,8 @@
-"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
+"""Parent-owned arithmetic, opening observations and verdicts. Compose-internal only.
 
-Issue 537/538 (Issue 543 option B2): this used to be the same process that also served
-the Participant Portal's config, inspect, starter, public-test and prepare endpoints, in
-the single Docker stage a learner's own `make build` produced -- so
-`tests/hidden/check_aggregate.py` shipped in the learner's own image alongside it, and
-all eight checkpoints are graded by running that suite. Its `check_plan` states the three
-numbers `plan` must return, `check_cost` states the round and opening counts it accepts,
-and `check_privacy` states the exact multiset a run may reveal. `fixtures/generate.py`
-shipped there too, and it derives the secret counts and severities behind `plain_score`.
-That Portal-facing surface now lives in `participant/server.py`, in a separate image (see
-../Dockerfile) that this process's own container never builds; this file, `fixtures/` and
-`tests/hidden/` are reachable only over the Compose-internal network (see
-../docker-compose.yml), never from the participant container's filesystem.
-
-`GET /public` below is what the participant image reads instead of importing
-`fixtures.generate`.
-
-Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
-  - `checkpointId` is required and is echoed back verbatim. The platform fails closed
-    on a missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
-  - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
-    capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
-    checkpoint instead of the verifier.
-  - No learner input is ever concatenated into a shell command; the subprocess is
-    invoked with an argument list and `shell=False`.
-  - Responses carry `correct` and, at most, a property name. Never the hidden test
-    names, the expected values, or reference output.
-  - Malformed input produces a failed checkpoint, never a crashed process.
+The learner receives only function arguments over a bounded fresh-ID channel. Printed
+JSON and child attributes never supply a grade or an opening counter. Code submissions
+retain the existing raw-source and tcw1 envelope formats and the existing 25-second total deadline.
 """
 
 from __future__ import annotations
@@ -38,27 +12,23 @@ import hashlib
 import hmac
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from participant.execution import LearnerError, LearnerSession
+from participant.isolation import protect_supervisor
+from tests.hidden import check_aggregate
 from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert
 
-ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w2-private-aggregate"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
 RUN_TIMEOUT_SECONDS = 25
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
 #: Cap for the verdict's optional human-readable failure summary. Kept under the
 #: platform's 2000-character message limit with room to spare.
 MAX_MESSAGE_CHARS = 1900
@@ -86,58 +56,6 @@ CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 
 
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`, which
-# aborts the exec -- so on a macOS checkout every submission run failed, including the
-# reference. The lab runs on Linux, where the cap does apply, so skipping it on Darwin
-# does not change what participants run.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_aggregate
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import aggregate
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-phases = {phases!r}
-if phases:
-    failures = []
-    for name in phases:
-        failures.extend(getattr(check_aggregate, name)(aggregate, {seed!r}))
-else:
-    failures = check_aggregate.run(aggregate, {seed!r})
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
 
@@ -160,47 +78,18 @@ def _run_submission(
         return False, None
     if len(source) > MAX_BODY_BYTES:
         return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "aggregate.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    try:
+        with LearnerSession({'aggregate.py': source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            module = learner.module()
+            if phases:
+                failures = []
+                for name in phases:
+                    failures.extend(getattr(check_aggregate, name)(module, seed))
+            else:
+                failures = check_aggregate.run(module, seed)
+    except (LearnerError, OSError, ValueError):
+        return False, 'The submitted functions could not be evaluated.'
+    return not failures, _failure_message(failures)
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
@@ -354,6 +243,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
 def main() -> None:
+    protect_supervisor()
     port = int(os.environ.get("VERIFY_PORT", "18150"))
     # Bind every interface *inside the container*, not the container's loopback: the
     # Workbench reaches this process across the Compose-internal `lab` network, so a

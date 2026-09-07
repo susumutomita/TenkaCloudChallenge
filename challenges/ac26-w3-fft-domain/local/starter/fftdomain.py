@@ -1,16 +1,11 @@
-"""A deliberately incomplete evaluation-domain toolkit.
+"""点の重複を見抜く入力検査を完成させる / Validate distinct evaluation points.
 
-The public contract is ``validate_domain(prime, order, omega)``,
-``fft(coefficients, omega, prime)``, ``ifft(values, omega, prime)`` and
-``interpolate_and_evaluate(values, omega, point, prime)``.
+公開テストは本物の点だけを使うので、最初のコードでも通ります。
+Public tests use valid domains, so the starter already passes them.
 
-Every public test passes. The domains they use are ones where the one equation this
-starter checks -- ``omega ** n == 1`` -- happens to be the whole truth.
-
-TODO: omega is handed in and trusted after that single equation. An omega from a
-*smaller* subgroup satisfies it too, and so can an order that does not even divide
-p-1. Whatever you add to establish "order exactly n", add it here -- nothing else in
-the image decides it for you.
+_domain_ok: 1からomegaを掛けて余りを取り、初めて1へ戻る回数がorderか確認。
+Start at 1, multiply by omega with remainders, and check that the first return
+is at step order. One equation at the last step does not detect earlier returns.
 """
 
 from __future__ import annotations
@@ -52,8 +47,7 @@ def _parse_list(value: object, prime: int) -> list[int] | None:
 
 
 def _domain_ok(omega: object, order: int, prime: int) -> bool:
-    """TODO: `omega ** order == 1` is satisfied by every element of every smaller
-    subgroup as well, and nothing here asks whether `order` divides `prime - 1`."""
+    """TODO: Check the first return to 1, not only the value at the last step."""
     return type(omega) is int and omega % prime != 0 and pow(omega, order, prime) == 1
 
 

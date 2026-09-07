@@ -1,26 +1,16 @@
-"""Hidden tests. Run by /verify against a copy of the learner's oblivious.py.
+"""Trusted finite checks for the declared OT arithmetic and selected gate observations.
 
-Two of these checks are not about getting an answer out, and they are the ones worth
-reading before changing anything.
-
-`check_receiver_privacy` does not run the protocol. It enumerates every blind in the
-declared range under both choices and compares the two *sets* of requests. Perfect
-receiver privacy is exactly the statement that those sets coincide; an implementation
-that excludes 0 from the range produces sets differing in one element each, and those
-two elements name the choice bit. Nothing about a single successful transfer would
-notice.
-
-`check_gate_privacy` is the same shape one level up. Mask reuse across the two
-transfers of an AND gate is *correct* -- the masks still cancel, and every
-reconstruction test passes -- while making each party's output share a deterministic
-function of the other party's secret bits. So correctness is checked separately from
-the property, and the property is checked by varying the other party's inputs and
-watching whether this party's view moves with them.
+Receiver privacy assumes a uniform draw over the inclusive q-integer interval and
+checks every request value and count. Gate privacy compares occurrence counts of
+(received, output) under four equally likely random pairs, with each party's input
+fixed. This is not a proof of arbitrary Python behavior, all protocol transcripts,
+or security of the tiny group against discrete-log enumeration.
 """
 
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from itertools import product
 from pathlib import Path
 
@@ -70,7 +60,7 @@ def check_request(module, seed: str) -> list[str]:
 
 
 def check_receiver_privacy(module, seed: str) -> list[str]:
-    """The sender must not be able to tell the choices apart. A set comparison."""
+    """Compare uniform full-cycle request probabilities, not just possible values."""
     failures: list[str] = []
     for label in LABELS:
         grp = group(seed, label)
@@ -94,34 +84,27 @@ def check_receiver_privacy(module, seed: str) -> list[str]:
             )
             continue
         try:
-            reachable = [
-                {module.request(grp, key["public"], choice, t) % grp["p"] for t in range(low, high + 1)}
-                for choice in (0, 1)
-            ]
-        except Exception as error:  # noqa: BLE001
-            return [f"request raised {type(error).__name__} while sweeping the blind"]
-        # Stated positively, and not only as "the two sets agree". A `request` that
-        # ignores its arguments makes both sets `{1}`, which agrees perfectly and hides
-        # nothing because it transfers nothing. The property is that the request ranges
-        # over the whole subgroup under each choice, which a constant cannot fake.
-        if any(len(side) != grp["q"] for side in reachable):
-            failures.append(
-                "the request does not range over the whole subgroup, so it is not "
-                "uniform under either choice"
-            )
+            reachable = []
+            for choice in (0, 1):
+                counts = Counter()
+                for t in range(low, high + 1):
+                    req = module.request(grp, key['public'], choice, t)
+                    if not _int(req) or not 0 <= req < grp['p'] or pow(req,grp['q'],grp['p']) != 1:
+                        raise ValueError('request must be a canonical subgroup element')
+                    counts[req] += 1
+                reachable.append(counts)
+        except Exception as error:
+            return [f'request raised {type(error).__name__} while sweeping the blind']
+        if any(len(side) != grp['q'] or set(side.values()) != {1} for side in reachable):
+            failures.append('the request does not visit every subgroup value once over the uniform blind range')
             continue
         if reachable[0] != reachable[1]:
-            only_one = sorted(reachable[1] - reachable[0])[:2]
-            only_zero = sorted(reachable[0] - reachable[1])[:2]
-            failures.append(
-                "the choice is readable from the request: "
-                f"{only_zero} can only mean choice 0 and {only_one} only choice 1"
-            )
+            failures.append('the two choices do not have the same request distribution')
     return failures
 
 
 def check_transfer(module, seed: str) -> list[str]:
-    """End to end: the chosen message arrives, and the other one stays unreadable."""
+    """Verify the declared keys and selected-message recovery, not sender security."""
     failures: list[str] = []
     for label in LABELS:
         grp = group(seed, label)
@@ -161,7 +144,7 @@ def check_transfer(module, seed: str) -> list[str]:
             )
             if tuple(cts) != expected:
                 failures.append(
-                    "the ciphertexts do not use the declared independent sender keys"
+                    "the ciphertexts do not use the declared sender keys"
                 )
                 continue
             try:
@@ -169,7 +152,7 @@ def check_transfer(module, seed: str) -> list[str]:
             except Exception as error:  # noqa: BLE001
                 return [f"unwrap raised {type(error).__name__}"]
             wanted = ses["message_0"] if choice == 0 else ses["message_1"]
-            if got != wanted:
+            if not _int(got) or got != wanted:
                 failures.append(f"the receiver did not recover message {choice}")
                 continue
             # The other branch must not fall out of the same key. A ciphertext pair
@@ -186,11 +169,19 @@ def check_transfer(module, seed: str) -> list[str]:
 
 def _gate(module, x0: int, x1: int, y0: int, y1: int, randomness: tuple[int, int]):
     """One AND gate, run the way the two parties run it. Returns both views."""
-    mask_0, mask_1 = module.gate_masks(randomness)
-    received_1 = module.offer(x0, mask_0)[y1]
-    received_0 = module.offer(x1, mask_1)[y0]
+    masks = module.gate_masks(randomness)
+    if not isinstance(masks,(tuple,list)) or len(masks)!=2 or not all(_bit(v) for v in masks):
+        raise ValueError('gate_masks must return two bits')
+    mask_0,mask_1=masks
+    offers=(module.offer(x0,mask_0),module.offer(x1,mask_1))
+    if any(not isinstance(pair,(tuple,list)) or len(pair)!=2 or not all(_bit(v) for v in pair) for pair in offers):
+        raise ValueError('offer must return two bits')
+    received_1=offers[0][y1]
+    received_0=offers[1][y0]
     z0 = module.output_share(x0, y0, mask_0, received_0)
     z1 = module.output_share(x1, y1, mask_1, received_1)
+    if not _bit(z0) or not _bit(z1):
+        raise ValueError("output_share must return a bit")
     return (received_0, z0), (received_1, z1)
 
 
@@ -221,22 +212,18 @@ def check_and_gate(module, seed: str) -> list[str]:
 
 
 def check_gate_privacy(module, seed: str) -> list[str]:
-    """Each party's view must not move when only the other party's secrets move.
+    """Count each selected (received, output) observation with uniform random bits.
 
-    Correct-but-leaky is the failure being separated here, so this cannot be folded
-    into the correctness check: a `gate_masks` that returns one mask twice passes
-    every reconstruction above and fails here. Party 0's whole view is the message it
-    received plus its own output share; sweeping the gate's randomness must leave that
-    view's distribution unchanged as the other party's secrets vary. The sweep is
-    symmetric: checking only party 0 leaves implementations that leak exclusively to
-    party 1 undetected.
+    The correctness phase remains a separate prerequisite in the checkpoint.
+    Neither this projection nor its finite enumeration attests a full semi-honest
+    or malicious-security protocol implementation.
     """
     failures: list[str] = []
     for party in (0, 1):
         for own_x, own_y in product((0, 1), repeat=2):
-            views: dict[tuple[int, int], frozenset[tuple[int, int]]] = {}
+            views: list[Counter] = []
             for other_x, other_y in product((0, 1), repeat=2):
-                seen: set[tuple[int, int]] = set()
+                seen = Counter()
                 for randomness in product((0, 1), repeat=2):
                     if party == 0:
                         gate_inputs = (own_x, other_x, own_y, other_y)
@@ -246,9 +233,9 @@ def check_gate_privacy(module, seed: str) -> list[str]:
                         party_views = _gate(module, *gate_inputs, randomness)
                     except Exception as error:  # noqa: BLE001
                         return [f"the AND gate raised {type(error).__name__}"]
-                    seen.add(party_views[party])
-                views[(other_x, other_y)] = frozenset(seen)
-            if len({*views.values()}) > 1:
+                    seen[party_views[party]] += 1
+                views.append(seen)
+            if any(view != views[0] for view in views[1:]):
                 failures.append(
                     f"party {party}'s view of the gate changes with party {1 - party}'s "
                     "secret bits, so the two transfers are not independently masked"

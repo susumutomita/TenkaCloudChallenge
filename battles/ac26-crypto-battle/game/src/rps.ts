@@ -1,7 +1,7 @@
 /** Paired Orders. Openings stay with the judge until BOTH have been accepted. */
 import { isCommitment, isHand, isRandomness, rpsOutcome, verifyOpening } from "./commitment.ts";
 import { settleRpsHunts } from "./rps-hunt.ts";
-import { encodeArtifact } from "./ledger-codec.ts";
+import { compactContractId, encodeArtifact } from "./ledger-codec.ts";
 import type { Contract, CryptoBattleOp, CryptoBattleState, DuelOutcome, OrderTaskProjection, RpsOpenArtifact, ValidateResult } from "./types.ts";
 
 /** Circle schedule: every pair meets; an odd roster rotates the bye. */
@@ -52,7 +52,7 @@ export function applyRps(state: CryptoBattleState, teamId: string, op: DuelOp): 
       id: `${order.id}-rps-commit`, kind: "rps-commit", method: "duel", teamId,
       generation: state.teams[teamId]!.generation, contractId: order.id, duelId: order.task.duelId,
       postedAtMs: state.nowMs!, commitment: op.commitment,
-    })],
+    }, state.teams)],
   };
   if (!isHand(op.hand)) throw new Error("applyRps: invalid hand");
   const opened: Contract = { ...order, rps: { ...order.rps, opening: { hand: op.hand, randomness: op.randomness } } };
@@ -69,7 +69,7 @@ export function applyRps(state: CryptoBattleState, teamId: string, op: DuelOp): 
   for (const c of [opened, opponent]) {
     const team = teams[c.teamId]!;
     const outcome = outcomes.get(c.id)!;
-    teams[c.teamId] = { ...team, score: team.score + (outcome === "win" ? state.config.scores.duelWin : outcome === "draw" ? state.config.scores.duelDraw : 0), completedContractIds: [...team.completedContractIds, c.id] };
+    teams[c.teamId] = { ...team, score: team.score + (outcome === "win" ? state.config.scores.duelWin : outcome === "draw" ? state.config.scores.duelDraw : 0), completedContractIds: [...team.completedContractIds, compactContractId(c.teamId, c.id)] };
     artifacts.push({
       id: `${c.id}-rps-open`, kind: "rps-open", method: "duel", teamId: c.teamId,
       generation: team.generation, contractId: c.id, duelId: order.task.duelId, postedAtMs: state.nowMs!,
@@ -79,7 +79,7 @@ export function applyRps(state: CryptoBattleState, teamId: string, op: DuelOp): 
   return settleRpsHunts({
     ...next, teams,
     contracts: next.contracts.map(c => outcomes.has(c.id) ? { ...c, status: "completed", resolution: "duel", rps: { ...c.rps, outcome: outcomes.get(c.id)! } } : c),
-    publicLedger: [...state.publicLedger, ...artifacts.map(encodeArtifact)],
+    publicLedger: [...state.publicLedger, ...artifacts.map(a => encodeArtifact(a, state.teams))],
   }, [opened.id, opponent.id], state.nowMs!, false);
 }
 
@@ -91,7 +91,7 @@ export function expireRps(state: CryptoBattleState, atMs: number): CryptoBattleS
     const opponent = opponentOrder(state, c);
     const ready = c.rps?.opening !== undefined || (c.rps?.commitment !== undefined && opponent?.rps?.commitment === undefined);
     const team = teams[c.teamId]!;
-    teams[c.teamId] = { ...team, score: Math.max(0, team.score + (ready ? state.config.scores.duelWin : state.config.scores.expiredOrder)), completedContractIds: ready ? [...team.completedContractIds, c.id] : team.completedContractIds };
+    teams[c.teamId] = { ...team, score: Math.max(0, team.score + (ready ? state.config.scores.duelWin : state.config.scores.expiredOrder)), completedContractIds: ready ? [...team.completedContractIds, compactContractId(c.teamId, c.id)] : team.completedContractIds };
     return ready ? { ...c, status: "completed", resolution: "duel", rps: { ...c.rps, outcome: "forfeit-win" } }
       : { ...c, status: "expired", expiryCause: "deadline" };
   });

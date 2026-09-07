@@ -1,3 +1,7 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { hasSuccessfulHunt, recordSuccessfulHunt } from "./hunt-success.ts";
+import { storeLastHunt, readLastHunt } from "./hunt-result.ts";
+import { rsaHuntKey, pruneRetiredRsaHunts } from "./hunt-key.ts";
 /**
  * Pure game model for the PROVE / LEAK / HUNT / ROTATE Battle (Issue #486, PR1-PR3).
  *
@@ -53,6 +57,8 @@
 
 import {
   type ContractPlan,
+  deriveRsaKey,
+  deriveRsaPlaintext,
   deriveCipherKey,
   deriveContractPlan,
   derivePermutationTag,
@@ -63,17 +69,27 @@ import {
   deriveTeamGeneration,
   type FieldConfig,
 } from "./fixtures.ts";
+import { deriveRotorPositions, deriveRotorPlaintext } from "./fixtures.ts";
+import { huntCount, changeHuntCount, packHuntAttempts } from "./hunt-budget.ts";
+import { appendRotorHunt, hasRotorHunt, hasRecordedHunt, appendShareHunt, appendSudokuHunt, compactRecordedHunts } from "./hunt-log.ts";
+import { rotorEncrypt, parseRotorAnswer, rotorValue } from "./rotor.ts";
+import { parseRsaAnswer, rsaEncrypt, rsaFactorsFit } from "./rsa.ts";
 import { applyRpsHunt, projectRpsHunt, validateRpsHunt } from "./rps-hunt.ts";
+import { appendRsaHunt } from "./hunt-log.ts";
 import { huntKey, storedHuntKey, compactHuntAttempts, validateStoredHuntAttempts, pruneRetiredHuntAttempts } from "./hunt-key.ts";
 import { applyRps, expireRps, pairTeams, projectRps, validateRps } from "./rps.ts";
 import { parseCanonicalDecimal } from "./decimal.ts";
 import { decryptOrderSum, deriveFheOrderInputs, expectedFheSum } from "./fhe.ts";
 import { awardBooster, boosterStartAt, projectBooster, storedBooster } from "./booster.ts";
+import { awardLightning, storedLightning, settleLightning, projectLightning, lightningEligible, lightningBonus, armLightning } from "./lightning.ts";
 import { type HintContext, hintCostAt, hintsFor } from "./hints.ts";
 import {
   type CipherRung,
   ALL_CIPHER_RUNGS,
   encryptWithRung,
+  exposedKeyPositions,
+  isCipherRung,
+  validCipherKey,
   parseAnswer,
   rungSpec,
   toSymbols,
@@ -93,7 +109,7 @@ import {
   type SubmissionMethod,
 } from "./methods.ts";
 import { HAND_PRIME, mod } from "./field.ts";
-import { decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
+import { storedTeamId, compactCompletedContractIds, compactContractId, contractId, decodeArtifact, decodeLedger, encodeArtifact, encodeLedger, migrateStateV1 } from "./ledger-codec.ts";
 import {
   ALL_PERMUTATIONS,
   CONSTRAINT_GROUPS,
@@ -278,6 +294,7 @@ export function initialState(
     phase: "waiting",
     readyTeamIds: [],
     endgameBooster: { status: "pending" },
+    endgameLightning: { status: "pending" },
     nowMs: undefined,
     startedAtMs: undefined,
     nextContractAtMs: undefined,
@@ -321,8 +338,15 @@ function buildOrderTask(
   seed: string,
   contractId: string,
   prime: bigint,
+  teamId: string,
+  generation: number,
 ): OrderTask {
   switch (plan.taskKind) {
+    case "rotor-encrypt": return { kind: "rotor-encrypt", generation, plaintext: deriveRotorPlaintext(seed, contractId) };
+    case "rsa-encrypt": {
+      const { n, e } = deriveRsaKey(seed, teamId, generation);
+      return { kind: "rsa-encrypt", n, e, plaintext: deriveRsaPlaintext(seed, contractId) };
+    }
     case "reveal-share":
       return { kind: "reveal-share", shareIndices: plan.requestedShareIndices };
     case "homomorphic-sum":
@@ -341,7 +365,7 @@ function buildOrderTask(
       // every team knows how the cipher works, and the only thing that decides
       // who survives is who kept their key.
       const rung: CipherRung = plan.rung ?? "caesar";
-      return { kind: "caesar-shift", rung, plaintext: derivePlaintext(seed, contractId, rung) };
+      return { kind: "caesar-shift", rung, plaintext: derivePlaintext(seed, contractId, rung), ...(plan.keyPosition === undefined ? {} : { keyPosition: plan.keyPosition }) };
     }
     case "zk-sudoku":
       // [Issue #709] No payload: the puzzle is already public and the solution
@@ -528,6 +552,7 @@ function migrateTeams(
   for (const [teamId, team] of Object.entries(teams)) {
     next[teamId] = {
       ...team,
+      completedContractIds: compactCompletedContractIds(teamId, team.completedContractIds),
       cipherHuntedGenerations: team.cipherHuntedGenerations ?? {},
       // [Issue #709] Same class: a row written before the sudoku HUNT existed
       // has had no solution recovered, because there was none to recover.
@@ -558,6 +583,7 @@ function highestSequenceFor(contracts: readonly Contract[], teamId: string): num
 function needsTeamMigration(teams: Readonly<Record<string, TeamState>>): boolean {
   return Object.values(teams).some(
     (team) =>
+      compactCompletedContractIds(team.teamId, team.completedContractIds) !== team.completedContractIds ||
       !team.cipherHuntedGenerations ||
       team.issuedOrderCount === undefined ||
       team.sudokuHuntedGenerations === undefined,
@@ -593,13 +619,18 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *   4  roster-indexed HUNT budget keys and lossless numeric ledger Order IDs
  *   5  `lastHunt.points` records the actual score delta of new HUNT results
  *   6  endgame booster distribution, fixed once at the phase boundary
+ *   7  Vigenère rung and public key-position offsets (old Caesar rows keep scalar keys)
+ *   8  Vigenère wrong-answer reward forfeiture and own lastCipher adjudication
+ *   9  private lightning distribution, targeted card, and accepted-answer history
+ *  10  RSA Orders/pairs, exact-time factor HUNT logs and compact completed IDs
+ *  11  Rotor Orders/pairs; ledger tuples; lossless audit/counter/guard/verdict roster codecs
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 6;
+export const STATE_SCHEMA_VERSION = 11;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -619,11 +650,30 @@ export const STATE_SCHEMA_VERSION = 6;
  * keys are validated and retained, not compacted again as logical team IDs.
  * v5 -> v6 records pending distribution before the boundary, or an explicit
  * unavailable result afterward when the old row has no historical ranking.
+ * v6 -> v7 retains existing scalar Caesar Orders, ledgers and reservations.
+ * Only newly issued Vigenère Orders gain public key-position offsets.
+ * v7 -> v8 preserves existing Vigenère rows and reservations. Only a newly
+ * adjudicated incorrect CIPHER writes cipherFailed/lastCipher; absent means no
+ * previously charged failure. Existing true flags survive every migration.
+ * v8 -> v9 adds pending/unavailable lightning distribution, preserving all
+ * Vigenère and compact reservations. Legacy Orders have unknown accepted-answer history
+ * and cannot be targeted; the next issued Orders record answerAttempted=false.
+ * v9 -> v10 preserves existing Orders, cipherFailed and lightning cards exactly.
+ * RSA is issued only for future scheduled standard endgame cipher slots. Completed
+ * exact Order IDs reuse the ledger codec. Legacy hunt-log objects remain unchanged;
+ * no timestamps are invented for pre-patch RSA reservations without a log.
+ * v10 -> v11 preserves public Ledger values/order in roster-indexed tuples,
+ * groups exact-time HUNT logs and separate attempt counters by target/generation,
+ * and packs untimed successful-HUNT guards without inventing timestamps. If
+ * grouping would change any same-time legacy replay order, the entire old log
+ * stays in its original representation. Pending RPS reservations keep their
+ * original generation; old lastHunt objects remain readable beside new tuples.
+ * Rotor is issued only in future scheduled normal pressure cipher slots.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4 and v5 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9 and v10 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -656,8 +706,9 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
   const lifted = withMigratedContracts(rest as CryptoBattleState);
   return {
     ...lifted,
-    publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a))),
-    huntAttempts: fromVersion >= 4 ? validateStoredHuntAttempts(lifted) : compactHuntAttempts(lifted),
+    ...compactRecordedHunts(lifted),
+    publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a, lifted.teams), lifted.teams)),
+    huntAttempts: packHuntAttempts({ ...lifted, huntAttempts: fromVersion >= 4 ? validateStoredHuntAttempts(lifted) : compactHuntAttempts(lifted) }),
     contracts: lifted.contracts.map((contract) => {
       const { proveCommitment: _c, proveChallenge: _e, ...kept } = contract as Contract & {
         readonly proveCommitment?: unknown;
@@ -682,15 +733,15 @@ function unspentNonceExposure(
   for (const team of Object.values(state.teams)) {
     const commitments = new Set<string>();
     let reused = false;
-    for (const artifact of state.publicLedger) {
-      if (artifact.k !== "proof" || artifact.tm !== team.teamId || artifact.g !== team.generation) continue;
+    for (const stored of state.publicLedger) {
+    const artifact = artifactFields(stored);
+      if (artifact.k !== "proof" || storedTeamId(artifact, state.teams) !== team.teamId || artifact.g !== team.generation) continue;
       if (commitments.has(artifact.o)) reused = true;
       commitments.add(artifact.o);
     }
     if (!reused) continue;
-    const spent = state.successfulHunts ?? [];
     const attackerLeft = teamIds.some(
-      (attacker) => attacker !== team.teamId && !spent.includes(huntKey(attacker, team.teamId, team.generation)),
+      (attacker) => attacker !== team.teamId && !hasSuccessfulHunt(state, huntKey(attacker, team.teamId, team.generation)),
     );
     if (attackerLeft) return { teamId: team.teamId, generation: team.generation };
   }
@@ -699,8 +750,9 @@ function unspentNonceExposure(
 
 function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleState {
   const endgameBooster = storedBooster(persistedState);
-  const state = endgameBooster === persistedState.endgameBooster ? persistedState
-    : { ...persistedState, endgameBooster };
+  const endgameLightning = storedLightning(persistedState);
+  const state = endgameBooster === persistedState.endgameBooster && endgameLightning === persistedState.endgameLightning ? persistedState
+    : { ...persistedState, endgameBooster, endgameLightning };
   const config = needsConfigMigration(state.config) ? mergeConfig(state.config) : state.config;
   const teams = needsTeamMigration(state.teams)
     ? migrateTeams(state.teams, state.contracts)
@@ -731,15 +783,18 @@ function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleS
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   const boundary = boosterStartAt(state);
-  if (state.endgameBooster?.status === "pending" && boundary !== undefined && eventNowMs >= boundary) {
+  if ((state.endgameBooster?.status === "pending" || state.endgameLightning?.status === "pending") && boundary !== undefined && eventNowMs >= boundary) {
     // Only read the boundary ranking. Carrying this intermediate tick forward
     // would issue unseen Orders and then charge them on a delayed tick, breaking
     // the existing no-catch-up-penalty rule. The actual transition stays intact.
     const atBoundary = tickAtTime(state, boundary);
     const advanced = eventNowMs === boundary ? atBoundary : tickAtTime(state, eventNowMs);
-    return { ...advanced, endgameBooster: awardBooster(atBoundary) };
+    return settleLightning({ ...advanced,
+      endgameBooster: state.endgameBooster?.status === "pending" ? awardBooster(atBoundary) : state.endgameBooster,
+      endgameLightning: state.endgameLightning?.status === "pending" ? awardLightning(atBoundary) : state.endgameLightning,
+    });
   }
-  return tickAtTime(state, eventNowMs);
+  return settleLightning(tickAtTime(state, eventNowMs));
 }
 
 function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -828,7 +883,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
         continue;
       }
-      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig);
+      const plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig, { elapsedMs: nextContractAtMs - startedAtMs, buildToPressureMs: state.config.phaseBoundaries.buildToPressureMs, pressureToEndgameMs: state.config.phaseBoundaries.pressureToEndgameMs });
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
       //
@@ -866,10 +921,11 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         // so the only cost of answering it is the exposure, and letting it
         // lapse to stay hidden is never the better trade.
         leakPoints: plan.privacyConstraint === "must-disclose" ? points : state.config.scores.contractLeak,
-        task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime),
+        task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime, teamId, state.teams[teamId]!.generation),
         issuedAtMs: nextContractAtMs,
         expiresAtMs,
         status: "open",
+        answerAttempted: false,
         // [Issue #645] The Order states its rule, and the method list follows
         // from it and the task -- never the other way round, so a method added
         // in a later phase is offered on exactly the Orders it legitimately
@@ -1059,9 +1115,10 @@ function revealsByTag(
   generation: number,
 ): ReadonlyMap<string, readonly OpenedGroup[]> {
   const byTag = new Map<string, OpenedGroup[]>();
-  for (const artifact of state.publicLedger) {
+  for (const stored of state.publicLedger) {
+    const artifact = artifactFields(stored);
     if (artifact.k !== "sudoku-reveal") continue;
-    if (artifact.tm !== teamId || artifact.g !== generation) continue;
+    if (storedTeamId(artifact, state.teams) !== teamId || artifact.g !== generation) continue;
     const bucket = byTag.get(artifact.tg) ?? [];
     bucket.push({ group: artifact.gr, cells: artifact.cl });
     byTag.set(artifact.tg, bucket);
@@ -1133,9 +1190,10 @@ function usedPermutationsFor(
   generation: number,
 ): readonly Permutation[] {
   const used: Permutation[] = [];
-  for (const artifact of state.publicLedger) {
+  for (const stored of state.publicLedger) {
+    const artifact = artifactFields(stored);
     if (artifact.k !== "sudoku-reveal") continue;
-    if (artifact.tm !== teamId || artifact.g !== generation) continue;
+    if (storedTeamId(artifact, state.teams) !== teamId || artifact.g !== generation) continue;
     const pi = ALL_PERMUTATIONS.find(
       (candidate) => derivePermutationTag(state.seed, teamId, generation, candidate) === artifact.tg,
     );
@@ -1233,6 +1291,15 @@ export function validateOp(
   }
 
   switch (op.kind) {
+    case "declare-lightning": {
+      const contract = state.contracts.find(c => c.id === op.contractId && c.teamId === teamId);
+      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc"].includes(m));
+      if (!contract || !method) return { ok: false, error: "lightning requires your own calculation Order; duel outcomes do not qualify" };
+      const gate = validateOrderSubmission(state, teamId, op.contractId, method);
+      if (!gate.ok) return gate;
+      return lightningEligible(state, contract) ? { ok: true }
+        : { ok: false, error: "lightning is unavailable or this Order has a recorded answer attempt" };
+    }
     case "hunt-rps": return validateRpsHunt(state, teamId, op);
     case "rps-commit":
     case "rps-open": {
@@ -1274,7 +1341,7 @@ export function validateOp(
           error: `target team is on generation ${target.generation}, not ${op.generation}`,
         };
       }
-      if (state.successfulHunts.includes(huntKey(teamId, op.targetTeamId, op.generation))) {
+      if ((hasSuccessfulHunt(state, huntKey(teamId, op.targetTeamId, op.generation)) || hasRecordedHunt(state, teamId, op.targetTeamId, op.generation, "share"))) {
         return { ok: false, error: "this generation was already hunted successfully by this team" };
       }
       // [Issue #696] The attempt budget, and the reason a wrong secret is NOT
@@ -1284,7 +1351,7 @@ export function validateOp(
       // retries are a faster path to the secret than the interpolation, so a
       // miss has to land, cost `scores.wrongHunt`, and spend one of these.
       // `applyHunt` does the comparison and reports which happened.
-      const spent = state.huntAttempts[storedHuntKey(state, huntKey(teamId, op.targetTeamId, op.generation))] ?? 0;
+      const spent = huntCount(state, storedHuntKey(state, huntKey(teamId, op.targetTeamId, op.generation))) ?? 0;
       if (spent >= state.config.maxHuntAttemptsPerTarget) {
         return {
           ok: false,
@@ -1423,7 +1490,7 @@ export function validateOp(
           error: `target team is on generation ${target.generation}, not ${op.generation}`,
         };
       }
-      if (state.successfulHunts.includes(sudokuHuntKey(teamId, op.targetTeamId, op.generation))) {
+      if ((hasSuccessfulHunt(state, sudokuHuntKey(teamId, op.targetTeamId, op.generation)) || hasRecordedHunt(state, teamId, op.targetTeamId, op.generation, "sudoku"))) {
         return { ok: false, error: "this generation's solution was already recovered by this team" };
       }
       // The exploit has to be real, not merely claimed: the target must
@@ -1450,7 +1517,7 @@ export function validateOp(
       // [Issue #696] Same budget logic as the Shamir HUNT, on its own counter.
       // There are only 288 solutions and a public puzzle rules most of them
       // out, so free retries would be cheaper than lining the reveals up.
-      const spent = state.huntAttempts[storedHuntKey(state, sudokuHuntKey(teamId, op.targetTeamId, op.generation))] ?? 0;
+      const spent = huntCount(state, storedHuntKey(state, sudokuHuntKey(teamId, op.targetTeamId, op.generation))) ?? 0;
       if (spent >= state.config.maxHuntAttemptsPerTarget) {
         return {
           ok: false,
@@ -1557,7 +1624,7 @@ export function validateOp(
       const gate = validateOrderSubmission(state, teamId, op.contractId, "cipher");
       if (!gate.ok) return gate;
       const contract = state.contracts.find((c) => c.id === op.contractId);
-      if (contract?.task.kind !== "caesar-shift") {
+      if (contract?.task.kind !== "caesar-shift" && contract?.task.kind !== "rsa-encrypt" && contract?.task.kind !== "rotor-encrypt") {
         // Unreachable through the gate above, which already checked the method
         // can perform the task. Fail loudly rather than reading `rung` off a
         // task that has none.
@@ -1566,18 +1633,18 @@ export function validateOp(
       // Untrusted wire input -- an arbitrary array of arbitrary strings after a
       // JSON round-trip. Parsed through the rung's own gate, which rejects
       // anything outside the alphabet rather than letting it reach arithmetic.
-      const answer = parseAnswer(op.answer, contract.task.rung);
+      const answer = contract.task.kind === "rotor-encrypt" ? parseRotorAnswer(op.answer) : contract.task.kind === "rsa-encrypt" ? parseRsaAnswer(op.answer, contract.task.n) : parseAnswer(op.answer, contract.task.rung);
       if (answer === undefined) {
-        return { ok: false, error: "answer must use this Order's symbols, or their values" };
+        return { ok: false, error: contract.task.kind === "rotor-encrypt" ? "enter exactly four integers from 0 to 3" : contract.task.kind === "rsa-encrypt" ? "enter one decimal integer from 0 up to n-1" : "answer must use this Order's symbols, or their values" };
       }
-      const expected = expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
+      const expected = contract.task.kind === "rotor-encrypt" ? rotorEncrypt(contract.task.plaintext, deriveRotorPositions(state.seed, teamId, team.generation)) : contract.task.kind === "rsa-encrypt" ? [rsaEncrypt(contract.task.plaintext, contract.task)] : expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
       if (answer.length !== expected.length) {
         return {
           ok: false,
           error: `answer has ${answer.length} symbols, the Order asks for ${expected.length}`,
         };
       }
-      if (answer.some((value, position) => value !== expected[position])) {
+      if (contract.task.kind === "caesar-shift" && contract.task.rung !== "vigenere" && answer.some((value, position) => value !== expected[position])) {
         // Deliberately does not say WHICH position is wrong. The Order is a
         // hand calculation with a deadline; turning the judge into a checker
         // that walks a team to the answer would replace the calculation with a
@@ -1586,7 +1653,28 @@ export function validateOp(
       }
       return { ok: true };
     }
+    case "hunt-rotor": {
+      if (state.nowMs === undefined) return { ok: false, error: "match has not started" };
+      if (typeof op.targetTeamId !== "string" || op.targetTeamId === teamId || !Object.hasOwn(state.teams, op.targetTeamId)) return { ok: false, error: "choose another team" };
+      const target = state.teams[op.targetTeamId]!;
+      if (!Number.isSafeInteger(op.generation) || op.generation !== target.generation) return { ok: false, error: "select the current target generation" };
+      if (hasRotorHunt(state, teamId, target.teamId, op.generation)) return { ok: false, error: "Rotor already hunted on this generation" };
+      if (!decodeLedger(state.publicLedger, state.teams).some(a => a.kind === "rotor-pair" && a.method === "leak" && a.teamId === target.teamId && a.generation === op.generation)) return { ok: false, error: "Rotor HUNT needs a public Rotor pair from this generation" };
+      if (!rotorValue(op.a) || !rotorValue(op.b)) return { ok: false, error: "enter initial a and b as integers 0..3" };
+      const spent = huntCount(state, storedHuntKey(state, huntKey(teamId, target.teamId, op.generation))) ?? 0;
+      return spent < state.config.maxHuntAttemptsPerTarget ? { ok: true } : { ok: false, error: "no shared HUNT attempts left against this generation" };
+    }
+    case "hunt-rsa": {
+      if (state.phase !== "endgame") return { ok: false, error: "RSA public keys are available during endgame" };
+      if (typeof op.targetTeamId !== "string" || op.targetTeamId === teamId || !Object.hasOwn(state.teams, op.targetTeamId)) return { ok: false, error: "choose another team" };
+      const target = state.teams[op.targetTeamId];
+      if (!target || !Number.isSafeInteger(op.generation) || op.generation < 1 || op.generation !== target.generation) return { ok: false, error: "select the current target generation" };
+      if (hasSuccessfulHunt(state, rsaHuntKey(state, teamId, target.teamId, target.generation)) || hasRecordedHunt(state, teamId, target.teamId, target.generation, "rsa")) return { ok: false, error: "RSA already hunted on this generation" };
+      const { n } = deriveRsaKey(state.seed, target.teamId, target.generation);
+      return rsaFactorsFit(n, op.p, op.q) ? { ok: true } : { ok: false, error: "enter two distinct prime factors whose product is the public n" };
+    }
     case "hunt-cipher": {
+      if (!isCipherRung(op.rung)) return { ok: false, error: "unknown cipher rung" };
       if (state.nowMs === undefined) {
         return { ok: false, error: "match has not started yet (no tick() has run)" };
       }
@@ -1606,18 +1694,20 @@ export function validateOp(
           error: `target team is on generation ${target.generation}, not ${op.generation}`,
         };
       }
-      if (state.successfulHunts.includes(cipherHuntKey(teamId, op.targetTeamId, op.generation, op.rung))) {
+      if (hasSuccessfulHunt(state, cipherHuntKey(teamId, op.targetTeamId, op.generation, op.rung))) {
         return { ok: false, error: "this rung was already broken by this team on this generation" };
       }
-      // Untrusted wire input: `recoveredKey` is typed `number` but arrives as
-      // whatever JSON carried. Reject a non-integer or out-of-range value here
-      // rather than comparing NaN, which would always be `false` and read as a
-      // wrong guess instead of a malformed op.
-      const modulus = rungSpec(op.rung).symbols.length;
-      if (!Number.isInteger(op.recoveredKey) || op.recoveredKey < 0 || op.recoveredKey >= modulus) {
-        return { ok: false, error: `recoveredKey must be an integer in 0..${modulus - 1}` };
+      if (op.rung === "vigenere") {
+        const pairs = decodeLedger(state.publicLedger, state.teams).filter((a): a is CipherPairArtifact =>
+          a.kind === "cipher-pair" && a.teamId === op.targetTeamId && a.generation === op.generation && a.rung === op.rung);
+        if (exposedKeyPositions(pairs, op.rung).length < rungSpec(op.rung).keyLength) {
+          return { ok: false, error: "Vigenere HUNT requires public pairs covering all three key positions in this generation" };
+        }
       }
-      if (op.recoveredKey !== deriveCipherKey(state.seed, op.targetTeamId, op.generation, op.rung)) {
+      if (!validCipherKey(op.recoveredKey, op.rung)) {
+        return { ok: false, error: "recoveredKey must contain this rung's number of shifts, each within its alphabet" };
+      }
+      if (JSON.stringify(op.recoveredKey) !== JSON.stringify(deriveCipherKey(state.seed, op.targetTeamId, op.generation, op.rung))) {
         return { ok: false, error: "that is not this team's key" };
       }
       return { ok: true };
@@ -1645,7 +1735,8 @@ function expectedCipherAnswer(
 ): readonly number[] {
   const generation = state.teams[teamId]?.generation ?? 1;
   const key = deriveCipherKey(state.seed, teamId, generation, rung);
-  return encryptWithRung(derivePlaintext(state.seed, contractId, rung), key, rung);
+  const task = state.contracts.find(c => c.id === contractId)?.task;
+  return encryptWithRung(derivePlaintext(state.seed, contractId, rung), key, rung, task?.kind === "caesar-shift" ? task.keyPosition ?? 0 : 0);
 }
 
 /**
@@ -1695,7 +1786,7 @@ function applyLeak(
   // publishes the (plaintext, ciphertext) pair, which is the material that
   // recovers a key. Branching here rather than at the call site keeps one
   // scoring path: both pay `leakPoints`, both close the Order the same way.
-  if (contract.task.kind === "caesar-shift") {
+  if (contract.task.kind === "rotor-encrypt" || contract.task.kind === "caesar-shift" || contract.task.kind === "rsa-encrypt") {
     return applyLadderLeak(state, teamId, contract, contract.task, nowMs);
   }
   if (contract.task.kind !== "reveal-share") {
@@ -1730,13 +1821,13 @@ function applyLeak(
     // [Issue #659] The leak rate, not the full rate. Paying the same for both
     // made LEAK strictly dominant — no computation, identical payout.
     score: team.score + contract.leakPoints,
-    completedContractIds: [...team.completedContractIds, contract.id],
+    completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
   };
 
   return {
     ...state,
     contracts,
-    publicLedger: [...state.publicLedger, ...encodeLedger(artifacts)],
+    publicLedger: [...state.publicLedger, ...encodeLedger(artifacts, state.teams)],
     teams: { ...state.teams, [teamId]: updatedTeam },
   };
 }
@@ -1748,20 +1839,26 @@ function applyLeak(
  * This is the rung's entire lesson made mechanical. The team saves the whole
  * hand calculation and takes `leakPoints`, and in exchange the public record
  * gains a plaintext next to its ciphertext -- which on the bottom rung is one
- * subtraction away from their key. Higher rungs survive more pairs; that
- * difference is the ladder.
+ * subtraction away from their key. Vigenère exposes positions separately,
+ * Rotor pairs constrain initial states, and RSA uses public factors without LEAK.
  */
 function applyLadderLeak(
   state: CryptoBattleState,
   teamId: string,
   contract: Contract,
-  task: Extract<OrderTask, { kind: "caesar-shift" }>,
+  task: Extract<OrderTask, { kind: "caesar-shift" | "rsa-encrypt" | "rotor-encrypt" }>,
   nowMs: number,
 ): CryptoBattleState {
   const team = state.teams[teamId];
   if (!team) throw new Error("applyOp(leak): unknown team -- call validateOp() first");
-  const answer = expectedCipherAnswer(state, teamId, task.rung, contract.id);
-  const artifact: CipherPairArtifact = {
+  const answer = task.kind === "rotor-encrypt" ? rotorEncrypt(task.plaintext, deriveRotorPositions(state.seed, teamId, team.generation)) : task.kind === "rsa-encrypt" ? [rsaEncrypt(task.plaintext, task)] : expectedCipherAnswer(state, teamId, task.rung, contract.id);
+  const artifact: PublicArtifact = task.kind === "rotor-encrypt" ? {
+    id: `${contract.id}-pair`, teamId, generation: team.generation, kind: "rotor-pair", method: "leak", contractId: contract.id,
+    plaintext: task.plaintext, ciphertext: answer, postedAtMs: nowMs,
+  } : task.kind === "rsa-encrypt" ? {
+    id: `${contract.id}-pair`, teamId, generation: team.generation, kind: "rsa-pair", method: "leak", contractId: contract.id,
+    n: task.n, e: task.e, plaintext: task.plaintext, ciphertext: answer[0]!, postedAtMs: nowMs,
+  } : {
     id: `${contract.id}-pair`,
     teamId,
     generation: team.generation,
@@ -1769,6 +1866,7 @@ function applyLadderLeak(
     method: "leak",
     contractId: contract.id,
     rung: task.rung,
+    ...(task.keyPosition === undefined ? {} : { keyPosition: task.keyPosition }),
     plaintext: task.plaintext,
     ciphertext: answer,
     postedAtMs: nowMs,
@@ -1778,13 +1876,13 @@ function applyLadderLeak(
     contracts: state.contracts.map((c) =>
       c.id === contract.id ? { ...c, status: "completed" as const, resolution: "leak" as const } : c,
     ),
-    publicLedger: [...state.publicLedger, encodeArtifact(artifact)],
+    publicLedger: [...state.publicLedger, encodeArtifact(artifact, state.teams)],
     teams: {
       ...state.teams,
       [teamId]: {
         ...team,
         score: team.score + contract.leakPoints,
-        completedContractIds: [...team.completedContractIds, contract.id],
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -1806,9 +1904,23 @@ function applyCipher(
 ): CryptoBattleState {
   const contract = state.contracts.find((c) => c.id === op.contractId);
   const team = state.teams[teamId];
-  if (!contract || !team) {
+  if (!contract || !team || (contract.task.kind !== "caesar-shift" && contract.task.kind !== "rsa-encrypt" && contract.task.kind !== "rotor-encrypt")) {
     throw new Error("applyOp(cipher): invalid op reached apply -- call validateOp() first");
   }
+  const answer = contract.task.kind === "rotor-encrypt" ? parseRotorAnswer(op.answer) : contract.task.kind === "rsa-encrypt" ? parseRsaAnswer(op.answer, contract.task.n) : parseAnswer(op.answer, contract.task.rung);
+  const expected = contract.task.kind === "rotor-encrypt" ? rotorEncrypt(contract.task.plaintext, deriveRotorPositions(state.seed, teamId, team.generation)) : contract.task.kind === "rsa-encrypt" ? [rsaEncrypt(contract.task.plaintext, contract.task)] : expectedCipherAnswer(state, teamId, contract.task.rung, contract.id);
+  if (!answer || answer.length !== expected.length) throw new Error("applyOp(cipher): malformed answer reached apply");
+  if (answer.some((value, position) => value !== expected[position])) {
+    if (contract.task.kind === "caesar-shift" && contract.task.rung !== "vigenere") throw new Error("applyOp(cipher): wrong Caesar answer reached apply");
+    const score = Math.max(0, team.score - state.config.scores.wrongProve);
+    return { ...state,
+      contracts: state.contracts.map(c => c.id === contract.id ? { ...c, cipherFailed: true } : c),
+      teams: { ...state.teams, [teamId]: { ...team, score,
+        lastCipher: { contractId: contract.id, outcome: "miss", points: score - team.score },
+      } },
+    };
+  }
+  const points = contract.cipherFailed === true ? 0 : contract.points + lightningBonus(state, contract);
   return {
     ...state,
     contracts: state.contracts.map((c) =>
@@ -1820,55 +1932,66 @@ function applyCipher(
       ...state.teams,
       [teamId]: {
         ...team,
-        score: team.score + contract.points,
-        completedContractIds: [...team.completedContractIds, contract.id],
+        score: team.score + points,
+        lastCipher: { contractId: contract.id, outcome: "hit", points },
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
 }
 
-/**
- * [Issue #659 §2] A successful ladder break.
- *
- * Asymmetric on purpose. The attacker earns the RUNG's bonus, which is far
- * below `scores.huntBonus`: a Shamir HUNT is five minutes of Lagrange
- * interpolation, and recovering a Caesar key is one subtraction. Paying both 25
- * would make the bottom rung the only thing anyone hunts and collapse
- * 「弱い相手は安く狩れて、強い相手は狩れない」 from a judgement into a reflex.
- *
- * The victim pays the full `scores.huntPenalty` all the same -- cheap to break
- * is not cheap to lose, and it is the victim's side that keeps the confirmed
- * ordering 「LEAK して狩られる −2」 true on every rung.
- */
+/** A stateful-cipher attempt uses the existing shared HUNT budget and prices.
+ * The exact-time success record also prevents another reward for this pairing. */
+function applyHuntRotor(state: CryptoBattleState, teamId: string, op: Extract<CryptoBattleOp, { kind: "hunt-rotor" }>): CryptoBattleState {
+  const attacker = state.teams[teamId], target = state.teams[op.targetTeamId];
+  if (!attacker || !target || state.nowMs === undefined) throw new Error("Rotor HUNT requires a validated op");
+  const key = storedHuntKey(state, huntKey(teamId, target.teamId, op.generation));
+  const huntAttempts = changeHuntCount(state, key, 1);
+  const initial = deriveRotorPositions(state.seed, target.teamId, op.generation);
+  const hit = initial.a === op.a && initial.b === op.b;
+  const score = hit ? attacker.score + state.config.scores.huntBonus : Math.max(0, attacker.score - state.config.scores.wrongHunt);
+  const teams = { ...state.teams, [teamId]: { ...attacker, score,
+    lastHunt: storeLastHunt(state, { targetTeamId: target.teamId, generation: op.generation, via: "rotor" as const, outcome: hit ? "hit" as const : "miss" as const, points: score - attacker.score }),
+  } };
+  if (!hit) return { ...state, teams, huntAttempts };
+  const broken = target.cipherHuntedGenerations.rotor ?? [];
+  teams[target.teamId] = { ...target, score: Math.max(0, target.score - state.config.scores.huntPenalty),
+    cipherHuntedGenerations: { ...target.cipherHuntedGenerations, rotor: broken.includes(op.generation) ? broken : [...broken, op.generation] } };
+  return { ...state, teams, huntAttempts,
+    huntLog: appendRotorHunt(state, teamId, target.teamId, op.generation),
+  };
+}
+
 function applyHuntCipher(
   state: CryptoBattleState,
   teamId: string,
-  op: Extract<CryptoBattleOp, { kind: "hunt-cipher" }>,
+  op: Extract<CryptoBattleOp, { kind: "hunt-cipher" | "hunt-rsa" }>,
 ): CryptoBattleState {
   const attacker = state.teams[teamId];
   const target = state.teams[op.targetTeamId];
   if (!attacker || !target) {
     throw new Error("applyOp(hunt-cipher): invalid op reached apply -- call validateOp() first");
   }
-  const broken = target.cipherHuntedGenerations[op.rung] ?? [];
+  const rung = op.kind === "hunt-rsa" ? "rsa" : op.rung;
+  const bonus = rung === "rsa" ? state.config.scores.huntBonus : rungSpec(rung).huntBonus;
+  const broken = target.cipherHuntedGenerations[rung] ?? [];
+  const huntLog = rung === "rsa" ? appendRsaHunt(state, teamId, op.targetTeamId, op.generation) : state.huntLog;
   return {
     ...state,
+    huntLog,
     teams: {
       ...state.teams,
-      [teamId]: { ...attacker, score: attacker.score + rungSpec(op.rung).huntBonus },
+      [teamId]: { ...attacker, score: attacker.score + bonus },
       [op.targetTeamId]: {
         ...target,
         score: Math.max(0, target.score - state.config.scores.huntPenalty),
         cipherHuntedGenerations: {
           ...target.cipherHuntedGenerations,
-          [op.rung]: broken.includes(op.generation) ? broken : [...broken, op.generation],
+          [rung]: broken.includes(op.generation) ? broken : [...broken, op.generation],
         },
       },
     },
-    successfulHunts: [
-      ...state.successfulHunts,
-      cipherHuntKey(teamId, op.targetTeamId, op.generation, op.rung),
-    ],
+    successfulHunts: rung === "rsa" ? state.successfulHunts : recordSuccessfulHunt(state, cipherHuntKey(teamId, op.targetTeamId, op.generation, rung)),
   };
 }
 
@@ -2039,13 +2162,13 @@ function completeOrder(
   return {
     ...state,
     contracts,
-    publicLedger: [...state.publicLedger, encodeArtifact(artifact)],
+    publicLedger: [...state.publicLedger, encodeArtifact(artifact, state.teams)],
     teams: {
       ...state.teams,
       [teamId]: {
         ...team,
-        score: team.score + contract.points,
-        completedContractIds: [...team.completedContractIds, contract.id],
+        score: team.score + contract.points + lightningBonus(state, contract),
+        completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
       },
     },
   };
@@ -2067,6 +2190,12 @@ function projectTask(
   contractId: string,
 ): OrderTaskProjection {
   switch (task.kind) {
+    case "rotor-encrypt": {
+      const order = state.contracts.find(c => c.id === contractId && c.teamId === teamId);
+      if (!order) throw new Error("projectTask: missing owned Rotor Order");
+      return { ...task, myInitial: deriveRotorPositions(state.seed, teamId, task.generation) };
+    }
+    case "rsa-encrypt": return { kind: "rsa-encrypt", n: task.n, e: task.e, plaintext: task.plaintext };
     case "rps-duel": {
       const order = state.contracts.find(c => c.id === contractId);
       if (!order || order.teamId !== teamId) throw new Error("projectTask: missing owned duel");
@@ -2109,6 +2238,7 @@ function projectTask(
         plaintext: task.plaintext,
         symbols: spec.symbols,
         pairsToBreak: spec.pairsToBreak,
+        ...(task.keyPosition === undefined ? {} : { keyPosition: task.keyPosition }),
         myKey: deriveCipherKey(state.seed, teamId, generation, task.rung),
       };
     }
@@ -2192,7 +2322,7 @@ function applyHunt(
 
   const key = huntKey(teamId, op.targetTeamId, op.generation);
   const budgetKey = storedHuntKey(state, key);
-  const huntAttempts = { ...state.huntAttempts, [budgetKey]: (state.huntAttempts[budgetKey] ?? 0) + 1 };
+  const huntAttempts = changeHuntCount(state, budgetKey, 1);
 
   // [Issue #696] The comparison moved here from `validateOp` so a miss is a
   // move that happened rather than a request that never existed. `validateOp`
@@ -2212,7 +2342,7 @@ function applyHunt(
           // and `projectForTeam` is a pure function of state -- so if the
           // state does not say "that was a miss", nothing downstream can, and
           // the Portal is left calling a -8 a SUCCESS.
-          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", points: Math.max(0, attacker.score - state.config.scores.wrongHunt) - attacker.score },
+          lastHunt: storeLastHunt(state, { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", points: Math.max(0, attacker.score - state.config.scores.wrongHunt) - attacker.score }),
         },
       },
       huntAttempts,
@@ -2222,7 +2352,7 @@ function applyHunt(
   const updatedAttacker: TeamState = {
     ...attacker,
     score: attacker.score + state.config.scores.huntBonus,
-    lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", points: state.config.scores.huntBonus },
+    lastHunt: storeLastHunt(state, { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", points: state.config.scores.huntBonus }),
   };
   const updatedTarget: TeamState = {
     ...target,
@@ -2236,14 +2366,7 @@ function applyHunt(
     ...state,
     teams: { ...state.teams, [teamId]: updatedAttacker, [op.targetTeamId]: updatedTarget },
     huntAttempts,
-    successfulHunts: [...state.successfulHunts, key],
-    // Additive audit trail for replay.ts -- see HuntLogEntry's doc comment
-    // in types.ts for why this exists alongside (not instead of)
-    // successfulHunts above.
-    huntLog: [
-      ...state.huntLog,
-      { attackerTeamId: teamId, targetTeamId: op.targetTeamId, generation: op.generation, atMs: nowMs },
-    ],
+    huntLog: appendShareHunt(state, teamId, op.targetTeamId, op.generation),
   };
 }
 
@@ -2308,7 +2431,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     voided,
     state.config.scores.expiredOrder,
   );
-  return pruneRetiredHuntAttempts({ ...state, contracts, teams, publicPuzzles });
+  return pruneRetiredHuntAttempts(pruneRetiredRsaHunts({ ...state, contracts, teams, publicPuzzles }));
 }
 
 /**
@@ -2347,6 +2470,7 @@ function applyProveSudoku(
   if (pi === undefined || !isValidSolution(op.grid) || samePermutation(pi, IDENTITY_PERMUTATION)) {
     return {
       ...state,
+      contracts: state.contracts.map(c => c.id === contract.id ? { ...c, answerAttempted: true } : c),
       teams: {
         ...state.teams,
         [teamId]: {
@@ -2379,6 +2503,7 @@ function applyProveSudoku(
     tag,
     postedAtMs: nowMs,
   };
+  const points = contract.points + lightningBonus(state, contract);
   const completed = completeOrder(state, teamId, contract, artifact, "prove");
   const provingTeam = completed.teams[teamId];
   if (!provingTeam) throw new Error("applyOp(prove-sudoku): team vanished while completing the Order");
@@ -2386,7 +2511,7 @@ function applyProveSudoku(
     ...completed,
     teams: {
       ...completed.teams,
-      [teamId]: { ...provingTeam, lastProve: { contractId: contract.id, outcome: "hit" } },
+      [teamId]: { ...provingTeam, lastProve: { contractId: contract.id, outcome: "hit", points } },
     },
   };
 }
@@ -2417,7 +2542,7 @@ function applyHuntSudoku(
   const nowMs = state.nowMs;
   const key = sudokuHuntKey(teamId, op.targetTeamId, op.generation);
   const budgetKey = storedHuntKey(state, key);
-  const huntAttempts = { ...state.huntAttempts, [budgetKey]: (state.huntAttempts[budgetKey] ?? 0) + 1 };
+  const huntAttempts = changeHuntCount(state, budgetKey, 1);
   const solution = deriveSudokuSolution(state.seed, op.targetTeamId, op.generation);
   const hit = solution.every((v, i) => v === op.solution[i]);
   if (!hit) {
@@ -2428,7 +2553,7 @@ function applyHuntSudoku(
         [teamId]: {
           ...attacker,
           score: Math.max(0, attacker.score - state.config.scores.wrongHunt),
-          lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", via: "sudoku", points: Math.max(0, attacker.score - state.config.scores.wrongHunt) - attacker.score },
+          lastHunt: storeLastHunt(state, { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "miss", via: "sudoku", points: Math.max(0, attacker.score - state.config.scores.wrongHunt) - attacker.score }),
         },
       },
       huntAttempts,
@@ -2442,7 +2567,7 @@ function applyHuntSudoku(
       [teamId]: {
         ...attacker,
         score: attacker.score + state.config.scores.huntBonus,
-        lastHunt: { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", via: "sudoku", points: state.config.scores.huntBonus },
+        lastHunt: storeLastHunt(state, { targetTeamId: op.targetTeamId, generation: op.generation, outcome: "hit", via: "sudoku", points: state.config.scores.huntBonus }),
       },
       [op.targetTeamId]: {
         ...target,
@@ -2451,11 +2576,7 @@ function applyHuntSudoku(
       },
     },
     huntAttempts,
-    successfulHunts: [...state.successfulHunts, key],
-    huntLog: [
-      ...state.huntLog,
-      { attackerTeamId: teamId, targetTeamId: op.targetTeamId, generation: op.generation, atMs: nowMs, via: "sudoku" },
-    ],
+    huntLog: appendSudokuHunt(state, teamId, op.targetTeamId, op.generation),
   };
 }
 
@@ -2495,13 +2616,19 @@ function applyStart(state: CryptoBattleState): CryptoBattleState {
   return tick({ ...state, startedAtMs, nextContractAtMs: startedAtMs, phase: "build" }, startedAtMs);
 }
 
-export function applyOp(
+/** A declaration and its terminal result persist in the same operation/state write. */
+export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): CryptoBattleState {
+  return settleLightning(applyMethodOp(state, teamId, op));
+}
+
+function applyMethodOp(
   persistedState: CryptoBattleState,
   teamId: string,
   op: CryptoBattleOp,
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "declare-lightning": return armLightning(state, teamId, op.contractId);
     case "hunt-rps": return applyRpsHunt(state, teamId, op);
     case "rps-commit":
     case "rps-open":
@@ -2526,6 +2653,8 @@ export function applyOp(
       return applyProveSudoku(state, teamId, op);
     case "cipher":
       return applyCipher(state, teamId, op);
+    case "hunt-rotor": return applyHuntRotor(state, teamId, op);
+    case "hunt-rsa":
     case "hunt-cipher":
       return applyHuntCipher(state, teamId, op);
     case "reveal-hint":
@@ -2572,14 +2701,14 @@ export function projectForTeam(
     generation: team.generation,
     lastRotateAtMs: team.lastRotateAtMs,
     rotateCooldownRemainingMs,
-    completedContractIds: team.completedContractIds,
+    completedContractIds: team.completedContractIds.map(c => contractId({ tm: teamId, c })),
     huntedGenerations: team.huntedGenerations,
     sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
     usedPermutations: usedPermutationsFor(state, teamId, team.generation),
     sudokuHuntedGenerations: team.sudokuHuntedGenerations ?? [],
   };
 
-  const publicLedger = decodeLedger(state.publicLedger);
+  const publicLedger = decodeLedger(state.publicLedger, state.teams);
   const exposedShareIndices = [...new Set(publicLedger.flatMap((entry) =>
     entry.kind === "share" && entry.teamId === teamId && entry.generation === team.generation
       ? [entry.shareIndex] : [],
@@ -2591,7 +2720,9 @@ export function projectForTeam(
       return {
         id: c.id,
         kind: c.kind,
-        points: c.points,
+        points: c.cipherFailed === true ? 0 : c.points + lightningBonus(state, c),
+        ...(c.cipherFailed === undefined ? {} : { cipherFailed: c.cipherFailed }),
+        lightningEligible: lightningEligible(state, c),
         leakPoints: c.leakPoints,
         task,
         status: c.status,
@@ -2636,12 +2767,12 @@ export function projectForTeam(
     if (other.teamId === teamId) continue;
     huntAttempts[other.teamId] = {
       generation: other.generation,
-      spent: state.huntAttempts[storedHuntKey(state, huntKey(teamId, other.teamId, other.generation))] ?? 0,
+      spent: huntCount(state, storedHuntKey(state, huntKey(teamId, other.teamId, other.generation))) ?? 0,
       max: state.config.maxHuntAttemptsPerTarget,
     };
     sudokuHuntAttempts[other.teamId] = {
       generation: other.generation,
-      spent: state.huntAttempts[storedHuntKey(state, sudokuHuntKey(teamId, other.teamId, other.generation))] ?? 0,
+      spent: huntCount(state, storedHuntKey(state, sudokuHuntKey(teamId, other.teamId, other.generation))) ?? 0,
       max: state.config.maxHuntAttemptsPerTarget,
     };
   }
@@ -2688,12 +2819,20 @@ export function projectForTeam(
     sudokuHuntAttempts,
     huntWinPoints: state.config.scores.huntBonus,
     hintBooster: projectBooster(state, teamId),
+    lightning: projectLightning(state, teamId),
+    publicRsaKeys: state.phase === "endgame" || state.phase === "ended" ? Object.values(state.teams).map(team => {
+      const { n, e } = deriveRsaKey(state.seed, team.teamId, team.generation);
+      return { teamId: team.teamId, generation: team.generation, n, e };
+    }) : [],
     completedHunts: Object.values(state.teams).filter(other => other.teamId !== teamId).flatMap(other =>
-      (["share", "sudoku", ...ALL_CIPHER_RUNGS] as const).flatMap(via => {
+      (["share", "sudoku", ...ALL_CIPHER_RUNGS, "rsa", "rotor"] as const).flatMap<NonNullable<CryptoBattleProjection["completedHunts"]>[number]>(via => {
+        if (via === "rotor") return hasRotorHunt(state, teamId, other.teamId, other.generation) ? [{ targetTeamId: other.teamId, generation: other.generation, via }] : [];
         const key = via === "share" ? huntKey(teamId, other.teamId, other.generation)
           : via === "sudoku" ? sudokuHuntKey(teamId, other.teamId, other.generation)
+          : via === "rsa" ? rsaHuntKey(state, teamId, other.teamId, other.generation)
           : cipherHuntKey(teamId, other.teamId, other.generation, via);
-        return state.successfulHunts.includes(key) ? [{ targetTeamId: other.teamId, generation: other.generation, via }] : [];
+        const logged = (via === "share" || via === "sudoku" || via === "rsa") && hasRecordedHunt(state, teamId, other.teamId, other.generation, via);
+        return hasSuccessfulHunt(state, key) || logged ? [{ targetTeamId: other.teamId, generation: other.generation, via }] : [];
       })),
     wrongHuntCost: state.config.scores.wrongHunt,
     wrongProveCost: state.config.scores.wrongProve,
@@ -2702,7 +2841,8 @@ export function projectForTeam(
     // so a team that has never HUNTed projects no key at all, which keeps the
     // JSON round trip byte-identical to the object (dev/harness.test.ts
     // compares the two).
-    ...(team.lastHunt === undefined ? {} : { lastHunt: team.lastHunt }),
+    ...(team.lastHunt === undefined ? {} : { lastHunt: readLastHunt(state, team.lastHunt) }),
     ...(team.lastProve === undefined ? {} : { lastProve: team.lastProve }),
+    ...(team.lastCipher === undefined ? {} : { lastCipher: team.lastCipher }),
   };
 }

@@ -99,6 +99,11 @@ def _b64decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + padding)
 
 
+def workbench_sealing_key() -> bytes:
+    """Only the unpublished verifier derives this key from the fixture seed."""
+    return hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+
+
 def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
     """Undo the Workbench's `tcw1.` seal and check it against this deployment.
 
@@ -116,7 +121,7 @@ def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
             return None
         payload = _b64decode(encoded_payload)
         signature = _b64decode(encoded_signature)
-        key = hashlib.sha256((PROBLEM_ID + "\0" + SEED).encode("utf-8")).digest()
+        key = workbench_sealing_key()
         expected_signature = hmac.new(key, payload, hashlib.sha256).digest()[:16]
         if not hmac.compare_digest(signature, expected_signature):
             return None
@@ -141,6 +146,9 @@ class Handler(BaseHTTPRequestHandler):
         # is the whole thing Issue 537/543 is about.
         if path == "/healthz":
             self._respond(200, {"ok": True})
+            return
+        if path == "/workbench-key":
+            self._respond(200, {"key": workbench_sealing_key().hex()})
             return
         if path == "/public":
             self._respond(200, public_payload(SEED))

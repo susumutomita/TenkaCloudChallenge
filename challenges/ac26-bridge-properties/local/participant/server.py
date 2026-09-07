@@ -1,39 +1,16 @@
-"""Public Participant Workbench: the Portal editor API, a fail-closed verifier proxy,
-and nothing that can derive an answer.
+"""Participant editor API: public evidence, untrusted function execution, fixed verifier proxy.
 
-This process never grades a checkpoint locally -- every `/verify` request is forwarded
-to the Compose-internal verifier, and any missing or invalid verifier response becomes
-a canonical `correct: false` verdict (see `proxy_verdict`). `POST /api/prepare` is
-proxied the same way, to the verifier's own `/prepare`: preparing the five portal
-fields means running the learner's own `classify.py` / `counterexamples.py` against
-`boundary_instance`, which is deliberately never disclosed elsewhere, so that has to
-happen wherever `fixtures/` lives -- not here (see `proxy_prepare`).
-
-This process carries no seed-derived fixtures of its own: `GET /api/inspect` and the
-public-test run both need this deployment's public evidence, fetched from the
-verifier's `GET /public` at runtime (see `fetch_public`) rather than computed here.
-
-Issue 543/537: `fixtures/generate.py` used to ship in this same Docker stage, because
-`show.py` and the public tests need the statement, the verifiers and the leaky
-transcript it derives. That alone was enough to leak `privacy-leak`'s answer even
-after `instance(seed).witness` stayed the only place it was compared -- `instance` and
-`boundary_instance` are plain, seed-keyed functions, and a learner already has the
-seed (`FLAG_SEED`, their own container's environment), so keeping the generator
-reachable here left both answers one `import` away regardless of where the comparison
-itself lived. `fixtures/` is not copied into the `participant` Docker stage at all any
-more (see ../Dockerfile); this file has no way to reconstruct that deployment's
-evidence except by asking the verifier for it, which is the same thing the Portal and
-`show.py` ask for.
+The Workbench has no run seed, fixtures or hidden checker. Submitted functions run
+with public inputs only; Linux denies file opening, network access and supervisor
+interference. Public test success is a shape check, never scoring evidence.
+Preparing checkpoint values and grading them use fixed internal verifier routes.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -42,8 +19,11 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from participant.execution import run_functions
+from participant.isolation import protect_supervisor
+
 ROOT = Path(__file__).resolve().parents[1]
-SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
+SEED = "local-dev-seed"  # author-only fallback; live public evidence comes from verifier
 PORT = int(os.environ.get("WORKBENCH_PORT", "18092"))
 VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 #: Both derived from VERIFIER_URL (which points at /verify) rather than requiring two
@@ -59,24 +39,15 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# Reading a client body and waiting for bounded computation are different budgets.
+VERIFIER_TIMEOUT_SECONDS = 20
 
 CHECKPOINTS = ("incompleteness", "unsoundness", "privacy-leak", "property-matrix", "transfer")
 SUBMISSION_FILES = ("classify.py", "counterexamples.py")
-CODE_CHECKPOINTS = frozenset(("transfer",))
-CHECKPOINT_LABELS = {
-    "incompleteness": "正しい入力が弾かれる場面を作る",
-    "unsoundness": "主張の範囲外を通してしまう例を作る",
-    "privacy-leak": "transcript から秘密を取り出す",
-    "property-matrix": "3 つの verifier を性質で分類する",
-    "transfer": "見たことのない instance でも成立させる",
-}
-
-
-def _limits() -> None:
-    if sys.platform.startswith("linux"):
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
+# All five controls submit the current editor files. The verifier's transfer
+# feedback classification is separate from this existing Portal input contract.
+CODE_CHECKPOINTS = frozenset(CHECKPOINTS)
+CHECKPOINT_LABELS = {'incompleteness': '正しい入力が弾かれる場面を作る', 'unsoundness': '範囲外の入力が通る例を作る', 'privacy-leak': '記録から証拠の値を読み取る', 'property-matrix': '3 つの検証者を性質で分類する', 'transfer': '別の数値でも成立させる'}
 
 
 def fetch_public(verifier_public_url: str = VERIFIER_PUBLIC_URL) -> dict[str, object] | None:
@@ -90,7 +61,7 @@ def fetch_public(verifier_public_url: str = VERIFIER_PUBLIC_URL) -> dict[str, ob
     if verifier_public_url:
         request = Request(verifier_public_url, method="GET")
         try:
-            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+            with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
                 body = response.read(MAX_BODY_BYTES + 1)
                 if len(body) <= MAX_BODY_BYTES:
                     decoded = json.loads(body.decode("utf-8"))
@@ -106,15 +77,7 @@ def fetch_public(verifier_public_url: str = VERIFIER_PUBLIC_URL) -> dict[str, ob
             json.JSONDecodeError,
         ):
             pass
-    # Falls through when VERIFIER_URL is unset or the verifier could not be reached --
-    # which `docker-compose.yml`'s `depends_on: verifier: condition: service_healthy`
-    # means never happens for a real deployment. The one place this fallback resolves
-    # is a checkout with `fixtures/` still on disk (the repository itself, or someone
-    # running this file straight from the verifier or author Docker stage): it can
-    # never resolve inside a built `participant` image, where `fixtures/` is not copied
-    # in at all (see ../Dockerfile) -- so this branch existing does not reopen Issue
-    # 543/537's leak. `scripts/ac26-bridge-properties.test.ts` exercises this file
-    # without a live verifier and relies on exactly this fallback.
+    # Author checkout fallback only. The participant image has no fixtures package.
     try:
         from fixtures.generate import public_payload
     except ImportError:
@@ -134,7 +97,7 @@ def config_payload() -> dict[str, object]:
     return {
         "id": "ac26-bridge-properties",
         "name": "満たす性質、破る性質",
-        "description": "反例を作り、completeness・soundness・privacy を区別する。",
+        "description": '3 つの検証者（入力を受理・拒否するプログラム）を監査する。証拠を確認し、正しい入力・範囲外の入力・記録を比べ、反例を作るコードで 3 つの性質を確かめる。',
         "submittedFiles": list(SUBMISSION_FILES),
         "checkpoints": [
             {
@@ -145,13 +108,12 @@ def config_payload() -> dict[str, object]:
             for checkpoint in CHECKPOINTS
         ],
         # 英語は Portal 側の locale が選ぶ (共有 workbench.py の config_payload と同じ契約)。
-        # 文言の正本は metadata.json — scripts/generate-course-workbenches.py --check が
-        # 乖離を落とす (#381)。 この payload は手書きなので、 直すときはここを編集する。
+        # Keep these problem-local labels aligned with metadata.json by checkpoint ID.
         "i18n": {
             "en": {
                 "name": 'What it holds, what it breaks',
-                "description": 'Three toy verifiers arrive for audit. All of them pass the happy-path tests. They are broken in different ways. Build counterexamples and classify what each one holds and what it breaks.',
-                "checkpointLabels": {'incompleteness': 'Make a valid input get rejected', 'unsoundness': 'Get something outside the claim accepted', 'privacy-leak': 'Pull the secret out of a transcript', 'property-matrix': 'Classify the three verifiers by property', 'transfer': 'Hold up on instances you have not seen'},
+                "description": 'Audit three verifiers: programs that accept or reject an input. Inspect their checks and records, then write counterexamples to distinguish three properties.',
+                "checkpointLabels": {'incompleteness': 'Make a valid input get rejected', 'unsoundness': 'Make an out-of-range input get accepted', 'privacy-leak': 'Read the witness from the record', 'property-matrix': 'Classify the three verifiers by property', 'transfer': 'Make the same code work on different numbers'},
             }
         },
     }
@@ -177,69 +139,29 @@ def _submission_sources(files: object) -> dict[str, str] | None:
     return normalized
 
 
-def _run_script(script: str) -> tuple[int, str] | None:
-    """Run a fully-built Python script (no learner file needed on disk) with the
-    process's resource limits, in a throwaway workspace."""
-    with tempfile.TemporaryDirectory() as workspace:
-        transcript = Path(workspace) / "stdout"
-        try:
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
-
-
-def _public_test_script(sources: dict[str, str], public: dict[str, object]) -> str:
-    """Build the sandboxed script that runs the public suite against `sources`.
-
-    The learner's files and this deployment's already-fetched public evidence are both
-    embedded as literals (`repr`/`json.dumps`, never interpolated into anything that
-    runs as a shell command) rather than written where the submission's own imports
-    could reach them: the child process never touches the network or the verifier
-    itself, only the values this process already fetched on its behalf.
-    """
-    writes = "\n".join(
-        f"open(workspace + '/{name}', 'w', encoding='utf-8').write({text!r})"
-        for name, text in sources.items()
-    )
-    return "\n".join(
-        [
-            "import os, runpy, tempfile",
-            f"os.environ['FLAG_SEED'] = {SEED!r}",
-            f"os.environ['PUBLIC_EVIDENCE_JSON'] = {json.dumps(public)!r}",
-            "os.environ['BROWSER_PUBLIC_TESTS'] = '1'",
-            "workspace = tempfile.mkdtemp()",
-            writes,
-            "os.environ['SUBMISSION_DIR'] = workspace",
-            f"runpy.run_path({str(ROOT)!r} + '/tests/public/test_properties.py', run_name='__main__')",
-        ]
-    )
-
-
 def run_public_tests(files: object) -> dict[str, object]:
-    """Run the same shape checks as `make test` against Portal-edited sources."""
+    """Check output shapes using only the same public inputs shown by Inspect."""
     sources = _submission_sources(files)
     if sources is None:
         return {"passed": False, "output": "Both editable Python files are required."}
     public = fetch_public()
     if public is None:
         return {"passed": False, "output": "Public evidence unavailable; is the verifier running?"}
-    result = _run_script(_public_test_script(sources, public))
-    if result is None:
-        return {"passed": False, "output": "Public tests timed out or could not start."}
-    return {"passed": result[0] == 0, "output": result[1]}
+    calls = [{"function": "classify", "argument": alias} for alias in public["verifiers"]]
+    calls.extend({"function": name, "argument": public["statement"]} for name in
+                 ("incompleteness_witness", "unsoundness_witness"))
+    calls.append({"function": "extract_witness", "argument": public["transcript"]})
+    result = run_functions(sources, calls)
+    values = result and result.get("values")
+    if not isinstance(values, list) or len(values) != len(calls):
+        return {"passed": False, "output": (result or {}).get("output") or "Functions did not return values within the execution limits."}
+    matrix_size = len(public["verifiers"])
+    matrix_ok = all(isinstance(value, dict) and set(value) == {"complete", "sound", "private"}
+                    and all(type(item) is bool for item in value.values()) for value in values[:matrix_size])
+    numbers_ok = all(type(value) is int for value in values[matrix_size:])
+    passed = matrix_ok and numbers_ok
+    detail = "public tests: all passed (shapes only; the starter passes too)" if passed else "Return three boolean keys from classify and integers from the other functions."
+    return {"passed": passed, "output": result["output"] + "\n" + detail}
 
 
 def failed_verdict(body: dict[str, object]) -> dict[str, object]:
@@ -265,7 +187,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -302,14 +224,7 @@ def proxy_prepare(
     files: object,
     prepare_url: str = VERIFIER_PREPARE_URL,
 ) -> dict[str, object]:
-    """Ask the verifier to run the submitted files against the real instances.
-
-    `prepare_submissions` used to run this in-process, because `fixtures/` was right
-    there. It is not any more (Issue 543/537): the only place `boundary_instance` --
-    the input `incompleteness` is checked against, never shown on the wire -- can be
-    reached from is the verifier, so the whole computation moves there and this
-    process only relays the request and validates the shape of what comes back.
-    """
+    """Ask the fixed internal prepare route for values derived from source and inputs."""
     if not prepare_url:
         return _prepare_fallback(files)
     payload = json.dumps({"files": files}, ensure_ascii=False).encode("utf-8")
@@ -320,7 +235,7 @@ def proxy_prepare(
         method="POST",
     )
     try:
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return {"ok": False, "output": "verifier response too large"}
@@ -438,6 +353,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

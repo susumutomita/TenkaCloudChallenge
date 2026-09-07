@@ -1,3 +1,5 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
 /**
  * Shared 2-team, 25-min vertical-playtest script builder (Issue #486 PR5).
  *
@@ -166,8 +168,8 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     const currentGeneration = team?.generation ?? 1;
     return [
       ...new Set(
-        state.publicLedger
-          .filter((a) => a.k === "share" && a.tm === teamId && a.g === currentGeneration)
+        state.publicLedger.map(artifactFields)
+          .filter((a) => a.k === "share" && storedTeamId(a, state.teams) === teamId && a.g === currentGeneration)
           .map((a) => (a.k === "share" ? a.i : -1)),
       ),
     ];
@@ -184,8 +186,8 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
 
   function ledgerKindsFor(teamId: string): Set<string> {
     return new Set(
-      state.publicLedger
-        .filter((artifact) => artifact.tm === teamId)
+      state.publicLedger.map(artifactFields)
+        .filter((artifact) => storedTeamId(artifact, state.teams) === teamId)
         .map((artifact) => artifact.k),
     );
   }

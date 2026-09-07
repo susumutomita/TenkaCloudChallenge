@@ -4,7 +4,7 @@
 #   make test-one ID=...  re-run one public test by name substring
 #   make inspect          print your fixtures and the trace to reason about
 #   make reset            restore starter/ to its shipped state
-#   make reference-test   authors / CI only: hidden + mutation suites, inside the image
+#   make reference-test   authors / CI only: mutation + Linux boundary suites
 #
 # FLAG_SEED is injected by the platform at deploy. The default below exists only so an
 # author can run the problem straight out of a checkout.
@@ -25,6 +25,10 @@ COMPOSE := FLAG_SEED=$(FLAG_SEED) docker compose -f local/docker-compose.yml -p 
 # `docker run` against a standalone image.
 RUN := $(COMPOSE) run --rm \
 	-v $(CURDIR)/local/starter:/problem/starter:ro workbench
+AUTHOR_RUN := docker run --rm --init --network none --read-only \
+	--tmpfs /tmp:rw,noexec,nosuid,size=64m,uid=10001,gid=10001 \
+	--cap-drop ALL --security-opt no-new-privileges:true \
+	--memory 1g --pids-limit 128 -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author
 
 .PHONY: build test test-one inspect reset reference-test verifier-up verifier-down
 
@@ -59,4 +63,11 @@ reset:
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	$(AUTHOR_RUN) python mutation.py
+	$(AUTHOR_RUN) python -m unittest discover -s tests/hidden -p test_execution_boundary.py -v
+
+# Runtime regression for documented computation and forwarding budgets.
+.PHONY: computation-test
+computation-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python tests/hidden/test_computation_allowance.py -v

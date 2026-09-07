@@ -38,8 +38,10 @@
  */
 
 import type { Hand } from "./commitment.ts";
-import type { CipherRung } from "./ladder.ts";
-import type { StoredArtifact } from "./ledger-codec.ts";
+import type { RotorTask, RotorTaskProjection } from "./rotor.ts";
+import type { CipherKey, CipherRung } from "./ladder.ts";
+import type { RsaTask, PublicRsaKey } from "./rsa.ts";
+import type { PersistedArtifact } from "./ledger-codec.ts";
 import type { PrivacyConstraint, SubmissionMethod } from "./methods.ts";
 import type { Permutation, SudokuGrid } from "./sudoku.ts";
 
@@ -309,6 +311,8 @@ export interface StoredCiphertext {
  * team's projection can carry it. See mpc.ts.
  */
 export type OrderTask =
+  | RotorTask
+  | RsaTask
   | {
       readonly kind: "reveal-share";
       /** Which share indices the Order wants accounted for. */
@@ -342,6 +346,8 @@ export type OrderTask =
   | {
       readonly kind: "caesar-shift";
       readonly rung: CipherRung;
+      /** Public offset into the repeated key; absent means zero on old Caesar rows. */
+      readonly keyPosition?: number;
       /**
        * The symbols to encrypt, as VALUES — the pictures are added by
        * `projectTask` from the rung's alphabet.
@@ -401,6 +407,8 @@ export interface RpsHuntTarget {
   readonly duelId: string;
   readonly generation: number;
   readonly commitment: number;
+  /** Public status only; the opponent's opening values remain private. Optional for older hosts. */
+  readonly openingHeld?: boolean;
   readonly remainingMs: number;
   readonly evidence: readonly RpsOpenArtifact[];
 }
@@ -420,6 +428,10 @@ export interface RpsSubmission {
 }
 
 export interface Contract {
+  /** Vigenère/RSA: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
+  readonly cipherFailed?: boolean;
+  /** False only when this version issued the Order; omitted legacy history is unknown. */
+  readonly answerAttempted?: boolean;
   readonly rps?: RpsSubmission;
   readonly id: string;
   /** The team this Order was issued to (only that team may submit against it). */
@@ -621,7 +633,7 @@ export interface PartialArtifact {
  * reader looking at the public record can count how many pairs a team has out
  * and know whether that team is already broken.
  *
- * `plaintext` and `ciphertext` are the pictures, not the values, so the record
+ * `plaintext` and `ciphertext` are numeric values, rendered as pictures, so the record
  * reads the same to a participant as the Order did (#659 §3).
  */
 export interface CipherPairArtifact {
@@ -632,6 +644,7 @@ export interface CipherPairArtifact {
   readonly method: SubmissionMethod;
   readonly contractId: string;
   readonly rung: CipherRung;
+  readonly keyPosition?: number;
   /**
    * The published pair, as symbol VALUES. Rendered to pictures at the edge
    * (`ledgerPayload`, the board) from the rung's own alphabet — see
@@ -642,6 +655,14 @@ export interface CipherPairArtifact {
    */
   readonly plaintext: readonly number[];
   readonly ciphertext: readonly number[];
+  readonly postedAtMs: number;
+}
+
+/** Only LEAK publishes the original value and its encrypted result; never p, q or d. */
+export interface RsaPairArtifact {
+  readonly id: string; readonly teamId: string; readonly generation: number;
+  readonly kind: "rsa-pair"; readonly method: SubmissionMethod; readonly contractId: string;
+  readonly n: number; readonly e: number; readonly plaintext: number; readonly ciphertext: number;
   readonly postedAtMs: number;
 }
 
@@ -683,7 +704,15 @@ export interface RpsOpenArtifact extends Omit<RpsCommitArtifact, "kind">, RpsOpe
   readonly kind: "rps-open";
 }
 
+export interface RotorPairArtifact {
+  readonly kind: "rotor-pair"; readonly id: string; readonly teamId: string; readonly generation: number;
+  readonly method: SubmissionMethod; readonly contractId: string; readonly postedAtMs: number;
+  readonly plaintext: readonly number[]; readonly ciphertext: readonly number[];
+}
+
 export type PublicArtifact =
+  | RotorPairArtifact
+  | RsaPairArtifact
   | RpsCommitArtifact
   | RpsOpenArtifact
   | ShareArtifact
@@ -738,7 +767,8 @@ export interface TeamState {
   readonly issuedOrderCount: number;
   /** Includes skipped stale duel slots; absent on pre-duel rows means zero. */
   readonly issuedDuelCount?: number;
-  readonly completedContractIds: readonly string[];
+  /** Schema 10 reuses the ledger exact-Order-ID codec; projection expands strings. */
+  readonly completedContractIds: readonly (string | number)[];
   /** This team's OWN generations that some attacker has successfully HUNTed. */
   readonly huntedGenerations: readonly number[];
   /**
@@ -770,6 +800,7 @@ export interface TeamState {
    * can only report what the state remembers.
    */
   readonly lastProve?: LastProve;
+  readonly lastCipher?: LastCipher;
   /**
    * [Issue #696] This team's most recent Shamir HUNT, and whether it landed.
    *
@@ -781,7 +812,7 @@ export interface TeamState {
    * before this existed, and on a team that has never HUNTed -- both mean the
    * same thing: nothing to report.
    */
-  readonly lastHunt?: LastHunt;
+  readonly lastHunt?: StoredLastHunt;
   readonly lastRpsHunt?: RpsHuntResult;
 }
 
@@ -789,6 +820,8 @@ export interface TeamState {
 export type HuntOutcome = "hit" | "miss";
 
 /** [Issue #696] One HUNT, as the attacker's own record of it. */
+export type StoredLastHunt = LastHunt | readonly [target: number, generation: number, via: 0 | 1 | 2, hit: 0 | 1, points?: number];
+
 export interface LastHunt {
   /** Actual change from this attack, including the score floor. Older rows may omit it. */
   readonly points?: number;
@@ -796,11 +829,21 @@ export interface LastHunt {
   readonly generation: number;
   readonly outcome: HuntOutcome;
   /** [Issue #709] Which secret was hunted. Absent means the Shamir secret. */
-  readonly via?: "sudoku";
+  readonly via?: "sudoku" | "rotor";
+}
+
+/** The submitting team's own CIPHER verdict. */
+export interface LastCipher {
+  readonly contractId: string;
+  readonly outcome: "hit" | "miss";
+  /** Actual score delta, including floor; zero-reward completion is still a hit. */
+  readonly points: number;
 }
 
 /** [Issue #709] One PROVE, as the proving team's own record of it. */
 export interface LastProve {
+  /** New successful adjudications record their actual reward, including lightning. */
+  readonly points?: number;
   readonly contractId: string;
   readonly outcome: "hit" | "miss";
 }
@@ -816,7 +859,26 @@ export interface HintBoosterProjection {
   readonly remainingMs: number;
 }
 
+export type LightningTarget = { readonly contractId: string; readonly points: number; readonly expiresAtMs: number };
+export type LightningOutcome = "hit" | "leak" | "deadline" | "rotate" | "ended";
+export type LightningCard = { readonly status: "available" } | { readonly status: "unused-expired" }
+  | ({ readonly status: "armed" } & LightningTarget)
+  | ({ readonly status: "spent"; readonly outcome: LightningOutcome } & LightningTarget);
+export type EndgameLightning = { readonly status: "pending" } | { readonly status: "unavailable" }
+  | { readonly status: "awarded"; readonly cards: Readonly<Record<string, LightningCard>> };
+export interface LightningProjection {
+  readonly status: "waiting" | "scheduled" | "unavailable" | "ineligible" | LightningCard["status"];
+  readonly startAfterMs: number;
+  readonly startsInMs?: number;
+  readonly remainingMs: number;
+  readonly contractId?: string;
+  /** Total successful calculation reward (base x 2), not an extra fixed bonus. */
+  readonly points?: number;
+  readonly outcome?: LightningOutcome;
+}
+
 export interface CryptoBattleState {
+  readonly endgameLightning?: EndgameLightning;
   /** #659 §9: immutable endgame distribution; omitted only by older rows. */
   readonly endgameBooster?: EndgameBooster;
   readonly config: CryptoBattleConfig;
@@ -848,7 +910,7 @@ export interface CryptoBattleState {
    * whole design and why nothing about `PublicArtifact` itself, or
    * `CryptoBattleProjection.publicLedger` below, changed.
    */
-  readonly publicLedger: readonly StoredArtifact[];
+  readonly publicLedger: readonly PersistedArtifact[];
   readonly teams: Readonly<Record<string, TeamState>>;
   /**
    * [Issue #709] Every team's current-generation sudoku PUZZLE -- the eight
@@ -866,11 +928,10 @@ export interface CryptoBattleState {
    * below sees it present.
    */
   readonly publicPuzzles?: Readonly<Record<string, SudokuGrid>>;
-  /**
-   * Replay guard: `JSON.stringify([attackerTeamId, targetTeamId, generation])`
-   * for every successful HUNT. JSON-encoded (not `|`-joined) so a team id
-   * that happens to contain `|` can never collide with a different triple.
-   */
+  /** Untimed once-only success guards. Schema11 uses method/target/generation
+   * bit rows over the fixed roster; old logical string guards remain readable.
+   * A timestamped huntLog entry itself guards the same success. Guards without
+   * an audit time stay here and never manufacture a replay event. */
   readonly successfulHunts: readonly string[];
   /**
    * Schema 4 uses sorted-roster numeric positions in these private JSON keys.
@@ -884,34 +945,40 @@ export interface CryptoBattleState {
    * `{}` -- an older match played in a 2^61 - 1 field where retries were
    * pointless, so crediting it a full budget takes nothing away from anyone.
    */
-  readonly huntAttempts: Readonly<Record<string, number>>;
-  /**
-   * Ordered log of successful HUNTs, WITH a timestamp (Issue #486 PR5,
-   * `replay.ts`). `successfulHunts` above deliberately carries only the
-   * replay-guard KEY, no `atMs` -- it cannot answer "when did this HUNT
-   * succeed?" on its own, and every other `PublicArtifact` on the ledger
-   * already has a `postedAtMs` a debrief/replay can use, but a HUNT posts no
-   * ledger artifact at all (see reducer.ts's `applyHunt`). This field exists
-   * purely so `replay.ts`'s post-match debrief (Issue #486's "120分 debrief
-   * / Replay" -- the worked example is literally "58:01 Team B HUNT
-   * success") can be honest about hunt timing instead of omitting it or
-   * guessing. Purely additive: `validateOp`'s replay guard still reads only
-   * `successfulHunts` above, never this field -- see `applyHunt`.
-   */
-  readonly huntLog: readonly HuntLogEntry[];
+  readonly huntAttempts: StoredHuntAttempts;
+  /** Exact-time Shamir, Sudoku, RSA and Rotor success history. Schema11 groups
+   * lossless millisecond offsets by method/target/generation and fixed attacker
+   * roster slot. decodeHuntLog restores the public chronological replay shape.
+   * These records also reject repeat success; ROTATE never removes history.
+   * Legacy object records are accepted on migration. Classic cipher guards
+   * historically have no time, so they remain untimed rather than guessed. */
+  readonly huntLog: readonly StoredHuntLogEntry[];
 }
 
-/** One entry in `CryptoBattleState.huntLog` -- see that field's doc comment. */
+/** One decoded success (also the legacy stored form); see huntLog's comment. */
+/** Schema11 groups both independent counters per target/generation. Numeric entries are legacy migration input. */
+export type StoredHuntAttempts = Readonly<Record<string, number | readonly [width: number, counts: string]>>;
+
 export interface HuntLogEntry {
   readonly attackerTeamId: string;
   readonly targetTeamId: string;
   readonly generation: number;
   readonly atMs: number;
   /** [Issue #709] Which secret fell. Absent means the Shamir secret. */
-  readonly via?: "sudoku";
+  readonly via?: "sudoku" | "rsa" | "rotor";
 }
 
+/** RSA successes are losslessly grouped by target/generation; see hunt-log.ts. */
+export type StoredHuntLogEntry = HuntLogEntry | {
+  readonly rsa: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string];
+} | { readonly rotor: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] }
+| { readonly share: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] }
+| { readonly sudoku: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] };
+
 export type CryptoBattleOp =
+  | { readonly kind: "hunt-rotor"; readonly targetTeamId: string; readonly generation: number; readonly a: number; readonly b: number }
+  | { readonly kind: "declare-lightning"; readonly contractId: string }
+  | { readonly kind: "hunt-rsa"; readonly targetTeamId: string; readonly generation: number; readonly p: string; readonly q: string }
   | { readonly kind: "hunt-rps"; readonly targetTeamId: string; readonly duelId: string; readonly predictedHand: number }
   | { readonly kind: "rps-commit"; readonly contractId: string; readonly commitment: number }
   | { readonly kind: "rps-open"; readonly contractId: string; readonly hand: number; readonly randomness: number }
@@ -1016,8 +1083,8 @@ export type CryptoBattleOp =
       readonly targetTeamId: string;
       readonly generation: number;
       readonly rung: CipherRung;
-      /** The recovered key, as a symbol value. */
-      readonly recoveredKey: number;
+      /** A scalar for Caesar; three ordered shifts for Vigenère. */
+      readonly recoveredKey: CipherKey;
     }
   /**
    * [Issue #659 §9] Open the next hint on one of this team's own open Orders,
@@ -1107,6 +1174,8 @@ export interface VaultProjection {
  * by accident.
  */
 export type OrderTaskProjection =
+  | RotorTaskProjection
+  | RsaTask
   | { readonly kind: "reveal-share"; readonly shareIndices: readonly number[] }
   | { readonly kind: "homomorphic-sum"; readonly inputs: readonly StoredCiphertext[] }
   | {
@@ -1129,6 +1198,8 @@ export type OrderTaskProjection =
   | {
       readonly kind: "caesar-shift";
       readonly rung: CipherRung;
+      /** Public offset into the repeated key; absent means zero on old Caesar rows. */
+      readonly keyPosition?: number;
       /**
        * The symbols to encrypt, as VALUES.
        *
@@ -1150,7 +1221,7 @@ export type OrderTaskProjection =
       /** How many published pairs recover the key on this rung (#659 §2). */
       readonly pairsToBreak: number;
       /** THIS team's key for the rung, at its current generation. */
-      readonly myKey: number;
+      readonly myKey: CipherKey;
     }
   /**
    * [Issue #709] Nothing to add: the solution is on the vault and the puzzle
@@ -1163,6 +1234,9 @@ export type OrderTaskProjection =
       readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
+  readonly cipherFailed?: boolean;
+  /** Authoritative eligibility before any accepted answer; missing means unknown. */
+  readonly lightningEligible?: boolean;
   readonly id: string;
   readonly kind: ContractKind;
   readonly points: number;
@@ -1246,9 +1320,12 @@ export interface TeamSummaryProjection {
 export interface CryptoBattleProjection {
   /** Own benefit only; the opponent's allocation is never projected. */
   readonly hintBooster?: HintBoosterProjection;
+  readonly lightning?: LightningProjection;
   /** Public scoring rule and this reader's completed attacks; no recovered values. */
   readonly huntWinPoints?: number;
-  readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung }[];
+  readonly completedHunts?: readonly { readonly targetTeamId: string; readonly generation: number; readonly via: "share" | "sudoku" | CipherRung | "rsa" | "rotor" }[];
+  /** All teams' current public RSA keys, from endgame onward; LEAK is not required. */
+  readonly publicRsaKeys?: readonly PublicRsaKey[];
   /** Public evidence plus only this reader’s private predictions/results. */
   readonly rpsHunt?: RpsHuntProjection;
   readonly phase: Phase;
@@ -1341,4 +1418,5 @@ export interface CryptoBattleProjection {
   readonly lastHunt?: LastHunt;
   /** [Issue #709] The reader's most recent PROVE, if any -- see `TeamState.lastProve`. */
   readonly lastProve?: LastProve;
+  readonly lastCipher?: LastCipher;
 }
