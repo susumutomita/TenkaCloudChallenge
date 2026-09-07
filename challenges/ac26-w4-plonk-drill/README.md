@@ -70,3 +70,5 @@ make test STARTER_FILE=local/reference/plonk_drill.py
 `reference-test` runs 10 mutants, 8 learning-contract tests and 5 execution-isolation tests. The learning suite checks the two-gate construction across fixtures, all valid final rows against independent predicates, zero-product rejection, the supplied linear equation, interpolation/accumulator identities, first editor action, submission binding and hint/score shape.
 
 From the catalog root, run `make install && make agent-gate`. See [READER.md](READER.md) for the independent hand calculation and actual runtime evidence, including explicit verification limits. A live AWS event or a third-party session is optional rehearsal, not a development merge gate.
+
+Issue #716 participant reread: address bases are distinguished from column indices, and the zero-remainder argument is explained before polynomial divisibility is used. See `local/tests/hidden/READER.md`. Validation passed10 mutation checks,8 learning-contract tests and5 network-isolation tests.
