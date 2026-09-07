@@ -1,3 +1,4 @@
+import { BreachNotice } from "./BreachNotice.tsx";
 import { chooseProveTable } from "./prove-table.ts";
 import RotorMaterials from "./RotorMaterials.tsx";
 import RsaMaterials from "./RsaMaterials.tsx";
@@ -766,7 +767,7 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
     sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
     rpsHunt: (projection?.rpsHunt?.targets.length ?? 0) > 0,
-    rotate: (projection?.myContracts.some(order => order.status === "open" && order.remainingMs > 0 && order.privacyConstraint === "must-disclose") ?? false) || ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
+    rotate: Boolean(projection?.lastBreach && projection.lastBreach.generation === projection.vault.generation) || (projection?.myContracts.some(order => order.status === "open" && order.remainingMs > 0 && order.privacyConstraint === "must-disclose") ?? false) || ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
       || (projection?.publicRsaKeys?.some(key => key.teamId === projection.vault.teamId && key.generation === projection.vault.generation) ?? false),
   };
 }
@@ -1244,6 +1245,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
         <span className="tc-scoreline-hint">{copy.scoreHint}</span>
         <div className="tc-rival-score">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(t => <span key={t.teamId}>{locale === "ja" ? "相手" : "Opponent"} · {t.teamName || t.teamId} <strong>{t.score} {locale === "ja" ? "点" : "pt"}</strong></span>)}</div>
       </div>
+      <BreachNotice key={`${props.team.eventId}:${projection.vault.teamId}:${projection.lastBreach?.sequence ?? 0}`} projection={projection} locale={locale} onDefend={()=>{
+        const defense=document.getElementById("tc-breach-defense");
+        defense?.scrollIntoView({block:"center",behavior:"smooth"});
+        defense?.focus({preventScroll:true});
+      }} />
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
       <OrderQueue key={`${props.team.eventId}:${projection.vault.teamId}`} projection={projection} locale={locale}
@@ -1679,9 +1685,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return next ? { kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings." } : { kind: "error", title: copy.rejected, body: copy.unavailable };
         })} />
 
-        {tactics.rotate && <div className="tc-rotate-card">
+        {tactics.rotate && <div id="tc-breach-defense" tabIndex={-1} className="tc-rotate-card">
           <div className="tc-card-title">{locale === "ja" ? "自分の防御 · 秘密を作り直す（ROTATE）" : "Defend yourself · Replace your secrets (ROTATE)"}</div>
           <div className="tc-card-hint">{copy.rotateHint}</div>
+          {projection.vault.rotatePenalty !== undefined && <p><strong>{locale === "ja" ? `実行すると −${projection.vault.rotatePenalty} 点` : `This action costs ${projection.vault.rotatePenalty} points`}</strong></p>}
           {projection.publicRsaKeys?.length ? <p className="tc-card-hint">{locale === "ja" ? "RSAの新しい公開n/eも全員に見えます。小さい鍵の数は再登場する場合があり、ROTATEで因数分解を防げるわけではありません。" : "Everyone also sees the new RSA n/e. Tiny key numbers can recur; ROTATE does not prevent factoring."}</p> : null}
           {sudokuPressure === "hunted" && <div className="tc-card-hint">{copy.rotateSudokuHunted}</div>}
           {sudokuPressure === "exhausted" && <div className="tc-card-hint">{copy.rotateSudokuExhausted}</div>}

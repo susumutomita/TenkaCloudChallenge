@@ -740,7 +740,18 @@ export interface StoredShare {
  * `projectForTeam` is the only sanctioned read path, and it redacts every
  * other team's `secret` / `shares` (see reducer.ts + adversarial test #5).
  */
+export interface BreachNotice {
+  readonly sequence: number;
+  readonly attackerTeamId: string;
+  readonly generation: number;
+  readonly method: "share" | "sudoku" | "caesar" | "vigenere" | "rsa" | "rotor";
+  readonly atMs: number;
+  /** Actual signed score change, including the zero-score floor. */
+  readonly points: number;
+}
+
 export interface TeamState {
+  readonly lastBreach?: BreachNotice;
   /** Current-generation minimum ROTATE cost after fulfilling a disclosure Order. */
   readonly disclosureRotationCost?: number;
   readonly teamId: string;
@@ -1149,6 +1160,7 @@ export interface VaultProjection {
   readonly rotateCooldownRemainingMs: number;
   /** Minimum total cost after a publication-required Order; not an additional fee. */
   readonly rotateMinimumPenalty?: number;
+  readonly rotatePenalty?: number;
   readonly completedContractIds: readonly string[];
   readonly huntedGenerations: readonly number[];
   /**
@@ -1324,6 +1336,7 @@ export interface TeamSummaryProjection {
  * place that has to get the redaction right.
  */
 export interface CryptoBattleProjection {
+  readonly lastBreach?: BreachNotice;
   /** Host-relative timestamp of this snapshot; never a browser clock. */
   readonly clockMs?: number;
   /** Own benefit only; the opponent's allocation is never projected. */

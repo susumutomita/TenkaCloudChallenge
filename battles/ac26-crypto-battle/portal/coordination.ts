@@ -34,7 +34,7 @@ import type { PortalCoordinationClient, PortalCoordinationOutcome } from "@tenka
 import type { CryptoBattleProjection } from "../game/src/types.ts";
 
 /** ADR-014 / polling-over-SSE: same cadence as microservice-migration-battle's StatusPanel. */
-export const COORDINATION_POLL_MS = 30_000;
+export const COORDINATION_POLL_MS = 5_000;
 
 /**
  * `getProjection()` returns `unknown` on the SDK's `PortalCoordinationOutcome`
