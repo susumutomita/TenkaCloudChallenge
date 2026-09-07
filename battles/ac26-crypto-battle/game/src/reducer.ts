@@ -3022,7 +3022,7 @@ function applyIo(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattleOp
  const hit=JSON.stringify(parseIoAnswer(op.answer))===JSON.stringify(ioAnswer(c.task));
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
- return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"io" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
+ return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"io" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
 }
 function applySnark(state: CryptoBattleState, teamId: string, op: Extract<CryptoBattleOp,{kind:"snark"}>): CryptoBattleState {
   const order = state.contracts.find(c => c.id === op.contractId)!;

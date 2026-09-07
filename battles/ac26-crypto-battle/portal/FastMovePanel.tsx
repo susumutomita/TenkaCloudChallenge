@@ -1517,7 +1517,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
-          const delta=-next.wrongProveCost;
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"計算と分布の比較に成功！":"Function and distribution check complete!",body:locale==="ja"?"同じ機能かどうかと、公開データの分布を別々に確認できました。":"You checked functional equivalence and the published distributions separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。空欄の余りと、rを含む公開データの組を確認してください。`:`${delta} pt. Check the missing remainders and complete outcomes including r.`};
         }
        )}/> }
