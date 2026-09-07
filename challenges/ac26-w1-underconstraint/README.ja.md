@@ -76,3 +76,8 @@ Linuxの提出コード用filterで、ファイル・ディレクトリの作成
 ## 計算用の道具と実行時間
 
 計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コードの1回の実行は15秒までです。検査によっては、別の入力で2回実行します。
+
+
+### Issue #716 reader check
+
+独立読者が競技者向け本文・ヒント・starterを確認し、exploitの小例で入場結果まで不正になるにはissuer_ok=1が必要と指摘しました。日英の小例へその前提を補いました。issuer_ok=0ならokの判定は破れても入場結果grantedは0のままです。非公開採点・referenceは読者確認に使用しておらず、実提出は未実施です。

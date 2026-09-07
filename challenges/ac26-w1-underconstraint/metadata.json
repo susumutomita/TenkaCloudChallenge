@@ -133,7 +133,7 @@
           },
           {
             "id": "exploit-hint-2",
-            "content": "式と小例：p=7,revoked=3では、Aだけならinv=0,ok=1でA=0、B=3。Bだけならinv=0,ok=0でB=0、A=−1→6。granted=ok×issuer_okで入場の式も0にします。前者は入場結果、後者は逆元の意味が壊れています。",
+            "content": "式と小例：p=7,revoked=3,issuer_ok=1では、Aだけならinv=0,ok=1でA=0、B=3。Bだけならinv=0,ok=0でB=0、A=−1→6。granted=ok×issuer_okで入場の式も0にします。前者は入場結果、後者は逆元の意味が壊れています。",
             "penalty": 5
           },
           {
@@ -278,7 +278,7 @@
             },
             {
               "id": "exploit-hint-2",
-              "content": "Formula and example: p=7, revoked=3. With only A, inv=0 and ok=1 give A=0 but B=3. With only B, inv=0 and ok=0 give B=0 but A=−1→6. Set granted=ok×issuer_ok. The first breaks the decision; the second breaks the inverse helper."
+              "content": "Formula and example: p=7, revoked=3, issuer_ok=1. With only A, inv=0 and ok=1 give A=0 but B=3. With only B, inv=0 and ok=0 give B=0 but A=−1→6. Set granted=ok×issuer_ok. The first breaks the decision; the second breaks the inverse helper."
             },
             {
               "id": "exploit-hint-3",
