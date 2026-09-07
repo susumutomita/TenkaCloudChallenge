@@ -15,7 +15,7 @@ export const ROTOR_EXPLANATIONS = {
       {
         title: "位置を足す→表を引く→位置を引く",
         lines: [
-          "mod 4は4で割った余り。負なら4を足して0〜3へ戻します。P=[1,3,0,2]、Q=[3,0,2,1]、表は左から0番です。mは元の数字、uは途中、cは出力。u=(P[(m+a) mod 4]−a) mod 4、c=(Q[(u+b) mod 4]−b) mod 4。",
+          "4で割った余りを mod 4 と書きます。負なら4を足して0〜3へ戻します。P=[1,3,0,2]、Q=[3,0,2,1]、表は左から0番です。mは元の数字、uは途中、cは出力。u=(P[(m+a) mod 4]−a) mod 4、c=(Q[(u+b) mod 4]−b) mod 4。",
           "別の例：m3,a0,b1ならP[3]=2でu2。Q[3]=1から1を引きc0。出力後a1,b1へ。",
           "初期位置は16通りしかない教材です。公開1組で特定できる場合も、候補が複数残る場合もあります。実用Enigmaそのものではなく、段は安全性の順位を表しません。",
         ],
@@ -35,7 +35,7 @@ export const ROTOR_EXPLANATIONS = {
       {
         title: "Add position → look up → subtract position",
         lines: [
-          "mod 4 means remainder after division by 4; if negative, add 4 to return to 0–3. P=[1,3,0,2], Q=[3,0,2,1], numbered from 0 on the left. m is original, u intermediate, c output: u=(P[(m+a) mod 4]−a) mod 4; c=(Q[(u+b) mod 4]−b) mod 4.",
+          "Write the remainder after division by 4 as mod 4; if negative, add 4 to return to 0–3. P=[1,3,0,2], Q=[3,0,2,1], numbered from 0 on the left. m is original, u intermediate, c output: u=(P[(m+a) mod 4]−a) mod 4; c=(Q[(u+b) mod 4]−b) mod 4.",
           "Separate example: m3,a0,b1 gives P[3]=2, so u2. Q[3]=1 minus 1 gives c0. Output first, then a1,b1.",
           "This teaching model has only 16 initial positions. One public pair may identify them, or leave multiple candidates. It is not actual Enigma and rungs do not rank security.",
         ],

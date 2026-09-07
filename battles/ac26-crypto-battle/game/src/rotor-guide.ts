@@ -12,8 +12,8 @@ export function rotorGuide(
     };
   if (rung === 1)
     return {
-      ja: "式：mod 4 は4で割った余りで、負なら4を足して0〜3へ戻します。表の左から0番、1番、2番、3番です。P=[1,3,0,2]、Q=[3,0,2,1]。\nu=(P[(m+a) mod 4]−a) mod 4、c=(Q[(u+b) mod 4]−b) mod 4。mは元の数字、aは速い車輪、bは遅い車輪の今の位置、uは途中の数字、cは出力です。\n別の一桁例：m=3,a=0,b=1ならP[3]=2なのでu=2。Q[3]=1から1を引いてc=0。出力してからaを1へ進め、bは1のまま。aが3→0に戻るときだけbも1進め、bも3の次は0です。",
-      en: "Formula: mod 4 is the remainder after division by 4; if negative, add 4 to return to 0–3. Table entries are numbered 0,1,2,3 from the left. P=[1,3,0,2], Q=[3,0,2,1].\nu=(P[(m+a) mod 4]−a) mod 4; c=(Q[(u+b) mod 4]−b) mod 4. m is the original digit; a and b are the current fast and slow positions; u is the intermediate digit; c is the output.\nSeparate one-digit example: m=3,a=0,b=1 gives P[3]=2, so u=2. Q[3]=1 minus 1 gives c=0. Output first, then advance a to 1; b stays 1. Only when a wraps 3→0 does b advance too, also wrapping 3→0.",
+      ja: "式：4で割った余りを mod 4 と書き、負なら4を足して0〜3へ戻します。表の左から0番、1番、2番、3番です。P=[1,3,0,2]、Q=[3,0,2,1]。\nu=(P[(m+a) mod 4]−a) mod 4、c=(Q[(u+b) mod 4]−b) mod 4。mは元の数字、aは速い車輪、bは遅い車輪の今の位置、uは途中の数字、cは出力です。\n別の一桁例：m=3,a=0,b=1ならP[3]=2なのでu=2。Q[3]=1から1を引いてc=0。出力してからaを1へ進め、bは1のまま。aが3→0に戻るときだけbも1進め、bも3の次は0です。",
+      en: "Formula: write the remainder after division by 4 as mod 4; if negative, add 4 to return to 0–3. Table entries are numbered 0,1,2,3 from the left. P=[1,3,0,2], Q=[3,0,2,1].\nu=(P[(m+a) mod 4]−a) mod 4; c=(Q[(u+b) mod 4]−b) mod 4. m is the original digit; a and b are the current fast and slow positions; u is the intermediate digit; c is the output.\nSeparate one-digit example: m=3,a=0,b=1 gives P[3]=2, so u=2. Q[3]=1 minus 1 gives c=0. Output first, then advance a to 1; b stays 1. Only when a wraps 3→0 does b advance too, also wrapping 3→0.",
     };
   return {
     ja: `この1題を計算してから次へ進みます。元の列は ${task.plaintext.join(" ")}、初期位置はa=${task.myInitial.a}, b=${task.myInitial.b}。\n① 表に4行を作り、各行へ元の数字m、今のa・bを書きます。② その行のmをPの式に入れてuを計算し、uをQの式に入れてcを書きます。③ cを出してからaを1進めます。aが3→0ならbも1進め、次の行へ写します。④ 出したcだけを上から4個、CIPHER欄へ入れて提出。完了表示と得点を確認します。\n先に誤答していた場合、期限内に正答しても0点で完了します。未入力・範囲外は誤答に数えません。再挑戦も最初のa・bから始めます。`,

@@ -219,3 +219,16 @@ match. Final checks: 713 non-capacity game tests, 64 dev tests, both type checks
 `/private/tmp/rotor-review-dev-final.log`, and
 `/private/tmp/rotor-review-catalog-final.log`. The earlier browser smoke remains
 applicable to the worksheet; no new AWS or timed independent playtest is claimed.
+
+
+### CI execution-budget correction
+
+GitHub job 101610532510 passed metadata validation but was cancelled with
+"The job has exceeded the maximum execution time of 5m0s" during game tests.
+The complete local capacity suite took 1,137.19 seconds. CI now runs ordinary
+regressions/type checks under the existing five-minute budget and all eight
+capacity cases in four independent jobs (five small-roster/configuration cases,
+then each of the three 99-team routes). Each capacity job has a 35-minute bound;
+the existing per-case 30-minute bound and all byte/team/history assertions remain.
+The paid Rotor hint and free concept panel also now define remainders before mod
+in both languages, completing the wording correction beyond the worksheet.
