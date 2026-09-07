@@ -18,7 +18,7 @@ export function StarkWorksheet({task,locale,busy,wrongCost,onSubmit}:{task:Stark
  {input(2,ja?'Rの定数：2×最初の答え−2番目の答え = □':'Constant of R: 2×first answer−second answer = □')}
  <h4>{ja?'3. 商を1回折り畳む':'3. Fold the quotient once'}</h4>
  <p>Q(X) = {p.quotient[0]} + {p.quotient[1]}X + {p.quotient[2]}X²</p>
- <p>{ja?'商の係数は計算済みです。偶数乗の部分と奇数乗の部分に分け、Y=X²と置きます。検査側が指定する数βを奇数側に掛けて足すと、最高の乗数（次数）が2から1に下がります。これはFRIという低次数検査の1回の折り畳みです。':'The quotient coefficients are supplied. Split even and odd powers and write Y=X². Multiply the odd part by the verifier’s number β and add it to the even part. The highest power (degree) drops from two to one. This is one fold from the low-degree test FRI.'}</p>
+ <p>{ja?'商の式は計算済みです。Q=q₀+q₁X+q₂X²で、q₀は定数、q₁はXに掛ける数、q₂はX²に掛ける数です。この3つを係数と呼びます。偶数乗の部分と奇数乗の部分に分け、Y=X²と置きます。検査側が指定する数βを奇数側に掛けて足すと、最高の乗数（次数）が2から1に下がります。これはFRIという低次数検査の1回の折り畳みです。':'The quotient expression is supplied. In Q=q₀+q₁X+q₂X², q₀ is the constant, q₁ multiplies X, and q₂ multiplies X². These three numbers are called coefficients. Split even and odd powers and write Y=X². Multiply the odd part by the verifier’s number β and add it to the even part. The highest power (degree) drops from two to one. This is one fold from the low-degree test FRI.'}</p>
  <p>{ja?'一般式：Q=q₀+q₁X+q₂X² → F(Y)=(q₀+βq₁)+q₂Y。qは上の係数です。例：Q=2+3X+4X²、β=2ならF=1+4Y（2+2×3=8の余り1）。':'Writing q for the coefficients: Q=q₀+q₁X+q₂X² → F(Y)=(q₀+βq₁)+q₂Y. Example: Q=2+3X+4X² and β=2 gives F=1+4Y because 2+2×3=8 has remainder 1.'}</p>
  {input(3,`β=${task.beta}：${p.quotient[0]} + ${task.beta}×${p.quotient[1]} = □`)}
  <p>{ja?`不正解は最大 ${wrongCost} 点減点。期限内なら再提出できます。`:`Incorrect answers cost up to ${wrongCost} points. Retry before the deadline.`}</p>

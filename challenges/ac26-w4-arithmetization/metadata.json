@@ -34,7 +34,7 @@
   "estimatedDuration": "60-90 分",
   "shortDescription": "「このプログラムを正しく実行した」を、実行を見せずに信じてもらいたい。最初の一歩は、実行の記録を表にして、表の決まりを多項式の式へ翻訳することです。ただし翻訳しただけでは証明ではない — 何が保証されて何が漏れているかを、漏れの実物を自分で作って確かめます。",
   "description": "Week 4 の 1 問目。 Week 4 の講義（「証明」と「ゼロ知識性」、2026-08-18 公開）のうち、 STARK の節（スライド 19〜23: 実行トレース → AIR → 商多項式 → Merkle → FRI）の最初の 2 歩 「実行トレース化」 と 「実行トレース制約の多項式化 (AIR)」 に対応する。 講義のトイ AIR は遷移制約 3 本だけで境界制約を持たないので、 本問はそこを補う位置にある。 role は transfer（講義のトイ計算とは別の状態機械へ転用する）。 公式課題は README 上 WIP のため、 課題との対応は主張しない。\n\n題材は 2 列・2 規則の状態機械。 計算そのものは重要ではなく、 「これが走ったことを証明する」 が 「これらの多項式関係が これらの点で消える」 へ変換される過程が主題。\n\n中心にあるのは 2 種類の制約が別の仕事をしていること。 transition 制約は 「各行が前の行から従う」 としか言わない。 boundary 制約が 「どこから始まったか」 を言う。 一方が他方を含意しないので、 boundary を落とした系は同じ機械を別の初期状態から走らせた trace で完全に充足される — 多項式は等しく正しく、 別の文の証明になっている。 underconstrained checkpoint はこの trace を participant に構成させる。\n\nevaluation domain は単位根の冪で、 行と点が順序どおり対応する。 素数は steps が p-1 を割るものだけを選んである。\n\nこれは証明系ではない。 commitment も verifier の乱数も無く、 何に対しても健全ではない。 arithmetization への橋であって、 その先ではない。",
-  "instructions": "## 「実行しました」を、実行を見せずに\n\nこのトラックの背骨は 1 行です — (5 + x) + (3 + x) = 8 + 2x。x が何か知らないまま、式の形だけで計算が進みました。ゼロ知識証明では **x があなたの秘密**で、x を見せずに「計算は正しかった」と示します。\n\nそのためには、まず「計算が正しかった」という文そのものを、数学が扱える形へ翻訳しなければなりません。zkVM（RISC Zero や SP1）がやっているのはまさにこれで、CPU の実行を「横に変数、縦に時刻の表」に起こし、表の決まりを多項式の式へ直します。zkRollup が 100 万件の取引を 1 個の証明にできるのも、最初にこの翻訳があるからです。\n\n翻訳の行き先はこうです。**機械がこう走った → 表を作る → 表の決まりを式にする → その式が、決められた点で全部 0 になる。** 最後の形になれば、機械を再実行しなくても、式が 0 かどうかだけで確かめられます。\n\n## この問題の機械\n\n列が 2 本（a と b）、規則が 2 本だけの小さな機械です。1 行目が決まっていて、「次の行の a = いまの a + b」「次の行の b = いまの b + weight × いまの a」で表が伸びます。\n\np = 7、weight = 2、1 行目 (2, 3) で、紙の上を 3 歩だけ（途中式は省きません）:\n\n- 1 → 2 行目: a = 2 + 3 = **5**、b = 3 + 2×2 = 7 → 7 − 7 = **0**。2 行目は (5, 0)\n- 2 → 3 行目: a = 5 + 0 = **5**、b = 0 + 2×5 = 10 → 10 − 7 = **3**。3 行目は (5, 3)\n- 3 → 4 行目: a = 5 + 3 = 8 → 8 − 7 = **1**、b = 3 + 2×5 = 13 → 13 − 7 = **6**。4 行目は (1, 6)\n\nできた表 (2,3), (5,0), (5,3), (1,6) は、どの隣り合う 2 行を見ても規則を満たしています。\n\n## 前提 — 手持ちの道具は 3 行\n\n- 数は「素数 p で割ったあまり」。負なら p を足して 0 以上へ。Python の `% p`。初めてなら `ac26-w1-constraint-lab` へ。\n- n + 1 個の点を通る式はちょうど 1 本（2 点で直線、3 点で放物線、の延長）。表の 1 列を式に置き換える **補間** はこれのことです。\n- 行番号を置き換える点の並びが **domain**。この並びの素性は `ac26-w3-fft-domain` で確かめました。\n\n## 翻訳が落とすもの\n\nここが山です。**1 行目を (1, 1) に変えて同じ規則で伸ばした表** (1,1), (2,3), (5,0), (5,3) も、どの隣り合う 2 行でも規則を満たします。\n\nつまり、決まりには 2 種類あって、仕事が違います。**遷移制約**は「どの行も、前の行から規則どおりに出ている」としか言いません。**境界制約**が「どこから始まったか」を言います。片方はもう片方を含みません。境界制約を落とした系は、同じ機械を別の初期状態から走らせた表でも完全に満たされます — 式はどれも正しく 0 なのに、証明している文が別物になる。Week 1 で **アンダー制約** と呼んだ形が、ここでも同じ顔で出てきます。\n\n多項式にしただけでは、証明ではありません。**何を式にし忘れたかは、式は教えてくれない**からです。最後から 2 番目の checkpoint では、その「別の表」をあなたが実際に作って提出します。\n\n## 最初の一手\n\n1. Participant Portal（この問題文が出ているサイト）で **「起動」** を押します。問題文と同じ画面に **問題エディタ**が出て、`air.py` が入っています。編集するのはこの 1 ファイルだけで、新しいファイルを作る必要はありません。\n2. エディタの **「証拠を確認」** を押します。この起動だけの条件と証拠が出ます。\n   - コンテナが動いた証拠の文字列（health token。この問題では提出に使いません）\n   - **p**（体）、**steps**（表の行数）、**weight**（2 本目の規則で掛ける数）、**start**（1 行目の a と b）\n   - あなたの weight を入れた 2 本の規則\n   - **表そのもの** — 行番号、その行の a と b、その行に対応する domain の点が、行数分だけ並びます\n   - domain についての説明（行が点に順番どおり対応していること）\n3. まず、その表の 1 行目と 2 行目を紙で確かめてください。上の 3 歩の例と同じ手順を、あなたの p・weight・start でやるだけです。合えば、機械の動きは理解できています。\n\n**この表はあなたの答え合わせに使えます**。`execute` が同じ条件で返すべき表がそれです。ただし採点はあなたが見ていない条件で走るので、画面の数字を書き写した実装は落ちます。\n\n## 答えるもの — checkpoint は 8 個\n\n8 個とも **`air.py` を走らせて採点します**。この問題に「回答欄に値を書く」種類の checkpoint はありません。関数の枠は最初から `air.py` に入っていて、`setting` は `p` / `steps` / `weight` / `start` が入った辞書です。\n\n1. **trace** — `execute(setting)` を書く。1 行目 `start` から規則を steps − 1 回あてて、`(a, b)` を上から順に並べたリスト（長さ steps）を返す。\n2. **transition** — `transition_residuals(trace, setting)` を書く。**隣り合う 2 行の組ごとに**、「次の行はこうなるはず」から「実際の次の行」を引いた残りを、`(a の残り, b の残り)` の組で、上から順に返す。正しい表なら全部 0。書く前に、組がいくつあるかを数えてください（行数と同じではありません）。\n3. **boundary** — `boundary_residuals(trace, setting)` を書く。この表を「ほかでもないこの初期状態から始まった計算」に縛る式の残りを、整数のリストで返す。正しい表なら全部 0。\n4. **interpolate** — `interpolate(values, points, p)` と `evaluate(coefficients, x, p)`、そして `column_polynomials(trace, points, p)` を書く。`interpolate` は「points[i] を入れると values[i] になる」ただ 1 本の多項式の係数を、**次数の低い順**のリストで返します（係数は 0 以上 p 未満の整数に直しておくこと）。有限体の割り算は逆元の掛け算です（`pow(x, p - 2, p)` が x の逆元）。`evaluate` は係数からその多項式の x での値を返します（domain の点に限らず、どんな x でも係数どおりに計算すること）。`column_polynomials` は列ごとに 1 本、domain 上で列と一致する多項式を作り、係数のリストのリストを返します。\n5. **compose** — 新しい関数はありません。4 で作った多項式を domain の隣り合う点で見たとき、遷移の関係がちゃんと 0 になるかを見ます。**行と点の対応が順番どおりか**がここで効きます。\n6. **locate** — `first_violation(trace, setting)` を書く。最初に決まりが破れた行を `{\"row\": 行番号, \"kind\": \"transition\" または \"boundary\"}` の辞書で返す。破れていなければ `None`。1 行目には「前の行」がありません — そこで壊れうるのはどちらの種類か、考えてください。\n7. **underconstrained** — `underconstrained_witness(setting)` を書く。**遷移制約は全部満たすのに、この計算ではない表**を自分で作って返します。返す形は `{\"trace\": [[a, b], [a, b], ...], \"constraint_dropped\": \"...\"}`。行数は steps と同じ、数は全部 p で割った余りに直しておくこと（steps も p も `setting` にあります）。`constraint_dropped` には、**その表が通ってしまうためには 2 種類の制約のどちらが欠けていなければならないか**、その名前を文字列で入れます。\n8. **transfer** — 同じ `air.py` を、**あなたが一度も見ていない条件**（別の p、別の行数、別の weight、別の初期状態）で 1 から 7 まで全部もう一度走らせます。画面の数字に合わせて書いた実装はここで落ちます。\n\n**提出のしかた**: `air.py` を書いて、その checkpoint の **「提出 (+点数)」** を押すだけです。いまのエディタの中身がそのまま採点へ送られます。8 個は別々に採点されるので、1 つ詰まっても他は取れます。**不正解のときは、どの決まりが破れたかの短い説明が返ります**（期待される値そのものは返りません）— それを読んで直し、何度でも出し直せます。1 回外すごとに 15 点引かれます（8 個で合計 300 点。合計が 0 点未満になることはありません）。エディタを壊してしまったら **「初期状態に戻す」** で最初の `air.py` に戻せます。\n\n**「公開テストを実行」** を押すと、手元で先に一部を試せます。ただし公開テストが見るのは「表が走るか」と「正しい表の遷移の残りが 0 か」だけです。行を 1 つ壊してみることも、補間も、境界制約も見ていません — **境界制約を 1 つも書いていない実装でも公開テストは通ります**。\n\n## 表の次は、封\n\n8 つ通れば終わりです。機械の実行が表になり、表の決まりが式になり、式が domain の点で 0 になる — この翻訳を自分の手で 1 回通し、翻訳が保証しない部分を、自分で作った反例で示しました。\n\nでも、まだ証明ではありません。表を全部見せたら秘密 x ごと見せることになり、全部検算させたら再実行と同じです。**見せずに、全部見させずに確かめる**道具がここから始まります — まず封をする `ac26-w4-commit-open`、そして数点だけ見る 3 本のドリルへ。",
+  "instructions": "## 「実行しました」を、実行を見せずに\n\nこのトラックの背骨は 1 行です — (5 + x) + (3 + x) = 8 + 2x。x が何か知らないまま、式の形だけで計算が進みました。ゼロ知識証明では **x があなたの秘密**で、x を見せずに「計算は正しかった」と示します。\n\nそのためには、まず「計算が正しかった」という文そのものを、数学が扱える形へ翻訳しなければなりません。zkVM（RISC Zero や SP1）がやっているのはまさにこれで、CPU の実行を「横に変数、縦に時刻の表」に起こし、表の決まりを多項式の式へ直します。zkRollup が 100 万件の取引を 1 個の証明にできるのも、最初にこの翻訳があるからです。\n\n翻訳の行き先はこうです。**機械がこう走った → 表を作る → 表の決まりを式にする → その式が、決められた点で全部 0 になる。** 最後の形になれば、機械を再実行しなくても、式が 0 かどうかだけで確かめられます。\n\n## この問題の機械\n\n列が 2 本（a と b）、規則が 2 本だけの小さな機械です。1 行目が決まっていて、「次の行の a = いまの a + b」「次の行の b = いまの b + weight × いまの a」で表が伸びます。\n\np = 7、weight = 2、1 行目 (2, 3) で、紙の上を 3 歩だけ（途中式は省きません）:\n\n- 1 → 2 行目: a = 2 + 3 = **5**、b = 3 + 2×2 = 7 → 7 − 7 = **0**。2 行目は (5, 0)\n- 2 → 3 行目: a = 5 + 0 = **5**、b = 0 + 2×5 = 10 → 10 − 7 = **3**。3 行目は (5, 3)\n- 3 → 4 行目: a = 5 + 3 = 8 → 8 − 7 = **1**、b = 3 + 2×5 = 13 → 13 − 7 = **6**。4 行目は (1, 6)\n\nできた表 (2,3), (5,0), (5,3), (1,6) は、どの隣り合う 2 行を見ても規則を満たしています。\n\n## 前提 — 手持ちの道具は 3 行\n\n- 数は「素数 p で割ったあまり」。負なら p を足して 0 以上へ。Python の `% p`。初めてなら `ac26-w1-constraint-lab` へ。\n- 相異なるm個の横座標に指定した値を返す、次数m−1以下の多項式がただ1本あります。次数は0でない係数が付くXの累乗の最大値です。例えば3点なら次数2以下で、直線や定数になる場合もあります。この式を作るのが補間です。\n- 行番号を置き換える点の並びが **domain**。この並びの素性は `ac26-w3-fft-domain` で確かめました。\n\n## 翻訳が落とすもの\n\nここが山です。**1 行目を (1, 1) に変えて同じ規則で伸ばした表** (1,1), (2,3), (5,0), (5,3) も、どの隣り合う 2 行でも規則を満たします。\n\nつまり、決まりには 2 種類あって、仕事が違います。**遷移制約**は「どの行も、前の行から規則どおりに出ている」としか言いません。**境界制約**が「どこから始まったか」を言います。片方はもう片方を含みません。境界制約を落とした系は、同じ機械を別の初期状態から走らせた表でも完全に満たされます — 式はどれも正しく 0 なのに、証明している文が別物になる。Week 1 で **アンダー制約** と呼んだ形が、ここでも同じ顔で出てきます。\n\n多項式にしただけでは、証明ではありません。**何を式にし忘れたかは、式は教えてくれない**からです。最後から 2 番目の checkpoint では、その「別の表」をあなたが実際に作って提出します。\n\n## 最初の一手\n\n1. Participant Portal（この問題文が出ているサイト）で **「起動」** を押します。問題文と同じ画面に **問題エディタ**が出て、`air.py` が入っています。編集するのはこの 1 ファイルだけで、新しいファイルを作る必要はありません。\n2. エディタの **「証拠を確認」** を押します。この起動だけの条件と証拠が出ます。\n   - コンテナが動いた証拠の文字列（health token。この問題では提出に使いません）\n   - **p**（体）、**steps**（表の行数）、**weight**（2 本目の規則で掛ける数）、**start**（1 行目の a と b）\n   - あなたの weight を入れた 2 本の規則\n   - **表そのもの** — 行番号、その行の a と b、その行に対応する domain の点が、行数分だけ並びます\n   - domain についての説明（行が点に順番どおり対応していること）\n3. まず、その表の 1 行目と 2 行目を紙で確かめてください。上の 3 歩の例と同じ手順を、あなたの p・weight・start でやるだけです。合えば、機械の動きは理解できています。\n\n**この表はあなたの答え合わせに使えます**。`execute` が同じ条件で返すべき表がそれです。ただし採点はあなたが見ていない条件で走るので、画面の数字を書き写した実装は落ちます。\n\n## 規則から係数リストへ\n\n以下はすべてpで割った余りで計算します。[c0,c1,c2]はc0+c1*X+c2*X²という式です。補間は異なるm点から、次数m−1以下の式を作ります。末尾の0は省いても残しても、表す式は同じです。\n\n点の番号iを1つ選び、それ以外の番号jそれぞれの (X−points[j])/(points[i]−points[j]) を掛け合わせた式をL_i(X)とします。点が違うので分母は0になりません。割り算はpow(分母,-1,p)を掛けることです。L_iは自分の点で1、ほかの点で0です。すべてのiについてvalues[i]*L_i(X)を足せば、求める補間式になります。\n\n係数で実装するには、各iの分子を[1]、分母を1から始めます。係数リストbに(X−t)を掛けるときは長さlen(b)+1の0リストを作り、各kで位置kへ−t*b[k]、位置k+1へb[k]を足します。余りを取りながら繰り返し、分母にはpoints[i]−points[j]を掛けます。最後に分子の各係数をvalues[i]*pow(分母,-1,p)倍して、出力の同じ位置へ足します。\n\np=7、points=[0,1]、values=[2,5]ならL0=1−X、L1=X。2*(1−X)+5*X=2+3*Xで係数[2,3]です。evaluateはc0+c1*x+c2*x²+…を計算し、余りを返します。\n\n境界の戻り値は[(trace[0][0]−start[0])%p,(trace[0][1]−start[1])%p]のa,b順です。返すrow番号は0始まり。列の式A,Bと隣り合う点u,vで、composeの残差はA(u)+B(u)−A(v)とB(u)+weight*A(u)−B(v)の余りです。最後の行から先頭へはつなぎません。省いた制約の名前は\"boundary\"です。\n\n## 答えるもの — checkpoint は 8 個\n\n8 個とも **`air.py` を走らせて採点します**。この問題に「回答欄に値を書く」種類の checkpoint はありません。関数の枠は最初から `air.py` に入っていて、`setting` は `p` / `steps` / `weight` / `start` が入った辞書です。\n\n1. **trace** — `execute(setting)` を書く。1 行目 `start` から規則を steps − 1 回あてて、`(a, b)` を上から順に並べたリスト（長さ steps）を返す。\n2. **transition** — `transition_residuals(trace, setting)` を書く。**隣り合う 2 行の組ごとに**、「次の行はこうなるはず」から「実際の次の行」を引いた残りを、`(a の残り, b の残り)` の組で、上から順に返す。正しい表なら全部 0。書く前に、組がいくつあるかを数えてください（行数と同じではありません）。\n3. **boundary** — `boundary_residuals(trace, setting)` を書く。この表を「ほかでもないこの初期状態から始まった計算」に縛る式の残りを、整数のリストで返す。正しい表なら全部 0。\n4. **interpolate** — `interpolate(values, points, p)` と `evaluate(coefficients, x, p)`、そして `column_polynomials(trace, points, p)` を書く。`interpolate` は「points[i] を入れると values[i] になる」次数len(points)−1以下の多項式の係数を、**次数の低い順**のリストで返します（係数は 0 以上 p 未満の整数に直しておくこと）。有限体の割り算は逆元の掛け算です（`pow(x, p - 2, p)` が x の逆元）。`evaluate` は係数からその多項式の x での値を返します（domain の点に限らず、どんな x でも係数どおりに計算すること）。`column_polynomials` は列ごとに 1 本、domain 上で列と一致する多項式を作り、係数のリストのリストを返します。\n5. **compose** — 新しい関数はありません。4 で作った多項式を domain の隣り合う点で見たとき、遷移の関係がちゃんと 0 になるかを見ます。**行と点の対応が順番どおりか**がここで効きます。\n6. **locate** — `first_violation(trace, setting)` を書く。最初に決まりが破れた行を `{\"row\": 行番号, \"kind\": \"transition\" または \"boundary\"}` の辞書で返す。破れていなければ `None`。1 行目には「前の行」がありません — そこで壊れうるのはどちらの種類か、考えてください。\n7. **underconstrained** — `underconstrained_witness(setting)` を書く。**遷移制約は全部満たすのに、この計算ではない表**を自分で作って返します。返す形は `{\"trace\": [[a, b], [a, b], ...], \"constraint_dropped\": \"...\"}`。行数は steps と同じ、数は全部 p で割った余りに直しておくこと（steps も p も `setting` にあります）。`constraint_dropped` には、**その表が通ってしまうためには 2 種類の制約のどちらが欠けていなければならないか**、その名前を文字列で入れます。\n8. **transfer** — 同じ `air.py` を、**あなたが一度も見ていない条件**（別の p、別の行数、別の weight、別の初期状態）で 1 から 7 まで全部もう一度走らせます。画面の数字に合わせて書いた実装はここで落ちます。\n\n**提出のしかた**: `air.py` を書いて、その checkpoint の **「提出 (+点数)」** を押すだけです。いまのエディタの中身がそのまま採点へ送られます。8 個は別々に採点されるので、1 つ詰まっても他は取れます。**不正解のときは、どの決まりが破れたかの短い説明が返ります**（期待される値そのものは返りません）— それを読んで直し、何度でも出し直せます。1 回外すごとに 15 点引かれます（8 個で合計 300 点。合計が 0 点未満になることはありません）。エディタを壊してしまったら **「初期状態に戻す」** で最初の `air.py` に戻せます。\n\n**「公開テストを実行」** を押すと、手元で先に一部を試せます。ただし公開テストが見るのは「表が走るか」と「正しい表の遷移の残りが 0 か」だけです。行を 1 つ壊してみることも、補間も、境界制約も見ていません — **境界制約を 1 つも書いていない実装でも公開テストは通ります**。\n\n## 表の次は、封\n\n8 つ通れば終わりです。機械の実行が表になり、表の決まりが式になり、式が domain の点で 0 になる — この翻訳を自分の手で 1 回通し、翻訳が保証しない部分を、自分で作った反例で示しました。\n\nでも、まだ証明ではありません。表を全部見せたら秘密 x ごと見せることになり、全部検算させたら再実行と同じです。**見せずに、全部見させずに確かめる**道具がここから始まります — まず封をする `ac26-w4-commit-open`、そして数点だけ見る 3 本のドリルへ。",
   "writeup": "## 変換は健全性を足さない\n\ntrace を多項式に補間しても、 それだけでは何も保証されない。 補間は表現を変える操作であって、 検証の力は制約が担っている。 「多項式になったから証明だ」 は、 表を CSV から JSON にしたら正しくなった、 と言うのに近い。\n\n## 2 種類の制約は別の仕事をしている\n\ntransition 制約は 「各行が前の行から従う」 と言う。 boundary 制約は 「どこから始まったか」 と言う。 一方が他方を含意しない。\n\nboundary を落とすと、 系は同じ機械を**別の初期状態から**走らせた trace で完全に充足される。 遷移はすべて成り立ち、 residual はすべて 0 で、 多項式は等しく正しい。 それは別の文の証明である。 underconstrained checkpoint で構成するのはこの trace で、 これが 「制約を 1 本落とす」 の具体的な意味になる。\n\n## residual の本数\n\ntransition residual は隣接する行の対ごとに 1 本なので、 行数より 1 少ない。 行ごとに 1 本作る実装は、 最後の行を存在しない次の行と比べている。 mutation suite の 1 つはこれで、 IndexError で落ちる。\n\n## 違反はどの行に現れるか\n\ni 番目の遷移が作るのは行 i+1 なので、 最初に壊れる行は i+1 である。 i と報告する実装は、 直す場所を 1 行間違えて教える。\n\n行 0 には前の行が無い。 そこで壊れうるのは boundary だけで、 それを transition 違反と呼ぶと、 やはり間違った場所を指す。 だから boundary を先に見る。\n\n## evaluation domain\n\ndomain は単位根の冪で、 行 i が点 g^i に対応する。 隣り合う行が隣り合う点になるので、 遷移制約は 「x での多項式」 と 「次の点での同じ多項式」 の関係として書ける。 素数は steps が p-1 を割るものだけを選んである。 そうでなければ、 その位数の単位根が存在しない。\n\n## これは証明系ではない\n\ncommitment が無く、 verifier の乱数が無く、 したがって何に対しても健全ではない。 arithmetization までの橋であって、 その先ではない。 ここで作ったものを 「小さな SNARK」 と呼ぶのは、 この問題が教えようとしていることの正反対である。\n\n## Week 4 の対応づけ\n\nWeek 4 の教材は pinned commit 時点で未公開。 courseAlignment は `week4/README.md` を `kind: \"placeholder\"` で pin し、 role は transfer にしてある。 GOVERNANCE.md §6 が未公開週の companion に許すのは diagnostic と transfer で、 この問題は Week 1 の constraint と Week 3 の体を新しい設定へ転用しているので transfer が正確でもある。 公式課題が何を要求するかについては何も主張していない。",
   "tags": [
     "advanced-cryptography-2026",
@@ -76,7 +76,24 @@
         "input": "multiline",
         "label": "実行 trace を作る",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "trace-hint-1",
+            "content": "表は機械の途中経過です。次の2値は両方とも変更前の行から計算します。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-2",
+            "content": "p=7、weight=2、(a,b)=(2,3)なら次は(5,0)。bの計算に更新後のa=5を使ってはいけません。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-3",
+            "content": "executeでsettingのp,steps,weight,startを読み、最初の組をリストへ入れます。変更前のa,bから次の2値を同時に作り、steps行まで追加してtraceを提出します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "transition",
@@ -87,8 +104,18 @@
         "hints": [
           {
             "id": "transition-hint-1",
-            "content": "residual は何本あるか。 行数と同じではない。 最後の行の 「次の行」 は存在しない。",
-            "penalty": 15
+            "content": "残差は、規則が予想した数と実際の数の差です。隣り合う行ごとに検査します。",
+            "penalty": 2
+          },
+          {
+            "id": "transition-hint-2",
+            "content": "p=7、weight=2で(2,3)の次が(4,0)なら残差は(2+3−4,3+2×2−0)の余り=(1,0)。a側だけ規則違反です。",
+            "penalty": 2
+          },
+          {
+            "id": "transition-hint-3",
+            "content": "transition_residualsでtrace[i]とtrace[i+1]を読み、予想−実際をpで割った余りの組にします。iは0〜len(trace)−2。最後の行から先へは進めず、組のリストを返してtransitionを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -101,8 +128,18 @@
         "hints": [
           {
             "id": "boundary-hint-1",
-            "content": "transition 制約だけを満たす trace は、 別の初期状態から始めても作れる。 それを禁じているのは何か。",
-            "penalty": 12
+            "content": "遷移が正しくても出発点は正しいとは限りません。最初の行を指定された初期状態へ結び付けます。",
+            "penalty": 2
+          },
+          {
+            "id": "boundary-hint-2",
+            "content": "p=7、指定start=(2,3)、実際の先頭=(1,3)なら、実際−指定の余りは[6,0]。同じ表の遷移がすべて0でも境界は失敗します。",
+            "penalty": 2
+          },
+          {
+            "id": "boundary-hint-3",
+            "content": "boundary_residualsでtrace[0]の各列からsetting[\"start\"]の対応する値を引き、pで余りを取り、2整数のリストを返します。boundaryを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -115,8 +152,18 @@
         "hints": [
           {
             "id": "interpolate-hint-1",
-            "content": "体の上での補間。 割り算は逆元の乗算で、 点が相異なることが効いてくる。",
-            "penalty": 20
+            "content": "点ごとに指定値を返す式を作り、表の列を式へ移します。ほかの点で0、自分の点で1になる式を足し合わせます。",
+            "penalty": 2
+          },
+          {
+            "id": "interpolate-hint-2",
+            "content": "p=7、points=[1,2]、values=[3,5]なら式は1+2X、係数[1,2]です。X=1で3、X=2で5。一般の作り方は無料本文の補間手順を使います。",
+            "penalty": 2
+          },
+          {
+            "id": "interpolate-hint-3",
+            "content": "interpolateで無料本文の各点iの式L_iを作りvalues[i]倍して係数へ加えます。evaluateは係数を低い次数から読む式、column_polynomialsはa列とb列を別々にinterpolateへ渡します。interpolateを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -125,7 +172,24 @@
         "input": "multiline",
         "label": "domain 上で関係が消えることを見る",
         "points": 40,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "compose-hint-1",
+            "content": "列を式に変えても、行と点の順序は同じでなければなりません。隣の点で計算した値が次の行に対応するかを調べます。",
+            "penalty": 2
+          },
+          {
+            "id": "compose-hint-2",
+            "content": "p=7、weight=2で先頭(2,3)、次(5,0)なら、Aの次の値5は2+3、Bの次の値0は3+2×2の余りです。式になっても同じ関係を確認します。",
+            "penalty": 2
+          },
+          {
+            "id": "compose-hint-3",
+            "content": "air.pyのcolumn_polynomialsがa列とb列を取り違えず、traceの行とpointsの順序を保ってinterpolateへ渡しているか確認します。evaluateが任意のxで係数どおりに計算することも確認します。compose関数を新設する必要はありません。composeの「提出」を押し、失敗なら返された規則名に沿ってこの2関数を修正します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "locate",
@@ -136,8 +200,18 @@
         "hints": [
           {
             "id": "locate-hint-1",
-            "content": "行 0 には前の行が無い。 そこで壊れうるのはどちらの制約か。 そして i 番目の transition が壊すのはどの行か。",
-            "penalty": 18
+            "content": "最初に壊れた場所を示すと原因を追えます。出発点の誤りを先に調べ、それから行を順に見ます。",
+            "penalty": 2
+          },
+          {
+            "id": "locate-hint-2",
+            "content": "行番号は0始まり。先頭が違えばrow=0,kind=boundary。行0から行1への規則が破れたらrow=1,kind=transitionです。",
+            "penalty": 2
+          },
+          {
+            "id": "locate-hint-3",
+            "content": "first_violationはboundary_residualsに0以外があれば境界の辞書を返します。次にtransition_residualsを先頭から見て、最初の非零の組の位置iに対しrow=i+1を返します。なければNone。locateを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -150,8 +224,18 @@
         "hints": [
           {
             "id": "underconstrained-hint-1",
-            "content": "transition 制約は 「各行が前の行から従う」 としか言っていない。 それを全部満たす別の trace はどう作るか。",
-            "penalty": 20
+            "content": "規則どおり進んでも違う出発点なら別の計算です。境界を抜くとその別の計算を排除できません。",
+            "penalty": 2
+          },
+          {
+            "id": "underconstrained-hint-2",
+            "content": "p=7、weight=2でstart=(2,3)の代わりに(1,1)から始めると(1,1),(2,3),(5,0)と進みます。規則は守りますが指定の出発点ではありません。",
+            "penalty": 2
+          },
+          {
+            "id": "underconstrained-hint-3",
+            "content": "underconstrained_witnessでstartの一方を1増やしてpで余りを取り、元settingを変更せず新しい条件を作ります。その条件でexecuteしtraceへ入れ、constraint_droppedはboundary。元条件で境界だけ違反することを確認して提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -160,7 +244,24 @@
         "input": "multiline",
         "label": "見たことのない設定でも成立させる",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "画面の一例ではなく規則を実装すれば、別の条件でも同じ理由で動きます。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "p=5なら(2,3)の和は余り0、p=7なら5。割る数を7へ固定した実装では、新しい条件で表も式も変わります。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "air.pyを開き、p,steps,weight,startとpointsを引数から読むようにします。割る数や行数を画面の数へ固定していないか確認し、transferの「提出」を押します。不正解なら返された規則名に対応する関数を直し、再提出します（外すたび15点）。公開テストだけでは補間や壊れた行の検出は確認できません。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
@@ -169,7 +270,7 @@
       "name": "Turning it into a polynomial is not a proof",
       "shortDescription": "You want 'I ran this program correctly' believed without showing the run. The first step is translating the run into a table, and the table's rules into polynomial relations. But the translation alone is not a proof — you find what it guarantees and what leaks through, by building the leak yourself.",
       "description": "First problem of Week 4. It corresponds to the first two steps of the STARK section of the Week 4 lecture (\"proof\" and \"zero-knowledge\", published 2026-08-18) — slides 19–23: execution trace → AIR → quotient polynomial → Merkle → FRI — namely \"turn the computation into an execution trace\" and \"turn the trace constraints into polynomials (AIR)\". The lecture's toy AIR has three transition constraints and no boundary constraint, so this problem sits exactly where that gap is. Its role is transfer (a different state machine than the lecture's toy computation). The official assignment is still WIP in the README, so no correspondence to it is claimed.\n\nThe material is a two-column, two-rule state machine. The computation itself does not matter; the subject is the conversion of \"prove this ran\" into \"these polynomial relations vanish at these points\".\n\nAt the centre: the two constraint kinds do different jobs. Transition constraints only ever say \"each row follows from the previous one\". Boundary constraints say where it started. Neither implies the other, so a system with the boundary dropped is fully satisfied by a trace of the same machine run from a different initial state — the polynomials are equally correct, and prove a different statement. The underconstrained checkpoint has the participant construct that trace.\n\nThe evaluation domain is powers of a root of unity, rows corresponding to points in order. Primes are chosen so that steps divides p-1.\n\nThis is not a proof system. There is no commitment and no verifier randomness, and it is sound against nothing. It is the bridge to arithmetization, not what lies beyond it.",
-      "instructions": "## \"I ran it\" — without showing the run\n\nThe spine of this track is one line: (5 + x) + (3 + x) = 8 + 2x. The computation went through without anyone knowing what x is. In zero-knowledge proofs, **x is your secret**, and you show \"the computation was correct\" without showing x.\n\nFor that, the sentence \"the computation was correct\" itself must first be translated into something mathematics can handle. This is exactly what zkVMs (RISC Zero, SP1) do: they write a CPU's execution out as a table — variables across, time downward — and turn the table's rules into polynomial relations. A zkRollup can fold a million transactions into one proof because this translation comes first.\n\nThe destination looks like this: **the machine ran like so → build the table → turn the table's rules into expressions → those expressions come out 0 at the appointed points.** Once it is in that final shape, no one has to re-run the machine; checking that expressions vanish is enough.\n\n## This problem's machine\n\nA small machine: two columns (a and b), two rules. The first row is fixed, and the table grows by \"next a = current a + b\" and \"next b = current b + weight × current a\".\n\nThree steps on paper, with p = 7, weight = 2 and first row (2, 3) — no step skipped:\n\n- row 1 → 2: a = 2 + 3 = **5**, b = 3 + 2×2 = 7 → 7 − 7 = **0**. Row 2 is (5, 0)\n- row 2 → 3: a = 5 + 0 = **5**, b = 0 + 2×5 = 10 → 10 − 7 = **3**. Row 3 is (5, 3)\n- row 3 → 4: a = 5 + 3 = 8 → 8 − 7 = **1**, b = 3 + 2×5 = 13 → 13 − 7 = **6**. Row 4 is (1, 6)\n\nThe table (2,3), (5,0), (5,3), (1,6) satisfies both rules between every adjacent pair of rows.\n\n## Before you start — three tools in hand\n\n- Numbers are remainders after dividing by a prime p; a negative result gets p added until it is 0 or more (Python's `% p`). New to this? `ac26-w1-constraint-lab` first.\n- Exactly one polynomial passes through n + 1 points (\"two points fix a line, three fix a parabola\", extended). **Interpolation** — replacing a table column with an expression — is this fact at work.\n- The run of points standing in for row numbers is the **domain**; verifying its credentials was `ac26-w3-fft-domain`.\n\n## What the translation drops\n\nHere is the summit. **Change the first row to (1, 1) and grow the same rules**, and the table (1,1), (2,3), (5,0), (5,3) also satisfies both rules between every adjacent pair.\n\nSo there are two kinds of rules, doing different jobs. A **transition constraint** only ever says \"every row follows from the one before\". A **boundary constraint** says \"and it started here\". Neither contains the other. Drop the boundary constraints and the system is perfectly satisfied by the same machine run from a different start — every expression is honestly 0, and the sentence being proved is a different one. The shape Week 1 called **under-constrained** shows up here wearing the same face.\n\nTurning it into polynomials is not yet a proof, because **the expressions cannot tell you what you forgot to turn into an expression**. In the second-to-last checkpoint, you build that \"other table\" yourself and submit it.\n\n## First move\n\n1. In Participant Portal (the site showing this statement) press **起動 (Start)**. The **problem editor** appears on the same page with `air.py` in it. That one file is the only thing you edit; you never create files.\n2. Press **Inspect evidence** in the editor. This deployment's conditions and evidence appear:\n   - a string proving the container ran (the health token; this problem never asks you to submit it)\n   - **p** (the field), **steps** (how many rows the table has), **weight** (the number the second rule multiplies by), **start** (the a and b of the first row)\n   - the two rules, with your weight filled in\n   - **the table itself** — the row number, that row's a and b, and the domain point that row goes with, one line per row\n   - a note about the domain (that rows correspond to points in order)\n3. Check the first two rows of that table on paper. It is the same procedure as the three steps above, with your p, weight and start. If they match, you understand the machine.\n\n**That table is your own answer key**: it is what `execute` should return on these conditions. But grading runs on conditions you never see, so an implementation that copied the numbers off the screen will fail.\n\n## What you answer — eight checkpoints\n\nAll eight are graded **by running your `air.py`**. This problem has no \"type a value into an answer field\" checkpoint. The function stubs are already in `air.py`, and `setting` is a dictionary holding `p`, `steps`, `weight` and `start`.\n\n1. **trace** — write `execute(setting)`. Start from `start` and apply the rules steps − 1 times, returning a list of `(a, b)` rows top to bottom (length steps).\n2. **transition** — write `transition_residuals(trace, setting)`. **For each adjacent pair of rows**, return \"what the next row should have been\" minus \"what it actually is\", as an `(a residual, b residual)` pair, top to bottom. An honest table makes them all 0. Count the pairs before you write it — it is not the number of rows.\n3. **boundary** — write `boundary_residuals(trace, setting)`. Return, as a list of integers, the residuals of the expressions tying this table to *this* starting state rather than some other one. An honest table makes them all 0.\n4. **interpolate** — write `interpolate(values, points, p)`, `evaluate(coefficients, x, p)` and `column_polynomials(trace, points, p)`. `interpolate` returns the coefficients of the single polynomial with \"put in points[i], get values[i]\", **lowest degree first** (reduce each coefficient to an integer in 0 .. p − 1). Division in a finite field is multiplication by the inverse (`pow(x, p - 2, p)` is x's inverse). `evaluate` returns that polynomial's value at x, computed from the coefficients — for any x, not only domain points. `column_polynomials` builds one polynomial per column agreeing with that column on the domain, and returns a list of coefficient lists.\n5. **compose** — no new function. It looks at the polynomials from step 4 on adjacent domain points and checks that the transition relation really comes out 0 there. **Whether rows and points line up in the right order** is what this checkpoint catches.\n6. **locate** — write `first_violation(trace, setting)`. Return the first row where a rule breaks, as `{\"row\": row number, \"kind\": \"transition\" or \"boundary\"}`, or `None` if nothing breaks. Row 0 has no row before it — think about which of the two kinds can fail there, and which cannot.\n7. **underconstrained** — write `underconstrained_witness(setting)`. Build and return **a table that satisfies every transition constraint but is not this computation**. The shape is `{\"trace\": [[a, b], [a, b], ...], \"constraint_dropped\": \"...\"}`. Give it the same number of rows as steps, with every number reduced mod p (both steps and p are in `setting`). In `constraint_dropped`, put the name of **which of the two kinds of constraint has to be missing for your table to pass**.\n8. **transfer** — the same `air.py` is run through checkpoints 1–7 all over again on **conditions you have never seen** (a different p, a different number of rows, a different weight, a different starting state). An implementation fitted to the numbers on screen fails here.\n\n**How submitting works**: write `air.py` and press that checkpoint's **Submit (+points)**; the editor's current contents are sent as they are. The eight are graded separately, so being stuck on one does not block the rest. **A wrong answer comes back with a short note saying which rule broke** (never the expected value) — read it, fix it, and resubmit as often as you like. Each miss costs 15 points (the eight total 300; the total never goes below 0). **Restore starter** puts `air.py` back to its original state.\n\n**Run public tests** lets you try part of it locally first. But the public tests only look at whether the table runs and whether an honest table's transition residuals are 0. They never damage a row, never interpolate, and never look at the boundary — **an implementation with no boundary constraints at all passes them.**\n\n## After the table, the seal\n\nYou are done when all eight pass. A machine's run became a table, the table's rules became expressions, and the expressions vanish on the domain — you carried the translation through once, and showed with your own counterexample what it does not guarantee.\n\nIt is still not a proof. Show the whole table and you show the secret x with it; make the verifier recheck everything and that is a re-run. The tools for **checking without showing, and without reading it all** start here — sealing first in `ac26-w4-commit-open`, then opening only a few points in the three drills.",
+      "instructions": "## \"I ran it\" — without showing the run\n\nThe spine of this track is one line: (5 + x) + (3 + x) = 8 + 2x. The computation went through without anyone knowing what x is. In zero-knowledge proofs, **x is your secret**, and you show \"the computation was correct\" without showing x.\n\nFor that, the sentence \"the computation was correct\" itself must first be translated into something mathematics can handle. This is exactly what zkVMs (RISC Zero, SP1) do: they write a CPU's execution out as a table — variables across, time downward — and turn the table's rules into polynomial relations. A zkRollup can fold a million transactions into one proof because this translation comes first.\n\nThe destination looks like this: **the machine ran like so → build the table → turn the table's rules into expressions → those expressions come out 0 at the appointed points.** Once it is in that final shape, no one has to re-run the machine; checking that expressions vanish is enough.\n\n## This problem's machine\n\nA small machine: two columns (a and b), two rules. The first row is fixed, and the table grows by \"next a = current a + b\" and \"next b = current b + weight × current a\".\n\nThree steps on paper, with p = 7, weight = 2 and first row (2, 3) — no step skipped:\n\n- row 1 → 2: a = 2 + 3 = **5**, b = 3 + 2×2 = 7 → 7 − 7 = **0**. Row 2 is (5, 0)\n- row 2 → 3: a = 5 + 0 = **5**, b = 0 + 2×5 = 10 → 10 − 7 = **3**. Row 3 is (5, 3)\n- row 3 → 4: a = 5 + 3 = 8 → 8 − 7 = **1**, b = 3 + 2×5 = 13 → 13 − 7 = **6**. Row 4 is (1, 6)\n\nThe table (2,3), (5,0), (5,3), (1,6) satisfies both rules between every adjacent pair of rows.\n\n## Before you start — three tools in hand\n\n- Numbers are remainders after dividing by a prime p; a negative result gets p added until it is 0 or more (Python's `% p`). New to this? `ac26-w1-constraint-lab` first.\n- For m distinct horizontal coordinates, exactly one polynomial of degree at most m−1 fits the specified values. Degree is the highest power of X with a nonzero coefficient. This is interpolation.\n- The run of points standing in for row numbers is the **domain**; verifying its credentials was `ac26-w3-fft-domain`.\n\n## What the translation drops\n\nHere is the summit. **Change the first row to (1, 1) and grow the same rules**, and the table (1,1), (2,3), (5,0), (5,3) also satisfies both rules between every adjacent pair.\n\nSo there are two kinds of rules, doing different jobs. A **transition constraint** only ever says \"every row follows from the one before\". A **boundary constraint** says \"and it started here\". Neither contains the other. Drop the boundary constraints and the system is perfectly satisfied by the same machine run from a different start — every expression is honestly 0, and the sentence being proved is a different one. The shape Week 1 called **under-constrained** shows up here wearing the same face.\n\nTurning it into polynomials is not yet a proof, because **the expressions cannot tell you what you forgot to turn into an expression**. In the second-to-last checkpoint, you build that \"other table\" yourself and submit it.\n\n## First move\n\n1. In Participant Portal (the site showing this statement) press **起動 (Start)**. The **problem editor** appears on the same page with `air.py` in it. That one file is the only thing you edit; you never create files.\n2. Press **Inspect evidence** in the editor. This deployment's conditions and evidence appear:\n   - a string proving the container ran (the health token; this problem never asks you to submit it)\n   - **p** (the field), **steps** (how many rows the table has), **weight** (the number the second rule multiplies by), **start** (the a and b of the first row)\n   - the two rules, with your weight filled in\n   - **the table itself** — the row number, that row's a and b, and the domain point that row goes with, one line per row\n   - a note about the domain (that rows correspond to points in order)\n3. Check the first two rows of that table on paper. It is the same procedure as the three steps above, with your p, weight and start. If they match, you understand the machine.\n\n**That table is your own answer key**: it is what `execute` should return on these conditions. But grading runs on conditions you never see, so an implementation that copied the numbers off the screen will fail.\n\n## From the rule to coefficient lists\n\nAll following arithmetic takes remainders after division by p. A coefficient list [c0,c1,c2] means c0+c1*X+c2*X². Interpolation fits m distinct points with a polynomial of degree at most m−1. Trailing zero coefficients may be omitted or retained; they represent the same polynomial.\n\nFor each point index i, form L_i(X) by multiplying (X−points[j])/(points[i]−points[j]) for every other index j. Each denominator is nonzero because the points differ. Division means multiplying by pow(denominator,-1,p). L_i is1 at point i and0 at every other point. Add values[i]*L_i(X) for every i. This is the interpolation formula, not an extra constraint to discover.\n\nTo implement it, begin each numerator with coefficient list[1] and denominator1. Multiplying a current list b by (X−t) makes a new zero list of length len(b)+1: for each k, add −t*b[k] at index k and b[k] at k+1. Reduce by p. Multiply the denominator by points[i]−points[j]. Finally multiply the numerator coefficients by values[i]*pow(denominator,-1,p) and add into the output list.\n\nFor p=7,points=[0,1],values=[2,5], L0=1−X and L1=X. Then2*(1−X)+5*X=2+3*X, coefficients[2,3]. evaluate computes c0+c1*x+c2*x²+… with remainders.\n\nBoundary output is[(trace[0][0]−start[0])%p,(trace[0][1]−start[1])%p], in a,b order. Output row indices start at0. For column expressions A,B and adjacent points u,v, the composed residuals are A(u)+B(u)−A(v) and B(u)+weight*A(u)−B(v), reduced by p. There is no wrap from the final row to the first. The dropped-constraint name is \"boundary\".\n\n## What you answer — eight checkpoints\n\nAll eight are graded **by running your `air.py`**. This problem has no \"type a value into an answer field\" checkpoint. The function stubs are already in `air.py`, and `setting` is a dictionary holding `p`, `steps`, `weight` and `start`.\n\n1. **trace** — write `execute(setting)`. Start from `start` and apply the rules steps − 1 times, returning a list of `(a, b)` rows top to bottom (length steps).\n2. **transition** — write `transition_residuals(trace, setting)`. **For each adjacent pair of rows**, return \"what the next row should have been\" minus \"what it actually is\", as an `(a residual, b residual)` pair, top to bottom. An honest table makes them all 0. Count the pairs before you write it — it is not the number of rows.\n3. **boundary** — write `boundary_residuals(trace, setting)`. Return, as a list of integers, the residuals of the expressions tying this table to *this* starting state rather than some other one. An honest table makes them all 0.\n4. **interpolate** — write `interpolate(values, points, p)`, `evaluate(coefficients, x, p)` and `column_polynomials(trace, points, p)`. `interpolate` returns the coefficients of the single polynomial with \"put in points[i], get values[i]\", **lowest degree first** (reduce each coefficient to an integer in 0 .. p − 1). Division in a finite field is multiplication by the inverse (`pow(x, p - 2, p)` is x's inverse). `evaluate` returns that polynomial's value at x, computed from the coefficients — for any x, not only domain points. `column_polynomials` builds one polynomial per column agreeing with that column on the domain, and returns a list of coefficient lists.\n5. **compose** — no new function. It looks at the polynomials from step 4 on adjacent domain points and checks that the transition relation really comes out 0 there. **Whether rows and points line up in the right order** is what this checkpoint catches.\n6. **locate** — write `first_violation(trace, setting)`. Return the first row where a rule breaks, as `{\"row\": row number, \"kind\": \"transition\" or \"boundary\"}`, or `None` if nothing breaks. Row 0 has no row before it — think about which of the two kinds can fail there, and which cannot.\n7. **underconstrained** — write `underconstrained_witness(setting)`. Build and return **a table that satisfies every transition constraint but is not this computation**. The shape is `{\"trace\": [[a, b], [a, b], ...], \"constraint_dropped\": \"...\"}`. Give it the same number of rows as steps, with every number reduced mod p (both steps and p are in `setting`). In `constraint_dropped`, put the name of **which of the two kinds of constraint has to be missing for your table to pass**.\n8. **transfer** — the same `air.py` is run through checkpoints 1–7 all over again on **conditions you have never seen** (a different p, a different number of rows, a different weight, a different starting state). An implementation fitted to the numbers on screen fails here.\n\n**How submitting works**: write `air.py` and press that checkpoint's **Submit (+points)**; the editor's current contents are sent as they are. The eight are graded separately, so being stuck on one does not block the rest. **A wrong answer comes back with a short note saying which rule broke** (never the expected value) — read it, fix it, and resubmit as often as you like. Each miss costs 15 points (the eight total 300; the total never goes below 0). **Restore starter** puts `air.py` back to its original state.\n\n**Run public tests** lets you try part of it locally first. But the public tests only look at whether the table runs and whether an honest table's transition residuals are 0. They never damage a row, never interpolate, and never look at the boundary — **an implementation with no boundary constraints at all passes them.**\n\n## After the table, the seal\n\nYou are done when all eight pass. A machine's run became a table, the table's rules became expressions, and the expressions vanish on the domain — you carried the translation through once, and showed with your own counterexample what it does not guarantee.\n\nIt is still not a proof. Show the whole table and you show the secret x with it; make the verifier recheck everything and that is a re-run. The tools for **checking without showing, and without reading it all** start here — sealing first in `ac26-w4-commit-open`, then opening only a few points in the three drills.",
       "writeup": "## The translation adds no soundness\n\nInterpolating a trace into polynomials guarantees nothing by itself. Interpolation changes the representation; the checking power lives in the constraints. \"It is a polynomial now, so it is a proof\" is close to saying a table became correct when it was converted from CSV to JSON.\n\n## The two kinds of constraint do different jobs\n\nTransition constraints say each row follows from the one before it. Boundary constraints say where the machine started. Neither implies the other.\n\nDrop the boundary and the system is perfectly satisfied by a trace of the same machine started from **somewhere else**. Every transition holds, every residual is zero, and the polynomials are just as valid. They are a proof of a different statement. The `underconstrained` checkpoint has you build that trace, which is what \"dropping one constraint\" concretely means.\n\n## How many residuals\n\nOne per adjacent row pair, so one fewer than the number of rows. An implementation with one per row is comparing the last row against a next row that does not exist -- one of the mutations is exactly that, and it dies with an IndexError.\n\n## Which row a violation belongs to\n\nThe i-th transition produces row i+1, so row i+1 is the first row that is wrong. Reporting i sends the reader one row away from the problem.\n\nRow 0 has no predecessor, so the only thing that can break there is the boundary; calling that a transition failure points at the wrong place too. That is why the boundary is checked first.\n\n## The evaluation domain\n\nThe domain is the powers of a root of unity, with row i at point g^i. Consecutive rows are consecutive points, so the transition constraint becomes a relation between a polynomial at x and the same polynomial at the next point. The primes are chosen so that `steps` divides p-1 -- otherwise no root of unity of that order exists.\n\n## This is not a proof system\n\nThere is no commitment, no verifier randomness, and therefore no soundness against anybody. It is a bridge to arithmetization, not past it. Calling what you build here \"a small SNARK\" is the opposite of what the problem is trying to teach.\n\n## Week 4 alignment\n\nWeek 4's material was not published upstream at the pinned commit. `courseAlignment` pins `week4/README.md` with `kind: \"placeholder\"` and takes the `transfer` role -- one of the two GOVERNANCE.md section 6 permits for an unpublished week, and accurate besides, since the problem transfers Week 1's constraints and Week 3's field into a new setting. It asserts nothing about what the official exercise will require.",
       "learningGoals": [
         "Turn a small machine's run into a rule-following table (a trace)",
@@ -183,7 +284,21 @@
       "checks": [
         {
           "id": "trace",
-          "label": "Produce the execution trace"
+          "label": "Produce the execution trace",
+          "hints": [
+            {
+              "id": "trace-hint-1",
+              "content": "The table records the machine as it runs. Compute both next values from the old row."
+            },
+            {
+              "id": "trace-hint-2",
+              "content": "For p=7,weight=2,(a,b)=(2,3), the next row is(5,0). Do not compute b with the updated a=5."
+            },
+            {
+              "id": "trace-hint-3",
+              "content": "In execute read p,steps,weight,start from setting. Append the initial pair, then compute both next values from the old pair until there are steps rows. Submit trace."
+            }
+          ]
         },
         {
           "id": "transition",
@@ -191,7 +306,15 @@
           "hints": [
             {
               "id": "transition-hint-1",
-              "content": "How many residuals are there? Not one per row -- the last row has no next row."
+              "content": "A residual is the difference between a predicted value and the actual value. Check each adjacent row pair."
+            },
+            {
+              "id": "transition-hint-2",
+              "content": "With p=7,weight=2, a row(2,3) followed by(4,0) gives residuals(2+3−4,3+2×2−0) reduced by7 =(1,0). Only the a rule fails."
+            },
+            {
+              "id": "transition-hint-3",
+              "content": "In transition_residuals compare trace[i] and trace[i+1]. Reduce predicted minus actual by p. Iterate i from0 through len(trace)−2 and return the list of pairs. Submit transition."
             }
           ]
         },
@@ -201,7 +324,15 @@
           "hints": [
             {
               "id": "boundary-hint-1",
-              "content": "A trace satisfying only the transition constraints can start anywhere. What forbids that?"
+              "content": "Correct transitions do not guarantee the intended starting point. Bind the first row to the specified initial state."
+            },
+            {
+              "id": "boundary-hint-2",
+              "content": "For p=7,start=(2,3),actual first row(1,3), actual minus specified gives[6,0] after reduction. Transitions can all pass while this boundary fails."
+            },
+            {
+              "id": "boundary-hint-3",
+              "content": "In boundary_residuals subtract each setting[\"start\"] value from the corresponding trace[0] value. Reduce by p and return a two-integer list. Submit boundary."
             }
           ]
         },
@@ -211,13 +342,35 @@
           "hints": [
             {
               "id": "interpolate-hint-1",
-              "content": "Interpolation over the field. Division is by modular inverse, and the points being distinct is what makes it work."
+              "content": "Replace a column by an expression that gives its listed value at each point. Add expressions that are1 at their own point and0 at every other point."
+            },
+            {
+              "id": "interpolate-hint-2",
+              "content": "For p=7,points=[1,2],values=[3,5], the expression is1+2X, coefficients[1,2]. It gives3 at1 and5 at2. The free statement supplies the general interpolation procedure."
+            },
+            {
+              "id": "interpolate-hint-3",
+              "content": "In interpolate construct each expression L_i from the free statement, multiply by values[i], and add its coefficients. evaluate reads coefficients in increasing degree order. column_polynomials interpolates a and b separately. Submit interpolate."
             }
           ]
         },
         {
           "id": "compose",
-          "label": "Watch the relation vanish on the domain"
+          "label": "Watch the relation vanish on the domain",
+          "hints": [
+            {
+              "id": "compose-hint-1",
+              "content": "Changing columns into expressions must preserve the mapping from rows to points. Values at the next point must describe the next row."
+            },
+            {
+              "id": "compose-hint-2",
+              "content": "For p=7,weight=2, rows(2,3) then(5,0), next A=2+3 and next B=(3+2×2) remainder7. The same relation must hold after interpolation."
+            },
+            {
+              "id": "compose-hint-3",
+              "content": "In air.py, check that column_polynomials interpolates the a and b columns separately and preserves the correspondence between trace rows and points. Check that evaluate uses the coefficients for any x. Do not add a compose function. Press Submit for compose; if it fails, use the returned rule name to repair these functions."
+            }
+          ]
         },
         {
           "id": "locate",
@@ -225,7 +378,15 @@
           "hints": [
             {
               "id": "locate-hint-1",
-              "content": "Row 0 has no predecessor. Which kind of constraint can break there? And which row does the i-th transition break?"
+              "content": "Report the earliest broken row so the cause can be found. Check the starting point first, then scan transitions in order."
+            },
+            {
+              "id": "locate-hint-2",
+              "content": "Rows start at0. A wrong start is row=0,kind=boundary. A broken transition from row0 to row1 is row=1,kind=transition."
+            },
+            {
+              "id": "locate-hint-3",
+              "content": "In first_violation check nonzero boundary_residuals first. Then scan transition_residuals; the first nonzero pair at index i produces row=i+1. Return None if all pass. Submit locate."
             }
           ]
         },
@@ -235,13 +396,35 @@
           "hints": [
             {
               "id": "underconstrained-hint-1",
-              "content": "The transition constraints only say each row follows from the one before. How do you build another trace that satisfies all of them?"
+              "content": "A valid run from a different starting point is a different computation. Without the boundary, transition checks cannot exclude it."
+            },
+            {
+              "id": "underconstrained-hint-2",
+              "content": "For p=7,weight=2, starting at(1,1) instead of(2,3) produces(1,1),(2,3),(5,0). The rules hold but the requested start does not."
+            },
+            {
+              "id": "underconstrained-hint-3",
+              "content": "In underconstrained_witness copy setting and increase one start value by1, reducing by p. Execute with that copy and return trace plus constraint_dropped=\"boundary\". Check the original boundary fails while transitions pass, then submit."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in a setting you have not seen"
+          "label": "Hold up in a setting you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "Implement the rule rather than copying one displayed example, so it works for new settings for the same reason."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "The sum of2 and3 has remainder0 for p=5 but5 for p=7. Fixing the divisor to7 breaks the table and expressions for another setting."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Open air.py and read p, steps, weight, start and points from the arguments. Remove numbers copied from the displayed example, then press Submit for transfer. On failure, use the returned rule name to identify the function to repair and resubmit (each miss costs 15 points). Public tests alone do not check interpolation or damaged-row detection."
+            }
+          ]
         }
       ]
     }

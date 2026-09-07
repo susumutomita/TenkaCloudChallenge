@@ -63,7 +63,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `underconstrained` | 45 | A different trace satisfying every transition constraint |
 | `transfer` | 30 | All of it under a field, length and weight you have not seen |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at 2 points each (48 points in total), within the hint penalty cap.
 
 ## Details that decide whether an implementation is right
 
@@ -132,3 +132,6 @@ Zero. No cloud account, no AWS resources.
 `make reference-test` runs the mutation suite: nine broken implementations. The two worth reading
 are "checks only the last transition" and "drops the boundary constraints" — both produce a system
 that looks complete and accepts traces that are not the computation.
+
+
+All eight checkpoints now have three two-point hints. A participant-only review found a missing degree bound for interpolation uniqueness and missing interpolation/array arithmetic steps. These are now in the free bilingual statement, alongside boundary sign and row-index conventions. The author checked the boundary convention against the reference; this is not participant-play evidence. Catalog validation passed; no runtime or grader changes and no live Portal play in this revision.
