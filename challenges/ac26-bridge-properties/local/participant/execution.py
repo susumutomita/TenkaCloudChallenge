@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import resource
 import signal
@@ -20,7 +21,8 @@ def _limits():
     resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
     resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-    resource.setrlimit(resource.RLIMIT_CPU, (5, 6))
+    cpu_seconds = max(1, math.ceil(RUN_TIMEOUT_SECONDS))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
 
 
 def run_functions(sources, calls):

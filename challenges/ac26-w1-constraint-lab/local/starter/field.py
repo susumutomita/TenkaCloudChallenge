@@ -1,4 +1,7 @@
-"""One of three editor files / 編集する3ファイルの1つ。
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.
+One of three editor files / 編集する3ファイルの1つ。
 
 A field here means remainders after division by a prime p, from 0 through p-1.
 この問題では素数pで割った余り0〜p−1を使います。Pythonの value % p がその計算です。

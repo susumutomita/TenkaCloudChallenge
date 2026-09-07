@@ -39,6 +39,8 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# Reading a client body and waiting for bounded computation are different budgets.
+VERIFIER_TIMEOUT_SECONDS = 20
 
 CHECKPOINTS = ("incompleteness", "unsoundness", "privacy-leak", "property-matrix", "transfer")
 SUBMISSION_FILES = ("classify.py", "counterexamples.py")
@@ -59,7 +61,7 @@ def fetch_public(verifier_public_url: str = VERIFIER_PUBLIC_URL) -> dict[str, ob
     if verifier_public_url:
         request = Request(verifier_public_url, method="GET")
         try:
-            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+            with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
                 body = response.read(MAX_BODY_BYTES + 1)
                 if len(body) <= MAX_BODY_BYTES:
                     decoded = json.loads(body.decode("utf-8"))
@@ -185,7 +187,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -233,7 +235,7 @@ def proxy_prepare(
         method="POST",
     )
     try:
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return {"ok": False, "output": "verifier response too large"}

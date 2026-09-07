@@ -36,6 +36,8 @@ VERIFIER_PUBLIC_URL = VERIFIER_URL.rsplit("/", 1)[0] + "/public" if VERIFIER_URL
 MAX_BODY_BYTES = 256 * 1024
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# Reading a client body and waiting for bounded computation are different budgets.
+VERIFIER_TIMEOUT_SECONDS = 25
 
 SUBMITTED_FILES = ("field.py", "circuit.py", "gadgets.py")
 FILE_CHECKPOINTS = ("residuals", "boolean", "membership", "range")
@@ -55,7 +57,7 @@ def fetch_public(verifier_public_url: str = VERIFIER_PUBLIC_URL) -> dict[str, ob
     if verifier_public_url:
         request = Request(verifier_public_url, method="GET")
         try:
-            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+            with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
                 body = response.read(MAX_BODY_BYTES + 1)
                 if len(body) <= MAX_BODY_BYTES:
                     decoded = json.loads(body.decode("utf-8"))
@@ -200,7 +202,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)

@@ -1,4 +1,7 @@
-"""JA: Inspect の検査と記録から3性質を分類する。コードはこのファイルで編集。
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.
+JA: Inspect の検査と記録から3性質を分類する。コードはこのファイルで編集。
 EN: Classify three properties from Inspect's checks and records. Edit this file.
 
 verifier = 入力を受理/拒否するプログラム / a program accepting or rejecting inputs.

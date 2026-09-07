@@ -65,3 +65,9 @@ reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	$(AUTHOR_RUN) python mutation.py
 	$(AUTHOR_RUN) python -m unittest discover -s tests/hidden -p test_execution_boundary.py -v
+
+# Runtime regression for documented computation and forwarding budgets.
+.PHONY: computation-test
+computation-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python tests/hidden/test_computation_allowance.py -v

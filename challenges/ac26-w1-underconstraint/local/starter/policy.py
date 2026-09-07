@@ -1,4 +1,7 @@
-"""Edit only these four functions. Submit this source for the five code checkpoints.
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コードの1回の実行は15秒までです。検査によっては、別の入力で2回実行します。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Each execution of submitted code has a 15-second deadline. Some checks run it twice with different inputs.
+Edit only these four functions. Submit this source for the five code checkpoints.
 
 First action: Inspect evidence -> deployedCircuit, then compare it with A and B.
 A signal is a variable; a witness maps every signal name to an integer value.

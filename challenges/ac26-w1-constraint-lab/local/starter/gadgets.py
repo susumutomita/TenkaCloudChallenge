@@ -1,4 +1,7 @@
-"""Gadgets: turning a program condition into constraints. The third file you edit.
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.
+Gadgets: turning a program condition into constraints. The third file you edit.
 
 A constraint is an expression required to have remainder zero.
 A signal is a named variable; a witness assigns values to those variables.

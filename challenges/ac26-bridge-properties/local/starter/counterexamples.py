@@ -1,4 +1,7 @@
-"""JA: 反例は、満たすはずの性質が破れる具体例。この3関数を編集してください。
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.
+JA: 反例は、満たすはずの性質が破れる具体例。この3関数を編集してください。
 EN: A counterexample is a concrete case breaking a claimed property. Edit these functions.
 
 statement = 条件の辞書 / dictionary of conditions: a,b,c,p,lo,hi.
