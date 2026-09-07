@@ -93,8 +93,8 @@ export function RotorRules({ locale }: { readonly locale: Locale }) {
       </p>
       <p>
         {ja
-          ? "mod 4＝4で割った余り。負なら4を足して0〜3へ。P=[1,3,0,2]、Q=[3,0,2,1]、左から0番です。"
-          : "mod 4 = remainder after division by 4; if negative, add 4 to return to 0–3. P=[1,3,0,2], Q=[3,0,2,1], numbered from 0 on the left."}
+          ? "4で割った余りを mod 4 と書きます。負なら4を足して0〜3へ。P=[1,3,0,2]、Q=[3,0,2,1]、左から0番です。"
+          : "Write the remainder after division by 4 as mod 4; if negative, add 4 to return to 0–3. P=[1,3,0,2], Q=[3,0,2,1], numbered from 0 on the left."}
       </p>
       <code style={{ display: "block" }}>
         u = (P[(m+a) mod 4] − a) mod 4<br />c = (Q[(u+b) mod 4] − b) mod 4

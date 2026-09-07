@@ -7,6 +7,8 @@ export interface RotorPositions {
 }
 export interface RotorTask {
   readonly kind: "rotor-encrypt";
+  /** Generation fixed when this Order was issued, retained after ROTATE. */
+  readonly generation: number;
   readonly plaintext: readonly number[];
 }
 export interface RotorTaskProjection extends RotorTask {

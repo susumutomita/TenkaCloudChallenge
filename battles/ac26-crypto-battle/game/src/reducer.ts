@@ -342,7 +342,7 @@ function buildOrderTask(
   generation: number,
 ): OrderTask {
   switch (plan.taskKind) {
-    case "rotor-encrypt": return { kind: "rotor-encrypt", plaintext: deriveRotorPlaintext(seed, contractId) };
+    case "rotor-encrypt": return { kind: "rotor-encrypt", generation, plaintext: deriveRotorPlaintext(seed, contractId) };
     case "rsa-encrypt": {
       const { n, e } = deriveRsaKey(seed, teamId, generation);
       return { kind: "rsa-encrypt", n, e, plaintext: deriveRsaPlaintext(seed, contractId) };
@@ -2188,7 +2188,7 @@ function projectTask(
     case "rotor-encrypt": {
       const order = state.contracts.find(c => c.id === contractId && c.teamId === teamId);
       if (!order) throw new Error("projectTask: missing owned Rotor Order");
-      return { ...task, myInitial: deriveRotorPositions(state.seed, teamId, state.teams[teamId]!.generation) };
+      return { ...task, myInitial: deriveRotorPositions(state.seed, teamId, task.generation) };
     }
     case "rsa-encrypt": return { kind: "rsa-encrypt", n: task.n, e: task.e, plaintext: task.plaintext };
     case "rps-duel": {

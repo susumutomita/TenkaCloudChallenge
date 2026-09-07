@@ -21,14 +21,39 @@ export function packHuntTimeSlots(values: readonly number[]) {
 		previous = value;
 	}
 	const packed = packUnsignedSlots(deltas);
-	return packed.text.length + 1 < direct.text.length
+	const smallest = packed.text.length + 1 < direct.text.length
 		? { width: -packed.width, text: packed.text }
 		: direct;
+    // Consecutive equal differences are common, but every exact difference is
+    // retained. Bound each run at 63 so a malformed count cannot expand freely.
+    const runs: number[] = [];
+    for (const delta of deltas) {
+        if (runs.length && runs.at(-1) === delta && runs[runs.length - 2]! < 63)
+            runs[runs.length - 2]!++;
+        else runs.push(1, delta);
+    }
+    const packedRuns = packUnsignedSlots(runs);
+    const text = `${packedRuns.width}:${packedRuns.text}`;
+    return text.length + 1 < smallest.text.length ? {width: 12, text} : smallest;
 }
 
 export function unpackHuntTimeSlots(text: string, width: number): number[] {
-	if (width >= 0) return unpackUnsignedSlots(text, width);
-	const deltas = unpackUnsignedSlots(text, -width);
+	let deltas: number[];
+    if (width === 12) {
+        const separator = text.indexOf(':');
+        if (separator !== 1 || !/^[1-9]$/.test(text[0]!)) throw new Error("Invalid HUNT time runs");
+        const runs = unpackUnsignedSlots(text.slice(separator + 1), Number(text[0]));
+        if (runs.length % 2) throw new Error("Incomplete HUNT time run");
+        deltas = [];
+        for (let i = 0; i < runs.length; i += 2) {
+            const count = runs[i]!;
+            if (count < 1 || count > 63) throw new Error("Invalid HUNT time run length");
+            for (let n = 0; n < count; n++) deltas.push(runs[i + 1]!);
+        }
+    } else {
+        if (width >= 0) return unpackUnsignedSlots(text, width);
+        deltas = unpackUnsignedSlots(text, -width);
+    }
 	let previous = 0;
 	return deltas.map((value) => {
 		if (value === 0) return 0;

@@ -179,3 +179,43 @@ showed “攻撃済み”. The screenshot `/private/tmp/rotor-final-hunt-success
 visually inspected and shows the order queue, success panel and next-order action.
 The clock was paused: this confirms interaction and feedback, not a fresh timed
 five-minute reader run. It does not exercise platform score-history persistence.
+
+
+### PR #773 review corrections and complete rerun (2026-09-07)
+
+Retained completed and expired Rotor orders now carry their issuance generation;
+ROTATE does not reinterpret their keys with the current generation. A JSON
+round-trip regression covers both cases. The Rotor worksheet defines division
+remainders before using mod notation in both languages.
+
+Dense HUNT rows now preserve acceptance order at identical millisecond timestamps,
+including mixed targets/methods and appends after reload. Exact rank sequences use
+raw, affine, repeated-motif, or dictionary encodings; timestamp differences may use
+bounded run encoding. No event, timestamp, target, generation, or ordering is
+removed. Old encodings remain readable. Malformed encodings are rejected.
+
+The affine-only rank implementation exceeded the 99-team rapid-PROVE budget
+(3,538,079 bytes). The motif implementation still exceeded it (3,489,947), as did
+the dictionary-only probe (3,172,882). Bounded exact-difference runs resolved that
+failure without raising the existing 3,145,728-byte budget or reducing team limits.
+
+All eight capacity cases passed in one final command (1,137.19 seconds):
+
+| Teams / route | Peak bytes | Final bytes | Accepted transitions |
+| --- | ---: | ---: | ---: |
+| 12 / rapid-LEAK | 218,326 | 191,386 | 18,610 |
+| 12 / rapid-PROVE | 237,614 | 211,073 | 20,975 |
+| 12 / reuse | 203,742 | 203,098 | 12,743 |
+| 99 / rapid-LEAK | 2,638,394 | 2,366,841 | 944,086 |
+| 99 / rapid-PROVE | 3,080,011 | 2,835,155 | 1,107,256 |
+| 99 / reuse | 1,836,171 | 1,711,739 | 560,466 |
+
+The suite checks each accepted transition, retained histories, reload behavior,
+and repeat-attack rejection. It covers these complete fixtures, not every possible
+match. Final checks: 713 non-capacity game tests, 64 dev tests, both type checks,
+116-item catalog gate, and git diff --check passed. Evidence logs:
+`/private/tmp/rotor-review-capacity-runs.log`,
+`/private/tmp/rotor-review-game-final.log`,
+`/private/tmp/rotor-review-dev-final.log`, and
+`/private/tmp/rotor-review-catalog-final.log`. The earlier browser smoke remains
+applicable to the worksheet; no new AWS or timed independent playtest is claimed.

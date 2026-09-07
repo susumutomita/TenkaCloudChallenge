@@ -970,10 +970,10 @@ export interface HuntLogEntry {
 
 /** RSA successes are losslessly grouped by target/generation; see hunt-log.ts. */
 export type StoredHuntLogEntry = HuntLogEntry | {
-  readonly rsa: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string];
-} | { readonly rotor: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string] }
-| { readonly share: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string] }
-| { readonly sudoku: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string] };
+  readonly rsa: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string];
+} | { readonly rotor: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] }
+| { readonly share: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] }
+| { readonly sudoku: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] };
 
 export type CryptoBattleOp =
   | { readonly kind: "hunt-rotor"; readonly targetTeamId: string; readonly generation: number; readonly a: number; readonly b: number }

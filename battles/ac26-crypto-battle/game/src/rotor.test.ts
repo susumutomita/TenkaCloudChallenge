@@ -70,6 +70,7 @@ describe("Rotor: public wheels, evolving positions, private calculation", () => 
     expect(host.state.config).toEqual(DEFAULT_CONFIG);
     expect(own.task).toEqual({
       kind: "rotor-encrypt",
+      generation: 1,
       plaintext: [3, 2, 3, 2],
       myInitial: { a: 3, b: 2 },
     });
@@ -307,7 +308,7 @@ describe("Rotor: public wheels, evolving positions, private calculation", () => 
         c.id === other.id
           ? {
               ...c,
-              task: { kind: "rotor-encrypt" as const, plaintext: [0, 0, 1, 0] },
+              task: { kind: "rotor-encrypt" as const, generation: 1, plaintext: [0, 0, 1, 0] },
             }
           : c,
       ),
@@ -526,4 +527,18 @@ test.each([
       answer: ["3", "2", "2", "3"],
     }).ok,
   ).toBe(false);
+});
+
+
+test("retained Rotor projections preserve their issuance generation after ROTATE", () => {
+  for (const complete of [false, true]) {
+    const host = fresh();
+    const original = order(host);
+    if (complete) play(host, "alpha", { kind: "leak", contractId: original.id });
+    play(host, "alpha", { kind: "rotate" });
+    const reloaded = copy(host.state);
+    const retained = projectForTeam(reloaded, "alpha").myContracts.find(c => c.id === original.id)!;
+    expect(retained.task).toEqual(original.task);
+    expect(retained.status).toBe(complete ? "completed" : "expired");
+  }
 });

@@ -2,7 +2,7 @@ import { huntKey } from "./hunt-key.ts";
 import { expandSuccessfulHunts } from "./hunt-success.ts";
 import { expect, test } from "bun:test";
 import { createMatch, submitOp } from "../../dev/host.ts";
-import { appendRsaHunt, decodeHuntLog } from "./hunt-log.ts";
+import { appendRsaHunt, appendRotorHunt, appendShareHunt, appendSudokuHunt, decodeHuntLog } from "./hunt-log.ts";
 import { buildReplay } from "./replay.ts";
 import { applyOp, initialState, migrateState, projectForTeam, tick } from "./reducer.ts";
 import type { CryptoBattleState, HuntLogEntry } from "./types.ts";
@@ -155,6 +155,63 @@ test("arbitrary legacy ties keep the exact replay insertion order instead of bei
   const lifted=migrateState(checkpoint(old),10);
   expect(decodeHuntLog(lifted)).toEqual(huntLog);
   expect(buildReplay(lifted)).toEqual(buildReplay(old));
-  expect(lifted.huntLog).toEqual(old.huntLog);
+  expect(decodeHuntLog(checkpoint(lifted))).toEqual(old.huntLog);
   expect(lifted.successfulHunts).toEqual([]);
+});
+
+test("equal-time successes preserve acceptance order across blocks and roster positions", () => {
+  let state = initialState({eventId:"ties", teamIds:["a","b","c","x","y"], matchSecret:"synthetic"});
+  const expected: HuntLogEntry[] = [];
+  for (const [attacker,target,atMs] of [["c","x",20],["b","y",20],["a","x",20],["a","y",21],["b","x",20]] as const) {
+    state={...state, nowMs:atMs};
+    state={...state,huntLog:appendRsaHunt(state,attacker,target,1)};
+    expected.push({attackerTeamId:attacker,targetTeamId:target,generation:1,atMs,via:"rsa"});
+    state=checkpoint(state);
+    expect(decodeHuntLog(state)).toEqual([...expected].sort((a,b)=>a.atMs-b.atMs));
+  }
+});
+
+
+test("same-millisecond ranks survive sparse mixed-method appends, reloads and further appends", () => {
+  let state = initialState({eventId:"rank-roundtrip",teamIds:Array.from({length:12},(_,i)=>`t${i}`),matchSecret:"synthetic"});
+  const ids = Object.keys(state.teams).sort();
+  const expected: HuntLogEntry[] = [];
+  const methods = [[appendRsaHunt,"rsa"],[appendRotorHunt,"rotor"],[appendShareHunt,undefined],[appendSudokuHunt,"sudoku"]] as const;
+  for (let i=0;i<ids.length;i++) for (let j=ids.length-1;j>=0;j--) {
+    if (i===j) continue;
+    for (const [append,via] of methods) {
+      const atMs = 1234;
+      state={...state,nowMs:atMs};
+      state={...state,huntLog:append(state,ids[i]!,ids[j]!,1)};
+      expected.push({attackerTeamId:ids[i]!,targetTeamId:ids[j]!,generation:1,atMs,...(via?{via}:{})});
+    }
+    state=checkpoint(state);
+    expect(decodeHuntLog(state)).toEqual(expected);
+  }
+});
+
+test("repeating tie ranks and a later irregular append retain the complete replay", () => {
+  let state = initialState({eventId:"periodic-ranks",teamIds:Array.from({length:99},(_,i)=>`t${String(i).padStart(2,"0")}`),matchSecret:"synthetic"});
+  const ids = Object.keys(state.teams).sort(), target = ids.at(-1)!;
+  const expected: HuntLogEntry[] = [];
+  const append = (attacker: string, generation: number, rsa: boolean) => {
+    state = {...state, huntLog:(rsa ? appendRsaHunt : appendShareHunt)(state,attacker,target,generation)};
+    expected.push({attackerTeamId:attacker,targetTeamId:target,generation,atMs:state.nowMs!,...(rsa?{via:"rsa" as const}:{})});
+  };
+  for (let i=0;i<ids.length-1;i++) {
+    state={...state,nowMs:100+i};
+    const padding = i === 97 ? 9 : i % 3 === 1 ? 8 : 0;
+    for (let j=0;j<padding;j++) append(ids[j]!,100+i,false);
+    append(ids[i]!,1,true);
+    state=checkpoint(state);
+    expect(decodeHuntLog(state)).toEqual(expected);
+  }
+  expect(buildReplay(state).filter(e=>e.kind==="hunt-success").map(e=>e.atMs)).toEqual(expected.map(e=>e.atMs));
+});
+
+test("malformed order encodings fail instead of discarding stored ranks", () => {
+  const state=initialState({eventId:"bad-ranks",teamIds:["a","b","c"],matchSecret:"synthetic"});
+  for (const [width,text] of [[0,"1,no"],[0,"-1,0"],[10,"1:"],[10,"1:AAA"],[10,"0:A"],[10,"1:!"]] as const) {
+    expect(()=>decodeHuntLog({...state,huntLog:[{rsa:[2,1,0,1,"BB",width,text]}]})).toThrow();
+  }
 });

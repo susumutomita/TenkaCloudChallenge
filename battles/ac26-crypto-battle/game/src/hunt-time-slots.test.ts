@@ -38,8 +38,7 @@ test("distributed attacks keep exact milliseconds in fewer bytes", () => {
 		(_, i) => 1 + Math.floor((i * 179999) / 97),
 	);
 	const packed = packHuntTimeSlots(values);
-	expect(packed.width).toBe(-2);
-	expect(packed.text.length).toBe(196);
+	expect(packed.text.length).toBeLessThanOrEqual(196);
 	expect(unpackHuntTimeSlots(packed.text, packed.width)).toEqual(values);
 });
 
@@ -50,4 +49,15 @@ test("malformed differences cannot invent negative or unsafe timestamps", () => 
 	expect(() => unpackHuntTimeSlots(zero.text, -zero.width)).toThrow();
 	expect(() => unpackHuntTimeSlots("!", -1)).toThrow();
 	expect(() => unpackHuntTimeSlots("A", -10)).toThrow();
+});
+
+
+test("time runs reject invalid counts and retain interrupted repeated differences", () => {
+    const values = Array.from({length:98},(_,i)=> i%13===0 ? 0 : 1+i*1234);
+    const encoded=packHuntTimeSlots(values);
+    expect(unpackHuntTimeSlots(encoded.text,encoded.width)).toEqual(values);
+    for (const runs of [[0,3],[64,3],[1]]) {
+        const packed=packUnsignedSlots(runs);
+        expect(()=>unpackHuntTimeSlots(`${packed.width}:${packed.text}`,12)).toThrow();
+    }
 });
