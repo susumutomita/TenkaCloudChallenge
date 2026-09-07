@@ -85,3 +85,5 @@ CLIは編集したスターターをDockerへ標準入力で送り、ホスト�
 
 対応元は[固定コミットのzkvm-exploit課題](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732/week6/problems/zkvm-exploit/README.md)です。
 講座のu16・上限1000を小さな数へ縮め、実際に証明を作る前に計算と主張の条件を追います。
+
+独立読者レビューで見つかった入力形式、プログラム照合の対象、bindingの三数の構成方法を修正しました。最終ヒントではm−1、limit+1、1を作り、合計と保存値で成立理由を確かめます。

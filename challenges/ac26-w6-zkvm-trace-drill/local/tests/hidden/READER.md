@@ -120,3 +120,7 @@ parent resource-limit modification, setsid and setpgid. The API remained reachab
 the trusted grading proxy still accepted the reader's constructed answer, and both
 languages' completed visible starters passed. The fourth Docker regression checks
 that a normally exiting execution leaves no running descendant.
+
+## 2026-09-07 participant-only reread (Issue #716 / PR #800)
+
+An independent reader inspected the Japanese and English participant instructions and public starter surfaces, without hidden tests, reference implementation, or verifier code. The first pass found three gaps: scalar versus list answer formats; the meaning of binding to a program identity; and the concrete final construction `[m−1, limit+1, 1]`. Those definitions and steps were added to the visible instructions/hints. The same reader reread the edited participant text and reported all three gaps resolved. This was a text/hand-calculation check; it did not claim browser or AWS execution. Review also replaced the English `in0..m−1` with “from 0 through m−1”.
