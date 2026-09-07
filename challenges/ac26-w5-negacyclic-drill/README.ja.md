@@ -81,3 +81,5 @@ inspect/testは採点用コンテナを残すので、`make verifier-down` で�
 
 [講義の位置付け](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/c088f8e6f301dedcd80b6dd9c321a1cd83410637/week5/README.md)。
 [実際のTFHEブートストラップ](https://www.zama.org/post/tfhe-deep-dive-part-4)。
+
+参加者向け資料の独立読みで、入力の符号化と出力の読み方の違い、およびリストの番号の説明不足を確認しました。日英とも2つの変換を区別し、四入力と0始まりの場所の対応表を追加しました。採点・配布データは変更していません。

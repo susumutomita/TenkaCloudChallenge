@@ -92,3 +92,5 @@ Participant-only reading and runtime evidence are recorded in
 
 [Course context](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/c088f8e6f301dedcd80b6dd9c321a1cd83410637/week5/README.md).
 [Real TFHE bootstrapping](https://www.zama.org/post/tfhe-deep-dive-part-4).
+
+Independent participant reading found an unexplained change between input encoding and output interpretation, plus an undefined list-index shortcut. The bilingual statement now distinguishes both mappings and shows the four input pairs with their zero-based list positions. Grading and fixtures are unchanged.
