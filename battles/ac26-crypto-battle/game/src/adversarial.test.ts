@@ -97,7 +97,7 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
   let guard = 0;
   while (true) {
     const distinctIndices = new Set(
-      decodeLedger(state.publicLedger)
+      decodeLedger(state.publicLedger, state.teams)
         .filter((a) => a.teamId === target)
         .filter(isShareArtifact)
         .map((a) => a.shareIndex),
@@ -125,7 +125,7 @@ test("adversarial 2: LEAK x3 -> HUNT end-to-end (real contract issuance, real re
   }
 
   const byIndex = new Map<number, Share>();
-  for (const artifact of decodeLedger(state.publicLedger).filter((a) => a.teamId === target).filter(isShareArtifact)) {
+  for (const artifact of decodeLedger(state.publicLedger, state.teams).filter((a) => a.teamId === target).filter(isShareArtifact)) {
     byIndex.set(artifact.shareIndex, { index: artifact.shareIndex, value: BigInt(artifact.value) });
   }
   const shares = [...byIndex.values()].slice(0, state.config.threshold);
@@ -168,7 +168,7 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
   // 1 share leaked under the NEW generation, at an index not already used above.
   state = leakShareIndex(state, target, 3);
 
-  const ledgerAfterRotate = decodeLedger(state.publicLedger);
+  const ledgerAfterRotate = decodeLedger(state.publicLedger, state.teams);
   const oldLeaks = ledgerAfterRotate
     .filter((a) => a.teamId === target && a.generation === 1)
     .filter(isShareArtifact);
@@ -210,7 +210,7 @@ test("adversarial 3: ROTATE invalidates old leaks -- mixed old+new generations d
   // Once 3 clean shares of the NEW generation are leaked, the hunt succeeds.
   state = leakShareIndex(state, target, 4);
   state = leakShareIndex(state, target, 5);
-  const cleanNewLeaks = decodeLedger(state.publicLedger)
+  const cleanNewLeaks = decodeLedger(state.publicLedger, state.teams)
     .filter((a) => a.teamId === target && a.generation === 2)
     .filter(isShareArtifact)
     .map((a) => ({ index: a.shareIndex, value: BigInt(a.value) }));
@@ -232,7 +232,7 @@ test("adversarial 4: a successful HUNT cannot be replayed for the same (attacker
   for (let i = 1; i <= state.config.threshold; i += 1) {
     state = leakShareIndex(state, target, i);
   }
-  const shares: Share[] = decodeLedger(state.publicLedger)
+  const shares: Share[] = decodeLedger(state.publicLedger, state.teams)
     .filter((a) => a.teamId === target)
     .filter(isShareArtifact)
     .slice(0, state.config.threshold)

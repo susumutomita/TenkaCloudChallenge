@@ -52,7 +52,7 @@ export function applyRps(state: CryptoBattleState, teamId: string, op: DuelOp): 
       id: `${order.id}-rps-commit`, kind: "rps-commit", method: "duel", teamId,
       generation: state.teams[teamId]!.generation, contractId: order.id, duelId: order.task.duelId,
       postedAtMs: state.nowMs!, commitment: op.commitment,
-    })],
+    }, state.teams)],
   };
   if (!isHand(op.hand)) throw new Error("applyRps: invalid hand");
   const opened: Contract = { ...order, rps: { ...order.rps, opening: { hand: op.hand, randomness: op.randomness } } };
@@ -79,7 +79,7 @@ export function applyRps(state: CryptoBattleState, teamId: string, op: DuelOp): 
   return settleRpsHunts({
     ...next, teams,
     contracts: next.contracts.map(c => outcomes.has(c.id) ? { ...c, status: "completed", resolution: "duel", rps: { ...c.rps, outcome: outcomes.get(c.id)! } } : c),
-    publicLedger: [...state.publicLedger, ...artifacts.map(encodeArtifact)],
+    publicLedger: [...state.publicLedger, ...artifacts.map(a => encodeArtifact(a, state.teams))],
   }, [opened.id, opponent.id], state.nowMs!, false);
 }
 

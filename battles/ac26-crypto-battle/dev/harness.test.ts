@@ -1,3 +1,5 @@
+import { artifactFields } from "../game/src/ledger-codec.ts";
+import { storedTeamId } from "../game/src/ledger-codec.ts";
 /**
  * Issue #644: what the local development harness has to keep true.
  *
@@ -157,8 +159,8 @@ describe("dev scenarios are reachable and deterministic", () => {
     // see ../game/src/ledger-codec.ts): `k` is that form's own field name for
     // `PublicArtifact.kind`.
     const { publicLedger } = buildScenario("ledger-filling").host.state;
-    expect(publicLedger.some((artifact) => artifact.k === "share")).toBe(true);
-    expect(publicLedger.some((artifact) => artifact.k === "sudoku-reveal")).toBe(true);
+    expect(publicLedger.map(artifactFields).some((artifact) => artifact.k === "share")).toBe(true);
+    expect(publicLedger.map(artifactFields).some((artifact) => artifact.k === "sudoku-reveal")).toBe(true);
   });
 
   /**
@@ -309,8 +311,8 @@ describe("Issue #645 scenarios reach the position they advertise", () => {
 
   it("should produce three alpha reveals sharing one tag, and a recoverable solution", () => {
     const { host } = buildScenario("pi-reuse");
-    const reveals = host.state.publicLedger.filter(
-      (a) => a.k === "sudoku-reveal" && a.tm === "alpha",
+    const reveals = host.state.publicLedger.map(artifactFields).filter(
+      (a) => a.k === "sudoku-reveal" && storedTeamId(a,host.state.teams) === "alpha",
     );
     expect(reveals).toHaveLength(3);
     const tags = new Set(reveals.map((a) => (a.k === "sudoku-reveal" ? a.tg : "")));

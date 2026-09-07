@@ -15,6 +15,7 @@ export function orderHeading(order: ContractProjection, locale: Locale): string 
 
 /** Count only distinct indices of this team's current generation, including this request. */
 export function disclosurePreview(projection: CryptoBattleProjection, order: ContractProjection, locale: Locale): string {
+  if (order.task.kind === "rotor-encrypt") return locale === "ja" ? "元の4文字と暗号の4文字を公開。同じ初期位置を使うため、1組だけでも初期位置を特定される場合があります。" : "Publishes the four original and encrypted digits. Reused initial positions may be recoverable from even one pair.";
   if (order.task.kind === "rsa-encrypt") return locale === "ja"
     ? "元の数 m と暗号の答え c を公開。小さい n は公開鍵だけで因数分解して攻撃できます。"
     : "Publishes original m and encrypted answer c. This tiny n can already be factored using the public key alone.";

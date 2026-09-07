@@ -1,3 +1,6 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
+import { decodeHuntLog } from "./hunt-log.ts";
 /**
  * [Issue #709] The relabelling-reuse HUNT -- the successor of the nonce-reuse
  * HUNT, with the same rule from #645 behind it:
@@ -97,7 +100,7 @@ describe("reuse is a real, and really exploitable, mistake", () => {
     );
     expect(next.teams[VICTIM]?.sudokuHuntedGenerations).toEqual([1]);
     expect(next.teams[VICTIM]?.huntedGenerations).toEqual([]);
-    expect(next.huntLog.at(-1)).toMatchObject({ attackerTeamId: ATTACKER, targetTeamId: VICTIM, via: "sudoku" });
+    expect(decodeHuntLog(next).at(-1)).toMatchObject({ attackerTeamId: ATTACKER, targetTeamId: VICTIM, via: "sudoku" });
     // The recovered grid IS the victim's solution -- asserted against the
     // victim's own vault, which the attacker never saw.
     expect(op.solution).toEqual([...projectForTeam(state, VICTIM).vault.sudokuSolution]);
@@ -163,7 +166,7 @@ describe("a reuse that gave nothing away is not huntable either", () => {
     const ambiguous = { eventId: "pi-reuse-ambiguous-10", teamIds: ["victim", "attacker"] } as const;
     const state = stateAfterReuse(1, [2, 3, 4, 1], ambiguous);
     expect(solutionsConsistentWith(projectForTeam(state, ATTACKER).publicPuzzles[VICTIM] ?? []).length).toBeGreaterThan(1);
-    const first = state.publicLedger.find((a) => a.k === "sudoku-reveal" && a.tm === VICTIM);
+    const first = state.publicLedger.map(artifactFields).find((a) => a.k === "sudoku-reveal" && storedTeamId(a, state.teams) === VICTIM);
     if (first?.k !== "sudoku-reveal") throw new Error("expected one reveal on the ledger");
     const duplicated: CryptoBattleState = {
       ...state,

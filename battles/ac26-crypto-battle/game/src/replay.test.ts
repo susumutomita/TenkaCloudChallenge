@@ -1,3 +1,6 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { decodeHuntLog } from "./hunt-log.ts";
+import { expandHuntAttempts } from "./hunt-budget.ts";
 /**
  * Replay reconstruction tests (Issue #486 PR5).
  *
@@ -63,8 +66,8 @@ describe("buildReplay / keyMoments: against the vertical playtest's actual final
     expect(huntEvent.summary.ja).toMatch(/HUNT 成功/);
     // Sourced from huntLog (Issue #486 PR5 addition), not fabricated.
     expect(result.finalState.huntLog).toHaveLength(1);
-    const loggedHunt = result.finalState.huntLog[0];
-    if (!loggedHunt || "rsa" in loggedHunt) throw new Error("expected a legacy huntLog entry");
+    const loggedHunt = decodeHuntLog(result.finalState)[0];
+    if (!loggedHunt) throw new Error("expected the real huntLog entry");
     expect(huntEvent.atMs).toBe(loggedHunt.atMs);
 
     const rotateEvent = replay.find((e) => e.kind === "rotate");
@@ -126,7 +129,7 @@ describe("buildReplay / keyMoments: against the vertical playtest's actual final
       ...(result.finalState.teams[ATTACKER]?.shares ?? []),
     ]
       .map((s) => s.value)
-      .filter((v) => !result.finalState.publicLedger.some((a) => a.k === "share" && a.v === v));
+      .filter((v) => !result.finalState.publicLedger.map(artifactFields).some((a) => a.k === "share" && a.v === v));
     expect(unleakedShareValues.length).toBeGreaterThan(0);
 
     const serialized = JSON.stringify({ replay, moments });
@@ -207,7 +210,7 @@ describe("buildReplay: edge cases the vertical-playtest fixture does not exercis
     const after = applyOp(state, "alpha", wrongGuess);
 
     expect(after.huntLog).toEqual([]);
-    expect(Object.values(after.huntAttempts)).toEqual([1]);
+    expect(Object.values(expandHuntAttempts(after))).toEqual([1]);
     expect(buildReplay(after)).toEqual(before);
   });
 });

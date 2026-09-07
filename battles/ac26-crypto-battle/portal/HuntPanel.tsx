@@ -1,7 +1,8 @@
+import RotorHunt from "./RotorHunt.tsx";
 import RsaHunt from "./RsaHunt.tsx";
 import type { PublicRsaKey } from "../game/src/rsa.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget } from "../game/src/types.ts";
+import type { CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget, RotorPairArtifact } from "../game/src/types.ts";
 import { ALL_CIPHER_RUNGS, exposedKeyPositions, validCipherKey, rungSpec, type CipherRung } from "../game/src/ladder.ts";
 import { CONSTRAINT_GROUPS } from "../game/src/sudoku.ts";
 import { cipherHuntCandidates, huntBudgetFor, ledgerTargets, sudokuHuntCandidates, type CipherHuntCandidate, type SudokuHuntCandidate } from "./hunt-targets.ts";
@@ -11,17 +12,17 @@ import { describeRevealGroup, emptyCells, parseCells, SudokuBoard, SudokuInput }
 import { DieRow } from "./DieFace.tsx";
 
 type Locale = "ja" | "en";
-type Mode = "share" | "sudoku" | CipherRung | "rps" | "rsa";
+type Mode = "share" | "sudoku" | CipherRung | "rps" | "rsa" | "rotor";
 type Status = "waiting" | "ready" | "completed" | "exhausted" | "pending" | "unknown";
 export interface HuntOption {
   readonly key: string; readonly teamId: string; readonly generation: number; readonly mode: Mode;
   readonly status: Status; readonly detail: { readonly ja: string; readonly en: string };
-  readonly left?: number; readonly points?: number;
+  readonly left?: number; readonly points?: number; readonly rotor?: readonly RotorPairArtifact[];
   readonly sudoku?: SudokuHuntCandidate; readonly cipher?: CipherHuntCandidate; readonly rps?: RpsHuntTarget; readonly rsa?: PublicRsaKey;
 }
 const labels = {
-  ja: { share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", vigenere: "Vigenère暗号", rps: "じゃんけんの予測", rsa: "RSAの因数分解", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
-  en: { share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", vigenere: "Vigenère cipher", rps: "RPS prediction", rsa: "RSA factorization", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
+  ja: { rotor: "Rotorの初期位置", share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", vigenere: "Vigenère暗号", rps: "じゃんけんの予測", rsa: "RSAの因数分解", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
+  en: { rotor: "Rotor initial positions", share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", vigenere: "Vigenère cipher", rps: "RPS prediction", rsa: "RSA factorization", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
 };
 
 /** Public records open a worksheet; no solver or verdict is run for the participant. */
@@ -83,7 +84,13 @@ export function huntOptions(projection: CryptoBattleProjection): readonly HuntOp
         ja: rsa ? `公開鍵 n=${rsa.n}・e=${rsa.e}。nを異なる素数2個の積に分けて攻撃します。LEAK不要です。` : "終盤になると公開鍵が表示されます。",
         en: rsa ? `Public key n=${rsa.n}, e=${rsa.e}. Factor n into two distinct primes to attack. No LEAK needed.` : "Public keys appear in endgame.",
       } };
-    return [share, sudokuOption, ...cipherOptions, rsaOption, rpsOption];
+    const pairs = projection.publicLedger.filter((a): a is RotorPairArtifact => a.kind === "rotor-pair" && a.method === "leak" && a.teamId === teamId && a.generation === generation);
+    const rotorOption: HuntOption = { ...entry("rotor"), rotor: pairs, left, points: projection.huntWinPoints,
+      status: left === undefined ? "unknown" : status("rotor", pairs.length > 0, left), detail: {
+        ja: `現世代の公開${pairs.length}組。${pairs.length ? "公開列から最初の車輪の位置を計算します。1組でも特定できる場合があります。" : "相手がRotorのお題をLEAKすると元と答えが公開されます。"} 候補が複数なら別の公開を待ちます。`,
+        en: `${pairs.length} public pair(s) this generation. ${pairs.length ? "Calculate initial wheel positions from the rows; one pair may suffice." : "An opponent's Rotor LEAK publishes the original and answer."} Wait for more evidence if candidates remain.`,
+      } };
+    return [share, sudokuOption, ...cipherOptions, rotorOption, rsaOption, rpsOption];
   });
 }
 
@@ -106,7 +113,7 @@ export default function HuntPanel(props: Props) {
     <div className="tc-hunt-opponents">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(team => <article key={team.teamId} className="tc-hunt-opponent">
       <h3>{name(team.teamId)} <small>{ja ? "世代" : "Generation"} {team.generation} · {team.score} {ja ? "点" : "pt"}</small></h3>
       {options.filter(o => o.teamId === team.teamId).map(option => <div key={option.key} className={`tc-hunt-method tc-hunt-${option.status}`}>
-        <div><strong>{copy[option.mode]}</strong><span className="tc-hunt-state">{option.mode === "sudoku" && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</span></div><p>{option.status === "unknown" ? refreshing : option.detail[locale]}</p>
+        <div><strong>{copy[option.mode]}</strong><span className="tc-hunt-state">{(option.mode === "sudoku" || option.mode === "rotor") && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</span></div><p>{option.status === "unknown" ? refreshing : option.detail[locale]}</p>
         {option.status === "ready" && <button type="button" className="tc-target-chip" aria-pressed={selected === option.key} onClick={() => setSelected(option.key)}>{ja ? (option.mode === "sudoku" ? "数独の材料を確認して解く →" : `${copy[option.mode]}の材料・計算へ →`) : `Open ${copy[option.mode]} worksheet →`}</button>}
         {(option.status === "completed" || option.status === "exhausted") && <p>{option.mode === "rps" && option.status === "completed" ? (ja ? "次の対戦の受付を待ちます。" : "Wait for the next duel's prediction window.") : (ja ? "相手の世代が変わると、次の攻撃を準備できます。" : "Prepare a new attack when the opponent's generation changes.")}</p>}
       </div>)}
@@ -122,6 +129,7 @@ export function HuntWorkspace({ target, ...props }: Props & { readonly target: H
   const [cells, setCells] = useState<readonly string[]>(emptyCells);
   const ja = locale === "ja", name = projection.teams[target.teamId]?.teamName || target.teamId;
   if (target.status !== "ready") return null;
+  if (target.rotor) return <RotorHunt {...props} target={{ ...target, pairs: target.rotor }} />;
   if (target.rsa) return <RsaHunt {...props} target={target.rsa} />;
   if (target.rps) return <RpsHuntCandidate {...props} target={target.rps} />;
   const grid = parseCells(cells);

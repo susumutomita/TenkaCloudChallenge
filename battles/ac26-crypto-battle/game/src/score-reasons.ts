@@ -37,6 +37,7 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
     case "rps-commit":
     case "rps-open": return "duel";
     case "hunt":
+    case "hunt-rotor":
     case "hunt-rsa":
     case "hunt-cipher":
     case "hunt-sudoku":

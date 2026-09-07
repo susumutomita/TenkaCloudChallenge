@@ -1,3 +1,4 @@
+import { rotorRow, rotorPositions } from "../game/src/rotor.ts";
 import { isRsaPublicKey } from "../game/src/rsa.ts";
 /**
  * Shared portal-plugin helpers for ac26-crypto-battle (Issue #486, PR4).
@@ -134,6 +135,8 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (!Array.isArray(v.publicLedger)) return false;
 
   if (typeof v.teams !== "object" || v.teams === null) return false;
+  if (v.myContracts.some(c => c.task?.kind === "rotor-encrypt" && (!rotorRow(c.task.plaintext) || !rotorPositions(c.task.myInitial)))) return false;
+  if (v.publicLedger.some((a: Record<string, unknown>) => a?.kind === "rotor-pair" && (a.method !== "leak" || !rotorRow(a.plaintext) || !rotorRow(a.ciphertext) || "myInitial" in a))) return false;
   const rsaValue = (n: unknown, max: number) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0 && n < max;
   if (v.myContracts.some(c => c.task?.kind === "rsa-encrypt" && (!isRsaPublicKey(c.task) || !rsaValue(c.task.plaintext, c.task.n)))) return false;
   if (v.publicRsaKeys !== undefined) {
@@ -166,7 +169,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // reach the HUNT cards' array methods or turn into a fabricated completion.
   if (v.completedHunts !== undefined) {
     if (!Array.isArray(v.completedHunts)) return false;
-    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true, vigenere: true, rsa: true };
+    const methods: Readonly<Record<NonNullable<CryptoBattleProjection["completedHunts"]>[number]["via"], true>> = { share: true, sudoku: true, caesar: true, vigenere: true, rsa: true, rotor: true };
     for (const entry of v.completedHunts) {
       if (typeof entry !== "object" || entry === null) return false;
       if (typeof entry.targetTeamId !== "string" || entry.targetTeamId.length === 0) return false;

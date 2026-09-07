@@ -1,8 +1,10 @@
+import { huntKey } from "./hunt-key.ts";
+import { expandSuccessfulHunts } from "./hunt-success.ts";
 import { expect, test } from "bun:test";
 import { createMatch, submitOp } from "../../dev/host.ts";
 import { appendRsaHunt, decodeHuntLog } from "./hunt-log.ts";
 import { buildReplay } from "./replay.ts";
-import { initialState, migrateState, projectForTeam, tick } from "./reducer.ts";
+import { applyOp, initialState, migrateState, projectForTeam, tick } from "./reducer.ts";
 import type { CryptoBattleState, HuntLogEntry } from "./types.ts";
 
 const checkpoint = <T>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -101,6 +103,58 @@ test("old reservations alone never invent an RSA timestamp during migration or r
   const legacy = { ...base, successfulHunts: ["r1:1"], huntLog: [] };
   expect(buildReplay(checkpoint(legacy))).toEqual([]);
   const lifted = migrateState(checkpoint(legacy), 9);
-  expect(lifted.successfulHunts).toEqual(legacy.successfulHunts);
+  expect(expandSuccessfulHunts(lifted)).toEqual(legacy.successfulHunts);
   expect(lifted.huntLog).toEqual([]);
+});
+
+test("schema11 compacts timestamped share and sudoku successes while preserving an unknown-time legacy guard", async () => {
+  const { huntKey } = await import("./hunt-key.ts");
+  const { hasRecordedHunt, compactRecordedHunts } = await import("./hunt-log.ts");
+  const base = applyOp(tick(initialState({ eventId: "mixed-hunt-log", teamIds: ["a|b", "a", "b"], matchSecret: "synthetic" }), 0), "a", { kind: "start" });
+  const known: HuntLogEntry[] = [
+    { attackerTeamId: "a", targetTeamId: "b", generation: 1, atMs: 100 },
+    { attackerTeamId: "a|b", targetTeamId: "b", generation: 1, atMs: 262245 },
+    { attackerTeamId: "a", targetTeamId: "b", generation: 1, atMs: 262246, via: "sudoku" },
+  ];
+  const unknown = huntKey("b", "a", 1);
+  const legacy = { ...base, huntLog: known, successfulHunts: [unknown, huntKey("a", "b", 1), huntKey("a|b", "b", 1), JSON.stringify(["sudoku", "a", "b", 1])] };
+  const before = checkpoint(legacy);
+  const lifted = migrateState(checkpoint(legacy), 10);
+  expect(decodeHuntLog(lifted)).toEqual(known);
+  expect(expandSuccessfulHunts(lifted)).toEqual([unknown]);
+  expect(compactRecordedHunts(lifted)).toEqual({ huntLog: lifted.huntLog, successfulHunts: lifted.successfulHunts });
+  expect(hasRecordedHunt(lifted, "a", "b", 1, "share")).toBe(true);
+  expect(hasRecordedHunt(lifted, "a", "b", 1, "sudoku")).toBe(true);
+  expect(hasRecordedHunt(lifted, "a|b", "b", 1, "sudoku")).toBe(false);
+  expect(hasRecordedHunt(lifted, "a", "b", 1, "rotor")).toBe(false);
+  expect(hasRecordedHunt(lifted, "b", "a", 1, "share")).toBe(false);
+  expect(legacy).toEqual(before);
+  const reversed = checkpoint({ ...lifted, teams: Object.fromEntries(Object.entries(lifted.teams).reverse()) });
+  expect(decodeHuntLog(reversed)).toEqual(known);
+  expect(projectForTeam(reversed, "a").completedHunts).toContainEqual({ targetTeamId: "b", generation: 1, via: "share" });
+  expect(projectForTeam(reversed, "b").completedHunts).toContainEqual({ targetTeamId: "a", generation: 1, via: "share" });
+  const { validateOp } = await import("./reducer.ts");
+  const running = tick(reversed, 262246);
+  // Both a timestamped success and an old guard-only success retain replay rejection.
+  const knownOp = { kind: "hunt" as const, targetTeamId: "b", generation: 1, recoveredSecret: running.teams.b!.secret };
+  expect(validateOp(running, "a", knownOp).ok).toBe(false);
+  expect(validateOp({ ...running, huntLog: [], successfulHunts: [] }, "a", knownOp).ok).toBe(true);
+  expect(validateOp(running, "b", { kind: "hunt", targetTeamId: "a", generation: 1, recoveredSecret: running.teams.a!.secret }).ok).toBe(false);
+});
+
+
+test("arbitrary legacy ties keep the exact replay insertion order instead of being silently reordered", () => {
+  const base = initialState({eventId:"audit-ties",teamIds:["a","b","c"],matchSecret:"synthetic"});
+  const huntLog = [
+    {attackerTeamId:"a",targetTeamId:"b",generation:1,atMs:1},
+    {attackerTeamId:"b",targetTeamId:"a",generation:1,atMs:1},
+    {attackerTeamId:"c",targetTeamId:"a",generation:1,atMs:2},
+    {attackerTeamId:"c",targetTeamId:"b",generation:1,atMs:2},
+  ];
+  const old = {...base,huntLog,successfulHunts:huntLog.map(e=>huntKey(e.attackerTeamId,e.targetTeamId,e.generation))};
+  const lifted=migrateState(checkpoint(old),10);
+  expect(decodeHuntLog(lifted)).toEqual(huntLog);
+  expect(buildReplay(lifted)).toEqual(buildReplay(old));
+  expect(lifted.huntLog).toEqual(old.huntLog);
+  expect(lifted.successfulHunts).toEqual([]);
 });

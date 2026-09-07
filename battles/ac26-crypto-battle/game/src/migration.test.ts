@@ -1,3 +1,5 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { readLastHunt } from "./hunt-result.ts";
 /**
  * [Issue #645] Reloading a match that was persisted by an OLDER version.
  *
@@ -414,7 +416,7 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
       expect("proveChallenge" in contract).toBe(false);
     }
     expect(lifted.config.scores.wrongProve).toBe(DEFAULT_CONFIG.scores.wrongProve);
-    expect(lifted.publicLedger.some((a) => a.k === "proof")).toBe(true);
+    expect(lifted.publicLedger.map(artifactFields).some((a) => a.k === "proof")).toBe(true);
     // What it produced is what the reducer reads: a tick and a projection run.
     const view = projectForTeam(tick(lifted, (lifted.nowMs ?? 0) + 1), "teamA");
     expect(view.publicPuzzles.teamB).toHaveLength(16);
@@ -458,11 +460,11 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
 
   test("migrateState chains v1 through v2, and refuses a version it does not know", () => {
     const v2 = preSudokuState();
-    const v1 = { ...v2, publicLedger: decodeLedger(v2.publicLedger) };
+    const v1 = { ...v2, publicLedger: decodeLedger(v2.publicLedger, v2.teams) };
     const lifted = migrateState(v1, 1);
     expect(lifted.publicLedger).toEqual(migrateState(v2, 2).publicLedger);
     expect(lifted.publicPuzzles?.teamA).toHaveLength(16);
-    expect(() => migrateState(v2, 10)).toThrow();
+    expect(() => migrateState(v2, 11)).toThrow();
     expect(() => migrateState(v2, 0)).toThrow();
     expect(() => migrateState(null, 2)).toThrow();
     expect(() => migrateState({ seed: "x" }, 2)).toThrow();
@@ -483,7 +485,7 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     expect(lifted.publicLedger).toEqual(legacy.publicLedger);
     for (const teamId of CTX.teamIds) {
       const view = projectForTeam(lifted, teamId);
-      expect(view.lastHunt).toEqual(legacy.teams[teamId]!.lastHunt);
+      expect(view.lastHunt).toEqual(readLastHunt(legacy, legacy.teams[teamId]!.lastHunt!));
       expect(view.lastHunt?.points).toBeUndefined();
       expect("lastHunt" in view.teams[teamId]!).toBe(false);
     }
@@ -519,7 +521,7 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     expect(validateOp(state, "teamA", op)).toEqual({ ok: true });
     const next = applyOp(state, "teamA", op);
     expect(next.contracts.find((c) => c.id === order.id)?.resolution).toBe("prove");
-    expect(next.publicLedger.at(-1)?.k).toBe("sudoku-reveal");
+    expect(next.publicLedger.map(artifactFields).at(-1)?.k).toBe("sudoku-reveal");
   });
 
   test("the backfilled puzzle is written back, so the migration is not redone forever", () => {

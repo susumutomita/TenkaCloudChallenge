@@ -119,13 +119,13 @@ export type ReplayEvent =
         readonly contractId: string;
         readonly generation: number;
         readonly rung: string;
-        readonly pairsToBreak: number;
+        readonly pairsToBreak?: number;
       } | { readonly contractId: string; readonly generation: number; readonly n: number; readonly e: number };
     })
   | (ReplayEventBase & {
       readonly kind: "hunt-success";
       readonly teamId: string;
-      readonly detail: { readonly targetTeamId: string; readonly generation: number; readonly via?: "sudoku" | "rsa" };
+      readonly detail: { readonly targetTeamId: string; readonly generation: number; readonly via?: "sudoku" | "rsa" | "rotor" };
     })
   | (ReplayEventBase & {
       readonly kind: "rotate";
@@ -153,7 +153,7 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
   // shape this function's switch below already expects, rather than
   // reshaping every branch to read compact keys. `keyMoments` below does the
   // same at its own, single, `state.publicLedger` read site.
-  for (const artifact of decodeLedger(state.publicLedger)) {
+  for (const artifact of decodeLedger(state.publicLedger, state.teams)) {
     // [Issue #645] Switched exhaustively on all four artifact kinds. An
     // `else` here would silently relabel a future fifth kind as whatever the
     // last branch happened to be, which is exactly how ciphertexts and
@@ -233,6 +233,11 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
           detail: { contractId: artifact.contractId, generation: artifact.generation },
         });
         break;
+      case "rotor-pair":
+        events.push({ atMs: artifact.postedAtMs, teamId: artifact.teamId, kind: "cipher-leak",
+          summary: { ja: `${artifact.teamId} が Rotor の元の列と暗号の列を公開。同じ初期位置で照合でき、1組で特定できる場合もあります。`, en: `Team ${artifact.teamId} published a Rotor original/encrypted pair. It can constrain reused initial positions; one pair may suffice.` },
+          detail: { contractId: artifact.contractId, generation: artifact.generation, rung: "rotor" } });
+        break;
       case "rsa-pair":
         events.push({ atMs: artifact.postedAtMs, teamId: artifact.teamId, kind: "cipher-leak",
           summary: { ja: `${artifact.teamId} が RSA の元の数と暗号の答えを公開。公開鍵だけでも小さい n を因数分解して攻撃できます。`, en: `Team ${artifact.teamId} published the RSA original and encrypted answer. This tiny n can already be factored from the public key alone.` },
@@ -265,8 +270,8 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
   for (const hunt of decodeHuntLog(state)) {
     // [Issue #709] A sudoku HUNT recovered the target's solution through a
     // reused relabelling, not its Shamir secret; the debrief says which.
-    const via = hunt.via === "rsa" ? " -- factored the public RSA modulus" : hunt.via === "sudoku" ? " -- sudoku solution recovered from a reused relabelling" : "";
-    const viaJa = hunt.via === "rsa" ? " -- RSA の公開 n を素因数分解" : hunt.via === "sudoku" ? " -- 数独の解を、使い回された付け替えから復元" : "";
+    const via = hunt.via === "rotor" ? " -- Rotor initial positions recovered" : hunt.via === "rsa" ? " -- factored the public RSA modulus" : hunt.via === "sudoku" ? " -- sudoku solution recovered from a reused relabelling" : "";
+    const viaJa = hunt.via === "rotor" ? " -- Rotorの初期位置を復元" : hunt.via === "rsa" ? " -- RSA の公開 n を素因数分解" : hunt.via === "sudoku" ? " -- 数独の解を、使い回された付け替えから復元" : "";
     events.push({
       atMs: hunt.atMs,
       teamId: hunt.attackerTeamId,
@@ -395,7 +400,7 @@ export function keyMoments(replay: readonly ReplayEvent[], state: CryptoBattleSt
     }
   }
 
-  const decodedLedger = decodeLedger(state.publicLedger);
+  const decodedLedger = decodeLedger(state.publicLedger, state.teams);
   for (const event of replay) {
     if (event.kind !== "rotate") continue;
     const priorGeneration = event.detail.generation - 1;

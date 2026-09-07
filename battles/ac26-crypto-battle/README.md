@@ -110,9 +110,9 @@ keys private; RSA publishes its encryption key while keeping a recovery key
 private. Keeping an answer private is not a security guarantee for these tiny models.
 
 LEAK publishes the symbols **next to** their encrypted form. On the Caesar rung
-that single pair is the key. The public record shows how many pairs a team has
-out against how many its rung survives, so whether an opponent is already broken
-is something you can read off the board.
+that single pair is the key. Vigenère records identify the disclosed key positions. Rotor records let the
+reader test initial positions; a single pair may leave several possibilities.
+RSA attacks use the public n and do not require a pair.
 
 ROTATE moves the key to a new generation. Attack submissions must name the
 current generation and use its public information. Tiny RSA keys may recur;
@@ -232,12 +232,13 @@ Check “No hint penalty” and its remaining time beside the selected Order's h
 
 A legacy match upgraded after the endgame boundary has no saved ranking for that instant. It retains regular hint penalties and displays the reason instead of inventing a past distribution. Higher cipher rungs remain separate increments. Lightning is described below.
 
-## Cipher ladder: Caesar, Vigenère and textbook RSA
+## Cipher ladder: Caesar, Vigenère, Rotor and textbook RSA
 
 The method changes for newly issued cipher Orders when the existing `pressure`
 phase begins (30 minutes after match start by default). Orders already issued
 keep their method and deadline. Build uses Caesar's single shift;
-pressure uses a three-shift Vigenère cycle. Normal endgame cipher slots use RSA;
+normal pressure cipher slots alternate a three-shift Vigenère cycle and Rotor.
+Normal endgame cipher slots use RSA;
 rush cipher slots retain Vigenère. Read the highlighted key position,
 add that private shift to the original value, take the remainder after dividing
 by 6, and submit the one value with **CIPHER**. Its answer stays private to the
@@ -252,7 +253,7 @@ would already reveal all keys. This classical repeated-key cipher is not a
 modern secure encryption scheme.
 
 A first correct CIPHER keeps the Order's normal score (30 for standard Orders;
-existing rush settings still apply). A well-formed wrong Vigenère or RSA answer costs
+existing rush settings still apply). A well-formed wrong Vigenère, Rotor or RSA answer costs
 `wrongProve` (6 by default) and permanently forfeits that Order's CIPHER reward.
 Correct retries complete it for 0, avoiding expiry; malformed inputs do not count.
 The screen states both outcomes before submission. LEAK still pays 10, Vigenère HUNT pays 25 with a 12-point victim
@@ -264,9 +265,8 @@ Local verification: `cd game && bun test && bun run typecheck`; `cd dev && bun t
 && bun run typecheck`. The `vigenere` dev scenario uses the standard five-minute
 TTL and three actual opponent LEAKs. See [the recorded local walkthrough](dev/VIGENERE-READING.md).
 RSA is implemented in standard endgame Orders and public-key HUNT.
-The rotor/Enigma model and a new homomorphic ladder rung remain
-outside this increment of #659. Existing Shamir, encrypted addition and the
-endgame hint booster remain available.
+Rotor is the two-wheel teaching exercise described below. Existing Shamir, encrypted
+addition and endgame assistance remain available; no additional FHE Order is introduced.
 
 
 ### Endgame lightning (#659 §9)
@@ -283,10 +283,10 @@ reward, including a rush reward. #659's broad PROVE means doing the calculation;
 DUEL win/draw/forfeit points are not calculation-answer rewards and do not qualify.
 No new score constants or timers are introduced. The card is fixed to one Order,
 with no undo or stacking. A rejected input does not create an accepted-answer
-record. A recorded PROVE miss or Vigenère/RSA cipher failure prevents later declaration.
+record. A recorded PROVE miss or Vigenère/Rotor/RSA cipher failure prevents later declaration.
 
 After declaration, wrong answers may be retried on the same Order until its
-existing deadline. Existing penalties remain unchanged. Vigenère and RSA forfeit their
+existing deadline. Existing penalties remain unchanged. Vigenère, Rotor and RSA forfeit their
 base reward after a wrong answer, so its doubled reward is also zero; correct
 completion still avoids expiry. LEAK pays its ordinary reward and spends the
 card. Deadline, ROTATE or match end expires it without multiplying any penalty.
@@ -348,5 +348,37 @@ this tiny deterministic model provides no modern encryption-security guarantee.
 
 See [the recorded local RSA walkthrough](dev/RSA-READING.md) for a participant-only
 maximum-range packet, independent AI arithmetic and actual Portal submissions.
-Schema 10 preserves schema-9 lightning and schema-8 cipher failure state. #659
-remains open for rotor/Enigma and the later homomorphic ladder rung; #740 is separate.
+Schema 11 retains schema-10 RSA records, lightning and cipher failures. The existing
+`homomorphic-sum` Order already teaches addition on hidden inputs in every phase;
+it is an addition-only model, not full FHE or an assertion that later rungs are unbreakable.
+
+### Rotor: trace two moving wheels
+
+Normal pressure cipher slots alternate Vigenère/Rotor. A Rotor Order has four
+numeric cards 0–3, public P=[1,3,0,2] and Q=[3,0,2,1], and initial positions a,b
+visible only to its owner and the judge. The on-card formula is
+`u=(P[(m+a) mod 4]−a) mod 4`, `c=(Q[(u+b) mod 4]−b) mod 4`.
+Here mod4 means remainder after division by4 (add4 if negative), m is original,
+u intermediate and c output. Output first, then advance a; only a's3→0 carry
+advances b, which also wraps3→0. A separate one-digit example and a four-row
+worksheet sit by the input. This changes the replacement table with position,
+rather than adding three repeated shifts.
+
+Each Order in a generation restarts from the same initial positions. CIPHER sends
+four outputs privately (+30); LEAK publishes the original/output pair (+10).
+One pair can determine the initial positions, or leave multiple candidates. HUNT
+requires one current-generation Rotor pair and the true initial a,b, not a forced
+second LEAK or a client-side uniqueness claim. A miss costs8 and an attempt from
+the existing shared Shamir/RPS budget (3); Sudoku's separate budget is unchanged.
+Success gives25, costs the victim12 (floor0), and is recorded once in replay.
+Wrong CIPHER uses the existing6-point penalty and forfeits that Order's subsequent
+reward, including lightning. The normal five-minute deadline, six-Order batch,
+endgame RSA and rush Vigenère are unchanged. ROTATE voids old Orders and attack
+eligibility; the tiny16-state key space can repeat numeric initial positions.
+
+This is a small reversible model, not actual Enigma and not a security ranking.
+It borrows position-adjusted wiring from the [NSA educational simulator](https://github.com/NationalSecurityAgency/enigma-simulator/blob/master/components.py).
+The reviewed seminar and owner notes contain no direct Rotor exercise; their
+connection is encryption/recovery keys and checking the exact conditions under
+which reused secrets leak. See [the Rotor reader and runtime record](dev/ROTOR-READING.md).
+No new resources, services, IAM, timers, score prices or cleanup steps are added.

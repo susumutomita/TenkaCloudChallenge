@@ -58,7 +58,7 @@ describe("the Order belt a participant actually sees", () => {
   test("every task kind appears", () => {
     const kinds = new Set<OrderTaskKind>(orders.map((o) => o.task.kind));
     expect(kinds).toEqual(
-      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total", "rps-duel", "rsa-encrypt"]),
+      new Set(["reveal-share", "caesar-shift", "homomorphic-sum", "zk-sudoku", "masked-total", "rps-duel", "rsa-encrypt", "rotor-encrypt"]),
     );
   });
 
@@ -101,13 +101,15 @@ describe("the Order belt a participant actually sees", () => {
     // secret's polynomial -- three of those, from one generation, and the
     // secret is gone. On a ladder Order the cost is a (plaintext, ciphertext)
     // pair, and how much that costs depends on the RUNG: one pair is the whole
-    // key at the bottom, and higher up it is worth nothing to an attacker.
+    // Caesar key; Vigenère needs distinct positions, Rotor may leave several
+    // initial states, and small RSA public factors need no pair.
     // Asserting only the share shape here would let the ladder Order ship with
     // no choice attached and this test would still pass.
     const shapes = new Map<string, readonly SubmissionMethod[]>([
       ["reveal-share", ["leak", "prove"]],
       ["caesar-shift", ["cipher", "leak"]],
       ["rsa-encrypt", ["cipher", "leak"]],
+      ["rotor-encrypt", ["cipher", "leak"]],
     ]);
     for (const order of freeChoice) {
       const expected = shapes.get(order.task.kind);
@@ -117,7 +119,7 @@ describe("the Order belt a participant actually sees", () => {
     }
     // Both shapes actually occur -- otherwise the contrast above is theory.
     const seen = new Set(freeChoice.map((o) => o.task.kind));
-    expect(seen).toEqual(new Set(["reveal-share", "caesar-shift", "rsa-encrypt"]));
+    expect(seen).toEqual(new Set(["reveal-share", "caesar-shift", "rsa-encrypt", "rotor-encrypt"]));
   });
 
   /**

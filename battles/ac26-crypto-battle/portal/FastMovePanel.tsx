@@ -1,3 +1,4 @@
+import RotorMaterials from "./RotorMaterials.tsx";
 import RsaMaterials from "./RsaMaterials.tsx";
 import Lightning from "./Lightning.tsx";
 import VigenereMaterials from "./VigenereMaterials.tsx";
@@ -528,7 +529,7 @@ export function huntFeedback(
   next: CryptoBattleProjection | undefined,
   targetTeamId: string,
   locale: Locale,
-  via?: "sudoku",
+  via?: "sudoku" | "rotor",
 ): FeedbackDraft {
   const copy = FAST_MOVE_COPY[locale];
   const outcome = next?.lastHunt;
@@ -537,7 +538,7 @@ export function huntFeedback(
   // hit must not be reported as a recovered solution.
   const matches = outcome !== undefined && outcome.targetTeamId === targetTeamId && (outcome.via ?? undefined) === via;
   if (next !== undefined && matches && outcome?.outcome === "hit") {
-    const body = via === "sudoku" ? copy.huntSudokuBody : copy.huntBody;
+    const body = via === "rotor" ? (locale === "ja" ? "相手のRotorの初期位置が一致し、攻撃が成功しました。" : "The recovered Rotor initial positions match; the attack succeeded.") : via === "sudoku" ? copy.huntSudokuBody : copy.huntBody;
     return { kind: "hunt", title: copy.huntSuccess, body: outcome.points === undefined ? `${body} ${copy.huntUnknownPoints()}` : body, reward: outcome.points };
   }
   if (next !== undefined && matches && outcome?.outcome === "miss") {
@@ -1295,7 +1296,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </p>
         )}
         <div className="tc-primary-actions">
-          {(selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && selectedOrder.allowedMethods.includes("cipher") && <button
+          {(selectedOrder?.task.kind === "rotor-encrypt" || selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && selectedOrder.allowedMethods.includes("cipher") && <button
             type="button"
             className="tc-action tc-prove-button"
             aria-controls="tc-cipher-answer"
@@ -1305,7 +1306,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             }}
           >
             <span className="tc-action-heading"><span>{locale === "ja" ? "計算して暗号化する" : selectedOrder.task.kind === "rsa-encrypt" ? "Calculate the encrypted number" : "Calculate the encrypted row"}</span><b>+{selectedOrder.points} {locale === "ja" ? "点" : "pt"}</b></span>
-            <small>{selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "CIPHER · 繰り返し掛けて余りを取る" : "CIPHER · Multiply repeatedly and take remainders") : (locale === "ja" ? "CIPHER · 各数字に鍵を足す" : "CIPHER · Add the key to each value")}</small>
+            <small>{selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "CIPHER · 表を引き、位置を進める" : "CIPHER · Look up tables and advance positions") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "CIPHER · 繰り返し掛けて余りを取る" : "CIPHER · Multiply repeatedly and take remainders") : (locale === "ja" ? "CIPHER · 各数字に鍵を足す" : "CIPHER · Add the key to each value")}</small>
             <span className="tc-action-risk">{selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "元の数と暗号の答えは公開しません。" : "The original and encrypted answer stay private.") : (locale === "ja" ? "元の列と暗号の組は公開しません。" : "The plaintext/ciphertext pair stays private.")}</span>
           </button>}
           {leakAllowed && <button
@@ -1325,7 +1326,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 title: copy.leakSuccess,
                 reward: selectedOrder.leakPoints,
                 body:
-                  selectedOrder.task.kind === "rsa-encrypt"
+                  selectedOrder.task.kind === "rotor-encrypt"
+                    ? (locale === "ja" ? "元の4文字と暗号の4文字を公開しました。1組で初期位置を特定される場合もあります。" : "Published the four original and encrypted digits. Even one pair may reveal the initial positions.")
+                    : selectedOrder.task.kind === "rsa-encrypt"
                     ? (locale === "ja" ? "元の数 m と暗号の答え c を公開しました。公開鍵だけでも因数分解で攻撃できます。" : "Published original m and encrypted answer c. The public key alone already allows a factoring attack.")
                     : selectedOrder.task.kind === "caesar-shift"
                     ? selectedOrder.task.rung === "vigenere"
@@ -1407,11 +1410,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
         The cost of NOT doing the calculation is stated here rather than left to
         the LEAK button, because this is the moment the choice is actually made.
       */}
-      {(selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && (
+      {(selectedOrder?.task.kind === "rotor-encrypt" || selectedOrder?.task.kind === "caesar-shift" || selectedOrder?.task.kind === "rsa-encrypt") && (
         <div id="tc-cipher-answer" className="tc-input-panel">
-          <strong style={{ fontSize: "12px" }}>{selectedOrder.task.kind === "rsa-encrypt" ? "RSA · CIPHER" : copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
+          <strong style={{ fontSize: "12px" }}>{selectedOrder.task.kind === "rotor-encrypt" ? "Rotor · CIPHER" : selectedOrder.task.kind === "rsa-encrypt" ? "RSA · CIPHER" : copy.cipherTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
           {selectedOrder.task.kind === "caesar-shift" && selectedOrder.task.rung === "vigenere" && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
-          {selectedOrder.task.kind === "rsa-encrypt" ? <RsaMaterials task={selectedOrder.task} locale={locale} /> : selectedOrder.task.rung === "vigenere" ? <VigenereMaterials task={selectedOrder.task} locale={locale} /> : <>
+          {selectedOrder.task.kind === "rotor-encrypt" ? <RotorMaterials task={selectedOrder.task} locale={locale} /> : selectedOrder.task.kind === "rsa-encrypt" ? <RsaMaterials task={selectedOrder.task} locale={locale} /> : selectedOrder.task.rung === "vigenere" ? <VigenereMaterials task={selectedOrder.task} locale={locale} /> : <>
           <div className="tc-lesson">
             <div className="tc-lesson-use">{copy.cipherUse}</div>
             <div className="tc-lesson-why">{copy.cipherWhy}</div>
@@ -1435,13 +1438,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </ul>
           <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
           </>}
-          {selectedOrder.task.kind === "rsa-encrypt" && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
+          {(selectedOrder.task.kind === "rsa-encrypt" || selectedOrder.task.kind === "rotor-encrypt") && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
           <input
             ref={cipherInputRef}
             aria-label="fast-cipher-answer"
             value={cipherAnswer}
             onChange={(event) => setCipherAnswer(event.target.value)}
-            placeholder={selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : copy.cipherAnswer}
+            placeholder={selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "暗号の4文字（0〜3、空白区切り）" : "Four encrypted digits (0–3, spaces)") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : copy.cipherAnswer}
           />
           <button
             type="button"
@@ -1644,7 +1647,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
 
       <HuntPanel projection={projection} locale={locale} submitting={submitting}
         onSubmit={(op) => run(() => client.submitOp(op), (next) => {
-          if (op.kind === "hunt" || op.kind === "hunt-sudoku") return huntFeedback(next, op.targetTeamId, locale, op.kind === "hunt-sudoku" ? "sudoku" : undefined);
+          if (op.kind === "hunt" || op.kind === "hunt-sudoku" || op.kind === "hunt-rotor") return huntFeedback(next, op.targetTeamId, locale, op.kind === "hunt-rotor" ? "rotor" : op.kind === "hunt-sudoku" ? "sudoku" : undefined);
           if (op.kind === "hunt-rsa" && !next?.completedHunts?.some(h => h.via === "rsa" && h.targetTeamId === op.targetTeamId && h.generation === op.generation)) return { kind: "error", title: copy.rejected, body: copy.unavailable };
           if (op.kind === "hunt-rsa") return { kind: "hunt", title: copy.huntSuccess, body: locale === "ja" ? "公開nの素数2個が一致し、攻撃が成功しました。" : "The two prime factors match public n; the attack succeeded.", reward: next ? projection.huntWinPoints : undefined };
           if (op.kind === "hunt-cipher") return { kind: "hunt", title: copy.huntSuccess, body: copy.huntCipherBody, reward: next ? rungSpec(op.rung).huntBonus : undefined };

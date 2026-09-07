@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -56,7 +57,7 @@ describe("paired issue and clock", () => {
     let s = running(["a","b"], 1);
     const kinds = new Set(s.contracts.filter(c=>c.teamId==="a").map(c=>c.task.kind));
     for (let i=1;i<13;i++) { s=tick(s, DEFAULT_CONFIG.onboardingFollowUpMs+i*DEFAULT_CONFIG.contractIntervalMs); for(const c of s.contracts) if(c.teamId==="a") kinds.add(c.task.kind); }
-    expect(kinds).toEqual(new Set(["reveal-share", "caesar-shift", "rsa-encrypt", "homomorphic-sum", "masked-total", "zk-sudoku", "rps-duel"]));
+    expect(kinds).toEqual(new Set(["reveal-share", "caesar-shift", "rsa-encrypt", "rotor-encrypt", "homomorphic-sum", "masked-total", "zk-sudoku", "rps-duel"]));
   });
   test("a late tick skips unseen expired pairs and never charges for them", () => {
     const idle=tick(initialState({eventId:"late",teamIds:["a","b"]}),0);
@@ -93,7 +94,7 @@ describe("commit/open authority and privacy", () => {
       let s=seal(seal(running(),"a",hand,r),"b",3,5);
       s=open(s,"a",hand,r);
       const p=JSON.parse(JSON.stringify(projectForTeam(s,"b")));
-      expect(p.publicLedger.filter((a:{kind:string})=>a.kind==="rps-open")).toEqual([]);
+      expect(p.publicLedger.map(artifactFields).filter((a:{kind:string})=>a.kind==="rps-open")).toEqual([]);
       const task=p.myContracts.find((c:{task:{kind:string}})=>c.task.kind==="rps-duel").task;
       expect(task).toEqual({kind:"rps-duel",duelId:(duel(s,"b").task as {duelId:string}).duelId,opponentTeamId:"a",drawPoints:10,expiryPenalty:-15,myCommitment:commit(3,5),opponentCommitment:commit(hand,r),opponentCommitted:true,opponentOpened:true});
       expect(Object.keys(p)).not.toContain("contracts");
@@ -101,7 +102,7 @@ describe("commit/open authority and privacy", () => {
       const records=projectForTeam(s,"b").publicLedger.filter(a=>a.kind==="rps-open");
       expect(records).toHaveLength(2);
       expect(new Set(records.map(a=>a.postedAtMs)).size).toBe(1);
-      expect(encodeLedger(decodeLedger(s.publicLedger))).toEqual([...s.publicLedger]);
+      expect(encodeLedger(decodeLedger(s.publicLedger, s.teams), s.teams)).toEqual([...s.publicLedger]);
     }
   });
   test("all nine hand pairs settle exactly once with the correct points", () => {
@@ -129,7 +130,7 @@ describe("duel expiry and upgrade", () => {
       s=tick(s,duel(s,"a").expiresAtMs);
       expect(scoreReasons(beforeExpiry, s, {kind:"tick"})).toEqual({a:"duel", b:"deadline"});
       expect(s.teams.a!.score).toBe(130); expect(s.teams.b!.score).toBe(85);
-      expect(decodeLedger(s.publicLedger).some(a=>a.kind==="rps-open")).toBe(false);
+      expect(decodeLedger(s.publicLedger, s.teams).some(a=>a.kind==="rps-open")).toBe(false);
       const again=tick(s,s.nowMs!);
       expect(again.teams).toEqual(s.teams);
     }

@@ -1,3 +1,6 @@
+import { artifactFields } from "./ledger-codec.ts";
+import { storedTeamId } from "./ledger-codec.ts";
+import { huntCount, expandHuntAttempts } from "./hunt-budget.ts";
 import { scoreReasons } from "./score-reasons.ts";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
@@ -46,7 +49,7 @@ describe("RPS prediction gates",()=>{
     for(const s of [seal(start(),"b",2,2),seal(history(1),"b",2,2),seal(history(2,4),"b",2,2)]) expect(validateOp(s,"a",prediction(s)).ok).toBe(false);
     const s=ready(); expect(rpsReuseEvidence(s,"b").map(a=>a.randomness)).toEqual([2,2]);
     expect(validateOp(s,"a",prediction(s))).toEqual({ok:true});
-    const one=s.publicLedger.find(a=>a.k==="rps-open"&&a.tm==="b")!;
+    const one=s.publicLedger.map(artifactFields).find(a=>a.k==="rps-open"&&storedTeamId(a,s.teams)==="b")!;
     expect(validateOp({...s,publicLedger:[one,one]},"a",prediction(s)).ok).toBe(false);
   });
   test("rejects unsealed, self, unknown, malformed, late and ended targets",()=>{
@@ -70,9 +73,9 @@ describe("RPS prediction gates",()=>{
   test("shares the Shamir attempt budget in both directions",()=>{
     let s=ready(); const wrong=String((BigInt(s.teams.b!.secret)+1n)%BigInt(s.config.prime));
     const shamir={kind:"hunt" as const,targetTeamId:"b",generation:1,recoveredSecret:wrong};
-    s=move(s,"a",shamir); const key=storedHuntKey(s,huntKey("a","b",1)); expect(s.huntAttempts[key]).toBe(1);
-    s=move(s,"a",prediction(s)); expect(s.huntAttempts[key]).toBe(2);
-    s=move(s,"a",shamir); expect(s.huntAttempts[key]).toBe(3);
+    s=move(s,"a",shamir); const key=storedHuntKey(s,huntKey("a","b",1)); expect(huntCount(s,key)).toBe(1);
+    s=move(s,"a",prediction(s)); expect(huntCount(s,key)).toBe(2);
+    s=move(s,"a",shamir); expect(huntCount(s,key)).toBe(3);
     expect(validateOp(s,"a",shamir).ok).toBe(false);
     const next=ready(); expect(validateOp({...next,huntAttempts:s.huntAttempts},"a",prediction(next)).ok).toBe(false);
     expect(projectForTeam(s,"a").huntAttempts.b?.spent).toBe(3);
@@ -123,19 +126,19 @@ describe("prediction privacy and delayed settlement",()=>{
     if(targetOpened) s=open(s,"b",2,2);
     const expired=order(s,"b").expiresAtMs, count=s.publicLedger.length;
     s=tick(s,expired);
-    expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",1))]).toBeUndefined();
+    expect(huntCount(s, storedHuntKey(s,huntKey("a","b",1)))).toBeUndefined();
     expect(s.teams.a!.lastRpsHunt).toMatchObject({outcome:"cancelled",points:0});
     expect(s.teams.a!.lastRpsHunt).not.toHaveProperty("actualHand");
     expect(s.publicLedger).toHaveLength(count); expect(s.contracts.every(c=>!c.rps?.predictions)).toBe(true);
-    s=tick(s,expired+1); expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",1))]).toBeUndefined();
+    s=tick(s,expired+1); expect(huntCount(s, storedHuntKey(s,huntKey("a","b",1)))).toBeUndefined();
   });
   test("cancellation refunds the acceptance generation and preserves newer attempts",()=>{
     let s=ready(); s=move(s,"a",prediction(s)); s=move(s,"b",{kind:"rotate"});
     const wrong=String((BigInt(s.teams.b!.secret)+1n)%BigInt(s.config.prime));
     s=move(s,"a",{kind:"hunt",targetTeamId:"b",generation:2,recoveredSecret:wrong});
     s=tick(s,order(s,"b").expiresAtMs);
-    expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",1))]).toBeUndefined();
-    expect(s.huntAttempts[storedHuntKey(s,huntKey("a","b",2))]).toBe(1);
+    expect(huntCount(s, storedHuntKey(s,huntKey("a","b",1)))).toBeUndefined();
+    expect(huntCount(s, storedHuntKey(s,huntKey("a","b",2)))).toBe(1);
   });
 });
 

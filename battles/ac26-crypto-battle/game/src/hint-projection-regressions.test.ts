@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 import { describe, expect, test } from "bun:test";
 import { disclosurePreview } from "../../portal/OrderFocus.tsx";
 import { mpcWorksheet } from "../../portal/MpcWorksheet.tsx";

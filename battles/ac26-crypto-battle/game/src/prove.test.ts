@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /**
  * Reducer-level integration tests for PROVE (Issue #486 PR2, rebuilt as ZK
  * sudoku in #709): validateOp / applyOp wiring, wrong-grid / unrelabelled /

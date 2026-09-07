@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /**
  * Portal plugin tests (Issue #486, PR4).
  *

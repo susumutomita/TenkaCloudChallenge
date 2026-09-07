@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 import { EXPLANATIONS, orderCalculation } from "../../portal/ConceptExplanation.tsx";
 import { deriveCipherKey } from "./fixtures.ts";
 import { describe, expect, test } from "bun:test";
@@ -45,8 +46,8 @@ function answerOnScreen(order: ReturnType<typeof orderAt>): string[] {
 }
 
 function readyHost() {
-  const host = match();
-  for (const minute of [31, 36, 41]) leakAt(host, minute);
+  const host = createMatch({ eventId: "vigenere-regression", teamIds: ["alpha", "bravo"], matchSecret: "vigenere-regression" }, { phaseBoundaries: { buildToPressureMs: 30 * MINUTE, pressureToEndgameMs: 75 * MINUTE } });
+  for (const minute of [31, 41, 51]) leakAt(host, minute);
   return host;
 }
 
@@ -103,8 +104,8 @@ describe("the Vigenère cycle, not a stronger-security claim", () => {
   });
 
   test("three repeated exposures of one position still leave two unknown shifts", () => {
-    const host = createMatch({ eventId: "vigenere-regression", teamIds: ["alpha", "bravo"], matchSecret: "vigenere-regression" }, { phaseBoundaries: { buildToPressureMs: 30 * MINUTE, pressureToEndgameMs: 75 * MINUTE } });
-    for (const minute of [31, 46, 61]) leakAt(host, minute);
+    const host = createMatch({ eventId: "vigenere-regression", teamIds: ["alpha", "bravo"], matchSecret: "vigenere-regression" }, { phaseBoundaries: { buildToPressureMs: 30 * MINUTE, pressureToEndgameMs: 100 * MINUTE }, matchDurationMs: 105 * MINUTE });
+    for (const minute of [31, 61, 91]) leakAt(host, minute);
     expect(pairs(host)).toHaveLength(3);
     expect(exposedKeyPositions(pairs(host), "vigenere")).toHaveLength(1);
     const option = huntOptions(projectForTeam(host.state, "alpha")).find(o => o.teamId === "bravo" && o.mode === "vigenere")!;
@@ -122,7 +123,7 @@ describe("the Vigenère cycle, not a stronger-security claim", () => {
     expect(fits).toBe(36);
     // Even the correct private key cannot bypass the PUBLIC material requirement.
     const targetKey = deriveCipherKey(host.state.seed, "bravo", 1, "vigenere");
-    expect(submitOp(host, "alpha", { kind: "hunt-cipher", targetTeamId: "bravo", generation: 1, rung: "vigenere", recoveredKey: targetKey }, 61 * MINUTE).kind).toBe("rejected");
+    expect(submitOp(host, "alpha", { kind: "hunt-cipher", targetTeamId: "bravo", generation: 1, rung: "vigenere", recoveredKey: targetKey }, 91 * MINUTE).kind).toBe("rejected");
   });
 
   test("the server rejects all 216 keys without three public positions and isolates team/rung/generation", () => {
@@ -136,10 +137,10 @@ describe("the Vigenère cycle, not a stronger-security claim", () => {
     expect(validateOp(ready.state, "alpha", op).ok).toBe(true);
     // Adversarial persisted records: unrelated entries must not unlock this target.
     for (const patch of [{ teamId: "alpha" }, { generation: 0 }, { rung: "caesar" as const }]) {
-      const changed = decodeLedger(ready.state.publicLedger).map(a => a.kind === "cipher-pair" ? { ...a, ...patch } : a);
+      const changed = decodeLedger(ready.state.publicLedger, ready.state.teams).map(a => a.kind === "cipher-pair" ? { ...a, ...patch } : a);
       expect(validateOp({ ...ready.state, publicLedger: encodeLedger(changed) }, "alpha", op).ok).toBe(false);
     }
-    expect(submitOp(ready, "bravo", { kind: "rotate" }, 41 * MINUTE).kind).toBe("ok");
+    expect(submitOp(ready, "bravo", { kind: "rotate" }, 51 * MINUTE).kind).toBe("ok");
     expect(validateOp(ready.state, "alpha", { ...op, generation: 2 }).ok).toBe(false);
   });
 
@@ -175,17 +176,17 @@ describe("the Vigenère cycle, not a stronger-security claim", () => {
     for (const pair of pairs(host)) key[pair.keyPosition!] = (pair.ciphertext[0]! - pair.plaintext[0]! + 6) % 6;
     const op = { kind: "hunt-cipher" as const, targetTeamId: "bravo", generation: 1, rung: "vigenere" as const, recoveredKey: key };
     const before = host.state.teams.alpha!.score, victim = host.state.teams.bravo!.score;
-    expect(submitOp(host, "alpha", op, 41 * MINUTE).kind).toBe("ok");
+    expect(submitOp(host, "alpha", op, 51 * MINUTE).kind).toBe("ok");
     expect(host.state.teams.alpha!.score - before).toBe(25);
     expect(host.state.teams.bravo!.score).toBe(Math.max(0, victim - 12));
-    expect(submitOp(host, "alpha", op, 41 * MINUTE + 1).kind).toBe("rejected");
+    expect(submitOp(host, "alpha", op, 51 * MINUTE + 1).kind).toBe("rejected");
     expect(huntOptions(projectForTeam(host.state, "alpha")).find(o => o.teamId === "bravo" && o.mode === "vigenere")?.status).toBe("completed");
     const ledger = host.state.publicLedger;
-    expect(submitOp(host, "bravo", { kind: "rotate" }, 41 * MINUTE + 2).kind).toBe("ok");
+    expect(submitOp(host, "bravo", { kind: "rotate" }, 51 * MINUTE + 2).kind).toBe("ok");
     expect(host.state.publicLedger).toEqual(ledger);
-    expect(submitOp(host, "alpha", op, 41 * MINUTE + 3).kind).toBe("rejected");
+    expect(submitOp(host, "alpha", op, 51 * MINUTE + 3).kind).toBe("rejected");
     expect(huntOptions(projectForTeam(host.state, "alpha")).find(o => o.teamId === "bravo" && o.mode === "vigenere")?.status).toBe("waiting");
-    advance(host, 46);
+    advance(host, 61);
     expect(orderAt(host, "bravo").task.myKey).not.toEqual(key);
   });
 
@@ -224,7 +225,7 @@ describe("the Vigenère cycle, not a stronger-security claim", () => {
     old.state = lifted; advance(old, 31);
     expect(orderAt(old).task.rung).toBe("vigenere");
     const host = readyHost();
-    expect(encodeLedger(decodeLedger(JSON.parse(JSON.stringify(host.state.publicLedger))))).toEqual([...host.state.publicLedger]);
+    expect(encodeLedger(decodeLedger(JSON.parse(JSON.stringify(host.state.publicLedger)), host.state.teams), host.state.teams)).toEqual([...host.state.publicLedger]);
     expect(projectForTeam(JSON.parse(JSON.stringify(host.state)), "alpha")).toEqual(projectForTeam(host.state, "alpha"));
   });
 });

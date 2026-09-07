@@ -1,3 +1,4 @@
+import { expandHuntAttempts } from "./hunt-budget.ts";
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -108,7 +109,7 @@ test("v5 migration preserves compact RPS reservations; a past legacy ranking is 
   let state = buildScenario("rps-reuse").host.state;
   const target = projectForTeam(state, "alpha").rpsHunt!.targets[0]!;
   state = move(state, "alpha", { kind: "hunt-rps", targetTeamId: "bravo", duelId: target.duelId, predictedHand: 2 });
-  const legacy = oldRow(state), before = JSON.stringify(legacy), migrated = migrateState(legacy, 5);
+  const legacy = { ...oldRow(state), huntAttempts: expandHuntAttempts(state) }, before = JSON.stringify(legacy), migrated = migrateState(legacy, 5);
   expect(migrated.huntAttempts).toEqual(state.huntAttempts);
   expect(migrated.contracts).toEqual(state.contracts); expect(migrated.publicLedger).toEqual(state.publicLedger);
   expect(projectForTeam(migrated, "alpha").rpsHunt!.pending).toEqual(projectForTeam(state, "alpha").rpsHunt!.pending);

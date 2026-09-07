@@ -1,3 +1,4 @@
+import { artifactFields } from "./ledger-codec.ts";
 /**
  * [Issue #679] Tests for `ledger-codec.ts`'s persisted-ledger encoding.
  *
@@ -196,6 +197,7 @@ function expectedIdFor(artifact: PublicArtifact): string {
     case "rps-open": return `${artifact.contractId}-rps-open`;
     case "share":
       return `${artifact.contractId}-share${artifact.shareIndex}`;
+    case "rotor-pair":
     case "rsa-pair":
     case "cipher-pair":
       return `${artifact.contractId}-pair`;
@@ -213,7 +215,7 @@ function expectedIdFor(artifact: PublicArtifact): string {
 describe("ledger-codec: id derivation matches real reducer-constructed data (test 2)", () => {
   test("a small multi-method match reaches all 5 reducer-written PublicArtifact kinds, and none of them needed the `d` escape hatch", () => {
     const state = playMultiMethodMatch(6, 10);
-    const kindsSeen = new Set(state.publicLedger.map((a) => a.k));
+    const kindsSeen = new Set(state.publicLedger.map(artifactFields).map((a) => a.k));
     expect(kindsSeen).toEqual(new Set(["share", "cipher-pair", "sudoku-reveal", "ciphertext", "partial"]));
     expect(state.publicLedger.length).toBeGreaterThan(20);
 
@@ -229,7 +231,7 @@ describe("ledger-codec: id derivation matches real reducer-constructed data (tes
     // fields (a second, separately-written implementation of the same
     // template, not a call into ledger-codec.ts's own derivation) and confirm
     // it matches what decode produced.
-    for (const artifact of decodeLedger(state.publicLedger)) {
+    for (const artifact of decodeLedger(state.publicLedger, state.teams)) {
       expect(artifact.id).toBe(expectedIdFor(artifact));
     }
   });
@@ -263,7 +265,7 @@ describe("ledger-codec: id derivation matches real reducer-constructed data (tes
     for (const stored of state.publicLedger) {
       expect("d" in stored).toBe(false);
     }
-    for (const artifact of decodeLedger(state.publicLedger)) {
+    for (const artifact of decodeLedger(state.publicLedger, state.teams)) {
       expect(artifact.id).toBe(expectedIdFor(artifact));
     }
   });
@@ -304,7 +306,7 @@ describe("ledger-codec: pre-#650 artifacts keep their participant-visible meanin
 
   test("migration restores `leak` on a share written before the field existed", () => {
     const migrated = migrateStateV1({ publicLedger: [legacyShare] }, 1);
-    const entries = decodeLedger(migrated.publicLedger);
+    const entries = decodeLedger(migrated.publicLedger, migrated.teams);
     expect(entries).toHaveLength(1);
     const entry = entries[0] as PublicArtifact;
     expect(entry.method).toBe("leak");
@@ -316,7 +318,7 @@ describe("ledger-codec: pre-#650 artifacts keep their participant-visible meanin
 
   test("migration restores `prove` on a proof written before the field existed", () => {
     const migrated = migrateStateV1({ publicLedger: [legacyProof] }, 1);
-    const entries = decodeLedger(migrated.publicLedger);
+    const entries = decodeLedger(migrated.publicLedger, migrated.teams);
     expect(entries).toHaveLength(1);
     const entry = entries[0] as PublicArtifact;
     expect(entry.method).toBe("prove");
@@ -326,7 +328,7 @@ describe("ledger-codec: pre-#650 artifacts keep their participant-visible meanin
   test("an artifact that already declares a method is left exactly as it is", () => {
     const explicit = { ...(legacyShare as object), method: "cipher" } as unknown as PublicArtifact;
     const migrated = migrateStateV1({ publicLedger: [explicit] }, 1);
-    expect(decodeLedger(migrated.publicLedger)[0]?.method).toBe("cipher");
+    expect(decodeLedger(migrated.publicLedger, migrated.teams)[0]?.method).toBe("cipher");
   });
 
   test("encodeArtifact itself stays faithful -- interpreting old shapes is migration's job", () => {
@@ -345,8 +347,9 @@ describe("ledger-codec: migrateStateV1 (test 3)", () => {
    * historical shape `migrateStateV1` exists to accept.
    */
   function buildV1AndV2(): { v1: unknown; v2: CryptoBattleState } {
-    const v2 = playMultiMethodMatch(4, 8);
-    const v1 = { ...v2, publicLedger: decodeLedger(v2.publicLedger) };
+    const current = playMultiMethodMatch(4, 8);
+    const v2 = { ...current, publicLedger: encodeLedger(decodeLedger(current.publicLedger, current.teams)) };
+    const v1 = { ...v2, publicLedger: decodeLedger(v2.publicLedger, v2.teams) };
     return { v1, v2 };
   }
 
@@ -357,12 +360,12 @@ describe("ledger-codec: migrateStateV1 (test 3)", () => {
     expect(migrated).toEqual(v2);
   });
 
-  test("nothing in the ledger is lost: decodeLedger(migrated.publicLedger) recovers the full v1 ledger content", () => {
+  test("nothing in the ledger is lost: decodeLedger(migrated.publicLedger, migrated.teams) recovers the full v1 ledger content", () => {
     const { v1 } = buildV1AndV2();
     const v1Ledger = (v1 as { publicLedger: readonly PublicArtifact[] }).publicLedger;
     expect(v1Ledger.length).toBeGreaterThan(0);
     const migrated = migrateStateV1(v1, 1);
-    expect(decodeLedger(migrated.publicLedger)).toEqual([...v1Ledger]);
+    expect(decodeLedger(migrated.publicLedger, migrated.teams)).toEqual([...v1Ledger]);
   });
 
   test("an empty v1 ledger migrates to an empty v2 ledger (the pre-first-tick / no-activity row)", () => {
@@ -408,4 +411,18 @@ describe("ledger-codec: unrecognized kinds fail loudly, not silently", () => {
     const bogus = { ...encodeArtifact(FIXTURES[0]!), k: "not-a-real-kind" } as unknown as StoredArtifact;
     expect(() => decodeArtifact(bogus)).toThrow();
   });
+});
+
+test("schema11 roster references preserve every artifact and exact escaped ID in a mixed legacy ledger", () => {
+  const state = initialState({ eventId: "ledger-roster", teamIds: ["0", "a|b", "a", "😀"] });
+  const entries = FIXTURES.map((entry, i) => ({ ...entry, teamId: ["a|b", "0", "😀", "a"][i % 4]!, id: `external/${i}`, contractId: `external/order/${i}` }));
+  const packed = encodeLedger(entries, state.teams);
+  expect(packed.every(entry => typeof artifactFields(entry).tm === "number")).toBe(true);
+  const reversed = Object.fromEntries(Object.entries(state.teams).reverse());
+  expect(decodeLedger(JSON.parse(JSON.stringify(packed)), reversed)).toEqual(entries);
+  const mixed = packed.map((entry, i) => i % 2 ? encodeArtifact(entries[i]!) : entry);
+  expect(decodeLedger(mixed, reversed)).toEqual(entries);
+  expect(() => decodeLedger(packed)).toThrow("roster");
+  for (const tm of [-1, 1.5, 4, NaN, null]) expect(() => decodeArtifact({ ...artifactFields(packed[0]!), tm } as never, state.teams)).toThrow();
+  expect(() => encodeArtifact({ ...entries[0]!, teamId: "outside" }, state.teams)).toThrow();
 });
