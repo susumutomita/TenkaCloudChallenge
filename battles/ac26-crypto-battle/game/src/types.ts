@@ -1,3 +1,4 @@
+import type {IoTask} from "./io.ts";
 import type {ConstraintTask} from "./snark.ts";
 import type {Point} from "./ec.ts";
 /**
@@ -193,6 +194,7 @@ export interface PhaseBoundaries {
  */
 export interface CryptoBattleConfig {
   readonly ecOrders?: boolean;
+  readonly ioOrders?: boolean;
   readonly snarkOrders?: boolean;
   readonly proofProtocol?: "schnorr-v1";
   /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
@@ -378,6 +380,7 @@ export type OrderTask =
    * stated here, so a team relabels the whole grid rather than the four cells
    * it knows will be read.
    */
+  | IoTask
   | ConstraintTask
   | { readonly kind: "ec-add"; readonly left:Point; readonly right:Point }
   | { readonly kind: "zk-sudoku" }
@@ -1004,6 +1007,7 @@ export type CryptoBattleOp =
   | { readonly kind: "schnorr-commit"; readonly contractId: string; readonly y: number; readonly a: number }
   | { readonly kind: "snark"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "ec"; readonly contractId:string; readonly answer:string }
+  | { readonly kind: "io"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "schnorr-response"; readonly contractId: string; readonly z: number }
   | { readonly kind: "hunt-rotor"; readonly targetTeamId: string; readonly generation: number; readonly a: number; readonly b: number }
   | { readonly kind: "declare-lightning"; readonly contractId: string }
@@ -1259,6 +1263,7 @@ export type OrderTaskProjection =
    * [Issue #709] Nothing to add: the solution is on the vault and the puzzle
    * is public. Kept as its own arm so a card can name the job.
    */
+  | IoTask
   | ConstraintTask
   | { readonly kind: "ec-add"; readonly left:Point; readonly right:Point }
   | { readonly kind: "zk-sudoku" }

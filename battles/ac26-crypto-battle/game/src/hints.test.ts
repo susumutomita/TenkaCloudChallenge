@@ -65,10 +65,10 @@ function oneOrderPerKind(): { projection: CryptoBattleProjection; order: Contrac
     state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
   }
   let streaming = applyOp(initialState({...CTX,matchSecret:"ec-hints"},STREAMING_ORDER_CONFIG),"teamA",{kind:"start"});
-  for(let t=0;t<=900000&&(!seen.has("ec-add")||!seen.has("snark-constraints"));t+=30000){
+  for(let t=0;t<=1_200_000&&(!seen.has("ec-add")||!seen.has("io-equivalence")||!seen.has("snark-constraints"));t+=30000){
     streaming=tick(streaming,t);
     const projection=projectForTeam(streaming,"teamA");
-    for(const order of projection.myContracts)if(order.task.kind==="ec-add"||order.task.kind==="snark-constraints")seen.set(order.task.kind,{projection,order});
+    for(const order of projection.myContracts)if(order.task.kind==="ec-add"||order.task.kind==="io-equivalence"||order.task.kind==="snark-constraints")seen.set(order.task.kind,{projection,order});
   }
   return [...seen.values()];
 }

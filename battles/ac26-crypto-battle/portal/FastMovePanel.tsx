@@ -1,3 +1,4 @@
+import {IoWorksheet} from "./IoWorksheet.tsx";
 import {orderReward} from "./orderReward.ts";
 import {SnarkWorksheet} from "./SnarkWorksheet.tsx";
 import {EcWorksheet} from "./EcWorksheet.tsx";
@@ -1511,6 +1512,16 @@ export default function FastMovePanel(props: PortalSlotProps) {
           onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
         onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
+      {selectedOrder?.task.kind === "io-equivalence" && <IoWorksheet wrongCost={projection.wrongProveCost} key={`io:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+        ()=>client.submitOp({kind:"io",contractId:selectedOrder.id,answer}),
+        next=>{
+          if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"計算と分布の比較に成功！":"Function and distribution check complete!",body:locale==="ja"?"同じ機能かどうかと、公開データの分布を別々に確認できました。":"You checked functional equivalence and the published distributions separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。空欄の余りと、rを含む公開データの組を確認してください。`:`${delta} pt. Check the missing remainders and complete outcomes including r.`};
+        }
+       )}/> }
       {selectedOrder?.task.kind === "snark-constraints" && <SnarkWorksheet wrongCost={projection.wrongProveCost} key={`snark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
         ()=>client.submitOp({kind:"snark",contractId:selectedOrder.id,answer}), next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
