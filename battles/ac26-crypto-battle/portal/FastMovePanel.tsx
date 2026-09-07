@@ -1,4 +1,6 @@
 import { BreachNotice } from "./BreachNotice.tsx";
+import { SchnorrProof } from "./SchnorrProof.tsx";
+import { power } from "../game/src/schnorr.ts";
 import { chooseProveTable } from "./prove-table.ts";
 import RotorMaterials from "./RotorMaterials.tsx";
 import RsaMaterials from "./RsaMaterials.tsx";
@@ -1272,7 +1274,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <span>{locale === "ja" ? "いまのお題" : "Current Order"} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</span>
             <span className="tc-ticket-clock">{Math.ceil(selectedOrder.remainingMs / 1000)}s</span>
           </div>
-          <h2 className="tc-order-heading">{proveAllowed && (proveOpen || selectedOrder.task.kind === "zk-sudoku") ? (locale === "ja" ? "数字を置き換えて、4マスを完成させよう" : "Rename the digits and complete four cells") : orderHeading(selectedOrder, locale)}</h2>
+          <h2 className="tc-order-heading">{proveAllowed && (proveOpen || selectedOrder.task.kind === "zk-sudoku") ? (locale === "ja" ? (selectedOrder.schnorr ? "ゼロ知識証明：秘密を送らず、応答を計算しよう" : "数独の模型：数字を置き換えて4マスを完成") : (selectedOrder.schnorr ? "Zero-knowledge proof: calculate a response without sending your secret" : "Sudoku model: rename the digits and complete four cells")) : orderHeading(selectedOrder, locale)}</h2>
           <div className="tc-ticket-track" aria-hidden="true">
             <div
               className="tc-ticket-fill"
@@ -1384,8 +1386,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
             onClick={() => setProveOpen((value) => !value)}
           >
             <span className="tc-action-heading"><span>{locale === "ja" ? "秘密を守って証明する" : "Prove while protecting your secret"}</span><b>+{selectedOrder?.points} {locale === "ja" ? "点" : "pt"}</b></span>
-            <small>PROVE · {copy.proveHint}</small>
-            <span className="tc-action-risk">{locale === "ja" ? "かけらの公開は増えません。付け替えた数字の一列などを公開します。" : "No extra share is published. One relabelled row, column or box becomes public."}</span>
+            <small>PROVE · {selectedOrder?.schnorr ? (locale === "ja" ? "先に a を送る → 届いた e で応答を計算" : "Send a → calculate a response to e") : copy.proveHint}</small>
+            <span className="tc-action-risk">{selectedOrder?.schnorr ? (locale === "ja" ? "シェアは公開せず、検証できる会話 (a,e,z) を公開します。" : "Publishes the verifiable transcript (a,e,z), without a share.") : (locale === "ja" ? "シェアは公開せず、数独模型の一部を公開します。" : "Publishes part of the Sudoku model, without a share.")}</span>
           </button>}
         </div>
         {selectedOrder?.task.kind === "reveal-share" && <ConceptExplanation key={selectedOrder.id} locale={locale} topic="sharing" task={selectedOrder.task} prime={projection.prime} />}
@@ -1542,7 +1544,12 @@ export default function FastMovePanel(props: PortalSlotProps) {
         The judge still receives and checks the complete grid. Used tables stay
         selectable so reuse remains a real decision, with its risk labelled.
       */}
-      {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && proveAllowed && (
+      {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder?.schnorr && proveAllowed && <SchnorrProof key={`schnorr:${selectedOrder.id}`} order={selectedOrder} teamId={projection.vault.teamId} locale={locale} busy={submitting} onSubmit={op=>void run(()=>client.submitOp(op),next=>{
+        if(op.kind === "schnorr-commit") return {kind:"hint",title:locale === "ja"?"検証者から e が届きました":"Verifier challenge received",body:locale === "ja"?"下の③で応答 z を計算してください。":"Calculate response z in step ③ below."};
+        const proof=next?.publicLedger.find(entry=>entry.kind === "proof" && entry.contractId === selectedOrder.id);
+        return proof?.kind === "proof" && proof.publicKey ? {kind:"prove",reward:selectedOrder.points,title:locale === "ja"?"証明成功！":"Proof verified!",body:`${locale === "ja" ? "検証式が一致" : "Verification matches"}: ${power(2,Number(proof.response))} = ${Number(proof.commitment)*power(Number(proof.publicKey),Number(proof.challenge))%23}。${locale === "ja"?"秘密 x を送らず検証できました。":"Verified without sending x."}`} : {kind:"error",title:locale === "ja"?"検証式が一致しません":"Verification failed",body:locale === "ja"?"応答は1回だけです。期限までに別の答え方を選ぶか、次のお題へ進んでください。":"Only one response is accepted. Choose another allowed method before the deadline or continue to the next Order."};
+      })} />}
+      {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && !selectedOrder.schnorr && proveAllowed && (
         <div className="tc-input-panel tc-proof-inputs">
           <strong>{locale === "ja" ? "青い4マスに、置き換えた数字を入力" : "Fill the four blue cells with the renamed digits"}</strong>
 

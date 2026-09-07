@@ -24,7 +24,7 @@ A share is an index-and-value pair used in secret sharing. This game creates fiv
 | | What it does | What it costs |
 | --- | --- | --- |
 | **LEAK** | Publish a share, or an original/encrypted pair, to answer instantly | Public records can supply an opponent's attack |
-| **PROVE** | Relabel a sudoku grid and fill four cells | Requires calculation; wrong submissions cost points |
+| **PROVE** | Commit a, receive e, and hand-calculate the Schnorr response z | Requires calculation; wrong submissions cost points |
 | **HUNT** | Recover a secret, key or hand from public information and attack | Secret, sudoku and hand misses cost points and attempts; an incorrect cipher key is rejected without a charge |
 | **ROTATE** | Replace the secret and key with a new generation | Unanswered secret-bound Orders become void and cost points; after a mandatory disclosure, pay at least one expiry penalty (the larger penalty only; score never falls below zero). Rock-paper-scissors continues |
 | **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
@@ -37,7 +37,7 @@ An ordinary correct calculation earns +30, LEAK earns +10, and expiry costs −1
 | --- | --- | --- |
 | add without decrypting | **Homomorphic encryption** | How ciphertext addition relates to the decrypted result |
 | masked subtotal | **Secure computation (MPC)** | Adding masks to private inputs and cancelling them in the total |
-| PROVE | **Zero-knowledge proofs (ZK)** | Sudoku relabelling and properties demonstrated by partial checks |
+| PROVE | **Zero-knowledge proofs (ZK)** | Schnorr public verification, simulation and knowledge extraction |
 
 ZK demonstrates correctness while hiding a secret answer. Sudoku is a teaching example; this game's trusted judge knows the original solution. FHE supports computations built from addition and multiplication. This Order explores addition using small numbers. The diagram-and-formula explanations describe the difference from practical systems.
 
@@ -61,7 +61,7 @@ New matches start with one Order and receive one more every 30 seconds. Both ord
 | --- | --- |
 | reveal a share | choose LEAK or PROVE |
 | publish a share (publication required) | LEAK only, full points; a new index adds one distinct public share, a duplicate adds zero. ROTATE first to avoid publishing |
-| show it without showing it | PROVE: relabel your sudoku solution with an unused table and open the line asked for |
+| show it without showing it | PROVE: commit a and calculate the response z to the verifier challenge e |
 | encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
 | encrypted addition | add both pairs component by component, remainder p |
 | masked subtotal | compute my number + received masks - sent masks, remainder p |
@@ -73,7 +73,7 @@ Every card shows its deadline, points, task, and accepted methods. A method abse
 | Move | Meaning |
 | --- | --- |
 | LEAK | let the system answer the ORDER. What becomes public depends on the ORDER |
-| PROVE | rewrite your 4x4 sudoku solution with a fresh digit-relabelling table and open one line; no share is published |
+| PROVE | publish Schnorr y and (a,e,z); neither x, r nor a share is sent |
 | CIPHER | encrypt the symbols with your key and submit. Nothing is published |
 | FHE | add ciphertexts without decrypting |
 | MPC | submit one subtotal while each office's input stays private |
@@ -119,7 +119,7 @@ ROTATE moves the key to a new generation. Attack submissions must name the
 current generation and use its public information. Tiny RSA keys may recur;
 rotation does not guarantee that earlier factors stop matching the new n.
 
-The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. PROVE is the 4x4 sudoku relabelling the drawer walks through by hand; share reconstruction uses Shamir threshold sharing (distinct from the additive sharing exercise in `ac26-w2-secret-sharing`).
+The complete Portal reference contains the formulas, constants, and runnable Python for PROVE and HUNT. New-match PROVE uses the Schnorr protocol below; share reconstruction uses Shamir threshold sharing (distinct from the additive sharing exercise in `ac26-w2-secret-sharing`).
 
 ## Reading the screen
 
@@ -386,7 +386,7 @@ No new resources, services, IAM, timers, score prices or cleanup steps are added
 
 ### Answer workspace (#780)
 
-New Caesar orders contain five symbols. The answer field explicitly requests space-separated numbers. Sudoku PROVE prepares a private random unused relabeling and immediately shows four marked inputs; clock updates and identical poll responses retain the relabeling. This remains the trusted-judge teaching model, not a full ZK protocol. MPC includes a three-party mask-cancellation diagram and its general equation; duel powers use superscripts and expanded products.
+New Caesar orders contain five symbols. The answer field explicitly requests space-separated numbers. Legacy-match Sudoku PROVE prepares a private random unused relabeling and immediately shows four marked inputs; clock updates and identical poll responses retain the relabeling. This remains the trusted-judge teaching model, not a full ZK protocol. MPC includes a three-party mask-cancellation diagram and its general equation; duel powers use superscripts and expanded products.
 
 ### HUNT opponent selection (#782)
 
@@ -395,3 +395,14 @@ The HUNT panel prioritizes opponents with public evidence, lists five teams per 
 ## When an opponent recovers your secret
 
 A notice above the answer workspace identifies the attacker, secret type, generation and actual score loss. Draft input stays intact. Review defense opens the ROTATE impact before committing that action. After rotation, the notice is labeled as a previous-generation event. Only the latest notice is retained; polling does not replay it. Old history is not backfilled with guessed penalties.
+
+### New-match Schnorr zero-knowledge proof (#783)
+
+Based on Week 3 lecture slides 54–60 and the learning note's Schnorr section.
+The browser keeps witness x and fresh randomness r. It sends public y = 2ˣ mod23 and hand-calculated a = 2ʳ mod23. After these are fixed, the verifier returns e from 0–10. The player hand-calculates z = (r + ex) mod11. Verification checks **2ᶻ ≡ a yᵉ (mod23)** using public values only; x and r never reach the server.
+
+A commitment cannot be replaced and each challenge accepts one response, including a wrong response. Foreign Orders, expired responses and duplicate rewards are rejected. Private values are retained in session storage: continue in the original tab.
+
+The four-stage mathematical guide covers a worked example, exponent laws, an identical-distribution simulator without x, and extraction from two responses to the same a. This is honest-verifier ZK (HVZK). Tiny parameters allow brute force and a guessed challenge succeeds with probability 1/11; this is not practical cryptographic security. Successful verification is not secret recovery and does not award HUNT points.
+
+The statement is knowledge of the discrete logarithm x for y, not knowledge of a secret-sharing share or Sudoku solution. Persisted legacy matches retain the trusted-judge Sudoku model; new matches select Schnorr through the versioned configuration.

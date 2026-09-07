@@ -12,10 +12,10 @@ export function orderHeading(order: ContractProjection, locale: Locale): string 
     // so the heading says "publish", not "account for" -- there is no PROVE.
     if (order.privacyConstraint === "must-disclose") {
       return locale === "ja"
-        ? `秘密のかけら ${pieces} の公開を求められています (公開が条件・満額)`
+        ? `シェア ${pieces} を公開して得点する（秘密分散・公開が条件）`
         : `A request to publish your secret share ${pieces} (publication required, full points)`;
     }
-    return locale === "ja" ? `秘密のかけら ${pieces} を求められています` : `A request for your secret share ${pieces}`;
+    return locale === "ja" ? `秘密を公開して即答するか、計算で証明する` : `A request for your secret share ${pieces}`;
   }
   return taskLabel(order.task, locale);
 }
@@ -46,6 +46,6 @@ export function disclosurePreview(projection: CryptoBattleProjection, order: Con
   for (const index of order.task.shareIndices) indices.add(index);
   const after = indices.size;
   return locale === "ja"
-    ? `公開済みのかけら ${before} → ${after} 個。${after >= projection.threshold ? "相手に秘密を復元される状態になります。" : `${projection.threshold} 個そろうと相手が秘密を復元できます。`}`
+    ? `公開済みのシェア ${before} → ${after} 個。${after >= projection.threshold ? "相手に秘密を復元される状態になります。" : `${projection.threshold} 個そろうと相手が秘密を復元できます。`}`
     : `Public shares: ${before} → ${after}. ${after >= projection.threshold ? "Your secret will be recoverable." : `${projection.threshold} distinct shares let an opponent recover your secret.`}`;
 }

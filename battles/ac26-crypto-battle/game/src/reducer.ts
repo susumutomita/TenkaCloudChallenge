@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+import { power, group, scalar, verifySchnorr } from "./schnorr.ts";
 import { artifactFields } from "./ledger-codec.ts";
 import { hasSuccessfulHunt, recordSuccessfulHunt } from "./hunt-success.ts";
 import { storeLastHunt, readLastHunt } from "./hunt-result.ts";
@@ -255,6 +257,7 @@ export function resolveMatchSeed(ctx: CoordinationContext): string {
 
 /** Current deployed pacing; persisted legacy matches retain their own configuration. */
 export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
+  proofProtocol: "schnorr-v1",
   contractIntervalMs: 30_000,
   contractsPerIssue: 1,
   onboardingFollowUpMs: 30_000,
@@ -640,7 +643,7 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 12;
+export const STATE_SCHEMA_VERSION = 13;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -683,9 +686,9 @@ export const STATE_SCHEMA_VERSION = 12;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 and v11 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11 and v12 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -1488,6 +1491,7 @@ export function validateOp(
       return { ok: true };
     }
     case "hunt-sudoku": {
+      if (state.config.proofProtocol === "schnorr-v1") return {ok:false,error:"new matches use Schnorr; Sudoku recovery is a legacy method"};
       // [Issue #709] Same preconditions as a Shamir HUNT -- see that branch for
       // why each exists -- and a different piece of evidence.
       if (state.nowMs === undefined) {
@@ -1601,7 +1605,21 @@ export function validateOp(
       }
       return { ok: true };
     }
+    case "schnorr-commit":
+    case "schnorr-response": {
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "prove");
+      if (!gate.ok) return gate;
+      if (state.config.proofProtocol !== "schnorr-v1") return {ok:false,error:"this match uses the legacy Sudoku model"};
+      const contract = state.contracts.find(c => c.id === op.contractId)!;
+      if (op.kind === "schnorr-commit") {
+        if (contract.schnorr) return {ok:false,error:"commitment is already fixed; answer its challenge"};
+        return group(op.a) && group(op.y) && op.y !== 1 ? {ok:true} : {ok:false,error:"commitment must belong to the order-11 subgroup"};
+      }
+      if (!contract.schnorr || contract.schnorr.used) return {ok:false,error:"commit first; each challenge accepts one response"};
+      return scalar(op.z) ? {ok:true} : {ok:false,error:"response must be an integer from 0 to 10"};
+    }
     case "prove-sudoku": {
+      if (state.config.proofProtocol === "schnorr-v1") return {ok:false,error:"this match requires the interactive Schnorr proof"};
       // [Issue #645] Same Order gate as every other method -- PROVE is a second
       // way to fulfil an Order, not a different queue of things to fulfil.
       const gate = validateOrderSubmission(state, teamId, op.contractId, "prove");
@@ -2308,7 +2326,7 @@ function projectHints(
     id: spec.id,
     cost: hintPrice(state, vault.teamId, level) ?? 0,
     regularCost: hintCostAt(state.config.scores.hintCosts, level) ?? 0,
-    ...(level < revealed ? { text: spec.text(ctx) } : {}),
+    ...(level < revealed ? { text: state.config.proofProtocol === "schnorr-v1" && contract.allowedMethods.includes("prove") ? schnorrHint(level) : spec.text(ctx) } : {}),
   }));
 }
 
@@ -2662,6 +2680,8 @@ function applyMethodOp(
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "schnorr-commit":
+    case "schnorr-response": return applySchnorr(state, teamId, op);
     case "declare-lightning": return armLightning(state, teamId, op.contractId);
     case "hunt-rps": return applyRpsHunt(state, teamId, op);
     case "rps-commit":
@@ -2755,6 +2775,7 @@ export function projectForTeam(
       const task = projectTask(state, teamId, c.task, c.id);
       return {
         id: c.id,
+        ...(state.config.proofProtocol === "schnorr-v1" && c.allowedMethods.includes("prove") ? { schnorr: { ...(c.schnorr ? {pending:c.schnorr} : {}) } } : {}),
         kind: c.kind,
         points: c.cipherFailed === true ? 0 : c.points + lightningBonus(state, c),
         ...(c.cipherFailed === undefined ? {} : { cipherFailed: c.cipherFailed }),
@@ -2827,6 +2848,7 @@ export function projectForTeam(
   return {
     clockMs: state.nowMs,
     ...(team.lastBreach ? { lastBreach: team.lastBreach } : {}),
+    ...(state.config.proofProtocol ? {proofProtocol:state.config.proofProtocol} : {}),
     phase: state.phase,
     prime: state.config.prime,
     threshold: state.config.threshold,
@@ -2888,4 +2910,39 @@ export function projectForTeam(
 
 function rotationPenalty(state: CryptoBattleState, teamId: string, openCount: number): number {
   return Math.max(disclosureRotateMinimum(state, teamId), openCount * Math.abs(state.config.scores.expiredOrder));
+}
+
+/** Domain-separated server randomness; retrying a fixed commitment cannot reroll e. */
+function schnorrRandom(seed: string, purpose: string, parts: readonly unknown[]): number {
+  for (let counter=0;;counter++) {
+    const bytes=createHmac("sha256",seed).update(JSON.stringify(["schnorr-v1",purpose,...parts,counter])).digest();
+    for(const byte of bytes) if(byte<253) return byte%11;
+  }
+}
+function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<CryptoBattleOp,{kind:"schnorr-commit"|"schnorr-response"}>): CryptoBattleState {
+  const contract=state.contracts.find(c=>c.id===op.contractId)!;
+  if(op.kind==="schnorr-commit") {
+    const e=schnorrRandom(state.seed,"challenge",[teamId,contract.id,op.y,op.a]);
+    return {...state, contracts:state.contracts.map(c=>c.id===contract.id?{...c,schnorr:{y:op.y,a:op.a,e}}:c)};
+  }
+  const pending=contract.schnorr!;
+  const y=pending.y;
+  const consumed={...state,contracts:state.contracts.map(c=>c.id===contract.id?{...c,schnorr:{...pending,used:true}}:c)};
+  if(!verifySchnorr(y,pending.a,pending.e,op.z)) {
+    // A failed proof consumes the challenge, preventing brute-force retries for points.
+    return {...consumed, teams:{...state.teams,[teamId]:{...state.teams[teamId]!,score:Math.max(0,state.teams[teamId]!.score-Math.abs(state.config.scores.wrongProve))}}};
+  }
+  return completeOrder(consumed,teamId,contract,{
+    kind:"proof",id:`${contract.id}-proof`,teamId,generation:state.teams[teamId]!.generation,method:"prove",contractId:contract.id,
+    commitment:String(pending.a),challenge:String(pending.e),response:String(op.z),publicKey:String(y),postedAtMs:state.nowMs!,
+  },"prove");
+}
+
+function schnorrHint(level:number): {ja:string;en:string} {
+  const hints=[
+    {ja:"PROVEは秘密xを送らず、公開値y=2ˣに対応するxを知っていると示します。まず画面のrでa=2ʳ mod23を計算して送ります。LEAKを選べるお題なら、代わりに指定シェアを公開して答えることもできます。",en:"PROVE shows knowledge of x for public y=2ˣ without sending x. First calculate a=2ʳ mod23 using the displayed r. If LEAK is allowed, publishing the requested share is an alternative."},
+    {ja:"aを送ると検証者からeが届きます。z=(r+e×x) mod11を計算します。例：r=3、e=5、x=7なら3+5×7=38、11で割った余りは5です。",en:"After a is fixed, the verifier sends e. Calculate z=(r+e×x) mod11. Example: r=3, e=5, x=7 gives 38 mod11=5."},
+    {ja:"入力するのは③のzです。rとxは自分の画面、eはaを送った後に表示されます。掛け算→足し算→11で割った余りの順に計算し、0〜10の整数を1個送ります。検証式は2ᶻ ≡ a×yᵉ (mod23)。xとrは送信しません。",en:"Enter z in step ③. Your screen provides r and x; e appears after sending a. Multiply, add, then reduce modulo11. Send one integer 0–10. Verification checks 2ᶻ ≡ a×yᵉ (mod23), without receiving x or r."},
+  ];
+  return hints[level]!;
 }

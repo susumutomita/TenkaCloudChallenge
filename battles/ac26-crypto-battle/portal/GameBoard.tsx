@@ -1,3 +1,4 @@
+import { power, verifySchnorr } from "../game/src/schnorr.ts";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { taskDetail, taskLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
@@ -129,6 +130,7 @@ interface LedgerGroup {
    * spotting the matching tags is the reading the HUNT asks for.
    */
   reveals: SudokuRevealArtifact[];
+  transcripts: Extract<PublicArtifact,{kind:"proof"}>[];
   duels: Extract<PublicArtifact, { kind: "rps-commit" | "rps-open" }>[];
   /**
    * [Issue #645] Counted per artifact kind, not lumped into one "proof" bucket.
@@ -179,6 +181,7 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
         rotorPairs: [],
         rsaPairs: [],
         reveals: [],
+        transcripts: [],
         duels: [],
         protected: new Map(),
       };
@@ -186,6 +189,7 @@ function groupLedger(ledger: readonly PublicArtifact[]): LedgerGroup[] {
     else if (entry.kind === "rotor-pair") current.rotorPairs.push(entry);
     else if (entry.kind === "rsa-pair") current.rsaPairs.push(entry);
     else if (entry.kind === "cipher-pair") current.pairs.push(entry);
+    else if (entry.kind === "proof" && entry.publicKey) current.transcripts.push(entry);
     else if (entry.kind === "sudoku-reveal") current.reveals.push(entry);
     else if (entry.kind === "rps-commit" || entry.kind === "rps-open") current.duels.push(entry);
     else current.protected.set(entry.kind, (current.protected.get(entry.kind) ?? 0) + 1);
@@ -490,6 +494,12 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                     <span className="tc-reveal-tag" title={copy.tag}>{locale === "ja" ? "置き換えの印：" : "Replacement ID: "}{reveal.tag}</span>
                   </div>
                 ))}
+                {group.transcripts.map(entry => <div className="tc-proof-card" key={entry.id}>
+                  <strong>{locale === "ja" ? "ゼロ知識証明：公開情報だけで検証" : "Zero-knowledge proof: public verification"}</strong>
+                  <p>y={entry.publicKey}, a={entry.commitment}, e={entry.challenge}, z={entry.response}</p>
+                  <p>2<sup>{entry.response}</sup> mod 23 = {power(2,Number(entry.response))}<br/>{entry.commitment} × {entry.publicKey}<sup>{entry.challenge}</sup> mod 23 = {Number(entry.commitment)*power(Number(entry.publicKey),Number(entry.challenge))%23}</p>
+                  <p>{verifySchnorr(Number(entry.publicKey),Number(entry.commitment),Number(entry.challenge),Number(entry.response)) ? (locale === "ja" ? "一致：Verify成功。秘密を復元したわけではないのでHUNTの得点はありません。" : "Equal: verification succeeds. This does not recover the secret or award HUNT points.") : (locale === "ja" ? "不一致：検証失敗" : "Not equal: verification failed")}</p>
+                </div>)}
                 {group.duels.map(entry => <div className="tc-proof-card" key={entry.id}>
                   {entry.kind === "rps-commit" ? "COMMIT" : "OPEN"} · c={entry.commitment}
                   {entry.kind === "rps-open" && <> · {locale === "ja" ? "手" : "hand"} m={entry.hand} · {locale === "ja" ? "隠す数" : "hiding number"} r={entry.randomness}</>}

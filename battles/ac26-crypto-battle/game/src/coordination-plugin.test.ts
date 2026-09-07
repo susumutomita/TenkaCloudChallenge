@@ -163,7 +163,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
    */
   it("declares the current stateSchemaVersion with reducer.ts's migrateState wired [Issue #679, #709]", () => {
     expect(plugin.stateSchemaVersion).toBe(STATE_SCHEMA_VERSION);
-    expect(STATE_SCHEMA_VERSION).toBe(12);
+    expect(STATE_SCHEMA_VERSION).toBe(13);
     expect(plugin.migrateState).toBe(migrateState);
   });
 
@@ -233,16 +233,17 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
       (c) => c.teamId === "red" && c.status === "open" && c.allowedMethods.includes("prove"),
     );
     if (!redContract) throw new Error("test setup: expected an open contract for red after tick(0)");
-    const proveOp: CryptoBattleOp = buildProveSudokuOp(
-      plugin.projectForTeam(state, "red").vault,
-      redContract.id,
-    );
-    state = expectDispatched(dispatchOp(plugin, state, "red", proveOp));
+    const witness = plugin.projectForTeam(state, "red").myContracts.find(c => c.id === redContract.id)?.schnorr;
+    if (!witness) throw new Error("expected Schnorr witness");
+    state = expectDispatched(dispatchOp(plugin, state, "red", {kind: "schnorr-commit", contractId: redContract.id, y:13, a: 8}));
+    const pending = plugin.projectForTeam(state, "red").myContracts.find(c => c.id === redContract.id)?.schnorr?.pending;
+    if (!pending) throw new Error("expected verifier challenge");
+    state = expectDispatched(dispatchOp(plugin, state, "red", {kind: "schnorr-response", contractId: redContract.id, z: (3 + pending.e * 7) % 11}));
     const redAfterProve = state.teams.red;
     if (!redAfterProve) throw new Error("test setup: expected a red team");
     expect(redAfterProve.score).toBe(redContract.points);
     expect(state.publicLedger).toHaveLength(2);
-    expect(decodeLedger(state.publicLedger, state.teams)[1]?.kind).toBe("sudoku-reveal");
+    expect(decodeLedger(state.publicLedger, state.teams)[1]?.kind).toBe("proof");
 
     // -- HUNT: blue reconstructs red's secret from `threshold` of red's
     // shares (see this file's header on why this reads state.teams directly
