@@ -1,3 +1,4 @@
+import type {ConstraintTask} from "./snark.ts";
 import type {Point} from "./ec.ts";
 /**
  * State / op / projection / config types for the PROVE / LEAK / HUNT Battle's
@@ -192,6 +193,7 @@ export interface PhaseBoundaries {
  */
 export interface CryptoBattleConfig {
   readonly ecOrders?: boolean;
+  readonly snarkOrders?: boolean;
   readonly proofProtocol?: "schnorr-v1";
   /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
   readonly prime: string;
@@ -376,6 +378,7 @@ export type OrderTask =
    * stated here, so a team relabels the whole grid rather than the four cells
    * it knows will be read.
    */
+  | ConstraintTask
   | { readonly kind: "ec-add"; readonly left:Point; readonly right:Point }
   | { readonly kind: "zk-sudoku" }
   | { readonly kind: "rps-duel"; readonly duelId: string; readonly opponentTeamId: string };
@@ -997,6 +1000,7 @@ export type StoredHuntLogEntry = HuntLogEntry | {
 
 export type CryptoBattleOp =
   | { readonly kind: "schnorr-commit"; readonly contractId: string; readonly y: number; readonly a: number }
+  | { readonly kind: "snark"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "ec"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "schnorr-response"; readonly contractId: string; readonly z: number }
   | { readonly kind: "hunt-rotor"; readonly targetTeamId: string; readonly generation: number; readonly a: number; readonly b: number }
@@ -1253,6 +1257,7 @@ export type OrderTaskProjection =
    * [Issue #709] Nothing to add: the solution is on the vault and the puzzle
    * is public. Kept as its own arm so a card can name the job.
    */
+  | ConstraintTask
   | { readonly kind: "ec-add"; readonly left:Point; readonly right:Point }
   | { readonly kind: "zk-sudoku" }
   | { readonly kind: "rps-duel"; readonly duelId: string; readonly opponentTeamId: string;
