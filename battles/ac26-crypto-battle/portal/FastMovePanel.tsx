@@ -1,3 +1,4 @@
+import {EcWorksheet} from "./EcWorksheet.tsx";
 import { BreachNotice } from "./BreachNotice.tsx";
 import { SchnorrProof } from "./SchnorrProof.tsx";
 import { power } from "../game/src/schnorr.ts";
@@ -59,7 +60,7 @@ import type {
 } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-type FeedbackKind = "leak" | "prove" | "hunt" | "rotate" | "hint" | "error";
+type FeedbackKind = "ec" | "leak" | "prove" | "hunt" | "rotate" | "hint" | "error";
 
 /**
  * [Issue #697] A banner before it is stamped with the submission it belongs to.
@@ -1508,6 +1509,16 @@ export default function FastMovePanel(props: PortalSlotProps) {
           onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
         onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
+      {selectedOrder?.task.kind === "ec-add" && <EcWorksheet key={`ec:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+        ()=>client.submitOp({kind:"ec",contractId:selectedOrder.id,answer}),
+        next=>{
+          if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
+          const delta=next.teams[projection.vault.teamId]!.score-projection.teams[projection.vault.teamId]!.score;
+          return hit?{kind:"prove",reward:delta,title:locale==="ja"?"点加算に成功！":"Point addition complete!",body:`P + Q = ${answer}`,lesson:locale==="ja"?"点加算を繰り返すと、秘密の整数から公開鍵の点を作る計算につながります。":"Repeated point addition turns a private integer into a public-key point."}:{kind:"error",title:locale==="ja"?"答えが違います":"Incorrect point",body:locale==="ja"?`${delta} 点。傾き、x、yの順に、7で割った余りを確認してください。`:`${delta} pt. Check the slope, x, and y remainders modulo7.`};
+        }
+      )}/>}
+
       {selectedOrder?.task.kind === "masked-total" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.mpcTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>

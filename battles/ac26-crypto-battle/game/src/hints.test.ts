@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type HintContext, HINT_LADDER, HINT_LEVELS, hintsFor } from "./hints.ts";
 import { SUBSTRING_SAFE_FIELD } from "./playtest.ts";
-import { applyOp, DEFAULT_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
+import { applyOp, DEFAULT_CONFIG, STREAMING_ORDER_CONFIG, initialState, projectForTeam, tick, validateOp } from "./reducer.ts";
 import type { ContractProjection, CryptoBattleProjection, CryptoBattleState, OrderTaskKind } from "./types.ts";
 
 /**
@@ -63,6 +63,12 @@ function oneOrderPerKind(): { projection: CryptoBattleProjection; order: Contrac
       if (!seen.has(order.task.kind)) seen.set(order.task.kind, { projection, order });
     }
     state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
+  }
+  let streaming = applyOp(initialState({...CTX,matchSecret:"ec-hints"},STREAMING_ORDER_CONFIG),"teamA",{kind:"start"});
+  for(let t=0;t<=900000&&!seen.has("ec-add");t+=30000){
+    streaming=tick(streaming,t);
+    const projection=projectForTeam(streaming,"teamA");
+    for(const order of projection.myContracts)if(order.task.kind==="ec-add")seen.set("ec-add",{projection,order});
   }
   return [...seen.values()];
 }
