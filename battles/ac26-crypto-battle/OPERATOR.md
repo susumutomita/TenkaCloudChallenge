@@ -565,3 +565,11 @@ after each disclosure. It pays the floor even with no unanswered work and scores
 below the race policy. Avoiding exposure remains a paid choice, not a guarantee
 that both human teams will choose to attack. The 90-minute RPS test retains all
 attacks, but its final score is 135 lower (nine disclosure retirement fees of15).
+
+Browser check for PR #752: the real local dev harness at 375×812 rendered
+`LEAK +30` and `LEAKのみ` on the disclosure card, with document scrollWidth375.
+Selecting a disclosure and submitting LEAK showed the minimum15-point ROTATE
+cost before its button. Screenshots: disclosure-mobile-752.png and
+disclosure-rotate-price-752.png in the local verification output directory.
+This used the harness's accelerated, paused scenario, not an AWS event or timed
+human gameplay. The existing sticky Order queue remains visible while scrolling.

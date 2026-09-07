@@ -332,7 +332,7 @@ export function OrderBelt({
                     {newIds.includes(order.id) && <b className="tc-order-arrived">{locale === "ja" ? "到着" : "New"}</b>}
                     </span>}
                   </span>
-                  <span>{taskLabel(order.task, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
+                  <span>{order.privacyConstraint === "must-disclose" ? (locale === "ja" ? "シェアを公開して答える（LEAKのみ）" : "Publish a share (LEAK only)") : taskLabel(order.task, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
                 </div>
                 {/*
                   [Issue #645] Which methods THIS Order accepts, on the card
