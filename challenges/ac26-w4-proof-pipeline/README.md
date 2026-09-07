@@ -63,7 +63,7 @@ out the two shortcuts that would otherwise pass everything —
 
 - rebuilding a clean run from the definition satisfies every contract and destroys the
   evidence;
-- setting the verdict to `reject` silences every contract at once.
+- changing the verdict to `reject` only repairs acceptance of unsatisfied constraints; other violations remain.
 
 There is one fault for which flipping the verdict *is* the repair. Finding which, and
 being able to say why it is the exception, is most of the checkpoint.
@@ -95,7 +95,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `cost` | 30 | Four unsupported claims rejected and four supported ones kept |
 | `diagnose` | 50 | Earliest broken layer on nine faults, and a one-field repair |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at two points each (48 total).
 
 ## What the claims are for
 
@@ -165,3 +165,5 @@ from the prover-only set (nothing ever publishes it, so no verdict changes) and 
 `dangling_artifacts`' output (the hidden tests sort before comparing). A mutation that
 cannot change an outcome does not demonstrate coverage, and leaving an unkillable one in
 the list teaches that a `SURVIVED` line can be ignored.
+
+Reader review found missing definition keys, inclusion rules and repair contracts. These are now free bilingual instructions, with three hint rungs per checkpoint. The author compared the contract with the reference, not as participant-play evidence. Runtime and grading remain unchanged; live Portal play was not run.

@@ -24,7 +24,7 @@ in every run in this problem. A commitment succeeding tells you the prover commi
 something. It tells you nothing about whether what they committed to satisfies the
 constraint system, and nothing about whether the verifier checked the openings.
 
-Run `make inspect` first.
+Start the problem in the Portal and press Inspect evidence first.
 """
 
 from __future__ import annotations
@@ -187,8 +187,7 @@ def repair(definition: dict, run: dict) -> dict:
     the one the fault damaged.
 
     That rules out two shortcuts. Rebuilding a clean run from the definition passes
-    every contract while destroying the evidence. Setting the verdict to `reject`
-    silences every contract at once without repairing anything -- with one exception,
-    and finding which fault that is, and why, is most of this checkpoint.
+    every contract while destroying the evidence. Changing verdict to reject repairs only acceptance of unsatisfied constraints.
+    Other record-level violations remain even when the verdict is reject.
     """
     return dict(run)
