@@ -1,136 +1,60 @@
-# 掛け算は 5 回、通信は 1 回
+# 掛け算は5回、通信は1回
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+件数と深刻度の加法的シェアから、組織全体のインシデントスコアを組み立てます。同じコードで計算を合わせ、許可された開示だけを行い、独立な開示を模型上の1ラウンドへまとめます。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 250 · **Chapter:** Week 2 / Private
-Aggregation Synthesis · **Role:** `synthesis` · **想定時間:** 75〜105 分 · **配点:** 300
-· **必須前提:** `ac26-w2-privacy-audit` · **Status:** draft — 後述の「Week 2 の対応づけ」を参照
+Advanced Cryptography Program 2026の非公式・独立したcompanionです。講座との提携・承認はありません。本問は算術と開示窓口の模型であり、実運用のMPCプロトコルではありません。
 
-## ストーリー
+## 参加者の進め方
 
-複数の組織が incident について情報交換をしています。うまくいっていません。昼食の席で、一般論として、
-誰も最初に数字を言おうとしないからです。彼らが本当に欲しいのは 1 つの数値です。
+Participant Portalで起動し、「証拠を確認」から公開設定を見て、`aggregate.py`を編集します。まず`plan(spec)`を書き、「書く前にコストを見積もる」を提出できます。他の関数が未完成でもplanは独立に採点されます。「公開テストを実行」は見積もりの形と1設定のスコアを検査するので、aggregateが未完成の間はスコア側が失敗します。
 
-```text
-score = Σ_i (count_i * severity_i) + bias        （bias は公開、mod p）
-```
+本文には用語、組織番号と破片所有者番号の表、必要な式、p=7の手計算例があります。`share_inputs`、`add_public`、`aggregate`を完成させ、同じエディタから各欄を提出します。8欄とも現在のソースを使用し、端末・別エディタ・手入力JSONは不要です。
 
-積の両側が秘密で、しかも別々の人が持っています。この式が Week 2 のすべてです。
-
-## 何を作るのか
-
-公開はすべて 1 つのハンドルを通ります。
-
-```python
-io.open_batch([sharing_a, sharing_b])   # -> [value_a, value_b]   1 round
-io.open_batch([sharing_a])
-io.open_batch([sharing_b])              # -> 同じ値               2 rounds
-```
-
-1 回の呼び出しが 1 round です。何をどうまとめるかは設計判断であり、主張ではなく**実測**で採点され
-ます。
-
-## Participant Portal での進め方
-
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
-2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
-3. Portal のエディタで starter のソースを編集する。
-4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
-5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
-
-checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
-エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
-値は拒否されます。
-
-## 採点
-
-8 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
-
-| Checkpoint | 配点 | 何を検査するか |
+| 提出欄 | 配点 | 確認すること |
 |---|---:|---|
-| `plan` | 35 | 実装前に見積もった乗算数・triple 数・round 数 |
-| `share-inputs` | 30 | party 数ぶんの正規形 share と、秘密への復元 |
-| `linear` | 30 | 公開定数を 1 party だけが畳み込む |
-| `multiply` | 55 | スコアが平文計算と一致する |
-| `result` | 35 | 再 share・順序反転・入力の既知変化 |
-| `privacy` | 40 | mask 差を公開し、それ以外を公開しない |
-| `cost` | 35 | 見積もりと実測の一致 |
-| `transfer` | 40 | 見たことのない seed での再実行 |
+| plan | 35 | 積数・三つ組数・ラウンド数を3キーの整数で見積もる |
+| share-inputs | 30 | 渡された乱数を先頭に使い、最後の破片で合計を合わせる |
+| linear | 30 | 元の値に公開定数を足した値へ復元できる |
+| multiply | 55 | スコアの破片が平文の式と一致する |
+| result | 35 | 再分割・組織順の変更・件数変化の関係を保つ |
+| privacy | 40 | 開示した値が各三つ組のマスク差と重複回数込みで一致する |
+| cost | 35 | 実開示1回・2k値・planとの一致 |
+| transfer | 40 | 別の割る数・人数・入力でも4関数が成立する |
 
-hint は 8 個の checkpoint すべてに 3 段ずつあります (hint1 = 何をしたいのか / hint2 = どう考えるか / hint3 = 読めば解けるウォークスルー)。減点は各 checkpoint の配点の 50% 以内で、24 個すべてを開いても 300 点中 160 点が残ります。
+誤答は15点減点。各欄の3ヒントは仕組み、小さな式・例、実際の引数と画面名による手順です。既存ID・配点・ヒント減点は維持しています。
 
-## 3 つの数のうち 2 つは同じ
+## 算術と観察
 
-組織が k 個なら乗算は k 回、triple も k 個です。しかし round は k 回では**ありません**。どの積の
-`d` と `e` も他の積の結果に依存しないので、全部を 1 回の open にまとめられます。
+組織i、破片の所有者jを分け、`counts[i]`・`severities[i]`・その積自身の`triple_list[i]`から差分を作ります。d/eを開示後、各破片で`c_j+d*b_j+e*a_j`を計算し、公開項d*eを全体へ1回だけ加えます。これは`(a+d)*(b+e)`の展開です。積を位置ごとに合計し、biasも1回加えます。p7例では返却[6,5]が4へ復元されます。
 
-乗算ごとに open する実装は正しく、privacy も保たれ、latency だけが k 倍になります。それがこの問題の
-主題です。round 数は乗算の**深さ**で決まり、個数では決まりません。この式の深さは 1 なので、幅がいくら
-増えても round は 1 のままです。深さ D の回路なら D round になります。
+積どうしは独立なので、2k個のマスク差を1回の`io.open_batch`へまとめられます。開いた値の数と呼出しの回数は別です。積ごとに開く実装は計算と開示値が正しくても1ラウンドの目標を満たしません。三つ組の再利用は、正しく2k値を開きながら入力どうしの差を漏らすことがあります。privacyとcostを別々に確認する理由です。
 
-## triple の使い回しが correctness のバグではない理由
+戻り値と開示入力の順序付き列はlist/tuple同値で、share_inputsの外側・内側も同様です。公開定数を複数位置へ配分する場合も、調整量の合計がその定数とmod pで一致すれば正解です。bool・小数・誤った長さ・範囲外の要素は親が拒否します。
 
-Beaver 乗算は c = a*b を満たす任意の triple で正しく動くので、同じ triple を全積に使ってもスコアは
-合います。書けるどんな correctness test も通ります。
+開示の条件は、**復元して開いた値を、重複する回数も含めて比較**します。順序は自由です。ソースの特定の書き方を要求したり、関数本体の実行を証明したりする検査ではありません。公開定数を別の所有者へ足す方法や、合計を変えない返却シェアの再配分など、正しい別実装も受け入れます。
 
-壊れるのは privacy です。1 つの `a` が `x₁` と `x₂` の両方を覆うと、open された `d₁ - d₂` は
-`x₁ - x₂` そのもの、つまり秘密の差が transcript に載ります。
+## 模型と実行制限の範囲
 
-hidden test は open された値の多重集合を、供給された triple が含意する mask 差と厳密に照合します。
-blacklist ではなく完全一致なので、「別の積の triple を使った」「余計に何か出した」「足りない」を
-1 つの検査で捕まえます。
+1本のPythonに全シェアを渡すので、そのプログラムは引数を自分で復元できます。模型の観察者が見るのは`io.open_batch`で要求された開示値です。全Pythonの情報流、分散した秘密性、結託対策、副経路、実ネットワークの往復数を証明する欄ではありません。
 
-## correctness・privacy・cost を別々に採点する理由
+観察者が知らない、独立で一様な使い捨てマスクは理想的な算術の説明です。fixtureは決定的な教材データであり、暗号用乱数の保証ではありません。マスク0も有効値として生成できます。スコアを公開した後は、そのスコアから推測できることが残ります。
 
-実装は「正しいが高い」「正しいが漏れる」「安全だが誤り」のいずれにもなり得ます。1 つの verdict に
-まとめると、自分がどれを作ったのか分かりません。だから 3 つの checkpoint に分けてあります。
+Workbenchは親が持つ既存seed/tcw1提出準備を維持し、hidden fixtureと採点器は非公開verifier imageに置きます。Linuxでは提出コードを別プロセスに渡し、環境を空から作り、継承FDを閉じ、ファイルの読取り・作成・属性変更・プログラム起動・ネットワーク・他プロセスへの干渉・優先度変更・永続IPCを制限します。親が戻り値を検算し、受け取った開示要求をその場で処理して記録します。子が書いたカウンタや偽の採点出力は判定に使いません。新しい要求IDは古い応答や事前印字を拒否しますが、関数実行の証明ではありません。既存25秒の評価上限と入力・出力量の上限を保ち、プロセス群を回収し、Tiniが孤児プロセスを回収します。
 
-## 公開した出力から定義上漏れるもの
+検証した範囲の実行制限であり、Docker管理者への防御や汎用の安全な実行基盤を保証しません。失敗時にseed、hidden入力、例外本文、参照出力は返しません。公開ソースの初期化診断は検証したファイル名・行番号・例外型に限定します。
 
-score を公開すると決めた時点で、score から導けることは公開されます。k = 1 なら `score - bias` は
-その組織の積そのものです。k が小さく severity の範囲が狭ければ、count の候補はかなり絞れます。
+## ローカル検証と資源
 
-MPC が保証するのは**計算過程**が追加の漏洩を生まないことです。出力から何も分からないことは保証
-しません。それが必要なら、出力の摂動や閾値化といった別の仕組みが要ります。
+`make test`はstarterまたは編集中のコードへ公開検査を行います。未完成starterのスコア検査は失敗が期待値です。`make reference-test`は既存9変異とLinuxの実行・開示境界回帰をauthor imageで実行します。リポジトリルートの`make agent-gate`はcatalog契約の検査であり、実行確認を代替しません。
 
-## threat model
+既定Composeは`local/docker-compose.yml`。Workbenchはhost-loopback18099、verifierは内部networkのみです。両serviceは非root、init付き。今回の受入確認は専用project `ac26-private-aggregate-reader-716`、localhost18153、合成seed `private-aggregate-reader-716`を使用しました。before/afterの証拠、コマンド、保持した実Portalコンポーネントのharnessは`local/tests/hidden/READER.md`にあります。
 
-honest-but-curious、collusion なし、toy field、手で検算できる大きさの値。security の主張でも、実運用
-のモデルでもありません。
+AWS資源は作成しません。DockerはローカルCPU・メモリ・image・containerを使用します。使用したprojectだけを`make verifier-down`または正確なproject専用downコマンドで停止します。他の稼働projectには触れません。
 
-## Week 2 の対応づけ
+## 講義との対応
 
-Week 2 の教材は `curriculum.md` が記録している commit の時点で未公開です。`courseAlignment` は
-`week2/README.md` を `kind: "placeholder"` で pin し、`status` は `draft` のままです。この pin は
-対応づけではなく、その commit 時点で教材が存在しなかったという事実を記録します。これにより
-`bun run course:drift` は教材公開の日に `PUBLISHED` を報告できます。#219 が対応づけを確定してから
-draft を外します。
+metadataの既存alignment/status pinは維持しました。過去のsnapshotを示すもので、現在もWeek2が未公開だという主張ではありません。今回は講義の`week2/problems/toy-mpc/README.md`と作者Week2ノートの加法的分散・使い捨て三つ組・開示の選択・通信コストを読み直しました。正確なpath・commit・hashは`local/tests/hidden/source-readings.json`に記録しています。Boolean MPC、OT、実分散システムへの展開はこの算術の総合問題の範囲外です。
 
-## 保証範囲
+## Pythonで使える補助
 
-ローカル実行は**自習用の honor-system 検証**です。compose stack のすべてのコンテナと
-Docker デーモンを管理する人を、中身の閲覧から止める手立てはありません。ここにある境界は
-秘匿ではなく誤配送の防止です。build して動かす Workbench コンテナには starter と公開テスト
-しか入っておらず、fixture も hidden test も参照解答も verifier 本体も入っていません。
-それらは Workbench がネットワーク越しに話す、公開されていない second container と、
-`make reference-test` が build する author 専用 image にだけあります。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した実装 9 種類があります。うち 2 つ
-（triple の使い回しと、乗算ごとの open）は**完全に正しいスコアを返します**。答えだけを見る suite なら
-両方とも通ってしまい、この問題は算術を採点しているだけになります。
+計算用の標準ライブラリ `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing` を読み込めます。これらは実行前に用意されます。他のモジュールの追加読み込みやファイル・ネットワークへのアクセスには対応しません。公開・提出とも1回25秒以内です。

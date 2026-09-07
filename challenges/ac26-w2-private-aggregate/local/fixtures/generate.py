@@ -128,12 +128,13 @@ class Triple:
 
 def triples(seed: str, label: str, st: Setting, count: int) -> list[Triple]:
     """`count` independent preprocessed triples. Reusing one is a real defect, not a
-    style question, so they are generated distinctly and the hidden tests check it."""
+    style question, so each product has its own labeled material. Zero masks are valid field elements.
+    Deterministic toy generation is not a cryptographic randomness guarantee."""
     out: list[Triple] = []
     for index in range(count):
         s = _stream(seed, f"triple:{label}:{index}")
-        a = _pick(s, 0, 1, st.p - 1)
-        b = _pick(s, 4, 1, st.p - 1)
+        a = _pick(s, 0, 0, st.p - 1)
+        b = _pick(s, 4, 0, st.p - 1)
         out.append(
             Triple(
                 a=shares_of(seed, f"{label}-a{index}", a, st.parties, st.p),
@@ -145,7 +146,7 @@ def triples(seed: str, label: str, st: Setting, count: int) -> list[Triple]:
 
 
 def inputs_shared(seed: str, label: str, st: Setting) -> dict[str, list[list[int]]]:
-    """Every organization's two private figures, already split. Nobody holds either."""
+    """Both figures are shared; this one-process model holds every piece."""
     return {
         "counts": [
             shares_of(seed, f"{label}-count{i}", value, st.parties, st.p)

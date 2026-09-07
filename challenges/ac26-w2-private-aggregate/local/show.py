@@ -1,4 +1,4 @@
-"""`make inspect` — your setting, the shape of what you are handed, and your token."""
+"""Inspect evidence: public settings and one organization's complete example shares."""
 
 from __future__ import annotations
 
@@ -58,26 +58,28 @@ def main() -> None:
     payload = _public_payload()
     params = payload["params"]
     p, parties = params["p"], params["parties"]
-    print("health token  :", payload["healthToken"])
+    print("health marker (no answer required):", payload["healthToken"])
     print("field p       :", p)
     print("organizations :", parties)
     print("public bias   :", params["bias"])
     print()
-    print("what your protocol is handed (values shown are shares, not secrets):")
+    print("Public example: all additive pieces are shown; their sum modulo p recovers each value.")
+    print("公開例は全破片を表示します。合計をpで割った余りから元の数を復元できます。")
     triple = payload["triples"][0]
     print(json.dumps({
         "counts[0]": payload["counts"][0],
         "severities[0]": payload["severities"][0],
-        "triple[0].a": triple["a"],
-        "triple[0].b": triple["b"],
-        "triple[0].c": triple["c"],
+        "triple_list[0].a": triple["a"],
+        "triple_list[0].b": triple["b"],
+        "triple_list[0].c": triple["c"],
     }, indent=2))
     print()
     print(f"score = sum of {parties} products, plus a public bias, mod {p}")
     print()
-    print("Both factors of every product are secret. Count the multiplications, then")
-    print("count the rounds. They are not the same number, and only one of them is")
-    print("forced by the expression.")
+    print("This one-program model holds all shares. The privacy check observes open_batch only.")
+    print("この模型のPythonは全破片を持ちます。privacyが観察するのはopen_batchです。")
+    print("Count the products and the opening rounds separately; begin with plan(spec).")
+    print("積の数と開示の呼出し回数を分け、まずplan(spec)から始めてください。")
 
 
 if __name__ == "__main__":
