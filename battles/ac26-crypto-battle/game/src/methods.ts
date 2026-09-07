@@ -41,7 +41,7 @@ import type { OrderTaskKind } from "./types.ts";
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec" | "io" | "snark";
+export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec" | "stark" | "io" | "snark";
 
 /**
  * What an Order forbids being made public.
@@ -88,6 +88,7 @@ export interface SubmissionMethodSpec {
 }
 
 export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMethodSpec>> = {
+  stark: {method:"stark",publishesRawSecretMaterial:false},
   io: {method:"io",publishesRawSecretMaterial:false},
   snark: {method:"snark",publishesRawSecretMaterial:false},
   ec: {method:"ec",publishesRawSecretMaterial:false},
@@ -116,6 +117,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
   "cipher",
   "duel",
   "ec",
+  "stark",
   "io",
   "snark",
 ];
@@ -134,6 +136,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
  */
 const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[]>> = {
   "ec-add": ["ec"],
+  "stark-trace": ["stark"],
   "io-equivalence": ["io"],
   "snark-constraints": ["snark"],
   "rotor-encrypt": ["leak", "cipher"],

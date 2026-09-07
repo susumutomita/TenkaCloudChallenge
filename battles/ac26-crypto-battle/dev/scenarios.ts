@@ -74,6 +74,7 @@ export const SCENARIO_IDS = [
   "waiting",
   "streaming",
   "ec-order",
+  "stark-order",
   "io-order",
   "snark-order",
 
@@ -109,6 +110,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
   "snark-order": {ja:"SNARK — 計算と配線の不正を見つける",en:"SNARK — check gates and wires"},
 
   "schnorr-lightning": {ja:"Schnorr — ライトニングを使って証明する",en:"Schnorr — prove with lightning"},
+  "stark-order": {ja:"STARK — 実行表と折り畳みを検査",en:"STARK — trace and fold"},
   "io-order": {ja:"iO — 同じ機能と公開分布を比べる",en:"iO — compare functions and distributions"},
   "ec-order": {ja:"楕円曲線 — 7で割った余りで2点を足す",en:"Elliptic curve — add two points modulo7"},
   streaming: { ja: "新設定 — 30秒ごとに到着・回答は1分", en: "Current pacing — arrives every 30s, answer within 1m" },
@@ -342,7 +344,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver((id === "streaming" || id === "ec-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
+  const driver = makeDriver((id === "streaming" || id === "ec-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -363,6 +365,14 @@ export function buildScenario(id: ScenarioId): Scenario {
         if(view.lightning?.status === "available" && view.myContracts.some(c=>c.status === "open" && c.schnorr && !c.allowedMethods.includes("leak"))) break;
         driver.advance(30_000);
         if(i===29) throw new Error("no Schnorr lightning order reached");
+      }
+      break;
+    }
+    case "stark-order": {
+      for(let i=0;i<150;i++) {
+        if(driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="stark-trace"))break;
+        driver.advance(30_000);
+        if(i===149)throw new Error("no STARK worksheet reached");
       }
       break;
     }

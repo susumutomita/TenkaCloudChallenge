@@ -51,6 +51,7 @@ const COPY = {
     moves: [
       { name: "CIPHER — 数字を暗号にする", body: "最初はシーザー暗号です。元の数字に秘密の鍵を足し、記号の個数で割った余りを答えます。答えは公開されません。同じお題を LEAK すると元と答えの組が公開され、鍵を読む材料になります。先の段ではお題に書かれた別の方式へ進みます。" },
       { name: "IO — 識別不可能性難読化（iO）の条件を比べる", body: "全4入力で計算AとBが同じ答えを出すか、変換後に公開する表の分布が同じかを比較します。空欄2個、同じ機能なら1・違えば0、共通する公開データの組の個数を提出します。全入力を列挙する模型なので、一般の効率的なiOではありません。" },
+      {name:"STARK — 実行表と折り畳みを検査",body:"実行表の2乗の規則を検査し、そのずれを余りの式へつなぎ、商を1回折り畳みます。4欄を7で割った余りで提出します。実行が正しいかと折り畳みの計算は別々に確認します。コミットメントやゼロ知識化を含む完全なSTARKではありません。"},
       {name:"SNARK — 計算と配線を検査",body:"3行の計算と2本の配線の差を7で割った余りにして、5欄に入力します。全て0なら整合しています。不正な表でもその検出結果が正しければ得点します。短い証明やゼロ知識化ではなく算術化の模型です。"},
       { name: "EC — 楕円曲線の点を足す", body: "楕円曲線は、決めた式を満たす座標(x,y)の集まりです。画面の式と逆元の表でP+Qを求め、xとyを半角スペースで区切って提出します。ECDSAという電子署名でも使う計算ですが、この問題は署名全体ではなく、7で割った余りで行う点加算です。" },
       { name: "FHE — 暗号のまま足す", body: "準同型暗号は、中身を隠した暗号文のまま計算する技術です。左右 2 個の数字の組を受け取り、左どうし・右どうしを足して、各々の余りを提出します。完全準同型暗号（FHE）は掛け算も扱います。このゲームは足し算を体験するモデルです。" },
@@ -84,6 +85,7 @@ const COPY = {
     moves: [
       { name: "CIPHER — Encrypt digits", body: "Start with Caesar: add your secret key to each digit and keep the remainder after division by the symbol count. Your answer is not published. LEAK instead publishes the original and answer together, giving others evidence to recover the key. Later rungs explain their own different methods." },
       { name: "IO — Compare indistinguishability obfuscation (iO) conditions", body: "Compare A and B on all four inputs, then compare the distributions of their transformed tables. Submit two missing outputs, 1 for equivalent functions or 0 otherwise, and the shared outcome count. Enumerating every input is a finite model, not efficient general-purpose iO." },
+      {name:"STARK — Check the trace and fold",body:"Check two squaring transitions, connect their mismatches to a remainder polynomial and fold the quotient once. Submit four remainders by7. Execution correctness and folding are separate checks. This is not a full STARK with commitments or zero-knowledge masking."},
       {name:"SNARK — Check gates and wires",body:"Enter five remainders modulo7 for three gates and two wires. All zero means consistent. Correctly detecting a corrupt table earns points too. This models arithmetization, not a succinct proof or zero knowledge."},
       { name: "EC — Add elliptic curve points", body: "An elliptic curve is a set of coordinate pairs satisfying an equation. Use the displayed formula and inverse table to find P+Q; submit x space y. ECDSA digital signatures use point addition, but this exercise only covers addition modulo7, not a complete signature." },
       { name: "FHE — Add encrypted values", body: "Homomorphic encryption allows computation on hidden values. Receive pairs, add lefts and rights separately, and submit the remainders. Fully homomorphic encryption (FHE) also supports multiplication; this game models addition." },

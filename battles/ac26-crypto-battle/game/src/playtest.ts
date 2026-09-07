@@ -1,3 +1,4 @@
+import {starkAnswer} from "./stark.ts";
 import {ioAnswer} from "./io.ts";
 import {addPoints} from "./ec.ts";
 import {constraintResiduals} from "./snark.ts";
@@ -482,6 +483,7 @@ export function buildClearingOp(
       return buildCipherOp(contract);
     case "homomorphic-sum":
       return buildFheOp(contract, prime);
+    case "stark-trace": return {kind:"stark",contractId:contract.id,answer:starkAnswer(contract.task).join(" ")};
     case "io-equivalence": return {kind:"io",contractId:contract.id,answer:ioAnswer(contract.task).join(" ")};
     case "snark-constraints": return {kind:"snark",contractId:contract.id,answer:constraintResiduals(contract.task).join(" ")};
     case "ec-add": return {kind:"ec",contractId:contract.id,answer:addPoints(contract.task.left,contract.task.right)?.join(" ")??"O"};
