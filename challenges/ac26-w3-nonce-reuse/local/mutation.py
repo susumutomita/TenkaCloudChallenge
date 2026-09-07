@@ -128,6 +128,7 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 
 
 MUTATIONS += (
+    ("returns zero for a different signer", [('        raise MalformedRecord("the two transcripts are not from the same signer")', '        return 0')]),
     ("skips recovery input parsing", [("    first = parse_record(first, group)\n    second = parse_record(second, group)", "")]),
     ("does not require a message field", [('("message", "public_key", "commitment", "response")', '("public_key", "commitment", "response")')]),
     ("accepts non-integer responses", [("not isinstance(response, int) or isinstance(response, bool) or not 0 <= response < group.n", "not 0 <= response < group.n")]),
@@ -161,7 +162,16 @@ def main() -> int:
     suite = unittest.defaultTestLoader.discover(str(ROOT / "tests" / "hidden"), pattern="test_*.py")
     if not unittest.TextTestRunner().run(suite).wasSuccessful():
         return 1
-    baseline = check_recover.run(_load(REFERENCE), SEED)
+    from fixtures.generate import deterministic_nonce, secp_group, toy_group
+    reference = _load(REFERENCE)
+    for group in (secp_group(), toy_group(SEED, "fixture-contract")):
+        for secret in (1, group.n - 1):
+            for message in (b"", b"nonce-contract", bytes(range(256))):
+                if deterministic_nonce(secret, message, group) != reference.safe_nonce(secret, message, group):
+                    print("FAIL fixture nonce differs from the repair reference")
+                    return 1
+    print("PASS fixture and repair reference use the same HMAC contract")
+    baseline = check_recover.run(reference, SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")
         return 1

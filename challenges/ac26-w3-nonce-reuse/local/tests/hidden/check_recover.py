@@ -280,9 +280,8 @@ def check_reject(module, seed: str) -> list[str]:
             continue
         if foreign["public_key"] != parsed_first["public_key"]:
             try:
-                recovered = module.recover_secret(parsed_first, foreign, group)
-                if module.confirms(recovered, parsed_first["public_key"], group):
-                    failures.append("a cross-signer pair produced a confirmed recovery")
+                module.recover_secret(parsed_first, foreign, group)
+                failures.append("a cross-signer pair must raise MalformedRecord")
             except module.MalformedRecord:
                 pass
             except Exception as error:  # noqa: BLE001

@@ -20,7 +20,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 #     the participant container has `FLAG_SEED` in its environment. The hidden phases are
 #     three fixed labels, so a learner could compute their keys here and hard-code them
 #     into a submission instead of attacking a log.
-#   * `deterministic_nonce` is the `repair` checkpoint's answer, with a docstring saying
+#   * `deterministic_nonce` implements the repair checkpoint's HMAC contract, with a docstring saying
 #     what has to go into the hash and why the message alone is not enough.
 #
 # `tests/hidden/check_recover.py` left too: its `_really_accepts` is the acceptance rule

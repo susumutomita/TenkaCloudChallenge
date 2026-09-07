@@ -25,6 +25,8 @@ routine the log records. The log itself is handed to you as an argument, and
 Inspect evidence in Participant Portal displays this deployment's log.
 """
 
+# Point coordinates must be integers (not bool), in 0..group.p-1.
+# Reject infinity before accepting curve membership; otherwise raise MalformedRecord.
 from __future__ import annotations
 
 
