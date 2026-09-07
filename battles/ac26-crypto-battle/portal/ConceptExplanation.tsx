@@ -17,7 +17,7 @@ export const SHARE_PAIR_TABLE = [["0", "5", "4"], ["1", "0", "1"], ["2", "2", "5
 /** Fixed teaching examples, independent of every match's private data. */
 export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
   ja: {
-    snark: {name:"SNARKの算術化",steps:[{title:"計算と配線を式にする",lines:["SNARKは計算の正しさを短い証明で示す方式です。算術化は計算を、正しければ余りが0になる式へ直すことです。","ゲートは1行の計算です。出力を次の入力へつなぐ配線も一致する必要があります。","この模型は表を直接検査します。短い証明やゼロ知識化は未実装です。"]}]},
+    snark: {name:"SNARKの算術化",steps:[{title:"計算と配線を式にする",lines:["SNARKは計算の正しさを短い証明で示す方式です。算術化は計算を、正しければ余りが0になる式へ直すことです。","ゲートは1行の計算です。出力を次の入力へつなぐ配線も一致する必要があります。","この模型は表を直接検査します。短い証明や、秘密を見せず正しさを示すゼロ知識の仕組みは未実装です。"]}]},
     ec: {name:"楕円曲線の点加算",steps:[{title:"ECDSAの土台となる計算",lines:["点は座標(x,y)の組です。普通の座標同士の足し算とは別の規則で、曲線上の2点から曲線上の別の点を作ります。","このお題は点加算のみ。ECDSA署名の生成や検証全体ではありません。"]}]},
     schnorr: {name:"ゼロ知識証明（Schnorr）",steps:[]},
     rotor: ROTOR_EXPLANATIONS.ja,
@@ -55,7 +55,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
     ] },
   },
   en: {
-    snark: {name:"SNARK arithmetization",steps:[{title:"Equations for computation and wiring",lines:["A SNARK gives a short proof that a computation is correct. Arithmetization translates computations into equations whose remainders are zero when correct.","A gate is one calculation. Wires must connect equal output and input values.","This model directly checks a table. It does not implement succinct proofs or zero knowledge."]}]},
+    snark: {name:"SNARK arithmetization",steps:[{title:"Equations for computation and wiring",lines:["A SNARK gives a short proof that a computation is correct. Arithmetization translates computations into equations whose remainders are zero when correct.","A gate is one calculation. Wires must connect equal output and input values.","This model directly checks a table. It does not produce short proofs or hide private values while showing correctness (zero knowledge)."]}]},
     ec: {name:"Elliptic-curve addition",steps:[{title:"Arithmetic used by ECDSA",lines:["A point is a pair of coordinates (x,y). Curve addition combines two curve points into another, using a special rule rather than adding coordinates.","This task covers point addition, not the complete ECDSA signing or verification algorithm."]}]},
     schnorr: {name:"Zero-knowledge proof (Schnorr)",steps:[]},
     rotor: ROTOR_EXPLANATIONS.en,
