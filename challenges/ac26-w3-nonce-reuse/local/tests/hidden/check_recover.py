@@ -85,6 +85,10 @@ def check_parse(module, seed: str) -> list[str]:
         good_point = normalized["public_key"]
         invalid_points = (
             group.infinity(),
+            Point(good_point.params, "x", good_point.y),
+            Point(good_point.params, good_point.x, "y"),
+            Point(good_point.params, None, good_point.y),
+            Point(good_point.params, True, good_point.y),
             Point((group.p, group.a + 1, group.b), good_point.x, good_point.y),
             Point(good_point.params, good_point.x + group.p, good_point.y),
             next(group.point(a, b) for a in range(group.p) for b in range(group.p)

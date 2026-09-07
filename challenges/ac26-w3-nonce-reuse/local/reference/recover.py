@@ -41,10 +41,10 @@ def _point(value, group):
     from participant.schnorr import Point
 
     if isinstance(value, Point):
-        if value.is_infinity or not group.contains(value):
-            raise MalformedRecord("the point is not a usable group element")
         if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:
             raise MalformedRecord("a coordinate is not canonical")
+        if value.is_infinity or not group.contains(value):
+            raise MalformedRecord("the point is not a usable group element")
         return value
     if not isinstance(value, (tuple, list)) or len(value) != 2:
         raise MalformedRecord("a point is a pair of coordinates")

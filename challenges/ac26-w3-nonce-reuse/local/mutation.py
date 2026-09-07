@@ -124,6 +124,7 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 
 
 MUTATIONS += (
+    ("checks membership before coordinate types", [('        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:\n            raise MalformedRecord("a coordinate is not canonical")\n        if value.is_infinity or not group.contains(value):\n            raise MalformedRecord("the point is not a usable group element")\n', '        if value.is_infinity or not group.contains(value):\n            raise MalformedRecord("the point is not a usable group element")\n        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:\n            raise MalformedRecord("a coordinate is not canonical")\n')]),
     ("uses plain SHA256 instead of HMAC", [(
         "digest = hmac.new(key, data, hashlib.sha256).digest()",
         "digest = hashlib.sha256(key + data).digest()",
