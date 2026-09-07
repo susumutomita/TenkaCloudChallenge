@@ -43,7 +43,7 @@ the loop — the shape of the answer is what makes the whole construction possib
 `params` carries `base`, `levels`, `degree`, `dimension`, `modulus`, `plaintext_modulus`,
 `delta`. They all change between checkpoints. Anything hardcoded is wrong somewhere.
 
-Run `make inspect` first.
+Use Inspect evidence in Participant Portal first.
 
 None of this is secure — the parameters are small enough to enumerate and the secret falls
 to linear algebra. It is a toy of the mechanism.
@@ -52,6 +52,7 @@ to linear algebra. It is a toy of the mechanism.
 from __future__ import annotations
 
 from participant.ring import (  # noqa: F401 - the supplied ring, RLWE and RGSW layer
+    digest,
     external_product,
     normalize,
     ring_add,
@@ -170,18 +171,21 @@ def blind_rotate_trace(params: dict, key, sample: dict, accumulator: dict) -> tu
     ```text
     step          0 for the offset, then 1 .. dimension
     mask          the coefficient this step consumed: body at step 0, mask[i-1] after
-    exponent      that coefficient normalized into [0, 2N) — negated at step 0
+    exponent      (-body) % (2*N) at step 0; mask[i-1] % (2*N) after
     selector      "phase-offset" at step 0, then "bk[0]", "bk[1]", ...
-    candidate0    digest of the accumulator going in
-    candidate1    digest of the rotated candidate
+    candidate0    post-offset digest at step 0; accumulator going in afterward
+    candidate1    post-offset digest at step 0; rotated candidate afterward
     output        digest of this step's result
     ```
 
     `digest(params, ciphertext)` is supplied by `participant.ring`, so the format is not
-    yours to guess. Note what a digest can show: for a real CMUX the output matches neither
-    candidate. No plaintext bit appears anywhere, and none can — the trace never sees the
-    secret.
+    yours to guess. The record contains no plaintext secret bit. Different digests do not
+    prove absence of secret-dependent branches; the exercise also checks its required path.
 
     The last record's `output` is the digest of `blind_rotate`'s result.
     """
     return ()
+
+# Trace step 0 records the post-offset ciphertext in both candidates and output.
+# Later candidates can also coincide when the mask coefficient is zero.
+# Different ciphertext outputs alone do not prove secret-independent execution.

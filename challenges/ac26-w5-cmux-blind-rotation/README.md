@@ -95,7 +95,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `trace` | 35 | One record per step plus the offset, ending at the rotation it describes, public fields independent of the secret |
 | `transfer` | 30 | All of it under a degree, dimension, base and modulus you have not seen |
 
-Hints on seven of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at 2 points each (48 total), within each checkpoint's 50% cap.
 
 ## What the `constant` checkpoint does and does not claim
 
@@ -169,3 +169,6 @@ Zero. No cloud account, no AWS resources.
 `make reference-test` runs the mutation suite: twenty-four broken implementations. Several
 of them are wrong in both `monomial_rotate` and the loop at once, and only separate from the
 reference at the plaintext model.
+
+
+All eight checkpoints receive three 2-point hints (48 points total). Free construction rules define array operations, rotation and trace semantics. Output inequality is an observation, not proof of secret-independent execution. Independent participant-only reading caught this overclaim, missing APIs and the zero-mask trace case. Verifier execution is unchanged; hint availability and deductions change.
