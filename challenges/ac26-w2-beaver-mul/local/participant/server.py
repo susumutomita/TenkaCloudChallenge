@@ -43,10 +43,13 @@ VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
 MAX_BODY_BYTES = 256 * 1024
 RUN_TIMEOUT_SECONDS = 20
+PUBLIC_TEST_TIMEOUT_SECONDS = 15
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+# A bounded 20-second grading run may outlive the client body-read budget.
+VERIFIER_TIMEOUT_SECONDS = 25
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -79,7 +82,7 @@ _WORKBENCH = PortalEditorSupport(
     code_checkpoints=('mask', 'open', 'combine', 'protocol', 'transfer'),
     checkpoints=('mask', 'open', 'combine', 'protocol', 'transfer'),
     max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
+    run_timeout_seconds=PUBLIC_TEST_TIMEOUT_SECONDS,
     max_output_bytes=MAX_OUTPUT_BYTES,
     limit_fn=_limits,
 )
@@ -109,7 +112,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)

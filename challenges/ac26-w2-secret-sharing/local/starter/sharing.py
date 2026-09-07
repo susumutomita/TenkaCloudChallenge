@@ -1,4 +1,7 @@
-"""Repair six functions, then submit five checkpoints in the Portal.
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コードの実行は12秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 12-second execution deadline.
+Repair six functions, then submit five checkpoints in the Portal.
 
 Start -> Inspect evidence -> edit sharing.py -> Run public tests -> Submit.
 A share is one holder's piece of a secret. p is a prime divisor; every returned

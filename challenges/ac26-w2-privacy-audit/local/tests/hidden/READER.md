@@ -123,3 +123,32 @@ docker run --rm --init --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,
 `make agent-gate` at the catalog root checks all 116 entries. This follow-up adds no new HTTP/UI flow; the existing suite exercises the unchanged positive/public-check paths with synthetic data. The prior live/API evidence above remains historical rather than being claimed as a new playthrough.
 
 Final result: 8 existing mutations killed; 17 complete runtime tests pass in 71.672s, including the new filesystem case. Existing reference and public positive checks pass without changing their sources.
+
+### Computational allowance follow-up (2026-09-07)
+
+A local author test imports the 14 documented computational standard libraries
+inside the actual isolated worker, then separately runs six seconds of real CPU
+work. The pre-fix filesystem-baseline image rejected the added imports. It also killed the six-second computation at the old five-second CPU limit.
+The updated worker preloads these helpers before applying the same filesystem,
+network and IPC restrictions. README and starter text list the supported imports.
+The CPU budget now covers the existing 20-second grading deadline. The participant
+server waits up to 25 seconds for that verdict but still limits incoming bodies to
+15 seconds. Real loopback HTTP tests use scaled delays to prove those two budgets
+are independent and that expired/mismatched responses still fail closed. They do
+not claim a full 20-second end-to-end browser run.
+
+Run `make reference-test computation-test` for the existing reference/mutation
+suites and new local regressions. These are author tests, not an independent
+participant read-through or a live AWS rehearsal.
+
+Final verification passed: `make reference-test computation-test`, including the
+existing Linux boundary tests, reference answers and mutation checks. The new
+computation tests pass after the same tests rejected unavailable imports in the
+pre-fix image. All 116 catalog entries validate.
+
+### Review follow-up: standard author command (2026-09-07)
+
+`make reference-test` now runs `test_computation_allowance.py` as well as the
+existing boundary and mutation suites. The standalone `computation-test` remains
+available for focused reruns. The standard command passed for all three affected
+Week 2 problems (65 Linux tests total and 43 existing mutants rejected).

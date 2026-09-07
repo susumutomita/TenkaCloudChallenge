@@ -288,3 +288,29 @@ docker run --rm --init --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,
 
 Final result: 27 existing mutations killed; 19 complete runtime tests pass in 50.296s, including the new filesystem case. Existing reference and public positive checks pass without changing their sources.
 The existing honest alternative construction also remains accepted.
+
+### Computational allowance follow-up (2026-09-07)
+
+A local author test imports the 14 documented computational standard libraries
+inside the actual isolated worker, then separately runs six seconds of real CPU
+work. The pre-fix filesystem-baseline image rejected the added imports. The CPU test already passed, so neither its 12-second worker deadline nor its
+15-second verifier forwarding wait was changed.
+The updated worker preloads these helpers before applying the same filesystem,
+network and IPC restrictions. README and starter text list the supported imports.
+Only helper availability and its documentation change for this problem.
+
+Run `make reference-test computation-test` for the existing reference/mutation
+suites and new local regressions. These are author tests, not an independent
+participant read-through or a live AWS rehearsal.
+
+Final verification passed: `make reference-test computation-test`, including the
+existing Linux boundary tests, reference answers and mutation checks. The new
+computation tests pass after the same tests rejected unavailable imports in the
+pre-fix image. All 116 catalog entries validate.
+
+### Review follow-up: standard author command (2026-09-07)
+
+`make reference-test` now runs `test_computation_allowance.py` as well as the
+existing boundary and mutation suites. The standalone `computation-test` remains
+available for focused reruns. The standard command passed for all three affected
+Week 2 problems (65 Linux tests total and 43 existing mutants rejected).

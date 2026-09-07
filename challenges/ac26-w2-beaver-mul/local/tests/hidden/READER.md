@@ -205,3 +205,41 @@ docker run --rm --init --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,
 
 Final result: 8 existing mutations killed; 18 complete runtime tests pass in 56.851s, including the new filesystem case. Existing reference and public positive checks pass without changing their sources.
 The first added-test attempt lacked its json import (the existing suite passed); that harness error was fixed and the full suite rerun. The original log is retained as `/private/tmp/filesystem-716-w2-beaver-mul-initial.log`.
+
+### Computational allowance follow-up (2026-09-07)
+
+A local author test imports the 14 documented computational standard libraries
+inside the actual isolated worker, then separately runs six seconds of real CPU
+work. The pre-fix filesystem-baseline image rejected the added imports. It also killed the six-second computation at the old five-second CPU limit.
+The updated worker preloads these helpers before applying the same filesystem,
+network and IPC restrictions. README and starter text list the supported imports.
+The CPU budget now covers the existing 20-second grading deadline. The participant
+server waits up to 25 seconds for that verdict but still limits incoming bodies to
+15 seconds. Real loopback HTTP tests use scaled delays to prove those two budgets
+are independent and that expired/mismatched responses still fail closed. They do
+not claim a full 20-second end-to-end browser run.
+
+Run `make reference-test computation-test` for the existing reference/mutation
+suites and new local regressions. These are author tests, not an independent
+participant read-through or a live AWS rehearsal.
+
+Final verification passed: `make reference-test computation-test`, including the
+existing Linux boundary tests, reference answers and mutation checks. The new
+computation tests pass after the same tests rejected unavailable imports in the
+pre-fix image. All 116 catalog entries validate.
+
+### Review follow-up: standard author command (2026-09-07)
+
+`make reference-test` now runs `test_computation_allowance.py` as well as the
+existing boundary and mutation suites. The standalone `computation-test` remains
+available for focused reruns. The standard command passed for all three affected
+Week 2 problems (65 Linux tests total and 43 existing mutants rejected).
+
+The actual `/api/test` HTTP route previously accepted a correct submission with
+a 16-second startup delay, contradicting the documented 15-second public deadline.
+The new regression failed before the fix. Workbench public tests now receive their
+own 15-second deadline while private grading retains 20 seconds. After the fix,
+the same HTTP submission is rejected publicly and accepted by private grading.
+Logs: `/private/tmp/week2-public-deadline-before.log` and
+`/private/tmp/week2-beaver-review-after.log`. This exercises local Linux and HTTP,
+not an AWS deployment or a new independent reader.

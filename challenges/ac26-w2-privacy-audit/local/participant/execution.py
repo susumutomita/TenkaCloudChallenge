@@ -32,7 +32,7 @@ def _limits():
     resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_LOG_BYTES, MAX_LOG_BYTES))
-    resource.setrlimit(resource.RLIMIT_CPU, (5, 6))
+    resource.setrlimit(resource.RLIMIT_CPU, (20, 21))
 
 
 class LearnerSession:

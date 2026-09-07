@@ -1,4 +1,7 @@
-"""Beaver乗算：ここに4関数を書き、5つの採点欄へ同じファイルを提出します。
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。公開テストの実行は15秒、採点の実行は20秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Public tests allow 15 seconds; grading allows 20 seconds.
+Beaver乗算：ここに4関数を書き、5つの採点欄へ同じファイルを提出します。
 Beaver multiplication: implement four functions here; all five checks use this file.
 
 share（シェア）は数の持ち分、partyはその持ち主です。各リストの同じ位置が

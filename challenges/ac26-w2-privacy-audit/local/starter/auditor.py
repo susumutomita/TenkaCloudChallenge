@@ -1,4 +1,7 @@
-"""監査器 / Privacy auditor — 編集するファイルはこれ一つ。
+"""
+JA: 計算に使える標準ライブラリ（Python に付属する道具）は collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コードの実行は20秒までです。
+EN: Available computational standard libraries (tools included with Python): collections, decimal, fractions, functools, hashlib, hmac, itertools, json, math, operator, random, statistics, time, typing. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 20-second execution deadline.
+監査器 / Privacy auditor — 編集するファイルはこれ一つ。
 
 MPC（秘密計算）は、複数人が入力を隠して共同で結果を計算する方法。
 秘密分散で各人に渡す数が share（シェア）。open は復元した値の公開。
