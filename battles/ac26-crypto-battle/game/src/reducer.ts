@@ -725,7 +725,7 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
     );
   }
   const lifted = withMigratedContracts(rest as CryptoBattleState);
-  return {
+  return settleLightning({
     ...lifted,
     ...compactRecordedHunts(lifted),
     publicLedger: lifted.publicLedger.map(a => encodeArtifact(decodeArtifact(a, lifted.teams), lifted.teams)),
@@ -735,9 +735,21 @@ export function migrateState(state: unknown, fromVersion: number): CryptoBattleS
         readonly proveCommitment?: unknown;
         readonly proveChallenge?: unknown;
       };
+      if (kept.schnorr) {
+        // v13/v14 fixed the challenge without recording answerAttempted, and
+        // left one-shot PROVE-only misses open. Preserve scores and history;
+        // only normalize future eligibility and the already-consumed attempt.
+        const missed = kept.schnorr.used === true && (kept.schnorr.outcome === "miss"
+          || (kept.schnorr.outcome === undefined && kept.status === "open"));
+        const terminal = missed && kept.status === "open"
+          && kept.allowedMethods.length === 1 && kept.allowedMethods[0] === "prove";
+        return {...kept, answerAttempted:true,
+          ...(missed ? {schnorr:{...kept.schnorr,outcome:"miss" as const}} : {}),
+          ...(terminal ? {status:"completed" as const,resolution:"prove" as const} : {})} as Contract;
+      }
       return kept as Contract;
     }),
-  };
+  });
 }
 
 /**

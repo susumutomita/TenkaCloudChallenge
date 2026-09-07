@@ -135,3 +135,20 @@ for (const proveOnly of [true, false]) test(`one-shot miss: terminal=${proveOnly
  expect(state.teams.a!.score).toBe(10);
  expect(orderResultLabel(view.myContracts.find(c=>c.id===id)!,"ja")).toBe("✓ 完了");
  });
+
+for(const version of [13,14]) test(`migration v${version} preserves the consumed proof and prevents late lightning`,()=>{
+ let state=create();const id="a-c0";const y=projectForTeam(state,"a").myContracts[0]!.schnorr!.y;
+ state={...state,phase:"endgame",endgameLightning:{status:"awarded",cards:{a:{status:"available"}}}};
+ state=applyOp(state,"a",{kind:"schnorr-commit",contractId:id,y,a:8});
+ const legacy={...state,contracts:state.contracts.map(c=>({...c,answerAttempted:false}))};
+ const migrated=migrateState(JSON.parse(JSON.stringify(legacy)),version);
+ expect(validateOp(migrated,"a",{kind:"declare-lightning",contractId:id}).ok).toBe(false);
+ for(const leak of [true,false]) {
+  const failed={...legacy,contracts:legacy.contracts.map(c=>({...c,allowedMethods:leak?["prove" as const,"leak" as const]:["prove" as const],schnorr:{...c.schnorr!,used:true,outcome:"miss" as const}})),teams:{...legacy.teams,a:{...legacy.teams.a!,score:93}}};
+  const after=migrateState(JSON.parse(JSON.stringify(failed)),version);
+  expect(after.teams.a!.score).toBe(93);
+  expect(after.contracts[0]!.status).toBe(leak?"open":"completed");
+  expect(validateOp(after,"a",{kind:"leak",contractId:id}).ok).toBe(leak);
+  if(!leak) expect(tick(after,60_000).teams.a!.score).toBe(93);
+ }
+});
