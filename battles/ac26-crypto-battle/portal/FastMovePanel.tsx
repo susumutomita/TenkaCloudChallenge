@@ -1528,7 +1528,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
-          const delta=-next.wrongProveCost;
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"実行表と折り畳みの検査に成功！":"Trace and fold check complete!",body:locale==="ja"?"実行表のずれと折り畳みを別々に確認できました。":"You checked execution mismatches and the fold separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。上から順に、7で割った余りを確認してください。`:`${delta} pt. Check the four remainders by 7 in order.`};
         }
        )}/> }
@@ -1537,7 +1538,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
-          const delta=-next.wrongProveCost;
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"計算と分布の比較に成功！":"Function and distribution check complete!",body:locale==="ja"?"同じ機能かどうかと、公開データの分布を別々に確認できました。":"You checked functional equivalence and the published distributions separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。空欄の余りと、rを含む公開データの組を確認してください。`:`${delta} pt. Check the missing remainders and complete outcomes including r.`};
         }
        )}/> }
@@ -1545,7 +1547,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         ()=>client.submitOp({kind:"snark",contractId:selectedOrder.id,answer}), next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
-          const delta=-next.wrongProveCost;
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"制約の検査に成功！":"Constraint check complete!",body:answer.split(" ").every(v=>v==="0")?(locale==="ja"?"全て0：計算も配線も一致しています。":"All zero: gates and wires agree."):(locale==="ja"?"0でない箇所があり、不正な計算か配線を検出しました。":"Nonzero remainders expose incorrect gates or wires.")}:{kind:"error",title:locale==="ja"?"余りを確認してください":"Check the remainders",body:`${delta} pt`};
         }
       )}/>}
@@ -1554,7 +1557,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
-          const delta=-next.wrongProveCost;
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"点加算に成功！":"Point addition complete!",body:`P + Q = ${answer}`,lesson:locale==="ja"?"点加算を繰り返すと、秘密の整数から公開鍵の点を作る計算につながります。":"Repeated point addition turns a private integer into a public-key point."}:{kind:"error",title:locale==="ja"?"答えが違います":"Incorrect point",body:locale==="ja"?`${delta} 点。傾き、x、yの順に、7で割った余りを確認してください。`:`${delta} pt. Check the slope, x, and y remainders modulo7.`};
         }
       )}/>}

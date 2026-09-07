@@ -51,6 +51,11 @@ test('owned STARK orders grade arithmetic, reject replay and expiry, and record 
  const bad={...op,answer:`${(Number(answer[0])+1)%7}${answer.slice(1)}`};
  const miss=applyOp(s,'a',bad);expect(miss.teams.a!.score).toBe(50-Math.abs(s.config.scores.wrongProve));
  expect(scoreReasons(s,miss,{kind:'op',teamId:'a',op:bad})).toEqual({a:'stark'});
+ for(const balance of [0,3,50]){
+  const before={...s,teams:{...s.teams,a:{...s.teams.a!,score:balance}}};
+  const after=applyOp(before,'a',bad);
+  expect(projectForTeam(after,'a').myContracts.find(c=>c.id===order.id)!.lastSubmissionPoints).toBe(0-Math.min(balance,Math.abs(s.config.scores.wrongProve)));
+ }
  const hit=applyOp(s,'a',op);expect(hit.teams.a!.score).toBe(50+2*order.points);
  expect(validateOp(hit,'a',op).ok).toBe(false);
  expect(validateOp(tick(s,order.expiresAtMs),'a',op).ok).toBe(false);
