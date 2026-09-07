@@ -8,6 +8,15 @@ from __future__ import annotations
 # Load the small standard-library vocabulary before closing file access. The exercise
 # itself needs only dictionaries, if, loops and arithmetic. No pip packages are needed.
 import collections
+import decimal
+import fractions
+import functools
+import hashlib
+import hmac
+import operator
+import random
+import statistics
+import time
 import itertools
 import json
 import math

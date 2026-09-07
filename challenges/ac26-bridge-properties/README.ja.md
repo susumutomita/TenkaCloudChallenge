@@ -86,3 +86,7 @@ platform の計算・保存・ネットワークが課金対象になり得る�
 ## ファイル属性操作の隔離追加
 
 Linuxの提出コード用filterで、ファイル・ディレクトリの作成、リンク、名前変更、削除、属性変更も拒否します。ファイルopenだけの禁止では、子の終了後にこれらの変更が残りました。問題内の回帰は実filterを16個の使い捨て子プロセスへ適用し、19操作のEPERMと、親が所有する一時fixtureの内容・一覧・権限・所有者・時刻・拡張属性が変わらないことを確認します。一時fixtureも最後に削除します。API・得点・数学的な正答条件・実行期限は変更せず、既存の正答コードと検査を維持します。before/afterの範囲とコマンドは `local/tests/hidden/READER.md` に記録しています。
+
+## 計算用の道具と実行時間
+
+計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。

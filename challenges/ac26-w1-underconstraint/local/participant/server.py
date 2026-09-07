@@ -51,6 +51,8 @@ VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 MAX_BODY_BYTES = 256 * 1024
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
+# Reading a client body and waiting for bounded computation are different budgets.
+VERIFIER_TIMEOUT_SECONDS = 35
 
 CHECKPOINTS = ("build", "audit", "exploit", "root-cause", "repair", "mutation-transfer")
 SUBMISSION_FILES = ("policy.py",)
@@ -197,7 +199,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)

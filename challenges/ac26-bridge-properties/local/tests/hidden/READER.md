@@ -191,3 +191,28 @@ docker run --rm --init --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,
 `make agent-gate` at the catalog root checks all 116 entries. This follow-up adds no new HTTP/UI flow; the existing suite exercises the unchanged positive/public-check paths with synthetic data. The prior live/API evidence above remains historical rather than being claimed as a new playthrough.
 
 Final result: 8 existing mutations killed; 12 complete runtime tests pass in 44.359s, including the new filesystem case. Existing reference and public positive checks pass without changing their sources.
+
+### Computational allowance regression (2026-09-07)
+
+A new local author regression sends a function that uses six seconds of actual CPU
+time through the real isolated worker. The previous `(5, 6)` CPU limit terminated
+it before the documented 15-second wall deadline. The unchanged filesystem-baseline
+author image also rejected imports of computational helpers such as `fractions`.
+The updated worker preloads the documented 14 standard libraries and sets the CPU
+limit from the existing 15-second execution budget. No filesystem or network rule
+was relaxed.
+
+The participant's inbound body timeout remains 15 seconds. Its outbound verifier
+wait is 20 seconds, covering one 15-second worker. A real loopback HTTP regression uses a
+response delayed beyond a scaled inbound timeout but inside the outbound budget;
+an expired outbound request or mismatched checkpoint still yields a failed verdict.
+The test deliberately does not claim that the scaled transport delay is a full
+15-second end-to-end run. These are author regressions, not a new independent
+participant read-through or AWS rehearsal. Run `make computation-test` and
+`make reference-test` to repeat the checks.
+
+The final `make reference-test computation-test` run passed the existing reference,
+mutation and Linux boundary suites plus all four new computation/HTTP regressions.
+Catalog validation passed for all 116 entries. During validation, the existing
+sub-second timeout test caught an invalid floating-point CPU limit; rounding up to
+an integer preserves that short wall deadline without failing worker startup.

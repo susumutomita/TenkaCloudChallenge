@@ -6,6 +6,7 @@ hundreds of interpreters. The trusted checker retains its own time and memory ca
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import resource
@@ -30,7 +31,8 @@ def _limits():
     resource.setrlimit(resource.RLIMIT_AS, (512 * 1024 * 1024, 512 * 1024 * 1024))
     resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_LOG_BYTES, MAX_LOG_BYTES))
-    resource.setrlimit(resource.RLIMIT_CPU, (5, 6))
+    cpu_seconds = max(1, math.ceil(RUN_TIMEOUT_SECONDS))
+    resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
 
 
 class LearnerSession:
