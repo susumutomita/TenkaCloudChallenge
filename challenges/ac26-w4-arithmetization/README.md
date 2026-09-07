@@ -132,3 +132,6 @@ Zero. No cloud account, no AWS resources.
 `make reference-test` runs the mutation suite: nine broken implementations. The two worth reading
 are "checks only the last transition" and "drops the boundary constraints" — both produce a system
 that looks complete and accepts traces that are not the computation.
+
+
+All eight checkpoints now have three two-point hints. A participant-only review found a missing degree bound for interpolation uniqueness and missing interpolation/array arithmetic steps. These are now in the free bilingual statement, alongside boundary sign and row-index conventions. The author checked the boundary convention against the reference; this is not participant-play evidence. Catalog validation passed; no runtime or grader changes and no live Portal play in this revision.

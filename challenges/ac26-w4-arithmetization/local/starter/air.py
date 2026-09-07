@@ -46,7 +46,9 @@ def boundary_residuals(trace: list[tuple[int, int]], setting: dict) -> list[int]
 
 
 def interpolate(values: list[int], points: list[int], p: int) -> list[int]:
-    """The unique polynomial through (points[i], values[i]), over F_p.
+    """The polynomial of degree at most len(points)-1 through the supplied values.
+
+    Horizontal coordinates points[i] must be distinct modulo p.
 
     Return coefficients, lowest degree first. Field arithmetic — division is by modular
     inverse, and there is a reason `points` are distinct.
