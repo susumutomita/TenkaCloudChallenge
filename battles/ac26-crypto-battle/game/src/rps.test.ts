@@ -156,7 +156,9 @@ test("the free worksheet tables agree with independent repeated multiplication f
   const p=projectForTeam(running(),"a"), order=p.myContracts.find(c=>c.task.kind==="rps-duel")!;
   for(const locale of ["ja","en"] as const) {
     const html=renderToStaticMarkup(createElement(RpsDuel,{order,opponentName:"Bravo",locale,submitting:false,onSubmit:async()=>{}}));
-    expect(html).toContain("4×9=36"); expect(html).toContain("36−23=13");
+    const text = html.replace(/<[^>]*>/g, "").replace(/\s/g, "");
+    expect(text).toContain("4×9=36"); expect(text).toContain("36−23=13");
+    expect(html).toContain("<sup>m</sup>");
     expect(html).toContain(locale==="ja"?"封じる数字":"Sealed number");
     expect(html).not.toContain('value="13"');
   }
