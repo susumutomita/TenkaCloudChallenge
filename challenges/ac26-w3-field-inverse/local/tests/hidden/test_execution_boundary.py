@@ -361,6 +361,37 @@ class FieldMismatch(Exception, metaclass=Pretend):
         self.assertFalse(server.evaluate('errors', source))
         self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
 
+    def test_builtin_type_rebinding_cannot_forge_exception_ancestry(self):
+        source = reader() + """
+import builtins
+_real_type = type
+class TypeProxy:
+    def __call__(self, value):
+        return _real_type(value)
+    def __getattribute__(self, name):
+        if name == '__getattribute__':
+            return lambda cls, attr: (NotInvertible, FieldMismatch)
+        return object.__getattribute__(self, name)
+_original_inverse = FieldElement.inverse
+_original_add = FieldElement.__add__
+def inverse(self):
+    try:
+        return _original_inverse(self)
+    except NotInvertible:
+        builtins.type = TypeProxy()
+        raise ValueError('not a custom exception')
+def add(self, other):
+    try:
+        return _original_add(self, other)
+    except FieldMismatch:
+        builtins.type = TypeProxy()
+        raise TypeError('not a custom exception')
+FieldElement.inverse = inverse
+FieldElement.__add__ = add
+"""
+        self.assertFalse(server.evaluate('errors', source))
+        self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+
     def test_field_identity_is_not_mathematical_equality(self):
         source = reader() + "\nFieldElement.__eq__ = lambda self, other: self.field is other.field and self.value == other.value\n"
         self.assertFalse(server.evaluate('normalize', source))

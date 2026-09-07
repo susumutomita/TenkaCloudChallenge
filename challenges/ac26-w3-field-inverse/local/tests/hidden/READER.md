@@ -247,3 +247,22 @@ remain positive controls; all 14 existing mutants are rejected. Logs:
 `/private/tmp/field-770-arithmetic-before.log` and
 `/private/tmp/field-770-arithmetic-after.log`. This is a grading regression check,
 not a new participant read-through or cloud deployment.
+
+### Mutable builtin type regression (2026-09-07)
+
+At `248167d1`, replacing `builtins.type` while raising a builtin exception let a
+proxy report a fake MRO containing both custom exception classes. The new
+regression reproduced the errors checkpoint accepting that submission. The worker
+now captures native type/classification primitives before executing source and
+uses identity comparisons without a mutable `any` lookup. The actual public and
+private checks reject the proxy submission; all 28 Linux regressions and 14
+existing mutants pass, with the reference and legitimate subclasses accepted.
+Logs: `/private/tmp/field-770-builtins-before.log` and
+`/private/tmp/field-770-builtins-after.log`.
+
+These changes harden ordinary Python exception reporting, not attest Python
+object provenance against a learner that implements its own wire protocol. The
+parent continues to determine whether an error is mathematically allowed from
+its own operands and operation; a child error label alone never makes valid
+arithmetic fail or invalid arithmetic pass. This pre-existing assurance boundary
+remains stated in the adapter and participant documentation.

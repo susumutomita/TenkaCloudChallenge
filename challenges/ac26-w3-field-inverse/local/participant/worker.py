@@ -39,6 +39,15 @@ def initialization_error(error, filename):
 
 
 def main():
+    # Capture native classification primitives before any submitted code executes.
+    # They describe ordinary Python exceptions only; the parent still treats the
+    # resulting labels as claims and verifies the allowed error mathematically.
+    native_type = type
+    native_getattribute = type.__getattribute__
+    native_isinstance = isinstance
+    native_issubclass = issubclass
+    native_exception = Exception
+    native_tuple = tuple
     initial = json.loads(sys.stdin.readline())
     restrict_learner()
     modules = {name: types.ModuleType(name) for name in ('field',)}
@@ -54,12 +63,12 @@ def main():
                 if declared not in module.__dict__:
                     continue
                 candidate = module.__dict__[declared]
-                if (not isinstance(candidate, type)
-                        or not issubclass(candidate, Exception)
-                        or candidate.__module__ == 'builtins'):
+                if (not native_isinstance(candidate, native_type)
+                        or not native_issubclass(candidate, native_exception)
+                        or native_getattribute(candidate, '__module__') == 'builtins'):
                     raise TypeError('Keep custom exception classes for the supplied names.')
                 exception_types.append((declared, candidate))
-            exception_types = tuple(exception_types)
+            exception_types = native_tuple(exception_types)
         except BaseException as error:
             print(json.dumps({'initializationError': initialization_error(error, filename)}), flush=True)
             return
@@ -105,9 +114,13 @@ def main():
             # Report all memberships: multiple inheritance must not depend on
             # tuple order. These are untrusted claims; the parent selects the
             # only permitted error from its own operands and operation.
-            ancestry = type.__getattribute__(type(error), "__mro__")
-            kinds = [name for name, cls in exception_types
-                     if any(base is cls for base in ancestry)]
+            ancestry = native_getattribute(native_type(error), "__mro__")
+            kinds = []
+            for declared, cls in exception_types:
+                for base in ancestry:
+                    if base is cls:
+                        kinds.append(declared)
+                        break
             response = {'callId': call['callId'], 'error': True, 'errorKinds': kinds}
         print(json.dumps(response, separators=(',', ':')), flush=True)
 
