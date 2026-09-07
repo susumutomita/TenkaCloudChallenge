@@ -125,7 +125,7 @@ export const HINT_LEVELS = 3;
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
   "snark-constraints": [
     {id:"snark-constraints/1",text:()=>({ja:"まず各行の計算を確かめ、次に前の出力が次の入力へ同じ値で届くか確かめます。行だけ正しくても、つなぎ方が違えば元の計算にはなりません。",en:"Check each gate, then whether the output reaches the next input unchanged. Correct individual gates alone do not establish correct wiring."})},
-    {id:"snark-constraints/2",text:()=>({ja:"7で割った余りで確認します。足し算2+3−5=0なら一致。配線が5→6なら5−6=−1、7を足して余り6なので不一致です。",en:"Take remainders by7: 2+3−5=0 passes. A wire5→6 gives5−6=−1, remainder6, so it fails."})},
+    {id:"snark-constraints/2",text:()=>({ja:"7で割った余りで確認します。足し算2+3−5=0なら一致。掛け算3×4−4=8は7を引いて余り1なので不一致。配線が5→6なら5−6=−1、7を足して余り6なので不一致です。",en:"Take remainders by7: 2+3−5=0 passes. Multiplication 3×4−4=8; subtract7 to get remainder1, so it fails. A wire5→6 gives5−6=−1, remainder6, so it fails."})},
     {id:"snark-constraints/3",text:ctx=>{
       if(ctx.task.kind!=="snark-constraints")throw new Error("SNARK task required");
       const [a,b,c]=ctx.task.rows;

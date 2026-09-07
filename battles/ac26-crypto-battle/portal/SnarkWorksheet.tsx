@@ -13,7 +13,7 @@ export function SnarkWorksheet({task,locale,busy,onSubmit}:{task:ConstraintTask;
   </div>
   <p>{ja?'矢印の両端は同じ値である必要があります（コピー制約）。各行の計算が合っていても、この配線が違えば全体は不正です。':'Each arrow must connect equal values: a copy constraint. Correct individual gates do not excuse incorrect wiring.'}</p>
   <p>{ja?'一般式：足し算 L+R−O、掛け算 L×R−O、配線は 出力−次の入力。7で割った余りを求めます。全5個が0なら、この表の計算と配線は整合します。':'General rules: addition L+R−O, multiplication L×R−O, and wire output−next input. Take each remainder by 7. All five must be zero for this table to be consistent.'}</p>
-  <p>{ja?'例：2+3−5=0 は一致。出力5を入力6へつなぐと5−6=−1、7を足して余り6となり不一致。':'Example: 2+3−5=0 passes. Wiring output5 to input6 gives 5−6=−1; add7 to get remainder6, a mismatch.'}</p>
+  <p>{ja?'例：足し算2+3−5=0は一致。掛け算3×4−4=8は7を引いて余り1なので不一致。出力5を入力6へつなぐと5−6=−1、7を足して余り6となり不一致。':'Example: addition 2+3−5=0 passes. Multiplication 3×4−4=8; subtract 7 to get remainder 1, so it fails. Wiring output5 to input6 gives 5−6=−1; add7 to get remainder6, a mismatch.'}</p>
   <strong>{ja?'5つの余りを入力（0〜6）':'Enter five remainders (0–6)'}</strong>
   {equations.map((eq,i)=><label key={i} style={{display:'flex',gap:12,alignItems:'center',margin:'8px 0'}}>{i<3?(ja?`行${i+1}`:`Row ${i+1}`):(ja?`配線${i-2}`:`Wire ${i-2}`)}: {eq} →
    <input aria-label={`SNARK remainder ${i+1}`} style={{width:70}} inputMode="numeric" maxLength={1} value={values[i]} onChange={e=>setValues(v=>v.map((x,j)=>i===j?e.target.value:x))}/>
