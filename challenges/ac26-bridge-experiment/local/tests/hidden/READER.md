@@ -126,3 +126,7 @@ Cleanup completed: the dedicated project’s two service containers and two netw
 were removed; the project-label container listing was empty. Logs:
 `/private/tmp/bridge-716-cleanup.log` and `bridge-716-remaining-containers.log`.
 No shared project, localhost5657, AWS resource, release or original checkout was changed.
+
+## 2026-09-08 participant-only reread (Issue #716)
+
+An independent reader inspected only Japanese/English participant instructions, hints and the public starter. Hidden tests, reference code and verifier internals were excluded. The first pass found no concrete way to retain and call the slow implementation after editing the only count_no_walkback function. The instructions now say to copy it as count_no_walkback_slow, edit the original name, and place the explained assert comparison for(6,4,9) after both definitions. The reader confirmed that both language versions now connect save, edit, compare and submit, and hand-checked the four matching integers4,6,8,9. This was text/hand-calculation review, not UI submission.
