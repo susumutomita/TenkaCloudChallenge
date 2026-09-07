@@ -117,3 +117,21 @@ for (const proveOnly of [true, false]) test(`one-shot miss: terminal=${proveOnly
    expect(state.teams.a!.score).toBe(afterMiss);
  }
 });
+
+ test("LEAK after a failed proof keeps its real terminal outcome and ordinary score",()=>{
+ let state=create();const id="a-c0";
+ state={...state,phase:"endgame",endgameLightning:{status:"awarded",cards:{a:{status:"available"}}}};
+ state=applyOp(state,"a",{kind:"declare-lightning",contractId:id});
+ const y=projectForTeam(state,"a").myContracts[0]!.schnorr!.y;
+ state=applyOp(state,"a",{kind:"schnorr-commit",contractId:id,y,a:8});
+ const e=state.contracts.find(c=>c.id===id)!.schnorr!.e;
+ const x=Array.from({length:11},(_,i)=>i).find(i=>power(2,i)===y)!;
+ state=applyOp(state,"a",{kind:"schnorr-response",contractId:id,z:(3+e*x+1)%11});
+ expect(projectForTeam(state,"a").lightning?.status).toBe("armed");
+ expect(validateOp(state,"a",{kind:"leak",contractId:id}).ok).toBe(true);
+ state=applyOp(state,"a",{kind:"leak",contractId:id});
+ const view=projectForTeam(state,"a");
+ expect(view.lightning).toMatchObject({status:"spent",outcome:"leak"});
+ expect(state.teams.a!.score).toBe(10);
+ expect(orderResultLabel(view.myContracts.find(c=>c.id===id)!,"ja")).toBe("✓ 完了");
+ });

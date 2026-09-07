@@ -8,7 +8,7 @@ type Locale = "ja" | "en";
 
 /** A deadline may end between server polls; do not leave it actionable at 0:00. */
 export function orderDisplayState(order: ContractProjection): "open" | "completed" | "expired" | "voided" | "failed" {
-  if (order.status === "completed" && order.schnorr?.pending?.outcome === "miss") return "failed";
+  if (order.status === "completed" && !order.allowedMethods.includes("leak") && order.schnorr?.pending?.outcome === "miss") return "failed";
   if (order.status === "expired" && order.expiryCause === "rotate") return "voided";
   return order.status === "open" && order.remainingMs <= 0 ? "expired" : order.status;
 }

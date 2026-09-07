@@ -79,7 +79,7 @@ export function settleLightning(state: CryptoBattleState): CryptoBattleState {
     } else if (card.status === "armed") {
       const contract = state.contracts.find(c => c.id === card.contractId && c.teamId === teamId);
       // Vigenère's ordinary reward forfeiture also applies to the multiplier.
-      const proofMiss = contract?.status === "completed" && contract.schnorr?.outcome === "miss";
+      const proofMiss = contract?.status === "completed" && contract.resolution === "prove" && contract.schnorr?.outcome === "miss";
       const points = contract?.cipherFailed === true || proofMiss ? 0 : card.points;
       const outcome: LightningOutcome | undefined = contract?.status === "completed"
         ? proofMiss ? "miss" : contract.resolution === "leak" ? "leak" : "hit"
