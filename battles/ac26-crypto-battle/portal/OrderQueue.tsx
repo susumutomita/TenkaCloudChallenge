@@ -7,12 +7,14 @@ export interface OrderReceipt { readonly id: string; readonly points: number }
 type Locale = "ja" | "en";
 
 /** A deadline may end between server polls; do not leave it actionable at 0:00. */
-export function orderDisplayState(order: ContractProjection): "open" | "completed" | "expired" | "voided" {
+export function orderDisplayState(order: ContractProjection): "open" | "completed" | "expired" | "voided" | "failed" {
+  if (order.status === "completed" && !order.allowedMethods.includes("leak") && order.schnorr?.pending?.outcome === "miss") return "failed";
   if (order.status === "expired" && order.expiryCause === "rotate") return "voided";
   return order.status === "open" && order.remainingMs <= 0 ? "expired" : order.status;
 }
 
 export function orderResultLabel(order: ContractProjection, locale: Locale): string {
+  if (orderDisplayState(order) === "failed") return locale === "ja" ? "✗ 証明失敗" : "✗ Proof failed";
   if (orderDisplayState(order) === "completed") return locale === "ja" ? "✓ 完了" : "✓ Completed";
   if (orderDisplayState(order) === "voided") return locale === "ja" ? "↻ ROTATEで無効" : "↻ Voided by ROTATE";
   return locale === "ja" ? "⌛ 期限切れ" : "⌛ Expired";
@@ -58,9 +60,11 @@ export default function OrderQueue({ projection, locale, selectedId, onSelect, r
           setNewIds(changes.arrived.map(order => order.id));
           messages.push(locale === "ja" ? `新しいお題が${changes.arrived.length}件到着。「到着」のカードを追加しました。` : `${changes.arrived.length} new Order(s) arrived. Look for the New cards.`);
         }
+        const failed = changes.finished.filter(order => orderDisplayState(order) === "failed").length;
         const completed = changes.finished.filter(order => orderDisplayState(order) === "completed").length;
         const expired = changes.finished.filter(order => orderDisplayState(order) === "expired").length;
         const voided = changes.finished.filter(order => orderDisplayState(order) === "voided").length;
+        if (failed) messages.push(locale === "ja" ? `${failed}件が証明失敗で終了。` : `${failed} proof(s) failed.`);
         if (completed) messages.push(locale === "ja" ? `${completed}件完了。` : `${completed} completed.`);
         if (expired) messages.push(locale === "ja" ? `${expired}件が期限切れ。` : `${expired} expired.`);
         if (voided) messages.push(locale === "ja" ? `${voided}件がROTATEで無効になりました。` : `${voided} voided by ROTATE.`);

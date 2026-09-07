@@ -3,7 +3,7 @@ import { useState } from "react";
 import ConceptExplanation from "./ConceptExplanation.tsx";
 
 type Locale = "ja" | "en";
-type Topic = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "commit";
+type Topic = "remainder" | "sharing" | "mpc" | "schnorr" | "fhe" | "caesar" | "commit";
 interface PracticeCopy {
   readonly title: string;
   readonly purpose: string;
@@ -162,26 +162,24 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
     },
   },
   {
-    topic: "zk", answer: "2",
+    topic: "schnorr", answer: "5",
     ja: {
-      prompt: "矢印の先の数字に読み替えよう。1→3、2→1、3→4、4→2。",
-      calculation: "2・1・3・4 → 1・3・4・□",
-      takeaway: "数字を替えても、1〜4が1回ずつ並びます。",
-
-      title: "答えを別の数字に付け替えて見せる",
-      purpose: "旧方式の数独模型では数独の答えを使います。この練習では、その一行として 1〜4 が一度ずつ並んだ列を使います。『正しい解を持っている』と審判に確かめてもらいながら、元の解全体を相手チームへ直接渡したくありません。そこで、どのマスでも同じ表を使い、数字の呼び名を替えます。",
-      steps: ["表は 1→3、2→1、3→4、4→2。矢印の先の数字へ読み替えます。", "元の行 2・1・3・4 は、1・3・4・□ になります。", "最後の元の数字は 4。表の 4→2 を見て、空欄を埋めてください。"],
-      question: "付け替えた行の最後の数字", result: "1・3・4・2 になりました。元の行と同じく、1〜4 が一度ずつ現れます。本番は表を選び、4 マスを埋めます。ゲームの審判は元の解を知って照合し、相手へは付け替えた一行などの一部分を公開します。ZK（ゼロ知識証明）は答えを明かさず正しさを示す技術で、本来は検証する人にも答えを隠します。このゲームはその考え方を体験するモデルです。同じ表は再使用しないでください。同じ表で別の部分も見せると、相手が公開された部分をつなげられるからです。", retry: "4→2 は、4 を 2 に読み替える意味です。",
+      prompt: "x=7は秘密の数、r=3は今回だけの内緒の乱数です。a=8はrから作って先に固定した数。e=5はその後に検証者が返した質問の数です。送る答えをzと呼び、下の式で計算します。",
+      calculation: "z = (3 + 5 × 7) を11で割った余り = □",
+      takeaway: "送るのは応答 z=5。秘密 x と乱数 r は送りません。",
+      title: "ゼロ知識証明：秘密を送らず、質問に答える",
+      purpose: "Schnorr（シュノア）証明は、公開値 y に対応する秘密 x を知っていると示す手順です。ZK（ゼロ知識）は検証者にも秘密を教えない性質です。ここでは小さい数で、値を固定→質問→応答の順を練習します。",
+      steps: ["公開値 y は2をx回掛けて23で割った余り。x=7ならy=13。まず乱数r=3からa=2³の余り=8を送り、変更できなくします。", "検証者の質問e=5を受け取ったら、z=(r+e×x)を11で割った余りにします。3+5×7=38です。", "38=11×3+□。余りを応答欄へ入れます。"],
+      question: "検証者に送る応答 z", result: "z=5です。検証者は2⁵と8×13⁵をそれぞれ23で割り、両方の余りが9なので合格とします。一般には2ᶻとa×yᵉの余りを比べます。毎回新しいrを使うことでxを隠します。正直に質問する検証者には、xなしでも、同じ会話が同じ確率で現れるように作れる、という性質がZKの根拠です。本番もaを固定し、届いたeからzを計算します。この小さい数は手計算用で、秘密を総当たりできるため実用の安全性はありません。", retry: "38から11を3回引いた余りを答えてください。",
     },
     en: {
-      prompt: "Replace each digit with the one after its arrow: 1→3, 2→1, 3→4, 4→2.",
-      calculation: "2,1,3,4 → 1,3,4,□",
-      takeaway: "The renamed row still contains 1–4 once each.",
-
-      title: "Show a solution with its digits renamed",
-      purpose: "The match uses sudoku solutions; here we practise one row containing each of 1–4 once. Have the judge check that you hold a solution without directly handing the full original to another team. Use the same digit-renaming table in every cell.",
-      steps: ["Table: 1→3, 2→1, 3→4, 4→2. Replace each digit with the digit after its arrow.", "Original row 2,1,3,4 becomes 1,3,4,□.", "The last original digit is 4. Use 4→2 to fill the hole."],
-      question: "The last digit of the renamed row", result: "The result is 1,3,4,2, still containing 1–4 once each. In the match, choose a table and fill four cells. The trusted game judge knows the original and publishes one renamed group to others. ZK (zero-knowledge proof) demonstrates correctness without disclosing an answer, including to its verifier. This game teaches that idea with a simplified judge. Do not reuse a table: showing other parts with the same table lets an opponent connect the published pieces.", retry: "4→2 means replace 4 with 2.",
+      prompt: "x=7 is your secret; r=3 is fresh private randomness. a=8 is the value made from r and fixed first. e=5 is the verifier’s question sent afterwards. Your response is called z; calculate it below.",
+      calculation: "z = remainder of (3 + 5 × 7) divided by 11 = □",
+      takeaway: "Send response z=5, without sending secret x or randomness r.",
+      title: "Zero-knowledge proof: answer without sending the secret",
+      purpose: "A Schnorr proof demonstrates knowledge of secret x for public value y. Zero knowledge (ZK) means the verifier learns no secret. Practise the sequence: fix a value, receive a question, respond.",
+      steps: ["Public y is the remainder of 2 multiplied x times divided by 23. For x=7, y=13. First fix a=8, the remainder of 2³ for fresh r=3.", "After question e=5 arrives, compute z as the remainder of r+e×x divided by 11: 3+5×7=38.", "38=11×3+□. Enter the remainder as your response."],
+      question: "Response z sent to the verifier", result: "z=5. The verifier divides 2⁵ and 8×13⁵ by 23. Both remainders are 9, so verification passes. In general, compare the remainders of 2ᶻ and a×yᵉ. Fresh r hides x. For an honestly questioning verifier, the same conversations can be generated with the same probabilities without x: this is the zero-knowledge property. Current matches also fix a before receiving e and calculating z. These tiny teaching numbers allow exhaustive search and offer no practical security.", retry: "Subtract 11 three times from 38 and enter the remainder.",
     },
   },
   {

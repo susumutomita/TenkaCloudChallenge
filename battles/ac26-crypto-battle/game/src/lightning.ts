@@ -2,7 +2,7 @@ import { boosterStartAt } from "./booster.ts";
 import type { Contract, CryptoBattleState, EndgameLightning, LightningCard, LightningOutcome, LightningProjection } from "./types.ts";
 
 const duration = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0;
-const outcomes: readonly LightningOutcome[] = ["hit", "leak", "deadline", "rotate", "ended"];
+const outcomes: readonly LightningOutcome[] = ["hit", "miss", "leak", "deadline", "rotate", "ended"];
 
 /** Historical ranks cannot be reconstructed from a later score. Never grant on reload. */
 export function storedLightning(state: CryptoBattleState): EndgameLightning {
@@ -79,9 +79,10 @@ export function settleLightning(state: CryptoBattleState): CryptoBattleState {
     } else if (card.status === "armed") {
       const contract = state.contracts.find(c => c.id === card.contractId && c.teamId === teamId);
       // Vigenère's ordinary reward forfeiture also applies to the multiplier.
-      const points = contract?.cipherFailed === true ? 0 : card.points;
+      const proofMiss = contract?.status === "completed" && contract.resolution === "prove" && contract.schnorr?.outcome === "miss";
+      const points = contract?.cipherFailed === true || proofMiss ? 0 : card.points;
       const outcome: LightningOutcome | undefined = contract?.status === "completed"
-        ? contract.resolution === "leak" ? "leak" : "hit"
+        ? proofMiss ? "miss" : contract.resolution === "leak" ? "leak" : "hit"
         : contract?.status === "expired" ? contract.expiryCause === "rotate" ? "rotate" : "deadline"
         : (state.nowMs ?? 0) >= card.expiresAtMs ? "deadline"
         : state.phase === "ended" ? "ended" : undefined;
