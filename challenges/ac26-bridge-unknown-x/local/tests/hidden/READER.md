@@ -134,3 +134,9 @@ continues to the next field instead of aborting every later output. The real
 part2 function was checked with tuple, list and an unsupported tuple entry; valid
 arrays remain byte-identical to the tested HTTP output. Evidence:
 /private/tmp/unknown-x-716-formatter-check.log. The final catalog gate passed.
+
+## Issue 716: independence recheck (2026-09-08)
+
+An independent reader inspected only participant instructions and hints. First pass found that section 6 used independence without defining it or connecting the candidate table to probabilities. The revised Japanese/English text defines an unchanged cover choice for every original, derives probability 1/n from one matching cover, and contrasts x=a modulo 5. A second public-text-only reading found these bridges complete and checked the counterexample by hand.
+
+Validation: 25 mutations killed and 17 author tests run (15 passed; 2 live Workbench tests skipped). Catalog gate: 116 valid entries. No shared deployment performed.
