@@ -88,3 +88,5 @@ are involved. The local services use CPU and memory until stopped.
 Authors run `make reference-test`; at repository root run `make install` and `make agent-gate`.
 See `local/tests/hidden/READER.md` for the independent read-through and real participant API evidence.
 Live AWS and human event rehearsal are not run and are optional pre-event checks.
+
+Participant-only reread (Issue #716): `local/tests/hidden/READER.md` records the distinction between arbitrary Y evaluation and square check positions. Reference validation:12 mutation checks,10 learning-contract tests and5 network-isolation tests passed.
