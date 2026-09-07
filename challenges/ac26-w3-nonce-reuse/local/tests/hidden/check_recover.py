@@ -79,6 +79,17 @@ def check_parse(module, seed: str) -> list[str]:
             {**record, "public_key": (group.p, 0)},
             {**record, "commitment": (1, 1)},
         ]
+        from participant.schnorr import Point
+        good_point = normalized["public_key"]
+        invalid_points = (
+            group.infinity(),
+            Point((group.p, group.a + 1, group.b), good_point.x, good_point.y),
+            Point(good_point.params, good_point.x + group.p, good_point.y),
+            next(group.point(a, b) for a in range(group.p) for b in range(group.p)
+                 if not group.contains(group.point(a, b))),
+        )
+        for key in ("public_key", "commitment"):
+            broken.extend({**normalized, key: point} for point in invalid_points)
         for candidate in broken:
             try:
                 module.parse_record(candidate, group)
@@ -112,6 +123,11 @@ def check_detect(module, seed: str) -> list[str]:
         log = audit_log(seed, label, group)
         records = list(log["records"])
         _secret, duplicate, _other = _reuse_pair(seed, label, group)
+        try:
+            if module.find_reuse([duplicate, dict(duplicate)], group) != []:
+                failures.append("an equal-challenge-only log produced a reuse pair")
+        except Exception as error:
+            failures.append(f"equal-challenge log raised {type(error).__name__}")
         records.extend([duplicate, dict(duplicate)])
         try:
             pairs = module.find_reuse(records, group)

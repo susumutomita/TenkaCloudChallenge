@@ -123,6 +123,18 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 )
 
 
+MUTATIONS += (
+    ("trusts every normalized Point", [(
+        "    if isinstance(value, Point):",
+        "    if isinstance(value, Point):\n        return value",
+    )]),
+    ("returns first pair without comparing challenges", [(
+        "                if e1 != e2:\n                    pairs.append((left, right))",
+        "                return [(left, right)]",
+    )]),
+)
+
+
 def _load(source: str):
     import types
 
