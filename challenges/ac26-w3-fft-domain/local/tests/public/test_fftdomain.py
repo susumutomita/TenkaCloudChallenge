@@ -18,16 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 SUBMISSION = Path(os.environ.get("SUBMISSION_DIR", ROOT / "starter")) / "fftdomain.py"
 
 
+_MODULE = None
+
 def _load():
-    spec = importlib.util.spec_from_file_location("participant_fftdomain", SUBMISSION)
-    if spec is None or spec.loader is None:
-        raise AssertionError("could not load fftdomain.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    for name in ("validate_domain", "fft", "ifft", "interpolate_and_evaluate"):
-        if not hasattr(module, name):
-            raise AssertionError(f"fftdomain.py must define {name}()")
-    return module
+    if _MODULE is None:
+        raise RuntimeError('Public tests require a bounded learner session.')
+    return _MODULE
 
 
 def _horner(coefficients: list[int], point: int, prime: int) -> int:
@@ -101,28 +97,42 @@ TESTS = {
 }
 
 
+def run_cases(module, only=''):
+    global _MODULE
+    _MODULE = module
+    selected = {name: test for name, test in TESTS.items() if only in name}
+    failures, lines = [], []
+    try:
+        if not selected:
+            return ['no public test matched'], 'no public test matched'
+        for name, test in selected.items():
+            try:
+                test()
+                lines.append('pass '+name)
+            except Exception as error:
+                failures.append(name)
+                lines.append('FAIL '+name+': '+type(error).__name__)
+        lines.append(f'{len(failures)} failed' if failures else f'all passed ({len(selected)})')
+        return failures, '\n'.join(lines)
+    finally:
+        _MODULE = None
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", default="")
+    parser.add_argument('--only', default='')
     args = parser.parse_args()
-    selected = {name: test for name, test in TESTS.items() if args.only in name}
-    if not selected:
-        print("no public test matched", file=sys.stderr)
-        return 2
-    failures: list[str] = []
-    for name, test in selected.items():
-        try:
-            test()
-            print(f"pass {name}")
-        except Exception as error:  # noqa: BLE001 - test runner reports each failure
-            failures.append(name)
-            print(f"FAIL {name}: {type(error).__name__}: {error}")
-    if failures:
-        print(f"{len(failures)} failed")
+    sys.path.insert(0, str(ROOT))
+    from participant.execution import LearnerSession
+    from participant.isolation import protect_supervisor
+    protect_supervisor()
+    try:
+        with LearnerSession({'fftdomain.py': SUBMISSION.read_text()}) as session:
+            failures, output = run_cases(session.module(), args.only)
+        print(output)
+        return int(bool(failures))
+    except Exception:
+        print('Public tests could not complete.')
         return 1
-    print(f"all passed ({len(selected)})")
-    return 0
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     raise SystemExit(main())

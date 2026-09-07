@@ -57,15 +57,15 @@ MUTATIONS: list[tuple[str, str, str]] = [
 ]
 
 
-def _load(source: str) -> types.ModuleType:
-    module = types.ModuleType("mutant")
-    module.__dict__["__file__"] = "<mutant>"
-    exec(compile(source, "<mutant>", "exec"), module.__dict__)  # noqa: S102 - author-only test
-    return module
+def judge(source):
+    from verifier.server import evaluate, CHECKPOINTS
+    return [name for name in CHECKPOINTS if not evaluate(name, source)]
 
 
 def main() -> int:
-    baseline = run(_load(REFERENCE), SEED)
+    from participant.isolation import protect_supervisor
+    protect_supervisor()
+    baseline = judge(REFERENCE)
     if baseline:
         print("the reference does not pass its hidden suite:")
         for failure in baseline:
@@ -81,7 +81,7 @@ def main() -> int:
             continue
         source = REFERENCE.replace(before, after, 1)
         try:
-            failures = run(_load(source), SEED)
+            failures = judge(source)
         except Exception as error:  # noqa: BLE001 - a crashing mutant is killed
             failures = [type(error).__name__]
         if failures:

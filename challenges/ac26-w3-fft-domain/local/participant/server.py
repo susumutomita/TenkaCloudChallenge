@@ -34,6 +34,7 @@ from urllib.request import Request, urlopen
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from participant.isolation import protect_supervisor
 from participant.workbench import PortalEditorSupport
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +49,7 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+VERIFY_FORWARD_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -80,8 +82,8 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w3-fft-domain',
     problem_name='その domain、本当に割り切れますか',
     problem_name_en='Does that domain actually divide?',
-    description='渡された omega を信じずに evaluation domain を検証し、FFT・逆変換・補間を本物の domain の上だけで動かす。',
-    description_en='Validate a handed evaluation domain instead of trusting it, and run the transform, its inverse, and interpolation only over real domains.',
+    description='点の並びを検査し、係数と値を正しく往復できる計算に直す。',
+    description_en='Validate point sequences and repair the round trip between coefficients and values.',
     checkpoint_labels={'domain': 'domain — 渡された omega の位数を自分で確かめる', 'roundtrip': 'roundtrip — 逆変換が係数を取り戻す', 'ordering': 'ordering — 値を index どおりの冪に置く', 'interpolate': 'interpolate — domain の内外どちらの点にも答える', 'generalize': 'generalize — 見たことのない素数と次数でも成り立たせる'},
     checkpoint_labels_en={'domain': 'domain - check the order of the omega you were handed', 'roundtrip': 'roundtrip - turn the values back into the coefficients', 'ordering': 'ordering - put each value at the power its index names', 'interpolate': 'interpolate - answer points on and off the domain', 'generalize': 'generalize - hold for primes and orders you have not seen'},
     submitted_files=('fftdomain.py',),
@@ -118,7 +120,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFY_FORWARD_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -236,6 +238,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 

@@ -64,8 +64,14 @@ def public_evidence() -> dict:
 def main() -> None:
     payload = public_evidence()
     primes = payload["primes"]
+    print("Small example / 小さい例: p=5, n=4")
+    print("steps / 回数     : 0 1 2 3 4")
+    print("omega=2         : 1 2 4 3 1 (first return / 初めて戻る: 4)")
+    print("omega=4         : 1 4 1 4 1 (first return / 初めて戻る: 2)")
+    print("coefficients / 係数 [1,2,3,4] -> values / 値 [0,4,3,2] at [1,2,4,3]")
+    print()
     print("deployment       :", payload["healthToken"])
-    print("field family     :", ", ".join(str(prime) for prime in primes))
+    print("primes / 素数    :", ", ".join(str(prime) for prime in primes))
     print()
     print("An order n is legal over p exactly when n divides p-1. A sample of this")
     print("deployment's family, with the orders the contract accepts in each:")
@@ -98,8 +104,8 @@ def main() -> None:
     print(f"  its powers       : {fake_points}")
     print("  the points repeat, so nothing evaluated on them can be inverted.")
     print()
-    print("The hidden phases hand your code omegas of both kinds, over primes and orders")
-    print("the public tests never use. Deciding which kind you were handed is the problem.")
+    print("Apply the same rules to both kinds, including other primes and point counts than")
+    print("those in the public tests. Decide whether the points are distinct.")
 
 
 if __name__ == "__main__":
