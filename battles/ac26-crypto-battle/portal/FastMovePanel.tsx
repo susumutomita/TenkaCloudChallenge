@@ -1518,7 +1518,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
-          const delta=-next.wrongProveCost;
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"実行表と折り畳みの検査に成功！":"Trace and fold check complete!",body:locale==="ja"?"実行表のずれと折り畳みを別々に確認できました。":"You checked execution mismatches and the fold separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。上から順に、7で割った余りを確認してください。`:`${delta} pt. Check the four remainders by 7 in order.`};
         }
        )}/> }

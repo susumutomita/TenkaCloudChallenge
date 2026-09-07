@@ -3052,5 +3052,5 @@ function applyStark(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattl
  const hit=JSON.stringify(parseStarkAnswer(op.answer))===JSON.stringify(starkAnswer(c.task));
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
- return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"stark" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
+ return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"stark" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
 }
