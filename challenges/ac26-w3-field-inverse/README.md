@@ -100,7 +100,7 @@ You may add branches and loops inside `field.py`'s methods and functions. Keep t
 
 This component also supplies division in slope formulas for elliptic curves, the curves whose points are used in cryptography. You are not implementing the curve's special cases or a complete signature scheme here.
 
-Available computational standard-library modules (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. You may import them in your code. This environment does not support installing extra packages, file access or network communication. The required integer arithmetic can also use only built-in operations.
+Available computational standard-library modules (tools included with Python): `collections`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `time`, `typing`. You may import them in your code. This environment does not support installing extra packages, file access or network communication. The required integer arithmetic can also use only built-in operations.
 
 ## Local runtime and author verification
 
@@ -112,15 +112,16 @@ parameters and holds the mathematical checker. Both services use nonroot users,
 Source initializes in a fresh worker without the seed or checker. After readiness,
 requests carry fresh identifiers. The parent validates integer values, moduli,
 operations, equality/hash consistency and expected exceptions. A printed failures list
-is not a verdict. Fresh identifiers reject preprinted results; they do not attest
-native Python returns. A participant who implements the live value protocol must still
-satisfy the same mathematical checks. The finite tested cases are not a proof about
+is not a verdict. Identifiers stay in a private C envelope, outside Python dispatch and JSON callbacks.
+Only matching replies are processed, and their values still undergo mathematical checks. The finite tested cases are not a proof about
 all possible inputs or implementations.
 
 Exception observation and response construction use a small CPython native adapter
 inside the isolated worker. The learner cannot replace these through Python frame
 locals or closure cells. This observes the actual type returned by a dispatched
-Python call; it does not authenticate a submission that writes its own protocol.
+Python call. The C adapter removes the nonce before JSON decoding and attaches it
+only after response serialization, preventing Python frame inspection from forging a reply.
+Arbitrary native memory access remains outside this boundary.
 The compiler is used only in the Docker build stage and is absent from runtime
 images. The adapter implements no field solution or private test.
 

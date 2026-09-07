@@ -260,6 +260,21 @@ def egcd(root):
                 self.assertFalse(server.evaluate(checkpoint,source),checkpoint)
             self.assertFalse(_WORKBENCH.run_public_tests({'field.py':source})['passed'])
 
+    def test_call_id_injection_cannot_forge_exception_provenance(self):
+        source=reader().replace('raise NotInvertible(', 'raise wrong(').replace('raise FieldMismatch(', 'raise wrong(')+"""
+import sys, os, json
+def wrong(message):
+    frame=sys._getframe()
+    while frame:
+        call=frame.f_locals.get('call')
+        if isinstance(call,dict) and 'callId' in call:
+            os.write(1,(json.dumps({'callId':call['callId'],'error':True,'errorKinds':['NotInvertible','FieldMismatch']})+'\\n').encode())
+            break
+        frame=frame.f_back
+    return ValueError(message)
+"""
+        self.assertFalse(server.evaluate('errors',source))
+
     def test_live_id_never_replaces_mathematics(self):
         for alteration in ('value','modulus','bool','float','wrong'):
             source=reader()+r"""
@@ -271,8 +286,8 @@ def altered(self,field,value):
     while f and 'call' not in f.f_locals:f=f.f_back
     if f and f.f_locals['call']['function']=='element':
         scope={**f.f_globals, **f.f_locals}
-        # A protocol-speaking solution can send mathematically valid object data.
-        # The object is also retained so following operations can use this handle.
+        # Even mathematically correct manually injected records cannot obtain
+        # the private envelope; normal method returns are tested separately.
         next_id=scope['next_handle']+1
         scope['objects'][next_id]=self
         record={'id':next_id,'value':self.value,'modulus':field.modulus}
@@ -282,8 +297,8 @@ FieldElement.__init__=altered
 """
             change={'value':'pass','modulus':"record['modulus']+=1",'bool':"record['value']=bool(record['value'])",'float':"record['value']=float(record['value'])",'wrong':"record['value']=(record['value']+1)%field.modulus"}[alteration]
             source=source.replace('ALTER',change)
-            self.assertEqual(server.evaluate('normalize',source),alteration=='value',alteration)
-            self.assertEqual(_WORKBENCH.run_public_tests({'field.py':source})['passed'],alteration=='value',alteration)
+            self.assertFalse(server.evaluate('normalize',source),alteration)
+            self.assertFalse(_WORKBENCH.run_public_tests({'field.py':source})['passed'],alteration)
 
     def test_fixed_reply_and_reused_reply_are_ignored(self):
         for good in (True,False):
@@ -293,7 +308,7 @@ _old=egcd
 _previous=None
 def egcd(*args):
     global _previous
-    cid=sys._getframe(1).f_locals['call']['callId']
+    cid=sys._getframe(1).f_locals['call'].get('callId','unavailable')
     value=_old(*args)
     os.write(1,(json.dumps({'callId':_previous or 'fixed','value':value})+'\n').encode())
     _previous=cid
@@ -303,13 +318,16 @@ def egcd(*args):
             # egcd is also called inside inverse, so direct egcd-trace isolates this reply test.
             self.assertEqual(server.evaluate('egcd-trace',source),good)
 
-    def test_call_ids_not_in_initial_source_and_are_unique(self):
-        source="import sys\ninitial_has_id='callId' in sys._getframe(1).f_locals['initial']\ndef egcd():return [initial_has_id,sys._getframe(1).f_locals['call']['callId']]\n"
+    def test_call_ids_are_private_and_unique(self):
+        source="import sys\ninitial_has_id='callId' in sys._getframe(1).f_locals['initial']\ndef egcd():return [initial_has_id,'callId' in sys._getframe(1).f_locals['call']]\n"
         with LearnerSession({'field.py':source}) as learner:
-            results=[learner.call('field','egcd',[]) for _ in range(3)]
-        self.assertEqual(len({r[1] for r in results}),3)
-        for r in results:
-            self.assertFalse(r[0]);self.assertRegex(r[1],r'^[0-9a-f]{32}$')
+            results=[]; identifiers=[]
+            for _ in range(3):
+                results.append(learner.call('field','egcd',[]))
+                identifiers.append(learner.sequence)
+        self.assertEqual(results,[[False,False]]*3)
+        self.assertEqual(len(set(identifiers)),3)
+        for identifier in identifiers:self.assertRegex(identifier,r'^[0-9a-f]{32}$')
 
     def test_value_modulus_equality_hash_and_cross_modulus_errors(self):
         variants=[
@@ -505,7 +523,7 @@ FieldElement.inverse = inverse
         self.assertFalse(correct);self.assertNotIn('PRIVATE_OPERAND',message)
 
     def test_documented_computational_imports_work(self):
-        source=reader()+"\nimport collections,decimal,fractions,functools,hashlib,hmac,itertools,json,math,operator,random,statistics,time,typing\nassert fractions.Fraction(1,2)+fractions.Fraction(1,2)==1\nassert statistics.mean([1,3])==2\nassert random.Random(0).randrange(7) in range(7)\n"
+        source=reader()+"\nimport collections,copy,dataclasses,enum,re,decimal,fractions,functools,hashlib,hmac,itertools,json,math,operator,random,statistics,time,typing\nassert fractions.Fraction(1,2)+fractions.Fraction(1,2)==1\nassert statistics.mean([1,3])==2\nassert random.Random(0).randrange(7) in range(7)\n"
         for checkpoint in server.CHECKPOINTS:
             self.assertTrue(server.evaluate(checkpoint,source),checkpoint)
         self.assertTrue(_WORKBENCH.run_public_tests({'field.py':source})['passed'])
