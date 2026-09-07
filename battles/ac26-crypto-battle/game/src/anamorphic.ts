@@ -23,12 +23,13 @@ export interface AnamorphicTask{
  /** The participant acts as sender/receiver; this additional table is NOT in the monitor's view. */
  readonly secretBits:readonly number[];
  readonly targetBit:number;
- readonly receivedIndex:number;
+ /** Changed randomness for the transfer question: copies of each trial ticket. */
+ readonly tickets:readonly number[];
 }
 export function anamorphicAnswer(task:AnamorphicTask):readonly number[]{
  const selected=task.secretBits.indexOf(task.targetBit);
  if(selected<0)throw new Error('no matching candidate');
- return [selected+1,anamorphicDecrypt(task.candidates[selected]!,task.ordinaryKey),task.secretBits[task.receivedIndex]!];
+ return [selected+1,anamorphicDecrypt(task.candidates[selected]!,task.ordinaryKey),task.tickets.reduce((sum,count,i)=>sum+(task.secretBits[i]===task.targetBit?count:0),0)];
 }
 export function anamorphicTask(bytes:readonly number[]):AnamorphicTask{
  if(bytes.length<10)throw new Error('ten bytes required');
@@ -36,8 +37,8 @@ export function anamorphicTask(bytes:readonly number[]):AnamorphicTask{
  const trials=[0,1,2,3,4,5];
  for(let i=5;i>0;i--){const j=bytes[10-i]!%(i+1);[trials[i],trials[j]]=[trials[j]!,trials[i]!];}
  const lookup=ANAMORPHIC_LOOKUPS[bytes[2]!%20]!;
- return {kind:'anamorphic-rejection',ordinaryKey,candidates:trials.map(r=>anamorphicEncrypt(message,ordinaryKey,r)),secretBits:trials.map(r=>lookup[r]!),targetBit:bytes[3]!%2,receivedIndex:bytes[4]!%6};
+ return {kind:'anamorphic-rejection',ordinaryKey,candidates:trials.map(r=>anamorphicEncrypt(message,ordinaryKey,r)),secretBits:trials.map(r=>lookup[r]!),targetBit:bytes[3]!%2,tickets:trials.map((_,i)=>1+bytes[(4+i)%10]!%3)};
 }
 export function parseAnamorphicAnswer(answer:unknown):readonly number[]|undefined{
- return typeof answer==='string'&&/^[1-6] [1-6] [01]$/.test(answer)?answer.split(' ').map(Number):undefined;
+ return typeof answer==='string'&&/^[1-6] [1-6] [3-9]$/.test(answer)?answer.split(' ').map(Number):undefined;
 }

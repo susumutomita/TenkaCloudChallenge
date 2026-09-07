@@ -20,12 +20,12 @@ test('balanced hidden lookup averaged over secret tables gives the ordinary sing
  // A known/public lookup destroys that argument: three outcomes never occur.
  expect(ANAMORPHIC_LOOKUPS[0]!.filter(b=>b===1).length).toBe(3);
 });
-test('worksheet selects the first matching trial and decodes a separate incoming packet',()=>{
+test('worksheet selects the first matching trial and transfers rejection sampling to biased randomness',()=>{
  for(let n=0;n<256;n++){
   const t=anamorphicTask([n,n*3,n*5,n*7,n*11,n*13,n*17,n*19,n*23,n*29]),a=anamorphicAnswer(t);
   expect(t.secretBits[a[0]!-1]).toBe(t.targetBit);
   expect(t.secretBits.slice(0,a[0]!-1).every(b=>b!==t.targetBit)).toBe(true);
-  expect(a[1]).toBe(1+n*3%6);expect(a[2]).toBe(t.secretBits[t.receivedIndex]);
+  expect(a[1]).toBe(1+n*3%6);expect(a[2]).toBe(t.tickets.filter((_,i)=>t.secretBits[i]===t.targetBit).reduce((x,y)=>x+y,0));
   expect(parseAnamorphicAnswer(a.join(' '))).toEqual(a);
  }
  expect(parseAnamorphicAnswer('0 1 0')).toBeUndefined();
@@ -41,7 +41,7 @@ test('owned anamorphic orders grade arithmetic, reject replay and expiry, and re
  expect(order).toBeDefined();if(order.task.kind!=='anamorphic-rejection')throw new Error('wrong task');
  expect(order.allowedMethods).toEqual(['anamorphic']);
  const projection=projectForTeam(s,'a');expect(isCryptoBattleProjection(projection)).toBe(true);
- for(const patch of [{ordinaryKey:0},{targetBit:2},{receivedIndex:6},{candidates:[]},{candidates:[[1]]},{secretBits:[0,1]},{secretBits:[0,0,0,0,0,2]}]){
+ for(const patch of [{ordinaryKey:0},{targetBit:2},{tickets:[]},{tickets:[0,1,1,1,1,1]},{tickets:[4,1,1,1,1,1]},{candidates:[]},{candidates:[[1]]},{secretBits:[0,1]},{secretBits:[0,0,0,0,0,2]}]){
   expect(isCryptoBattleProjection({...projection,myContracts:projection.myContracts.map(c=>c.id===order.id?{...c,task:{...c.task,...patch}}:c)})).toBe(false);
  }
 
@@ -61,4 +61,19 @@ test('owned anamorphic orders grade arithmetic, reject replay and expiry, and re
 
 test('old match configurations do not silently acquire anamorphic orders',()=>{
  for(const version of [14,15,16,17,18])expect(migrateState(initialState({eventId:'old',teamIds:['a']}),version).config.anamorphicOrders).toBeUndefined();
+});
+
+test('biased random trials break the balanced-table single-packet distribution',()=>{
+ const base=anamorphicTask([1,2,3,4,5,6,7,8,9,10]);
+ for(const targetBit of [0,1]) {
+  const tickets=[2,1,1,1,1,1];
+  let probability=0;
+  for(const secretBits of ANAMORPHIC_LOOKUPS){
+   const denominator=anamorphicAnswer({...base,secretBits,targetBit,tickets})[2]!;
+   if(secretBits[0]===targetBit)probability+=tickets[0]!/denominator/20;
+  }
+  expect(probability).toBeCloseTo(1/4,12);
+  expect(probability).not.toBeCloseTo(2/7,6);
+ }
+ for(let w=1;w<=3;w++)expect(anamorphicAnswer({...base,tickets:Array(6).fill(w)})[2]).toBe(3*w);
 });
