@@ -4,8 +4,8 @@ export function SnarkWorksheet({task,locale,busy,wrongCost,onSubmit}:{task:Const
  const ja=locale==='ja';const [values,setValues]=useState(['','','','','']);const [a,b,c]=task.rows;
  const equations=[`${a[0]} + ${a[1]} − ${a[2]}`,`${b[0]} × ${b[1]} − ${b[2]}`,`${c[0]} + ${c[1]} − ${c[2]}`,`${a[2]} − ${c[0]}`,`${b[2]} − ${c[1]}`];
  return <section className="tc-input-panel" aria-label="SNARK constraint worksheet">
-  <h3>{ja?'SNARKの算術化：計算と配線を検査':'SNARK arithmetization: check gates and wires'}</h3>
-  <p>{ja?'SNARKは計算の正しさを短い証明で示す方式です。ここでは、その準備として計算を「余りが0になる式」に直す算術化を体験します。値を隠すZKや短い証明の生成は、この表の検査だけでは実現しません。':'A SNARK provides a short proof of a computation. This exercise covers arithmetization: translating computation into equations with zero remainder. Zero knowledge means showing correctness without revealing private values. Checking this table alone provides neither zero knowledge nor a succinct proof.'}</p>
+  <h3>{ja?'計算を式で確かめる：短い証明（SNARK）の準備':'Check computation with equations: prepare a short proof (SNARK)'}</h3>
+  <p>{ja?'SNARKは計算の正しさを短い証明で示す方式です。ここでは、その準備として計算を「余りが0になる式」に直す算術化を体験します。秘密の値を教えず正しさを示す性質をゼロ知識（ZK）と呼びます。この表の検査だけでは、ゼロ知識や短い証明の生成は実現しません。':'A SNARK provides a short proof of a computation. This exercise covers arithmetization: translating computation into equations with zero remainder. Zero knowledge means showing correctness without revealing private values. Checking this table alone provides neither zero knowledge nor a short proof.'}</p>
   <p>{ja?'下の表は誰かが提出した計算です。正しいとは限りません。各行をゲートと呼び、L・Rが入力、Oが出力です。':'This is a proposed computation and may be wrong. Each row is a gate: L and R are inputs, O is its output.'}</p>
   <table><thead><tr><th>{ja?'行':'Row'}</th><th>{ja?'計算':'Operation'}</th><th>L</th><th>R</th><th>O</th></tr></thead><tbody>{task.rows.map((row,i)=><tr key={i}><th>{i+1}</th><td>{i===1?'×':'+'}</td>{row.map((v,j)=><td key={j}>{v}</td>)}</tr>)}</tbody></table>
   <div style={{display:'flex',gap:12,flexWrap:'wrap',padding:12,background:'#eef5ff',color:'#16212e'}} aria-label={ja?'必要な配線':'Required wiring'}>
