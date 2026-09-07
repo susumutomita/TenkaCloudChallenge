@@ -1286,7 +1286,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
-      {(projection.lightning?.status === "available" || projection.lightning?.status === "armed") && <Lightning projection={projection} order={selectedOrder} locale={locale} busy={submitting}
+      {(projection.lightning?.status === "available" || projection.lightning?.status === "armed" || projection.lightning?.status === "spent") && <Lightning projection={projection} order={selectedOrder} locale={locale} busy={submitting}
         onSelect={id => { setSelectedOrderId(id); setProveOpen(false); }}
         onDeclare={id => void run(() => submitDeclareLightning(client, id), next => ({
           kind: next?.lightning?.status === "armed" && next.lightning.contractId === id ? "hint" : "error",

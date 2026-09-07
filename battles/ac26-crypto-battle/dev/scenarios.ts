@@ -74,6 +74,7 @@ export const SCENARIO_IDS = [
   "waiting",
   "streaming",
   "ec-order",
+  "schnorr-lightning",
   "fresh",
   "hint-booster",
   "lightning",
@@ -102,6 +103,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "デプロイ直後 — まだ誰も始めていない",
     en: "Just deployed — nobody has started it",
   },
+  "schnorr-lightning": {ja:"Schnorr — ライトニングを使って証明する",en:"Schnorr — prove with lightning"},
   "ec-order": {ja:"楕円曲線 — 7で割った余りで2点を足す",en:"Elliptic curve — add two points modulo7"},
   streaming: { ja: "新設定 — 30秒ごとに到着・回答は1分", en: "Current pacing — arrives every 30s, answer within 1m" },
   fresh: {
@@ -334,7 +336,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver((id === "streaming" || id === "ec-order") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
+  const driver = makeDriver((id === "streaming" || id === "ec-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -344,6 +346,16 @@ export function buildScenario(id: ScenarioId): Scenario {
       driver.host.state = initialState({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS }, DEV_CONFIG);
       break;
 
+    case "schnorr-lightning": {
+      driver.advance(60 * 60_000);
+      for (let i=0;i<30;i++) {
+        const view=projectForTeam(driver.host.state,"alpha");
+        if(view.lightning?.status === "available" && view.myContracts.some(c=>c.status === "open" && c.schnorr && !c.allowedMethods.includes("leak"))) break;
+        driver.advance(30_000);
+        if(i===29) throw new Error("no Schnorr lightning order reached");
+      }
+      break;
+    }
     case "ec-order": {
       for(let i=0;i<150;i++) {
         const found=driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="ec-add"&&c.task.left&&c.task.right&&c.task.left[0]!==c.task.right[0]);

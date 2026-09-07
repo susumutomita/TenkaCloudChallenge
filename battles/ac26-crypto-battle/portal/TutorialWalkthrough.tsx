@@ -3,7 +3,7 @@ import { useState } from "react";
 import ConceptExplanation from "./ConceptExplanation.tsx";
 
 type Locale = "ja" | "en";
-type Topic = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "commit";
+type Topic = "remainder" | "sharing" | "mpc" | "schnorr" | "fhe" | "caesar" | "commit";
 interface PracticeCopy {
   readonly title: string;
   readonly purpose: string;
@@ -162,9 +162,9 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
     },
   },
   {
-    topic: "zk", answer: "5",
+    topic: "schnorr", answer: "5",
     ja: {
-      prompt: "秘密 x=7、今回だけの乱数 r=3。先に a=8 を送り、検証者から質問 e=5 が届きました。",
+      prompt: "x=7は秘密の数、r=3は今回だけの内緒の乱数です。a=8はrから作って先に固定した数。e=5はその後に検証者が返した質問の数です。送る答えをzと呼び、下の式で計算します。",
       calculation: "z = (3 + 5 × 7) を11で割った余り = □",
       takeaway: "送るのは応答 z=5。秘密 x と乱数 r は送りません。",
       title: "ゼロ知識証明：秘密を送らず、質問に答える",
@@ -173,7 +173,7 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
       question: "検証者に送る応答 z", result: "z=5です。検証者は2⁵と8×13⁵をそれぞれ23で割り、両方の余りが9なので合格とします。一般には2ᶻとa×yᵉの余りを比べます。毎回新しいrを使うことでxを隠します。正直に質問する検証者には、xなしでも、同じ会話が同じ確率で現れるように作れる、という性質がZKの根拠です。本番もaを固定し、届いたeからzを計算します。この小さい数は手計算用で、秘密を総当たりできるため実用の安全性はありません。", retry: "38から11を3回引いた余りを答えてください。",
     },
     en: {
-      prompt: "Secret x=7, fresh random r=3. You fixed a=8 before the verifier sent question e=5.",
+      prompt: "x=7 is your secret; r=3 is fresh private randomness. a=8 is the value made from r and fixed first. e=5 is the verifier’s question sent afterwards. Your response is called z; calculate it below.",
       calculation: "z = remainder of (3 + 5 × 7) divided by 11 = □",
       takeaway: "Send response z=5, without sending secret x or randomness r.",
       title: "Zero-knowledge proof: answer without sending the secret",

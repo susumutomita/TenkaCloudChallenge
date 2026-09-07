@@ -1,3 +1,5 @@
+import {isCryptoBattleProjection} from "../../portal/coordination.ts";
+import {orderDisplayState,orderResultLabel} from "../../portal/OrderQueue.tsx";
 import {expect,test} from "bun:test";
 import {initialState,applyOp,tick,validateOp,projectForTeam,STREAMING_ORDER_CONFIG,migrateState} from "./reducer.ts";
 import {power,verifySchnorr} from "./schnorr.ts";
@@ -100,6 +102,12 @@ for (const proveOnly of [true, false]) test(`one-shot miss: terminal=${proveOnly
  expect(validateOp(state,"a",{kind:"reveal-hint",contractId:id}).ok).toBe(!proveOnly);
  expect(validateOp(state,"a",{kind:"leak",contractId:id}).ok).toBe(!proveOnly);
  if(proveOnly){
+   const view=projectForTeam(state,"a");
+   expect(isCryptoBattleProjection(view)).toBe(true);
+   expect(orderDisplayState(view.myContracts[0]!)).toBe("failed");
+   expect(orderResultLabel(view.myContracts[0]!,"ja")).toBe("✗ 証明失敗");
+   expect(orderResultLabel(view.myContracts[0]!,"en")).toBe("✗ Proof failed");
+   expect(projectForTeam(migrateState(state,14),"a").lightning).toMatchObject({status:"spent",outcome:"miss",points:0});
    expect(projectForTeam(state,"a").lightning).toMatchObject({status:"spent",outcome:"miss",points:0});
    const restored=JSON.parse(JSON.stringify(state));
    expect(projectForTeam(restored,"a").myContracts[0]!.schnorr!.pending!.outcome).toBe("miss");

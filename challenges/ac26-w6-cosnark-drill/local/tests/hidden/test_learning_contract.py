@@ -43,6 +43,17 @@ def editor_solution(instructions: str):
 
 
 class LearningContract(unittest.TestCase):
+    def test_paper_route_uses_one_digit_operands(self):
+        for index in range(64):
+            public = setting(f'paper-{index}')["public"]
+            self.assertEqual(public["p"], 7)
+            for name, value in public.items():
+                if name == "p":
+                    continue
+                for operand in value if isinstance(value, list) else [value]:
+                    self.assertGreaterEqual(operand, 0)
+                    self.assertLessEqual(operand, 6)
+
     def test_both_languages_work_when_copied_into_the_real_starter(self):
         # metadata is author input, not shipped in the participant image.
         metadata = METADATA

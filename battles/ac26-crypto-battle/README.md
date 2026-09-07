@@ -414,3 +414,9 @@ New matches offer EC addition at every thirteenth sequence slot, with duels taki
 Verify with `cd game && bun test src/ec.test.ts && bun run typecheck`, then the dev `ec-order` scenario.
 
 PR #790 follow-up: accepting a Schnorr commitment starts the answer attempt, so lightning must be declared beforehand. A failed one-shot PROVE-only Order is resolved with a persisted miss, without a second deadline charge or further paid hints. Orders permitting LEAK retain that alternative. Optional practice uses the current Schnorr exchange in both languages.
+
+### Score and mandatory-disclosure regressions (#777 / #778)
+
+`streaming-orders.test.ts` isolates expiry penalties over 30 minutes and verifies that pruning completed Orders does not remove earned points. `disclosure-score-regression.test.ts` uses normal penalties to verify a missed deadline deducts once while completed history survives. Scores are cumulative team state, not a sum over visible Orders.
+
+The latter also runs 90 minutes with the current 30-second arrival / 60-second deadline, Schnorr and EC configuration. Both teams LEAK only mandatory-disclosure Orders and successfully HUNT using only participant-projected public shares. No voluntary disclosure is required. The originally reported deployed revision is unidentified; this evidence exercises the local production reducer/projection. Verify the deployed environment after the owner deploys.

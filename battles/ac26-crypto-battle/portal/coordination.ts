@@ -87,7 +87,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
       || !duration(card.startAfterMs) || !duration(card.remainingMs)
       || (card.startsInMs !== undefined && !duration(card.startsInMs))) return false;
     if ((card.status === "armed" || card.status === "spent") && (typeof card.contractId !== "string" || card.contractId.length === 0 || !duration(card.points))) return false;
-    if (card.status === "spent" && !["hit", "leak", "deadline", "rotate", "ended"].includes(String(card.outcome))) return false;
+    if (card.status === "spent" && !["hit", "miss", "leak", "deadline", "rotate", "ended"].includes(String(card.outcome))) return false;
   }
   // [Issue #645] The modulus is required, not optional. The FHE and MPC panels
   // cannot state a solvable problem without it, and a payload from a

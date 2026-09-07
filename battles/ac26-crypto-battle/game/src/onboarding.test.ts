@@ -129,7 +129,7 @@ describe("optional arithmetic practice", () => {
     // Fixed, hand-worked values; the real cryptographic examples are checked
     // against the game primitives in concept-explanation.test.ts.
     const answers = ["1", "2", "2", "1", "2", "6", "5", "4", "1", "2"];
-    expect(PRACTICE_STEPS.map(step => step.topic)).toEqual(["remainder", "sharing", "sharing", "sharing", "sharing", "mpc", "zk", "fhe", "caesar", "commit"]);
+    expect(PRACTICE_STEPS.map(step => step.topic)).toEqual(["remainder", "sharing", "sharing", "sharing", "sharing", "mpc", "schnorr", "fhe", "caesar", "commit"]);
     for (let i = 0; i < answers.length; i++) {
       expect(checkPracticeAnswer(i, answers[i]!)).toBe(true);
       for (const invalid of ["", " ", "-1", "10", "a", "0"]) expect(checkPracticeAnswer(i, invalid)).toBe(false);
@@ -218,7 +218,7 @@ describe("Issue #641 live move lifecycle", () => {
 });
 
  it("Schnorr practice follows the live protocol in both languages",()=>{
-   const step=PRACTICE_STEPS.find(s=>s.topic==="zk")!;
+   const step=PRACTICE_STEPS.find(s=>s.topic==="schnorr")!;
    expect(Number(step.answer)).toBe((3+5*7)%11);
    expect((2**5)%23).toBe((8*13**5)%23);
    for(const copy of [step.ja,step.en]){
