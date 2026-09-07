@@ -175,11 +175,11 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
 
 
 def safe_nonce(secret: int, message: bytes, group) -> int:
-    """A nonce that does not repeat across different messages.
+    """A nonce derived from both the secret key and message.
 
     Deterministic on purpose. The same key and message give the same nonce -- and
-    therefore the same signature, which leaks nothing new -- while two different
-    messages cannot share one without a hash collision. The key is in the hash too:
+    therefore the same signature, which leaks nothing new -- while different messages can still share one after reduction modulo n-1,
+    even without a hash collision. The key is in the hash too:
     without it, two signers of the same message would use the same nonce.
     """
     digest = hashlib.sha256(

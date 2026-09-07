@@ -91,8 +91,7 @@ All eight checkpoints have three hints, two points per hint (48 points in total)
 is visibly wrong. Looking random is not having entropy.
 
 `deterministic_nonce` has the most worrying name and is correct. The same key and message give the
-same nonce — which gives the same signature, leaking nothing new — while two different messages
-cannot collide without a hash collision. The key goes into the hash too, or two signers of the
+same nonce — which gives the same signature, leaking nothing new — but different messages can share a nonce even when their hashes differ, because reduction modulo n−1 can merge digest values. A large output range makes this rare; it does not make it impossible. The key goes into the hash too, or two signers of the
 same message would share a nonce.
 
 ## Group order, and a test that cannot be written

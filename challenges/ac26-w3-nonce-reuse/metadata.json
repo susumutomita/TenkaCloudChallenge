@@ -240,7 +240,7 @@
           },
           {
             "id": "collision-hint-3",
-            "content": "collision_experimentでi=0〜samples−1を回し、message=f\"trial-{i}\".encode()とします。truncated_nonce(seed,1,message,group)を毎回呼び、setへ入れます。distinct=len(set)、collisions=samples−distinct、space=NONCE_SPACEの辞書を返します。collisionを提出します。",
+            "content": "最初にseen=set()で、同じ値を1個だけ残す集合を作ります。for i in range(samples)でmessage=f\"trial-{i}\".encode()、k=truncated_nonce(seed,1,message,group)を計算しseen.add(k)で追加します。{\"distinct\":len(seen),\"collisions\":samples-len(seen),\"space\":NONCE_SPACE}を返し、collisionを提出します。",
             "penalty": 2
           }
         ]
@@ -410,7 +410,7 @@
             },
             {
               "id": "collision-hint-3",
-              "content": "Loop i from0 to samples−1 in collision_experiment, for example with message=f\"trial-{i}\".encode(). Call truncated_nonce(seed,1,message,group) each time and add the result to a set. Return distinct=len(set),collisions=samples−distinct,space=NONCE_SPACE. Submit collision."
+              "content": "Start seen=set(), a collection retaining each value once. For i in range(samples), set message=f\"trial-{i}\".encode(), then k=truncated_nonce(seed,1,message,group) and seen.add(k). Return {\"distinct\":len(seen),\"collisions\":samples-len(seen),\"space\":NONCE_SPACE}. Submit collision."
             }
           ]
         },
