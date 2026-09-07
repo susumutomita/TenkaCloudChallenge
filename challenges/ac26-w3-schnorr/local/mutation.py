@@ -165,6 +165,18 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 )
 
 
+MUTATIONS += (
+    ("blindly unpacks malformed signatures", [(
+        "    if not isinstance(signature, (tuple, list)) or len(signature) != 2:\n        return False\n",
+        "",
+    )]),
+    ("accepts identity commitments", [(
+        "    if not group.contains(commitment) or commitment.is_infinity:\n        return False\n",
+        "",
+    )]),
+)
+
+
 def _load(source: str):
     import types
 

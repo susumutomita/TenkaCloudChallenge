@@ -112,7 +112,11 @@ def sign(secret: int, nonce: int, message: bytes, domain: str, group):
 
 
 def verify(public, message: bytes, signature, domain: str, group) -> bool:
+    if not isinstance(signature, (tuple, list)) or len(signature) != 2:
+        return False
     commitment, response = signature
+    if not validate_public_key(public, group) or not validate_public_key(commitment, group):
+        return False
     e = challenge(domain, commitment, public, message, group)
     return verify_transcript(public, commitment, e, response, group)
 

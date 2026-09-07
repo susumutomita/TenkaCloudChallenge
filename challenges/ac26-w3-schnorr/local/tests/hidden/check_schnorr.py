@@ -122,6 +122,16 @@ def check_transcript(module, seed: str) -> list[str]:
             if module.verify_transcript(public, other_commitment, e, z, group):
                 failures.append("a transcript with a modified commitment was accepted")
                 break
+        # An identity commitment can satisfy the equation for z=e*x, but is forbidden.
+        foreign = secp_group().generator
+        off_curve = next(group.point(a, b) for a in range(group.p)
+                         for b in range(group.p) if not group.contains(group.point(a, b)))
+        for bad_commitment in (group.infinity(), foreign, off_curve):
+            try:
+                if module.verify_transcript(public, bad_commitment, 1, x, group):
+                    failures.append("an unusable commitment was accepted")
+            except Exception as error:
+                failures.append(f"invalid commitment raised {type(error).__name__} instead of False")
         if module.verify_transcript(group.infinity(), commitment, 1, 1, group):
             failures.append("a transcript against the identity as a public key was accepted")
     return failures
@@ -256,6 +266,13 @@ def check_sign_verify(module, seed: str) -> list[str]:
             if not isinstance(signature, tuple) or len(signature) != 2:
                 failures.append("a signature is not a commitment and a response")
                 break
+            for malformed in ((), (group.generator,),
+                              (group.generator, 1, 2), None):
+                try:
+                    if module.verify(public, message, malformed, DOMAINS[0], group):
+                        failures.append("a malformed signature was accepted")
+                except Exception as error:
+                    failures.append(f"malformed signature raised {type(error).__name__} instead of False")
             if not module.verify(public, message, signature, DOMAINS[0], group):
                 failures.append("an honest signature was rejected")
                 break
