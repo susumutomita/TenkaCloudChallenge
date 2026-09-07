@@ -412,7 +412,7 @@
             },
             {
               "id": "binding-hint-3",
-              "content": "Set stored value s to your limit+1. Since limit < other_limit, s is at most the other limit. Choose the three numbers m−1, s, 1. Their ordinary sum is m+s and their remainder is s. Check each number is in0..m−1 and both conditions hold; enter the evaluated list [m−1,s,1] in binding. Format multiple results as a square-bracketed comma-separated list."
+              "content": "Set stored value s to your limit+1. Since limit < other_limit, s is at most the other limit. Choose the three numbers m−1, s, 1. Their ordinary sum is m+s and their remainder is s. Check each number is from 0 through m−1 and both conditions hold; enter the evaluated list [m−1,s,1] in binding. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         }
