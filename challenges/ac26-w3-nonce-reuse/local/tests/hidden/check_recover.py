@@ -81,6 +81,10 @@ def check_parse(module, seed: str) -> list[str]:
             {**record, "public_key": (group.p, 0)},
             {**record, "commitment": (1, 1)},
         ]
+        broken.extend({k:v for k,v in record.items() if k != missing}
+                      for missing in ("message", "public_key", "commitment", "response"))
+        broken.extend({**record, "response": value} for value in (True, False, 1.0, "1", None))
+        broken.extend((None, [], "record"))
         from participant.schnorr import Point
         good_point = normalized["public_key"]
         invalid_points = (
@@ -210,6 +214,19 @@ def check_reject(module, seed: str) -> list[str]:
         group = toy_group(seed, label)
         secret, first, second = _reuse_pair(seed, label, group)
         parsed_first = module.parse_record(dict(first), group)
+
+        malformed = [None, {}, [], {**first, "response": "bad"}]
+        malformed.extend({k:v for k,v in first.items() if k != missing}
+                         for missing in ("message", "public_key", "commitment", "response"))
+        for bad in malformed:
+            for left, right in ((bad, second), (first, bad)):
+                try:
+                    module.recover_secret(left, right, group)
+                    failures.append("invalid recovery inputs were accepted")
+                except module.MalformedRecord:
+                    pass
+                except Exception:
+                    failures.append("recovery did not follow its input error contract")
 
         invalid = module.parse_record(dict(second), group)
         invalid["response"] = (invalid["response"] + 1) % group.n

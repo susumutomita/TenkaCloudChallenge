@@ -124,6 +124,10 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 
 
 MUTATIONS += (
+    ("skips recovery input parsing", [("    first = parse_record(first, group)\n    second = parse_record(second, group)", "")]),
+    ("does not require a message field", [('("message", "public_key", "commitment", "response")', '("public_key", "commitment", "response")')]),
+    ("accepts non-integer responses", [("not isinstance(response, int) or isinstance(response, bool) or not 0 <= response < group.n", "not 0 <= response < group.n")]),
+
     ("checks membership before coordinate types", [('        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:\n            raise MalformedRecord("a coordinate is not canonical")\n        if value.is_infinity or not group.contains(value):\n            raise MalformedRecord("the point is not a usable group element")\n', '        if value.is_infinity or not group.contains(value):\n            raise MalformedRecord("the point is not a usable group element")\n        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:\n            raise MalformedRecord("a coordinate is not canonical")\n')]),
     ("uses plain SHA256 instead of HMAC", [(
         "digest = hmac.new(key, data, hashlib.sha256).digest()",
