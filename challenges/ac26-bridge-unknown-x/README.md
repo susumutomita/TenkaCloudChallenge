@@ -103,3 +103,7 @@ source basis, and participant acceptance are in
 [local/tests/hidden/READER.md](local/tests/hidden/READER.md). Stop only the Compose
 project used for the exercise; `make verifier-down` targets this problem's default
 project. No release, cloud deployment, or shared-environment action is needed.
+
+## Issue #716
+
+Section 6 defines independent cover selection and connects each matching cover to observation probability 1/n. The x=a counterexample shows why merely covering every value is insufficient. Public-text reader findings and recheck are recorded in local/tests/hidden/READER.md.

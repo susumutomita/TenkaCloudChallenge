@@ -91,3 +91,7 @@ process 境界を author image で検査します。`test` と `inspect` は非�
 [local/tests/hidden/READER.md](local/tests/hidden/READER.md) に記録します。片付けは自分の
 Compose project だけを対象にします。`make verifier-down` はこの問題の default
 project を停止します。release、cloud deploy、共有環境の変更は不要です。
+
+## Issue #716
+
+第6問で覆いを独立に選ぶ意味と、候補ごとの観測確率1/nを説明しました。x=aの反例で、全種類の覆いが現れるだけでは不十分な理由も示しています。公開文面のみの読者確認は local/tests/hidden/READER.md に記録しています。

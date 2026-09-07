@@ -113,13 +113,15 @@ def find_signed_without_user_verification(
 
 def _context_failure(server_record: dict[str, object], assertion: dict[str, object]) -> str | None:
     """Supplied WebAuthn context checks.  Return the first failed binding."""
+    if not isinstance(assertion, dict):
+        return "malformed-assertion"
     try:
         auth_data = _decode(str(assertion["authenticatorData"]))
         client_data_raw = _decode(str(assertion["clientDataJSON"]))
         client_data = json.loads(client_data_raw)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         return "malformed-assertion"
-    if len(auth_data) < 37:
+    if not isinstance(client_data, dict) or len(auth_data) < 37:
         return "malformed-assertion"
     if assertion.get("id") != server_record.get("credentialId"):
         return "credential-id-mismatch"

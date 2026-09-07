@@ -93,3 +93,6 @@ privilege 無しで動き、公開されるのは Workbench の loopback だけ�
 `make reference-test` が mutation suite を実行します。壊した実装 8 種類があります。Fermat 版は素数の
 checkpoint を全部通り、最終行だけの trace は当初の checkpoint を生き延びました。後者が、列全体を
 突き合わせるようになった理由です。
+
+
+6チェックポイントを3段ヒントに変更しました。参加者向け資料だけの読解で、n乗根の前提の欠落、invalid_values の記載漏れ、候補探索の手順不足を確認し、日英の無料本文にも補いました。この変更ではランタイム・採点器を変更していません。実Portalでのプレーは未実施で、カタログ検証とは区別します。
