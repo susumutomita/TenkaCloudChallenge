@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import unittest
 from pathlib import Path
 from types import ModuleType
 
@@ -15,6 +16,18 @@ REFERENCE = (ROOT / "reference" / "assertion.py").read_text(encoding="utf-8")
 SEED = "passkey-mutation-suite"
 
 MUTATIONS = [
+    (
+        "indexes a missing signature instead of rejecting it",
+        'signature = assertion.get("signature")',
+        'signature = assertion["signature"]',
+        "signature",
+    ),
+    (
+        "indexes a missing signature in the final policy",
+        'if not isinstance(public_key, dict) or not verify_signature(public_key, assertion):',
+        'if not isinstance(assertion["signature"], dict) or not isinstance(public_key, dict) or not verify_signature(public_key, assertion):',
+        "enforce-uv",
+    ),
     (
         "signs raw clientDataJSON instead of its hash",
         "return authenticator_data + hashlib.sha256(client_data).digest()",
@@ -61,6 +74,9 @@ def _load(source: str, name: str) -> ModuleType:
 
 
 def main() -> int:
+    regressions = unittest.defaultTestLoader.discover(str(ROOT / "tests" / "hidden"), pattern="test_*.py")
+    if not unittest.TextTestRunner().run(regressions).wasSuccessful():
+        return 1
     reference = _load(REFERENCE, "reference")
     if run(reference, SEED):
         print("FAIL reference implementation does not pass the hidden suite")
