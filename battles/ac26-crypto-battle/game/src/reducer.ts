@@ -2927,8 +2927,9 @@ function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<Cryp
   }
   const pending=contract.schnorr!;
   const y=pending.y;
-  const consumed={...state,contracts:state.contracts.map(c=>c.id===contract.id?{...c,answerAttempted:true,schnorr:{...pending,used:true}}:c)};
-  if(!verifySchnorr(y,pending.a,pending.e,op.z)) {
+  const outcome = verifySchnorr(y,pending.a,pending.e,op.z) ? "hit" as const : "miss" as const;
+  const consumed={...state,contracts:state.contracts.map(c=>c.id===contract.id?{...c,answerAttempted:true,schnorr:{...pending,used:true,outcome}}:c)};
+  if(outcome === "miss") {
     // A failed proof consumes the challenge, preventing brute-force retries for points.
     return {...consumed, teams:{...state.teams,[teamId]:{...state.teams[teamId]!,score:Math.max(0,state.teams[teamId]!.score-Math.abs(state.config.scores.wrongProve))}}};
   }

@@ -34,8 +34,9 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
   },[storageKey,proof.y,proof.pending?.a,proof.pending?.y]);
   const matchesPending = nonce!==null && secret!==null && (!proof.pending || (power(2,nonce)===proof.pending.a && power(2,secret)===proof.pending.y));
   const valid=(v:string)=>/^\d+$/.test(v)&&Number(v)<=10;
+  const correctCommitment = nonce !== null && /^\d+$/.test(a) && Number(a) === power(2,nonce);
   const commit=()=>{
-    if(nonce===null||secret===null)return;
+    if(nonce===null||secret===null||!correctCommitment)return;
     try { sessionStorage.setItem(storageKey,JSON.stringify({x:secret,r:nonce})); } catch { /* Current tab can continue using its witness. */ }
     onSubmit({kind:"schnorr-commit",contractId:order.id,y:proof.y,a:Number(a)});
   };
@@ -58,8 +59,9 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
         <tr><th>2<sup>r</sup> mod 23</th>{Array.from({length:11},(_,i)=><td key={i}>{power(2,i)}</td>)}</tr>
       </tbody></table>
       <label>a <input aria-label="Schnorr a" inputMode="numeric" value={a} onChange={e=>setA(e.target.value)} /></label>
-      <button type="button" disabled={busy||nonce===null||secret===null||!/^\d+$/.test(a)} onClick={commit}>{ja?"a を固定して、検証者の e を受け取る":"Fix a and receive the verifier's e"}</button>
-    </> : proof.pending.used ? <p role="status">{ja?"この証明の応答は送信済みです。結果を確認してください。":"This proof response has been submitted. Check the result."}</p> : <>
+      {a !== "" && !correctCommitment && <p role="alert">{ja?"表の r の列を確認してください。a が式の答えと違います。送る前に直せます。":"Check the r column: a does not match the equation. Correct it before sending."}</p>}
+      <button type="button" disabled={busy||secret===null||!correctCommitment} onClick={commit}>{ja?"a を固定して、検証者の e を受け取る":"Fix a and receive the verifier's e"}</button>
+    </> : proof.pending.used ? <p role="status">{(proof.pending.outcome === "hit" || (!proof.pending.outcome && order.status === "completed")) ? (ja?"検証成功：秘密を送らずに証明できました。":"Verification passed: you proved knowledge without sending the secret.") : (ja?"検証失敗：送った応答は検証式を満たしませんでした。この証明には再回答できません。":"Verification failed: your response did not satisfy the equation. This proof cannot be retried.")}</p> : <>
       <h4>{ja?"② a の固定後に、検証者から e が届きました":"② The verifier sent e after a was fixed"}</h4>
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>
       {!matchesPending ? <p role="alert">{ja?"この端末に開始時の乱数 r がありません。証明を開始したタブで続けてください。":"The original private r is missing. Continue in the tab where you started."}</p> : <>

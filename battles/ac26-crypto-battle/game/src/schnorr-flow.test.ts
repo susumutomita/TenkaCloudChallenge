@@ -22,6 +22,7 @@ test("commit precedes the unpredictable challenge, public verification awards on
   expect(validateOp(state,"a",response).ok).toBe(true);
   state=applyOp(state,"a",response);
   expect(state.teams.a!.score).toBe(30);
+  expect(projectForTeam(JSON.parse(JSON.stringify(state)),"a").myContracts[0]!.schnorr!.pending!.outcome).toBe("hit");
   expect(validateOp(state,"a",response).ok).toBe(false);
   const record=projectForTeam(state,"b").publicLedger.find(a=>a.kind==="proof")!;
   if(record.kind!=="proof")throw new Error("proof missing");
@@ -42,6 +43,7 @@ test("wrong response consumes the proof; no response brute force or old Sudoku b
   state=applyOp(state,"a",{kind:"schnorr-response",contractId:id,z:(right+1)%11});
   expect(state.teams.a!.score).toBe(0);
   expect(state.contracts.find(c=>c.id===id)!.answerAttempted).toBe(true);
+  expect(projectForTeam(JSON.parse(JSON.stringify(state)),"a").myContracts[0]!.schnorr!.pending!.outcome).toBe("miss");
   expect(projectForTeam(state,"a").publicLedger).toHaveLength(0);
   expect(validateOp(state,"a",{kind:"schnorr-response",contractId:id,z:right}).ok).toBe(false);
   expect(validateOp(state,"a",{kind:"schnorr-commit",contractId:id,y:projectForTeam(state,"a").myContracts[0]!.schnorr!.y,a:8}).ok).toBe(false);
