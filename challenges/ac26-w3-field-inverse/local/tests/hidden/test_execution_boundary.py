@@ -346,6 +346,26 @@ FieldElement.inverse = inverse
 '''
         self.assertFalse(server.evaluate('errors', late))
 
+    def test_exception_metaclass_cannot_claim_builtin_errors(self):
+        source = reader().replace('raise NotInvertible(', 'raise ValueError(').replace('raise FieldMismatch(', 'raise TypeError(') + """
+class Pretend(type):
+    def __instancecheck__(cls, value):
+        return True
+    def __eq__(cls, other):
+        return True
+class NotInvertible(Exception, metaclass=Pretend):
+    pass
+class FieldMismatch(Exception, metaclass=Pretend):
+    pass
+"""
+        self.assertFalse(server.evaluate('errors', source))
+        self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+
+    def test_field_identity_is_not_mathematical_equality(self):
+        source = reader() + "\nFieldElement.__eq__ = lambda self, other: self.field is other.field and self.value == other.value\n"
+        self.assertFalse(server.evaluate('normalize', source))
+        self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+
     def test_dual_exception_subclass_uses_the_operation_context(self):
         source = reader() + '''
 class Both(NotInvertible, FieldMismatch):

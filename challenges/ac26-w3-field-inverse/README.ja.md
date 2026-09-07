@@ -102,44 +102,23 @@
 
 計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。自分のコード内で import できます。追加のパッケージ導入、ファイルの読み書き、ネットワーク通信はこの実行環境では使いません。必要な整数計算は組み込みの演算だけでも実装できます。
 
-## Local runtime and author verification
+## ローカル実行環境と作問者の検証
 
-The participant image contains the editor, public examples and worker, but no hidden
-checks, fixtures or reference answer. A second, unpublished verifier derives public
-parameters and holds the mathematical checker. Both services use nonroot users,
-`init: true`, read-only filesystems and a loopback-only host port.
+参加者用イメージにはエディター、公開例、提出コードを動かす worker が入ります。非公開の検査、生成用データ、参照解答は入りません。ホストにポートを公開しない別の検証サービスが公開パラメーターを生成し、数学的な検査を行います。両サービスは非 root ユーザー、`init: true`、読み取り専用ファイルシステムを使い、ホストへのポート公開はループバックに限定します。
 
-Source initializes in a fresh worker without the seed or checker. After readiness,
-requests carry fresh identifiers. The parent validates integer values, moduli,
-operations, equality/hash consistency and expected exceptions. A printed failures list
-is not a verdict. Fresh identifiers reject preprinted results; they do not attest
-native Python returns. A participant who implements the live value protocol must still
-satisfy the same mathematical checks. The finite tested cases are not a proof about
-all possible inputs or implementations.
+提出コードは、シードや検査コードを持たない新しい worker で初期化します。準備完了後の要求には、その都度新しい識別子を付けます。親プロセスが整数値、法、演算、等価性と hash の整合性、必要な例外を検査します。提出コードが出力した失敗一覧を採点結果として採用しません。識別子は先回りして出力された応答を拒否しますが、Python の戻り値の由来を証明するものではありません。通信形式を自分で実装して応答する提出も、同じ数学的検査を満たす必要があります。有限個の検査で、すべての入力や実装の正しさを証明するわけではありません。
 
-The per-run limits remain 25 seconds, 512 MiB address space, 64 processes and 64 KiB
-output frames / accumulated non-result output. Linux restrictions deny file/network,
-persistent IPC, filesystem metadata changes and changes to supervisor scheduling.
-Worker process groups are removed and init reaps exited descendants. Public source
-initialization errors expose only a validated filename/line/type; private failure
-messages contain public rule names, never hidden operands or expected answers.
+1回の実行制限は25秒、アドレス空間512 MiB、64プロセス、応答1件および結果以外の出力の累計64 KiBです。Linux の制限で、ファイル・ネットワークへのアクセス、永続的なプロセス間通信、ファイルの属性変更、監視プロセスのスケジューリング変更を禁止します。worker のプロセスグループを終了し、init が終了済みの子プロセスを回収します。初期化エラーは検証済みのファイル名・行番号・例外型だけを公開します。非公開検査の失敗メッセージには公開済みの規則名だけを含め、非公開の入力値や期待値を含めません。
 
-The local Docker owner can inspect containers; these controls do not protect secrets
-from that owner. Production deployment and real-world cryptographic safety are not
-claimed. The Euclidean table branches on input and is not a constant-time secret-key
-implementation. This local exercise creates no AWS resources; it uses local Docker
-CPU, memory and disk. `make verifier-down` removes the local Compose environment.
+ローカル Docker の管理者はコンテナーの中を調べられます。この制限は、その管理者から秘密を守るものではありません。本番デプロイや実用暗号としての安全性は主張しません。ユークリッドの表の計算は入力によって分岐し、秘密鍵を一定時間で処理する実装ではありません。この教材は AWS リソースを作らず、ローカル Docker の CPU・メモリー・ディスクを使います。`make verifier-down` でローカル Compose 環境を削除します。
 
 ```sh
-make test                         # public suite against your edited local starter
-make test-one ID=small-seven       # matching public examples
-make inspect                      # public evidence; optional A=3 P=7
-make reference-test               # author reference + 14 existing mutants
-make runtime-test                 # author Linux boundary regressions
+make test                         # 編集したスターターで公開テスト
+make test-one ID=small-seven       # 名前が一致する公開例だけを実行
+make inspect                      # 公開情報を確認。A=3 P=7 の指定も可能
+make reference-test               # 作問者用の参照解答と既存14種類の誤実装を検査
+make runtime-test                 # 作問者用の Linux 実行境界の回帰テスト
 make verifier-down
 ```
 
-Run `make install && make agent-gate` at the catalog root. The retained real Portal
-component harness is `local/tests/hidden/portal/run.sh`; its URL is configurable with
-`AC26_WORKBENCH_URL`. Reader provenance, actual commands and observed results are in
-`local/tests/hidden/READER.md`. Browser-on-AWS checks are not part of this local evidence.
+カタログのルートで `make install` と `make agent-gate` を実行します。実際の Portal コンポーネントを使う検証は `local/tests/hidden/portal/run.sh` にあり、接続先を `AC26_WORKBENCH_URL` で指定できます。読者役の回答の作成経緯、実行したコマンド、観測結果は `local/tests/hidden/READER.md` に記録しています。AWS 上のブラウザー確認は、このローカル検証に含みません。

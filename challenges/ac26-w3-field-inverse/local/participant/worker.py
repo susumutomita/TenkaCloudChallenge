@@ -105,7 +105,9 @@ def main():
             # Report all memberships: multiple inheritance must not depend on
             # tuple order. These are untrusted claims; the parent selects the
             # only permitted error from its own operands and operation.
-            kinds = [name for name, cls in exception_types if isinstance(error, cls)]
+            ancestry = type.__getattribute__(type(error), "__mro__")
+            kinds = [name for name, cls in exception_types
+                     if any(base is cls for base in ancestry)]
             response = {'callId': call['callId'], 'error': True, 'errorKinds': kinds}
         print(json.dumps(response, separators=(',', ':')), flush=True)
 

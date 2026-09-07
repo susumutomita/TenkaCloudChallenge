@@ -212,3 +212,21 @@ and ordinary subclass/constant-hash positive controls remain unchanged. All14
 existing mutants are killed, reference passes, catalog116 passes. Runtime and
 mutation logs: `/private/tmp/field-770-exception-runtime.log` and
 `/private/tmp/field-770-mutations.log`.
+
+### Additional review regressions (2026-09-07)
+
+At `6a6bc0a9`, a submitted exception metaclass whose `__instancecheck__` always
+returns true allowed builtin exceptions to pass the errors checkpoint. A separate
+mutant comparing `self.field is other.field` passed normalization. Two new tests
+reproduced both failures before the fix (26 tests, exactly these two failures).
+The worker now uses the actual exception type's MRO and identity comparisons,
+without submitted instance-check or equality hooks. Both public and private
+normalization checks construct an equivalent element through a separate `Field(p)`.
+Ordinary exception subclasses, multiple inheritance, and colliding valid hashes
+remain positive controls. The Japanese operational section now mirrors the English
+runtime, safety, resource and verification information in Japanese.
+
+After these changes, all 26 Linux regressions passed (20.171 seconds), the existing
+14 mutants were rejected with the reference accepted, and catalog validation passed
+for all 116 entries. These are local author tests, not a new independent reader run
+or an AWS deployment check.

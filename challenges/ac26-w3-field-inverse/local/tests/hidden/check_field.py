@@ -57,7 +57,7 @@ def check_normalize(module, seed: str) -> list[str]:
             if not (element == field.element(raw)):
                 failures.append("two elements built from the same integer are not equal")
                 break
-            equivalent = field.element(raw + p)
+            equivalent = module.Field(p).element(raw + p)
             if element != equivalent or hash(element) != hash(equivalent):
                 failures.append("equal normalized elements must compare equal and have equal hashes")
                 break

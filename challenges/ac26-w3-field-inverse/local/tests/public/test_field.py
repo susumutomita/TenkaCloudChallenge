@@ -55,7 +55,7 @@ def run_cases(submission, public, only=''):
     def canonical():
         f = submission.Field(p)
         for raw in (0, 1, p, p+1, -1):
-            x, y = f.element(raw), f.element(raw+p)
+            x, y = f.element(raw), submission.Field(p).element(raw+p)
             if not _element(x, raw % p, p) or x != y or hash(x) != hash(y):
                 return 'the remainder, equality or hash does not follow normalization'
             if x == submission.Field(p+1).element(x.value):
