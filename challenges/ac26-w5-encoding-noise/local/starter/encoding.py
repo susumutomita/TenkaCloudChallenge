@@ -1,8 +1,7 @@
 """The only file you edit.
 
-A homomorphic ciphertext hides a message by putting it somewhere on a ring and then
-pushing it off that spot. Decryption is "which spot was this nearest to". Everything
-about correctness is a question of how far it can be pushed before the answer changes.
+This public encoding model studies how far a position can shift before decoding
+changes. There is no secret key: anyone can decode, so this is not encryption.
 
 The model, in full — nothing is hidden from you here:
 
@@ -21,8 +20,8 @@ hardcode is wrong somewhere.
 Three things are easy to get wrong and all three are graded:
 
   * **The tie.** A value exactly halfway between two encoding points rounds **up**. That
-    is a decision, and once it is made the tolerated noise interval is no longer
-    symmetric — work out which end loses the point.
+    makes the interval asymmetric for even delta. Odd delta has no integer tie
+    and its interval is symmetric.
 
   * **Negative noise.** `e` can be negative. Python's `%` already returns a non-negative
     result for a positive modulus, so this needs no special case; taking the absolute
@@ -30,11 +29,11 @@ Three things are easy to get wrong and all three are graded:
 
   * **The wrap.** The point past the last message is message 0, not message p.
 
-Run `make inspect` first — it prints the ring, every encoding point, and where the
+Use Inspect evidence in Participant Portal first — it prints the ring, every encoding point, and where the
 boundaries fall.
 
-None of this is secure. p and q are small enough to enumerate, which is the only reason
-the boundary is visible. Do not read anything here as a statement about real parameters.
+The boundary follows the public rounding rule, independent of any secret.
+This model is not a security or noise-growth assessment for real encryption.
 """
 
 from __future__ import annotations
@@ -61,9 +60,8 @@ def encode(params: dict, m: int) -> int:
 def centered(params: dict, x: int) -> int:
     """The representative of x in [-(q // 2), (q - 1) // 2].
 
-    Use the same tie convention as `decode`. Two conventions in one file disagree on
-    exactly one value per ring, and that bug survives every test written from a worked
-    example.
+    Reduce x by q, then move positions above the specified upper endpoint back by q.
+    For even q the midpoint is represented as -q//2; odd q has no integer midpoint.
     """
     return 0
 
@@ -79,7 +77,9 @@ def decode(params: dict, c: int) -> int:
 
 
 def success_interval(params: dict) -> tuple[int, int]:
-    """The inclusive range of noise over which **every** message still decodes.
+    """The largest consecutive safe interval containing zero, including both ends.
+
+    Full turns can decode correctly again outside this interval.
 
     Compute it from the parameters. Do not measure it by trying every noise value and
     seeing what your own `decode` does — if the decoder is wrong, a measured interval
@@ -89,9 +89,20 @@ def success_interval(params: dict) -> tuple[int, int]:
 
 
 def first_failure(params: dict, m: int, direction: int) -> tuple[int, int]:
-    """The first noise in `direction` (+1 or -1) that decodes to something other than m.
+    """The first noise in `direction` (+1 or -1) that decodes to something other than m % params["p"].
 
     Return `(noise, decoded)`. Two of the p messages have a different `decoded` from the
     rest; find out which two and why.
+    """
+    return (0, 0)
+
+
+def counterexample(params: dict, bug: str) -> tuple[int, int] | None:
+    """Return (m,e) showing the requested broken calculation differs from decode.
+
+    Valid params have delta>=2. Require 0<=m<p and -delta<=e<=delta.
+    bug is floor, no-wrap, or abs-noise. Their formulas are in the free statement.
+    Return inputs, not the calculated answers; return None if no separating pair exists.
+    Each bug is checked separately.
     """
     return (0, 0)

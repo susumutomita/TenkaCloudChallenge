@@ -106,3 +106,22 @@ def first_failure(params: dict, m: int, direction: int) -> tuple[int, int]:
     low, high = success_interval(params)
     noise = high + 1 if direction > 0 else low - 1
     return (noise, decode(params, add_noise(params, encode(params, m), noise)))
+
+
+def counterexample(params: dict, bug: str) -> tuple[int, int] | None:
+    p, d, q = params["p"], params["delta"], params["q"]
+    for m in range(p):
+        for e in range(-d, d + 1):
+            c = (m * d + e) % q
+            correct = ((c + d // 2) // d) % p
+            if bug == "floor":
+                broken = (c // d) % p
+            elif bug == "no-wrap":
+                broken = (c + d // 2) // d
+            elif bug == "abs-noise":
+                broken = ((((m * d + abs(e)) % q) + d // 2) // d) % p
+            else:
+                raise ValueError("unknown bug")
+            if correct != broken:
+                return (m, e)
+    return None

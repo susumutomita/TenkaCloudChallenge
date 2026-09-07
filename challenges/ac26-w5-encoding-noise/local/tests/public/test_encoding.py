@@ -1,11 +1,7 @@
-"""Public tests. They show the shape of an answer; they do not prove one correct.
+"""Public feedback for encoding, decoding and participant-built counterexamples.
 
-They encode, decode, and add a little noise, on one parameter set. They never test the
-exact half-way point, never use a negative noise, never cross a boundary, and never look
-at the message at either end of the space. Those four are where all the checkpoints live.
-
-An implementation that floors instead of rounding to nearest passes this file entirely,
-because flooring is right for every noise value that happens to be non-negative and small.
+Checks use only the displayed parameters. Hidden submissions cover other parameters
+and validation rules; passing this file does not establish every checkpoint.
 """
 
 from __future__ import annotations
@@ -82,16 +78,47 @@ def check_a_little_noise_survives() -> str:
     return ""
 
 
+def check_counterexamples_separate_results() -> str:
+    par = PUBLIC["params"]
+    p, d, q = par["p"], par["delta"], par["q"]
+    if d < 2:
+        return ""
+    for bug in ("floor", "no-wrap", "abs-noise"):
+        witness = submission.counterexample(par, bug)
+        if witness is None:
+            def differs(m, e):
+                c = (m*d+e)%q
+                good = ((c+d//2)//d)%p
+                bad = ((c//d)%p if bug == "floor" else (c+d//2)//d if bug == "no-wrap" else ((((m*d+abs(e))%q)+d//2)//d)%p)
+                return good != bad
+            if any(differs(m,e) for m in range(p) for e in range(-d,d+1)):
+                return "a separating input exists but none was returned"
+            continue
+        m, e = witness
+        if type(m) is not int or type(e) is not int or not (0 <= m < p and -d <= e <= d):
+            return "counterexample inputs must be inside the stated domain"
+        c = (m * d + e) % q
+        correct = ((c + d // 2) // d) % p
+        broken = ((c // d) % p if bug == "floor" else
+                  (c + d // 2) // d if bug == "no-wrap" else
+                  ((((m * d + abs(e)) % q) + d // 2) // d) % p)
+        if correct == broken:
+            return f"{bug}: your inputs do not separate the two formulas"
+    return ""
+
+
 CHECKS = (
     ("encode-matches-the-rule", check_encode_matches_the_rule),
     ("an-exact-point-decodes-to-itself", check_an_exact_point_decodes_to_itself),
     ("a-little-noise-survives", check_a_little_noise_survives),
+    ("counterexamples-separate-results", check_counterexamples_separate_results),
 )
 
 
 def main(argv: list[str]) -> int:
     only = argv[argv.index("--only") + 1] if "--only" in argv else ""
     failed = 0
+    print("Check each line separately. Start with encode-matches-the-rule; later FAIL lines do not block submitting encode.")
     for name, check in CHECKS:
         if only and only not in name:
             continue
@@ -106,7 +133,7 @@ def main(argv: list[str]) -> int:
             print(f"ok   {name}")
     print(f"\npublic tests: {failed} failed" if failed else "\npublic tests: all passed")
     if not failed:
-        print("\nNothing here went near a boundary, and the boundary is what is graded.")
+        print("\nPublic checks passed for this parameter set; submissions also check other parameters.")
     return 1 if failed else 0
 
 
