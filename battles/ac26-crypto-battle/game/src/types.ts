@@ -1256,7 +1256,7 @@ export type OrderTaskProjection =
       readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
-  readonly schnorr?: { readonly pending?: { readonly y: number; readonly a: number; readonly e: number; readonly used?: boolean } };
+  readonly schnorr?: { readonly y: number; readonly pending?: { readonly y: number; readonly a: number; readonly e: number; readonly used?: boolean } };
   readonly cipherFailed?: boolean;
   /** Authoritative eligibility before any accepted answer; missing means unknown. */
   readonly lightningEligible?: boolean;

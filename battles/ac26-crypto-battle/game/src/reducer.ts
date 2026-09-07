@@ -1613,7 +1613,7 @@ export function validateOp(
       const contract = state.contracts.find(c => c.id === op.contractId)!;
       if (op.kind === "schnorr-commit") {
         if (contract.schnorr) return {ok:false,error:"commitment is already fixed; answer its challenge"};
-        return group(op.a) && group(op.y) && op.y !== 1 ? {ok:true} : {ok:false,error:"commitment must belong to the order-11 subgroup"};
+        return group(op.a) && op.y === schnorrStatement(state.seed, teamId, contract.id) ? {ok:true} : {ok:false,error:"commitment must belong to the order-11 subgroup"};
       }
       if (!contract.schnorr || contract.schnorr.used) return {ok:false,error:"commit first; each challenge accepts one response"};
       return scalar(op.z) ? {ok:true} : {ok:false,error:"response must be an integer from 0 to 10"};
@@ -2775,7 +2775,7 @@ export function projectForTeam(
       const task = projectTask(state, teamId, c.task, c.id);
       return {
         id: c.id,
-        ...(state.config.proofProtocol === "schnorr-v1" && c.allowedMethods.includes("prove") ? { schnorr: { ...(c.schnorr ? {pending:c.schnorr} : {}) } } : {}),
+        ...(state.config.proofProtocol === "schnorr-v1" && c.allowedMethods.includes("prove") ? { schnorr: { y: c.schnorr?.y ?? schnorrStatement(state.seed, teamId, c.id), ...(c.schnorr ? {pending:c.schnorr} : {}) } } : {}),
         kind: c.kind,
         points: c.cipherFailed === true ? 0 : c.points + lightningBonus(state, c),
         ...(c.cipherFailed === undefined ? {} : { cipherFailed: c.cipherFailed }),
@@ -2927,7 +2927,7 @@ function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<Cryp
   }
   const pending=contract.schnorr!;
   const y=pending.y;
-  const consumed={...state,contracts:state.contracts.map(c=>c.id===contract.id?{...c,schnorr:{...pending,used:true}}:c)};
+  const consumed={...state,contracts:state.contracts.map(c=>c.id===contract.id?{...c,answerAttempted:true,schnorr:{...pending,used:true}}:c)};
   if(!verifySchnorr(y,pending.a,pending.e,op.z)) {
     // A failed proof consumes the challenge, preventing brute-force retries for points.
     return {...consumed, teams:{...state.teams,[teamId]:{...state.teams[teamId]!,score:Math.max(0,state.teams[teamId]!.score-Math.abs(state.config.scores.wrongProve))}}};
@@ -2940,9 +2940,19 @@ function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<Cryp
 
 function schnorrHint(level:number): {ja:string;en:string} {
   const hints=[
-    {ja:"PROVEは秘密xを送らず、公開値y=2ˣに対応するxを知っていると示します。まず画面のrでa=2ʳ mod23を計算して送ります。LEAKを選べるお題なら、代わりに指定シェアを公開して答えることもできます。",en:"PROVE shows knowledge of x for public y=2ˣ without sending x. First calculate a=2ʳ mod23 using the displayed r. If LEAK is allowed, publishing the requested share is an alternative."},
+    {ja:"PROVEでは、出題された公開値に対応する秘密を知っていると示します。まず今回だけの乱数から作った値を固定し、後から届く検証者の質問に応答します。秘密そのものは送りません。",en:"PROVE demonstrates knowledge of the secret for the assigned public value. Fix a value made from fresh randomness before receiving the verifier’s question; answer without sending the secret itself."},
     {ja:"aを送ると検証者からeが届きます。z=(r+e×x) mod11を計算します。例：r=3、e=5、x=7なら3+5×7=38、11で割った余りは5です。",en:"After a is fixed, the verifier sends e. Calculate z=(r+e×x) mod11. Example: r=3, e=5, x=7 gives 38 mod11=5."},
     {ja:"入力するのは③のzです。rとxは自分の画面、eはaを送った後に表示されます。掛け算→足し算→11で割った余りの順に計算し、0〜10の整数を1個送ります。検証式は2ᶻ ≡ a×yᵉ (mod23)。xとrは送信しません。",en:"Enter z in step ③. Your screen provides r and x; e appears after sending a. Multiply, add, then reduce modulo11. Send one integer 0–10. Verification checks 2ᶻ ≡ a×yᵉ (mod23), without receiving x or r."},
   ];
   return hints[level]!;
+}
+
+/** Assign the public statement before the prover can choose a commitment.
+ * The tiny teaching subgroup permits a browser lookup of x; no practical secrecy. */
+function schnorrStatement(seed: string, teamId: string, orderId: string): number {
+  const values = [4,8,16,9,18,13,3,6,12];
+  for (let counter = 0;; counter++) {
+    const bytes = createHmac("sha256", seed).update(JSON.stringify(["schnorr-statement-v1",teamId,orderId,counter])).digest();
+    for (const byte of bytes) if (byte < 252) return values[byte % values.length]!;
+  }
 }

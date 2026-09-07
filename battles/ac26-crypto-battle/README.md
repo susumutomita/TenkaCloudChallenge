@@ -406,3 +406,5 @@ A commitment cannot be replaced and each challenge accepts one response, includi
 The four-stage mathematical guide covers a worked example, exponent laws, an identical-distribution simulator without x, and extraction from two responses to the same a. This is honest-verifier ZK (HVZK). Tiny parameters allow brute force and a guessed challenge succeeds with probability 1/11; this is not practical cryptographic security. Successful verification is not secret recovery and does not award HUNT points.
 
 The statement is knowledge of the discrete logarithm x for y, not knowledge of a secret-sharing share or Sudoku solution. Persisted legacy matches retain the trusted-judge Sudoku model; new matches select Schnorr through the versioned configuration.
+
+The server assigns y per Order; a caller cannot replace it. In this tiny-group teaching model the browser finds x from a power table. This is not practical secret-key provisioning. The verification function accepts public values only; responses contain neither x nor r.

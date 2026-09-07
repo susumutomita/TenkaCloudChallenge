@@ -33,12 +33,12 @@ const COPY = {
   ja: {
     title: "この Battle の遊び方",
     intro: "お題（ORDER、データ上の名前は Contract）に答えて得点を競います。終了時の得点が高いチームが勝ちます。お題ごとに、入力する数・使える操作・得点・期限が違います。まず画面上部の『いまのお題』を読み、その直下で答えます。",
-    firstTitle: "最初のお題で、選ぶ理由を知る",
+    firstTitle: "お題ごとに、何をする？",
     first: [
-      "自分の秘密から作った数を『かけら（share）』と呼びます。番号はどのかけらかを区別する名前で、#1 の 1 がかけらの値という意味ではありません。",
+      "シェア（share）は、秘密分散で配る番号と数の組です。秘密分散のお題だけで使います。MPCでも使う方法はありますが、このゲームのMPCは隠す乱数を足し引きする別の方式です。",
       "『公開して答える（LEAK）』は、そのお題で求められたかけらを公開して、すぐ得点します。公開した数は『公開記録（PUBLIC LEDGER）』に残り、他のチームも読めます。",
       "新しい試合のPROVEはゼロ知識証明（Schnorr）。aを先に固定し、検証者から届くeを使ってzを手計算します。秘密xと乱数rは端末内に残ります。旧試合は数独模型のままです。",
-      "この二択は、かけらのお題の答え方です。別のお題では、暗号のまま足す・覆面を付ける・手を隠してじゃんけんする、など別の操作を使います。使える方法は各お題に表示されます。",
+      "LEAKとPROVEを選べるお題では「シェアを公開する」か「別の秘密xについて証明する」かを選びます。Schnorrはシェアの正しさを証明するものではありません。暗号化・準同型の足し算・MPC・じゃんけんにはそれぞれ別の入力欄があります。",
     ],
     evidenceTitle: "公開した情報は、どう使われる？",
     evidence: [
@@ -63,12 +63,12 @@ const COPY = {
   en: {
     title: "How this Battle works",
     intro: "Answer tasks called ORDERs (Contract in raw data) to score. The highest score at the end wins. Each Order states its inputs, permitted methods, points and deadline. Read the current Order at the top, then answer directly below it.",
-    firstTitle: "Understand the first choice",
+    firstTitle: "What does each Order ask you to do?",
     first: [
-      "A share is a number made from your secret. Its index identifies the piece: #1 does not mean the share’s value is 1.",
+      "A share is an indexed value distributed by secret sharing. It belongs to the secret-sharing task. Some MPC protocols use shares; this game instead uses cancelling random masks for MPC.",
       "Publish to answer (LEAK) reveals the requested share and scores immediately. Everyone can read the value in the PUBLIC LEDGER.",
       "New-match PROVE uses Schnorr zero-knowledge proof: fix a, receive e, then hand-calculate z. Private x and r stay in your browser. Legacy matches retain the Sudoku model.",
-      "These are the two options for a share Order. Other Orders use encrypted addition, masks or hidden-hand duels. Each Order shows its allowed methods.",
+      "Where both are offered, choose between publishing a share and proving knowledge of a separate x. Schnorr does not certify the share. Encryption, homomorphic addition, MPC and duels have separate inputs.",
     ],
     evidenceTitle: "What can an opponent do with published information?",
     evidence: [

@@ -1,3 +1,4 @@
+import {power} from "./schnorr.ts";
 import { decodeHuntLog } from "./hunt-log.ts";
 /**
  * Coordination plugin wiring test (Issue #486 PR3, revised for the PR3
@@ -235,10 +236,10 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     if (!redContract) throw new Error("test setup: expected an open contract for red after tick(0)");
     const witness = plugin.projectForTeam(state, "red").myContracts.find(c => c.id === redContract.id)?.schnorr;
     if (!witness) throw new Error("expected Schnorr witness");
-    state = expectDispatched(dispatchOp(plugin, state, "red", {kind: "schnorr-commit", contractId: redContract.id, y:13, a: 8}));
+    state = expectDispatched(dispatchOp(plugin, state, "red", {kind: "schnorr-commit", contractId: redContract.id, y:witness.y, a: 8}));
     const pending = plugin.projectForTeam(state, "red").myContracts.find(c => c.id === redContract.id)?.schnorr?.pending;
     if (!pending) throw new Error("expected verifier challenge");
-    state = expectDispatched(dispatchOp(plugin, state, "red", {kind: "schnorr-response", contractId: redContract.id, z: (3 + pending.e * 7) % 11}));
+    state = expectDispatched(dispatchOp(plugin, state, "red", {kind: "schnorr-response", contractId: redContract.id, z: (3 + pending.e * Array.from({length:11},(_,i)=>i).find(i=>power(2,i)===witness.y)!) % 11}));
     const redAfterProve = state.teams.red;
     if (!redAfterProve) throw new Error("test setup: expected a red team");
     expect(redAfterProve.score).toBe(redContract.points);

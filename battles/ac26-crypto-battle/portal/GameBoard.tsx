@@ -406,11 +406,11 @@ export function Vault({ projection, locale }: { readonly projection: CryptoBattl
           PROVE relabels, and it is private in exactly the way the shares are:
           this team's projection carries it, nobody else's does.
         */}
-        <div className="tc-vault-solution">
+        {projection.proofProtocol !== "schnorr-v1" && <div className="tc-vault-solution">
           <div className="tc-section-label">{copy.solution}</div>
           <SudokuBoard cells={projection.vault.sudokuSolution} label="my-solution" />
           <div className="tc-scoreline-hint">{copy.solutionHint}</div>
-        </div>
+        </div>}
       </details>
     </section>
   );

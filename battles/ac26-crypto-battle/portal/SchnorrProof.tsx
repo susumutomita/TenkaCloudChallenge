@@ -14,7 +14,10 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
   const storageKey=`tc-schnorr:${teamId}:${order.id}`;
   useEffect(()=>{
     if(proof.pending) {
-      const stored=sessionStorage.getItem(storageKey);
+      if(secret!==null && nonce!==null && power(2,secret)===proof.pending.y && power(2,nonce)===proof.pending.a) return;
+      setSecret(null); setNonce(null); setZ("");
+      let stored: string | null = null;
+      try { stored=sessionStorage.getItem(storageKey); } catch { return; }
       if(stored) {
         try {
           const saved=JSON.parse(stored);
@@ -26,14 +29,15 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       return;
     }
     const draw=()=>{const bytes=new Uint8Array(1);do {crypto.getRandomValues(bytes);} while(bytes[0]!>=253);return bytes[0]!%11;};
-    let x=0;while(x===0)x=draw();
-    setSecret(x);setNonce(draw());
-  },[storageKey]);
+    const x=Array.from({length:11},(_,i)=>i).find(i=>power(2,i)===proof.y);
+    setSecret(x??null);setNonce(draw());
+  },[storageKey,proof.y,proof.pending?.a,proof.pending?.y]);
+  const matchesPending = nonce!==null && secret!==null && (!proof.pending || (power(2,nonce)===proof.pending.a && power(2,secret)===proof.pending.y));
   const valid=(v:string)=>/^\d+$/.test(v)&&Number(v)<=10;
   const commit=()=>{
     if(nonce===null||secret===null)return;
-    sessionStorage.setItem(storageKey,JSON.stringify({x:secret,r:nonce}));
-    onSubmit({kind:"schnorr-commit",contractId:order.id,y:power(2,secret),a:Number(a)});
+    try { sessionStorage.setItem(storageKey,JSON.stringify({x:secret,r:nonce})); } catch { /* Current tab can continue using its witness. */ }
+    onSubmit({kind:"schnorr-commit",contractId:order.id,y:proof.y,a:Number(a)});
   };
   return <section className="tc-input-panel" aria-label="Schnorr zero-knowledge proof">
     <h3>{ja?"ゼロ知識証明（Schnorr）：秘密の数を知っていると示す":"Zero-knowledge proof (Schnorr): show knowledge of a secret"}</h3>
@@ -42,6 +46,8 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       <strong>{ja?"① あなた：a を送る":"① You send a"}</strong><span>→</span><strong>{ja?"② 検証者：e を返す":"② Verifier sends e"}</strong><span>→</span><strong>{ja?"③ あなた：z を計算":"③ You calculate z"}</strong>
     </div>
     <p><strong>{ja?"自分だけの数":"Private witness"}: x = {secret??"…"}</strong>　{ja?"公開値":"Public value"}: y = 2<sup>{secret??"…"}</sup> mod 23 = {secret===null?proof.pending?.y:power(2,secret)}</p>
+    <p>{ja?"この教材は小さい数なので、公開値 y から表で x を探せます。実用ではこの探索が困難になる大きさを使います。":"This tiny model finds x from public y using a power table. Practical parameters make this search infeasible."}</p>
+    <p>{ja?"≡ は「左右を割った余りが等しい」という記号です。":"≡ means both sides have the same remainder."}</p>
     <p>{ja?"mod は「割った余り」。指数・応答は11で、掛け算の結果は23で余りを取ります。":"mod means remainder. Reduce exponents/responses modulo 11 and group products modulo 23."}</p>
     {!proof.pending ? <>
       <h4>{ja?"① この式の答え a を入力して送る":"① Calculate and send a"}</h4>
@@ -56,7 +62,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
     </> : proof.pending.used ? <p role="status">{ja?"この証明の応答は送信済みです。結果を確認してください。":"This proof response has been submitted. Check the result."}</p> : <>
       <h4>{ja?"② a の固定後に、検証者から e が届きました":"② The verifier sent e after a was fixed"}</h4>
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>
-      {nonce===null ? <p role="alert">{ja?"この端末に開始時の乱数 r がありません。証明を開始したタブで続けてください。":"The original private r is missing. Continue in the tab where you started."}</p> : <>
+      {!matchesPending ? <p role="alert">{ja?"この端末に開始時の乱数 r がありません。証明を開始したタブで続けてください。":"The original private r is missing. Continue in the tab where you started."}</p> : <>
         <h4>{ja?"③ 掛けて、足して、11で割った余りを入力":"③ Multiply, add, then enter the remainder modulo 11"}</h4>
         <p style={{fontSize:24}}>z = (r + e × x) mod 11<br/>= ({nonce} + {proof.pending.e} × {secret??"…"}) mod 11 = □</p>
         <label>z (0–10) <input aria-label="Schnorr z" inputMode="numeric" value={z} onChange={e=>setZ(e.target.value)} /></label>
@@ -64,6 +70,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       </>}
     </>}
     <p>{ja?"検証する式（x と r は使いません）":"Verification (does not use x or r)"}: <strong>2<sup>z</sup> ≡ a × y<sup>e</sup> (mod 23)</strong></p>
+    {order.hints.filter(h=>h.text).length>=3 && <aside role="note"><strong>{ja?"購入済みヒント③・今回の数字":"Purchased hint 3 · your current values"}</strong><p>{!proof.pending ? (ja?`まず表の r=${nonce??"…"} の列を見て、下の数を a 欄に入力します。`:`Find r=${nonce??"…"} in the table and enter the number below it in a.`) : nonce===null ? (ja?"開始したタブで乱数を確認してください。":"Find the private randomness in the original tab.") : (ja?`まず ${proof.pending.e} × ${secret}、次に ${nonce} を足します。その結果から11を引き、0〜10になるまで繰り返して z 欄へ入力します。`:`Multiply ${proof.pending.e} × ${secret}, add ${nonce}, then subtract 11 until the result is 0–10. Enter it in z.`)}</p></aside>}
     <details><summary>{ja?"なぜこれがゼロ知識？ 図と式で確認":"Why zero knowledge? Follow the equations"}</summary>
       <SchnorrLesson locale={locale}/>
     </details>
