@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import type {ConstraintTask} from '../game/src/snark.ts';
-export function SnarkWorksheet({task,locale,busy,onSubmit}:{task:ConstraintTask;locale:'ja'|'en';busy:boolean;onSubmit:(answer:string)=>void}) {
+export function SnarkWorksheet({task,locale,busy,wrongCost,onSubmit}:{task:ConstraintTask;locale:'ja'|'en';busy:boolean;wrongCost:number;onSubmit:(answer:string)=>void}) {
  const ja=locale==='ja';const [values,setValues]=useState(['','','','','']);const [a,b,c]=task.rows;
  const equations=[`${a[0]} + ${a[1]} − ${a[2]}`,`${b[0]} × ${b[1]} − ${b[2]}`,`${c[0]} + ${c[1]} − ${c[2]}`,`${a[2]} − ${c[0]}`,`${b[2]} − ${c[1]}`];
  return <section className="tc-input-panel" aria-label="SNARK constraint worksheet">
@@ -18,6 +18,7 @@ export function SnarkWorksheet({task,locale,busy,onSubmit}:{task:ConstraintTask;
   {equations.map((eq,i)=><label key={i} style={{display:'flex',gap:12,alignItems:'center',margin:'8px 0'}}>{i<3?(ja?`行${i+1}`:`Row ${i+1}`):(ja?`配線${i-2}`:`Wire ${i-2}`)}: {eq} →
    <input aria-label={`SNARK remainder ${i+1}`} style={{width:70}} inputMode="numeric" maxLength={1} value={values[i]} onChange={e=>setValues(v=>v.map((x,j)=>i===j?e.target.value:x))}/>
   </label>)}
+  <p>{ja?`不正解は最大 ${wrongCost} 点減点。入力は残り、期限内なら再提出できます。`:`Incorrect answers cost up to ${wrongCost} points. Inputs stay; retry before the deadline.`}</p>
   <button type="button" disabled={busy||!values.every(v=>/^[0-6]$/.test(v))} onClick={()=>onSubmit(values.join(' '))}>{ja?'検査結果を提出':'Submit check results'}</button>
   <details><summary>{ja?'SNARK全体との関係・数学の式':'Relation to SNARKs and the general equation'}</summary>
    <p>{ja?'Qは演算を選ぶ係数です。添字L/R/M/O/Cは左入力・右入力・掛け算・出力・定数の係数を区別します。mod 7は「7で割った余りで比べる」という表記です。':'The Q values are coefficients selecting the operation. Subscripts L/R/M/O/C distinguish coefficients of the left input, right input, multiplication, output and constant. mod 7 means compare remainders after division by 7.'}</p>

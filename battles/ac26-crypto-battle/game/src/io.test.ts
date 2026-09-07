@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {ioAnswer,ioDistribution,ioEncode,ioEvaluate,ioOverlap,ioTables,ioTask,parseIoAnswer,type IoTable} from './io.ts';
+import {ioAnswer,ioDistribution,ioEncode,ioEvaluate,ioOverlap,ioTables,ioTask,parseIoAnswer,ioRotations,type IoTable} from './io.ts';
 test('every encoding preserves every input, including constant tables',()=>{
  for(let n=0;n<625;n++){
   const table=[n%5,Math.floor(n/5)%5,Math.floor(n/25)%5,Math.floor(n/125)%5] as IoTable;
@@ -25,7 +25,7 @@ test('issued programs cover both equivalent and inequivalent cases with one-digi
   const [a,b]=ioTables(task),answer=ioAnswer(task);
   expect(answer[0]).toBe(a[task.missing[0]]);expect(answer[1]).toBe(b[task.missing[1]]);
   expect(answer[2]).toBe(Number(task.c===(task.b-task.a*task.d%5+5)%5));
-  expect(answer[3]).toBe(answer[2]===1?4:0);
+  expect(answer[3]).toBe(answer[2]===1?ioRotations(task.rotations![0]).filter(r=>ioRotations(task.rotations![1]).includes(r)).length:0);
   answer[2]===1?equal++:unequal++;
   expect(parseIoAnswer(answer.join(' '))).toEqual(answer);answers.add(answer.join(' '));
  }
@@ -44,7 +44,7 @@ test('owned iO orders grade arithmetic, reject replay and expiry, and record the
  expect(order).toBeDefined();if(order.task.kind!=='io-equivalence')throw new Error('wrong task');
  expect(order.allowedMethods).toEqual(['io']);
  const projection=projectForTeam(s,'a');expect(isCryptoBattleProjection(projection)).toBe(true);
- for(const patch of [{a:0},{a:5},{b:-1},{c:0.5},{d:0},{missing:undefined},{missing:[0]},{missing:[0,4]}]){
+ for(const patch of [{rotations:[0,1]},{rotations:[1]},{rotations:[1,16]},{a:0},{a:5},{b:-1},{c:0.5},{d:0},{missing:undefined},{missing:[0]},{missing:[0,4]}]){
   const malformed={...projection,myContracts:projection.myContracts.map(c=>c.id===order.id?{...c,task:{...c.task,...patch}}:c)};
   expect(isCryptoBattleProjection(malformed)).toBe(false);
  }
@@ -65,4 +65,18 @@ test('owned iO orders grade arithmetic, reject replay and expiry, and record the
 
 test('old match configurations do not silently acquire iO orders',()=>{
  for(const version of [14,15,16])expect(migrateState(initialState({eventId:'old',teamIds:['a']}),version).config.ioOrders).toBeUndefined();
+});
+
+test('equal functions can have every shared support count under flawed source-dependent randomness',()=>{
+ const table:IoTable=[0,1,2,3],counts=new Set<number>();
+ for(let a=1;a<16;a++)for(let b=1;b<16;b++){
+  const left=ioDistribution(table,a),right=ioDistribution(table,b);
+  const overlap=ioOverlap(table,table,a,b);counts.add(overlap);
+  expect(overlap).toBe(left.filter(e=>right.some(f=>e.offset===f.offset)).length);
+  for(const e of [...left,...right])for(let x=0;x<4;x++)expect(ioEvaluate(e,x)).toBe(table[x]!);
+ }
+ expect([...counts].sort()).toEqual([0,1,2,3,4]);
+ // Same function and shared event r=1, but event r=0 identifies source A.
+ expect(ioOverlap(table,table,3,14)).toBe(1);
+ expect(ioRotations(3)).toEqual([0,1]);expect(ioRotations(14)).toEqual([1,2,3]);
 });
