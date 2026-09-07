@@ -266,3 +266,25 @@ parent continues to determine whether an error is mathematically allowed from
 its own operands and operation; a child error label alone never makes valid
 arithmetic fail or invalid arithmetic pass. This pre-existing assurance boundary
 remains stated in the adapter and participant documentation.
+
+### Response serialization regression (2026-09-07)
+
+At `adb3dc0b`, a submitted `json.dumps` replacement could rewrite the worker's
+`errorKinds`: builtin exceptions were accepted as the declared custom exceptions.
+The new regression failed before the fix (29 tests, exactly one failure), recorded
+in `/private/tmp/field-770-json-before.log`.
+
+The worker now constructs the pinned CPython runtime's encoder before executing
+submitted code, and retains its decoder and stream methods. It does not look up
+`json.dumps`, `JSONEncoder`, or encoder helpers through the learner-mutable module
+when sending responses. Capturing only `dumps` would still leave those lookups.
+A second regression changes all those JSON helpers in a mathematically correct
+submission and verifies that every checkpoint and the public tests still pass.
+This fixes ordinary module rebinding; it does not attest the origin of Python
+exceptions against a submission implementing its own wire protocol. The parent's
+mathematical validation remains authoritative.
+
+After the fix, all 30 Linux regressions passed (25.028 seconds), all 14 mutations
+were rejected, and the 116-item catalog gate passed. The runtime/mutation log is
+`/private/tmp/field-770-json-final.log`; the catalog log is
+`/private/tmp/field-770-json-gate.log`. No AWS deployment was run.

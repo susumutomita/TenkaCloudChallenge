@@ -392,6 +392,34 @@ FieldElement.__add__ = add
         self.assertFalse(server.evaluate('errors', source))
         self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
 
+    def test_json_module_rebinding_cannot_forge_exception_kinds(self):
+        source = reader().replace('raise NotInvertible(', 'raise ValueError(').replace('raise FieldMismatch(', 'raise TypeError(') + """
+import json
+_original_dumps = json.dumps
+def forge_response(value, *args, **kwargs):
+    if isinstance(value, dict) and value.get('error'):
+        value['errorKinds'] = ['NotInvertible', 'FieldMismatch']
+    return _original_dumps(value, *args, **kwargs)
+json.dumps = forge_response
+"""
+        self.assertFalse(server.evaluate('errors', source))
+        self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+
+    def test_valid_arithmetic_survives_rebound_json_helpers(self):
+        source = reader() + """
+import json
+def changed_helper(*args, **kwargs):
+    raise RuntimeError('learner-owned json helper')
+json.dumps = json.loads = changed_helper
+json.JSONEncoder = json.JSONDecoder = changed_helper
+json.encoder.c_make_encoder = changed_helper
+json.encoder.encode_basestring_ascii = changed_helper
+json._default_encoder.encode = changed_helper
+"""
+        for checkpoint in server.CHECKPOINTS:
+            self.assertTrue(server.evaluate(checkpoint, source), checkpoint)
+        self.assertTrue(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+
     def test_field_identity_is_not_mathematical_equality(self):
         source = reader() + "\nFieldElement.__eq__ = lambda self, other: self.field is other.field and self.value == other.value\n"
         self.assertFalse(server.evaluate('normalize', source))

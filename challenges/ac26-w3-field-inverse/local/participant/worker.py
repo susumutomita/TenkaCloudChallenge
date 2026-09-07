@@ -48,7 +48,23 @@ def main():
     native_issubclass = issubclass
     native_exception = Exception
     native_tuple = tuple
-    initial = json.loads(sys.stdin.readline())
+    # Instantiate the CPython encoder before learner imports. Capturing dumps
+    # alone still resolves JSONEncoder and encoder helpers through mutable json
+    # globals on every response. This runtime pins CPython in its Docker image.
+    encode = json.encoder.c_make_encoder(
+        {}, json.JSONEncoder().default, json.encoder.encode_basestring_ascii,
+        None, ':', ',', False, False, True,
+    )
+    decode = json.JSONDecoder().decode
+    join = ''.join
+    input_stream = sys.stdin
+    write, flush = sys.stdout.write, sys.stdout.flush
+
+    def send(response):
+        write(join(encode(response, 0)) + '\n')
+        flush()
+
+    initial = decode(input_stream.readline())
     restrict_learner()
     modules = {name: types.ModuleType(name) for name in ('field',)}
     sys.modules.update(modules)
@@ -70,9 +86,9 @@ def main():
                 exception_types.append((declared, candidate))
             exception_types = native_tuple(exception_types)
         except BaseException as error:
-            print(json.dumps({'initializationError': initialization_error(error, filename)}), flush=True)
+            send({'initializationError': initialization_error(error, filename)})
             return
-    print('{"ready":true}', flush=True)
+    send({'ready': True})
     objects = {}
     next_handle = 0
 
@@ -84,8 +100,8 @@ def main():
             return {'id': next_handle, 'modulus': value.modulus}
         return {'id': next_handle, 'modulus': value.field.modulus, 'value': value.value}
 
-    for line in sys.stdin:
-        call = json.loads(line)
+    for line in input_stream:
+        call = decode(line)
         try:
             module = modules['field']
             name, args = call['function'], call['args']
@@ -122,7 +138,7 @@ def main():
                         kinds.append(declared)
                         break
             response = {'callId': call['callId'], 'error': True, 'errorKinds': kinds}
-        print(json.dumps(response, separators=(',', ':')), flush=True)
+        send(response)
 
 
 if __name__ == '__main__':
