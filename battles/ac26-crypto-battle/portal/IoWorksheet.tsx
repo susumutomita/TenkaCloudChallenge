@@ -26,8 +26,8 @@ export function IoWorksheet({task,locale,busy,onSubmit}:{task:IoTask;locale:'ja'
   <p>{ja?'4組すべて同じで各確率も1/4なら、変換結果の分布（どの結果がどの確率で出るか）が一致します。この模型では元がAかBかを区別できません。機能が違う場合、iOは隠すことを要求しません。':'If all four outcomes match and each has probability 1/4, the distributions—the possible outputs and their probabilities—are identical. This model then cannot reveal whether A or B was the source. iO makes no such promise for different functions.'}</p>
   <button disabled={busy||!values.slice(0,2).every(v=>/^[0-4]$/.test(v))||!/^[01]$/.test(values[2]!)||!/^[0-4]$/.test(values[3]!)} onClick={()=>onSubmit(values.join(' '))}>{ja?'計算と比較を提出':'Submit calculation and comparison'}</button>
   <details><summary>{ja?'本来の定義と、この模型の限界':'The general definition and this model’s limits'}</summary>
-   <p>|Pr[D(O(C₀))=1] − Pr[D(O(C₁))=1]| ≈ 0</p>
    <p>{ja?'C₀とC₁は同じサイズ・同じ機能のプログラム、Oは変換、Dは変換結果を見て0か1を答える判別手順、Prは確率です。縦棒は差の大きさ。「≈0」は、本来は安全性の設定を大きくすると効率的なDでも差を無視できるほど小さくできることを表します。この模型では同じ機能の分布が完全に一致し、差は0です。':'C₀ and C₁ have the same size and function; O transforms them; D examines the transformed result and returns 0 or 1; Pr denotes probability. The bars mean the magnitude of the difference. In real iO, increasing the security parameter makes this difference negligible for efficient D. Here equivalent functions have exactly identical distributions, so the difference is zero.'}</p>
+   <p>|Pr[D(O(C₀))=1] − Pr[D(O(C₁))=1]| ≈ 0</p>
    <p>{ja?'この言語のサイズは算術操作3個です。入力をkビットへ増やすと真理値表は2ᵏ行必要になり、一般の回路に対して効率的ではありません。本物のiOの実装ではなく、機能保存と分布の条件を有限の入力で確認する模型です。元の名前A/Bを公開データに付ければ、計算が正しくても区別できてしまいます。':'Size in this toy language means three arithmetic operations. For k input bits the table needs 2ᵏ rows, so this is inefficient for general circuits. This is a finite model of correctness and distribution conditions, not a practical iO implementation. Appending the source label A/B would reveal the source even while preserving every answer.'}</p>
   </details>
  </section>;

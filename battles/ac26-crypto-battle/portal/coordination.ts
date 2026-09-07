@@ -143,6 +143,10 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (v.myContracts.some(c => c.task?.kind === "snark-constraints" &&
     (!Array.isArray(c.task.rows) || c.task.rows.length !== 3 || c.task.rows.some((row:unknown)=>
       !Array.isArray(row) || row.length !== 3 || row.some(n=>!rsaValue(n,7)))))) return false;
+  if (v.myContracts.some(c => c.task?.kind === "io-equivalence" &&
+    (!rsaValue(c.task.a,5) || c.task.a < 1 || !rsaValue(c.task.b,5) || !rsaValue(c.task.c,5) ||
+      !rsaValue(c.task.d,5) || c.task.d < 1 || !Array.isArray(c.task.missing) ||
+      c.task.missing.length !== 2 || c.task.missing.some((n:unknown)=>!rsaValue(n,4))))) return false;
   if (v.publicRsaKeys !== undefined) {
     if (!Array.isArray(v.publicRsaKeys)) return false;
     const seen = new Set<string>(), teams = v.teams as Record<string, { generation?: unknown }>;

@@ -34,7 +34,8 @@ test('issued programs cover both equivalent and inequivalent cases with one-digi
  expect(()=>ioEncode([0,1,2,3],4)).toThrow();expect(()=>ioEvaluate(ioEncode([0,1,2,3],0),4)).toThrow();
 });
 
-import {initialState,applyOp,tick,validateOp,STREAMING_ORDER_CONFIG,migrateState} from './reducer.ts';
+import {initialState,applyOp,tick,validateOp,STREAMING_ORDER_CONFIG,migrateState,projectForTeam} from './reducer.ts';
+import {isCryptoBattleProjection} from '../../portal/coordination.ts';
 import {scoreReasons} from './score-reasons.ts';
 test('owned iO orders grade arithmetic, reject replay and expiry, and record the score reason',()=>{
  let s=applyOp(initialState({eventId:'io',teamIds:['a','b'],matchSecret:'io-test'},STREAMING_ORDER_CONFIG),'a',{kind:'start'});
@@ -42,6 +43,12 @@ test('owned iO orders grade arithmetic, reject replay and expiry, and record the
  const order=s.contracts.find(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='io-equivalence')!;
  expect(order).toBeDefined();if(order.task.kind!=='io-equivalence')throw new Error('wrong task');
  expect(order.allowedMethods).toEqual(['io']);
+ const projection=projectForTeam(s,'a');expect(isCryptoBattleProjection(projection)).toBe(true);
+ for(const patch of [{a:0},{a:5},{b:-1},{c:0.5},{d:0},{missing:undefined},{missing:[0]},{missing:[0,4]}]){
+  const malformed={...projection,myContracts:projection.myContracts.map(c=>c.id===order.id?{...c,task:{...c.task,...patch}}:c)};
+  expect(isCryptoBattleProjection(malformed)).toBe(false);
+ }
+
  s={...s,phase:'endgame',endgameLightning:{status:'awarded',cards:{a:{status:'available'}}},teams:{...s.teams,a:{...s.teams.a!,score:50}}};
  expect(validateOp(s,'a',{kind:'declare-lightning',contractId:order.id}).ok).toBe(true);
  s=applyOp(s,'a',{kind:'declare-lightning',contractId:order.id});
