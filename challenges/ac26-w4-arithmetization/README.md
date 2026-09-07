@@ -63,7 +63,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `underconstrained` | 45 | A different trace satisfying every transition constraint |
 | `transfer` | 30 | All of it under a field, length and weight you have not seen |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at 2 points each (48 points in total), within the hint penalty cap.
 
 ## Details that decide whether an implementation is right
 
