@@ -102,3 +102,6 @@ them are the reason the hidden phases are written the way they are. The one that
 textbook rule and never checks the result is the defect the shipped starter carries, and it
 survives every public test. The one that accepts any omega whose order merely divides `n`
 passes the forward transform and only shows up on the inverse.
+
+
+Added three hint rungs to all six checkpoints. A participant-only reader caught a missing root-of-unity premise, an omitted invalid_values error, and an incomplete candidate-search procedure; the bilingual statement now supplies those rules without opening a hint. Catalog validation is recorded separately from runtime evidence. No runtime or grader changed in this revision; live Portal play was not run.

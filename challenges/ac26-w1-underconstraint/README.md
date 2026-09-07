@@ -76,3 +76,8 @@ The learner's Linux filter also denies file/directory creation, links, renames, 
 ## Computational tools and execution time
 
 Available computational standard libraries (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. Import them in your submitted files. Installing packages, file access and network access are unavailable. Each execution of submitted code has a 15-second deadline. Some checks run it twice with different inputs.
+
+
+### Issue #716 reader check
+
+An independent reader checked only participant statements, hints and starter files. The exploit example changes the admission result only when issuer_ok=1; both languages now state that premise. With issuer_ok=0, ok can be wrong while granted remains zero. Hidden grading and reference implementations were not used for the reader check; no live submission was performed.

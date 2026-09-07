@@ -131,3 +131,8 @@ Linuxの提出コード用filterで、ファイル・ディレクトリの作成
 ## 計算用の道具と実行時間
 
 計算に使える標準ライブラリ（Python に付属する道具）は `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`。提出ファイル内で import できます。追加パッケージ、ファイルの読み書き、ネットワーク通信は使えません。提出コード全体の実行は15秒までです。
+
+
+### ヒントの読者確認（Issue #716）
+
+競技者向け本文・ヒント・starterだけを読む独立確認で、日本語のmemberの手順が許可値そのものを掛けるように読める問題を発見しました。各許可値aについて差(x−a)を掛ける表の式に合わせて修正しました。例のp=7、allowed=[2,5]では、x=2の積は0となります。確認者は非公開テスト・referenceを読んでおらず、実提出は行っていません。

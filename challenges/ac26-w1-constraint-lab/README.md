@@ -141,3 +141,8 @@ The learner's Linux filter also denies file/directory creation, links, renames, 
 ## Computational tools and execution time
 
 Available computational standard libraries (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 15-second execution deadline.
+
+
+### Hint reader check (Issue #716)
+
+An independent reader used only the participant statement, hints and starter. The Japanese member procedure could be read as multiplying the allowed values themselves. It now explicitly multiplies each difference (x−a), matching the formula table and the English statement. With p=7, allowed=[2,5] and x=2, this product is zero. The reader did not inspect hidden tests or reference implementations and did not submit to a running verifier.

@@ -39,6 +39,10 @@ def _signature_failures(module: ModuleType, seeds: list[str]) -> list[str]:
                 failures.append("the valid signature over a different rpIdHash was rejected too early")
             if module.verify_signature(record["publicKey"], by_kind["bad-signature"]) is not False:
                 failures.append("a damaged signature was accepted")
+            missing_signature = copy.deepcopy(honest)
+            del missing_signature["signature"]
+            if module.verify_signature(record["publicKey"], missing_signature) is not False:
+                failures.append("a missing signature was not rejected")
             tampered = copy.deepcopy(honest)
             raw = bytearray(b64url_decode(str(tampered["clientDataJSON"])))
             raw[-2] ^= 1
@@ -96,6 +100,12 @@ def _policy_failures(module: ModuleType, seeds: list[str]) -> list[str]:
             relaxed = module.verify_assertion(case.server_record, by_kind["no-uv"], False)
             if relaxed != {"ok": True, "reason": "ok"}:
                 return ["UV=0 was rejected even when the server policy did not require UV"]
+            missing_signature = copy.deepcopy(by_kind["honest"])
+            del missing_signature["signature"]
+            if module.verify_assertion(case.server_record, missing_signature, True) != {
+                "ok": False, "reason": "signature-invalid"
+            }:
+                return ["a missing signature did not produce signature-invalid"]
             malformed = {"id": "broken"}
             malformed_verdict = module.verify_assertion(case.server_record, malformed, True)
             if malformed_verdict != {"ok": False, "reason": "malformed-assertion"}:
