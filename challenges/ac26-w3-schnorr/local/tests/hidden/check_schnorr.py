@@ -172,6 +172,18 @@ def check_serialization(module, seed: str) -> list[str]:
         except Exception as error:  # noqa: BLE001
             failures.append(f"a truncated encoding raised {type(error).__name__}")
 
+        off_curve = next(group.point(a, b) for a in range(group.p)
+                         for b in range(group.p) if (a, b) != (0, 0)
+                         and not group.contains(group.point(a, b)))
+        raw_invalid = off_curve.x.to_bytes(width, "big") + off_curve.y.to_bytes(width, "big")
+        try:
+            module.decode_point(raw_invalid, group)
+            failures.append("an off-curve point encoding was accepted")
+        except module.InvalidEncoding:
+            pass
+        except Exception as error:
+            failures.append(f"off-curve encoding raised {type(error).__name__}")
+
         # The ambiguity that matters: two different (domain, message) pairs must never
         # produce the same preimage. Plain concatenation makes them collide.
         commitment = group.generator.scalar_mul(k)

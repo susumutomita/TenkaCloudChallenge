@@ -177,6 +177,12 @@ MUTATIONS += (
 )
 
 
+MUTATIONS += (("accepts off-curve encodings", [(
+    '    if not group.contains(point):\n        raise InvalidEncoding("the encoded pair is not on the curve")\n',
+    "",
+)]),)
+
+
 def _load(source: str):
     import types
 

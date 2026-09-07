@@ -168,7 +168,7 @@
           },
           {
             "id": "serialization-hint-3",
-            "content": "group.as_public()[\"coordinate_bytes\"]を幅wとし、座標をto_bytes(w,\"big\")で並べます。decode_pointは長さ2*wと座標範囲を検査してgroup.pointへ戻します。challenge_preimageはdomain.encode()、R、P、messageを境界付きで連結します。serializationを提出します。",
+            "content": "group.as_public()[\"coordinate_bytes\"]を幅wとし、座標をto_bytes(w,\"big\")で並べます。decode_pointは長さ2*wと座標範囲を検査してgroup.pointへ戻します。challenge_preimageはdomain.encode()、R、P、messageを境界付きで連結します。serializationを提出します。 group.pointで作った点もgroup.contains(point)で曲線上か確認し、偽ならInvalidEncodingにします。",
             "penalty": 2
           }
         ]
@@ -355,7 +355,7 @@
             },
             {
               "id": "serialization-hint-3",
-              "content": "Use w=group.as_public()[\"coordinate_bytes\"] and coordinate.to_bytes(w,\"big\"). decode_point checks length2*w and coordinate ranges before group.point. challenge_preimage joins domain.encode(), R, P and message with boundaries. Submit serialization."
+              "content": "Use w=group.as_public()[\"coordinate_bytes\"] and coordinate.to_bytes(w,\"big\"). decode_point checks length2*w and coordinate ranges before group.point. challenge_preimage joins domain.encode(), R, P and message with boundaries. Submit serialization. After group.point constructs the point, check group.contains(point); raise InvalidEncoding if false."
             }
           ]
         },
