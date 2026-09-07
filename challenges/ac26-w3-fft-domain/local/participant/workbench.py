@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import shutil
+from participant.execution import LearnerSession
 import subprocess
 import sys
 import tempfile
@@ -186,47 +187,16 @@ class PortalEditorSupport:
     def run_public_tests(self, files: object) -> dict[str, object]:
         sources = self._normalize_files(files)
         if isinstance(sources, str):
-            return {"passed": False, "output": sources}
-        with tempfile.TemporaryDirectory() as temp_directory:
-            copied_root = Path(temp_directory) / "problem"
-            shutil.copytree(
-                self.root,
-                copied_root,
-                ignore=shutil.ignore_patterns(
-                    "__pycache__", "*.pyc", "reference", "mutation.py"
-                ),
-            )
-            for name, source in sources.items():
-                destination = copied_root / "starter" / name
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_text(source, encoding="utf-8")
-
-            test_files = sorted((copied_root / "tests" / "public").glob("test_*.py"))
-            if not test_files:
-                return {"passed": False, "output": "No public tests were found."}
-
-            transcript: list[str] = []
-            all_passed = True
-            for test_file in test_files:
-                result = self._run_process(
-                    [sys.executable, "-I", str(test_file)],
-                    cwd=copied_root,
-                    env=self._child_env(BROWSER_PUBLIC_TESTS="1"),
-                    timeout=self.run_timeout_seconds,
-                )
-                transcript.append(f"== {test_file.name} ==")
-                if result is None:
-                    all_passed = False
-                    transcript.append("timed out or could not start")
-                    continue
-                status, output = result
-                transcript.append(output.rstrip())
-                if status != 0:
-                    all_passed = False
-            return {
-                "passed": all_passed,
-                "output": "\n".join(transcript)[-self.max_output_bytes :],
-            }
+            return {'passed': False, 'output': sources}
+        from tests.public.test_fftdomain import run_cases
+        session = LearnerSession(sources, timeout=self.run_timeout_seconds)
+        try:
+            with session:
+                failures, output = run_cases(session.module())
+            return {'passed': not failures, 'output': output[-self.max_output_bytes:]}
+        except Exception:
+            detail = session.initialization_diagnostic
+            return {'passed': False, 'output': 'Public tests could not complete.' + ('\n'+detail if detail else '')}
 
     def prepare_submissions(self, files: object, manual: object) -> dict[str, object]:
         sources = self._normalize_files(files)

@@ -1,11 +1,16 @@
-"""点の重複を見抜く入力検査を完成させる / Validate distinct evaluation points.
+"""A deliberately incomplete evaluation-domain toolkit.
 
-公開テストは本物の点だけを使うので、最初のコードでも通ります。
-Public tests use valid domains, so the starter already passes them.
+The public contract is ``validate_domain(prime, order, omega)``,
+``fft(coefficients, omega, prime)``, ``ifft(values, omega, prime)`` and
+``interpolate_and_evaluate(values, omega, point, prime)``.
 
-_domain_ok: 1からomegaを掛けて余りを取り、初めて1へ戻る回数がorderか確認。
-Start at 1, multiply by omega with remainders, and check that the first return
-is at step order. One equation at the last step does not detect earlier returns.
+Every public test passes. The domains they use are ones where the one equation this
+starter checks -- ``omega ** n == 1`` -- happens to be the whole truth.
+
+TODO: omega is handed in and trusted after that single equation. An omega from a
+*smaller* subgroup satisfies it too, and so can an order that does not even divide
+p-1. Whatever you add to establish "order exactly n", add it here -- nothing else in
+the image decides it for you.
 """
 
 from __future__ import annotations
@@ -47,8 +52,14 @@ def _parse_list(value: object, prime: int) -> list[int] | None:
 
 
 def _domain_ok(omega: object, order: int, prime: int) -> bool:
-    """TODO: Check the first return to 1, not only the value at the last step."""
-    return type(omega) is int and omega % prime != 0 and pow(omega, order, prime) == 1
+    if type(omega) is not int or omega % prime == 0:
+        return False
+    point = 1
+    for count in range(1, order + 1):
+        point = point * omega % prime
+        if point == 1:
+            return count == order
+    return False
 
 
 def _evaluate(coefficients: list[int], point: int, prime: int) -> int:
