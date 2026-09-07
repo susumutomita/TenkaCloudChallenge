@@ -8,7 +8,7 @@ import ConceptDiagram from "./ConceptDiagram.tsx";
 import type { OrderTaskProjection } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-export type Concept = "stark" | "io" | "snark" | "ec" | "schnorr" | "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "rsa" | "rotor" | "commit";
+export type Concept = "anamorphic" | "stark" | "io" | "snark" | "ec" | "schnorr" | "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "rsa" | "rotor" | "commit";
 interface Step { readonly diagram?: "zk" | "relabel" | "sharing" | "mpc"; readonly title: string; readonly lines: readonly string[]; readonly table?: { readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] } }
 interface Explanation { readonly name: string; readonly steps: readonly Step[] }
 
@@ -17,6 +17,7 @@ export const SHARE_PAIR_TABLE = [["0", "5", "4"], ["1", "0", "1"], ["2", "2", "5
 /** Fixed teaching examples, independent of every match's private data. */
 export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
   ja: {
+    anamorphic:{name:"アナモルフィック暗号",steps:[{title:"通常の復号と追加秘密",lines:["監視者が通常鍵を持つ状況で、追加の秘密を使い別のメッセージを送ります。","通常の暗号化を繰り返して秘密の判定が目的のビットになるものを選ぶ、原論文5.1節の選び直しを体験します。小さい表は実用の安全性を持ちません。"]}]},
     stark:{name:"STARK",steps:[{title:"実行表 → 制約式 → 商 → 折り畳み",lines:["実行表は途中の数の記録です。AIRは計算の規則を式にする表現。制約式が指定の式で割り切れるかと、FRIの折り畳みを別々に確認します。","この模型はコミットメント・ランダム質問・ゼロ知識化を実装しません。"]}]},
     io:{name:"識別不可能性難読化（iO）",steps:[{title:"同じ機能と、同じ分布",lines:["同じ大きさで、すべての入力に同じ答えを出す計算を変換したとき、結果から元を区別できないことを調べます。","真理値表は全入力の答えの一覧。入力がkビットなら2ᵏ行必要なので、この模型は一般の効率的なiOではありません。"]}]},
     snark: {name:"SNARKの算術化",steps:[{title:"計算と配線を式にする",lines:["ゲートは1行の計算です。出力を次の入力へつなぐ配線も一致する必要があります。","この模型は表を直接検査します。短い証明やゼロ知識化は未実装です。"]}]},
@@ -57,6 +58,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
     ] },
   },
   en: {
+    anamorphic:{name:"Anamorphic encryption",steps:[{title:"Ordinary decryption and an additional secret",lines:["Send another message using an additional secret while a monitor holds the ordinary key.","Practice rejection sampling from section5.1: retry ordinary encryption until a secret predicate matches the hidden bit. The small lookup has no practical security."]}]},
     stark:{name:"STARK",steps:[{title:"Trace → constraints → quotient → fold",lines:["A trace records intermediate values. AIR expresses computation rules as equations. Check divisibility separately from the FRI fold.","This model does not implement commitments, random queries or zero-knowledge masking."]}]},
     io:{name:"Indistinguishability obfuscation (iO)",steps:[{title:"Same function and same distribution",lines:["Compare transformed programs of the same size and the same answers on every input. Their source should be indistinguishable.","A truth table lists every input result. It needs 2ᵏ rows for k input bits, so this model is not efficient general-purpose iO."]}]},
     snark: {name:"SNARK arithmetization",steps:[{title:"Equations for computation and wiring",lines:["A gate is one calculation. Wires must connect equal output and input values.","This model directly checks a table. It does not implement succinct proofs or zero knowledge."]}]},
@@ -111,6 +113,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
 
 export function conceptForTask(task: OrderTaskProjection): Concept {
   switch (task.kind) {
+    case "anamorphic-rejection": return "anamorphic";
     case "stark-trace": return "stark";
     case "io-equivalence": return "io";
     case "snark-constraints": return "snark";
@@ -147,7 +150,7 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
   }
 }
 
-export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"stark":"STARK：実行表をどう検査する？","snark":"SNARKの算術化とは？","io":"iOとは？機能と分布を比べる","ec":"楕円曲線の点加算とは？","schnorr":"ゼロ知識証明：なぜ秘密を送らず確かめられる？","rotor": "位置が進む車輪って何？", "rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"stark":"STARK: how is a trace checked?","snark":"What is SNARK arithmetization?","io":"What is iO? Compare functions and distributions","ec":"What is curve addition?","schnorr":"Zero knowledge: verify without the secret?","rotor": "How do advancing wheels work?", "rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
+export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"anamorphic":"通常鍵を渡しても秘密を送れる？","stark":"STARK：実行表をどう検査する？","snark":"SNARKの算術化とは？","io":"iOとは？機能と分布を比べる","ec":"楕円曲線の点加算とは？","schnorr":"ゼロ知識証明：なぜ秘密を送らず確かめられる？","rotor": "位置が進む車輪って何？", "rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"anamorphic":"A hidden message despite sharing the ordinary key?","stark":"STARK: how is a trace checked?","snark":"What is SNARK arithmetization?","io":"What is iO? Compare functions and distributions","ec":"What is curve addition?","schnorr":"Zero knowledge: verify without the secret?","rotor": "How do advancing wheels work?", "rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
 
 const button = { cursor: "pointer", border: "1px solid #a4b5c6", borderRadius: 5, padding: "5px 9px", color: "#24476d", background: "#fff", fontSize: 12 } as const;
 export default function ConceptExplanation({ locale, topic, task, prime, embedded = false }: {
@@ -156,7 +159,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
   const [selected, setSelected] = useState<Concept | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const copy = EXPLANATIONS[locale];
-  const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa", "ec", "io", "snark", "stark"] as Concept[]);
+  const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa", "ec", "io", "snark", "stark", "anamorphic"] as Concept[]);
   const lesson = selected ? copy[selected] : null;
   const step = lesson?.steps[stepIndex];
   const ja = locale === "ja";

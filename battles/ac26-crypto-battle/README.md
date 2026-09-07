@@ -449,3 +449,13 @@ Inputs: Advanced Cryptography 2026 Week4 slides20–23 (PDF pages24–27), revis
 
 Validation: all343 traces satisfy interpolation and quotient/remainder identities; all nonzero query pairs and challenges satisfy the one-fold equation. Owned-order tests cover wrong/correct scores, Lightning, replay, expiry, foreign teams and malformed projection rejection. Ordinary regression:764 tests; dev harness:82 tests; types and catalog:pass. In the real local Portal `stark-order`, trace6→6→5, Q=4+3X+6X², β=6 gave submitted5 4 6 1, success feedback and score30. Production deployment not run; deployment remains with the user.
 The additional distribution regression enumerates all 225 nonempty rotation-support pairs, including equal functions with partially overlapping outputs. Earlier browser evidence above predates these candidate-randomness cases; a new browser pass is required before merging.
+
+### Anamorphic rejection sampling (#794)
+
+Based on Persiano–Phan–Yung, EUROCRYPT2022, section5.1: https://iacr.org/archive/eurocrypt2022/132760134/132760134.pdf . This is the rejection-sampling route, not the appended-payload approach the paper rejects. A participant selects a normal ciphertext whose secret lookup bit matches the intended bit, performs ordinary decryption with the monitor’s key, and decodes a separate incoming packet using the additional secret lookup. The role diagram distinguishes sender, monitor and receiver. Three fields, formulas, a small worked example and pre-submit deduction are bilingual.
+
+The arithmetic uses ElGamal-shaped pairs modulo7. A balanced six-entry table substitutes for a pseudorandom function (PRF); it is scoped to one ordinary message. Neither the tiny group nor the lookup is practically secure. For each hidden bit, averaging uniform accepted-candidate selection across all20 balanced secret tables gives the ordinary1/6 distribution for a single packet. No multi-message security claim follows. Repeated trials in the paper are independent; the worksheet displays a shuffled, non-repeating practice sequence rather than an implementation of its secure sampler. No supplementary encrypted payload is appended.
+
+New matches add a candidate every29 slots subject to existing special-slot priorities. Existing matches retain their configuration. Schema19, owned-order validation, actual scoring, Lightning and score reason `anamorphic` stay in the problem runtime. Ordinary regression769 tests, dev85 tests, types and116-entry catalog validation pass. Deployment is not performed.
+
+Real local Portal `anamorphic-order`: key x=4, first accepted pair(4,4), incoming pair(1,1). Submitted1 1 0; success banner and current score30 were observed.
