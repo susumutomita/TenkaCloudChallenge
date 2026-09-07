@@ -21,8 +21,8 @@ export interface HuntOption {
   readonly sudoku?: SudokuHuntCandidate; readonly cipher?: CipherHuntCandidate; readonly rps?: RpsHuntTarget; readonly rsa?: PublicRsaKey;
 }
 const labels = {
-  ja: { rotor: "Rotorの初期位置", share: "秘密のかけら", sudoku: "数独の付け替え", caesar: "シーザー暗号", vigenere: "Vigenère暗号", rps: "じゃんけんの予測", rsa: "RSAの因数分解", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
-  en: { rotor: "Rotor initial positions", share: "Secret shares", sudoku: "Sudoku relabelling", caesar: "Caesar cipher", vigenere: "Vigenère cipher", rps: "RPS prediction", rsa: "RSA factorization", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
+  ja: { rotor: "Rotorの初期位置", share: "シェア（秘密分散）", sudoku: "ZK数独の公開マス", caesar: "シーザー暗号", vigenere: "Vigenère暗号", rps: "じゃんけんの予測", rsa: "RSAの因数分解", waiting: "材料待ち", ready: "攻撃できる", completed: "攻撃済み", exhausted: "回数切れ", pending: "攻撃済み・開封待ち", unknown: "状態を更新中" },
+  en: { rotor: "Rotor initial positions", share: "Secret shares", sudoku: "ZK Sudoku openings", caesar: "Caesar cipher", vigenere: "Vigenère cipher", rps: "RPS prediction", rsa: "RSA factorization", waiting: "Waiting for evidence", ready: "Ready to attack", completed: "Already attacked", exhausted: "No attempts left", pending: "Submitted · waiting for openings", unknown: "Refreshing status" },
 };
 
 /** Public records open a worksheet; no solver or verdict is run for the participant. */
@@ -95,30 +95,62 @@ export function huntOptions(projection: CryptoBattleProjection): readonly HuntOp
 }
 
 type Props = { readonly projection: CryptoBattleProjection; readonly locale: Locale; readonly submitting: boolean; readonly onSubmit: (op: CryptoBattleOp) => Promise<void> };
+export function huntOpponentPage(projection: CryptoBattleProjection, options: readonly HuntOption[], query: string, readyOnly: boolean, page: number) {
+  const ready = new Set(options.filter(o => o.status === "ready").map(o => o.teamId));
+  const search = query.trim().toLocaleLowerCase();
+  const all = Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId
+    && (!readyOnly || ready.has(t.teamId)) && `${t.teamName} ${t.teamId}`.toLocaleLowerCase().includes(search))
+    .sort((a, b) => Number(ready.has(b.teamId)) - Number(ready.has(a.teamId)) || a.teamId.localeCompare(b.teamId));
+  const lastPage = Math.max(0, Math.ceil(all.length / 5) - 1);
+  const currentPage = Math.min(Math.max(0, page), lastPage);
+  return { items: all.slice(currentPage * 5, currentPage * 5 + 5), total: all.length, page: currentPage, lastPage, ready };
+}
+
 export default function HuntPanel(props: Props) {
   const { projection, locale } = props;
   const [selected, setSelected] = useState("");
+  const [query, setQuery] = useState("");
+  const [readyOnly, setReadyOnly] = useState(false);
+  const [page, setPage] = useState(0);
   const options = useMemo(() => huntOptions(projection), [projection]);
-  const target = options.find(o => o.key === selected && o.status === "ready");
-  const work = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (target) { work.current?.focus({ preventScroll: true }); work.current?.scrollIntoView({ block: "start" }); } }, [selected]);
-  const ready = options.filter(o => o.status === "ready");
+  const listing = huntOpponentPage(projection, options, query, readyOnly, page);
+  const firstTeam = listing.items[0]?.teamId;
+  const choice = options.find(o => o.key === selected) ?? options.find(o => o.teamId === firstTeam && o.status === "ready") ?? options.find(o => o.teamId === firstTeam);
+  // Keep the inspected team and worksheet stable when new evidence arrives.
+  useEffect(() => { if (choice && choice.key !== selected) setSelected(choice.key); }, [choice?.key, selected]);
+  const target = choice?.status === "ready" ? choice : undefined;
   const ja = locale === "ja", copy = labels[locale];
-  const refreshing = ja ? "攻撃済み状態を更新中です。次の更新まで操作を待ってください。" : "Refreshing completed attacks. Wait for an updated response before acting.";
   const name = (id: string) => projection.teams[id]?.teamName || id;
+  const readyTeams = new Set(options.filter(o => o.status === "ready").map(o => o.teamId)).size;
+  const chooseTeam = (id: string) => setSelected((options.find(o => o.teamId === id && o.status === "ready") ?? options.find(o => o.teamId === id))!.key);
   return <section className="tc-hunt-entry" aria-label={ja ? "相手を攻撃する HUNT" : "Attack an opponent with HUNT"}>
     <h2>{ja ? "相手を攻撃する（HUNT）" : "Attack an opponent (HUNT)"}</h2>
-    <p className="tc-card-hint">{ja ? "相手の公開情報から秘密や手を計算する攻撃です。方式ごとに材料が異なります。材料待ちなら別のお題を進めましょう。" : "Recover secrets or predict hands from public information. Each method needs different evidence. Work on other Orders while waiting."}</p>
-    <p className="tc-hunt-notice" role="status" aria-live="polite">{ready.length ? (ja ? `材料・計算へ進める：${ready.map(o => `${name(o.teamId)}の${copy[o.mode]}`).join("、")}` : `Worksheets available: ${ready.map(o => `${name(o.teamId)} · ${copy[o.mode]}`).join(", ")}`) : (options.some(o => o.status === "unknown") ? refreshing : (ja ? "現在、攻撃できる材料はそろっていません。状態は約30秒ごとに更新されます。" : "No ready targets. Status refreshes about every 30 seconds."))}</p>
-    <div className="tc-hunt-opponents">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(team => <article key={team.teamId} className="tc-hunt-opponent">
-      <h3>{name(team.teamId)} <small>{ja ? "世代" : "Generation"} {team.generation} · {team.score} {ja ? "点" : "pt"}</small></h3>
-      {options.filter(o => o.teamId === team.teamId).map(option => <div key={option.key} className={`tc-hunt-method tc-hunt-${option.status}`}>
-        <div><strong>{copy[option.mode]}</strong><span className="tc-hunt-state">{(option.mode === "sudoku" || option.mode === "rotor") && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</span></div><p>{option.status === "unknown" ? refreshing : option.detail[locale]}</p>
-        {option.status === "ready" && <button type="button" className="tc-target-chip" aria-pressed={selected === option.key} onClick={() => setSelected(option.key)}>{ja ? (option.mode === "sudoku" ? "数独の材料を確認して解く →" : `${copy[option.mode]}の材料・計算へ →`) : `Open ${copy[option.mode]} worksheet →`}</button>}
-        {(option.status === "completed" || option.status === "exhausted") && <p>{option.mode === "rps" && option.status === "completed" ? (ja ? "次の対戦の受付を待ちます。" : "Wait for the next duel's prediction window.") : (ja ? "相手の世代が変わると、次の攻撃を準備できます。" : "Prepare a new attack when the opponent's generation changes.")}</p>}
-      </div>)}
-    </article>)}</div>
-    {target && <div ref={work} tabIndex={-1} className="tc-hunt-workspace"><HuntWorkspace key={`${projection.vault.teamId}:${target.key}:${target.rps?.duelId ?? ""}`} {...props} target={target} /></div>}
+    <p>{ja ? "相手を選ぶ → 公開材料で秘密を計算 → 答えを送る" : "Choose an opponent → calculate from public evidence → submit"}</p>
+    <p className="tc-hunt-notice" role="status" aria-live="polite">{ja ? `材料を確認できる相手：${readyTeams}チーム。` : `Opponents with available worksheets: ${readyTeams}.`}{!readyTeams && (ja ? "材料が集まるまでは、自分のお題を進めましょう。" : "Work on your Orders while evidence accumulates.")}</p>
+    <h3>{ja ? "1. 相手を選ぶ" : "1. Choose an opponent"}</h3>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+      <label>{ja ? "チーム名で検索 " : "Search teams "}<input type="search" value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} /></label>
+      <label><input type="checkbox" checked={readyOnly} onChange={e => { setReadyOnly(e.target.checked); setPage(0); }} />{ja ? "材料のある相手だけ" : "With evidence only"}</label>
+    </div>
+    <div className="tc-hunt-opponents" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0" }}>
+      {listing.items.map(team => <button type="button" key={team.teamId} className="tc-target-chip" aria-pressed={choice?.teamId === team.teamId} onClick={() => chooseTeam(team.teamId)}>
+        {name(team.teamId)} · {team.score}{ja ? "点" : "pt"} · {listing.ready.has(team.teamId) ? (ja ? "材料あり" : "Evidence available") : (ja ? "材料待ち・状況を確認" : "Waiting · inspect status")}
+      </button>)}
+    </div>
+    {listing.total === 0 && <p role="status">{ja ? "条件に合う相手はいません。検索や絞り込みを変更してください。" : "No matching opponents. Change the search or filter."}</p>}
+    {listing.lastPage > 0 && <nav aria-label={ja ? "相手一覧のページ" : "Opponent pages"}>
+      <button type="button" disabled={listing.page === 0} onClick={() => setPage(listing.page - 1)}>{ja ? "前の5件" : "Previous five"}</button>
+      <span> {listing.page + 1} / {listing.lastPage + 1} · {listing.total}{ja ? "チーム" : " teams"} </span>
+      <button type="button" disabled={listing.page === listing.lastPage} onClick={() => setPage(listing.page + 1)}>{ja ? "次の5件" : "Next five"}</button>
+    </nav>}
+    {choice && <section aria-label={ja ? "選択中の相手と攻撃方法" : "Selected opponent and method"}>
+      <h3>{ja ? "2. " : "2. "}{name(choice.teamId)} · {ja ? "攻撃方法と材料を確認" : "Choose a method and inspect evidence"}</h3>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{options.filter(o => o.teamId === choice.teamId).map(option => <button key={option.key} type="button" className="tc-target-chip" aria-pressed={choice.key === option.key} onClick={() => setSelected(option.key)}>{copy[option.mode]} · {(option.mode === "sudoku" || option.mode === "rotor") && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</button>)}</div>
+      <p>{choice.detail[locale]}</p>
+      {(choice.status === "completed" || choice.status === "exhausted") && <p>{ja ? "この方法では今は攻撃できません。別の方法か相手を選んでください。" : "This method is unavailable now. Choose another method or opponent."}</p>}
+      {choice.status === "unknown" && <p role="status">{ja ? "攻撃済み状態を更新中です。次の更新まで操作を待ってください。" : "Refreshing completed attacks. Wait for an updated response before acting."}</p>}
+      {target && <div className="tc-hunt-workspace"><h3>{ja ? "3. 材料から計算して、答えを送る" : "3. Calculate from the evidence and submit"}</h3><HuntWorkspace key={`${projection.vault.teamId}:${target.key}:${target.rps?.duelId ?? ""}`} {...props} target={target} /></div>}
+    </section>}
   </section>;
 }
 
