@@ -40,8 +40,8 @@
   "estimatedDuration": "60-90 分",
   "shortDescription": "署名サービスの監査ログには message・公開鍵・R・z がある。秘密鍵は無い。それでも、同じ R が二度出ている 1 組を見つければ、秘密鍵は連立方程式を解くだけで出る。しかもこの取り出しは、方式が安全である根拠と同じ式。",
   "description": "Week 3 の 4 問目、 role は transfer。 nonce 再利用を 「乱数の品質の問題」 として覚えるのではなく、 Sigma protocol の special soundness そのものとして扱う。\n\nz1 = k + e1*x と z2 = k + e2*x から k が消え、 x = (z1 - z2) * (e1 - e2)^-1 mod n が出る。 これは protocol を proof of knowledge たらしめている性質と同じもので、 「健全性の根拠」 と 「再利用が致命的である理由」 が同一の事実であることを実装で確認する。\n\n題材は noisy な audit log。 malformed な行、 きれいに parse できるが検証を通らない行、 そして**別の signer が同じ R を使っている行**が入れてある。 R の共有は必要条件であって十分条件ではない — 鍵が違えば解くべき未知数が 1 つではない。\n\nnonce generator は 3 種類。 `fixed_nonce` は即死、 `truncated_nonce` は log 上では完全にランダムに見えて birthday bound で衝突する、 `deterministic_nonce` は名前が最も不安に見えて実際には安全。 「ランダムに見える」 は entropy ではない、 が collision checkpoint の主題。\n\n**群位数の扱い**: repair checkpoint は secp256k1 で回す。 toy 群は scalar が 50 個未満しかなく、 60 通の message に 60 個の異なる nonce を割り当てることが鳩の巣原理で不可能だから。 40 元の群に安全な nonce 生成器は存在せず、 群が小さいこと自体が脆弱性である。 不可能なことを assert する test は書かない。\n\n同様に、 nonce space の truncation は 「60 サンプルが全部相異なるか」 では検出できない (16 bit でも 97% の確率で相異なる)。 検出は値域で行う — 256 bit の位数に対して全出力が 2^64 未満になる確率は事実上ゼロ。",
-  "instructions": "## 署名は全部正しい。それでも鍵が漏れる\n\nあなたが受け取るのは、ある署名サービスの **監査ログ** です。1 行ごとに message・公開鍵・封筒 R・返事 z。**秘密鍵はどこにもありません**——ログを残せるのは、まさに鍵が入っていないからです。どの署名も正しく検証を通ります。\n\nところがこのログのどこかで、1 人の署名者が **同じ R を 2 回** 使っています。同じ R = 同じ乱数 k。すると引き算 1 回で、その人の秘密鍵が出ます。ログを **読む権限しかない** 相手に、鍵が渡ってしまう。実際に、この失敗でウォレットや端末から秘密鍵が外部に割り出された事故が起きています。\n\n## しかも、これは方式の欠陥ではない\n\n鍵を取り出せることは、この署名の **強み** の裏返しです。「検証を通せる人は本当に x を知っている」と言えるのは、まさに **2 本の署名から x を取り出せるから**。protocol が安全である根拠と、nonce を 2 回使うと壊れる理由は、**同じ 1 本の式** です。この問題では、その式を攻撃の側から一度使い、最後に「二度と同じ k が出ない」nonce に直します。\n\n## 前提(署名が不安なら、先に schnorr へ)\n\n- **署名は schnorr と同じ**: `R = k·G`、`e = H(domain, R, P, message)`、`z = k + e·x (mod n)`、検証は `z·G = R + e·P`(作り方は `ac26-w3-schnorr`)。計算は `participant.schnorr` に用意済みで、`challenge(...)`・`sign_with(...)`・群を呼ぶだけ。\n- **割る数**: 座標は p、z や e は **n**(G の位数)。分数はないので、割り算は `pow(値, -1, n)` で逆元を掛けます。\n- **言葉**: nonce = \"number used once\"(1 度しか使わない k)、名前が「使い回すな」と言っている。誕生日の話 = 「40 人に同じ誕生日の 2 人がいる確率は高い」、**選べる値が少ないと少ない回数でも同じ値が出る**。監査ログ = 誰がいつ何に署名したかの記録。checkpoint = 8 つ。\n\n## 紙で 1 回(n = 29、x = 7、封筒に k = 3)\n\ne₁ = 5 なら z₁ = 3 + 5×7 = 38 ≡ 9。同じ k で e₂ = 11 なら z₂ = 80 ≡ 22。引くと z₁ − z₂ = −13 ≡ 16、e₁ − e₂ = −6 ≡ 23。つまり **23·x ≡ 16**。23 の逆元は 24 なので x ≡ 16×24 = 384 ≡ **7**——秘密が出ました。\n\n## 山は「同じ R」だけでは足りないこと\n\n2 本が「同じ 1 つの未知数についての式」になるには、R が同じこと以外にも一致すべきものがあります(誰の署名か、など)。ログには、それを満たさないのに R だけ同じ行が混ぜてある。**必要条件と十分条件を分ける**——これが detect の中身です。加えて、64 通りしか引かない弱い生成器が混ざっています。「40 回引くと何回ぶつかるか」を、走らせる前に予想してから測ってください(誕生日の話。ぶつからないほうが珍しい)。\n\n## 最初の一手\n\nParticipant Portal で **「起動」** を押すと、同じ画面に **問題エディタ**(`recover.py`)が出ます。\n\n**「証拠を確認」** を押すと 5 つ: ①health token(提出しない)②ログの行数と、1 行が持つもの(message・公開鍵・R・z。秘密鍵は無い)③ログの表(行番号・公開鍵・R・z)④2 回以上出た R の一覧 ⑤注意(壊れた行が混ざる、きれいに読めるのに検証を通らない行が少なくとも 1 つある、同じ R がすべて攻撃できる組とは限らない、弱い生成器は 64 通り、40 回引いたら何回ぶつかるか予想せよ)。\n\n**紙で**(提出欄なし): ④の表で、同じ R の 2 行が「同じ 1 つの未知数の 2 本の式」になる条件を、R 以外に何が要るか書き出す。それから⑤の予想も、測る前に数を決めておいてください。\n\n## 答えるもの — checkpoint は 8 つ\n\n書き換えるのは `recover.py` だけ。エラー名 `MalformedRecord` と 8 つの関数枠は入っています。署名の計算(`challenge`・`sign_with`・弱い生成器 `truncated_nonce`・その値域 `NONCE_SPACE`)は `participant.schnorr` に。ログ 1 行は `{\"message\": bytes, \"public_key\": (x, y), \"commitment\": (x, y), \"response\": int}`。\n\n1. **parse**(30) — `parse_record(record, group)` は 1 行を読んで、そろえた辞書(少なくとも `\"response\"` と `\"public_key\"`)を返す。**外から来たデータは壊れている前提**——キー不足、`message` が `bytes` でない、`response` が 0〜n−1 でない、`public_key`/`commitment` が曲線上でない、は `MalformedRecord` で断ります。\n2. **detect**(35) — `find_reuse(records, group)` は、**一緒に攻撃できる 2 行の番号の組** `(i, j)` のリスト。R が同じは必要だが十分ではない。挙げた組は採点側が検証し直します。\n3. **extract**(50) — `recover_secret(first, second, group)` は封筒を共有する 2 つの正しい記録から秘密鍵を返す。引き算のあと **何かの逆元** が要ります。渡す順を入れかえても同じ答えになること。\n4. **confirm**(30) — `confirms(secret, public, group)` は「その数が本当にその公開鍵の秘密鍵か」を True/False。**`public` は群の点そのものと、あなたの `parse_record` が返す形の両方が来る**——両方受け取れるように。\n5. **reject**(40) — 解けない組を解けないと言う。(a) まったく同じ記録が 2 つ = e が同じ = 差が 0 で逆元が取れない → `ZeroDivisionError` で落ちず `MalformedRecord`。(b) R は同じでも **署名者が違う** 組は、断るか、少なくとも `confirms` を通らない値を返す。(c) 使い回しが無いログでは `find_reuse` は空。\n6. **hunt**(40) — `attack_log(records, group)` が雑音まみれのログを通しで攻撃。`{\"secret\": 整数, \"public_key\": (x, y), \"records\": …}`、見つからなければ空の `{}`。**誰の鍵を取ったのかまで名指し**。\n7. **collision**(40) — `collision_experiment(seed, group, samples)` が弱い生成器 `truncated_nonce` を **実際に `samples` 回動かして** 測る。`{\"collisions\", \"distinct\", \"space\"}` を返し、`space` は値域(`NONCE_SPACE`)、`distinct` は「初めて出た値」、`collisions` は「すでに出ていた値」で、**2 つの和が `samples`**。40 回で 64 通りなら、ぶつからない結果は「動かしていない」ということ。\n8. **repair**(35) — `safe_nonce(secret, message, group)`。同じ入力からは同じ値でよいが(同じ鍵・同じ message なら同じ署名になるだけ)、**違う message どうし、同じ message に署名する違う人どうしがぶつからない** こと。値は 1〜n−1 で、**n の広さをそのまま使う**(短く切り詰めは落ちる)。この checkpoint だけ secp256k1 で回ります(練習用の群はスカラーが 50 個未満で、60 個の message に別々の nonce を配れないため)。\n\n各 checkpoint の **「提出 (+N pt)」** を押すと、そのときの `recover.py` が送られて採点(打ち込む欄なし)。8 つは独立採点、まちがえるごとに −15 点。**「公開テストを実行」** は下見、**「初期状態に戻す」** で元に戻ります。\n\n## 安全は「二度と同じ k を出さない」に尽きる\n\n雑音まじりのログから **攻撃できる組だけ** を挙げ、鍵を取って裏を取り、解けない組は解けないと言い、二度と同じことが起きない nonce に直す。protocol の安全と、nonce の使い回しの致命性が **同じ 1 本の式** だったこと——それを自分のコードで確かめたら終わりです。この決定的な safe nonce は、実運用の署名がまさに使っている考え方です。",
-  "writeup": "## これは乱数の話ではない\n\nnonce 再利用は 「弱い乱数生成器を使うと危ない」 として語られることが多い。 それは症状の説明であって、 理由の説明ではない。\n\n理由は special soundness である。 同じ commitment に対して異なる challenge へ 2 回応答すると、 その 2 本の transcript から witness が抽出できる。 これは Sigma protocol が proof of knowledge であることの定義そのもので、 「証明者は本当に x を知っている」 を保証している当の性質だ。 抽出器が存在するから健全であり、 抽出器が存在するから再利用が致命的になる。 同じ 1 つの事実の 2 つの側面である。\n\n## R の共有は十分条件ではない\n\nlog には別の signer が同じ R を使っている行が入れてある。 鍵が違えば、 2 本の transcript は 1 つの未知数についての 2 本の式ではない。 攻撃すると 「誰のものでもない scalar」 が出る。 だから復元は必ず P = xG で確認する。 算術は間違った組に対しても成功する。\n\n同様に、 きれいに parse できるが検証を通らない行も入れてある。 拒否される transcript の中の再利用は何も証明しない。\n\ne1 = e2 のときに逆元が存在しないのは、 同じ challenge への 2 回の応答が同じ式を 2 回書いただけだから。 情報が増えていない。\n\n## 3 つの nonce generator\n\n- `fixed_nonce`: 毎回同じ。 即座に死ぬ。\n- `truncated_nonce`: 本物のハッシュを取り、 数ビットに切り詰める。 **log 上では完全にランダムに見える**。 どの k も違って見え、 すべての署名が検証を通り、 目視では何もおかしくない。 それでも birthday bound で衝突する。\n- `deterministic_nonce`: 秘密鍵と message のハッシュ。 名前が最も不安に見えて、 これが安全なもの。 同じ鍵と同じ message は同じ nonce を生むが、 それは同じ署名を生むだけで新しい情報は漏れない。 異なる message はハッシュ衝突なしには衝突しない。 鍵も入れるのは、 message だけだと 2 人の signer が同じ message で同じ nonce を使ってしまうため。\n\n## 群位数と、書けない test\n\nrepair checkpoint は secp256k1 で回す。 toy 群は scalar が 50 個未満しかなく、 60 通の message に相異なる nonce を割り当てることが鳩の巣原理で**不可能**だから。 40 元の群に安全な nonce 生成器は存在しない。 群が小さいこと自体が脆弱性であって、 生成器の欠陥ではない。 不可能なことを assert する test は、 テストの失敗ではなく設計の失敗である。\n\nnonce space の truncation も、 「60 サンプルが全部相異なるか」 では捕まらない。 16 bit でも 60 draws が全部相異なる確率は約 97% で、 大半の実行をすり抜ける。 検出は値域で行う — 256 bit の位数に対して全出力が 2^64 未満に収まる確率は 2^-11000 程度で、 これは偶然ではなく truncation の証拠になる。\n\n## 次につながるところ\n\nWeek 4 以降の証明系でも 「同じ commitment に 2 つの challenge」 は繰り返し現れる。 そこでは抽出器は攻撃ではなく安全性証明の道具として出てくるが、 中身は同じ引き算である。",
+  "instructions": "## 先に、使う言葉と式\n\n署名は、公開鍵を使ってメッセージの作成者を確認するためのデータです。ここで扱うのはSchnorr署名の小さい教材です。群は点の足し算ができる集合、Gは出発点、整数倍kGはGをk回足した点です。nはnGが初めてゼロの点へ戻る回数（位数）で、座標で使う素数pとは別です。この問題のnはすべて素数なので、0以外の余りには逆元があります。整数の係数をスカラーと呼びます。\n\nxは秘密鍵、P=xGは公開鍵、kは今回の乱数、R=kGは公開する点です。本文の「封筒」はRの呼び名です。Hはデータから固定長の数を作るハッシュ関数、domainは用途を区別する文字列、messageは署名するデータです。質問eは用意されたchallenge関数で求めます。≡は割った余りが等しいこと、modは割った余りです。\n\n復元式は **x=((z1−z2)×(e1−e2)の逆元) mod n**。逆元は掛けて余り1になる数で、Pythonではpow(値,-1,n)。同じPとR、異なるeを持つ有効な2記録でだけ使えます。公開鍵の確認は **xG=P**。この抽出性をspecial soundnessと呼びますが、この式だけで署名方式全体の安全性が証明されるわけではありません。\n\n用意されたAPI：group.point(x,y)で座標を点に、group.contains(point)で曲線上か確認、group.generator.scalar_mul(k)でkGを計算します。challenge(DOMAINS[0],R,P,message,group)がeを返します。DOMAINS・challengeはparticipant.schnorrからimportします。署名の検証はzG==R+ePです。コードでは `group.generator.scalar_mul(z) == R + P.scalar_mul(e)`。点の型は `from participant.schnorr import Point` で取り込み、`isinstance(value, Point)` ならそのまま、座標の組なら `group.point(*value)` にそろえます。\n\n修復には標準ライブラリのhmacとhashlibを使えます。HMAC-SHA256は秘密鍵とデータから32バイトの値を作る関数です。バイトは0〜255の整数1個。結果をint.from_bytes(...,\"big\")で整数hと読み、1+h%(n−1)へ変換します。秘密鍵をHMACの鍵にし、固定の用途名・メッセージの長さ・メッセージをデータにすることで入力の境界を明確にします。secp256k1は最後の修復検査に使う大きな楕円曲線の名前です。点の計算はgroupが担当します。\n\n## 正しい署名からも、使い回した鍵が漏れる\n\nあなたが受け取るのは、ある署名サービスの **監査ログ** です。1 行ごとに message・公開鍵・封筒 R・返事 z。**秘密鍵はどこにもありません**——ログを残せるのは、まさに鍵が入っていないからです。正しく検証を通る記録に、不正な記録も混ざっています。\n\nところがこのログのどこかで、1 人の署名者が **同じ R を 2 回** 使っています。同じ R = 同じ乱数 k。すると引き算 1 回で、その人の秘密鍵が出ます。ログを **読む権限しかない** 相手に、鍵が渡ってしまう。実際に、この失敗でウォレットや端末から秘密鍵が外部に割り出された事故が起きています。\n\n## しかも、これは方式の欠陥ではない\n\n同じPとR、異なるeの有効な2記録から鍵を抽出できる性質を、攻撃側から確かめます。通常の異なる乱数で作った任意の2署名から鍵が出るわけではありません。\n\n## 前提(署名が不安なら、先に schnorr へ)\n\n- **署名は schnorr と同じ**: `R = k·G`、`e = H(domain, R, P, message)`、`z = k + e·x (mod n)`、検証は `z·G = R + e·P`(作り方は `ac26-w3-schnorr`)。計算は `participant.schnorr` に用意済みで、`challenge(...)`・`sign_with(...)`・群を呼ぶだけ。\n- **割る数**: 座標は p、z や e は **n**(G の位数)。分数はないので、割り算は `pow(値, -1, n)` で逆元を掛けます。\n- **言葉**: nonce = \"number used once\"(1 度しか使わない k)、名前が「使い回すな」と言っている。誕生日の話 = 「40 人に同じ誕生日の 2 人がいる確率は高い」、**選べる値が少ないと少ない回数でも同じ値が出る**。監査ログ = 誰がいつ何に署名したかの記録。checkpoint = 8 つ。\n\n## 紙で 1 回(n = 29、x = 7、封筒に k = 3)\n\ne₁ = 5 なら z₁ = 3 + 5×7 = 38 ≡ 9。同じ k で e₂ = 11 なら z₂ = 80 ≡ 22。引くと z₁ − z₂ = −13 ≡ 16、e₁ − e₂ = −6 ≡ 23。つまり **23·x ≡ 16**。23 の逆元は 24 なので x ≡ 16×24 = 384 ≡ **7**——秘密が出ました。\n\n## 山は「同じ R」だけでは足りないこと\n\n2 本が「同じ 1 つの未知数についての式」になるには、R が同じこと以外にも一致すべきものがあります(誰の署名か、など)。ログには、それを満たさないのに R だけ同じ行が混ぜてある。**必要条件と十分条件を分ける**——これが detect の中身です。加えて、64 通りしか引かない弱い生成器が混ざっています。「40 回引くと何回ぶつかるか」を、走らせる前に予想してから測ってください(誕生日の話。ぶつからないほうが珍しい)。\n\n## 最初の一手\n\nParticipant Portal で **「起動」** を押すと、同じ画面に **問題エディタ**(`recover.py`)が出ます。\n\n**「証拠を確認」** を押すと 5 つ: ①health token(提出しない)②ログの行数と、1 行が持つもの(message・公開鍵・R・z。秘密鍵は無い)③ログの表(行番号・公開鍵・R・z)④2 回以上出た R の一覧 ⑤注意(壊れた行が混ざる、きれいに読めるのに検証を通らない行が少なくとも 1 つある、同じ R がすべて攻撃できる組とは限らない、弱い生成器は 64 通り、40 回引いたら何回ぶつかるか予想せよ)。\n\n**紙で**(提出欄なし): ④の表で、同じ R の 2 行が「同じ 1 つの未知数の 2 本の式」になる条件を、R 以外に何が要るか書き出す。それから⑤の予想も、測る前に数を決めておいてください。\n\n## 答えるもの — checkpoint は 8 つ\n\n書き換えるのは `recover.py` だけ。エラー名 `MalformedRecord` と 8 つの関数枠は入っています。署名の計算(`challenge`・`sign_with`・弱い生成器 `truncated_nonce`・その値域 `NONCE_SPACE`)は `participant.schnorr` に。ログ 1 行は `{\"message\": bytes, \"public_key\": (x, y), \"commitment\": (x, y), \"response\": int}`。\n\n1. **parse**(30) — `parse_record(record, group)` は 1 行を読んで、そろえた辞書(少なくとも `\"response\"` と `\"public_key\"`)を返す。**外から来たデータは壊れている前提**——キー不足、`message` が `bytes` でない、`response` が 0〜n−1 でない、`public_key`/`commitment` が曲線上でない、は `MalformedRecord` で断ります。\n2. **detect**(35) — `find_reuse(records, group)` は、**一緒に攻撃できる 2 行の番号の組** `(i, j)` のリスト。R が同じは必要だが十分ではない。挙げた組は採点側が検証し直します。\n3. **extract**(50) — `recover_secret(first, second, group)` は封筒を共有する 2 つの正しい記録から秘密鍵を返す。引き算のあと **何かの逆元** が要ります。渡す順を入れかえても同じ答えになること。\n4. **confirm**(30) — `confirms(secret, public, group)` は「その数が本当にその公開鍵の秘密鍵か」を True/False。**`public` は群の点そのものと、あなたの `parse_record` が返す形の両方が来る**——両方受け取れるように。\n5. **reject**(40) — 解けない組を解けないと言う。(a) まったく同じ記録が 2 つ = e が同じ = 差が 0 で逆元が取れない → `ZeroDivisionError` で落ちず `MalformedRecord`。(b) R は同じでも **署名者が違う** 組は、断るか、少なくとも `confirms` を通らない値を返す。(c) 使い回しが無いログでは `find_reuse` は空。\n6. **hunt**(40) — `attack_log(records, group)` が雑音まみれのログを通しで攻撃。`{\"secret\": 整数, \"public_key\": (x, y), \"records\": …}`、見つからなければ空の `{}`。**誰の鍵を取ったのかまで名指し**。\n7. **collision**(40) — `collision_experiment(seed, group, samples)` が弱い生成器 `truncated_nonce` を **実際に `samples` 回動かして** 測る。`{\"collisions\", \"distinct\", \"space\"}` を返し、`space` は値域(`NONCE_SPACE`)、`distinct` は「初めて出た値」、`collisions` は「すでに出ていた値」で、**2 つの和が `samples`**。40回で64通りなら衝突しやすいですが、衝突ゼロも数学的には可能です。予想ではなく実測を返します。\n8. **repair**(35) — `safe_nonce(secret, message, group)`。同じ入力からは同じ値でよいが(同じ鍵・同じ message なら同じ署名になるだけ)、**教材で試す異なるmessageや署名者で重複しない**ことを確認します。有限の値域なので任意の入力全体で衝突ゼロとは主張しません。値は 1〜n−1 で、**n の広さをそのまま使う**(短く切り詰めは落ちる)。この checkpoint だけ secp256k1 で回ります(練習用の群はスカラーが 50 個未満で、60 個の message に別々の nonce を配れないため)。\n\n各 checkpoint の **「提出 (+N pt)」** を押すと、そのときの `recover.py` が送られて採点(打ち込む欄なし)。8 つは独立採点、まちがえるごとに −15 点。**「公開テストを実行」** は下見、**「初期状態に戻す」** で元に戻ります。\n\n## 使い回しを避け、確認した範囲を区別する\n\n雑音まじりのログから **攻撃できる組だけ** を挙げ、鍵を取って裏を取り、解けない組は解けないと言い、衝突を起こしにくい nonce に直す。同じ公開鍵・同じR・異なるeの有効な2記録から秘密を抽出できることを、自分のコードで確かめます。これは署名方式全体の安全性を示す証明ではありません。この決定的な safe nonce は、決定的なnonce生成の考え方を学ぶ模型です。実用の署名標準全体を実装するものではありません。",
+  "writeup": "## これは乱数の話ではない\n\nnonce 再利用は 「弱い乱数生成器を使うと危ない」 として語られることが多い。 それは症状の説明であって、 理由の説明ではない。\n\n理由は special soundness（特殊健全性）である。同じ公開鍵とcommitment（点R）、異なるchallenge（質問e）を持つ有効な2記録から、秘密鍵を抽出できる。この抽出性が乱数再利用の攻撃を説明する。式だけで署名方式全体の安全性が証明されるわけではない。\n\n## R の共有は十分条件ではない\n\nlog には別の signer が同じ R を使っている行が入れてある。 鍵が違えば、 2 本の transcript は 1 つの未知数についての 2 本の式ではない。 攻撃すると 「誰のものでもない scalar」 が出る。 だから復元は必ず P = xG で確認する。 算術は間違った組に対しても成功する。\n\n同様に、 きれいに parse できるが検証を通らない行も入れてある。 拒否される transcript の中の再利用は何も証明しない。\n\ne1 = e2 のときに逆元が存在しないのは、 同じ challenge への 2 回の応答が同じ式を 2 回書いただけだから。 情報が増えていない。\n\n## 3 つの nonce generator\n\n- `fixed_nonce`: 毎回同じ。 即座に死ぬ。\n- `truncated_nonce`: 本物のハッシュを取り、 数ビットに切り詰める。 **log 上では完全にランダムに見える**。 どの k も違って見え、 すべての署名が検証を通り、 目視では何もおかしくない。 それでも birthday bound で衝突する。\n- `deterministic_nonce`: 秘密鍵と message のハッシュ。 秘密鍵とメッセージに依存させ、大きい値域を使う。 同じ鍵と同じ message は同じ nonce を生むが、 それは同じ署名を生むだけで新しい情報は漏れない。 異なるmessageも有限のスカラー範囲へ写した後は衝突し得る。大きい値域によって、その確率を小さくする。 鍵も入れるのは、 message だけだと 2 人の signer が同じ message で同じ nonce を使ってしまうため。\n\n## 群位数と、書けない test\n\nrepair checkpoint は secp256k1 で回す。 toy 群は scalar が 50 個未満しかなく、 60 通の message に相異なる nonce を割り当てることが鳩の巣原理で**不可能**だから。 40 元の群に安全な nonce 生成器は存在しない。 群が小さいこと自体が脆弱性であって、 生成器の欠陥ではない。 不可能なことを assert する test は、 テストの失敗ではなく設計の失敗である。\n\nnonce space の truncation も、 「60 サンプルが全部相異なるか」 では捕まらない。 16 bit でも 60 draws が全部相異なる確率は約 97% で、 大半の実行をすり抜ける。 検出は値域で行う — 256 bit の位数に対して全出力が 2^64 未満に収まる確率は 2^-11000 程度で、 これは偶然ではなく truncation の証拠になる。\n\n## 次につながるところ\n\nWeek 4 以降の証明系でも 「同じ commitment に 2 つの challenge」 は繰り返し現れる。 そこでは抽出器は攻撃ではなく安全性証明の道具として出てくるが、 中身は同じ引き算である。",
   "tags": [
     "advanced-cryptography-2026",
     "week3",
@@ -63,7 +63,7 @@
     "復元した鍵を公開鍵で確認し、確認なしに主張しない",
     "R の共有は必要だが十分ではないと説明できる",
     "「ランダムに見える」ことと entropy が別だと、実験で示せる",
-    "二度と同じ k を出さない決定的な nonce の条件を述べられる"
+    "決定的なnonce生成で鍵とメッセージを使う理由と、有限の値域では衝突ゼロを保証できないことを説明できる"
   ],
   "runtime": {
     "provider": "docker",
@@ -82,7 +82,24 @@
         "input": "multiline",
         "label": "外から来た log を読む",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "parse-hint-1",
+            "content": "外から届く記録は、計算の前に形と値を確かめます。壊れた行を点や整数として扱うと、鍵の計算より前に止まります。形が正しいことと署名が有効なことは別々に検査します。",
+            "penalty": 2
+          },
+          {
+            "id": "parse-hint-2",
+            "content": "小例：response=3は整数ですが、response=\"3\"は文字列です。p=7の曲線y²=x³+1なら点(0,1)は1=1で曲線上、(0,2)は4≠1で外です。実際の曲線はgroupが渡します。",
+            "penalty": 2
+          },
+          {
+            "id": "parse-hint-3",
+            "content": "recover.pyのparse_recordで4キーと型を確認し、0<=response<group.nを確かめます。public_keyとcommitmentの座標2個をgroup.point(x,y)へ渡し、group.contains(point)で確認。辞書のmessageはbytes、responseは整数、公開鍵とRは点にそろえて返します。失敗はMalformedRecord。parseを提出します。 すでにPointなら再変換せず確認します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "detect",
@@ -93,8 +110,18 @@
         "hints": [
           {
             "id": "detect-hint-1",
-            "content": "R が同じであることは必要条件。 では十分条件は何か。 2 本の式が 1 つの未知数についての式であるために、 他に何が一致していなければならないか。",
-            "penalty": 15
+            "content": "使い回しを見つける目的は、同じ秘密鍵と同じ乱数の2本の式を作ることです。同じRだけでは不十分で、公開鍵も同じ、両方有効、質問eは異なる必要があります。",
+            "penalty": 2
+          },
+          {
+            "id": "detect-hint-2",
+            "content": "例：行0と行3の公開鍵PとRが一致しても、eが同じなら同じ式の繰り返しです。eが異なり両方の検証が通るときだけ(0,3)を返します。途中の壊れた行を除いても元の番号を変えません。",
+            "penalty": 2
+          },
+          {
+            "id": "detect-hint-3",
+            "content": "enumerate(records)で元の番号を保ち、parse_recordが失敗した行は除きます。acceptsでe=challenge(DOMAINS[0],R,P,message,group)を求め、group.generator.scalar_mul(z)==R+P.scalar_mul(e)を確認。find_reuseはi<jの組を比べ、同じP/Rかつ異なるeの有効な組だけ返します。detectを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -107,8 +134,18 @@
         "hints": [
           {
             "id": "extract-hint-1",
-            "content": "z1 から z2 を引くと何が消えるか。 残った式を x について解くには何が要るか。",
-            "penalty": 20
+            "content": "同じ乱数kを使った返事どうしを引くとkが消えます。残るのは質問の差に秘密鍵を掛けたものです。質問の差が0でなければ、逆元を掛けて秘密鍵を求められます。",
+            "penalty": 2
+          },
+          {
+            "id": "extract-hint-2",
+            "content": "n=7、x=2、k=1。e1=1ならz1=3、e2=3ならz2=0です。差は3と−2→5。5×3の余りは1なので逆元は3。x=(3×3)の余り=2。式はx=((z1−z2)*pow((e1−e2)%n,-1,n))%n。",
+            "penalty": 2
+          },
+          {
+            "id": "extract-hint-3",
+            "content": "recover_secretで2記録を点の辞書へそろえ、両方有効・同じP/R・異なるeを確認します。各eはchallenge(DOMAINS[0],R,P,message,group)。responseの差とeの差をgroup.nで割った余りにし、eの差の逆元を掛けて再び余りを返します。extractを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -117,7 +154,24 @@
         "input": "multiline",
         "label": "復元した鍵を確認する",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "confirm-hint-1",
+            "content": "引き算で出た数だけを信用せず、その数から公開鍵を作り直します。元の公開鍵と一致して初めて、その署名者の鍵と確認できます。",
+            "penalty": 2
+          },
+          {
+            "id": "confirm-hint-2",
+            "content": "公開鍵の式はP=x*G。Gは出発点で、2*GはG+Gです。例えばsecret=2ならgroup.generator.scalar_mul(2)を作り、受け取った点と==で比較します。座標の整数を単純に2倍する計算ではありません。",
+            "penalty": 2
+          },
+          {
+            "id": "confirm-hint-3",
+            "content": "confirmsはpublicが辞書ならpublic[\"public_key\"]を取り出し、座標の組ならgroup.pointへ、点ならそのまま使います。group.generator.scalar_mul(secret)とその点を比較し、True/Falseを返します。confirmを提出します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "reject",
@@ -128,8 +182,18 @@
         "hints": [
           {
             "id": "reject-hint-1",
-            "content": "e1 = e2 のとき、 2 本目の式は 1 本目と何が違うか。",
-            "penalty": 15
+            "content": "解けない組から適当な数を返すと、無関係の人を攻撃したことになります。形・署名の有効性・同じP/R・異なるeを、逆元を計算する前に確かめます。",
+            "penalty": 2
+          },
+          {
+            "id": "reject-hint-2",
+            "content": "同じ記録を2回渡すとe1−e2=0です。0に何を掛けても余り1にはならず、逆元はありません。メッセージが違ってもeが衝突することがあるので、記録の一致だけでは判定できません。",
+            "penalty": 2
+          },
+          {
+            "id": "reject-hint-3",
+            "content": "recover_secretに事前検査をまとめ、不正な記録、異なるP/R、同じeはMalformedRecordにします。find_reuseはその組を報告しないようにします。同じ行を2回渡して拒否、使い回しのない一覧で[]となることを確認し、rejectを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -138,7 +202,24 @@
         "input": "multiline",
         "label": "noise の中から見つけ出す",
         "points": 40,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "hunt-hint-1",
+            "content": "攻撃全体は、記録を読む→有効な組を見つける→鍵を復元→公開鍵で確認、の順です。不正な行1本でログ全体を止めず、確認できた署名者の鍵だけ報告します。",
+            "penalty": 2
+          },
+          {
+            "id": "hunt-hint-2",
+            "content": "例：候補(0,3)から得たxが公開鍵Pと一致すれば、secretにx、public_keyに(P.x,P.y)、recordsに[0,3]を入れます。候補がなければ{}。数xだけ返すと誰の鍵か確かめられません。",
+            "penalty": 2
+          },
+          {
+            "id": "hunt-hint-3",
+            "content": "attack_logはfind_reuseの各(i,j)について元のrecords[i],records[j]をrecover_secretへ渡し、confirmsで裏付けます。失敗した組は次へ進み、確認できた組を辞書で返します。recordsは根拠となる元の行番号の組として記録できます。見つからなければ{}を返し、huntを提出します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "collision",
@@ -149,8 +230,18 @@
         "hints": [
           {
             "id": "collision-hint-1",
-            "content": "生成器の値域は 64 通り。 40 回引いたら衝突は何回起きるか、 走らせる前に予測する。",
-            "penalty": 18
+            "content": "衝突は、すでに出た乱数がもう一度出ることです。同じ入力を繰り返すのでなく、異なるメッセージに対する弱い生成器を測ります。予想と実測を分け、結果を決め打ちしません。",
+            "penalty": 2
+          },
+          {
+            "id": "collision-hint-2",
+            "content": "出た値が2,5,2,2なら、初めての値は2個、再登場は2回、合計4回です。setという重複しない集合に値を足すとdistinctを数えられ、collisions=samples−distinctとなります。",
+            "penalty": 2
+          },
+          {
+            "id": "collision-hint-3",
+            "content": "collision_experimentでi=0〜samples−1を回し、例えばmessage=f\"trial-{i}\".encode()とします。truncated_nonce(seed,1,message,group)を毎回呼び、setへ入れます。distinct=len(set)、collisions=samples−distinct、space=NONCE_SPACEの辞書を返します。collisionを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -163,8 +254,18 @@
         "hints": [
           {
             "id": "repair-hint-1",
-            "content": "同じ鍵で同じ message なら同じ nonce でよい。 同じ署名になるだけで新しい情報は出ない。 では何が衝突してはいけないか。",
-            "penalty": 15
+            "content": "短い値域をやめ、秘密鍵とメッセージの両方からnonceを作ります。同じ入力は同じ値に、違う入力は大きい値域へ散らします。有限の値域なので衝突ゼロの保証ではなく、教材では検査対象の重複を調べます。",
+            "penalty": 2
+          },
+          {
+            "id": "repair-hint-2",
+            "content": "HMAC-SHA256は秘密鍵とデータから32バイトの値を作る関数です。バイトは0〜255の数1個、bytesはその列。結果を整数hへ読み替え、1+h%(n−1)なら0を避けて1〜n−1へ入ります。例：h=10,n=7なら1+4=5。",
+            "penalty": 2
+          },
+          {
+            "id": "repair-hint-3",
+            "content": "safe_nonceでwidth=(group.n.bit_length()+7)//8を求め、secret.to_bytes(width,\"big\")をHMACの鍵にします。messageはbytesのまま、固定の用途名と長さを付けて結合します。hmac.new(key,data,hashlib.sha256).digest()をint.from_bytes(...,\"big\")へ渡し、1+h%(group.n−1)を返します。64で切り詰めず、repairを提出します。これは教材の生成器で、実用の署名標準全体ではありません。 widthは鍵を何バイトで表すかです。dataの例：`b\"nonce-drill-v1\" + len(message).to_bytes(8,\"big\") + message`。",
+            "penalty": 2
           }
         ]
       }
@@ -175,8 +276,8 @@
       "name": "The same R twice is the key",
       "shortDescription": "A signing service's audit log holds the message, public key, R and z — and no secret key. Yet find the one pair where R appears twice and the secret key is a subtraction away. That same extraction is the very reason the scheme is sound.",
       "description": "Fourth problem of Week 3; its role is transfer. Nonce reuse is treated not as a fact to memorise about randomness quality but as the special soundness of the Sigma protocol itself.\n\nFrom z1 = k + e1*x and z2 = k + e2*x, k cancels and x = (z1 - z2) * (e1 - e2)^-1 mod n falls out. That is the very property that makes the protocol a proof of knowledge — the implementation confirms that \"the grounds of soundness\" and \"why reuse is fatal\" are the same fact.\n\nThe material is a noisy audit log. It contains malformed lines, lines that parse cleanly but fail verification, and **lines where a different signer used the same R**. Sharing R is necessary but not sufficient — with different keys there is more than one unknown to solve for.\n\nThree nonce generators: `fixed_nonce` dies instantly; `truncated_nonce` looks perfectly random in the log and collides at the birthday bound; `deterministic_nonce` has the most alarming name and is in fact safe. \"Looks random\" is not entropy — that is the collision checkpoint's theme.\n\n**Group order handling**: the repair checkpoint runs on secp256k1, because the toy group has fewer than 50 scalars and assigning 60 distinct nonces to 60 messages is impossible by pigeonhole. No safe nonce generator exists over a 40-element group; the group being small is itself the vulnerability. No test asserts the impossible.\n\nLikewise, truncation of the nonce space cannot be detected by \"are 60 samples all distinct\" (even 16 bits gives distinctness with 97% probability). Detection is by range — the probability that every output stays below 2^64 against a 256-bit order is effectively zero.",
-      "instructions": "## Every signature is valid. The key still leaks\n\nWhat you are handed is a signing service's **audit log** — message, public key, envelope R, response z per row. **No secret key anywhere**: keeping a log was safe precisely because none is in it. Every signature verifies.\n\nYet somewhere in this log one signer used **the same R twice**. Same R means the same random k — and then one subtraction hands you their secret key. Someone with **read access only** walks away with it. Real wallets and devices have had private keys extracted in exactly this way.\n\n## And this is not a flaw in the scheme\n\nBeing able to pull the key out is the flip side of the signature's **strength**. The reason we can say \"anyone who passes verification really knows x\" is exactly that **x can be recovered from two signatures**. The protocol's soundness and the fatality of reusing a nonce are **the same single equation**. Here you use that equation from the attacker's side once, then repair the nonce so the same k can never come round again.\n\n## Before you start (shaky on signatures? do schnorr first)\n\n- **The signature is the schnorr one**: `R = k·G`, `e = H(domain, R, P, message)`, `z = k + e·x (mod n)`, verified by `z·G = R + e·P` (built in `ac26-w3-schnorr`). The arithmetic is provided in `participant.schnorr`: call `challenge(...)`, `sign_with(...)`, the group.\n- **Divisors**: coordinates mod p, z and e mod **n** (the order of G). No fractions, so dividing is `pow(value, -1, n)`.\n- **Words**: nonce = \"number used once\" (the k), the name itself saying do not reuse it. The birthday bound = \"a room of 40 very likely holds two with the same birthday\" — **few possible values, and a repeat shows up after few draws**. Audit log = the record of who signed what and when. checkpoint = eight.\n\n## Once on paper (n = 29, x = 7, envelope with k = 3)\n\ne₁ = 5 gives z₁ = 3 + 5×7 = 38 ≡ 9. The same k with e₂ = 11 gives z₂ = 80 ≡ 22. Subtracting: z₁ − z₂ = −13 ≡ 16 and e₁ − e₂ = −6 ≡ 23. So **23·x ≡ 16**. The inverse of 23 is 24, so x ≡ 16×24 = 384 ≡ **7** — the secret, out.\n\n## The crux: \"same R\" is not enough\n\nFor two rows to be two equations in the **same one unknown**, more than R has to match (the same signer, for one). The log has rows planted with a shared R that fail that. **Separating necessary from sufficient** is the substance of detect. And a weak generator drawing from only 64 values is mixed in: predict how many collisions 40 draws produce **before** you measure (the birthday question — not colliding would be the surprise).\n\n## First move\n\nIn Participant Portal, select **起動 (Start)**; the problem editor (`recover.py`) appears on the same page.\n\nPress **Inspect evidence**. Five things: ① a health token (not submitted), ② the log's row count and what a row holds (message, public key, R, z — no secret key), ③ the log table (row number, public key, R, z), ④ which R values appear more than once, ⑤ the notes (some rows malformed; at least one parses cleanly yet does not verify; not every duplicate R is an opportunity; the weak generator draws from 64 values; predict the collisions in 40 draws first).\n\n**On paper** (nothing to submit): from ④, write down what two rows sharing an R need besides the R to be two equations in one unknown. Then fix your prediction for ⑤ before measuring.\n\n## What you answer — eight checkpoints\n\n`recover.py` is the only file you edit. The error name `MalformedRecord` and the eight function skeletons are there. The signature arithmetic (`challenge`, `sign_with`, the weak generator `truncated_nonce`, its range `NONCE_SPACE`) lives in `participant.schnorr`. A log row is `{\"message\": bytes, \"public_key\": (x, y), \"commitment\": (x, y), \"response\": int}`.\n\n1. **parse** (30) — `parse_record(record, group)` reads one row and returns a normalized dict (at least `\"response\"` and `\"public_key\"`). **Treat outside data as broken**: a missing key, a `message` that is not `bytes`, a `response` outside 0..n−1, a `public_key`/`commitment` not on the curve — all raise `MalformedRecord`.\n2. **detect** (35) — `find_reuse(records, group)` returns the list of index pairs `(i, j)` **that can be attacked together**. Sharing an R is necessary, not sufficient. The grader re-verifies each pair.\n3. **extract** (50) — `recover_secret(first, second, group)` returns the secret from two valid records sharing an envelope. After the subtraction, **something must be inverted**. Swapping the two arguments must give the same answer.\n4. **confirm** (30) — `confirms(secret, public, group)` returns True/False for \"is this scalar really that public key's secret\". **`public` arrives both as a group point and in whatever form your `parse_record` returns** — accept both.\n5. **reject** (40) — say \"not solvable\" when it is not. (a) Two identical records mean equal e, a difference of 0 with no inverse → raise `MalformedRecord` rather than falling into `ZeroDivisionError`. (b) A shared R from **different signers** — refuse it, or at least return something `confirms` rejects. (c) A log with no reuse makes `find_reuse` return nothing.\n6. **hunt** (40) — `attack_log(records, group)` runs the whole attack against the noisy log. It returns `{\"secret\": int, \"public_key\": (x, y), \"records\": …}`, or an empty `{}` when there is nothing. **It must name whose key it recovered.**\n7. **collision** (40) — `collision_experiment(seed, group, samples)` measures the weak generator `truncated_nonce` by **actually running it `samples` times**. It returns `{\"collisions\", \"distinct\", \"space\"}`, where `space` is the range (`NONCE_SPACE`), `distinct` counts first-seen values, `collisions` counts already-seen ones, and **the two sum to `samples`**. With 40 draws from 64, \"no collision\" means it was not run.\n8. **repair** (35) — `safe_nonce(secret, message, group)`. It may be deterministic (same key and message → the same signature, nothing new leaked), but **different messages, and different signers of the same message, must not collide**. The value is in 1..n−1 and must **use the full width of n** (truncating is caught). This checkpoint alone runs over secp256k1 (a practice group has under fifty scalars, too few to give 60 messages distinct nonces).\n\nEach checkpoint's **提出 (Submit, +N pt)** sends the current `recover.py` and grades it (nothing to type). The eight are graded independently; each wrong try costs 15 points. **Run public tests** is a preview; **Restore starter** brings back the original.\n\n## Safety comes down to \"never emit the same k twice\"\n\nPull **only the attackable pairs** from a noisy log, recover a key and confirm it, say \"not solvable\" about the pairs that are not, and repair the nonce so the same k never comes round again. That the protocol's soundness and the fatality of nonce reuse are **the same single equation** — you have now seen it in your own code. The deterministic safe nonce you write is exactly the idea signatures in production rely on.",
-      "writeup": "## This is not a story about random numbers\n\nNonce reuse is usually told as \"weak random number generators are dangerous\". That describes the symptom, not the reason.\n\nThe reason is **special soundness**: two accepting transcripts that share a commitment and differ in the challenge yield the witness. That is the definition of the Sigma protocol being a proof of knowledge — the property that guarantees the prover really knows x. The extractor exists, so the protocol is sound; the extractor exists, so reuse is fatal. One fact, two consequences.\n\n## Sharing R is not sufficient\n\nThe log contains a record from a *different* signer that happens to use the same R. With different keys, the two transcripts are not two equations in one unknown, and attacking them produces a scalar belonging to nobody. That is why a recovery is always confirmed against P = xG: the arithmetic succeeds on the wrong pair too.\n\nThe log also contains a record that parses cleanly and does not verify. Reuse inside a rejected transcript proves nothing.\n\nAnd when e1 = e2 there is no inverse, because two responses to the same challenge are one equation written twice. No new information arrived.\n\n## Three nonce generators\n\n- `fixed_nonce` — the same k every time. Dies immediately.\n- `truncated_nonce` — a genuine hash, thrown away down to a few bits. **In the log it looks perfectly random.** Every k differs, every signature verifies, nothing is visibly wrong. It collides on the birthday schedule anyway.\n- `deterministic_nonce` — a hash of the secret key and the message. The name is the most alarming and it is the safe one: the same key and message give the same nonce, which gives the same signature and leaks nothing new, while two different messages cannot collide without a hash collision. The key goes in too — hashing the message alone would give two signers the same nonce for the same message.\n\n## Group order, and the test that cannot be written\n\nThe repair checkpoint runs on secp256k1. A toy group has fewer than fifty scalars, so sixty messages cannot possibly get sixty distinct nonces — the pigeonhole says so before any code exists. There is no safe nonce generator in a forty-element group; the group being small **is** the vulnerability. A test that asserts the impossible is a design failure, not a failing test.\n\nTruncation is likewise not caught by \"are the sixty samples distinct\". At sixteen bits, sixty draws are all distinct about 97% of the time, so that assertion would let it through on most runs. The range is what rules it out: against a 256-bit order, every output landing below 2^64 has probability around 2^-11000 — that is evidence, not luck.\n\n## Where this leads\n\n\"One commitment, two challenges\" reappears throughout the proof systems in later weeks. There the extractor shows up as a tool in a security proof rather than as an attack, but it is the same subtraction.",
+      "instructions": "## Vocabulary and formulas first\n\nA signature is data checked with a public key to verify a message’s author. This is a small Schnorr teaching exercise. A group is a set with point addition; G is a starting point, kG adds G k times. The order n is the first positive integer with nG equal to the zero point, distinct from the coordinate prime p. Every order n used here is prime, so every nonzero remainder has an inverse. An integer coefficient is a scalar.\n\nx is the secret key, P=xG the public key, k this signature’s randomness, and R=kG its public point, called the envelope below. H is a hash function mapping data to a fixed-length value; domain labels the purpose, and message is the signed data. The supplied challenge function computes e. The symbol≡ means equal remainders and mod means remainder.\n\nRecovery is **x=((z1−z2)×inverse(e1−e2)) mod n**. An inverse multiplies to remainder1; Python uses pow(value,-1,n). Require valid records with the same P and R and different e. Confirmation is **xG=P**. This extraction property is called special soundness; the equation alone is not a proof of the entire signature scheme’s security.\n\nSupplied APIs: group.point(x,y) converts coordinates, group.contains(point) checks membership and group.generator.scalar_mul(k) computes kG. Import DOMAINS and challenge from participant.schnorr; challenge(DOMAINS[0],R,P,message,group) returns e. Verify zG==R+eP with `group.generator.scalar_mul(z) == R + P.scalar_mul(e)`. Import `Point` from `participant.schnorr`: keep an `isinstance(value, Point)` value as a point; otherwise convert its coordinate pair with `group.point(*value)`.\n\nFor repair, standard-library hmac and hashlib are available. HMAC-SHA256 maps a secret key and data to32 bytes; a byte is an integer0–255. Read this output as integer h with int.from_bytes(...,\"big\") and map to1+h%(n−1). Use the secret as the HMAC key and an unambiguous fixed purpose label, message length and message as data. secp256k1 is the large elliptic curve used for the repair check; group supplies its point arithmetic.\n\n## Valid signatures can still leak a reused key\n\nWhat you are handed is a signing service's **audit log** — message, public key, envelope R, response z per row. **No secret key anywhere**: keeping a log was safe precisely because none is in it. Valid signatures are mixed with invalid records.\n\nYet somewhere in this log one signer used **the same R twice**. Same R means the same random k — and then one subtraction hands you their secret key. Someone with **read access only** walks away with it. Real wallets and devices have had private keys extracted in exactly this way.\n\n## And this is not a flaw in the scheme\n\nExtract a key from two valid records sharing P and R but differing in e. This does not mean arbitrary signatures made with different nonces expose the key.\n\n## Before you start (shaky on signatures? do schnorr first)\n\n- **The signature is the schnorr one**: `R = k·G`, `e = H(domain, R, P, message)`, `z = k + e·x (mod n)`, verified by `z·G = R + e·P` (built in `ac26-w3-schnorr`). The arithmetic is provided in `participant.schnorr`: call `challenge(...)`, `sign_with(...)`, the group.\n- **Divisors**: coordinates mod p, z and e mod **n** (the order of G). No fractions, so dividing is `pow(value, -1, n)`.\n- **Words**: nonce = \"number used once\" (the k), the name itself saying do not reuse it. The birthday bound = \"a room of 40 very likely holds two with the same birthday\" — **few possible values, and a repeat shows up after few draws**. Audit log = the record of who signed what and when. checkpoint = eight.\n\n## Once on paper (n = 29, x = 7, envelope with k = 3)\n\ne₁ = 5 gives z₁ = 3 + 5×7 = 38 ≡ 9. The same k with e₂ = 11 gives z₂ = 80 ≡ 22. Subtracting: z₁ − z₂ = −13 ≡ 16 and e₁ − e₂ = −6 ≡ 23. So **23·x ≡ 16**. The inverse of 23 is 24, so x ≡ 16×24 = 384 ≡ **7** — the secret, out.\n\n## The crux: \"same R\" is not enough\n\nFor two rows to be two equations in the **same one unknown**, more than R has to match (the same signer, for one). The log has rows planted with a shared R that fail that. **Separating necessary from sufficient** is the substance of detect. And a weak generator drawing from only 64 values is mixed in: predict how many collisions 40 draws produce **before** you measure (the birthday question — not colliding would be the surprise).\n\n## First move\n\nIn Participant Portal, select **起動 (Start)**; the problem editor (`recover.py`) appears on the same page.\n\nPress **Inspect evidence**. Five things: ① a health token (not submitted), ② the log's row count and what a row holds (message, public key, R, z — no secret key), ③ the log table (row number, public key, R, z), ④ which R values appear more than once, ⑤ the notes (some rows malformed; at least one parses cleanly yet does not verify; not every duplicate R is an opportunity; the weak generator draws from 64 values; predict the collisions in 40 draws first).\n\n**On paper** (nothing to submit): from ④, write down what two rows sharing an R need besides the R to be two equations in one unknown. Then fix your prediction for ⑤ before measuring.\n\n## What you answer — eight checkpoints\n\n`recover.py` is the only file you edit. The error name `MalformedRecord` and the eight function skeletons are there. The signature arithmetic (`challenge`, `sign_with`, the weak generator `truncated_nonce`, its range `NONCE_SPACE`) lives in `participant.schnorr`. A log row is `{\"message\": bytes, \"public_key\": (x, y), \"commitment\": (x, y), \"response\": int}`.\n\n1. **parse** (30) — `parse_record(record, group)` reads one row and returns a normalized dict (at least `\"response\"` and `\"public_key\"`). **Treat outside data as broken**: a missing key, a `message` that is not `bytes`, a `response` outside 0..n−1, a `public_key`/`commitment` not on the curve — all raise `MalformedRecord`.\n2. **detect** (35) — `find_reuse(records, group)` returns the list of index pairs `(i, j)` **that can be attacked together**. Sharing an R is necessary, not sufficient. The grader re-verifies each pair.\n3. **extract** (50) — `recover_secret(first, second, group)` returns the secret from two valid records sharing an envelope. After the subtraction, **something must be inverted**. Swapping the two arguments must give the same answer.\n4. **confirm** (30) — `confirms(secret, public, group)` returns True/False for \"is this scalar really that public key's secret\". **`public` arrives both as a group point and in whatever form your `parse_record` returns** — accept both.\n5. **reject** (40) — say \"not solvable\" when it is not. (a) Two identical records mean equal e, a difference of 0 with no inverse → raise `MalformedRecord` rather than falling into `ZeroDivisionError`. (b) A shared R from **different signers** — refuse it, or at least return something `confirms` rejects. (c) A log with no reuse makes `find_reuse` return nothing.\n6. **hunt** (40) — `attack_log(records, group)` runs the whole attack against the noisy log. It returns `{\"secret\": int, \"public_key\": (x, y), \"records\": …}`, or an empty `{}` when there is nothing. **It must name whose key it recovered.**\n7. **collision** (40) — `collision_experiment(seed, group, samples)` measures the weak generator `truncated_nonce` by **actually running it `samples` times**. It returns `{\"collisions\", \"distinct\", \"space\"}`, where `space` is the range (`NONCE_SPACE`), `distinct` counts first-seen values, `collisions` counts already-seen ones, and **the two sum to `samples`**. With40 draws from64 a collision is likely, but zero collisions is mathematically possible. Return the actual measurement.\n8. **repair** (35) — `safe_nonce(secret, message, group)`. It may be deterministic (same key and message → the same signature, nothing new leaked), but **the exercise’s tested messages and signers must not collide**; a finite range cannot guarantee collision freedom for all possible inputs. The value is in 1..n−1 and must **use the full width of n** (truncating is caught). This checkpoint alone runs over secp256k1 (a practice group has under fifty scalars, too few to give 60 messages distinct nonces).\n\nEach checkpoint's **提出 (Submit, +N pt)** sends the current `recover.py` and grades it (nothing to type). The eight are graded independently; each wrong try costs 15 points. **Run public tests** is a preview; **Restore starter** brings back the original.\n\n## Avoid reuse and state the scope of your checks\n\nPull **only the attackable pairs** from a noisy log, recover a key and confirm it, say \"not solvable\" about the pairs that are not, and repair the generator to make collisions across different inputs unlikely. You have verified extraction from two valid records with the same public key and R and different challenges. This does not prove security of the whole signature scheme. This models deterministic nonce generation, not a complete production signature standard.",
+      "writeup": "## This is not a story about random numbers\n\nNonce reuse is usually told as \"weak random number generators are dangerous\". That describes the symptom, not the reason.\n\nThe reason is **special soundness**: two accepting transcripts that share a public key and commitment and differ in the challenge yield the witness. This extraction property explains the attack; it is not by itself a security proof for the whole signature scheme.\n\n## Sharing R is not sufficient\n\nThe log contains a record from a *different* signer that happens to use the same R. With different keys, the two transcripts are not two equations in one unknown, and attacking them produces a scalar belonging to nobody. That is why a recovery is always confirmed against P = xG: the arithmetic succeeds on the wrong pair too.\n\nThe log also contains a record that parses cleanly and does not verify. Reuse inside a rejected transcript proves nothing.\n\nAnd when e1 = e2 there is no inverse, because two responses to the same challenge are one equation written twice. No new information arrived.\n\n## Three nonce generators\n\n- `fixed_nonce` — the same k every time. Dies immediately.\n- `truncated_nonce` — a genuine hash, thrown away down to a few bits. **In the log it looks perfectly random.** Every k differs, every signature verifies, nothing is visibly wrong. It collides on the birthday schedule anyway.\n- `deterministic_nonce` — a hash of the secret key and the message. It depends on both the key and message and uses a large scalar range: the same key and message give the same nonce, which gives the same signature and leaks nothing new, while different messages can still collide after mapping into the finite scalar range; the large range makes such collisions unlikely. The key goes in too — hashing the message alone would give two signers the same nonce for the same message.\n\n## Group order, and the test that cannot be written\n\nThe repair checkpoint runs on secp256k1. A toy group has fewer than fifty scalars, so sixty messages cannot possibly get sixty distinct nonces — the pigeonhole says so before any code exists. There is no safe nonce generator in a forty-element group; the group being small **is** the vulnerability. A test that asserts the impossible is a design failure, not a failing test.\n\nTruncation is likewise not caught by \"are the sixty samples distinct\". At sixteen bits, sixty draws are all distinct about 97% of the time, so that assertion would let it through on most runs. The range is what rules it out: against a 256-bit order, every output landing below 2^64 has probability around 2^-11000 — that is evidence, not luck.\n\n## Where this leads\n\n\"One commitment, two challenges\" reappears throughout the proof systems in later weeks. There the extractor shows up as a tool in a security proof rather than as an attack, but it is the same subtraction.",
       "learningGoals": [
         "Find two signatures in the log that share the envelope R",
         "Extract the secret key algebraically from the difference of the two responses",
@@ -184,12 +285,26 @@
         "Confirm a recovered key against the public key rather than claiming it unchecked",
         "Explain why sharing R is necessary but not sufficient",
         "Show by experiment that looking random is not the same as having entropy",
-        "State the conditions for a deterministic nonce that never emits the same k twice"
+        "Explain why deterministic nonces depend on the key and message, and why a finite range cannot guarantee zero collisions"
       ],
       "checks": [
         {
           "id": "parse",
-          "label": "Read a log that came from outside"
+          "label": "Read a log that came from outside",
+          "hints": [
+            {
+              "id": "parse-hint-1",
+              "content": "Validate a record before doing arithmetic. Malformed data can stop the calculation before any key is recovered. Valid shape and a valid signature are separate checks."
+            },
+            {
+              "id": "parse-hint-2",
+              "content": "Example: response=3 is an integer; response=\"3\" is a string. On y²=x³+1 modulo7, (0,1) satisfies1=1 while(0,2) gives4≠1. Use the actual supplied group for the real curve."
+            },
+            {
+              "id": "parse-hint-3",
+              "content": "In recover.py, parse_record checks four keys and types and0<=response<group.n. Convert each coordinate pair using group.point(x,y), then check group.contains(point). Return a dict retaining message as bytes, response as an integer, and public_key/commitment as points. Raise MalformedRecord on failure. Submit parse. Keep and validate an existing Point instead of unpacking it again."
+            }
+          ]
         },
         {
           "id": "detect",
@@ -197,7 +312,15 @@
           "hints": [
             {
               "id": "detect-hint-1",
-              "content": "Sharing R is necessary. What else has to match before two transcripts are two equations in one unknown?"
+              "content": "Reuse must give two equations with the same secret key and nonce. Require the same public key and R, two valid signatures, and different challenges e."
+            },
+            {
+              "id": "detect-hint-2",
+              "content": "Rows0 and3 sharing P and R still give no new equation when e is equal. Return(0,3) only when both verify and e differs. Removing malformed rows must not renumber the originals."
+            },
+            {
+              "id": "detect-hint-3",
+              "content": "Use enumerate(records) to retain original indices; skip parse_record failures. In accepts, compute e=challenge(DOMAINS[0],R,P,message,group) and test group.generator.scalar_mul(z)==R+P.scalar_mul(e). find_reuse compares i<j and returns valid pairs sharing P/R with different e. Submit detect."
             }
           ]
         },
@@ -207,13 +330,35 @@
           "hints": [
             {
               "id": "extract-hint-1",
-              "content": "Subtract z2 from z1 and see what cancels. What do you need to solve the remainder for x?"
+              "content": "Subtract responses made with the same nonce k: k cancels. The remaining challenge difference multiplies the secret. If that difference is nonzero, multiply by its inverse to recover the secret."
+            },
+            {
+              "id": "extract-hint-2",
+              "content": "With n=7,x=2,k=1, e1=1 gives z1=3 and e2=3 gives z2=0. Differences are3 and−2→5. Since5×3 has remainder1, inverse5 is3; secret=(3×3) remainder7=2. Use x=((z1−z2)*pow((e1−e2)%n,-1,n))%n."
+            },
+            {
+              "id": "extract-hint-3",
+              "content": "Normalize both records to point dictionaries in recover_secret. Verify both, same P/R, and different e; compute each e with challenge(DOMAINS[0],R,P,message,group). Reduce the response and challenge differences modulo group.n, multiply by the latter’s inverse and reduce again. Submit extract."
             }
           ]
         },
         {
           "id": "confirm",
-          "label": "Confirm the key you recovered"
+          "label": "Confirm the key you recovered",
+          "hints": [
+            {
+              "id": "confirm-hint-1",
+              "content": "Confirm a recovered number by reconstructing its public key. Only a matching point establishes whose secret it is."
+            },
+            {
+              "id": "confirm-hint-2",
+              "content": "P=x*G; G is a starting point and2*G means G+G. For secret2, compare group.generator.scalar_mul(2) with the supplied point. This is not doubling the coordinate integers."
+            },
+            {
+              "id": "confirm-hint-3",
+              "content": "In confirms, extract public[\"public_key\"] when given a dict. Convert a coordinate pair with group.point; keep a point unchanged. Compare it with group.generator.scalar_mul(secret) and return True/False. Submit confirm."
+            }
+          ]
         },
         {
           "id": "reject",
@@ -221,13 +366,35 @@
           "hints": [
             {
               "id": "reject-hint-1",
-              "content": "When e1 equals e2, how does the second equation differ from the first?"
+              "content": "An unsolvable pair must not produce an invented accusation. Check structure, valid signatures, shared P/R and different e before inversion."
+            },
+            {
+              "id": "reject-hint-2",
+              "content": "Duplicate records give e1−e2=0. Zero has no inverse because every product is zero. Distinct messages may also produce equal e, so comparing records alone is insufficient."
+            },
+            {
+              "id": "reject-hint-3",
+              "content": "Add checks to recover_secret and raise MalformedRecord for malformed or invalid records, different P/R or equal e. Do not report those pairs from find_reuse. Check that duplicate input is refused and a log without reuse returns[]. Submit reject."
             }
           ]
         },
         {
           "id": "hunt",
-          "label": "Find it in the noise"
+          "label": "Find it in the noise",
+          "hints": [
+            {
+              "id": "hunt-hint-1",
+              "content": "Combine parsing, finding valid pairs, recovery and confirmation. A malformed row must not stop the whole log. Report only a key whose public point you confirmed."
+            },
+            {
+              "id": "hunt-hint-2",
+              "content": "If pair(0,3) yields x matching P, return secret:x, public_key:(P.x,P.y), records:[0,3]. Return{} when nothing works. A number alone does not identify its owner."
+            },
+            {
+              "id": "hunt-hint-3",
+              "content": "For each(i,j) from find_reuse, pass original records[i],records[j] to recover_secret and confirm with confirms. Skip failed pairs. Return the confirmed result dict; records can retain the original index pair as evidence. Return{} when none succeeds. Submit hunt."
+            }
+          ]
         },
         {
           "id": "collision",
@@ -235,7 +402,15 @@
           "hints": [
             {
               "id": "collision-hint-1",
-              "content": "The generator draws from 64 values. Predict how many collisions 40 draws produce before running it."
+              "content": "A collision is a generated value seen before. Measure the weak generator on distinct messages rather than repeating one identical input. Keep your prediction separate from the actual measurement."
+            },
+            {
+              "id": "collision-hint-2",
+              "content": "Outputs2,5,2,2 contain2 distinct values and2 repeated draws:4 total. A set stores each value once; collisions=samples−len(set)."
+            },
+            {
+              "id": "collision-hint-3",
+              "content": "Loop i from0 to samples−1 in collision_experiment, for example with message=f\"trial-{i}\".encode(). Call truncated_nonce(seed,1,message,group) each time and add the result to a set. Return distinct=len(set),collisions=samples−distinct,space=NONCE_SPACE. Submit collision."
             }
           ]
         },
@@ -245,7 +420,15 @@
           "hints": [
             {
               "id": "repair-hint-1",
-              "content": "The same key and message may give the same nonce -- it produces the same signature and leaks nothing new. So what must never collide?"
+              "content": "Replace the tiny output space with a value derived from both the secret and message. Identical inputs may repeat; different inputs spread over a large range. A finite range cannot guarantee no collisions; this exercise checks its tested inputs."
+            },
+            {
+              "id": "repair-hint-2",
+              "content": "HMAC-SHA256 takes a secret key and data and produces32 bytes. A byte is an integer0–255; bytes is a sequence of them. Read the output as integer h and use1+h%(n−1), in1..n−1. For h=10,n=7, this gives5."
+            },
+            {
+              "id": "repair-hint-3",
+              "content": "In safe_nonce set width=(group.n.bit_length()+7)//8 and encode secret.to_bytes(width,\"big\") as the HMAC key. Combine a fixed purpose label, the byte length of message and message itself as data. Read hmac.new(key,data,hashlib.sha256).digest() with int.from_bytes(...,\"big\") and return1+h%(group.n−1). Do not truncate to64. Submit repair. This is a teaching generator, not a full production signature standard. width is the number of bytes used to encode the key. For data use, for example, `b\"nonce-drill-v1\" + len(message).to_bytes(8,\"big\") + message`."
             }
           ]
         }

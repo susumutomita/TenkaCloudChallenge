@@ -146,3 +146,9 @@ real holes in the hidden tests while this problem was being written — the log 
 non-accepting duplicate, no cross-signer duplicate, and the nonce-space check was distinctness
 rather than range. A fourth, "reports a recovery without confirming it", turned out to be an
 equivalent mutant on its own and is now mutated together with the validation it depends on.
+
+## Three-rung hint reader check (Issue #716)
+
+All eight checks now have mechanism, small example, and edit/submit hints, costing 2 points each (6 total). An independent reader used only participant instructions, hints, and the starter. Findings covered existing Point values, point-arithmetic APIs, prime group orders, HMAC byte encoding, and overstated security claims. Both locales now distinguish finite-range collisions from the inputs tested by this exercise.
+
+This checks whether the explanation leads to implementation; it is not evidence of a successful live submission or a security proof for the signature scheme. Grading and executable logic are unchanged; only the starter's introductory docstring changed.

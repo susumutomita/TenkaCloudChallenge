@@ -13,9 +13,9 @@ Two equations. Two unknowns. You already have one of them.
 
 This is not a story about weak random number generators, although it is usually told
 that way. It is the Sigma protocol's *special soundness*: two accepting transcripts that
-share a commitment and differ in the challenge yield the witness. That property is what
-makes the protocol a proof of knowledge — the same fact that makes it sound is the fact
-that makes nonce reuse fatal.
+share a public key and commitment and differ in the challenge yield the witness.
+This extraction explains the nonce-reuse attack. The equation alone is not a security
+proof for the entire signature scheme.
 
 `participant.schnorr` gives you the group, the challenge function, and the signing
 routine the log records. The log itself is handed to you as an argument, and
