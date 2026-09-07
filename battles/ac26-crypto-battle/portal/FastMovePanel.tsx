@@ -1,3 +1,4 @@
+import { chooseProveTable } from "./prove-table.ts";
 import RotorMaterials from "./RotorMaterials.tsx";
 import RsaMaterials from "./RsaMaterials.tsx";
 import Lightning from "./Lightning.tsx";
@@ -20,6 +21,7 @@ import {
 import ConceptExplanation from "./ConceptExplanation.tsx";
 import { RpsHuntStatus, RpsOrderPrediction } from "./RpsHunt.tsx";
 import RpsDuel, { RpsResult, rpsRejection } from "./RpsDuel.tsx";
+import MpcMaskDiagram from "./MpcMaskDiagram.tsx";
 import MpcWorksheet from "./MpcWorksheet.tsx";
 import HuntPanel from "./HuntPanel.tsx";
 import HintBooster, { ageHintBooster } from "./HintBooster.tsx";
@@ -181,7 +183,7 @@ export const FAST_MOVE_COPY = {
     proveTitle: "SHOW IT WITHOUT SHOWING IT — a zero-knowledge proof",
     proveUse: "USED FOR: having the judge check your solution without directly handing the full original to another team",
     proveWhy: "WHY IT WORKS: relabelling the digits keeps every row, column and box valid — the judge sees a real solution, everyone else sees 1-4 in some order",
-    proveHelp: "Choose a table. Replace each left-hand digit with the digit after its arrow, and fill the four holes on the right. Never the same table twice.",
+    proveHelp: "An unused replacement table is ready. Follow its arrows and fill the four blue cells. You do not need to choose a table.",
     proveTable: "1. Choose a relabelling table",
     proveChooseTable: "Choose a table…",
     proveReused: "used in this generation — reuse exposes your solution",
@@ -189,8 +191,8 @@ export const FAST_MOVE_COPY = {
     proveSolution: "your solution (private)",
     proveUsed: "tables you already used this generation",
     proveNoneUsed: "none yet — any table that uses each of 1-4 once, other than 1→1 2→2 3→3 4→4, is fresh",
-    proveGrid: "2. Fill the four holes",
-    proveIncomplete: "Choose a table and fill the four holes with 1–4.",
+    proveGrid: "Enter here: four blue cells",
+    proveIncomplete: "Fill the four blue cells with 1–4.",
     proveSuccess: "PROVE SUCCESS",
     proveBody: (points: number, group: string) => `+${points} · ${group} of your RELABELLED grid is on the Public Ledger; your solution is not`,
     proveMiss: "PROVE MISS",
@@ -351,7 +353,7 @@ export const FAST_MOVE_COPY = {
     proveTitle: "解を見せずに示す ― ゼロ知識証明",
     proveUse: "つかいみち: 相手チームに元の解全体を直接渡さず、解を持っていることを審判に確認してもらう",
     proveWhy: "しくみ: 数字を付け替えても行・列・箱の性質は崩れない ── 審判には本物の解、相手には「1〜4 の並び替え」にしか見えない",
-    proveHelp: "表を1つ選び、左の数字を矢印の先の数字に読み替えて、右の空欄4マスに入力します。同じ表は 2 度使わないでください。",
+    proveHelp: "置き換え表はこちらで用意します。表を選ぶ必要はありません。元の盤面の数字を矢印で読み替え、青い4マスに入力します。",
     proveTable: "1. 付け替え表を選ぶ",
     proveChooseTable: "表を選んでください",
     proveReused: "この世代で使用済み — 再利用すると解が漏れる危険あり",
@@ -359,8 +361,8 @@ export const FAST_MOVE_COPY = {
     proveSolution: "自分の解 (非公開)",
     proveUsed: "この世代で使った表",
     proveNoneUsed: "まだなし ── 1〜4 を 1 回ずつ使う表なら、1→1 2→2 3→3 4→4 以外はどれでも新品",
-    proveGrid: "2. 空欄4マスを埋める",
-    proveIncomplete: "表を選び、空欄4マスに1〜4を入れてください。",
+    proveGrid: "ここに入力：青い4マス",
+    proveIncomplete: "青い4マスに1〜4を入れてください。",
     proveSuccess: "正解！",
     proveBody: (points: number, group: string) => `+${points} · 付け替えたマス目の${group}が公開記録に載りました。解そのものは載っていません`,
     proveMiss: "PROVE MISS",
@@ -419,14 +421,14 @@ export const FAST_MOVE_COPY = {
     fheBody: (points: number) => `+${points} · 復号せずに足した`,
     fheLesson:
       "いまのが「準同型暗号」です。中身を読めない数のまま計算して、答えは正しく出ました。ブロックチェーンでは、金額を誰も公開せずに合計を検証するのに使われています。",
-    mpcTitle: "覆面をかけた小計 ― MPC (秘密計算)",
+    mpcTitle: "自分の数を隠して合計する ― MPC (秘密計算)",
     mpcUse: "つかいみち: 各拠点が自分の数を隠し、合計の余りだけを出す",
     mpcWhy: "覆面は、2つの拠点が内緒で共有する数です。片方が足し、もう片方が引くので、全拠点の小計を足すと覆面は打ち消し合います。",
     mpcHelp: "やること: 自分の数 + 受け取った覆面 − 送った覆面 を、p で割った余り",
     mpcMine: "自分の数 (非公開)",
     mpcIncoming: "受け取った覆面",
     mpcOutgoing: "送った覆面",
-    mpcAnswer: "覆面をかけた小計",
+    mpcAnswer: "公開する小計",
     mpc: "小計を提出",
     mpcHint: "計算 / 自分の数は出ない",
     mpcSuccess: "正解！",
@@ -921,7 +923,7 @@ ${SUCCESS_CSS}
 /* [Issue #677] The two gate screens -- waiting to start, and finished. Both are
    a single centred message, because in both cases there is exactly one thing to
    say and at most one thing to press. */
-.tc-gate{display:grid;justify-items:start;gap:10px;padding:18px;border:1px solid #cfd8e3;border-radius:12px;background:#fff;max-width:56ch}
+.tc-gate{display:grid;justify-items:start;gap:10px;padding:18px;border:1px solid #cfd8e3;border-radius:12px;background:#fff;width:100%;min-width:0}
 .tc-gate-title{font-size:15px;font-weight:900;letter-spacing:.08em}
 .tc-gate-body{margin:0;font-size:13px;line-height:1.7;color:#3b4a5a}
 .tc-gate-note{margin:0;font-size:11px;color:#5f6b7a}
@@ -936,7 +938,7 @@ ${SUCCESS_CSS}
 .tc-chosen-method{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px;color:#315f91}
 .tc-chosen-method button{border:1px solid #b9cbe0;border-radius:6px;color:#42536a;background:#fff;font-size:12px;padding:6px 10px;cursor:pointer}
 .tc-why{font-size:12px;color:#42536a}.tc-why>summary{cursor:pointer}.tc-why[open]>summary{margin-bottom:8px}
-.tc-move-shell{max-width:1080px;margin:0 auto;padding:0;gap:12px;border:0;background:transparent}
+.tc-move-shell{width:100%;min-width:0;margin:0;padding:0;gap:12px;border:0;background:transparent}
 .tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
 .tc-scoreline{justify-content:space-between}.tc-scoreline .tc-rival-score{margin:0;display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
 .tc-records{font-size:13px;color:#42536a}
@@ -1023,7 +1025,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // [Issue #709] Sixteen typed cells for the relabelled grid, and sixteen for
   // a recovered solution. Strings until submit: a half-typed grid is a normal
   // state, and Number("") would silently be 0.
-  const [proveTableKey, setProveTableKey] = useState("");
   const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<OrderReceipt | undefined>();
@@ -1088,7 +1089,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const tactics = useMemo(() => tacticAvailability(projection), [projection]);
   const sudokuPressure = useMemo(() => sudokuRotatePressure(projection), [projection]);
   const exposure = useMemo(() => exposureRows(projection), [projection]);
-  const proveTable = ALL_PERMUTATIONS.find((table) => table.join("") === proveTableKey);
+  const usedProveTables = JSON.stringify(projection?.vault.usedPermutations ?? []);
+  // Stable across clock updates and equivalent poll responses, private to this client.
+  const proveTable = useMemo(() => chooseProveTable(JSON.parse(usedProveTables)),
+    [projection?.vault.teamId, projection?.vault.generation, selectedOrder?.id, usedProveTables]);
   const proveGivens = proveTable && projection
     ? sudokuFillInGivens(projection.vault.sudokuSolution, proveTable) : undefined;
   const proveGrid = proveGivens
@@ -1104,8 +1108,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const ownGeneration = projection?.vault.generation;
   useEffect(() => {
     setProveCells(emptyCells());
-    setProveTableKey("");
-    setProveOpen(false);
+    setProveOpen(selectedOrderIdForProve?.endsWith("-c0") === true);
     setFheR("");
     setFheY("");
     setMpcPartial("");
@@ -1254,18 +1257,18 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <span>{locale === "ja" ? "いまのお題" : "Current Order"} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</span>
             <span className="tc-ticket-clock">{Math.ceil(selectedOrder.remainingMs / 1000)}s</span>
           </div>
-          <h2 className="tc-order-heading">{orderHeading(selectedOrder, locale)}</h2>
+          <h2 className="tc-order-heading">{proveAllowed && (proveOpen || selectedOrder.task.kind === "zk-sudoku") ? (locale === "ja" ? "数字を置き換えて、4マスを完成させよう" : "Rename the digits and complete four cells") : orderHeading(selectedOrder, locale)}</h2>
           <div className="tc-ticket-track" aria-hidden="true">
             <div
               className="tc-ticket-fill"
-              style={{ width: `${Math.max(2, Math.min(100, (selectedOrder.remainingMs / 300_000) * 100))}%` }}
+              style={{ width: `${Math.max(2, Math.min(100, (selectedOrder.remainingMs / (selectedOrder.durationMs ?? 300_000)) * 100))}%` }}
             />
           </div>
 
         </div>
       )}
 
-      <Lightning projection={projection} order={selectedOrder} locale={locale} busy={submitting}
+      {(projection.lightning?.status === "available" || projection.lightning?.status === "armed") && <Lightning projection={projection} order={selectedOrder} locale={locale} busy={submitting}
         onSelect={id => { setSelectedOrderId(id); setProveOpen(false); }}
         onDeclare={id => void run(() => submitDeclareLightning(client, id), next => ({
           kind: next?.lightning?.status === "armed" && next.lightning.contractId === id ? "hint" : "error",
@@ -1273,7 +1276,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           body: next?.lightning?.status === "armed" && next.lightning.contractId === id
             ? locale === "ja" ? `このお題の計算正解で +${next.lightning.points} 点。続けて解答してください。` : `A correct calculation on this Order earns +${next.lightning.points}. Continue to your answer.`
             : locale === "ja" ? "指定結果を読み取れませんでした。お題とカードの状態を確認してください。" : "Could not read the declaration result. Check the Order and card.",
-        }))} />
+        }))} />}
 
       {primaryActionsVisible && selectedOrder?.task.kind !== "zk-sudoku" && (
       <div>
@@ -1388,17 +1391,16 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <div className="tc-lesson-use">{copy.fheUse}</div>
             <div className="tc-lesson-why">{copy.fheWhy}</div>
           </div>
-          <div className="tc-card-hint">{copy.fheHelp}</div>
+          <p className="tc-card-hint">{locale === "ja" ? `左どうし・右どうしを足し、それぞれ ${projection.prime} で割った余りを入力します。合計が ${projection.prime} 未満なら、その数のままです。` : `Add the left numbers and the right numbers separately. Enter each remainder after division by ${projection.prime}; a smaller total stays unchanged.`}</p>
+          <label className="tc-answer-label">{locale === "ja" ? "① 左の数を足す" : "1. Add the left numbers"}
+            <div><code>{selectedOrder.task.inputs.map(input => input.r).join(" + ")}</code> → {locale === "ja" ? `${projection.prime} で割った余り` : `remainder after division by ${projection.prime}`}</div>
+            <input aria-label="fast-fhe-r" inputMode="numeric" value={fheR} onChange={(event) => setFheR(event.target.value)} placeholder={locale === "ja" ? "左の答え" : "Left answer"} />
+          </label>
+          <label className="tc-answer-label">{locale === "ja" ? "② 右の数を足す" : "2. Add the right numbers"}
+            <div><code>{selectedOrder.task.inputs.map(input => input.y).join(" + ")}</code> → {locale === "ja" ? `${projection.prime} で割った余り` : `remainder after division by ${projection.prime}`}</div>
+            <input aria-label="fast-fhe-y" inputMode="numeric" value={fheY} onChange={(event) => setFheY(event.target.value)} placeholder={locale === "ja" ? "右の答え" : "Right answer"} />
+          </label>
           <ConceptExplanation key={selectedOrder.id} locale={locale} topic="fhe" task={selectedOrder.task} prime={projection.prime} />
-          <div className="tc-card-hint">{copy.fheInputs}</div>
-          <ul className="tc-material-list">
-            {selectedOrder.task.inputs.map((input, index) => (
-              <li key={`${input.r}-${input.y}`}><code>#{index + 1} = ({input.r}, {input.y})</code></li>
-            ))}
-          </ul>
-          <div className="tc-card-hint">{copy.prime}: <code>{projection.prime}</code></div>
-          <input aria-label="fast-fhe-r" value={fheR} onChange={(event) => setFheR(event.target.value)} placeholder={copy.fheAnswerR} />
-          <input aria-label="fast-fhe-y" value={fheY} onChange={(event) => setFheY(event.target.value)} placeholder={copy.fheAnswerY} />
           <button
             type="button"
             className="tc-submit-small tc-fhe-button"
@@ -1451,12 +1453,19 @@ export default function FastMovePanel(props: PortalSlotProps) {
           <div className="tc-card-warn">{copy.cipherCost(selectedOrder.task.pairsToBreak)}</div>
           </>}
           {(selectedOrder.task.kind === "rsa-encrypt" || selectedOrder.task.kind === "rotor-encrypt") && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
+          {selectedOrder.task.kind === "caesar-shift" && <p id="tc-caesar-input-format" className="tc-card-hint">
+            {locale === "ja"
+              ? `暗号にした数字を、左から順に ${selectedOrder.task.plaintext.length} 個、半角スペースで区切って入力してください。`
+              : `Enter all ${selectedOrder.task.plaintext.length} encrypted numbers in left-to-right order, separated by spaces.`}
+            <br />{locale === "ja" ? "区切り方の例：" : "Spacing example: "}<code>1 2 3</code>
+          </p>}
           <input
             ref={cipherInputRef}
+            aria-describedby={selectedOrder.task.kind === "caesar-shift" ? "tc-caesar-input-format" : undefined}
             aria-label="fast-cipher-answer"
             value={cipherAnswer}
             onChange={(event) => setCipherAnswer(event.target.value)}
-            placeholder={selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "暗号の4文字（0〜3、空白区切り）" : "Four encrypted digits (0–3, spaces)") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : copy.cipherAnswer}
+            placeholder={selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "暗号の4文字（0〜3、空白区切り）" : "Four encrypted digits (0–3, spaces)") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : selectedOrder.task.kind === "caesar-shift" ? (locale === "ja" ? "数字を半角スペースで区切って入力" : "Numbers separated by spaces") : copy.cipherAnswer}
           />
           <button
             type="button"
@@ -1485,7 +1494,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "masked-total" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.mpcTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          <p className="tc-card-hint">{locale === "ja" ? "秘密計算（MPC）は、互いの入力を明かさず協力して計算する技術です。今回は隠すための数（覆面）を足し引きし、合計だけを出す仕組みを体験します。" : "Find a combined total without directly showing your own input. Add and subtract the numbers called masks before submitting."}</p>
+          <p className="tc-card-hint">{locale === "ja" ? "秘密計算（MPC）は、自分の数を明かさず、みんなで計算する技術です。ここではランダムに選んだ数を内緒で交換して、自分の数を隠します。この隠す数をマスクと呼びます。" : "MPC computes together without revealing each input. Here, participants privately exchange random numbers to hide their inputs. These hiding numbers are called masks."}</p>
+          <MpcMaskDiagram locale={locale} />
           <MpcWorksheet task={selectedOrder.task} prime={projection.prime} locale={locale} />
           <label className="tc-answer-label">{copy.mpcAnswer} · {locale === "ja" ? `④ の答えを 1 つ入力（0〜${BigInt(projection.prime) - 1n}）` : `Enter the result of step 4 (0–${BigInt(projection.prime) - 1n})`}
             <input aria-label={copy.mpcAnswer} inputMode="numeric" value={mpcPartial} onChange={(event) => setMpcPartial(event.target.value)} placeholder={locale === "ja" ? "最後に出た数" : "Your final number"} />
@@ -1519,32 +1529,25 @@ export default function FastMovePanel(props: PortalSlotProps) {
       */}
       {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && proveAllowed && (
         <div className="tc-input-panel tc-proof-inputs">
-          <strong>{locale === "ja" ? "空欄4マスに、付け替えた数字を入力" : "Fill four holes with the renamed digits"}</strong>
+          <strong>{locale === "ja" ? "青い4マスに、置き換えた数字を入力" : "Fill the four blue cells with the renamed digits"}</strong>
 
           <div className="tc-card-hint">{copy.proveHelp}</div>
-          <label className="tc-card-hint" style={{ display: "block" }}>
-            {copy.proveTable}
-            <select aria-label={copy.proveTable} value={proveTableKey} style={{ display: "block", maxWidth: "100%", margin: "6px 0", padding: "6px", color: "#16212e", background: "#fff" }}
-              onChange={(event) => { setProveTableKey(event.target.value); setProveCells(emptyCells()); }}>
-              <option value="">{copy.proveChooseTable}</option>
-              {ALL_PERMUTATIONS.filter((table) => table.some((to, from) => to !== from + 1)).map((table) => (
-                <option key={table.join("")} value={table.join("")}>
-                  {table.map((to, from) => `${from + 1}→${to}`).join("  ")}
-                  {projection.vault.usedPermutations.some((used) => used.every((to, i) => to === table[i])) ? ` · ${copy.proveReused}` : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!proveTable && <p role="status">{locale === "ja" ? "この世代の置き換えをすべて使いました。下の「秘密を作り直す」で新しい世代に進めます。" : "All replacements in this generation have been used. Use the defense control below to start a new generation."}</p>}
+          {proveTable && <div className="tc-prove-table">
+            <strong>{locale === "ja" ? "今回の置き換え" : "Replacements for this answer"}</strong>
+            <PermutationChips pi={proveTable} />
+            <p className="tc-card-hint">{locale === "ja" ? "矢印の左が元の数字、右が入力する数字です。どのマスでも同じ表を使います。" : "The arrow points from the original digit to the digit to enter. Use the same table for every cell."}</p>
+          </div>}
           {proveTable && proveGivens && <>
           <RelabelDiagram solution={projection.vault.sudokuSolution} table={proveTable} locale={locale} />
           <div className="tc-sudoku-row">
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveSolution}</span>
-              <SudokuBoard cells={projection.vault.sudokuSolution} size={36} lit={proveGivens.map((v, i) => v ? -1 : i).filter(i => i >= 0)} label="my-solution" />
+              <SudokuBoard cells={projection.vault.sudokuSolution} size={44} lit={proveGivens.map((v, i) => v ? -1 : i).filter(i => i >= 0)} label="my-solution" />
             </div>
             <div className="tc-sudoku-block">
               <span className="tc-sudoku-caption">{copy.proveGrid}</span>
-              <SudokuInput size={36} value={proveCells} givens={proveGivens} onChange={setProveCells} ariaLabel="fast-prove-grid" />
+              <SudokuInput numberedHoles size={44} value={proveCells} givens={proveGivens} onChange={setProveCells} ariaLabel="fast-prove-grid" />
             </div>
           </div>
           </>}
@@ -1569,7 +1572,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
               // Order needs a different one. A miss keeps it, to be corrected.
               (next) => {
                 const draft = proveFeedback(next, selectedOrder.id, selectedOrder.points, locale);
-                if (draft.kind === "prove") { setProveCells(emptyCells()); setProveTableKey(""); }
+                if (draft.kind === "prove") { setProveCells(emptyCells()); }
                 return draft;
               },
             )}
@@ -1583,7 +1586,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         </div>
       )}
 
-      <HintBooster projection={projection} locale={locale} />
+      {projection.hintBooster?.status === "active" && <HintBooster projection={projection} locale={locale} />}
       {selectedOrder ? (
           <details className="tc-hints" key={selectedOrder.id}>
             <summary>{locale === "ja" ? `このお題のヒント${nextHint ? (nextHint.cost === 0 ? "（次は減点なし）" : `（次は −${nextHint.cost} 点）`) : "（すべて開いた）"}` : `Hints for this Order${nextHint ? (nextHint.cost === 0 ? " (next: no penalty)" : ` (next: −${nextHint.cost})`) : " (all opened)"}`}</summary>

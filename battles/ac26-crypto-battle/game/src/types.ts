@@ -1281,6 +1281,8 @@ export interface ContractProjection {
    * per-second countdown between 30s polls, never a second subtraction
    * against an absolute clock.
    */
+  /** Original deadline duration, for a progress bar independent of the configured TTL. */
+  readonly durationMs?: number;
   readonly remainingMs: number;
   /**
    * [Issue #659 §9] This Order's hint ladder, every level, with the text filled

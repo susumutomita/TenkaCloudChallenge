@@ -1708,7 +1708,7 @@ describe("Issue #709: the PROVE panel teaches the relabelling and reports a miss
       const copy = FAST_MOVE_COPY[locale];
       expect(copy.proveUse.length).toBeGreaterThan(0);
       expect(copy.proveWhy.length).toBeGreaterThan(0);
-      expect(copy.proveHelp).toMatch(locale === "ja" ? /同じ表は 2 度使わない/ : /Never the same table twice/);
+      expect(copy.proveHelp).toMatch(locale === "ja" ? /表を選ぶ必要はありません/ : /do not need to choose a table/);
       // The identity relabelling is named as the one that is NOT fresh.
       expect(copy.proveNoneUsed).toContain("1→1");
     }

@@ -383,3 +383,7 @@ The reviewed seminar and owner notes contain no direct Rotor exercise; their
 connection is encryption/recovery keys and checking the exact conditions under
 which reused secrets leak. See [the Rotor reader and runtime record](dev/ROTOR-READING.md).
 No new resources, services, IAM, timers, score prices or cleanup steps are added.
+
+### Answer workspace (#780)
+
+New Caesar orders contain five symbols. The answer field explicitly requests space-separated numbers. Sudoku PROVE prepares a private random unused relabeling and immediately shows four marked inputs; clock updates and identical poll responses retain the relabeling. This remains the trusted-judge teaching model, not a full ZK protocol. MPC includes a three-party mask-cancellation diagram and its general equation; duel powers use superscripts and expanded products.
