@@ -366,6 +366,21 @@ class FieldMismatch(Exception, metaclass=Pretend):
         self.assertFalse(server.evaluate('normalize', source))
         self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
 
+    def test_same_modulus_arithmetic_does_not_require_field_identity(self):
+        for name, checkpoint in (('__add__', 'arithmetic'), ('__sub__', 'arithmetic'),
+                                 ('__mul__', 'arithmetic'), ('__truediv__', 'inverse')):
+            source = reader() + f"""
+_original_operation = FieldElement.{name}
+def require_identity(self, other):
+    if self.field is not other.field:
+        raise FieldMismatch('different instances')
+    return _original_operation(self, other)
+FieldElement.{name} = require_identity
+"""
+            with self.subTest(operation=name):
+                self.assertFalse(server.evaluate(checkpoint, source))
+                self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+
     def test_dual_exception_subclass_uses_the_operation_context(self):
         source = reader() + '''
 class Both(NotInvertible, FieldMismatch):

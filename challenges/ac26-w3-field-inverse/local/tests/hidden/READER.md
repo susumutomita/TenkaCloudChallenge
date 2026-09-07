@@ -230,3 +230,20 @@ After these changes, all 26 Linux regressions passed (20.171 seconds), the exist
 14 mutants were rejected with the reference accepted, and catalog validation passed
 for all 116 entries. These are local author tests, not a new independent reader run
 or an AWS deployment check.
+
+### Separate Field instances in arithmetic (2026-09-07)
+
+At `b87f88c2`, four separate mutants restricted one of `+`, `-`, `*`, or `/`
+to identical Field instances. Each passed its private checkpoint despite violating
+the documented same-modulus contract. The new regression reproduced all four
+failures before the fix. Public modulus-seven examples and private arithmetic and
+division cases now construct the operands from separate Field instances with the
+same modulus. Existing identity, distributivity, and different-modulus rejection
+checks remain in place.
+
+All 27 Linux regressions pass after the fix, including rejection of each mutant by
+both the private checkpoint and public tests. The frozen reader and reference
+remain positive controls; all 14 existing mutants are rejected. Logs:
+`/private/tmp/field-770-arithmetic-before.log` and
+`/private/tmp/field-770-arithmetic-after.log`. This is a grading regression check,
+not a new participant read-through or cloud deployment.

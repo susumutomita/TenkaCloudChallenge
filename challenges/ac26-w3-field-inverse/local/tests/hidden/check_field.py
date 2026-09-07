@@ -78,7 +78,7 @@ def check_arithmetic(module, seed: str) -> list[str]:
         values = sample_values(seed, label, p)
         for a in values[:8]:
             for b in values[:8]:
-                x, y = field.element(a), field.element(b)
+                x, y = field.element(a), module.Field(p).element(b)
                 try:
                     got = [(x + y), (x - y), (x * y)]
                 except Exception as error:  # noqa: BLE001
@@ -189,7 +189,7 @@ def check_inverse(module, seed: str) -> list[str]:
             b = field.element(raw)
             if b.value == 0:
                 continue
-            a = field.element(raw + 7)
+            a = module.Field(p).element(raw + 7)
             try:
                 if ((a / b) * b) != a:
                     failures.append("dividing then multiplying does not return the original")

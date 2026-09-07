@@ -71,7 +71,7 @@ def run_cases(submission, public, only=''):
         return '' if _element(inv, pow(6,-1,p), p) else 'the inverse does not multiply to remainder one'
 
     def small_arithmetic():
-        f = submission.Field(7); a,b=f.element(5),f.element(4)
+        f = submission.Field(7); a,b=f.element(5),submission.Field(7).element(4)
         return '' if all(_element(x,v,7) for x,v in ((a+b,2),(a-b,1),(a*b,6))) else 'modulus seven arithmetic is wrong'
 
     def trace():
@@ -85,7 +85,7 @@ def run_cases(submission, public, only=''):
         return ''
 
     def small_inverse():
-        f = submission.Field(7); a,b=f.element(4),f.element(3)
+        f = submission.Field(7); a,b=f.element(4),submission.Field(7).element(3)
         return '' if _element(b.inverse(),5,7) and _element(a/b,6,7) else 'inverse or division under seven is wrong'
 
     def errors():
