@@ -28,6 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "anamorphic-rejection": return "Anamorphic ciphertext selection";
     case "stark-trace": return "STARK trace and fold";
     case "io-equivalence": return "Outputs and their probabilities";
     case "snark-constraints": return "SNARK gate/copy constraints";
@@ -54,6 +55,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
+    "anamorphic-rejection":"アナモルフィック暗号：隠れたビットを送る",
     "stark-trace":"STARK：実行表と折り畳みを検査",
     "io-equivalence":"答えと、その出る確率を比べる",
     "snark-constraints":"短い証明（SNARK）の準備：計算を検査",
@@ -74,6 +76,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "anamorphic-rejection":"Anamorphic encryption: send a hidden bit",
     "stark-trace":"STARK: check the trace and fold",
     "io-equivalence":"Compare answers and their probabilities",
     "snark-constraints":"Prepare a short proof (SNARK): check computation",
@@ -103,6 +106,7 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "anamorphic-rejection": return locale === "ja" ? "候補を選び、通常と秘密の復号を計算" : "Choose a trial and decode both messages";
     case "stark-trace": return locale === "ja" ? "実行表のずれと折り畳みの4欄を計算" : "Calculate four trace and fold fields";
     case "io-equivalence": return locale === "ja" ? "全4入力の答えと公開データを比較" : "Compare all four inputs and published data";
     case "snark-constraints": return locale === "ja" ? "3つの計算と2本の配線" : "Three gates and two wires";

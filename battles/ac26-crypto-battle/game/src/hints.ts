@@ -123,6 +123,11 @@ export const HINT_LEVELS = 3;
  * these rungs alone (three seeds x four kinds) before this landed.
  */
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
+  "anamorphic-rejection": [
+    {id:"anamorphic-rejection/1",text:()=>({ja:"同じ通常メッセージを暗号化した候補から、秘密の表で目的のビットになるものを選びます。監視者は通常鍵で普通の数を読み、受信者だけが追加の表でビットを読みます。",en:"Select an ordinary ciphertext whose secret lookup matches the intended bit. The monitor decodes an ordinary message; the receiver additionally decodes the bit using the lookup."})},
+    {id:"anamorphic-rejection/2",text:()=>({ja:"通常復号はs=aをx回掛けた数の7で割った余り。s×mの余りがbとなるmを探します。a=2,x=2,b=5ならs=4、4×3=12の余り5なのでm=3です。",en:"For ordinary decryption, s is a to power x, remainder7. Find m with s×m remainder7 equal to b. For a=2,x=2,b=5, s=4 and4×3=12 has remainder5, hence m=3."})},
+    {id:"anamorphic-rejection/3",text:ctx=>{if(ctx.task.kind!=="anamorphic-rejection")throw new Error("wrong task");return {ja:`秘密の判定が${ctx.task.targetBit}になる最初の行番号を入力。その行のaに対応するsを下の表で読み、s×1〜6でbと同じ余りを探します。最後は目的のビットと一致する3行を見つけ、応用のくじの表にあるその行の枚数を足して入力します。`,en:`Enter the first row whose secret bit is ${ctx.task.targetBit}. Read s for its a from the power table; try s×1 through s×6 to match remainder b. Finally find the three rows matching the target bit, sum their ticket counts in the transfer table, and enter that total.`};}},
+  ],
   "stark-trace": [
     {id:"stark-trace/1",text:()=>({ja:"まず実行表の各一歩が2乗の規則に合うか検査します。そのずれを式の余りへつなぎ、最後に商を折り畳みます。折り畳みが正しくても、実行表のずれは消えません。",en:"Check whether each trace step follows squaring, connect the mismatches to a remainder polynomial, then fold the quotient. A correct fold does not remove trace mismatches."})},
     {id:"stark-trace/2",text:()=>({ja:"7で割った余りにします。2→5は5−2²=1。ずれu=1,v=3なら余りの定数2u−v=−1を7で割った余り6。商の定数2、Xの係数3、β=2なら折り畳みの定数は2+2×3=8の余り1です。",en:"Take remainders by7. Step2→5 gives5−2²=1. Mismatches u=1,v=3 give remainder constant2u−v=−1, hence6. Quotient constant2, X coefficient3 and β=2 give fold constant2+2×3=8, hence1."})},

@@ -1,3 +1,4 @@
+import {anamorphicTask,anamorphicAnswer,parseAnamorphicAnswer} from "./anamorphic.ts";
 import {starkTask,starkAnswer,parseStarkAnswer} from "./stark.ts";
 import {ioTask,ioAnswer,parseIoAnswer} from "./io.ts";
 import {constraintTask, constraintResiduals, parseResiduals} from "./snark.ts";
@@ -265,6 +266,7 @@ export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   ecOrders:true,
   ioOrders:true,
   starkOrders:true,
+  anamorphicOrders:true,
   snarkOrders:true,
   contractIntervalMs: 30_000,
   contractsPerIssue: 1,
@@ -362,6 +364,15 @@ function buildOrderTask(
   generation: number,
 ): OrderTask {
   switch (plan.taskKind) {
+    case "anamorphic-rejection": {
+      let counter=0,index=0,bytes=Buffer.alloc(0);
+      return anamorphicTask(()=>{
+        if(index===bytes.length){
+          bytes=createHmac("sha256",seed).update(JSON.stringify(["anamorphic-v1",contractId,counter++])).digest();index=0;
+        }
+        return bytes[index++]!;
+      });
+    }
     case "stark-trace": return starkTask([...createHmac("sha256",seed).update(`stark:${contractId}`).digest()]);
     case "io-equivalence": return ioTask([...createHmac("sha256",seed).update(`io:${contractId}`).digest()]);
     case "snark-constraints": return constraintTask([...createHmac("sha256",seed).update(`snark:${contractId}`).digest()]);
@@ -658,7 +669,7 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 18;
+export const STATE_SCHEMA_VERSION = 19;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -701,9 +712,9 @@ export const STATE_SCHEMA_VERSION = 18;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16 and v17 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17 and v18 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -928,6 +939,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         continue;
       }
       let plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig, { elapsedMs: nextContractAtMs - startedAtMs, buildToPressureMs: state.config.phaseBoundaries.buildToPressureMs, pressureToEndgameMs: state.config.phaseBoundaries.pressureToEndgameMs });
+      if(state.config.anamorphicOrders && sequenceIndex%29===28)plan={...plan,taskKind:"anamorphic-rejection",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if(state.config.starkOrders && sequenceIndex%23===22)plan={...plan,taskKind:"stark-trace",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if(state.config.ioOrders && sequenceIndex%19===18)plan={...plan,taskKind:"io-equivalence",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if(state.config.ecOrders && sequenceIndex%13===12)plan={...plan,taskKind:"ec-add",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
@@ -1341,7 +1353,7 @@ export function validateOp(
   switch (op.kind) {
     case "declare-lightning": {
       const contract = state.contracts.find(c => c.id === op.contractId && c.teamId === teamId);
-      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark", "stark"].includes(m));
+      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark", "stark", "anamorphic"].includes(m));
       if (!contract || !method) return { ok: false, error: "lightning requires your own calculation Order; duel outcomes do not qualify" };
       const gate = validateOrderSubmission(state, teamId, op.contractId, method);
       if (!gate.ok) return gate;
@@ -1635,6 +1647,11 @@ export function validateOp(
         }
       }
       return { ok: true };
+    }
+    case "anamorphic": {
+      const gate=validateOrderSubmission(state,teamId,op.contractId,"anamorphic");
+      if(!gate.ok)return gate;
+      return parseAnamorphicAnswer(op.answer)?{ok:true}:{ok:false,error:"Enter trial number (1–6), ordinary message (1–6) and accepted-ticket total (3–9), separated by spaces."};
     }
     case "stark": {
       const gate=validateOrderSubmission(state,teamId,op.contractId,"stark");
@@ -2274,6 +2291,7 @@ function projectTask(
   contractId: string,
 ): OrderTaskProjection {
   switch (task.kind) {
+    case "anamorphic-rejection": return task;
     case "stark-trace": return task;
     case "io-equivalence": return task;
     case "snark-constraints": return task;
@@ -2750,6 +2768,7 @@ function applyMethodOp(
       return applyLeak(state, teamId, op);
     case "fhe":
       return applyFhe(state, teamId, op);
+    case "anamorphic": return applyAnamorphic(state,teamId,op);
     case "stark": return applyStark(state,teamId,op);
     case "io": return applyIo(state,teamId,op);
     case "snark": return applySnark(state,teamId,op);
@@ -3053,4 +3072,12 @@ function applyStark(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattl
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
  return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"stark" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
+}
+
+function applyAnamorphic(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattleOp,{kind:"anamorphic"}>):CryptoBattleState {
+ const c=state.contracts.find(c=>c.id===op.contractId)!;if(c.task.kind!=="anamorphic-rejection")throw new Error("wrong task");
+ const hit=JSON.stringify(parseAnamorphicAnswer(op.answer))===JSON.stringify(anamorphicAnswer(c.task));
+ const team=state.teams[teamId]!;
+ const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
+ return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"anamorphic" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
 }
