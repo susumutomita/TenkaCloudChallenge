@@ -32,9 +32,9 @@
   },
   "difficulty": 4,
   "estimatedDuration": "75-105 分",
-  "shortDescription": "数を 1 個ずつ隠して運んでいては、計算が終わらない。入れ物を多項式に広げれば、暗号文 1 つで N 個を運べて、X を掛ければ中身が回るおまけ付き。ただし X^N = −1 の符号 1 つを間違えると、自分の往復テストは全部通るのに、別世界にいる。",
+  "shortDescription": "数の並びを掛けたとき、端を越える項の符号を直します。そこから秘密鍵との積を使う2種類の暗号計算の模型を組み立て、計算のずれに耐えられる範囲を調べます。",
   "description": "Week 5 の 2 問目。 TFHE の後段をブラックボックスにしないため、 negacyclic な多項式環と toy LWE / RLWE の暗号化・復号をまず自分で書く。\n\n2 つの方式は同じ形をしている。 秘密に何かを掛けたもの、 符号化したメッセージ、 noise。 違うのは演算と積載量で、 LWE はベクトルの内積、 RLWE は多項式の negacyclic 積、 そして RLWE の暗号文 1 つは N 個のメッセージを運ぶ。 RLWE は長いベクトルの LWE ではない。\n\n環は R_q = Z_q[X] / (X^N + 1) で、 要点は X^N = -1 の 1 つ。 次数 N を越えて巻き戻る係数は符号が反転して戻る。 この符号 1 つが negacyclic と cyclic を分ける。 そして cyclic な環も立派な環で、 公理をすべて満たし分配し可換で、 participant 自身のテストを喜んで通る。 間違った積は participant.wrong_ring.cyclic_mul として書き出してあり、 反例を自分で壊したコードではなく明示された弱点に対して作れるようにしてある。\n\n採点の設計として、 hidden test の往復はすべて交差させる。 こちらで暗号化して fixture 側で復号し、 その逆も行う。 符号を反転した内積は符号を反転した phase と打ち消し合い、 平文を自分の中に持つ暗号文は本物より上手に復号し、 cyclic な環は自己整合的で、 どれも同じコードで往復するテストなら通ってしまう。 交差させると通らない。\n\n暗号化は mask と noise を引数で受け取る。 この問題の主題ではない CSPRNG を持ち込まずに再現性を確保するため。 実装は本来どちらも sample し、 1 つの鍵の下で mask を使い回すのは破綻になる。\n\nfixture の不変条件として、 生成される secret は少なくとも 1 つ 1 を含むよう強制してある。 全ゼロの secret では mask の項が消え、 実装が secret に何をしたかに関わらず b = encode(m) + e になる。 強制する前に 3 つの mutation がまさにこれで生き残った。\n\nこれは安全ではない。 n・N・q は全列挙できる大きさで、 secret は数個の sample から線形代数で復元できる。",
-  "instructions": "## 1 個ずつでは間に合わない\n\n前の問題で、数に覆いを足して、中身を見せないまま足し算できるようになりました。ただし暗号文 1 つに数が 1 個。1000 個のデータなら暗号文も計算も 1000 回で、Zama の TFHE-rs も Fhenix も、この形のままでは回りません。まとめて隠して、まとめて計算したい。\n\nそのための入れ物が**多項式**です。係数の欄が N 個あるので、暗号文 1 つで N 個の数を運べます。しかもおまけが付きます — 多項式に X を掛けると、係数が 1 つずつずれる。この「ずれる」が、この先の問題の中心になる**回転**です。RLWE は突然出てくる別の暗号ではなく、回せるようにするための入れ物の拡張です。\n\n## ただし、符号 1 つで別世界\n\n掛け算で次数が N を越えたら、どこかへ戻さなければなりません。この世界の約束は **X^N = −1** — はみ出した係数は、符号を裏返して先頭へ戻ります（negacyclic と呼びます）。\n\nX^N = +1 と決めても計算は成り立ちます。それも矛盾のない立派な数の世界で、**自分で書いた暗号化 → 復号の往復テストは全部通ってしまいます**。でも別の世界です。壊れるのは、正しい世界で作られた暗号文と混ぜたときだけ。だからこの問題の採点は往復を**交差**させます — 正しい世界の暗号文をあなたの復号に通し、その逆もやります。\n\n## 前提（知っていれば飛ばしてください）\n\n- 覆い・ずれ（ノイズ）・Δ・「あと何回足せるか」は前の問題 `ac26-w5-encoding-noise` の道具です。未習ならそちらが先\n- 係数はすべて mod q（目盛りが q 個の時計）。mod が初めてなら `ac26-w1-constraint-lab` へ\n- 多項式の展開は中 3 のとおり: (1 + 2X)(3 + X) = 3 + 7X + 2X²\n- コードでは多項式を**係数を次数の低い順に並べたリスト**で表します。1 + 7X なら `(1, 7)`\n\n## 紙で 1 回だけ\n\nN = 2、q = 17 で (1 + 2X)(3 + X) を計算します。展開は 3 + 7X + 2X²。X² をどう戻すかで答えが割れます。\n\n- **X² = −1**（この世界）: 2X² は −2 になり、3 − 2 + 7X = **1 + 7X**\n- **X² = +1**（間違った世界）: 2X² は +2 になり、3 + 2 + 7X = **5 + 7X**\n\n食い違うのは定数項の 1 か所だけ。この 1 か所が、2 つの世界を分ける反例です。\n\n## 形は同じ、中身だけ違う\n\nLWE と RLWE の暗号文は、どちらも「秘密鍵との積 + メッセージ + ノイズ」という同じ形です。違いは 3 つ — 秘密鍵が 0/1 のベクトルか 0/1 の多項式か、積が内積（2 つの並びを順に掛けて全部足す。Python では `sum(x*y for x, y in zip(a, s))`）か negacyclic の積か、運ぶメッセージが 1 個か **N 個**か。形が同じだから、片方を書けばもう片方はほぼ写経です。ただし RLWE は「長いベクトルの LWE」ではありません — 積が別物で、積載量が N 倍。この違いを言葉で名指すことも checkpoint の 1 つになっています。\n\n暗号文からマスクと秘密鍵の積を引いた残りを**位相**（phase）と呼びます。中身は「メッセージの持ち上げ + ノイズ」だけ — 前の問題の数直線が、そのまま帰ってくる場所です。\n\n## 最初の一手\n\n**「起動」** を押すと、この問題文と同じ画面に問題エディタが開きます。ファイルは `lwe.py` ひとつ、書きかけの関数を埋めるだけです。**「初期状態に戻す」** でいつでも元に戻せます。\n\n**「証拠を確認」** を押すと、この起動のためだけに作られた数値が並びます。\n\n- パラメータ: 次数 N、法 q（= 平文の個数 × Δ）、LWE の長さ n、そしてノイズの**予算**（この範囲に収まっていれば復号が元に戻る、下端と上端）。\n- **同じ入力を 2 つの世界で掛けた結果を並べたもの** — negacyclic の答えと cyclic の答え。片方に「間違った世界」と印がついています。\n- LWE の実演: メッセージ、持ち上げた値、マスク a、内積 a·s、ノイズ e、暗号文 b、位相 b − a·s、その centered 表示、復号結果。秘密鍵そのものは表示されません（内積 a·s が出ているので要りません）。\n- RLWE の実演: 同じ並びが、全部多項式（係数の並び）になったもの。**メッセージが N 個**あることに注目してください。\n- ノイズの見本の表: `index` / `noise` / `decodes` の 3 列。並び順は起動ごとに決まっていて、大きさ順ではありません。\n\n**先に見るのはこの 2 か所です。** ひとつは 2 つの世界の積の比較 — 同じ入力なのに、どこが、どう違うのか（上の紙の計算と同じ食い違いが、この起動の数で出ています）。もうひとつは LWE と RLWE の実演を上下に並べて見比べること — 行の名前がぴったり対応していて、中身の形だけが違います。この 2 つが、8 つの checkpoint の骨格です。\n\n数値は起動のたびに変わり、採点は画面に出ていない別のパラメータでも同じコードを走らせます。画面の数を書き写した実装はそこで落ちます。**「公開テストを実行」** で形の検査を手元で先に試せます。\n\n## 答えるもの — checkpoint は 8 つ\n\n8 つともコードで答えます（文字を打ち込む回答欄はありません）。`params` は `degree`（N）、`dimension`（n）、`plaintext_modulus`、`delta`、`modulus`（q）を持つ dict で、checkpoint ごとに中身が変わります。多項式は長さ N の整数の並びで受け渡しします。\n\n1. **normalize** — `normalize(params, coefficients)`: 好きな長さの（N より長くてもよく、マイナスを含んでもよい）係数の並びを受け取り、X^N = −1 で折りたたんで、**ちょうど N 個**の 0 以上 q 未満の整数の並びを返します。\n2. **ring** — `ring_add` / `ring_sub` / `ring_mul(params, a, b)`: 長さ N の並び 2 つを受け取り、長さ N の並びを返します。掛け算は中 3 の展開どおり全部掛けてから折りたたむ書き方（schoolbook）で十分です。\n3. **lwe** — `lwe_encrypt(params, secret, message, mask, noise)` は `{\"a\": …, \"b\": …}` **だけ**を返します（メッセージや秘密鍵を入れて返すと、自分で書く往復テストは全部通るのに何も暗号化していない実装になります）。`lwe_decrypt(params, secret, ciphertext)` は `{\"phase\", \"centered_phase\", \"message\", \"noise\"}` の 4 つのキーを持つ dict を返します。\n4. **rlwe** — `rlwe_encrypt(params, secret, messages, mask, noise)` と `rlwe_decrypt(params, secret, ciphertext)`。形は 3 と同じで、中身が多項式になり、`messages` は**係数 1 つにつき 1 個**、つまり N 個入ります。4 つのキーの中身も、それぞれ N 個の値になります。\n5. **correspondence** — `correspondence(params, lwe, rlwe)`: 引数はどちらも `{\"secret\": …, \"ciphertext\": …}`。返すのは `{\"lwe\": {…}, \"rlwe\": {…}}` で、各側に `secret_kind`、`mask_kind`、`operation`、`payload_size`（この暗号文 1 つが運ぶメッセージの個数）、`phase`、`centered_phase`、`noise`、`message` を入れます。`secret_kind` と `mask_kind` に入れるのは `\"vector\"` か `\"polynomial\"`、`operation` に入れるのは `\"inner-product\"` か `\"negacyclic-product\"` のどちらか — **どちらがどちらなのかを名指すのが、この checkpoint です**。\n6. **boundary** — `survives(params, noise)`: そのノイズを載せた位相が、まだ元のメッセージに戻るかを `True` / `False` で返します。`first_crossing(params, samples)`: `index` と `noise` を持つ dict の並びを受け取り、**渡された順で**最初に予算を外れたものの `index` を返します。全部生き残っていたら `-1`。\n7. **transfer** — 同じ `lwe.py` が、**画面に出ていない N・q・n・秘密鍵**で 1 から 6 まで全部走ります。\n8. **defense** — `validate_ciphertext(params, kind, ciphertext)`: `kind` は `\"lwe\"` か `\"rlwe\"` で、`a` と `b` がそれぞれ何個であるべきかはこれで決まります。使えない理由を**文字列のリスト**で返し、使えるなら空のリスト `[]`。同じ入力には毎回同じ答えを返してください。**正しい暗号文をうっかり断るのも失点**です。\n\ncheckpoint ごとに提出ボタンがあります。押すと、そのときのエディタの中身がそのまま採点へ送られます。8 つは独立に採点されるので、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計が 0 未満にはなりません）。正解した checkpoint は「解答済み」になり、それ以上は提出しません。\n\n## ここで作った環は、二度と作り直さない\n\n8 つ通れば終わりです。終わったとき、折りたたみと積は正しい世界のものになり、LWE と RLWE が交差しても往復し、2 つの違いを言葉で名指せるようになっています。\n\nこの環と RLWE は、次の問題 `ac26-w5-rgsw-external` からは完成品として支給され、Week 5 の最後まで土台であり続けます。そして「X を掛けると回る」入れ物を手に入れたので、次は回転を暗号化されたビットで操るための道具 — 桁分解と external product — を作りに行きます。符号を 1 つ間違えたまま進むと、この先の回転がすべて別物になる。だから、ここで詰めました。\n",
+  "instructions": "## 最初に直すもの\n\nあなたは暗号計算の教材シミュレータの修理担当です。数の並びを掛ける処理が、端を越えたときの符号を間違えています。「起動」→ lwe.pyを開く → 下の規則でnormalizeを実装 → 「公開テストを実行」のnormalize-produces-n-coefficientsを確認 → normalizeを提出、が最初の一手です。後続の未実装テストがFAILでも、normalizeは独立に提出できます。\n\n前の符号化問題は公開の計算で、秘密を隠す暗号ではありません。本問は秘密鍵との積を加えるLWEとRLWEの計算模型です。小さい鍵は調べ尽くせるため実用の安全性はありません。LWEは数の並びの同じ位置を掛けて合計し、RLWEは以下の多項式の掛け算を使います。\n\n## 前提 — 無料の計算規則\n\n**多項式**は1+2Xのような式、**係数**は1や2のように各項に付く数です。Xの0乗、1乗、2乗…の順に並べたリスト[1,2]で1+2Xを表します。**次数**はXを掛けた回数です。本問の入れ物にはN個の欄があり、XのN乗を−1へ置き換えます。これをnegacyclic（端で符号が反転する）計算と呼びます。数の並びをベクトル、同じ位置を掛けて全部足す計算を内積と呼びます。\n\nparamsのdegreeがN、dimensionがn、plaintext_modulusがp、deltaがd、modulusがqです。q=p×d。`x % q`はqで割った余り、`x // q`は整数除算です。すべての係数を0〜q−1に戻します。\n\n- normalize：位置iの係数をi%N番へ足します。i//Nが奇数なら符号を反転、偶数ならそのまま。最後はN個の並びです。\n- ring_add/ring_sub：同じ位置を足す/引き、normalizeします。ring_mul：全組合せa[i]×b[j]を位置i+jへ足してからnormalizeします。\n- encode(m)=((m%p)×d)%q。decode(c)=((c%q+d//2)//d)%p。同点なら大きい側へ丸め、pまで行ったら0へ戻ります。\n- centered(x)：v=x%qとし、vが(q+1)//2以上ならv−q、それ以外はv。これは負のずれを含む表示方法です。\n- LWEの積tはmaskとsecretの同じ位置を掛けた合計。暗号文はa=maskを各々qの余りへ戻した並び、b=(t+encode(message)+noise)%qです。aは公開してもよい数の並び（マスク）、secretが秘密鍵です。マスクだけで秘密になるのではなく、この積とノイズを加える構造を調べます。\n- 復号ではphase=(b−t)%q。これを位相（鍵との積を取り除いた残り）と呼びます。message=decode(phase)、centered_phase=centered(phase)、noise=centered(phase−encode(message))を返します。noiseは復号した値からのずれで、大きすぎた元のノイズを必ず復元する値ではありません。\n- RLWEも同じ式です。積tをring_mul(mask,secret)で求め、encode/decode/centeredは各係数へ適用します。aとbはともにN個、messageもN個です。\n- ノイズ予算はL=−(d//2)、U=d−d//2−1。survivesはL≤noise≤Uかを返します。これは0を含む連続した許容範囲です。first_crossingはsamplesを渡された順で調べ、初めて外れた要素のindex、なければ−1を返します。\n- validate_ciphertextにはdictが渡ります。kindはlweまたはrlwe。aはlist/tupleでLWEならn個、RLWEならN個。bはLWEなら整数1個、RLWEならN個のlist/tupleです。全要素は0〜q−1の整数で、True/Falseは認めません。欠けたa/bや型・長さ・範囲の違いの理由を文字列リストへ入れ、正しければ[]を返します。`type(v) is int`なら真偽値を除けます。\n\n```text\nN=2、q=8：1+2X+3X² → 1−3+2X → [6,2]\n同じ位置へ戻るたびに符号が反転します。\nLWE：p=2,d=4,q=8、mask=[2,3]、secret=[1,0]\n積=2×1+3×0=2 → message=1,noise=1 → b=(2+4+1)%8=7\nphase=(7−2)%8=5 → decode(5)=1、残ったずれ=1\n```\n\n## 答えるもの — checkpoint は 8 つ\n\n8 つともコードで答えます（文字を打ち込む回答欄はありません）。`params` は `degree`（N）、`dimension`（n）、`plaintext_modulus`、`delta`、`modulus`（q）を持つ dict で、checkpoint ごとに中身が変わります。多項式は長さ N の整数の並びで受け渡しします。\n\n1. **normalize** — `normalize(params, coefficients)`: 好きな長さの（N より長くてもよく、マイナスを含んでもよい）係数の並びを受け取り、X^N = −1 で折りたたんで、**ちょうど N 個**の 0 以上 q 未満の整数の並びを返します。\n2. **ring** — `ring_add` / `ring_sub` / `ring_mul(params, a, b)`: 長さ N の並び 2 つを受け取り、長さ N の並びを返します。掛け算は中 3 の展開どおり全部掛けてから折りたたむ書き方（schoolbook）で十分です。\n3. **lwe** — `lwe_encrypt(params, secret, message, mask, noise)` は `{\"a\": …, \"b\": …}` **だけ**を返します（メッセージや秘密鍵を入れて返すと、自分で書く往復テストは全部通るのに何も暗号化していない実装になります）。`lwe_decrypt(params, secret, ciphertext)` は `{\"phase\", \"centered_phase\", \"message\", \"noise\"}` の 4 つのキーを持つ dict を返します。\n4. **rlwe** — `rlwe_encrypt(params, secret, messages, mask, noise)` と `rlwe_decrypt(params, secret, ciphertext)`。形は 3 と同じで、中身が多項式になり、`messages` は**係数 1 つにつき 1 個**、つまり N 個入ります。4 つのキーの中身も、それぞれ N 個の値になります。\n5. **correspondence** — `correspondence(params, lwe, rlwe)`: 引数はどちらも `{\"secret\": …, \"ciphertext\": …}`。返すのは `{\"lwe\": {…}, \"rlwe\": {…}}` で、各側に `secret_kind`、`mask_kind`、`operation`、`payload_size`（この暗号文 1 つが運ぶメッセージの個数）、`phase`、`centered_phase`、`noise`、`message` を入れます。`secret_kind` と `mask_kind` に入れるのは `\"vector\"` か `\"polynomial\"`、`operation` に入れるのは `\"inner-product\"` か `\"negacyclic-product\"` のどちらか — **どちらがどちらなのかを名指すのが、この checkpoint です**。\n6. **boundary** — `survives(params, noise)`: そのノイズが指定の0を含む連続予算区間に入るかを `True` / `False` で返します。`first_crossing(params, samples)`: `index` と `noise` を持つ dict の並びを受け取り、**渡された順で**最初に予算を外れたものの `index` を返します。全部生き残っていたら `-1`。\n7. **transfer** — 同じ `lwe.py` が、**画面に出ていない N・q・n・秘密鍵**で 1 から 6 まで全部走ります。\n8. **defense** — `validate_ciphertext(params, kind, ciphertext)`: `kind` は `\"lwe\"` か `\"rlwe\"` で、`a` と `b` がそれぞれ何個であるべきかはこれで決まります。使えない理由を**文字列のリスト**で返し、使えるなら空のリスト `[]`。同じ入力には毎回同じ答えを返してください。**正しい暗号文をうっかり断るのも失点**です。\n\ncheckpoint ごとに提出ボタンがあります。押すと、そのときのエディタの中身がそのまま採点へ送られます。8 つは独立に採点されるので、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計が 0 未満にはなりません）。正解した checkpoint は「解答済み」になり、それ以上は提出しません。\n\n## ここで作った環は、二度と作り直さない\n\n8 つ通れば終わりです。終わったとき、折りたたみと積は正しい世界のものになり、各方式で参加者の暗号化と別実装の復号、その逆を組み合わせても正しく戻り、2 つの違いを言葉で名指せるようになっています。\n\nこの環と RLWE は、次の問題 `ac26-w5-rgsw-external` からは完成品として支給され、Week 5 の最後まで土台であり続けます。そして「X を掛けると回る」入れ物を手に入れたので、次は回転を暗号化されたビットで操るための道具 — 桁分解と external product — を作りに行きます。符号を 1 つ間違えたまま進むと、この先の回転がすべて別物になる。だから、ここで詰めました。\n",
   "writeup": "## cyclic な環も立派な環である\n\nX^N = +1 の環は公理をすべて満たし、 分配し、 可換で、 暗号化と復号が往復する。 ただこの環ではない。 だから 「自分のテストが通った」 は negacyclic かどうかについて何も言わない。 間違った積は participant.wrong_ring.cyclic_mul として書き出してあるので、 反例は明示された弱点に対して作る。\n\n## 自己整合的な間違いは交差させないと見えない\n\n符号を反転した内積は、 符号を反転した phase と打ち消し合う。 平文を自分の中に持っている暗号文は、 本物より上手に復号する。 mask を無視する実装は、 mask を無視する復号と完璧に往復する。 どれも同じコードで暗号化して復号するテストなら通る。\n\nhidden test の往復はすべて交差させてある。 こちらで暗号化して fixture 側で復号し、 その逆も行う。 自己整合的なだけの方式はこれを越えられず、 本当に正しい方式は何も気づかない。\n\n## 巻き戻りは 2 回で戻る\n\n次数 i の係数は i % N へ、 符号 (-1)^(i // N) で落ちる。 1 回巻き戻れば負、 2 回巻き戻れば正に戻る。 「N を越えたら負にする」 と書いた実装は、 長さ 2N を越える入力で間違える。 ring_mul が渡すのは長さ 2N-1 なので 1 回で足りるが、 normalize は任意長を受け取る。\n\n## RLWE は長いベクトルの LWE ではない\n\n積が別の積で、 暗号文 1 つが運ぶメッセージが 1 個ではなく N 個になる。 correspondence checkpoint が operation と payload_size をラベルとして採点するのはそのため。 RLWE の演算を inner-product と名指すのは、 この誤解を書き下したものになる。\n\n## 全ゼロの secret は方式を退化させる\n\n生成される secret は少なくとも 1 つ 1 を含むよう強制してある。 全ゼロなら mask の項が消え、 実装が secret に何をしたかに関わらず b = encode(m) + e になる。 符号を反転した内積も、 phase を足す復号も、 mask を無視する暗号化も、 すべて正しく見える。 強制する前に 3 つの mutation がこれで生き残った。\n\n## mask を使い回すと破綻する\n\n暗号化が mask と noise を引数で受け取るのは再現性のためで、 実装は本来どちらも sample する。 1 つの鍵の下で同じ mask を 2 回使うと、 2 つの暗号文の差で mask の項が消え、 2 つの平文の差と少しの noise が残る。\n\n## 対象外\n\n具体的な security parameter の選定、 CSPRNG や constant-time 実装、 NTT / FFT、 実用ライブラリ。 schoolbook 乗算は意図的で、 NTT は同じ符号規約を教えなければ動かない変換の裏に巻き戻りを隠す。\n\n## これは安全ではない\n\nn・N・q は全列挙でき、 secret は数個の sample から線形代数で復元できる。 機構の toy であって困難性の toy ではない。\n\n## 出典との対応\n\nWeek 5 の教材は公開済みなので、 courseAlignment は `week5/README.md` を lecture、 `week5/problems/tfhe-toy-python/README.md` を assignment として pin してある。 spoilerPolicy は independent-reimplementation で、 API・パラメータ生成・方式の記述は独自、 公式課題から関数名も fixture も skeleton も取っていない。",
   "tags": [
     "advanced-cryptography-2026",
@@ -82,8 +82,18 @@
         "hints": [
           {
             "id": "normalize-hint-1",
-            "content": "次数 i の係数は i % N へ落ちる。 符号は 1 回の巻き戻りで反転し、 2 回で戻る。",
-            "penalty": 14
+            "content": "多項式をN個の欄へ戻します。XのN乗は−1なので、端を越える回数で符号が変わります。",
+            "penalty": 2
+          },
+          {
+            "id": "normalize-hint-2",
+            "content": "N=2,q=8で[1,2,3]は1+2X+3X²。X²=−1より−2+2X、余りへ戻して[6,2]です。",
+            "penalty": 2
+          },
+          {
+            "id": "normalize-hint-3",
+            "content": "lwe.pyのnormalizeでparamsからdegreeとmodulusを読みます。N個の0の欄を作り、各係数を位置i%Nへ、i//Nの偶奇で足すか引きます。各欄をqの余りにして返し、公開テストのnormalize行を確認してnormalizeを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -96,8 +106,18 @@
         "hints": [
           {
             "id": "ring-hint-1",
-            "content": "schoolbook で長さ 2N-1 を作ってから畳めばよい。 participant.wrong_ring.cyclic_mul が間違った方の積。",
-            "penalty": 20
+            "content": "足し引きは同じ欄どうし、掛け算はすべての項どうしを組み合わせます。最後に端の符号反転を適用します。",
+            "penalty": 2
+          },
+          {
+            "id": "ring-hint-2",
+            "content": "N=2,q=8で(1+2X)(3+X)=3+7X+2X²=1+7X。答えは[1,7]です。",
+            "penalty": 2
+          },
+          {
+            "id": "ring-hint-3",
+            "content": "ring_addとring_subは各位置の和と差をnormalizeへ渡します。ring_mulは2N−1個の欄を作り、二重のforでa[i]*b[j]をi+jへ加え、normalizeして返します。3関数を保存しringを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -110,8 +130,18 @@
         "hints": [
           {
             "id": "lwe-hint-1",
-            "content": "phase の符号を逆にしても、 積が自分自身の符号反転になる場合は正しく復号する。 交差検査はそれを許さない。",
-            "penalty": 18
+            "content": "LWEの暗号文は公開マスクaと数bの組です。秘密鍵との内積をbから引くと、符号化した数とノイズが残ります。",
+            "penalty": 2
+          },
+          {
+            "id": "lwe-hint-2",
+            "content": "p=2,d=4,q=8、a=[2,3],s=[1,0]なら内積2。m=1,e=1でb=7、位相7−2=5、近い符号化点4からm=1へ戻ります。",
+            "penalty": 2
+          },
+          {
+            "id": "lwe-hint-3",
+            "content": "先にencode/decode/centeredを無料の式で実装します。lwe_encryptは内積にencode(message)とnoiseを足してa/bだけ返します。lwe_decryptは内積を引き、問題文の4キーを作ります。公開テストのlwe行を確認しlweを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -124,8 +154,18 @@
         "hints": [
           {
             "id": "rlwe-hint-1",
-            "content": "暗号文 1 つが N 個のメッセージを運ぶ。 定数項だけ合っている実装は LWE の頭で書いている。",
-            "penalty": 18
+            "content": "RLWEではマスクと鍵が多項式です。内積の代わりに端で符号が変わる掛け算を使い、各欄でメッセージを運びます。",
+            "penalty": 2
+          },
+          {
+            "id": "rlwe-hint-2",
+            "content": "N=2,q=8でmask=[1,2],secret=[1,0]の積は[1,2]。p=2,d=4、messages=[1,0],noise=[0,1]ならb=[5,3]。積を引くと[4,1]で復号は[1,0]です。",
+            "penalty": 2
+          },
+          {
+            "id": "rlwe-hint-3",
+            "content": "rlwe_encryptでring_mul(mask,secret)を求め、各係数へ符号化値とノイズを足してnormalizeします。rlwe_decryptではring_subで積を引き、各係数にdecode/centeredを適用して4キーを返します。公開テストのrlwe行を確認しrlweを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -134,7 +174,24 @@
         "input": "multiline",
         "label": "2 つを並べて違いを名指す",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "correspondence-hint-1",
+            "content": "同じ形の式でも、LWEの内積は数1個、RLWEの積はN個の係数です。対応表は値と演算の違いを両方説明します。",
+            "penalty": 2
+          },
+          {
+            "id": "correspondence-hint-2",
+            "content": "LWEで[2,3]と[1,0]の内積は2。RLWEで同じ並びを多項式として掛ければ[2,3]。同じ入力でも結果の形が違います。",
+            "penalty": 2
+          },
+          {
+            "id": "correspondence-hint-3",
+            "content": "correspondenceの引数から各secret/ciphertextを取り出し、それぞれの復号関数を呼びます。結果4キーに種類・操作・個数を足します。LWEはvector/inner-product/1、RLWEはpolynomial/negacyclic-product/N。lweとrlweを持つdictを返してcorrespondenceを提出します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "boundary",
@@ -145,8 +202,18 @@
         "hints": [
           {
             "id": "boundary-hint-1",
-            "content": "sample は大きさ順に並んでいない。 与えられた順序で最初のものを返す。 全部生き残ったら -1。",
-            "penalty": 18
+            "content": "ノイズ予算は、0から連続して元のメッセージへ戻れる幅です。first_crossingは大きさ順ではなく、実際に到着した順の最初の失敗を探します。",
+            "penalty": 2
+          },
+          {
+            "id": "boundary-hint-2",
+            "content": "d=4ならL=−2,U=1。noise=1は範囲内、2は外。[(index=7,noise=2),(index=3,noise=3)]なら最初の失敗のindexは7です。",
+            "penalty": 2
+          },
+          {
+            "id": "boundary-hint-3",
+            "content": "survivesはdeltaからL,Uを計算し範囲の真偽を返します。first_crossingはsamplesをforで順に見て、survivesがFalseならそのindexを返し、最後まで通れば−1。2関数を保存してboundaryを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -155,23 +222,57 @@
         "input": "multiline",
         "label": "見たことのない環で成立させる",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "別の大きさでも同じ規則が動くかを調べます。画面で見たNやqを固定すると、別の入れ物に変わったとき壊れます。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "同じ[1,0,1]もN=2ならX²=−1で[0,0]、N=4ならX²はそのままなので[1,0,1,0]です。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "normalizeからboundaryまでの関数で、長さや余りをparamsから読むか確認します。公開テストだけで別の設定まで通る保証はありません。同じlwe.pyをtransferへ提出し、その結果から対応する関数を直します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "defense",
         "input": "multiline",
         "label": "壊れた暗号文を断る",
         "points": 45,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "defense-hint-1",
+            "content": "計算できない形の暗号文を入口で断ります。値の見た目だけでなく、鍵の計算で必要な個数と整数の範囲を確認します。",
+            "penalty": 2
+          },
+          {
+            "id": "defense-hint-2",
+            "content": "n=2,q=8のLWEでa=[1,2],b=3は形が合います。a=[1]は1個不足、b=8は範囲外、b=Trueは整数として扱いません。",
+            "penalty": 2
+          },
+          {
+            "id": "defense-hint-3",
+            "content": "validate_ciphertextでa/bをgetで読み、kindに応じた型・長さを確認してから各値の型と0≤値<qを調べます。問題があれば理由文字列をリストへ追加し、正しければ空リストを返します。defenseを提出します。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "One sign, and everything downstream",
-      "shortDescription": "Hiding numbers one at a time is too slow. Widen the container to a polynomial and one ciphertext carries N of them — with a bonus: multiply by X and the contents rotate. But get the single sign in X^N = −1 wrong and every round-trip test you write still passes, in the wrong world.",
+      "shortDescription": "Repair the sign when multiplying number arrays across their boundary, then build two secret-key arithmetic models and investigate their tolerance to calculation noise.",
       "description": "Second problem of Week 5. So the later stages of TFHE are not a black box, first write the negacyclic polynomial ring and toy LWE / RLWE encryption and decryption yourself.\n\nThe two schemes share one shape: something multiplied by the secret, an encoded message, and noise. What differs is the operation and the payload — LWE takes a vector inner product, RLWE the negacyclic product of polynomials, and one RLWE ciphertext carries N messages. RLWE is not LWE with a long vector.\n\nThe ring is R_q = Z_q[X] / (X^N + 1), and the whole point is the single fact X^N = -1: a coefficient that wraps past degree N comes back with its sign flipped. That one sign separates negacyclic from cyclic. And the cyclic ring is a perfectly good ring — it satisfies every axiom, distributes, commutes, and happily passes the participant's own tests. The wrong product is written out as participant.wrong_ring.cyclic_mul, so the counterexample is built against a stated weakness rather than against code the participant broke themselves.\n\nAs a scoring design, every hidden round trip is crossed: encrypt here, decrypt on the fixture side, and the reverse. A sign-flipped inner product cancels against a sign-flipped phase; a ciphertext that carries its plaintext inside itself decrypts better than the real thing; the cyclic ring is self-consistent — all of them pass a round trip through the same code, and none survives the crossed one.\n\nEncryption takes the mask and noise as arguments, for reproducibility without dragging in a CSPRNG that is not this problem's subject. A real implementation samples both, and reusing a mask under one key is a break.\n\nAs a fixture invariant, every generated secret is forced to contain at least one 1. With an all-zero secret the mask term vanishes and b = encode(m) + e regardless of what the implementation did with the secret — three mutants survived on exactly this before the invariant was added.\n\nThis is not secure. n, N and q are exhaustively enumerable, and the secret is recoverable by linear algebra from a handful of samples.",
-      "instructions": "## One at a time is too slow\n\nThe previous problem hid a number under a cover and still added. But that ciphertext carries one number. A thousand data points mean a thousand ciphertexts and a thousand operations — neither Zama's TFHE-rs nor Fhenix could run that way. You want to hide in bulk and compute in bulk.\n\nThe container for that is a **polynomial**. It has N coefficient slots, so one ciphertext carries N numbers. And it comes with a bonus: multiply a polynomial by X and every coefficient shifts one place along. That shift is the **rotation** the rest of Week 5 is built around. RLWE is not some new cipher arriving out of nowhere — it is the container widened so things can rotate.\n\n## But one sign makes it another world\n\nWhen a product's degree crosses N, it has to come back somewhere. This world's rule is **X^N = −1**: what spills over returns to the front with its sign flipped (this is called negacyclic).\n\nDeclaring X^N = +1 also gives a consistent arithmetic. It is a perfectly good number world — and **every encrypt-then-decrypt round trip you write yourself passes in it**. It is simply a different world, and it only breaks against ciphertexts made in the correct one. Which is why the grading here **crosses** the round trips: ciphertexts made in the correct world go through your decryption, and vice versa.\n\n## Before you start (skip if you know this)\n\n- The cover, the drift (noise), Δ and \"how many more additions\" are the previous problem's tools — solve `ac26-w5-encoding-noise` first if they are new\n- Every coefficient lives mod q (a clock with q ticks). If mod itself is new, solve `ac26-w1-constraint-lab` first\n- Expanding polynomials works the school way: (1 + 2X)(3 + X) = 3 + 7X + 2X²\n- In code a polynomial is **a list of its coefficients, lowest degree first**: 1 + 7X is `(1, 7)`\n\n## Once, on paper\n\nTake N = 2, q = 17 and compute (1 + 2X)(3 + X). The expansion is 3 + 7X + 2X². The answer splits on what X² becomes.\n\n- **X² = −1** (this world): 2X² becomes −2, giving 3 − 2 + 7X = **1 + 7X**\n- **X² = +1** (the wrong world): 2X² becomes +2, giving 3 + 2 + 7X = **5 + 7X**\n\nThey disagree in exactly one place, the constant term. That one place is the counterexample separating the two worlds.\n\n## Same shape, different contents\n\nAn LWE ciphertext and an RLWE ciphertext have the same shape: secret-product + message + noise. Only three things differ — the secret is a 0/1 vector or a 0/1 polynomial; the product is an inner product (multiply two rows pairwise and sum; `sum(x*y for x, y in zip(a, s))` in Python) or the negacyclic product; and the payload is one message or **N of them**. Because the shape is shared, writing one makes the other nearly a transcription. But RLWE is not \"LWE with a long vector\": the product is a different product and the payload is N times larger. Naming that difference in words is itself one of the checkpoints.\n\nSubtract the mask-times-secret from a ciphertext and what remains is called the **phase**: nothing inside it but \"the lifted message plus noise\" — the previous problem's number line, coming home.\n\n## First move\n\nPress **Start** and the problem editor opens on the same page as this statement. It holds one file, `lwe.py`, already scaffolded — you fill in the existing functions. **Restore starter** puts it back at any time.\n\nPress **Inspect evidence** and this run's numbers appear.\n\n- The parameters: the degree N, the modulus q (= number of messages × Δ), the LWE length n, and the noise **budget** — the low and high ends inside which decryption still comes back.\n- **The same input multiplied in both worlds, side by side** — the negacyclic answer and the cyclic one, with one of them marked as the wrong world.\n- An LWE walkthrough: the message, its lifted value, the mask a, the inner product a·s, the noise e, the ciphertext b, the phase b − a·s, its centered form, and the decrypted result. The secret itself is not printed (the inner product a·s is there, so it is not needed).\n- An RLWE walkthrough: the same rows with everything turned into polynomials (rows of coefficients). Note that there are **N messages** in it.\n- A table of noise samples: the three columns `index` / `noise` / `decodes`. The order is fixed per run and is not sorted by size.\n\n**Two places are worth looking at first.** One is the two-world product comparison — same input, so what differs, and where (it is the paper calculation above, happening in this run's numbers). The other is reading the LWE and RLWE walkthroughs one above the other: the row names line up exactly and only the shape of the contents differs. Those two are the skeleton of all eight checkpoints.\n\nThe numbers change every run, and grading re-runs your code on parameters that were never shown, so copying the on-screen numbers fails there. **Run public tests** checks the shapes locally first.\n\n## What you answer — eight checkpoints\n\nAll eight are answered with code; there is no field to type a value into. `params` is a dict carrying `degree` (N), `dimension` (n), `plaintext_modulus`, `delta` and `modulus` (q), and its contents differ between checkpoints. Polynomials are passed around as rows of N integers.\n\n1. **normalize** — `normalize(params, coefficients)`: takes a row of coefficients of any length (it may be longer than N and may hold negatives), folds it with X^N = −1, and returns **exactly N** integers, each in 0 … q − 1.\n2. **ring** — `ring_add` / `ring_sub` / `ring_mul(params, a, b)`: take two rows of length N, return a row of length N. For the product, expanding everything the school way and then folding (schoolbook) is entirely enough.\n3. **lwe** — `lwe_encrypt(params, secret, message, mask, noise)` returns `{\"a\": …, \"b\": …}` and **nothing else** (put the message or the secret in the returned object and every round-trip test you write passes while the scheme encrypts nothing). `lwe_decrypt(params, secret, ciphertext)` returns a dict with the four keys `{\"phase\", \"centered_phase\", \"message\", \"noise\"}`.\n4. **rlwe** — `rlwe_encrypt(params, secret, messages, mask, noise)` and `rlwe_decrypt(params, secret, ciphertext)`. Same shape as 3 with polynomials inside: `messages` holds **one entry per coefficient**, so N of them, and each of the four keys holds N values.\n5. **correspondence** — `correspondence(params, lwe, rlwe)`: both arguments are `{\"secret\": …, \"ciphertext\": …}`. Return `{\"lwe\": {…}, \"rlwe\": {…}}`, each side carrying `secret_kind`, `mask_kind`, `operation`, `payload_size` (how many messages this one ciphertext carries), `phase`, `centered_phase`, `noise` and `message`. `secret_kind` and `mask_kind` take `\"vector\"` or `\"polynomial\"`; `operation` takes `\"inner-product\"` or `\"negacyclic-product\"` — **naming which is which is this checkpoint**.\n6. **boundary** — `survives(params, noise)`: returns `True` / `False` for whether a phase carrying that much noise still comes back as its own message. `first_crossing(params, samples)`: takes a row of dicts carrying `index` and `noise`, and returns the `index` of the first one out of budget **in the order given**. Return `-1` when every one of them survives.\n7. **transfer** — the same `lwe.py` runs checkpoints 1 to 6 again on **an N, q, n and secret that were never shown**.\n8. **defense** — `validate_ciphertext(params, kind, ciphertext)`: `kind` is `\"lwe\"` or `\"rlwe\"`, and it decides how many entries `a` and `b` must each have. Return the reasons it cannot be used as a **list of strings**, and the empty list `[]` when it can. The same input must always give the same answer, and **wrongly refusing a well-formed ciphertext costs you too**.\n\nEach checkpoint has its own submit button; pressing it sends the editor's current contents straight to grading. The eight are graded independently, so one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below zero). A solved checkpoint is marked solved and is not submitted again.\n\n## The ring you build here is never rebuilt\n\nPass all eight and you are done. By then the fold and the product belong to the right world, LWE and RLWE round-trip even when crossed, and you can name their difference in words.\n\nFrom the next problem (`ac26-w5-rgsw-external`) onward this ring and RLWE are handed to you as finished parts, and they stay under everything to the end of Week 5. With a container that rotates when multiplied by X, the next step is the tooling that lets an encrypted bit steer that rotation — digit decomposition and the external product. Carry the one wrong sign forward and every rotation after it becomes a different operation. That is why it gets pinned down here.\n",
+      "instructions": "## Your first repair\n\nYou maintain a teaching simulator whose multiplication gets the sign wrong when a coefficient crosses the end. Start → open lwe.py → implement normalize using the rules below → Run public tests and inspect normalize-produces-n-coefficients → submit normalize. Later unfinished tests may fail; normalize is graded independently.\n\nThe previous encoding exercise was public arithmetic, not encryption. This exercise models adding a product with a secret key: LWE multiplies matching positions and adds them, while RLWE uses polynomial multiplication. These tiny keys can be enumerated; this is not practical security.\n\n## Before you start — free calculation rules\n\nA polynomial is an expression such as 1+2X. Its coefficients are the numbers 1 and 2. A list stores coefficients in increasing powers of X: [1,2] means 1+2X. The degree counts how many X factors a term has. There are N slots here, and X to the power N is replaced by −1. This is negacyclic arithmetic: crossing the end changes the sign. A vector is a list of numbers; an inner product multiplies matching entries and adds them all.\n\nparams provides degree=N, dimension=n, plaintext_modulus=p, delta=d, modulus=q, with q=p*d. `%` means remainder after division and `//` means integer division. Keep coefficients between 0 and q−1.\n\n- normalize: add coefficient i to slot i%N, negating it when i//N is odd. Return exactly N entries.\n- ring_add/ring_sub: add/subtract matching entries, then normalize. ring_mul: add every a[i]*b[j] to slot i+j, then normalize.\n- encode(m)=((m%p)*d)%q; decode(c)=((c%q+d//2)//d)%p. Ties round up, and the value p wraps to 0.\n- centered(x): set v=x%q; return v−q if v>=(q+1)//2, otherwise v. This displays negative shifts too.\n- LWE: t is the sum of mask[i]*secret[i]. Return a=mask reduced entrywise, b=(t+encode(message)+noise)%q. The mask is a public list, not a secret key. The secret key, product and added noise are the structure being studied.\n- Decrypt with phase=(b−t)%q. Phase is the remainder after removing the key product. Return message=decode(phase), centered_phase=centered(phase), noise=centered(phase−encode(message)), and phase. This noise is relative to the decoded message; it need not recover excessive original noise.\n- RLWE uses the same equations with t=ring_mul(mask,secret). Apply encode, decode and centered separately to each coefficient. Both a and b have N entries; so does message.\n- Budget: L=−(d//2), U=d−d//2−1. survives returns whether L≤noise≤U. This is the consecutive allowed interval containing zero. first_crossing scans samples in their given order and returns the first failing sample's index, or −1 if none fail.\n- validate_ciphertext receives a dict and kind lwe or rlwe. a is a list/tuple of n entries for LWE or N for RLWE. b is one integer for LWE, or an N-entry list/tuple for RLWE. Every value must be an integer from 0 through q−1, excluding True/False. Return a list of reasons for missing a/b, wrong type, length or range, or [] for valid input. `type(v) is int` excludes booleans.\n\n```text\nN=2,q=8: 1+2X+3X² → 1−3+2X → [6,2]\nEach wrap flips the sign.\nLWE p=2,d=4,q=8, mask=[2,3], secret=[1,0]:\nt=2*1+3*0=2; message=1,noise=1 → b=(2+4+1)%8=7\nphase=(7−2)%8=5 → decode(5)=1; residual noise=1\n```\n\n## What you answer — eight checkpoints\n\nAll eight are answered with code; there is no field to type a value into. `params` is a dict carrying `degree` (N), `dimension` (n), `plaintext_modulus`, `delta` and `modulus` (q), and its contents differ between checkpoints. Polynomials are passed around as rows of N integers.\n\n1. **normalize** — `normalize(params, coefficients)`: takes a row of coefficients of any length (it may be longer than N and may hold negatives), folds it with X^N = −1, and returns **exactly N** integers, each in 0 … q − 1.\n2. **ring** — `ring_add` / `ring_sub` / `ring_mul(params, a, b)`: take two rows of length N, return a row of length N. For the product, expanding everything the school way and then folding (schoolbook) is entirely enough.\n3. **lwe** — `lwe_encrypt(params, secret, message, mask, noise)` returns `{\"a\": …, \"b\": …}` and **nothing else** (put the message or the secret in the returned object and every round-trip test you write passes while the scheme encrypts nothing). `lwe_decrypt(params, secret, ciphertext)` returns a dict with the four keys `{\"phase\", \"centered_phase\", \"message\", \"noise\"}`.\n4. **rlwe** — `rlwe_encrypt(params, secret, messages, mask, noise)` and `rlwe_decrypt(params, secret, ciphertext)`. Same shape as 3 with polynomials inside: `messages` holds **one entry per coefficient**, so N of them, and each of the four keys holds N values.\n5. **correspondence** — `correspondence(params, lwe, rlwe)`: both arguments are `{\"secret\": …, \"ciphertext\": …}`. Return `{\"lwe\": {…}, \"rlwe\": {…}}`, each side carrying `secret_kind`, `mask_kind`, `operation`, `payload_size` (how many messages this one ciphertext carries), `phase`, `centered_phase`, `noise` and `message`. `secret_kind` and `mask_kind` take `\"vector\"` or `\"polynomial\"`; `operation` takes `\"inner-product\"` or `\"negacyclic-product\"` — **naming which is which is this checkpoint**.\n6. **boundary** — `survives(params, noise)`: returns `True` / `False` for whether that noise is inside the specified consecutive budget containing zero. `first_crossing(params, samples)`: takes a row of dicts carrying `index` and `noise`, and returns the `index` of the first one out of budget **in the order given**. Return `-1` when every one of them survives.\n7. **transfer** — the same `lwe.py` runs checkpoints 1 to 6 again on **an N, q, n and secret that were never shown**.\n8. **defense** — `validate_ciphertext(params, kind, ciphertext)`: `kind` is `\"lwe\"` or `\"rlwe\"`, and it decides how many entries `a` and `b` must each have. Return the reasons it cannot be used as a **list of strings**, and the empty list `[]` when it can. The same input must always give the same answer, and **wrongly refusing a well-formed ciphertext costs you too**.\n\nEach checkpoint has its own submit button; pressing it sends the editor's current contents straight to grading. The eight are graded independently, so one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below zero). A solved checkpoint is marked solved and is not submitted again.\n\n## The ring you build here is never rebuilt\n\nPass all eight and you are done. By then the fold and the product belong to the right world, each scheme works when participant encryption is paired with another implementation’s decryption and vice versa, and you can name their difference in words.\n\nFrom the next problem (`ac26-w5-rgsw-external`) onward this ring and RLWE are handed to you as finished parts, and they stay under everything to the end of Week 5. With a container that rotates when multiplied by X, the next step is the tooling that lets an encrypted bit steer that rotation — digit decomposition and the external product. Carry the one wrong sign forward and every rotation after it becomes a different operation. That is why it gets pinned down here.\n",
       "writeup": "## A cyclic ring is a perfectly good ring\n\nThe ring with `X^N = +1` satisfies every axiom, distributes, commutes, and round-trips encryption against decryption. It is simply not this ring. So \"my tests pass\" says nothing about whether the product is negacyclic. The wrong product is written out as `participant.wrong_ring.cyclic_mul`, so the counterexample is against a stated weakness.\n\n## Self-consistent mistakes need a crossed test\n\nA sign-flipped inner product cancels against a sign-flipped phase. A ciphertext carrying its own plaintext decrypts better than the real one. An implementation that ignores the mask round-trips perfectly against a decryptor that also ignores it. All of them pass a test that encrypts and decrypts with the same code.\n\nSo every round trip in the hidden suite is crossed: encrypt here and decrypt against the fixtures, and the other way round. A scheme that is only self-consistent does not survive it, and a correct one does not notice.\n\n## Two wraps restore the sign\n\nThe coefficient at degree i lands on `i % N` with sign `(-1) ** (i // N)`. One wrap negates; two bring it back. An implementation that says \"negate if it went past N\" is wrong for any input longer than 2N. `ring_mul` only ever passes 2N - 1, so one wrap is enough there -- but `normalize` takes arbitrary input.\n\n## RLWE is not LWE with longer vectors\n\nThe product is a different product, and one ciphertext carries N messages instead of one. That is why the `correspondence` checkpoint grades the `operation` and `payload_size` labels: naming the RLWE operation an inner product is the misconception written down.\n\n## An all-zero secret degenerates the scheme\n\nThe generated secrets are forced to contain at least one 1. With an all-zero secret the mask term vanishes and `b = encode(m) + e` regardless of what the implementation did with the secret -- a sign-flipped inner product, a phase that adds instead of subtracting, and an implementation that ignores the mask all look correct. Three mutations survived on exactly this before it was forced.\n\n## Reusing a mask is a break\n\nEncryption takes its mask and noise as arguments for reproducibility; a real implementation samples both. Use the same mask twice under one key and the difference of the two ciphertexts cancels the mask term, leaving the difference of the two plaintexts plus a little noise.\n\n## Not in scope\n\nNo concrete security parameter selection, no CSPRNG or constant-time work, no NTT or FFT, no usable library. Schoolbook multiplication is deliberate: an NTT hides the wrap behind a transform that has to be told the same sign convention anyway.\n\n## This is not secure\n\nn, N and q are small enough to enumerate, and the secret falls to linear algebra from a handful of samples. A toy of the mechanism, not of the hardness.\n\n## Source alignment\n\nWeek 5's material is published upstream, so `courseAlignment` pins `week5/README.md` as `lecture` and `week5/problems/tfhe-toy-python/README.md` as `assignment`. `spoilerPolicy` is `independent-reimplementation`: the API, the parameter generation, and the scheme write-up are original, and no function name, fixture, or skeleton is taken from the official exercise.",
       "learningGoals": [
         "Fold an overflowing coefficient row back to length N under X^N = −1",
@@ -190,7 +291,15 @@
           "hints": [
             {
               "id": "normalize-hint-1",
-              "content": "The coefficient at degree i lands on i % N. One wrap negates the sign; two bring it back."
+              "content": "Fold a polynomial into N slots. X to the power N is −1, so the number of wraps determines the sign."
+            },
+            {
+              "id": "normalize-hint-2",
+              "content": "For N=2,q=8, [1,2,3] means 1+2X+3X². Replace X² by −1 to get −2+2X, then reduce to [6,2]."
+            },
+            {
+              "id": "normalize-hint-3",
+              "content": "In normalize in lwe.py, read degree and modulus from params. Start N zero slots; add or subtract each coefficient at i%N according to whether i//N is even or odd. Reduce each slot by q, return it, check the normalize public-test line, and submit normalize."
             }
           ]
         },
@@ -200,7 +309,15 @@
           "hints": [
             {
               "id": "ring-hint-1",
-              "content": "Build the length 2N-1 schoolbook product and then fold. participant.wrong_ring.cyclic_mul is the wrong one."
+              "content": "Addition and subtraction pair matching slots. Multiplication combines every pair of terms, then applies the sign-changing wrap."
+            },
+            {
+              "id": "ring-hint-2",
+              "content": "With N=2,q=8, (1+2X)(3+X)=3+7X+2X²=1+7X, represented by [1,7]."
+            },
+            {
+              "id": "ring-hint-3",
+              "content": "Pass matching sums and differences to normalize in ring_add and ring_sub. In ring_mul allocate 2N−1 slots, use two for loops to add a[i]*b[j] at i+j, then normalize. Save all three functions and submit ring."
             }
           ]
         },
@@ -210,7 +327,15 @@
           "hints": [
             {
               "id": "lwe-hint-1",
-              "content": "A backwards phase sign still decrypts whenever the product is its own negative. The crossed check does not allow that."
+              "content": "An LWE ciphertext contains public mask a and number b. Subtracting the inner product with the secret key leaves the encoded message and noise."
+            },
+            {
+              "id": "lwe-hint-2",
+              "content": "For p=2,d=4,q=8,a=[2,3],s=[1,0], the inner product is 2. With m=1,e=1, b=7 and phase=5; the nearest encoding point is 4, recovering m=1."
+            },
+            {
+              "id": "lwe-hint-3",
+              "content": "Implement encode, decode and centered from the free formulas. lwe_encrypt adds encode(message) and noise to the inner product and returns only a/b. lwe_decrypt subtracts the product and builds the four documented keys. Check the lwe public-test line and submit lwe."
             }
           ]
         },
@@ -220,13 +345,35 @@
           "hints": [
             {
               "id": "rlwe-hint-1",
-              "content": "One ciphertext carries N messages. An implementation that only gets the constant term right is thinking in LWE."
+              "content": "In RLWE the mask and key are polynomials. Use the sign-changing polynomial product instead of an inner product, carrying a message in each slot."
+            },
+            {
+              "id": "rlwe-hint-2",
+              "content": "For N=2,q=8, mask=[1,2] times secret=[1,0] gives [1,2]. With p=2,d=4,messages=[1,0],noise=[0,1], b=[5,3]. Subtracting the product gives [4,1], decoding to [1,0]."
+            },
+            {
+              "id": "rlwe-hint-3",
+              "content": "In rlwe_encrypt compute ring_mul(mask,secret), add encoded messages and noise entrywise, and normalize. In rlwe_decrypt subtract the product with ring_sub and apply decode/centered entrywise to return the four keys. Check the rlwe public-test line and submit rlwe."
             }
           ]
         },
         {
           "id": "correspondence",
-          "label": "Put them side by side and name the difference"
+          "label": "Put them side by side and name the difference",
+          "hints": [
+            {
+              "id": "correspondence-hint-1",
+              "content": "Although the formulas look alike, an LWE inner product yields one number and an RLWE product yields N coefficients. The correspondence table records both values and operations."
+            },
+            {
+              "id": "correspondence-hint-2",
+              "content": "The LWE inner product of [2,3] and [1,0] is 2. Multiplying the same lists as RLWE polynomials gives [2,3]. The output shape differs."
+            },
+            {
+              "id": "correspondence-hint-3",
+              "content": "Extract each secret/ciphertext and call the appropriate decrypt function. Add kind, operation and count to the four result keys: vector/inner-product/1 for LWE, polynomial/negacyclic-product/N for RLWE. Return a dict with lwe and rlwe entries and submit correspondence."
+            }
+          ]
         },
         {
           "id": "boundary",
@@ -234,17 +381,53 @@
           "hints": [
             {
               "id": "boundary-hint-1",
-              "content": "The samples are not sorted by magnitude. Return the first in the given order, and -1 if every one survives."
+              "content": "The noise budget is the consecutive range around zero that preserves the message. first_crossing finds the first failure in arrival order, not sorted order."
+            },
+            {
+              "id": "boundary-hint-2",
+              "content": "For d=4, L=−2,U=1. Noise 1 is inside and 2 is outside. For [(index=7,noise=2),(index=3,noise=3)], the first failure index is 7."
+            },
+            {
+              "id": "boundary-hint-3",
+              "content": "In survives compute L,U from delta and return the range comparison. In first_crossing loop over samples, returning that index on the first False from survives, or −1 after the loop. Save both functions and submit boundary."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in a ring you have not seen"
+          "label": "Hold up in a ring you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "Transfer checks the same rules at different sizes. Fixing N or q to the displayed numbers breaks when the container changes."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "The same [1,0,1] folds to [0,0] for N=2 because X²=−1; for N=4 it remains [1,0,1,0]."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Check that normalize through boundary read lengths and moduli from params. Public tests do not guarantee behavior under other settings. Submit the same lwe.py to transfer and use its result to identify the function to repair."
+            }
+          ]
         },
         {
           "id": "defense",
-          "label": "Refuse a broken ciphertext"
+          "label": "Refuse a broken ciphertext",
+          "hints": [
+            {
+              "id": "defense-hint-1",
+              "content": "Reject malformed ciphertexts at the boundary. Check the number of entries needed by the operation and the integer range, not just appearance."
+            },
+            {
+              "id": "defense-hint-2",
+              "content": "For LWE with n=2,q=8, a=[1,2],b=3 has the right shape. a=[1] is too short, b=8 is out of range, and b=True is not accepted as an integer."
+            },
+            {
+              "id": "defense-hint-3",
+              "content": "In validate_ciphertext read a/b with get. Check type and length for kind before checking each value is an integer with 0≤value<q. Append reason strings for problems, returning an empty list for valid input. Submit defense."
+            }
+          ]
         }
       ]
     }
