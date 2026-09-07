@@ -190,6 +190,7 @@ export interface PhaseBoundaries {
  * and `disruptions[]` timings get tuned (see other battles/*\/metadata.json).
  */
 export interface CryptoBattleConfig {
+  readonly proofProtocol?: "schnorr-v1";
   /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
   readonly prime: string;
   readonly threshold: number;
@@ -428,6 +429,7 @@ export interface RpsSubmission {
 }
 
 export interface Contract {
+  readonly schnorr?: { readonly y: number; readonly a: number; readonly e: number; readonly used?: boolean; readonly outcome?: "hit" | "miss" };
   /** Vigenère/RSA: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
   readonly cipherFailed?: boolean;
   /** False only when this version issued the Order; omitted legacy history is unknown. */
@@ -528,6 +530,8 @@ export interface ShareArtifact {
  * cryptographic material a viewer could use to reconstruct anything.
  */
 export interface ProofArtifact {
+  /** Present only for the interactive Schnorr protocol, p=23, q=11, g=2. */
+  readonly publicKey?: string;
   readonly id: string;
   readonly teamId: string;
   /** The team's secret generation the proven public commitment Y belongs to. */
@@ -989,6 +993,8 @@ export type StoredHuntLogEntry = HuntLogEntry | {
 | { readonly sudoku: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] };
 
 export type CryptoBattleOp =
+  | { readonly kind: "schnorr-commit"; readonly contractId: string; readonly y: number; readonly a: number }
+  | { readonly kind: "schnorr-response"; readonly contractId: string; readonly z: number }
   | { readonly kind: "hunt-rotor"; readonly targetTeamId: string; readonly generation: number; readonly a: number; readonly b: number }
   | { readonly kind: "declare-lightning"; readonly contractId: string }
   | { readonly kind: "hunt-rsa"; readonly targetTeamId: string; readonly generation: number; readonly p: string; readonly q: string }
@@ -1250,6 +1256,7 @@ export type OrderTaskProjection =
       readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
+  readonly schnorr?: { readonly y: number; readonly pending?: { readonly y: number; readonly a: number; readonly e: number; readonly used?: boolean; readonly outcome?: "hit" | "miss" } };
   readonly cipherFailed?: boolean;
   /** Authoritative eligibility before any accepted answer; missing means unknown. */
   readonly lightningEligible?: boolean;
@@ -1337,6 +1344,7 @@ export interface TeamSummaryProjection {
  */
 export interface CryptoBattleProjection {
   readonly lastBreach?: BreachNotice;
+  readonly proofProtocol?: "schnorr-v1";
   /** Host-relative timestamp of this snapshot; never a browser clock. */
   readonly clockMs?: number;
   /** Own benefit only; the opponent's allocation is never projected. */

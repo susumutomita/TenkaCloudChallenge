@@ -75,6 +75,7 @@ interface StoredRsaPairArtifact extends StoredArtifactBase {
 }
 
 export interface StoredProofArtifact extends StoredArtifactBase {
+  readonly y?: string;
   readonly k: "proof";
   readonly o: string;
   /** [Issue #701] The challenge `e`. Absent on a row written before #701. */
@@ -162,6 +163,7 @@ const TUPLE_FIELDS = {
   "sudoku-reveal": ["gr", "cl", "tg"],
   "rps-commit": ["du", "v"],
   "rps-open": ["du", "v", "h", "r"],
+  "schnorr-proof": ["o", "e", "z", "y"],
 } as const;
 const TUPLE_KINDS = Object.keys(TUPLE_FIELDS) as (keyof typeof TUPLE_FIELDS)[];
 const TUPLE_METHODS: readonly SubmissionMethod[] = [
@@ -180,17 +182,20 @@ export function artifactFields(entry: PersistedArtifact): StoredArtifact {
   const cached = tupleCache.get(tuple);
   if (cached) return cached;
   const [kind, tm, c, g, method, t] = tuple;
-  const k = Number.isInteger(kind) ? TUPLE_KINDS[kind] : undefined;
+  const rawKind = Number.isInteger(kind) ? TUPLE_KINDS[kind] : undefined;
+  const schnorr = rawKind === "schnorr-proof";
+  const k = rawKind === "schnorr-proof" ? "proof" : rawKind;
+  const fieldsForKind = schnorr ? ["o", "e", "z", "y"] : k ? TUPLE_FIELDS[k] : [];
   const m = Number.isInteger(method) ? TUPLE_METHODS[method] : undefined;
   if (
     !k ||
     !m ||
-    tuple.length < 6 + TUPLE_FIELDS[k].length ||
-    tuple.length > 7 + TUPLE_FIELDS[k].length
+    tuple.length < 6 + fieldsForKind.length ||
+    tuple.length > 7 + fieldsForKind.length
   )
     throw new Error("Invalid ledger tuple shape");
   const result: Record<string, unknown> = { k, tm, c, g, m, t };
-  for (const [i, field] of TUPLE_FIELDS[k].entries()) {
+  for (const [i, field] of fieldsForKind.entries()) {
     const value = tuple[6 + i];
     if (value === null) {
       if (
@@ -200,7 +205,7 @@ export function artifactFields(entry: PersistedArtifact): StoredArtifact {
         throw new Error("Missing required ledger tuple value");
     } else result[field] = value;
   }
-  if (tuple.length === 7 + TUPLE_FIELDS[k].length) {
+  if (tuple.length === 7 + fieldsForKind.length) {
     const d = tuple.at(-1);
     if (typeof d !== "string") throw new Error("Invalid escaped ledger ID");
     result.d = d;
@@ -210,11 +215,13 @@ export function artifactFields(entry: PersistedArtifact): StoredArtifact {
   return fields;
 }
 function tupleArtifact(fields: StoredArtifact): StoredArtifactTuple {
-  const kind = TUPLE_KINDS.indexOf(fields.k),
+  // A new tag preserves schema11 proof tuples, including escaped IDs.
+  const schnorr = fields.k === "proof" && fields.y !== undefined;
+  const kind = schnorr ? TUPLE_KINDS.indexOf("schnorr-proof") : TUPLE_KINDS.indexOf(fields.k),
     method = TUPLE_METHODS.indexOf(fields.m);
   if (kind < 0 || method < 0)
     throw new Error("Unknown ledger tuple discriminant");
-  const values = TUPLE_FIELDS[fields.k].map(
+  const values = (schnorr ? ["o", "e", "z", "y"] : TUPLE_FIELDS[fields.k]).map(
     (key) => (fields as unknown as Record<string, unknown>)[key] ?? null,
   );
   return [
@@ -435,6 +442,7 @@ export function encodeArtifact(
         ...base,
         k: "proof",
         o: artifact.commitment,
+        ...(artifact.publicKey === undefined ? {} : { y: artifact.publicKey }),
         ...(artifact.challenge === undefined ? {} : { e: artifact.challenge }),
         z: artifact.response,
       };
@@ -589,6 +597,7 @@ export function decodeArtifact(
         method,
         postedAtMs,
         commitment: stored.o,
+        ...(stored.y === undefined ? {} : { publicKey: stored.y }),
         ...(stored.e === undefined ? {} : { challenge: stored.e }),
         response: stored.z,
       } satisfies ProofArtifact;

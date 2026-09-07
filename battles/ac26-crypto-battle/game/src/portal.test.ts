@@ -631,13 +631,14 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
     expect(reconstruct(shares, P)).toBe(7n);
   });
 
-  it("does not contradict four-hole work, distinct-share counting or the teaching-model boundary", () => {
+  it("distinguishes new Schnorr work, legacy models and distinct-share counting", () => {
     for (const locale of ["ja", "en"] as const) {
       const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
       for (const stale of ["これがゲームの全部", "3 回やったら殺される", "nothing is simulated", "applied to sixteen cells", "4 つの対応表を 16 マス"])
         expect(html).not.toContain(stale);
       expect(html).toContain(locale === "ja" ? "#1・#2・#1 は 2 個分" : "#1, #2, #1 count as two");
-      expect(html).toContain(locale === "ja" ? "4 マス" : "four sudoku holes");
+      expect(html).toContain("Schnorr");
+      expect(html).toContain(locale === "ja" ? "端末内に残ります" : "stay in your browser");
       expect(html).toContain(locale === "ja" ? "じゃんけんのお題は続きます" : "Rock-paper-scissors Orders continue");
     }
   });
@@ -1564,12 +1565,13 @@ describe("the help drawer names what the player is learning", () => {
       for (const term of expected) expect(html).toContain(term);
     });
 
-    it(`explains the use case and the trusted-judge boundary (${locale})`, () => {
+    it(`explains the use case and the small-parameter HVZK boundary (${locale})`, () => {
       // Teach concrete uses and the model boundary without claiming that
       // every mechanism here is a full production cryptographic protocol.
       const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
       expect(html).toContain(locale === "ja" ? "合計を求めたい" : "company total");
-      expect(html).toContain(locale === "ja" ? "審判を信頼するモデル" : "trusted-judge teaching model");
+      expect(html).toContain("HVZK");
+      expect(html).toContain(locale === "ja" ? "秘密xは受け取りません" : "without receiving x");
     });
 
     it(`frames the historical cipher as the way in, not the destination (${locale})`, () => {

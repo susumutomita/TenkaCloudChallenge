@@ -90,7 +90,7 @@ export function huntOptions(projection: CryptoBattleProjection): readonly HuntOp
         ja: `現世代の公開${pairs.length}組。${pairs.length ? "公開列から最初の車輪の位置を計算します。1組でも特定できる場合があります。" : "相手がRotorのお題をLEAKすると元と答えが公開されます。"} 候補が複数なら別の公開を待ちます。`,
         en: `${pairs.length} public pair(s) this generation. ${pairs.length ? "Calculate initial wheel positions from the rows; one pair may suffice." : "An opponent's Rotor LEAK publishes the original and answer."} Wait for more evidence if candidates remain.`,
       } };
-    return [share, sudokuOption, ...cipherOptions, rotorOption, rsaOption, rpsOption];
+    return [share, ...(projection.proofProtocol === "schnorr-v1" ? [] : [sudokuOption]), ...cipherOptions, rotorOption, rsaOption, rpsOption];
   });
 }
 

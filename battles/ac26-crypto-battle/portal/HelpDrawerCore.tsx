@@ -1,7 +1,7 @@
 /** Optional reference. The first-screen explanation lives in StatusPanel. */
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 
-export const PYTHON_SNIPPET = String.raw`# PROVE -- relabel your sudoku solution. No code needed; this is the same
+export const PYTHON_SNIPPET = String.raw`# Legacy Sudoku model -- relabel your sudoku solution. No code needed; this is the same
 # thing written for a machine so you can check your hand work.
 solution = [1, 2, 3, 4,           # <- MY VAULT's 16 cells, row by row
             3, 4, 1, 2,
@@ -33,12 +33,12 @@ const COPY = {
   ja: {
     title: "この Battle の遊び方",
     intro: "お題（ORDER、データ上の名前は Contract）に答えて得点を競います。終了時の得点が高いチームが勝ちます。お題ごとに、入力する数・使える操作・得点・期限が違います。まず画面上部の『いまのお題』を読み、その直下で答えます。",
-    firstTitle: "最初のお題で、選ぶ理由を知る",
+    firstTitle: "お題ごとに、何をする？",
     first: [
-      "自分の秘密から作った数を『かけら（share）』と呼びます。番号はどのかけらかを区別する名前で、#1 の 1 がかけらの値という意味ではありません。",
+      "シェア（share）は、秘密分散で配る番号と数の組です。秘密分散のお題だけで使います。MPCでも使う方法はありますが、このゲームのMPCは隠す乱数を足し引きする別の方式です。",
       "『公開して答える（LEAK）』は、そのお題で求められたかけらを公開して、すぐ得点します。公開した数は『公開記録（PUBLIC LEDGER）』に残り、他のチームも読めます。",
-      "『秘密を守って証明する（PROVE）』は、数独の数字を付け替える表を選び、残り 4 マスを埋めます。かけらを公開せずに得点します。付け替えた一行などの一部分は公開されるため、同じ表の使い回しには注意します。",
-      "この二択は、かけらのお題の答え方です。別のお題では、暗号のまま足す・覆面を付ける・手を隠してじゃんけんする、など別の操作を使います。使える方法は各お題に表示されます。",
+      "新しい試合のPROVEはゼロ知識証明（Schnorr）。aを先に固定し、検証者から届くeを使ってzを手計算します。秘密xと乱数rは端末内に残ります。旧試合は数独模型のままです。",
+      "LEAKとPROVEを選べるお題では「シェアを公開する」か「別の秘密xについて証明する」かを選びます。Schnorrはシェアの正しさを証明するものではありません。暗号化・準同型の足し算・MPC・じゃんけんにはそれぞれ別の入力欄があります。",
     ],
     evidenceTitle: "公開した情報は、どう使われる？",
     evidence: [
@@ -52,23 +52,23 @@ const COPY = {
       { name: "CIPHER — 数字を暗号にする", body: "最初はシーザー暗号です。元の数字に秘密の鍵を足し、記号の個数で割った余りを答えます。答えは公開されません。同じお題を LEAK すると元と答えの組が公開され、鍵を読む材料になります。先の段ではお題に書かれた別の方式へ進みます。" },
       { name: "FHE — 暗号のまま足す", body: "準同型暗号は、中身を隠した暗号文のまま計算する技術です。左右 2 個の数字の組を受け取り、左どうし・右どうしを足して、各々の余りを提出します。完全準同型暗号（FHE）は掛け算も扱います。このゲームは足し算を体験するモデルです。" },
       { name: "MPC — 自分の数を隠して合計に参加する", body: "秘密計算（MPC）は、複数人で秘密を保って計算する方法です。各社の数を公開せず、合計を求めたい場面を体験します。自分の数に『受け取った覆面』を足し、『送った覆面』を引いて、余りを小計として提出します。覆面は内緒で共有する数で、全社を足すと打ち消し合います。得られる合計も、割る数で割った余りです。" },
-      { name: "PROVE — 解を見せずに正しさを示す", body: "ゼロ知識証明（ZK）は、答えを明かさず正しさを示す技術です。このゲームでは、審判は元の数独の解を持ち、付け替えたマスを照合します。相手には一部分だけを見せます。本来の ZK は検証する人にも答えを隠しますが、この教材は審判を信頼するモデルです。" },
+      { name: "PROVE — ゼロ知識証明（Schnorr）", body: "公開値yに対応する秘密xを知ることを示します。a→e→zの順に会話し、検証者は2ᶻ ≡ a×yᵉ (mod23)を確認。秘密xは受け取りません。図と式の解説で、なぜ秘密を増やさないかを確かめられます。小さい数のHVZK教材で、旧試合の数独模型とは別方式です。" },
       { name: "DUEL — 相手とじゃんけんする", body: "手を先に見せると相手が勝つ手を選べるので、手と隠す数を混ぜた数字を先に出します。これをコミットメントと呼びます。両者が出したあとに手と隠す数を審判へ渡し、両開封を同時公開して勝敗を決めます。小さい数では別の手への開け方を探せるため、同時公開を守る審判が必要です。commit-reveal 自体は ZK 証明ではありません。" },
     ],
     placesTitle: "画面のどこを見る？",
     places: ["いまのお題：説明・入力欄・送信ボタンが一緒にあります。別のお題は『ほかのお題を選ぶ』から選びます。", "秘密の公開状況：自分や相手のかけらが、同じ世代で何個公開されたかを見ます。", "公開記録と自分の保管庫：相手も読める公開情報と、自分だけが読める秘密を確認できます。MY VAULT は自分の保管庫です。"],
     codeTitle: "任意：紙での計算を Python でも確かめる",
-    codeIntro: "読む・遊ぶために、このコードを使う必要はありません。PROVE の表を適用する例と、任意の番号のかけらから戻す計算です。P は HUNT の画面にある割る数へ置き換えます。番号 #1・#2・#3 専用の短い式と、その理由は上部の『秘密のかけら』の解説で追えます。",
+    codeIntro: "読む・遊ぶために、このコードを使う必要はありません。旧試合の数独模型に表を適用する例と、任意の番号のかけらから戻す計算です。P は HUNT の画面にある割る数へ置き換えます。番号 #1・#2・#3 専用の短い式と、その理由は上部の『秘密のかけら』の解説で追えます。",
   },
   en: {
     title: "How this Battle works",
     intro: "Answer tasks called ORDERs (Contract in raw data) to score. The highest score at the end wins. Each Order states its inputs, permitted methods, points and deadline. Read the current Order at the top, then answer directly below it.",
-    firstTitle: "Understand the first choice",
+    firstTitle: "What does each Order ask you to do?",
     first: [
-      "A share is a number made from your secret. Its index identifies the piece: #1 does not mean the share’s value is 1.",
+      "A share is an indexed value distributed by secret sharing. It belongs to the secret-sharing task. Some MPC protocols use shares; this game instead uses cancelling random masks for MPC.",
       "Publish to answer (LEAK) reveals the requested share and scores immediately. Everyone can read the value in the PUBLIC LEDGER.",
-      "Prove while protecting the secret (PROVE) asks you to choose a digit-renaming table and fill four sudoku holes. It scores without revealing a share. A renamed group is published, so avoid reusing the same table.",
-      "These are the two options for a share Order. Other Orders use encrypted addition, masks or hidden-hand duels. Each Order shows its allowed methods.",
+      "New-match PROVE uses Schnorr zero-knowledge proof: fix a, receive e, then hand-calculate z. Private x and r stay in your browser. Legacy matches retain the Sudoku model.",
+      "Where both are offered, choose between publishing a share and proving knowledge of a separate x. Schnorr does not certify the share. Encryption, homomorphic addition, MPC and duels have separate inputs.",
     ],
     evidenceTitle: "What can an opponent do with published information?",
     evidence: [
@@ -82,13 +82,13 @@ const COPY = {
       { name: "CIPHER — Encrypt digits", body: "Start with Caesar: add your secret key to each digit and keep the remainder after division by the symbol count. Your answer is not published. LEAK instead publishes the original and answer together, giving others evidence to recover the key. Later rungs explain their own different methods." },
       { name: "FHE — Add encrypted values", body: "Homomorphic encryption allows computation on hidden values. Receive pairs, add lefts and rights separately, and submit the remainders. Fully homomorphic encryption (FHE) also supports multiplication; this game models addition." },
       { name: "MPC — Contribute without showing your input", body: "Secure computation (MPC) lets multiple parties compute while keeping inputs private. To contribute to a company total, add received masks to your input and subtract sent masks. A mask is a privately shared number; each is added and subtracted once across the companies. Submit your subtotal’s remainder. The combined result is also a remainder, not an unrestricted total." },
-      { name: "PROVE — Show correctness without the solution", body: "Zero-knowledge proofs (ZK) demonstrate correctness without revealing an answer. Here a trusted judge holds the sudoku solution and checks renamed cells; opponents see one group. A full ZK protocol also hides the solution from the verifier. This is a trusted-judge teaching model." },
+      { name: "PROVE — Schnorr zero-knowledge proof", body: "Zero-knowledge proofs show knowledge of x for public y through a→e→z. The verifier checks 2ᶻ ≡ a×yᵉ (mod23), without receiving x. The diagram guide explains why transcripts reveal no additional information. This is a tiny-parameter HVZK exercise, separate from legacy Sudoku matches." },
       { name: "DUEL — Play an opponent", body: "Showing your hand first lets an opponent counter it. First send a commitment, a number mixing your hand with a hiding number. After both commitments arrive, give the judge your opening. Both openings are published together to settle the duel. Tiny numbers permit alternative openings, so this model needs its judge to enforce simultaneous publication. Commit-reveal is not itself a ZK proof." },
     ],
     placesTitle: "Where should you look?",
     places: ["Current Order: instructions, answer fields and submission are together. Use Choose another Order to switch.", "Secret exposure: counts distinct shares published in each team’s current generation.", "Public record and your vault: inspect public evidence or your own private values. MY VAULT is visible only to your team."],
     codeTitle: "Optional: check your paper calculation with Python",
-    codeIntro: "This code is optional. It applies a PROVE table and reconstructs from arbitrary share indices. Replace P with the divisor on your HUNT card. The short formula for indices #1, #2, #3 and why it works are explained in Secret shares at the top.",
+    codeIntro: "This code is optional. It applies a legacy Sudoku table and reconstructs from arbitrary share indices. Replace P with the divisor on your HUNT card. The short formula for indices #1, #2, #3 and why it works are explained in Secret shares at the top.",
   },
 } as const;
 

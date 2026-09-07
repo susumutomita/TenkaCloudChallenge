@@ -1,3 +1,4 @@
+import { SchnorrLesson } from "./SchnorrLesson.tsx";
 import { ROTOR_EXPLANATIONS } from "./RotorMaterials.tsx";
 import { RSA_EXPLANATIONS } from "./RsaMaterials.tsx";
 import { cipherKeyAt } from "../game/src/ladder.ts";
@@ -7,7 +8,7 @@ import ConceptDiagram from "./ConceptDiagram.tsx";
 import type { OrderTaskProjection } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-export type Concept = "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "rsa" | "rotor" | "commit";
+export type Concept = "schnorr" | "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "rsa" | "rotor" | "commit";
 interface Step { readonly diagram?: "zk" | "relabel" | "sharing" | "mpc"; readonly title: string; readonly lines: readonly string[]; readonly table?: { readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] } }
 interface Explanation { readonly name: string; readonly steps: readonly Step[] }
 
@@ -16,6 +17,7 @@ export const SHARE_PAIR_TABLE = [["0", "5", "4"], ["1", "0", "1"], ["2", "2", "5
 /** Fixed teaching examples, independent of every match's private data. */
 export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
   ja: {
+    schnorr: {name:"ゼロ知識証明（Schnorr）",steps:[]},
     rotor: ROTOR_EXPLANATIONS.ja,
     rsa: RSA_EXPLANATIONS.ja,
     commit: { name: "手を先に封じる", steps: [
@@ -32,7 +34,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
     ] },
     sharing: {"name": "秘密分散とシェア", "steps": [{"title": "秘密計算との関係", "diagram": "sharing", "lines": ["秘密計算（MPC）は、互いの入力を明かさず協力して計算する技術です。", "秘密分散は、その実現方法の一つ。秘密から複数の数を作り、その1個をシェア（share）と呼びます。ここでは「秘密のかけら」とも表示しています。"]}, {"title": "まず、足し算で分ける例", "lines": ["秘密 6 → シェア 1・2・3", "戻すとき：1 + 2 + 3 = 6。計算は7で割った余りを使います。", "1と2だけでは、残りが分からず秘密を決められません。この例は3個すべて必要です。"]}, {"title": "この試合では、5個のうち3個で戻す", "lines": ["小さい例（割る数7）：秘密1を、式 1 + 番号 × 番号 で分けます。", "番号1 → 2、番号2 → 5、番号3 → 10 → 7を引いて3。", "番号1・2・3から戻す式：3×2 − 3×5 + 3 = −6 → 7を足して1。別の番号を使うと、掛ける数も変わります。"]}, {"title": "公開した情報が、攻撃の材料になる", "lines": ["LEAK：シェアを公開して得点。相手にもその数が見えます。", "HUNT：相手の同じ世代（同じ秘密から作った一組）のシェアを集め、元の秘密を計算して攻撃します。", "このゲームでは、秘密分散と、覆面で合計を出す秘密計算を別のお題で体験します。"]}]},
     mpc: {"name": "秘密計算（MPC）", "steps": [{"title": "入力を隠したまま、一緒に計算する", "diagram": "mpc", "lines": ["MPCは、複数の人が自分の入力を互いに明かさず、協力して計算する技術です。", "例：各社の売上を見せず、合計だけ知る。合計から分かる情報は隠しません。"]}, {"title": "隠す数を足し引きする模型", "lines": ["覆面＝入力を隠すため、拠点どうしで共有した数。片方が足し、もう片方が同じ数を引きます。", "A：2 + 1 − 4 = −1", "B：3 + 4 − 2 = 5", "C：1 + 2 − 1 = 2"]}, {"title": "全員分を足すと、覆面が消える", "lines": ["(2 + 1 − 4) + (3 + 4 − 2) + (1 + 2 − 1)", "+1 と −1、+4 と −4、+2 と −2 が消える → 2 + 3 + 1 = 6。", "7で割った余りでも、−1→6、6+5+2=13→6。同じ結果です。"]}, {"title": "自分の小計を送る", "lines": ["小計＝自分の入力 + 受け取った覆面 − 送った覆面。", "最後にカードの p（割る数）で割った余りを、回答欄に1個入力します。", "この画面では自分の分だけ計算します。全員の合計は審判が確認します。"]}]},
-    zk: {"name": "ゼロ知識証明（ZK）", "steps": [{"title": "秘密を送らず、正しさを証明する技術", "diagram": "zk", "lines": ["ZKは、秘密情報を明かさずに、主張が正しいと確認してもらう証明です。例えば、パスワードそのものを送らず「知っている」と証明します。", "次の数独は「見せる情報を減らす」部分を学ぶ模型です。審判は解を知るため、このゲームは本物のZKプロトコルではありません。"]}, {"title": "数独の模型：数字だけを付け替える", "diagram": "relabel", "lines": ["同じ数字は、どのマスでも同じ数字へ。上の矢印を押して確かめます。", "各行・各列・太枠の箱で、1〜4が1回ずつ現れるルールは、そのまま残ります。"]}, {"title": "見せる範囲を小さくする", "lines": ["自分 → 付け替えた16マス → 審判が確認", "相手に見えるもの → 付け替え後の1行・1列・1箱のうち1組。元の解全体は公開しません。", "本物のZKでは、秘密を知る審判に頼らず証明を検証します。模型と技術の違いはここです。"]}, {"title": "この画面でやること", "lines": ["① 今回の置き換えを矢印で確認します。未使用の表が自動で用意されます。", "② 左と同じ位置の数字を、矢印の先へ読み替えて4マス入力。", "③「答えを送る」を押す。同じ表を再利用すると解が漏れる危険があるため、次回も新しい表を自動で用意します。"]}]},
+    zk: {"name": "数独の模型（旧方式）", "steps": [{"title": "秘密を送らず、正しさを証明する技術", "diagram": "zk", "lines": ["ZKは、秘密情報を明かさずに、主張が正しいと確認してもらう証明です。例えば、パスワードそのものを送らず「知っている」と証明します。", "次の数独は「見せる情報を減らす」部分を学ぶ模型です。審判は解を知るため、このゲームは本物のZKプロトコルではありません。"]}, {"title": "数独の模型：数字だけを付け替える", "diagram": "relabel", "lines": ["同じ数字は、どのマスでも同じ数字へ。上の矢印を押して確かめます。", "各行・各列・太枠の箱で、1〜4が1回ずつ現れるルールは、そのまま残ります。"]}, {"title": "見せる範囲を小さくする", "lines": ["自分 → 付け替えた16マス → 審判が確認", "相手に見えるもの → 付け替え後の1行・1列・1箱のうち1組。元の解全体は公開しません。", "本物のZKでは、秘密を知る審判に頼らず証明を検証します。模型と技術の違いはここです。"]}, {"title": "この画面でやること", "lines": ["① 今回の置き換えを矢印で確認します。未使用の表が自動で用意されます。", "② 左と同じ位置の数字を、矢印の先へ読み替えて4マス入力。", "③「答えを送る」を押す。同じ表を再利用すると解が漏れる危険があるため、次回も新しい表を自動で用意します。"]}]},
     fhe: { name: "FHE", steps: [
       { title: "中身を読まずに、計算したい", lines: ["準同型暗号は、隠した数に計算をして、あとで開くと中身に計算した結果が得られる仕組みです。FHE（完全準同型暗号）は足し算と掛け算を組み合わせられます。この問題では入口の『隠したまま足す』を体験します。", "隠した数を『暗号文』、隠すための秘密の数を『鍵』と呼びます。答えを検査する『判定側』だけが鍵を持ち、暗号文ごとに別々の鍵を使います。"] },
       { title: "小さな暗号文を作ってみる", lines: ["説明用にだけ中身と鍵を見せます。割る数は 7。暗号文は（左、右）の組です。左はくじで選ぶ 0 以外の数。右は 中身 + 鍵 × 左 を 7 で割った余り。『鍵 × 左』を隠す数と呼びます。", "1 個目：中身 1、鍵 2、左 2。隠す数は 2 × 2 = 4、右は 1 + 4 = 5。暗号文は（2、5）。", "2 個目：中身 3、鍵 1、左 3。隠す数は 1 × 3 = 3、右は 3 + 3 = 6。暗号文は（3、6）。", "本番で届くのは数の組だけです。違う鍵なら別の中身でも同じ右の数を作れるため、鍵を知らない人は中身を決められません。"] },
@@ -51,6 +53,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
     ] },
   },
   en: {
+    schnorr: {name:"Zero-knowledge proof (Schnorr)",steps:[]},
     rotor: ROTOR_EXPLANATIONS.en,
     rsa: RSA_EXPLANATIONS.en,
     commit: { name: "Commit-reveal", steps: [
@@ -78,7 +81,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
       { title: "Remainders preserve cancellation", lines: ["Divide by 7 and keep remainders. A's −1 becomes −1 + 7 = 6. B stays 5, C stays 2. Add 7 while negative and subtract 7 while at least 7.", "The published total is 6 + 5 + 2 = 13 → 6, matching the real total 2 + 3 + 1 = 6.", "Expand the original subtotals: (2 + 1 − 4) + (3 + 4 − 2) + (1 + 2 − 1). Mask pairs +1/−1, +4/−4 and +2/−2 cancel."] },
       { title: "Build this Order's subtotal", lines: ["Start with your number, add every received mask and subtract every sent mask.", "p is the divisor. Add p while negative; subtract p while at least p. Enter the result into your masked subtotal. Submit your one subtotal, not the total of all offices."] },
     ] },
-    zk: {"name": "Zero-knowledge proof (ZK)", "steps": [{"title": "Prove a claim without sending the secret", "diagram": "zk", "lines": ["ZK proves a claim without revealing its secret information. For example, prove you know a password without sending the password.", "The sudoku below is a model for limiting what is revealed. Its judge knows the solution, so this game is not a real ZK protocol."]}, {"title": "Sudoku model: rename digits, keep positions", "diagram": "relabel", "lines": ["Rename every occurrence of a digit the same way. Select an arrow above to follow its cells.", "Every row, column and outlined box still contains 1–4 exactly once."]}, {"title": "Reveal a smaller part", "lines": ["You → sixteen renamed cells → the judge checks.", "Opponents see one renamed row, column or box, not the entire original solution.", "Real ZK verifies a proof without relying on a judge who knows the secret."]}, {"title": "What to do on this screen", "lines": ["1. Check the automatically prepared unused relabelling table.", "2. Use the left digit at each hole’s position and follow the table’s arrow. Fill four holes.", "3. Submit the answer. Reusing a table can reveal your solution; a new unused table is prepared next time."]}]},
+    zk: {"name": "Legacy Sudoku model", "steps": [{"title": "Prove a claim without sending the secret", "diagram": "zk", "lines": ["ZK proves a claim without revealing its secret information. For example, prove you know a password without sending the password.", "The sudoku below is a model for limiting what is revealed. Its judge knows the solution, so this game is not a real ZK protocol."]}, {"title": "Sudoku model: rename digits, keep positions", "diagram": "relabel", "lines": ["Rename every occurrence of a digit the same way. Select an arrow above to follow its cells.", "Every row, column and outlined box still contains 1–4 exactly once."]}, {"title": "Reveal a smaller part", "lines": ["You → sixteen renamed cells → the judge checks.", "Opponents see one renamed row, column or box, not the entire original solution.", "Real ZK verifies a proof without relying on a judge who knows the secret."]}, {"title": "What to do on this screen", "lines": ["1. Check the automatically prepared unused relabelling table.", "2. Use the left digit at each hole’s position and follow the table’s arrow. Fill four holes.", "3. Submit the answer. Reusing a table can reveal your solution; a new unused table is prepared next time."]}]},
     fhe: { name: "FHE", steps: [
       { title: "Compute without reading the contents", lines: ["Homomorphic encryption lets you compute on hidden values and later open the result of that computation. FHE (fully homomorphic encryption) combines addition and multiplication. This problem teaches the entry point: hidden addition.", "A hidden value is a ciphertext; a secret number used to hide it is a key. Only the judge that checks answers holds the keys. Each input here uses its own key."] },
       { title: "Make two tiny ciphertexts", lines: ["Only this example shows contents and keys. Divide by 7. A ciphertext is (left, right): left is a randomly chosen nonzero number; right is content + key × left, reduced to its remainder. Call key × left the hiding number.", "First: content 1, key 2, left 2. Hiding number 2 × 2 = 4; right 1 + 4 = 5. Ciphertext (2, 5).", "Second: content 3, key 1, left 3. Hiding number 1 × 3 = 3; right 3 + 3 = 6. Ciphertext (3, 6).", "In the match you only receive pairs. Different keys let different contents fit the same right value, so an observer without the keys cannot determine the contents."] },
@@ -132,7 +135,7 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
   }
 }
 
-export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"rotor": "位置が進む車輪って何？", "rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"rotor": "How do advancing wheels work?", "rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
+export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"schnorr":"ゼロ知識証明：なぜ秘密を送らず確かめられる？","rotor": "位置が進む車輪って何？", "rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"schnorr":"Zero knowledge: verify without the secret?","rotor": "How do advancing wheels work?", "rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
 
 const button = { cursor: "pointer", border: "1px solid #a4b5c6", borderRadius: 5, padding: "5px 9px", color: "#24476d", background: "#fff", fontSize: 12 } as const;
 export default function ConceptExplanation({ locale, topic, task, prime, embedded = false }: {
@@ -141,7 +144,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
   const [selected, setSelected] = useState<Concept | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const copy = EXPLANATIONS[locale];
-  const topics = topic ? [topic] : (["remainder", "sharing", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa"] as Concept[]);
+  const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa"] as Concept[]);
   const lesson = selected ? copy[selected] : null;
   const step = lesson?.steps[stepIndex];
   const ja = locale === "ja";
@@ -152,6 +155,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
         {topics.map((item) => <button key={item} type="button" style={button} aria-expanded={selected === item}
           onClick={() => { setSelected(selected === item ? null : item); setStepIndex(0); }}>{CONCEPT_QUESTIONS[locale][item]}</button>)}
       </div>
+      {selected === "schnorr" && <SchnorrLesson locale={locale}/>}
       {lesson && step && <div style={{ border: "1px solid #bad1e8", borderRadius: 6, background: "#f5f9fe", padding: 12, marginTop: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
           <strong>{lesson.name} · {stepIndex + 1} / {lesson.steps.length} — {step.title}</strong>
