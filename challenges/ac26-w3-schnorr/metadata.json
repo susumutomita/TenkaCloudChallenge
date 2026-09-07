@@ -96,7 +96,7 @@
           },
           {
             "id": "keygen-hint-3",
-            "content": "schnorr.pyのpublic_keyでsecretが整数で1以上group.n未満か検査し、generator.scalar_mul(secret)を返します。validate_public_keyではgroup.containsとis_infinityを確認し、不適切な点はFalse。keygenを提出します。",
+            "content": "schnorr.pyのpublic_keyでsecretが整数で1以上group.n未満か検査し、group.generator.scalar_mul(secret)を返します。validate_public_keyではgroup.contains(point)とpoint.is_infinityを確認し、不適切な点はFalse。keygenを提出します。",
             "penalty": 2
           }
         ]
@@ -120,7 +120,7 @@
           },
           {
             "id": "sigma-hint-3",
-            "content": "commitは1〜n−1のnonceからgenerator.scalar_mul(nonce)を返します。respondはnonce、challenge、secretで足し算と掛け算をし、group.nで余りを取ります。sigmaを提出します。",
+            "content": "commitは1〜n−1のnonceからgroup.generator.scalar_mul(nonce)を返します。respondはnonce、challenge、secretで足し算と掛け算をし、group.nで余りを取ります。sigmaを提出します。",
             "penalty": 2
           }
         ]
@@ -144,7 +144,7 @@
           },
           {
             "id": "transcript-hint-3",
-            "content": "publicとcommitmentを検査し、responseは0〜n−1の整数に限ります。整数のchallengeはgroup.nで余りを取ります。generator.scalar_mul(response)とcommitment+public.scalar_mul(challenge%group.n)を比較し、True/Falseを返してtranscriptを提出します。",
+            "content": "publicとcommitmentを検査し、responseは0〜n−1の整数に限ります。整数のchallengeはgroup.nで余りを取ります。group.generator.scalar_mul(response)とcommitment+public.scalar_mul(challenge%group.n)を比較し、True/Falseを返してtranscriptを提出します。",
             "penalty": 2
           }
         ]
@@ -301,7 +301,7 @@
             },
             {
               "id": "keygen-hint-3",
-              "content": "In schnorr.py, public_key checks that secret is an integer from1 through group.n−1 and returns generator.scalar_mul(secret). In validate_public_key check group.contains and is_infinity, returning False for unusable points. Submit keygen."
+              "content": "In schnorr.py, public_key checks that secret is an integer from1 through group.n−1 and returns group.generator.scalar_mul(secret). In validate_public_key check group.contains(point) and point.is_infinity, returning False for unusable points. Submit keygen."
             }
           ]
         },
@@ -319,7 +319,7 @@
             },
             {
               "id": "sigma-hint-3",
-              "content": "commit returns generator.scalar_mul(nonce) for a nonce in1..n−1. respond multiplies challenge by secret, adds nonce, and takes the remainder modulo group.n. Submit sigma."
+              "content": "commit returns group.generator.scalar_mul(nonce) for a nonce in1..n−1. respond multiplies challenge by secret, adds nonce, and takes the remainder modulo group.n. Submit sigma."
             }
           ]
         },
@@ -337,7 +337,7 @@
             },
             {
               "id": "transcript-hint-3",
-              "content": "Validate public and commitment, and require an integer response in0..n−1. Reduce the integer challenge by group.n. Compare generator.scalar_mul(response) with commitment+public.scalar_mul(challenge%group.n), return True/False, and submit transcript."
+              "content": "Validate public and commitment, and require an integer response in0..n−1. Reduce the integer challenge by group.n. Compare group.generator.scalar_mul(response) with commitment+public.scalar_mul(challenge%group.n), return True/False, and submit transcript."
             }
           ]
         },

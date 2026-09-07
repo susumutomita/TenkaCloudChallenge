@@ -1,7 +1,7 @@
 """Public tests. They show the shape of an answer; they do not prove one correct.
 
 They sign one message and verify it. They never change a byte and re-verify, never look
-at the serialization, never compare two domains, and never touch secp256k1.
+at malformed encodings, never compare two domains, and never touch secp256k1.
 
 A challenge function that hashes only the message passes this file. So does one with no
 length prefixes. Both are broken, and both are broken in ways that only show up when
@@ -56,7 +56,19 @@ def check_sign_then_verify() -> str:
     return ""
 
 
+def check_point_encoding_round_trip() -> str:
+    group, x, _k = _setup()
+    point = group.generator.scalar_mul(x)
+    encoded = submission.encode_point(point, group)
+    if not isinstance(encoded, bytes) or len(encoded) != 2 * group.as_public()["coordinate_bytes"]:
+        return "point encoding does not use the documented width"
+    if submission.decode_point(encoded, group) != point:
+        return "decoding did not recover the encoded point"
+    return ""
+
+
 CHECKS = (
+    ("point-encoding-round-trip", check_point_encoding_round_trip),
     ("public-key-is-xg", check_public_key_is_the_secret_times_g),
     ("honest-transcript-verifies", check_honest_transcript_verifies),
     ("sign-then-verify", check_sign_then_verify),

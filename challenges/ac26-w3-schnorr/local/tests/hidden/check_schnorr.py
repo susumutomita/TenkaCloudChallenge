@@ -53,7 +53,7 @@ def check_keygen(module, seed: str) -> list[str]:
         other = toy_group(seed, f"{label}-other")
         if other.params != group.params and module.validate_public_key(other.generator, group):
             failures.append("a point from another curve was accepted as a public key")
-        for bad in (0, group.n, -1):
+        for bad in (0, group.n, -1, True, False, 1.5, "1", None):
             try:
                 module.public_key(bad, group)
                 failures.append("a secret outside [1, n-1] was accepted")
@@ -76,6 +76,14 @@ def check_sigma(module, seed: str) -> list[str]:
         if commitment != group.generator.scalar_mul(k):
             failures.append("the commitment is not the nonce times the generator")
             continue
+        for bad in (0, group.n, -1, True, False, 1.5, "1", None):
+            try:
+                module.commit(bad, group)
+                failures.append("an invalid nonce was accepted")
+            except module.InvalidKey:
+                pass
+            except Exception as error:
+                failures.append(f"a bad nonce raised {type(error).__name__}, not InvalidKey")
         for e in (0, 1, 2, group.n - 1, (x * 7 + 3) % group.n):
             z = module.respond(k, e, x, group)
             if not isinstance(z, int) or not 0 <= z < group.n:
@@ -98,6 +106,12 @@ def check_transcript(module, seed: str) -> list[str]:
             if not module.verify_transcript(public, commitment, e, z, group):
                 failures.append("an honest transcript was rejected")
                 break
+            for bad_response in (z + group.n, z - group.n, 1.5, "1", None):
+                try:
+                    if module.verify_transcript(public, commitment, e, bad_response, group):
+                        failures.append("a noncanonical response was accepted")
+                except Exception as error:
+                    failures.append(f"invalid response raised {type(error).__name__} instead of False")
             if module.verify_transcript(public, commitment, e, (z + 1) % group.n, group):
                 failures.append("a transcript with a modified response was accepted")
                 break

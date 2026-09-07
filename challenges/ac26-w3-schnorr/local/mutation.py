@@ -30,6 +30,9 @@ _PREIMAGE = """    return b"".join(
     )"""
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+    ("accepts a boolean secret", [("or isinstance(secret, bool) ", "")]),
+    ("accepts zero nonce", [("not 1 <= nonce <= group.n - 1", "not 0 <= nonce <= group.n - 1")]),
+    ("accepts noncanonical response", [("if not isinstance(response, int) or not 0 <= response < group.n:", "if not isinstance(response, int):")]),
     (
         "leaves the domain out of the challenge",
         [

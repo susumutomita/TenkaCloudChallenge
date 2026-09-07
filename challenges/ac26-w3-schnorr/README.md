@@ -63,7 +63,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `cross-protocol` | 40 | The counterexample, and immunity to it |
 | `transfer` | 30 | The same protocol code on secp256k1 |
 
-Hints on six of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints costing two points each (48 total).
 
 ## The counterexample checkpoint
 
@@ -144,3 +144,6 @@ between, that mutation survived.
 
 
 Eight checkpoints now have three hint rungs. A participant-only reader found missing byte-encoding APIs, an incorrect collision guarantee, ambiguous input rules, and a set-shaped dictionary example. The bilingual text and starter explanation were corrected. Author inspection of the existing reference confirmed the challenge-reduction contract; that inspection is not participant-play evidence. Catalog checks passed. Runtime/Portal play was not performed for this documentation revision.
+
+
+Review follow-up adds an encoding round trip to the public suite and enforces documented invalid secret, nonce and response inputs in the grader. Public tests passed against the reference (four cases); all thirteen mutations were rejected. These author runs are not participant-play evidence.
