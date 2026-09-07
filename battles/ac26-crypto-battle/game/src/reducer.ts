@@ -1,4 +1,5 @@
 import {ioTask,ioAnswer,parseIoAnswer} from "./io.ts";
+import {constraintTask, constraintResiduals, parseResiduals} from "./snark.ts";
 import {addPoints,parsePoint,CURVE_POINTS} from "./ec.ts";
 import { createHmac } from "node:crypto";
 import { power, group, scalar, verifySchnorr } from "./schnorr.ts";
@@ -262,6 +263,7 @@ export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   proofProtocol: "schnorr-v1",
   ecOrders:true,
   ioOrders:true,
+  snarkOrders:true,
   contractIntervalMs: 30_000,
   contractsPerIssue: 1,
   onboardingFollowUpMs: 30_000,
@@ -359,6 +361,7 @@ function buildOrderTask(
 ): OrderTask {
   switch (plan.taskKind) {
     case "io-equivalence": return ioTask([...createHmac("sha256",seed).update(`io:${contractId}`).digest()]);
+    case "snark-constraints": return constraintTask([...createHmac("sha256",seed).update(`snark:${contractId}`).digest()]);
     case "ec-add": {
       const bytes=createHmac("sha256",seed).update(`ec:${contractId}`).digest();
       return {kind:"ec-add",left:CURVE_POINTS[bytes[0]!%CURVE_POINTS.length]!,right:CURVE_POINTS[bytes[1]!%CURVE_POINTS.length]!};
@@ -924,6 +927,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
       let plan = deriveContractPlan(state.seed, teamId, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), fieldConfig, { elapsedMs: nextContractAtMs - startedAtMs, buildToPressureMs: state.config.phaseBoundaries.buildToPressureMs, pressureToEndgameMs: state.config.phaseBoundaries.pressureToEndgameMs });
       if(state.config.ioOrders && sequenceIndex%19===18)plan={...plan,taskKind:"io-equivalence",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if(state.config.ecOrders && sequenceIndex%13===12)plan={...plan,taskKind:"ec-add",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
+      if(state.config.snarkOrders && sequenceIndex%17===16)plan={...plan,taskKind:"snark-constraints",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
       //
@@ -1333,7 +1337,7 @@ export function validateOp(
   switch (op.kind) {
     case "declare-lightning": {
       const contract = state.contracts.find(c => c.id === op.contractId && c.teamId === teamId);
-      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io"].includes(m));
+      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark"].includes(m));
       if (!contract || !method) return { ok: false, error: "lightning requires your own calculation Order; duel outcomes do not qualify" };
       const gate = validateOrderSubmission(state, teamId, op.contractId, method);
       if (!gate.ok) return gate;
@@ -1632,6 +1636,11 @@ export function validateOp(
       const gate=validateOrderSubmission(state,teamId,op.contractId,"io");
       if(!gate.ok)return gate;
       return parseIoAnswer(op.answer)?{ok:true}:{ok:false,error:"Enter two outputs (0–4), equivalence (0/1), and shared outcome count (0–4), separated by spaces."};
+    }
+    case "snark": {
+      const gate=validateOrderSubmission(state,teamId,op.contractId,"snark");
+      if(!gate.ok)return gate;
+      return parseResiduals(op.answer)?{ok:true}:{ok:false,error:"Enter five remainders (0–6), separated by spaces."};
     }
     case "ec": {
       const gate=validateOrderSubmission(state,teamId,op.contractId,"ec");
@@ -2257,6 +2266,7 @@ function projectTask(
 ): OrderTaskProjection {
   switch (task.kind) {
     case "io-equivalence": return task;
+    case "snark-constraints": return task;
     case "ec-add": return task;
     case "rotor-encrypt": {
       const order = state.contracts.find(c => c.id === contractId && c.teamId === teamId);
@@ -2731,6 +2741,7 @@ function applyMethodOp(
     case "fhe":
       return applyFhe(state, teamId, op);
     case "io": return applyIo(state,teamId,op);
+    case "snark": return applySnark(state,teamId,op);
     case "ec": return applyEc(state,teamId,op);
     case "mpc":
       return applyMpc(state, teamId, op);
@@ -3011,4 +3022,15 @@ function applyIo(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattleOp
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
  return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"io" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
+}
+function applySnark(state: CryptoBattleState, teamId: string, op: Extract<CryptoBattleOp,{kind:"snark"}>): CryptoBattleState {
+  const order = state.contracts.find(c => c.id === op.contractId)!;
+  if (order.task.kind !== "snark-constraints") throw new Error("wrong task");
+  const hit = JSON.stringify(parseResiduals(op.answer)) === JSON.stringify(constraintResiduals(order.task));
+  const team = state.teams[teamId]!;
+  const points = hit ? order.points + lightningBonus(state,order) : -Math.min(team.score,Math.abs(state.config.scores.wrongProve));
+  return {...state,
+    contracts: state.contracts.map(c => c.id === order.id ? {...c,answerAttempted:true,...(hit?{status:"completed" as const,resolution:"snark" as const}:{})} : c),
+    teams: {...state.teams,[teamId]: {...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,order.id)]}:{})}},
+  };
 }

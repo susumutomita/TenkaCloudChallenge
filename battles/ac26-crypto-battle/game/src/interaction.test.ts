@@ -109,6 +109,7 @@ class Bot {
       case "zk-sudoku":
         return freshPermutation(view.vault) ? buildProveSudokuOp(view.vault, order.id) : undefined;
       case "io-equivalence":
+      case "snark-constraints":
       case "ec-add":
       case "rotor-encrypt":
       case "rsa-encrypt":

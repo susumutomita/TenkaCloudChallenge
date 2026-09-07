@@ -128,6 +128,16 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
     {id:"io-equivalence/2",text:()=>({ja:"5で割った余りを使います。2×3+1=7なら余り2。表[0,1,2,3]を右へ1個回すと[3,0,1,2]で、入力2は位置(2+1)の3から答え2を読みます。",en:"Take remainders by5. 2×3+1=7 gives remainder2. Rotate [0,1,2,3] right by1 to get [3,0,1,2]; input2 reads position(2+1)=3 and returns2."})},
     {id:"io-equivalence/3",text:ctx=>{if(ctx.task.kind!=="io-equivalence")throw new Error("wrong hint task");const t=ctx.task;return {ja:`Aの空欄は${t.a}×${t.missing[0]}+${t.b}、Bの空欄は${t.a}×(${t.missing[1]}+${t.d})+${t.c}の余り。表4行を比較し、全部同じなら1、違えば0。下の回した表もrと組にして比べ、共通する組を数えて最後の欄へ入れます。`,en:`For A calculate ${t.a}×${t.missing[0]}+${t.b}; for B calculate ${t.a}×(${t.missing[1]}+${t.d})+${t.c}, taking remainders. Compare all4 rows: enter1 if identical, else0. Compare each rotated table together with r and enter the shared outcome count in the last field.`};}},
   ],
+  "snark-constraints": [
+    {id:"snark-constraints/1",text:()=>({ja:"まず各行の計算を確かめ、次に前の出力が次の入力へ同じ値で届くか確かめます。行だけ正しくても、つなぎ方が違えば元の計算にはなりません。",en:"Check each gate, then whether the output reaches the next input unchanged. Correct individual gates alone do not establish correct wiring."})},
+    {id:"snark-constraints/2",text:()=>({ja:"7で割った余りで確認します。足し算2+3−5=0なら一致。掛け算3×4−4=8は7を引いて余り1なので不一致。配線が5→6なら5−6=−1、7を足して余り6なので不一致です。",en:"Take remainders by7: 2+3−5=0 passes. Multiplication 3×4−4=8; subtract7 to get remainder1, so it fails. A wire5→6 gives5−6=−1, remainder6, so it fails."})},
+    {id:"snark-constraints/3",text:ctx=>{
+      if(ctx.task.kind!=="snark-constraints")throw new Error("SNARK task required");
+      const [a,b,c]=ctx.task.rows;
+      const steps=`${a[0]}+${a[1]}−${a[2]}; ${b[0]}×${b[1]}−${b[2]}; ${c[0]}+${c[1]}−${c[2]}; ${a[2]}−${c[0]}; ${b[2]}−${c[1]}`;
+      return {ja:`この順で計算：${steps}。各結果に7を足すか引いて0〜6にし、上から5欄へ入力します。すべて0でなくても、正しく計算した余りを提出してください。`,en:`Calculate in order: ${steps}. Add or subtract7 until each result is0–6. Enter the five fields in order, even when the results are not all zero.`};
+    }},
+  ],
   "ec-add": [
     {id:"ec-add/1",text:()=>({ja:"曲線上の2点を通る線を考え、交点の上下を反転して答えの点を作ります。同じ点なら接線を使います。普通の座標の足し算とは違います。",en:"Use the line through two curve points, then reflect the intersection. A repeated point uses a tangent. This is not coordinate-wise addition."})},
     {id:"ec-add/2",text:()=>({ja:"すべて7で割った余り。P=(2,1),Q=(3,1)なら傾きλ=(1−1)/(3−2)=0。x=λ²−2−3=2、y=λ(2−x)−1=6。結果は(2,6)。",en:"Reduce modulo7. P=(2,1),Q=(3,1): slope λ=(1−1)/(3−2)=0; x=λ²−2−3=2, y=λ(2−x)−1=6. Result (2,6)."})},

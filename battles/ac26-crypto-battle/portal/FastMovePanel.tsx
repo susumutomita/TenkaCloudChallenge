@@ -1,4 +1,5 @@
 import {IoWorksheet} from "./IoWorksheet.tsx";
+import {SnarkWorksheet} from "./SnarkWorksheet.tsx";
 import {EcWorksheet} from "./EcWorksheet.tsx";
 import { BreachNotice } from "./BreachNotice.tsx";
 import { SchnorrProof } from "./SchnorrProof.tsx";
@@ -1517,6 +1518,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
           const delta=next.teams[projection.vault.teamId]!.score-projection.teams[projection.vault.teamId]!.score;
           return hit?{kind:"prove",reward:delta,title:locale==="ja"?"計算と分布の比較に成功！":"Function and distribution check complete!",body:locale==="ja"?"同じ機能かどうかと、公開データの分布を別々に確認できました。":"You checked functional equivalence and the published distributions separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。空欄の余りと、rを含む公開データの組を確認してください。`:`${delta} pt. Check the missing remainders and complete outcomes including r.`};
+        }
+       )}/> }
+      {selectedOrder?.task.kind === "snark-constraints" && <SnarkWorksheet key={`snark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+        ()=>client.submitOp({kind:"snark",contractId:selectedOrder.id,answer}), next=>{
+          if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
+          const delta=next.teams[projection.vault.teamId]!.score-projection.teams[projection.vault.teamId]!.score;
+          return hit?{kind:"prove",reward:delta,title:locale==="ja"?"制約の検査に成功！":"Constraint check complete!",body:answer.split(" ").every(v=>v==="0")?(locale==="ja"?"全て0：計算も配線も一致しています。":"All zero: gates and wires agree."):(locale==="ja"?"0でない箇所があり、不正な計算か配線を検出しました。":"Nonzero remainders expose incorrect gates or wires.")}:{kind:"error",title:locale==="ja"?"余りを確認してください":"Check the remainders",body:`${delta} pt`};
         }
       )}/>}
       {selectedOrder?.task.kind === "ec-add" && <EcWorksheet key={`ec:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(

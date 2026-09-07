@@ -8,7 +8,7 @@ import ConceptDiagram from "./ConceptDiagram.tsx";
 import type { OrderTaskProjection } from "../game/src/types.ts";
 
 type Locale = "ja" | "en";
-export type Concept = "io" | "ec" | "schnorr" | "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "rsa" | "rotor" | "commit";
+export type Concept = "io" | "snark" | "ec" | "schnorr" | "remainder" | "sharing" | "mpc" | "zk" | "fhe" | "caesar" | "vigenere" | "rsa" | "rotor" | "commit";
 interface Step { readonly diagram?: "zk" | "relabel" | "sharing" | "mpc"; readonly title: string; readonly lines: readonly string[]; readonly table?: { readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] } }
 interface Explanation { readonly name: string; readonly steps: readonly Step[] }
 
@@ -18,6 +18,7 @@ export const SHARE_PAIR_TABLE = [["0", "5", "4"], ["1", "0", "1"], ["2", "2", "5
 export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
   ja: {
     io:{name:"識別不可能性難読化（iO）",steps:[{title:"同じ機能と、同じ分布",lines:["同じ大きさで、すべての入力に同じ答えを出す計算を変換したとき、結果から元を区別できないことを調べます。","真理値表は全入力の答えの一覧。入力がkビットなら2ᵏ行必要なので、この模型は一般の効率的なiOではありません。"]}]},
+    snark: {name:"SNARKの算術化",steps:[{title:"計算と配線を式にする",lines:["ゲートは1行の計算です。出力を次の入力へつなぐ配線も一致する必要があります。","この模型は表を直接検査します。短い証明やゼロ知識化は未実装です。"]}]},
     ec: {name:"楕円曲線の点加算",steps:[{title:"ECDSAの土台となる計算",lines:["点は座標(x,y)の組です。普通の座標同士の足し算とは別の規則で、曲線上の2点から曲線上の別の点を作ります。","このお題は点加算のみ。ECDSA署名の生成や検証全体ではありません。"]}]},
     schnorr: {name:"ゼロ知識証明（Schnorr）",steps:[]},
     rotor: ROTOR_EXPLANATIONS.ja,
@@ -56,6 +57,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
   },
   en: {
     io:{name:"Indistinguishability obfuscation (iO)",steps:[{title:"Same function and same distribution",lines:["Compare transformed programs of the same size and the same answers on every input. Their source should be indistinguishable.","A truth table lists every input result. It needs 2ᵏ rows for k input bits, so this model is not efficient general-purpose iO."]}]},
+    snark: {name:"SNARK arithmetization",steps:[{title:"Equations for computation and wiring",lines:["A gate is one calculation. Wires must connect equal output and input values.","This model directly checks a table. It does not implement succinct proofs or zero knowledge."]}]},
     ec: {name:"Elliptic-curve addition",steps:[{title:"Arithmetic used by ECDSA",lines:["A point is a pair of coordinates (x,y). Curve addition combines two curve points into another, using a special rule rather than adding coordinates.","This task covers point addition, not the complete ECDSA signing or verification algorithm."]}]},
     schnorr: {name:"Zero-knowledge proof (Schnorr)",steps:[]},
     rotor: ROTOR_EXPLANATIONS.en,
@@ -108,6 +110,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
 export function conceptForTask(task: OrderTaskProjection): Concept {
   switch (task.kind) {
     case "io-equivalence": return "io";
+    case "snark-constraints": return "snark";
     case "ec-add": return "ec";
     case "rotor-encrypt": return "rotor";
     case "rsa-encrypt": return "rsa";
@@ -141,7 +144,7 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
   }
 }
 
-export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"io":"iOとは？機能と分布を比べる","ec":"楕円曲線の点加算とは？","schnorr":"ゼロ知識証明：なぜ秘密を送らず確かめられる？","rotor": "位置が進む車輪って何？", "rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"io":"What is iO? Compare functions and distributions","ec":"What is curve addition?","schnorr":"Zero knowledge: verify without the secret?","rotor": "How do advancing wheels work?", "rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
+export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"snark":"SNARKの算術化とは？","io":"iOとは？機能と分布を比べる","ec":"楕円曲線の点加算とは？","schnorr":"ゼロ知識証明：なぜ秘密を送らず確かめられる？","rotor": "位置が進む車輪って何？", "rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"snark":"What is SNARK arithmetization?","io":"What is iO? Compare functions and distributions","ec":"What is curve addition?","schnorr":"Zero knowledge: verify without the secret?","rotor": "How do advancing wheels work?", "rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
 
 const button = { cursor: "pointer", border: "1px solid #a4b5c6", borderRadius: 5, padding: "5px 9px", color: "#24476d", background: "#fff", fontSize: 12 } as const;
 export default function ConceptExplanation({ locale, topic, task, prime, embedded = false }: {
@@ -150,7 +153,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
   const [selected, setSelected] = useState<Concept | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const copy = EXPLANATIONS[locale];
-  const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa", "ec", "io"] as Concept[]);
+  const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa", "ec", "io", "snark"] as Concept[]);
   const lesson = selected ? copy[selected] : null;
   const step = lesson?.steps[stepIndex];
   const ja = locale === "ja";

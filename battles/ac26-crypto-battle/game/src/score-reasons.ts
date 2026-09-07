@@ -34,6 +34,7 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
     case "prove-sudoku": return "prove";
     case "io": return "io";
     case "ec": return "ec";
+    case "snark": return "snark";
     case "cipher": return "cipher";
     case "leak": return "leak";
     case "fhe": return "fhe";
