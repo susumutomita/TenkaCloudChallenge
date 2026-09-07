@@ -318,8 +318,8 @@ export function OrderBelt({
                     has no LEAK route, so quoting a pass price would be a lie.
                   */}
                   <span className="tc-points">
-                    +{order.points}
-                    {order.allowedMethods.includes("leak") ? (
+                    {order.privacyConstraint === "must-disclose" ? `LEAK +${order.leakPoints}` : `+${order.points}`}
+                    {order.allowedMethods.includes("leak") && order.privacyConstraint !== "must-disclose" ? (
                       <span className="tc-points-pass"> / {copy.leakRate} +{order.leakPoints}</span>
                     ) : null}
                   </span>

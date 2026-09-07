@@ -1109,6 +1109,7 @@ describe("advanced tactics use progressive disclosure", () => {
     const order = base.myContracts[0]!;
     const pending = { ...order, status: "open" as const, privacyConstraint: "must-disclose" as const, allowedMethods: ["leak" as const] };
     expect(tacticAvailability({ ...base, myContracts: [pending] }).rotate).toBe(true);
+    expect(tacticAvailability({ ...base, myContracts: [{ ...pending, remainingMs: 0 }] }).rotate).toBe(false);
     expect(tacticAvailability({ ...base, myContracts: [{ ...pending, status: "expired" }] }).rotate).toBe(false);
   });
 

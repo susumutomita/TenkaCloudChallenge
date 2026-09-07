@@ -549,3 +549,19 @@ Malformed identities/counts fail without rewriting the saved row. Mixed-version
 workers must respect stateSchemaVersion11. Roll back only to a worker that
 understands these encodings; never relabel a row as version10. No platform
 configuration or cleanup change accompanies this migration.
+
+
+### Disclosure ROTATE floor (PR #752 follow-up)
+
+Answering a publication-required Order records `disclosureRotationCost` on the
+current team generation, equal to one expiry penalty. ROTATE charges the larger
+of this floor and its existing voided-Order penalties, never both. The marker
+survives JSON reload and Order pruning and clears on rotation. Optional disclosure
+alone does not activate it. The Portal receives `rotateMinimumPenalty` and shows
+it before ROTATE; the publication primer also states this price.
+
+The escape bot now clears other work first, publishes, then immediately rotates
+after each disclosure. It pays the floor even with no unanswered work and scores
+below the race policy. Avoiding exposure remains a paid choice, not a guarantee
+that both human teams will choose to attack. The 90-minute RPS test retains all
+attacks, but its final score is 135 lower (nine disclosure retirement fees of15).

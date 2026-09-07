@@ -50,7 +50,7 @@ interface Policy {
    * being hunted. `dodge`: ROTATE before the disclosure that would reach the
    * threshold, paying for whatever is still open.
    */
-  readonly rotate: "race" | "dodge";
+  readonly rotate: "race" | "dodge" | "escape";
 }
 
 interface Tally {
@@ -155,7 +155,9 @@ class Bot {
       }
     }
 
-    for (const order of view.myContracts.filter((c) => c.status === "open")) {
+    const work = view.myContracts.filter(c => c.status === "open");
+    if (this.policy.rotate === "escape") work.sort((a,b) => Number(a.privacyConstraint === "must-disclose") - Number(b.privacyConstraint === "must-disclose"));
+    for (const order of work) {
       const op = this.clearingOp(order, view);
       if (!op) continue;
       if (!validateOp(next, this.teamId, op).ok) continue;
@@ -165,6 +167,13 @@ class Bot {
         else this.tally.disclosures += 1;
       }
       view = projectForTeam(next, this.teamId);
+      if (op.kind === "leak" && order.privacyConstraint === "must-disclose" && this.policy.rotate === "escape" && validateOp(next, this.teamId, buildRotateOp()).ok) {
+        const before = next.teams[this.teamId]!.score;
+        next = applyOp(next, this.teamId, buildRotateOp());
+        expect(before - next.teams[this.teamId]!.score).toBe(Math.abs(next.config.scores.expiredOrder));
+        this.tally.rotations += 1;
+        view = projectForTeam(next, this.teamId);
+      }
     }
 
     // Attacks, from the public record only.
@@ -240,6 +249,15 @@ describe("two competent teams interact [Issue #740]", () => {
     // The hunter was not already far ahead when it struck.
     for (const gap of [...north.huntedAtScoreGap, ...south.huntedAtScoreGap]) {
       expect(Math.abs(gap)).toBeLessThan(DEFAULT_CONFIG.scores.contract * 4);
+    }
+  });
+
+  test("LEAK then immediate ROTATE has a score cost even after clearing the other work", () => {
+    const escaped = playMatch("interaction-escape", { north: { rotate: "escape" }, south: { rotate: "escape" } });
+    const racing = playMatch("interaction-escape", race);
+    for (const team of TEAMS) {
+      expect(escaped.bots[team]!.tally.rotations).toBeGreaterThan(0);
+      expect(escaped.state.teams[team]!.score).toBeLessThan(racing.state.teams[team]!.score);
     }
   });
 

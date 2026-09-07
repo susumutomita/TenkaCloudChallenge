@@ -1821,6 +1821,7 @@ function applyLeak(
     // [Issue #659] The leak rate, not the full rate. Paying the same for both
     // made LEAK strictly dominant — no computation, identical payout.
     score: team.score + contract.leakPoints,
+    disclosureRotationCost: contract.privacyConstraint === "must-disclose" ? Math.abs(state.config.scores.expiredOrder) : team.disclosureRotationCost,
     completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
   };
 
@@ -2370,6 +2371,14 @@ function applyHunt(
   };
 }
 
+/** Clearing the batch must not make immediately retiring a paid disclosure free. */
+function disclosureRotateMinimum(state: CryptoBattleState, teamId: string): number {
+  const cost = state.teams[teamId]?.disclosureRotationCost;
+  if (cost === undefined) return 0;
+  if (!Number.isFinite(cost) || cost < 0) throw new Error("invalid disclosure rotation cost");
+  return cost;
+}
+
 function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleState {
   const team = state.teams[teamId];
   if (!team) {
@@ -2383,6 +2392,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     secret: secret.toString(),
     shares: shares.map((s): StoredShare => ({ index: s.index, value: s.value.toString() })),
     lastRotateAtMs: state.nowMs,
+    disclosureRotationCost: undefined,
   };
   // Rotate's time cost isn't only the cooldown: every contract issued to
   // this team before the rotate is voided along with the old generation.
@@ -2431,7 +2441,10 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     voided,
     state.config.scores.expiredOrder,
   );
-  return pruneRetiredHuntAttempts(pruneRetiredRsaHunts({ ...state, contracts, teams, publicPuzzles }));
+  const minimum = disclosureRotateMinimum(state, teamId);
+  const charged = team.score - teams[teamId]!.score;
+  const pricedTeams = charged < minimum ? { ...teams, [teamId]: { ...teams[teamId]!, score: teams[teamId]!.score - (minimum - charged) } } : teams;
+  return pruneRetiredHuntAttempts(pruneRetiredRsaHunts({ ...state, contracts, teams: pricedTeams, publicPuzzles }));
 }
 
 /**
@@ -2701,6 +2714,7 @@ export function projectForTeam(
     generation: team.generation,
     lastRotateAtMs: team.lastRotateAtMs,
     rotateCooldownRemainingMs,
+    rotateMinimumPenalty: disclosureRotateMinimum(state, teamId),
     completedContractIds: team.completedContractIds.map(c => contractId({ tm: teamId, c })),
     huntedGenerations: team.huntedGenerations,
     sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),

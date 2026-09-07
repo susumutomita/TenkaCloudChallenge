@@ -764,7 +764,7 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
     sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
     rpsHunt: (projection?.rpsHunt?.targets.length ?? 0) > 0,
-    rotate: (projection?.myContracts.some(order => order.status === "open" && order.privacyConstraint === "must-disclose") ?? false) || ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
+    rotate: (projection?.myContracts.some(order => order.status === "open" && order.remainingMs > 0 && order.privacyConstraint === "must-disclose") ?? false) || ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
       || (projection?.publicRsaKeys?.some(key => key.teamId === projection.vault.teamId && key.generation === projection.vault.generation) ?? false),
   };
 }
@@ -1302,8 +1302,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
             */}
             {selectedOrder.privacyConstraint === "must-disclose" && (
               <span className="tc-share-primer-rule">{locale === "ja"
-                ? " この依頼はかけらの公開が条件です。得点は計算と同じ満額で、代わりに公開済みのかけらが 1 個増えます。増やしたくなければ、先に ROTATE で世代を変えます (開いている依頼は無効になります)。"
-                : " This request requires publishing the share. It pays the full computing rate; the cost is one more public share. To avoid that, ROTATE to a new generation first (open Orders are voided)."}</span>
+                ? " この依頼はかけらの公開が条件です。得点は計算と同じ満額で、未公開の番号なら公開数が増え、同じ番号なら増えません。公開専用Orderに答えた世代のROTATEは、未処理が0件でも最低1件分の失効点がかかります。増やしたくなければ、先に ROTATE で世代を変えます (開いている依頼は無効になります)。"
+                : " This request requires publishing the share. It pays the full computing rate; a new index increases exposure; a duplicate does not. After fulfilling a disclosure Order, ROTATE costs at least one expiry penalty even with no unfinished work. To avoid that, ROTATE to a new generation first (open Orders are voided)."}</span>
             )}
           </p>
         )}
@@ -1681,6 +1681,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             attack. State the price while the button is still unpressed, and
             count the Orders actually at stake rather than quoting a rule.
           */}
+          {(projection.vault.rotateMinimumPenalty ?? 0) > 0 && <div className="tc-card-warn">{locale === "ja" ? `公開専用Orderに回答済み：ROTATEは少なくとも −${projection.vault.rotateMinimumPenalty} 点。未処理Orderの減点がこれ以上なら、その減点だけです。` : `A disclosure Order was answered: ROTATE costs at least −${projection.vault.rotateMinimumPenalty} points, or the unanswered-Order penalty if larger.`}</div>}
           {rotateVoidCount(projection) > 0 ? (
             <div className="tc-card-warn">{copy.rotateCost(rotateVoidCount(projection))}</div>
           ) : null}

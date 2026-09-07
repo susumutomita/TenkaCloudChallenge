@@ -353,6 +353,19 @@ describe("leak", () => {
     expect(decodeLedger(next.publicLedger, next.teams).some((a) => a.kind === "share" && a.teamId === "teamA")).toBe(true);
   });
 
+  test("disclosure ROTATE minimum survives JSON and pruned Orders, then clears with the generation", () => {
+    const { state, order } = orderMatching(c => c.privacyConstraint === "must-disclose");
+    const leaked = applyOp(state, "teamA", { kind: "leak", contractId: order.id });
+    const reloaded = JSON.parse(JSON.stringify({ ...leaked, contracts: [] })) as CryptoBattleState;
+    const fee = Math.abs(state.config.scores.expiredOrder);
+    expect(projectForTeam(reloaded, "teamA").vault.rotateMinimumPenalty).toBe(fee);
+    expect(validateOp(reloaded, "teamA", { kind: "rotate" })).toEqual({ ok: true });
+    const rotated = applyOp(reloaded, "teamA", { kind: "rotate" });
+    expect(rotated.teams.teamA!.score).toBe(reloaded.teams.teamA!.score - fee);
+    expect(projectForTeam(rotated, "teamA").vault.rotateMinimumPenalty).toBe(0);
+    expect(projectForTeam(rotated, "teamB").vault.rotateMinimumPenalty).toBe(0);
+  });
+
   test("the same contract cannot be leaked twice", () => {
     const { state, order: contract } = orderMatching(allowsLeak);
     const op: CryptoBattleOp = { kind: "leak", contractId: contract.id };

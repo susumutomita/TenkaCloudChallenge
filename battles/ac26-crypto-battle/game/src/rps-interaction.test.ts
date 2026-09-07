@@ -129,7 +129,7 @@ test("90 standard minutes: both safe teams can score a public-evidence RPS predi
   expect(rotations).toEqual({ alpha: 18, bravo: 18 });
   for (const team of teams) {
     expect(projectForTeam(state, team).publicLedger.some(a => a.kind === "share")).toBe(true); // Mandatory disclosures only; optional work stays private.
-    expect(state.teams[team]!.score).toBe(3284);
+    expect(state.teams[team]!.score).toBe(3284 - 9 * Math.abs(state.config.scores.expiredOrder));
     expect(state.teams[team]!.completedContractIds).toHaveLength(109);
     expect(projectForTeam(state, team).publicLedger.some(a => a.kind === "cipher-pair")).toBe(false);
   }
