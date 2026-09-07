@@ -12,8 +12,8 @@ it is not a complete proof-generation protocol.
 
 ## Participant route
 
-1. Start the problem in the Portal and paste the Inspect assignments into `python3`.
-2. Run the statement's rows in order. Submit your computed values where an answer field exists.
+1. Start the problem in the Portal and read your numbers in Inspect evidence.
+2. Calculate the statement's rows on paper. Submit multiple values separated by commas (for example `1,1`), or one number for csum. Python is optional for checking.
 3. Without Python, use the editor. Replace `return None` with that row's whole code block,
    prefixing its final expression with `return`. Preceding names are supplied. Complete
    functions in order and Run public tests to see your own values.
@@ -84,3 +84,7 @@ procedure and vocabulary gaps that were corrected. Live events and further third
 rehearsals are optional.
 
 The arithmetic scope follows the [pinned co-snark-prove assignment](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732/week6/problems/co-snark-prove/README.md): shared linear forms and their product.
+
+Reader revision: the primary route is hand calculation; comma-separated answer syntax, unchanged coefficient indices, independent one-use masks, and the product expansion before constructing shares are explicit.
+
+All generated operands and masks now lie in 0–6, with fixed divisor7, so the paper-first route uses one-digit factors. The independent full-range mask distribution is retained.
