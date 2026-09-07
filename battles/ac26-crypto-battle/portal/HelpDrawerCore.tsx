@@ -50,6 +50,7 @@ const COPY = {
     movesTitle: "ほかのお題で、何を体験する？",
     moves: [
       { name: "CIPHER — 数字を暗号にする", body: "最初はシーザー暗号です。元の数字に秘密の鍵を足し、記号の個数で割った余りを答えます。答えは公開されません。同じお題を LEAK すると元と答えの組が公開され、鍵を読む材料になります。先の段ではお題に書かれた別の方式へ進みます。" },
+      {name:"SNARK — 計算と配線を検査",body:"SNARKは計算の正しさを短い証明で示す方式です。この準備として、計算を正しければ0になる式へ直す「算術化」を扱います。3行の計算と2本の配線の差を7で割った余りにして、5欄に入力します。全て0なら整合しています。不正な表でもその検出結果が正しければ得点します。この表の検査だけでは、短い証明や、秘密を見せず正しさを示すゼロ知識の仕組みは実現しません。"},
       { name: "EC — 楕円曲線の点を足す", body: "楕円曲線は、決めた式を満たす座標(x,y)の集まりです。画面の式と逆元の表でP+Qを求め、xとyを半角スペースで区切って提出します。ECDSAという電子署名でも使う計算ですが、この問題は署名全体ではなく、7で割った余りで行う点加算です。" },
       { name: "FHE — 暗号のまま足す", body: "準同型暗号は、中身を隠した暗号文のまま計算する技術です。左右 2 個の数字の組を受け取り、左どうし・右どうしを足して、各々の余りを提出します。完全準同型暗号（FHE）は掛け算も扱います。このゲームは足し算を体験するモデルです。" },
       { name: "MPC — 自分の数を隠して合計に参加する", body: "秘密計算（MPC）は、複数人で秘密を保って計算する方法です。各社の数を公開せず、合計を求めたい場面を体験します。自分の数に『受け取った覆面』を足し、『送った覆面』を引いて、余りを小計として提出します。覆面は内緒で共有する数で、全社を足すと打ち消し合います。得られる合計も、割る数で割った余りです。" },
@@ -81,6 +82,7 @@ const COPY = {
     movesTitle: "What do the other Orders teach?",
     moves: [
       { name: "CIPHER — Encrypt digits", body: "Start with Caesar: add your secret key to each digit and keep the remainder after division by the symbol count. Your answer is not published. LEAK instead publishes the original and answer together, giving others evidence to recover the key. Later rungs explain their own different methods." },
+      {name:"SNARK — Check gates and wires",body:"A SNARK provides a short proof of correct computation. Here translate calculations into expressions that must be zero, a preparation called arithmetization. Enter five remainders after division by7 for three calculations and two connections. All zero means consistent. Correctly detecting a corrupt table earns points too. Checking this table alone does not produce a short proof or hide private values while showing correctness (zero knowledge)."},
       { name: "EC — Add elliptic curve points", body: "An elliptic curve is a set of coordinate pairs satisfying an equation. Use the displayed formula and inverse table to find P+Q; submit x space y. ECDSA digital signatures use point addition, but this exercise only covers addition modulo7, not a complete signature." },
       { name: "FHE — Add encrypted values", body: "Homomorphic encryption allows computation on hidden values. Receive pairs, add lefts and rights separately, and submit the remainders. Fully homomorphic encryption (FHE) also supports multiplication; this game models addition." },
       { name: "MPC — Contribute without showing your input", body: "Secure computation (MPC) lets multiple parties compute while keeping inputs private. To contribute to a company total, add received masks to your input and subtract sent masks. A mask is a privately shared number; each is added and subtracted once across the companies. Submit your subtotal’s remainder. The combined result is also a remainder, not an unrestricted total." },

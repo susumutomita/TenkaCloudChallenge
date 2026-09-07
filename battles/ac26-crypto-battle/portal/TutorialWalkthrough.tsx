@@ -3,7 +3,7 @@ import { useState } from "react";
 import ConceptExplanation from "./ConceptExplanation.tsx";
 
 type Locale = "ja" | "en";
-type Topic = "remainder" | "sharing" | "mpc" | "schnorr" | "fhe" | "caesar" | "commit";
+type Topic = "zk" | "remainder" | "sharing" | "mpc" | "schnorr" | "fhe" | "caesar" | "commit";
 interface PracticeCopy {
   readonly title: string;
   readonly purpose: string;
@@ -250,6 +250,11 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
       steps: ["Take the remainder of 4^m × 9^r after division by 23. 4^1=4; 9^2=81; 81−23−23−23=12.", "4×12=48. Subtract 23 twice: 48−23−23=□.", "This remainder is the number you show before your hand."],
       question: "The number to seal first", result: "Send 2 first. After both commitments arrive, give the judge m=1 and r=2. The same calculation must reproduce 2. The judge publishes both openings together. This order is commit-reveal. Tiny numbers permit alternative openings, so the judge's simultaneous publication is needed to prevent adapting after seeing the other hand. Next time, draw r again from 0–10.", retry: "48−23=25. Subtract 23 once more.",
     },
+  },
+  {
+    topic:"zk",answer:"1",
+    ja:{title:"旧試合の数独模型：数字を読み替える",purpose:"以前の数独方式の試合向け練習です。現在のSchnorrとは別の模型です。",prompt:"表1→3、2→1、3→4、4→2で読み替えます。矢印は元の数字から新しい数字への対応です。",calculation:"元の行 [2,1,3,4] → [□,3,4,2]",takeaway:"数字の名前を変えても、1〜4が一度ずつ入る性質は残ります。",steps:["最初のマスは元が2。表の2→1を読みます。","残りは1→3、3→4、4→2。同じ表を全マスに使います。"],question:"元が2のマスに入る数字",result:"1です。この数独模型は一部分を公開する考え方を体験しますが、元の解を知る審判を信頼しており、本来のZKとは異なります。Schnorrの試合ではこの表は使いません。",retry:"表の2→1を見てください。"},
+    en:{title:"Legacy Sudoku model: relabel digits",purpose:"Practice for older Sudoku-protocol matches, separate from the current Schnorr model.",prompt:"Use 1→3, 2→1, 3→4, 4→2. Each arrow maps an original digit to its new name.",calculation:"Original row [2,1,3,4] → [□,3,4,2]",takeaway:"Renaming preserves the property that each digit occurs once.",steps:["The first cell originally contains2. Read 2→1.","The remaining cells use1→3,3→4,4→2. Apply the same map to every cell."],question:"New digit for original2",result:"1. This model explores revealing a part of the relabelled grid, but trusts a judge who knows the original solution. It differs from real ZK. Schnorr matches do not use this table.",retry:"Read the mapping2→1."},
   },
 ];
 

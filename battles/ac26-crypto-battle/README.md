@@ -413,6 +413,14 @@ The server assigns y per Order; a caller cannot replace it. In this tiny-group t
 New matches offer EC addition at every thirteenth sequence slot, with duels taking priority. Calculate addition, doubling and the identity O on y²=x³+2x+3 modulo7. This is foundational arithmetic used by ECDSA, not a complete signature scheme. Submit `x y` separated by one space, or `O`. The worksheet contains equations, an inverse table and a coordinate plot. Wrong answers use the existing wrongProve penalty; correct answers receive the Order reward. Existing expiry, ownership and replay gates apply. Legacy matches do not enable these Orders. No platform changes.
 Verify with `cd game && bun test src/ec.test.ts && bun run typecheck`, then the dev `ec-order` scenario.
 
+### Hand-calculated SNARK arithmetization (#791)
+
+New matches insert a gate/copy worksheet on every seventeenth candidate slot while retaining duel slots. It presents addition, multiplication and addition gates plus two required wires. Players enter five residuals modulo7, detecting a valid table, a corrupt output, or locally valid gates with incorrect wiring. Correct detection of nonzero residuals earns points. Existing ownership, deadline and replay gates apply; the score reason is `snark`.
+
+Inputs: lecture repository revision `bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732`, Week3 zkSNARK and Week4 slides25–29; study-note revision `58344a29ea39c25839475ba9a594c115ed89989b`, `week4/index.html`, PLONK gate table and grand product. This extracts the gate equation and copy constraints. Polynomial interpolation, KZG commitments, evaluation proofs, the copy grand product, succinct noninteractive proofs and zero-knowledge masking are not implemented. It is a visible arithmetization worksheet, not a complete SNARK.
+
+`snark.test.ts` covers correct and corrupt gates/wires, incorrect-answer penalties, rewards, replay, expiry and foreign ownership. In the real local Portal scenario `snark-order`, hand-calculated residuals for `4+5−2, 4×1−5, 4+3−6, 2−4, 5−3` were submitted as `0 6 1 5 2`; the UI reported incorrect wiring detected and +30 points.
+
 PR #790 follow-up: accepting a Schnorr commitment starts the answer attempt, so lightning must be declared beforehand. A failed one-shot PROVE-only Order is resolved with a persisted miss, without a second deadline charge or further paid hints. Orders permitting LEAK retain that alternative. Optional practice uses the current Schnorr exchange in both languages.
 
 ### Score and mandatory-disclosure regressions (#777 / #778)

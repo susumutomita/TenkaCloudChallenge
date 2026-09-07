@@ -28,6 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "snark-constraints": return "SNARK gate/copy constraints";
     case "ec-add": return "EC P + Q";
     case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `rsa m=${task.plaintext}/n=${task.n}/e=${task.e}`;
@@ -51,6 +52,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
+    "snark-constraints":"短い証明（SNARK）の準備：計算を検査",
     "ec-add":"楕円曲線：2点を足す",
     "rotor-encrypt": "進む車輪で4文字を暗号にする",
     "rsa-encrypt": "公開鍵で1個の数を暗号にする",
@@ -68,6 +70,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "snark-constraints":"Prepare a short proof (SNARK): check computation",
     "ec-add":"Elliptic curve: add two points",
     "rotor-encrypt": "Encrypt four digits with advancing wheels",
     "rsa-encrypt": "Encrypt one number with a public key",
@@ -94,6 +97,7 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "snark-constraints": return locale === "ja" ? "3つの計算と2本の配線" : "Three gates and two wires";
     case "ec-add": return `${task.left?.join(",")??"O"} + ${task.right?.join(",")??"O"}`;
     case "rotor-encrypt": return `Rotor · ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `RSA · m=${task.plaintext}, n=${task.n}, e=${task.e}`;

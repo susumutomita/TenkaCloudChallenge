@@ -41,7 +41,7 @@ import type { OrderTaskKind } from "./types.ts";
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec";
+export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec" | "snark";
 
 /**
  * What an Order forbids being made public.
@@ -88,6 +88,7 @@ export interface SubmissionMethodSpec {
 }
 
 export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMethodSpec>> = {
+  snark: {method:"snark",publishesRawSecretMaterial:false},
   ec: {method:"ec",publishesRawSecretMaterial:false},
   duel: { method: "duel", publishesRawSecretMaterial: true },
   leak: { method: "leak", publishesRawSecretMaterial: true },
@@ -114,6 +115,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
   "cipher",
   "duel",
   "ec",
+  "snark",
 ];
 
 /**
@@ -130,6 +132,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
  */
 const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[]>> = {
   "ec-add": ["ec"],
+  "snark-constraints": ["snark"],
   "rotor-encrypt": ["leak", "cipher"],
   "rsa-encrypt": ["leak", "cipher"],
   "rps-duel": ["duel"],
