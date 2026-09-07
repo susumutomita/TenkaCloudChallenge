@@ -1,138 +1,152 @@
 # Build the field before the curve
 
-> This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> Independent, unofficial companion to Advanced Cryptography Program 2026. Not affiliated with or endorsed by its course operators.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 310 · **Chapter:** Week 3 / Finite Fields
-· **Role:** `mechanism` · **Time:** 45–60 minutes · **Points:** 200
+## Start by turning −2 into remainder 5
 
-## The story
+You are building division for cryptographic arithmetic. Instead of ordinary fractions, use an **inverse: a partner whose product leaves remainder 1**.
 
-Every elliptic-curve slide starts with an equation over `F_p` and moves on within a minute,
-because the field is assumed. This problem is that minute, taken seriously: you build `F_p` from
-normalization up, and the last piece — the multiplicative inverse — is the one with real content.
+`FieldElement` is a type storing a modulus and a remainder. Its `__init__` method (a function inside a type) runs when an element is created.
 
-## What you implement
+**Start → Inspect evidence → edit `FieldElement.__init__` in `field.py` → Run public tests → submit “Normalize the remainder”.** First make `self.value` hold the remainder of `value` divided by `field.modulus`. The public tests include a negative input.
 
-```python
-class Field:
-    modulus: int
-    def element(self, value: int) -> FieldElement: ...
+## Before you start
 
-class FieldElement:
-    def __add__, __sub__, __mul__, __truediv__
-    def inverse(self) -> FieldElement: ...
+- The divisor `m` is the **modulus**, an integer greater than 1 here. Python `v % m` gives the remainder `r` in `v = m*q+r`, with `0 ≤ r < m`. Example: `−2 = 7*(−1)+5`, so `(-2) % 7 = 5`.
+- Choosing that remainder is **normalization**. An **element** here stores a modulus and a remainder. `Field(m)` stores the modulus; `.element(v)` creates an element. `self` means this object, `self.value` its remainder, and `self.field.modulus` its modulus. A function inside a class is a **method**.
+- `u ≡ v (mod m)` means that `u` and `v` leave the same remainder when divided by `m`. The symbol `≡` means precisely that. `gcd(a,m)` is their greatest common divisor.
+- With a prime modulus `p`, every element except zero has an inverse. This arithmetic is an example of a **finite field**: finitely many elements with arithmetic including division by nonzero elements. The same code will handle composite moduli, where some nonzero elements cannot be divisors.
 
-def egcd(a, b) -> (g, s, t)          # a*s + b*t == g == gcd(a, b)
-def egcd_trace(a, b) -> [ {q, r, s, t}, ... ]
-def non_invertible_element(modulus) -> int
+## Add, subtract or multiply → take the remainder
+
+| Operation | General formula | Modulus 7, a=5, b=4 |
+|---|---|---|
+| `a + b` | `(a+b) % m` | `9 % 7 = 2` |
+| `a - b` | `(a-b) % m` | `1 % 7 = 1` |
+| `a * b` | `(a*b) % m` | `20 % 7 = 6` |
+
+These are `__add__`, `__sub__`, `__mul__`. Return a `FieldElement` with the same modulus, not a plain integer. Normalizing on construction also normalizes intermediate results.
+
+**Equality requires both the same modulus and the same remainder.** Modulus 7 with −2 equals modulus 7 with 5, but differs from modulus 6 with 5. `__eq__` performs this comparison. `__hash__` returns an integer used by Python dictionaries and sets: equal elements must have equal hashes. You can use `hash((self.field.modulus, self.value))`. Different elements are allowed to share a hash.
+
+Reordering additions or multiplications, or changing their grouping, preserves the answer. Also `x+0=x`, `x*1=x`, `x-x=0` and `x*(y+z)=x*y+x*z`. With modulus 7, `2*(3+4)` and `2*3+2*4` both leave remainder 0.
+
+## Divide → multiply by the partner that makes 1
+
+For the inverse `x` of `a`, **`a*x ≡ 1 (mod m)`**. With modulus 7, `3*5=15=7*2+1`, so 3 has inverse 5. Thus `4 / 3` means `4*5 % 7 = 6`.
+
+To find that partner, the **extended Euclidean algorithm** computes integers `s,t` and the greatest common divisor `g` such that `a*s + m*t = g`. If `g=1`, `m*t` leaves remainder zero, so **the inverse is `s % m`**. If `g>1`, every integer combination of `a` and `m` is divisible by `g` and cannot equal 1.
+
+```text
+3 * (−2) + 7 * 1 = 1  →  inverse of 3 is (−2) % 7 = 5
+2 * 1    + 6 * 0 = 2  →  greatest common divisor is 2: no inverse
 ```
 
-Elements of two different moduli never combine silently.
+### Build the table without breaking its equation
 
-## Participant Portal workflow
+Each row `(r,s,t)` maintains `a*s + m*t = r`.
 
-1. Start the problem in Participant Portal; the problem editor appears on the same page.
-2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
-3. Edit the starter source in the Portal editor.
-4. Select **Run public tests** and fill any direct-answer fields from the evidence.
-5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
+1. Start upper = `(a,1,0)`, lower = `(m,0,1)`.
+2. While lower `r` is not zero, compute quotient `q = upper_r // lower_r`. `//` is integer division.
+3. Record **the current lower row**, as `{"q":q,"r":r,"s":s,"t":t}`.
+4. For each column, new = `upper − q*lower`. Move upper to the old lower and lower to new. Repeat.
+5. When lower `r` is zero, return upper `(r,s,t)` as `egcd`'s `(g,s,t)`.
 
-No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
-checkpoints use the current editor source. Direct answers are bound to the current deployment
-seed, so a value copied from another deployment is rejected.
+Why does the equation survive? Subtracting the two equations gives `a*(upper_s−q*lower_s) + m*(upper_t−q*lower_t) = upper_r−q*lower_r`. Each column undergoes the same subtraction. The `r` column repeatedly takes division remainders; its last nonzero remainder is the greatest common divisor.
 
-## Scoring
+| a=3, m=7 | Upper (r,s,t) | Lower (r,s,t): the row to record | q | Next lower |
+|---|---|---|---|---|
+| 1 | (3,1,0) | (7,0,1) | 0 | (3,1,0) |
+| 2 | (7,0,1) | (3,1,0) | 2 | (1,−2,1) |
+| 3 | (3,1,0) | (1,−2,1) | 3 | (0,7,−3) |
 
-Seven checkpoints, scored independently. Wrong answers cost 10 points each.
+`egcd(3,7)` returns `(1,-2,1)`. `egcd_trace(3,7)` returns these three rows, in order:
+`[{"q":0,"r":7,"s":0,"t":1}, {"q":2,"r":3,"s":1,"t":0}, {"q":3,"r":1,"s":-2,"t":1}]`.
+The three numbers of `egcd`, and the ordered rows of the trace, may use a list or tuple. Each row is a dict with `q,r,s,t`; every number is an integer, not a boolean or float. Keep negative `s,t` unchanged. Normalize when returning the inverse as an element.
 
-| Checkpoint | Points | What is checked |
-|---|---:|---|
-| `normalize` | 25 | Negatives, values past the modulus, idempotence, equality |
-| `arithmetic` | 30 | Add/sub/mul, identities, distributivity, commutativity, associativity |
-| `egcd-trace` | 35 | The step sequence, row by row, against the algorithm's own |
-| `inverse` | 35 | Every non-zero element of the prime field, plus `a / b * b == a` |
-| `errors` | 25 | Zero, division by zero, and mixing two moduli |
-| `composite` | 25 | The smallest non-invertible element — and none over a prime |
-| `units` | 25 | Every element of a composite modulus you have not been shown: the partner that multiplies to 1, or `NotInvertible`; `/` follows; one-to-one and closure — then the same over an unseen prime |
+The submitted tests call `egcd` and `egcd_trace` with `1 ≤ a < m`. Inside `inverse()`, use normalized `.value`. Zero can be rejected before calling the algorithm.
 
-Hints on five of the seven, each inside that checkpoint's 50% cap. None restates the statement: each carries a check in one-digit numbers or a case that is easy to miss.
+## When there is no inverse, do not return a number
 
-## Two distinctions this problem insists on
+Zero times anything is zero, never one. Under a composite modulus, the greatest common divisor still decides whether an inverse exists.
 
-**An integer is not a field element.** `-5` and `p - 5` name the same element; `-5` is not a
-canonical representative of it. Normalizing at construction means a negative input and an input
-past the modulus take the same path afterwards.
+| Modulus | Nonzero elements with an inverse → partner | Nonzero elements without an inverse | Smallest nonzero element without an inverse |
+|---|---|---|---|
+| 6 | 1→1, 5→5 | 2, 3, 4 | `non_invertible_element(6) = 2` |
+| 9 | 1→1, 2→5, 4→7, 5→2, 7→4, 8→8 | 3, 6 | `non_invertible_element(9) = 3` |
+| 7 | 1→1, 2→4, 3→5, 4→2, 5→3, 6→6 | none | `non_invertible_element(7) = 0` |
 
-**`pow(a, p - 2, p)` is not "the inverse".** It is an inverse when `p` is prime. Over a composite
-`n` it still returns a number — just not an inverse, and nothing tells you unless you check. The
-extended Euclidean algorithm returns the gcd alongside the coefficients, so it can say *there is
-no inverse*. The first mutation in this problem's suite is exactly the Fermat version: it passes
-every prime checkpoint and fails the composite one. Put a gcd guard in front of it and it passes
-`composite` too — and every other checkpoint but `units`, which enumerates a composite modulus the
-participant never sees. Over a composite `m`, `a^(m-2)` is the inverse of `a` only when
-`a^(m-1) ≡ 1`, which holds for a minority of the units (36 of 72 for `m = 91`). The table gets every
-element right without knowing whether `m` is prime.
+The function's zero means “no such **nonzero** element”. Search from 2 up to modulus−1 and return the first `a` with `gcd(a,m)>1`; return zero if none exists. One is always its own inverse.
 
-## Why the trace is compared row by row
+In `inverse()` and `/`, absence of an inverse requires `raise NotInvertible("no inverse")`. Before combining different moduli with `+ - * /`, use `raise FieldMismatch("different moduli")`. Both exception classes are provided; the explanation string is yours.
 
-The trace checkpoint first checked only that each row satisfies `a*s + p*t = r` and that the last
-row matches the gcd and the inverse. A mutation returning **only the last row** survived that — a
-one-row table satisfies all of it.
+For prime `p` and nonzero `a`, `a` to the power `p−1` leaves remainder 1 (Fermat's little theorem), so `pow(a,p-2,p)` gives the inverse. There is no such guarantee for a general composite modulus. Modulus 6 with 5 has inverse 5, yet `pow(5,4,6)=1` and `5*1 % 6=5`, which fails. The Euclidean algorithm handles both without first deciding whether the modulus is prime.
 
-It now compares the step count and each row's `(q, r, s, t)` against the reference sequence. Floor
-division makes that sequence deterministic, so there is exactly one right answer.
+## Seven submission rows and where to edit
 
-## Exhaustive, not sampled
+| Row | Code to edit | What to establish |
+|---|---|---|
+| normalize | `FieldElement.__init__`, `__eq__`, `__hash__` | Negative inputs normalize too; same modulus/remainder means equality and equal hash |
+| arithmetic | `__add__`, `__sub__`, `__mul__` | Correct remainders, including intermediate results |
+| egcd-trace | `egcd`, `egcd_trace` | Every table row, greatest common divisor and coefficient |
+| inverse | `inverse`, `__truediv__` | Invert every nonzero prime-modulus element; division undoes multiplication |
+| errors | Inverse and four arithmetic methods | Reject zero divisors and mixed moduli |
+| composite | `non_invertible_element`, `inverse` | Find the smallest nonzero element without an inverse and refuse to invert it |
+| units | The same `inverse`, `__truediv__` | Handle every nonzero element under unseen prime and composite moduli |
 
-`inverse` runs every non-zero element of the prime field, not a sample, so special-casing a few
-values is not a strategy. `units` does the same over a three-digit composite modulus drawn from a
-family (`UNIT_COMPOSITES`) no deployment ever shows — products of two distinct odd primes and odd
-prime squares, no Carmichael number — and then over an unseen prime: elements sharing no factor
-with the modulus must get the partner that multiplies to 1, the rest must raise `NotInvertible`,
-`/` must follow, and inversion must be **one-to-one** on the elements that have one (the property
-the former `axioms` checkpoint checked over a prime). `pow(a, -1, m)` is a correct inverse and
-passes; requiring the table is `egcd-trace`'s job, not this checkpoint's.
+You may add branches and loops inside `field.py`'s methods and functions. Keep the names and arguments. **All seven rows submit code: no separate number or JSON answer.** Each “Submit (+N pt)” sends the current file. The rows are independently graded, with a 10-point penalty per wrong answer.
 
-## The trace is not constant-time
+“Inspect evidence” shows this deployment's moduli, table, inverse and verification. After calculating a small example above, follow the same steps with the table's `a` and `modulus`. “Run public tests” checks small examples and the displayed prime; it does not exhaust unseen moduli. “Restore starter” discards your edits.
 
-The trace Workbench `inspect` prints branches on its inputs, and its step count depends on them. In
-code handling a real key that property is itself a side channel. It is here to make the algorithm
-legible, not as a model for production.
+This component also supplies division in slope formulas for elliptic curves, the curves whose points are used in cryptography. You are not implementing the curve's special cases or a complete signature scheme here.
 
-## Assurance scope
+Available computational standard-library modules (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. You may import them in your code. This environment does not support installing extra packages, file access or network communication. The required integer arithmetic can also use only built-in operations.
 
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter and the public tests only — no fixtures, no hidden tests,
-no reference solution, no verifier. Those live only in a second, unpublished container the
-Workbench reaches over the compose network, and in the author-only image `make reference-test`
-builds. `make inspect` and `make test` therefore need that second container running, which is
-what `make verifier-up` (run for you by both targets) starts and `make verifier-down` stops.
+## Local runtime and author verification
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+The participant image contains the editor, public examples and worker, but no hidden
+checks, fixtures or reference answer. A second, unpublished verifier derives public
+parameters and holds the mathematical checker. Both services use nonroot users,
+`init: true`, read-only filesystems and a loopback-only host port.
 
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
+Source initializes in a fresh worker without the seed or checker. After readiness,
+requests carry fresh identifiers. The parent validates integer values, moduli,
+operations, equality/hash consistency and expected exceptions. A printed failures list
+is not a verdict. Fresh identifiers reject preprinted results; they do not attest
+native Python returns. A participant who implements the live value protocol must still
+satisfy the same mathematical checks. The finite tested cases are not a proof about
+all possible inputs or implementations.
 
-## Cost
+Exception observation and response construction use a small CPython native adapter
+inside the isolated worker. The learner cannot replace these through Python frame
+locals or closure cells. This observes the actual type returned by a dispatched
+Python call; it does not authenticate a submission that writes its own protocol.
+The compiler is used only in the Docker build stage and is absent from runtime
+images. The adapter implements no field solution or private test.
 
-Zero. No cloud account, no AWS resources.
+The per-run limits remain 25 seconds, 512 MiB address space, 64 processes and 64 KiB
+output frames / accumulated non-result output. Linux restrictions deny file/network,
+persistent IPC, filesystem metadata changes and changes to supervisor scheduling.
+Worker process groups are removed and init reaps exited descendants. Public source
+initialization errors expose only a validated filename/line/type; private failure
+messages contain public rule names, never hidden operands or expected answers.
 
-## For authors
+The local Docker owner can inspect containers; these controls do not protect secrets
+from that owner. Production deployment and real-world cryptographic safety are not
+claimed. The Euclidean table branches on input and is not a constant-time secret-key
+implementation. This local exercise creates no AWS resources; it uses local Docker
+CPU, memory and disk. `make verifier-down` removes the local Compose environment.
 
-`make reference-test` runs the mutation suite: twelve broken implementations in-process, then the
-four `units` near-misses again through `verifier.server.evaluate_with_message` (the subprocess
-path, the `:units` seed suffix, and a message that must name properties and carry no digit). The
-Fermat-inverse one passes every prime checkpoint; the gcd-guarded one passes everything but
-`units`, and the suite asserts that it does (a near-miss another checkpoint already catches would
-be a plain bug). The last-row-only trace survived the original checkpoint and is why it now
-compares the whole sequence. The `units` near-misses were also run against all sixteen
-`UNIT_COMPOSITES` in-process; each fails on every one of them, so the verdict does not depend on
-which modulus a seed draws.
+```sh
+make test                         # public suite against your edited local starter
+make test-one ID=small-seven       # matching public examples
+make inspect                      # public evidence; optional A=3 P=7
+make reference-test               # author reference + 14 existing mutants
+make runtime-test                 # author Linux boundary regressions
+make verifier-down
+```
+
+Run `make install && make agent-gate` at the catalog root. The retained real Portal
+component harness is `local/tests/hidden/portal/run.sh`; its URL is configurable with
+`AC26_WORKBENCH_URL`. Reader provenance, actual commands and observed results are in
+`local/tests/hidden/READER.md`. Browser-on-AWS checks are not part of this local evidence.
