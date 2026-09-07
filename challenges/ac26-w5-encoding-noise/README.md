@@ -135,3 +135,9 @@ and the reason it is not enough.
 
 
 All seven checkpoints now have three 2-point hints (42 points total). The free statement supplies integer rounding, centered positions, the zero-containing safe interval, first-failure construction and exact parameter validity rules. Public encoding is distinguished from encryption; this does not model real noise growth or security. An independent participant-only reader caught missing validation bounds, ambiguous wraparound and incorrect secrecy/interval claims; the rewrite addresses those findings. Hint availability and deductions change (maximum total 53 to 42 points). The verifier now also rejects boolean, float and missing-key parameters as the free contract requires. Catalog validation and copy review are author checks, not a browser playtest. The author mutation suite passes its reference and rejects all 20 mutants, including permissive boolean, float and missing-key validators.
+
+
+The closing transfer checkpoint now also requires counterexample(params, bug) to construct inputs separating correct decoding from floor, no-wrap and abs-noise implementations. All formulas and input bounds are free; participants choose the separating cases. The verifier computes both results independently. Public feedback checks the current parameter set. The author suite rejects all 23 mutants, including non-separating and bug-ignoring witnesses.
+
+
+Independent reading found a no-witness case for two messages and odd spacing. The contract now permits None and the grader tests both existence and nonexistence; always returning None fails.

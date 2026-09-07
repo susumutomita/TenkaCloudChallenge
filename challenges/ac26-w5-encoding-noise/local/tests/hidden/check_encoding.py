@@ -201,6 +201,32 @@ def check_transfer(module, seed: str) -> list[str]:
     failures: list[str] = []
     for phase in (check_encode, check_noise, check_decode, check_interval, check_first_failure):
         failures.extend(phase(module, seed))
+    for par in [*_sets(seed), {"p":2,"delta":3,"q":6}, {"p":2,"delta":4,"q":8}]:
+        p, d, q = par["p"], par["delta"], par["q"]
+        if d < 2:
+            continue
+        for bug in ("floor", "no-wrap", "abs-noise"):
+            try:
+                witness = module.counterexample(dict(par), bug)
+                if witness is None:
+                    if bug == "abs-noise" and p == 2 and d % 2 == 1:
+                        continue
+                    failures.append("a separating input exists but none was returned")
+                    continue
+                if not isinstance(witness, (tuple, list)) or len(witness) != 2:
+                    return ["counterexample must return two inputs"]
+                m, e = witness
+                if type(m) is not int or type(e) is not int or not (0 <= m < p and -d <= e <= d):
+                    return ["counterexample inputs are outside the documented domain"]
+                c = (m * d + e) % q
+                good = ((c + d // 2) // d) % p
+                bad = ((c // d) % p if bug == "floor" else
+                       (c + d // 2) // d if bug == "no-wrap" else
+                       ((((m * d + abs(e)) % q) + d // 2) // d) % p)
+                if good == bad:
+                    failures.append("the proposed counterexample does not separate the calculations")
+            except Exception as error:
+                failures.append(f"counterexample raised {type(error).__name__}")
     return failures
 
 
@@ -267,6 +293,7 @@ PHASES = (
     check_interval,
     check_first_failure,
     check_validate,
+    check_transfer,
 )
 
 

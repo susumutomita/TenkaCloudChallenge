@@ -169,6 +169,11 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 
 
 MUTATIONS += (
+    ("never supplies a counterexample", [("                return (m, e)", "                return None")]),
+
+    ("returns a non-separating counterexample", [("                return (m, e)", "                return (0, 0)")]),
+    ("ignores which broken calculation was requested", [("    p, d, q = params[\"p\"], params[\"delta\"], params[\"q\"]", "    bug = 'floor'\n    p, d, q = params[\"p\"], params[\"delta\"], params[\"q\"]")]),
+
     ("accepts boolean parameters", [("    failures: list[str] = []",
         "    if any(type(v) is bool for v in params.values()): return []\n    failures: list[str] = []")]),
     ("accepts floating point parameters", [("    failures: list[str] = []",

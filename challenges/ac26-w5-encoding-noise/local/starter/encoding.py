@@ -95,3 +95,14 @@ def first_failure(params: dict, m: int, direction: int) -> tuple[int, int]:
     rest; find out which two and why.
     """
     return (0, 0)
+
+
+def counterexample(params: dict, bug: str) -> tuple[int, int] | None:
+    """Return (m,e) showing the requested broken calculation differs from decode.
+
+    Valid params have delta>=2. Require 0<=m<p and -delta<=e<=delta.
+    bug is floor, no-wrap, or abs-noise. Their formulas are in the free statement.
+    Return inputs, not the calculated answers; return None if no separating pair exists.
+    Each bug is checked separately.
+    """
+    return (0, 0)
