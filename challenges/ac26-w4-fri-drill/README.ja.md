@@ -81,3 +81,5 @@ make verifier-downで停止します。AWSリージョンやクラウド資源�
 作者はmake reference-test、リポジトリ直下でmake installとmake agent-gateを実行します。
 独立読解と実参加者APIの確認は local/tests/hidden/READER.md に記録します。
 実AWSと人によるイベントリハーサルは未実施で、任意の開催前確認です。
+
+Issue #716 の参加者向け再読では、任意のYへの代入と二乗位置での照合を区別しました。証跡は `local/tests/hidden/READER.md`。参照実装の変異12件、学習契約10件、ネットワーク分離5件の検証が成功しています。
