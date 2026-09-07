@@ -34,7 +34,7 @@ the problem starts, because now *you* decide what goes into the hash.
 | the domain | a signature made for another protocol verifies here |
 
 None of that shows on the happy path. Sign, verify, green — every time. Five of this problem's
-ten mutations are exactly that shape, which is why the checkpoints go after it directly.
+nineteen mutations are exactly that shape, which is why the checkpoints go after it directly.
 
 ## Participant Portal workflow
 
@@ -63,7 +63,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `cross-protocol` | 40 | The counterexample, and immunity to it |
 | `transfer` | 30 | The same protocol code on secp256k1 |
 
-Hints on six of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints costing two points each (48 total).
 
 ## The counterexample checkpoint
 
@@ -137,7 +137,15 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: ten broken implementations. Half of them sign and
+`make reference-test` runs the mutation suite: nineteen broken implementations. Five of them sign and
 verify perfectly and are broken only against an attacker. The length-prefix mutation is the reason
 the reference's preimage layout puts its two variable-length fields adjacent — with the points in
 between, that mutation survived.
+
+
+Eight checkpoints now have three hint rungs. A participant-only reader found missing byte-encoding APIs, an incorrect collision guarantee, ambiguous input rules, and a set-shaped dictionary example. The bilingual text and starter explanation were corrected. Author inspection of the existing reference confirmed the challenge-reduction contract; that inspection is not participant-play evidence. Catalog checks passed. Runtime/Portal play was not performed for this documentation revision.
+
+
+Review follow-up adds an encoding round trip to the public suite and enforces documented invalid secret, nonce and response inputs in the grader. Public tests passed against the reference (four cases); all thirteen mutations were rejected. These author runs are not participant-play evidence.
+
+Additional review validation rejects malformed signature shapes and identity, foreign-curve, and off-curve commitments. The reference and all nineteen mutation checks pass. These are author-side grading checks, not live participant-play evidence.

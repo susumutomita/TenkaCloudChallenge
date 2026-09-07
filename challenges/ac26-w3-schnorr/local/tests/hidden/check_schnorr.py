@@ -53,7 +53,11 @@ def check_keygen(module, seed: str) -> list[str]:
         other = toy_group(seed, f"{label}-other")
         if other.params != group.params and module.validate_public_key(other.generator, group):
             failures.append("a point from another curve was accepted as a public key")
-        for bad in (0, group.n, -1):
+        off_curve = next(group.point(a, b) for a in range(group.p) for b in range(group.p)
+                         if not group.contains(group.point(a, b)))
+        if module.validate_public_key(off_curve, group):
+            failures.append("an off-curve public key was accepted")
+        for bad in (0, group.n, -1, True, False, 1.5, "1", None):
             try:
                 module.public_key(bad, group)
                 failures.append("a secret outside [1, n-1] was accepted")
@@ -76,6 +80,14 @@ def check_sigma(module, seed: str) -> list[str]:
         if commitment != group.generator.scalar_mul(k):
             failures.append("the commitment is not the nonce times the generator")
             continue
+        for bad in (0, group.n, -1, True, False, 1.5, "1", None):
+            try:
+                module.commit(bad, group)
+                failures.append("an invalid nonce was accepted")
+            except module.InvalidKey:
+                pass
+            except Exception as error:
+                failures.append(f"a bad nonce raised {type(error).__name__}, not InvalidKey")
         for e in (0, 1, 2, group.n - 1, (x * 7 + 3) % group.n):
             z = module.respond(k, e, x, group)
             if not isinstance(z, int) or not 0 <= z < group.n:
@@ -98,6 +110,12 @@ def check_transcript(module, seed: str) -> list[str]:
             if not module.verify_transcript(public, commitment, e, z, group):
                 failures.append("an honest transcript was rejected")
                 break
+            for bad_response in (z + group.n, z - group.n, 1.5, "1", None):
+                try:
+                    if module.verify_transcript(public, commitment, e, bad_response, group):
+                        failures.append("a noncanonical response was accepted")
+                except Exception as error:
+                    failures.append(f"invalid response raised {type(error).__name__} instead of False")
             if module.verify_transcript(public, commitment, e, (z + 1) % group.n, group):
                 failures.append("a transcript with a modified response was accepted")
                 break
@@ -108,6 +126,22 @@ def check_transcript(module, seed: str) -> list[str]:
             if module.verify_transcript(public, other_commitment, e, z, group):
                 failures.append("a transcript with a modified commitment was accepted")
                 break
+        # An identity commitment can satisfy the equation for z=e*x, but is forbidden.
+        foreign = secp_group().generator
+        off_curve = next(group.point(a, b) for a in range(group.p)
+                         for b in range(group.p) if not group.contains(group.point(a, b)))
+        for bad_commitment in (group.infinity(), foreign, off_curve):
+            try:
+                if module.verify_transcript(public, bad_commitment, 1, x, group):
+                    failures.append("an unusable commitment was accepted")
+            except Exception as error:
+                failures.append(f"invalid commitment raised {type(error).__name__} instead of False")
+        for bad_public in (off_curve, foreign):
+            try:
+                if module.verify_transcript(bad_public, commitment, 0, k, group):
+                    failures.append("an unusable public key was accepted")
+            except Exception as error:
+                failures.append(f"invalid public key raised {type(error).__name__} instead of False")
         if module.verify_transcript(group.infinity(), commitment, 1, 1, group):
             failures.append("a transcript against the identity as a public key was accepted")
     return failures
@@ -140,6 +174,15 @@ def check_serialization(module, seed: str) -> list[str]:
                 pass
             except Exception as error:  # noqa: BLE001
                 failures.append(f"a non-reduced coordinate raised {type(error).__name__}")
+        if group.p + public.y < 1 << (8 * width):
+            overflow_y = raw[:width] + (group.p + public.y).to_bytes(width, "big")
+            try:
+                module.decode_point(overflow_y, group)
+                failures.append("a non-reduced y coordinate was accepted")
+            except module.InvalidEncoding:
+                pass
+            except Exception as error:
+                failures.append(f"a non-reduced y coordinate raised {type(error).__name__}")
         try:
             module.decode_point(raw[:-1], group)
             failures.append("a truncated encoding was accepted")
@@ -147,6 +190,18 @@ def check_serialization(module, seed: str) -> list[str]:
             pass
         except Exception as error:  # noqa: BLE001
             failures.append(f"a truncated encoding raised {type(error).__name__}")
+
+        off_curve = next(group.point(a, b) for a in range(group.p)
+                         for b in range(group.p) if (a, b) != (0, 0)
+                         and not group.contains(group.point(a, b)))
+        raw_invalid = off_curve.x.to_bytes(width, "big") + off_curve.y.to_bytes(width, "big")
+        try:
+            module.decode_point(raw_invalid, group)
+            failures.append("an off-curve point encoding was accepted")
+        except module.InvalidEncoding:
+            pass
+        except Exception as error:
+            failures.append(f"off-curve encoding raised {type(error).__name__}")
 
         # The ambiguity that matters: two different (domain, message) pairs must never
         # produce the same preimage. Plain concatenation makes them collide.
@@ -182,6 +237,10 @@ def check_fiat_shamir(module, seed: str) -> list[str]:
             failures.append("the challenge is not deterministic")
             continue
         base = module.challenge_preimage(DOMAINS[0], commitment, public, message, group)
+        expected = int.from_bytes(hashlib.sha256(base).digest(), "big") % group.n
+        if base_challenge != expected:
+            failures.append("the challenge is not SHA-256 of its preimage reduced by the group order")
+
         variants = {
             "the domain": module.challenge_preimage(
                 DOMAINS[1], commitment, public, message, group
@@ -210,6 +269,7 @@ def check_fiat_shamir(module, seed: str) -> list[str]:
         message = messages(seed, label, 1)[0]
         base_challenge = module.challenge(DOMAINS[0], commitment, public, message, group)
         others = [
+            module.challenge(DOMAINS[0], commitment, group.generator.scalar_mul((x + 1) % group.n), message, group),
             module.challenge(DOMAINS[1], commitment, public, message, group),
             module.challenge(DOMAINS[0], commitment, public, message + b"!", group),
             module.challenge(
@@ -242,6 +302,13 @@ def check_sign_verify(module, seed: str) -> list[str]:
             if not isinstance(signature, tuple) or len(signature) != 2:
                 failures.append("a signature is not a commitment and a response")
                 break
+            for malformed in ((), (group.generator,),
+                              (group.generator, 1, 2), None):
+                try:
+                    if module.verify(public, message, malformed, DOMAINS[0], group):
+                        failures.append("signature verification did not satisfy its acceptance contract")
+                except Exception as error:
+                    failures.append("signature verification did not return a result")
             if not module.verify(public, message, signature, DOMAINS[0], group):
                 failures.append("an honest signature was rejected")
                 break
