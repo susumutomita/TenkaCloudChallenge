@@ -254,9 +254,12 @@ def check_collision(module, seed: str) -> list[str]:
         if distinct + collisions != samples:
             failures.append("the counts do not add up to the number of samples drawn")
             continue
-        # With 40 draws from 64 slots, collisions are not a maybe.
-        if collisions == 0:
-            failures.append("no collision was found, so the generator was not actually run")
+        expected_values = {
+            truncated_nonce(f"{seed}:{label}", 1, f"trial-{i}".encode(), group)
+            for i in range(samples)
+        }
+        if distinct != len(expected_values) or collisions != samples - len(expected_values):
+            failures.append("the counts do not match the documented experiment")
     return failures
 
 

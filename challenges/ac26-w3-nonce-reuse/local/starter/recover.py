@@ -80,6 +80,8 @@ def attack_log(records, group) -> dict:
 def collision_experiment(seed: str, group, samples: int) -> dict:
     """Measure `participant.schnorr.truncated_nonce`.
 
+    Use secret=1 and message=f"trial-{i}".encode() for i in range(samples).
+    Pass seed unchanged to truncated_nonce(seed, 1, message, group).
     Return {"collisions", "distinct", "space"}. Predict the number before you run it —
     the generator's output looks like hash output, because it is.
     """
@@ -87,10 +89,10 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
 
 
 def safe_nonce(secret: int, message: bytes, group) -> int:
-    """Your repair. A nonce that does not repeat across different messages.
+    """Your repair. Derive nonces from the key and message using the full scalar range.
 
     Deterministic is allowed, and is probably what you want. Think about what has to go
-    into it so that two different messages cannot collide — and about what has to go in
-    so that two different *signers* of the same message do not collide either.
+    into it to make collisions unlikely for different messages and signers. A finite
+    output range cannot guarantee zero collisions for all inputs.
     """
     return 1

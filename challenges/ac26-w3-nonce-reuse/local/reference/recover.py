@@ -140,12 +140,12 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
     """
     from participant.schnorr import NONCE_SPACE, truncated_nonce
 
-    secret = 12345 % (group.n - 1) + 1
+    secret = 1
     seen: dict[int, int] = {}
     collisions = 0
     for index in range(samples):
-        message = f"payment {index}".encode()
-        k = truncated_nonce(f"{seed}:{index % 1}", secret, message, group)
+        message = f"trial-{index}".encode()
+        k = truncated_nonce(seed, secret, message, group)
         if k in seen:
             collisions += 1
         seen[k] = index
