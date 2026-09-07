@@ -150,7 +150,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
   const [selected, setSelected] = useState<Concept | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const copy = EXPLANATIONS[locale];
-  const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa", "ec"] as Concept[]);
+  const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "rsa", "ec", "snark"] as Concept[]);
   const lesson = selected ? copy[selected] : null;
   const step = lesson?.steps[stepIndex];
   const ja = locale === "ja";

@@ -1515,7 +1515,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
           const delta=next.teams[projection.vault.teamId]!.score-projection.teams[projection.vault.teamId]!.score;
-          return hit?{kind:"prove",reward:delta,title:locale==="ja"?"制約の検査に成功！":"Constraint check complete!",body:answer.split(" ").every(v=>v==="0")?(locale==="ja"?"全て0：計算も配線も一致しています。":"All zero: gates and wires agree."):(locale==="ja"?"0でない箇所があり、不正な計算か配線を検出しました。":"Nonzero residuals expose incorrect gates or wires.")}:{kind:"error",title:locale==="ja"?"余りを確認してください":"Check the remainders",body:`${delta} pt`};
+          return hit?{kind:"prove",reward:delta,title:locale==="ja"?"制約の検査に成功！":"Constraint check complete!",body:answer.split(" ").every(v=>v==="0")?(locale==="ja"?"全て0：計算も配線も一致しています。":"All zero: gates and wires agree."):(locale==="ja"?"0でない箇所があり、不正な計算か配線を検出しました。":"Nonzero remainders expose incorrect gates or wires.")}:{kind:"error",title:locale==="ja"?"余りを確認してください":"Check the remainders",body:`${delta} pt`};
         }
       )}/>}
       {selectedOrder?.task.kind === "ec-add" && <EcWorksheet key={`ec:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
