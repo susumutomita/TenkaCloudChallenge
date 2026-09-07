@@ -61,3 +61,5 @@ make verifier-down
 ```
 
 The live tests inspect every visible process environment, including Tini and healthchecks, without printing values. The public-output regression copies the actual runner's output through prepare and verify for tuple and list returns; its reference scratchpad is author runtime evidence, not independent participant solving. Linux-only child-process tests run inside `make reference-test`; they are skipped by this command on macOS. Run `make install && make agent-gate` at the catalog root. Independent reader and participant API evidence is recorded in `local/tests/hidden/READER.md`. Live AWS and third-party participant validation remain unrun, separate from local evidence.
+
+Issue #716 reader follow-up: public-point verification no longer uses x or r after preparation; generic doubling is explained before first use. Participant-read evidence is in `local/tests/hidden/READER.md`. Reference/mutation, learning, bootstrap and non-live isolation checks pass. Three live-Compose checks remain skipped by the author target.

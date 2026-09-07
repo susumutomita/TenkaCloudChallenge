@@ -151,3 +151,7 @@ nonce/tangent/mod names at first use. No field values or grading changed.
 The actual show.py entrypoint was exercised with an injected synthetic public
 snapshot; output is /private/tmp/schnorr-750-inspect-vocabulary.log. This is a
 public-output check, not a new live HTTP claim. The catalog gate passed.
+
+## 2026-09-08 participant-only reread (Issue #716)
+
+An independent reader inspected only Japanese/English participant instructions, hints and the public starter, without reference code, hidden tests or verifier internals. The first pass found that the verification hint used secret x and nonce r despite claiming public-only verification, and that the doubling formula written for G was later applied to another point without explaining coordinate substitution. The rewrite separates preparation of public P,R from verification by repeated additions using only P,R,e,s,G. The general-point substitution is now before field6, its first use. Rereading confirmed the mathematics and order; the final pass caught Markdown heading artifacts from moving the paragraph, which were corrected. This is text/hand-calculation evidence, not browser submission.

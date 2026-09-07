@@ -61,3 +61,5 @@ make verifier-down
 ```
 
 Tiniやhealthcheckを含む全プロセスの環境を検査し、値は出力しません。公開出力の回帰は、tuple/listを返す実公開テストの表示をprepare・verifyへそのまま渡します。この確認で使うreferenceは作者のruntime検査であり、独立した参加者役の解答とは区別します。Linux専用の子プロセス検査は `make reference-test` 内で実行します。macOSで上のコマンドを使った場合はその部分だけスキップされます。metadataはカタログrootの `make install && make agent-gate` で検証します。独立読解と実参加者APIの記録は `local/tests/hidden/READER.md` に保存します。実AWS・第三者参加者の確認は未実施で、ローカル検証と区別します。
+
+Issue #716 の読者確認で、検証は準備後のx,rを使わず公開点だけを足す手順へ変更し、任意の点を倍にする公式を初出前に説明しました。証跡は `local/tests/hidden/READER.md`。参照・変異・学習・起動・通常の分離検証が成功。実Composeが必要な3件はauthorターゲットでスキップされています。
