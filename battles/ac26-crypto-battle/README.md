@@ -26,7 +26,7 @@ A share is an index-and-value pair used in secret sharing. This game creates fiv
 | **LEAK** | Publish a share, or an original/encrypted pair, to answer instantly | Public records can supply an opponent's attack |
 | **PROVE** | Relabel a sudoku grid and fill four cells | Requires calculation; wrong submissions cost points |
 | **HUNT** | Recover a secret, key or hand from public information and attack | Secret, sudoku and hand misses cost points and attempts; an incorrect cipher key is rejected without a charge |
-| **ROTATE** | Replace the secret and key with a new generation | Unanswered secret-bound Orders become void and cost points; rock-paper-scissors continues |
+| **ROTATE** | Replace the secret and key with a new generation | Unanswered secret-bound Orders become void and cost points; after a mandatory disclosure, pay at least one expiry penalty (the larger penalty only; score never falls below zero). Rock-paper-scissors continues |
 | **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
 
 An ordinary correct calculation earns +30, LEAK earns +10, and expiry costs −15. Check each card for its accepted methods and actual points.
@@ -60,7 +60,7 @@ The opening has one Order. The first batch of six arrives one minute later; furt
 | What the card asks for | What you do |
 | --- | --- |
 | reveal a share | choose LEAK or PROVE |
-| publish a share (publication required) | LEAK only, full points; the cost is one more public share. ROTATE first to avoid it |
+| publish a share (publication required) | LEAK only, full points; a new index adds one distinct public share, a duplicate adds zero. ROTATE first to avoid publishing |
 | show it without showing it | PROVE: relabel your sudoku solution with an unused table and open the line asked for |
 | encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
 | encrypted addition | add both pairs component by component, remainder p |

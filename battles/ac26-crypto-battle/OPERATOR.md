@@ -63,7 +63,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (11, including Rotor Orders, packed HUNT counters and latest verdicts) and a
+The plugin declares `stateSchemaVersion` (12, including the generation-scoped disclosure retirement fee) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -541,13 +541,13 @@ Schema11 changes the saved representation, with no new public information:
 - Latest HUNT verdicts use roster tuples. Legacy objects, including absent score
   deltas, stay readable; an unknown historical delta is never reported as zero.
 
-Migration accepts schemas1–10, preserving existing Vigenère failure flags,
+The schema-11 migration accepted schemas1–10, preserving existing Vigenère failure flags,
 lightning and booster decisions, RPS predictions and current-generation guards.
 Only a guard with a matching real audit record is removed as redundant. Other
 untimed guards remain; the existing retired-RSA-guard policy is unchanged.
 Malformed identities/counts fail without rewriting the saved row. Mixed-version
-workers must respect stateSchemaVersion11. Roll back only to a worker that
-understands these encodings; never relabel a row as version10. No platform
+workers must respect the declared schema (currently12). Roll back only to a worker that
+understands that version; never relabel a row as an older version. No platform
 configuration or cleanup change accompanies this migration.
 
 
