@@ -318,8 +318,8 @@ export function OrderBelt({
                     has no LEAK route, so quoting a pass price would be a lie.
                   */}
                   <span className="tc-points">
-                    +{order.points}
-                    {order.allowedMethods.includes("leak") ? (
+                    {order.privacyConstraint === "must-disclose" ? `LEAK +${order.leakPoints}` : `+${order.points}`}
+                    {order.allowedMethods.includes("leak") && order.privacyConstraint !== "must-disclose" ? (
                       <span className="tc-points-pass"> / {copy.leakRate} +{order.leakPoints}</span>
                     ) : null}
                   </span>
@@ -332,7 +332,7 @@ export function OrderBelt({
                     {newIds.includes(order.id) && <b className="tc-order-arrived">{locale === "ja" ? "到着" : "New"}</b>}
                     </span>}
                   </span>
-                  <span>{taskLabel(order.task, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
+                  <span>{order.privacyConstraint === "must-disclose" ? (locale === "ja" ? "シェアを公開して答える（LEAKのみ）" : "Publish a share (LEAK only)") : taskLabel(order.task, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
                 </div>
                 {/*
                   [Issue #645] Which methods THIS Order accepts, on the card

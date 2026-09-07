@@ -464,10 +464,22 @@ describe("a match persisted before the sudoku PROVE still loads", () => {
     const lifted = migrateState(v1, 1);
     expect(lifted.publicLedger).toEqual(migrateState(v2, 2).publicLedger);
     expect(lifted.publicPuzzles?.teamA).toHaveLength(16);
-    expect(() => migrateState(v2, 11)).toThrow();
+    expect(() => migrateState(v2, 12)).toThrow();
     expect(() => migrateState(v2, 0)).toThrow();
     expect(() => migrateState(null, 2)).toThrow();
     expect(() => migrateState({ seed: "x" }, 2)).toThrow();
+  });
+
+  test("schema 11 upgrades without inventing retirement fees or changing saved scores", () => {
+    const initial = initialState(CTX);
+    const legacy = { ...initial, teams: { ...initial.teams, teamA: { ...initial.teams.teamA!, score: 5 } } };
+    const json = JSON.stringify(legacy);
+    const lifted = migrateState(legacy, 11);
+    expect(JSON.stringify(legacy)).toBe(json);
+    expect(lifted.teams).toEqual(legacy.teams);
+    expect(lifted.contracts).toEqual(legacy.contracts);
+    expect(projectForTeam(lifted, "teamA").vault.rotateMinimumPenalty).toBe(0);
+    expect(lifted.teams.teamA!.score).toBe(5);
   });
 
   test("schema 4 HUNT results retain their outcome without inventing a historical score delta", () => {

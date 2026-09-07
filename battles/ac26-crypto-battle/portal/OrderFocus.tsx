@@ -8,6 +8,13 @@ type Locale = "ja" | "en";
 export function orderHeading(order: ContractProjection, locale: Locale): string {
   if (order.task.kind === "reveal-share") {
     const pieces = order.task.shareIndices.map((i) => `#${i}`).join("・");
+    // [Issue #740] A disclosure Order: the client is buying the share itself,
+    // so the heading says "publish", not "account for" -- there is no PROVE.
+    if (order.privacyConstraint === "must-disclose") {
+      return locale === "ja"
+        ? `秘密のかけら ${pieces} の公開を求められています (公開が条件・満額)`
+        : `A request to publish your secret share ${pieces} (publication required, full points)`;
+    }
     return locale === "ja" ? `秘密のかけら ${pieces} を求められています` : `A request for your secret share ${pieces}`;
   }
   return taskLabel(order.task, locale);

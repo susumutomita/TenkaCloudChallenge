@@ -741,6 +741,8 @@ export interface StoredShare {
  * other team's `secret` / `shares` (see reducer.ts + adversarial test #5).
  */
 export interface TeamState {
+  /** Current-generation minimum ROTATE cost after fulfilling a disclosure Order. */
+  readonly disclosureRotationCost?: number;
   readonly teamId: string;
   /** [Issue #3172] 表示名 (initialState 時点の roster 由来)。 未解決なら省略。 */
   readonly teamName?: string;
@@ -1145,6 +1147,8 @@ export interface VaultProjection {
   readonly generation: number;
   readonly lastRotateAtMs: number | undefined;
   readonly rotateCooldownRemainingMs: number;
+  /** Minimum total cost after a publication-required Order; not an additional fee. */
+  readonly rotateMinimumPenalty?: number;
   readonly completedContractIds: readonly string[];
   readonly huntedGenerations: readonly number[];
   /**

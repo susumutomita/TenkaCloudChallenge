@@ -63,7 +63,7 @@ raw `bigint`.
 
 ### Upgrading across a schema version
 
-The plugin declares `stateSchemaVersion` (11, including Rotor Orders, packed HUNT counters and latest verdicts) and a
+The plugin declares `stateSchemaVersion` (12, including the generation-scoped disclosure retirement fee) and a
 `migrateState` that lifts older rows on first touch. One case is refused on
 purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
 Schnorr transcripts sharing a commitment on a team's current generation, and
@@ -153,6 +153,23 @@ make agent-gate
 `DEFAULT_CONFIG` in `game/src/reducer.ts` owns match duration, phase boundaries,
 Order cadence, batch size and TTLs, ROTATE cooldown, threshold/share count, and
 the score values that apply to every Order.
+
+### The disclosure Order and why the match connects
+
+The existing five-task rotation is preserved. Every other ordinary share slot
+requires publication; the alternating share slot still permits LEAK or PROVE.
+The opener remains unchanged. Disclosure indices advance cyclically through
+1..shareCount, so consecutive disclosures have distinct indices. Keeping five
+slots preserves the established Vigenere/Rotor/RSA issuance schedule.
+
+Publication still requires pressing LEAK. Expiry only penalizes; it publishes
+nothing. Disclosure LEAK pays the Order's full rate, including rush. ROTATE is
+visible before the first disclosure even at zero exposure; its normal cooldown
+and voided-Order penalty still apply. Duel byes can shift disclosure timing per
+team, so read opponents' exposure from public records rather than your schedule.
+`game/src/interaction.test.ts` verifies both competent teams land Shamir HUNTs
+without voluntary LEAKs, and that rotating before the third share prevents these
+attacks at a score cost. This is a deterministic test, not a human playtest.
 
 ### Field size and HUNT attempt limits
 
@@ -524,11 +541,39 @@ Schema11 changes the saved representation, with no new public information:
 - Latest HUNT verdicts use roster tuples. Legacy objects, including absent score
   deltas, stay readable; an unknown historical delta is never reported as zero.
 
-Migration accepts schemas1–10, preserving existing Vigenère failure flags,
+The schema-11 migration accepted schemas1–10, preserving existing Vigenère failure flags,
 lightning and booster decisions, RPS predictions and current-generation guards.
 Only a guard with a matching real audit record is removed as redundant. Other
 untimed guards remain; the existing retired-RSA-guard policy is unchanged.
 Malformed identities/counts fail without rewriting the saved row. Mixed-version
-workers must respect stateSchemaVersion11. Roll back only to a worker that
-understands these encodings; never relabel a row as version10. No platform
+workers must respect the declared schema (currently12). Roll back only to a worker that
+understands that version; never relabel a row as an older version. No platform
 configuration or cleanup change accompanies this migration.
+
+
+### Disclosure ROTATE floor (PR #752 follow-up)
+
+Answering a publication-required Order records `disclosureRotationCost` on the
+current team generation, equal to one expiry penalty. ROTATE charges the larger
+of this floor and its existing voided-Order penalties, never both. The marker
+survives JSON reload and Order pruning and clears on rotation. Optional disclosure
+alone does not activate it. The Portal receives `rotateMinimumPenalty` and shows
+it before ROTATE; the publication primer also states this price.
+
+The escape bot now clears other work first, publishes, then immediately rotates
+after each disclosure. It pays the floor even with no unanswered work and scores
+below the race policy. Avoiding exposure remains a paid choice, not a guarantee
+that both human teams will choose to attack. The 90-minute RPS test retains all
+attacks, but its final score is 135 lower (nine disclosure retirement fees of15).
+
+Browser check for PR #752: the real local dev harness at 375×812 rendered
+`LEAK +30` and `LEAKのみ` on the disclosure card, with document scrollWidth375.
+Selecting a disclosure and submitting LEAK showed the minimum15-point ROTATE
+cost before its button. Screenshots: disclosure-mobile-752.png and
+disclosure-rotate-price-752.png in the local verification output directory.
+This used the harness's accelerated, paused scenario, not an AWS event or timed
+human gameplay. The existing sticky Order queue remains visible while scrolling.
+
+### Disclosure retirement schema 12
+
+Schema 12 records the generation-scoped disclosure retirement fee. Migration accepts schemas 1–11, preserving saved scores, Orders and history. A legacy generation has no fee until a new mandatory disclosure is answered; no historical fee is invented. The platform must reject schema-12 rows on older workers, including during rollback. ROTATE charges the larger nominal fee (retirement minimum or voided-Order penalties) once, with the existing zero score floor.

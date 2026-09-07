@@ -229,12 +229,16 @@ export function buildVerticalPlaytestScript(): BuiltVerticalScript {
     // all four methods against the real issuance schedule rather than a
     // hand-built Order list.
     const alreadyLeaked = new Set(distinctLeakedShareIndices(DEFENDER));
+    // [Issue #740] A share Order the defender CHOOSES to leak -- one that also
+    // accepts PROVE. A disclosure Order (LEAK only, full price) is not a
+    // choice, and the equal-points assertion below is about the choice.
     const leakable = state.contracts.filter(
       (contract) =>
         contract.teamId === DEFENDER &&
         contract.status === "open" &&
         contract.task.kind === "reveal-share" &&
-        contract.allowedMethods.includes("leak"),
+        contract.allowedMethods.includes("leak") &&
+        contract.allowedMethods.includes("prove"),
     );
     // Prefer the property the story still needs: first a standard LEAK for
     // the equal-points assertion, then a previously-unpublished share index

@@ -128,7 +128,9 @@ describe("Orders carry the model the registry defines", () => {
       state = tick(state, round * DEFAULT_CONFIG.contractIntervalMs);
     }
     const constraints = new Set(state.contracts.map((c) => c.privacyConstraint));
-    expect(constraints).toEqual(new Set(["none", "no-raw-disclosure"]));
+    // [Issue #740] Three: the open choice, the PROVE-only rule, and the
+    // disclosure rule that leaves LEAK alone.
+    expect(constraints).toEqual(new Set(["none", "no-raw-disclosure", "must-disclose"]));
   });
 
   /**

@@ -247,10 +247,18 @@ describe("prove: what stays hidden", () => {
 
 describe("prove: the scoring MUST", () => {
   test("PROVE pays the Order's full rate, which is above what LEAK pays for the same Order", () => {
-    const state = tick(startedMatch(CTX), 0);
-    const order = state.contracts.find(
-      (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share",
+    // [Issue #740] The FREE share Order, not the disclosure one: the
+    // comparison is between a team's two choices, and a disclosure has one.
+    // The rotation is six long now, so the first free share Order after the
+    // opener is in the second batch.
+    let state = tick(startedMatch(CTX), 0);
+    const freeShare = (s: CryptoBattleState) => s.contracts.find(
+      (c) => c.teamId === "teamA" && c.status === "open" && c.task.kind === "reveal-share" && c.allowedMethods.includes("prove"),
     );
+    for (let round = 1; round <= 3 && !freeShare(state); round += 1) {
+      state = tick(state, round * DEFAULT_CONFIG.contractIntervalMs);
+    }
+    const order = freeShare(state);
     if (!order) throw new Error("expected a share Order");
     expect(order.allowedMethods).toEqual(["leak", "prove"]);
     const proved = applyOp(state, "teamA", buildProveSudokuOp(projectForTeam(state, "teamA").vault, order.id));

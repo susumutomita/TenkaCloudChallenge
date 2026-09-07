@@ -45,7 +45,7 @@ import RegistrationPanel, {
   submitRotate,
 } from "../../portal/RegistrationPanel.tsx";
 import { contractsForMethod } from "../../portal/RegistrationPanelCore.tsx";
-import { GameBoardBody } from "../../portal/GameBoard.tsx";
+import { GameBoardBody, OrderBelt } from "../../portal/GameBoard.tsx";
 import { ledgerPayload } from "../../portal/orderTask.ts";
 import { ALL_SUBMISSION_METHODS } from "./methods.ts";
 import {
@@ -1102,6 +1102,26 @@ describe("advanced tactics use progressive disclosure", () => {
       const aged = ageProjection(fixtureProjection({ matchRemainingMs: undefined }), 5_000);
       expect(aged?.matchRemainingMs).toBeUndefined();
     });
+  });
+
+  it("labels a disclosure card as one LEAK action in both locales", () => {
+    const base = fixtureProjection();
+    const order = { ...base.myContracts[0]!, privacyConstraint: "must-disclose" as const, allowedMethods: ["leak" as const], points: 30, leakPoints: 30 };
+    for (const locale of ["ja", "en"] as const) {
+      const html = renderToStaticMarkup(createElement(OrderBelt, { projection: { ...base, myContracts: [order] }, locale, compact: true }));
+      expect(html).toContain("LEAK +30");
+      expect(html).toContain(locale === "ja" ? "LEAKのみ" : "LEAK only");
+      expect(html).not.toContain("tc-points-pass");
+    }
+  });
+
+  it("offers ROTATE before the first required disclosure, without existing exposure", () => {
+    const base = fixtureProjection({ publicLedger: [] });
+    const order = base.myContracts[0]!;
+    const pending = { ...order, status: "open" as const, privacyConstraint: "must-disclose" as const, allowedMethods: ["leak" as const] };
+    expect(tacticAvailability({ ...base, myContracts: [pending] }).rotate).toBe(true);
+    expect(tacticAvailability({ ...base, myContracts: [{ ...pending, remainingMs: 0 }] }).rotate).toBe(false);
+    expect(tacticAvailability({ ...base, myContracts: [{ ...pending, status: "expired" }] }).rotate).toBe(false);
   });
 
   it("keeps every advanced control off a fresh first screen", () => {

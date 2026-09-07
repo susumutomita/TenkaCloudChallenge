@@ -64,7 +64,7 @@ test("90 standard minutes: both safe teams can score a public-evidence RPS predi
         const own = projectForTeam(state, team);
         let op: CryptoBattleOp | undefined;
         switch (order.task.kind) {
-          case "reveal-share":
+          case "reveal-share": if (!order.allowedMethods.includes("prove")) { op = { kind: "leak", contractId: order.id }; break; }
           case "zk-sudoku": op = buildProveSudokuOp(own.vault, order.id); break;
           case "rsa-encrypt": op = { kind: "cipher", contractId: order.id, answer: [String(rsaEncrypt(order.task.plaintext, order.task))] }; break;
           case "caesar-shift": op = buildCipherOp(order); break;
@@ -128,9 +128,10 @@ test("90 standard minutes: both safe teams can score a public-evidence RPS predi
   expect(heldHits).toEqual(hits); // Both successful attacks used the newly preserved window.
   expect(rotations).toEqual({ alpha: 18, bravo: 18 });
   for (const team of teams) {
-    expect(state.teams[team]!.score).toBe(3284);
+    expect(projectForTeam(state, team).publicLedger.some(a => a.kind === "share")).toBe(true); // Mandatory disclosures only; optional work stays private.
+    expect(state.teams[team]!.score).toBe(3284 - 9 * Math.abs(state.config.scores.expiredOrder));
     expect(state.teams[team]!.completedContractIds).toHaveLength(109);
-    expect(projectForTeam(state, team).publicLedger.some(a => a.kind === "share" || a.kind === "cipher-pair")).toBe(false);
+    expect(projectForTeam(state, team).publicLedger.some(a => a.kind === "cipher-pair")).toBe(false);
   }
   expect(state.contracts.some(c => c.status === "expired")).toBe(false);
 });

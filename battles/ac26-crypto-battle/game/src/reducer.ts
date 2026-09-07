@@ -624,13 +624,14 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  *   9  private lightning distribution, targeted card, and accepted-answer history
  *  10  RSA Orders/pairs, exact-time factor HUNT logs and compact completed IDs
  *  11  Rotor Orders/pairs; ledger tuples; lossless audit/counter/guard/verdict roster codecs
+ *  12  generation-scoped disclosure retirement cost
  *
  * The bump matters for ROLLBACK, not only for upgrade: a v2 worker's ledger
  * decoder throws on a kind it does not know, so a v3 row it was told was v2
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 11;
+export const STATE_SCHEMA_VERSION = 12;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -669,11 +670,13 @@ export const STATE_SCHEMA_VERSION = 11;
  * stays in its original representation. Pending RPS reservations keep their
  * original generation; old lastHunt objects remain readable beside new tuples.
  * Rotor is issued only in future scheduled normal pressure cipher slots.
+ * v11 -> v12 preserves scores, Orders and history. Existing generations have
+ * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9 and v10 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10 and v11 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -907,15 +910,20 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         continue;
       }
       const contractId = `${teamId}-c${sequenceIndex}`;
+      const points = plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract;
       issued.push({
         id: contractId,
         teamId,
         kind: plan.kind,
-        points: plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract,
+        points,
         // [Issue #659] LEAK pays the same on a rush Order as on a standard one:
         // rush pays more for the SPEED of computing it, and letting the system
         // answer is not faster work, it is no work.
-        leakPoints: state.config.scores.contractLeak,
+        // [Issue #740] Except on a disclosure Order, where LEAK is the job the
+        // client is paying for: it pays the Order's own rate (rush included),
+        // so the only cost of answering it is the exposure, and letting it
+        // lapse to stay hidden is never the better trade.
+        leakPoints: plan.privacyConstraint === "must-disclose" ? points : state.config.scores.contractLeak,
         task: buildOrderTask(plan, state.seed, contractId, fieldConfig.prime, teamId, state.teams[teamId]!.generation),
         issuedAtMs: nextContractAtMs,
         expiresAtMs,
@@ -1816,6 +1824,7 @@ function applyLeak(
     // [Issue #659] The leak rate, not the full rate. Paying the same for both
     // made LEAK strictly dominant — no computation, identical payout.
     score: team.score + contract.leakPoints,
+    disclosureRotationCost: contract.privacyConstraint === "must-disclose" ? Math.abs(state.config.scores.expiredOrder) : team.disclosureRotationCost,
     completedContractIds: [...team.completedContractIds, compactContractId(teamId, contract.id)],
   };
 
@@ -2365,6 +2374,14 @@ function applyHunt(
   };
 }
 
+/** Clearing the batch must not make immediately retiring a paid disclosure free. */
+function disclosureRotateMinimum(state: CryptoBattleState, teamId: string): number {
+  const cost = state.teams[teamId]?.disclosureRotationCost;
+  if (cost === undefined) return 0;
+  if (!Number.isFinite(cost) || cost < 0) throw new Error("invalid disclosure rotation cost");
+  return cost;
+}
+
 function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleState {
   const team = state.teams[teamId];
   if (!team) {
@@ -2378,6 +2395,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
     secret: secret.toString(),
     shares: shares.map((s): StoredShare => ({ index: s.index, value: s.value.toString() })),
     lastRotateAtMs: state.nowMs,
+    disclosureRotationCost: undefined,
   };
   // Rotate's time cost isn't only the cooldown: every contract issued to
   // this team before the rotate is voided along with the old generation.
@@ -2421,10 +2439,14 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   };
   // Charged through the same helper the deadline path uses, so the two causes
   // cannot drift apart into different prices for the same unanswered Order.
+  const penalty = Math.max(
+    disclosureRotateMinimum(state, teamId),
+    voided.length * Math.abs(state.config.scores.expiredOrder),
+  );
   const teams = applyExpiryPenalties(
     { ...state.teams, [teamId]: updatedTeam },
-    voided,
-    state.config.scores.expiredOrder,
+    [teamId],
+    -penalty,
   );
   return pruneRetiredHuntAttempts(pruneRetiredRsaHunts({ ...state, contracts, teams, publicPuzzles }));
 }
@@ -2696,6 +2718,7 @@ export function projectForTeam(
     generation: team.generation,
     lastRotateAtMs: team.lastRotateAtMs,
     rotateCooldownRemainingMs,
+    rotateMinimumPenalty: disclosureRotateMinimum(state, teamId),
     completedContractIds: team.completedContractIds.map(c => contractId({ tm: teamId, c })),
     huntedGenerations: team.huntedGenerations,
     sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),

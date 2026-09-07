@@ -764,7 +764,7 @@ export function tacticAvailability(projection: CryptoBattleProjection | null): {
     sudokuHunt: sudokuHuntCandidates(projection).length > 0,
     cipherHunt: cipherHuntCandidates(projection).length > 0,
     rpsHunt: (projection?.rpsHunt?.targets.length ?? 0) > 0,
-    rotate: ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
+    rotate: (projection?.myContracts.some(order => order.status === "open" && order.remainingMs > 0 && order.privacyConstraint === "must-disclose") ?? false) || ownExposedShareCount(projection) > 0 || sudokuRotatePressure(projection) !== undefined
       || (projection?.publicRsaKeys?.some(key => key.teamId === projection.vault.teamId && key.generation === projection.vault.generation) ?? false),
   };
 }
@@ -1293,6 +1293,18 @@ export default function FastMovePanel(props: PortalSlotProps) {
             <span>{locale === "ja"
               ? `秘密分散：秘密を複数の数（シェア）に分けて保管。${projection.vault.shares.length} 個中 ${projection.threshold} 個で元の秘密を復元できます。`
               : `Secret sharing splits a secret into numbers called shares. Any ${projection.threshold} of ${projection.vault.shares.length} shares recover it.`}</span>
+            {/*
+              [Issue #740] The disclosure Order says what it is before the one
+              button below it: the rules are asking for the share, it pays
+              what computing would, and the cost is the exposure it adds --
+              which the LEAK button's risk line counts. ROTATE is the way to
+              retire that exposure, at the price of the Orders still open.
+            */}
+            {selectedOrder.privacyConstraint === "must-disclose" && (
+              <span className="tc-share-primer-rule">{locale === "ja"
+                ? " この依頼はかけらの公開が条件です。得点は計算と同じ満額で、未公開の番号なら公開数が増え、同じ番号なら増えません。公開専用Orderに答えた世代のROTATEは、未処理が0件でも最低1件分の失効点がかかります。増やしたくなければ、先に ROTATE で世代を変えます (開いている依頼は無効になります)。"
+                : " This request requires publishing the share. It pays the full computing rate; a new index increases exposure; a duplicate does not. After fulfilling a disclosure Order, ROTATE costs at least one expiry penalty even with no unfinished work. To avoid that, ROTATE to a new generation first (open Orders are voided)."}</span>
+            )}
           </p>
         )}
         <div className="tc-primary-actions">
@@ -1579,7 +1591,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
             {selectedOrder.hints.filter(hint => hint.text !== undefined).map(hint => (
               <details className="tc-hint-rung" key={`${hint.id}:${selectedOrder.hints.filter(h => h.text).length}`} open={hint.level === selectedOrder.hints.filter(h => h.text).length - 1}>
                 <summary>{hint.level + 1}. {locale === "ja" ? ["しくみ", "小さな数の例", "自分の数でやる"][hint.level] : ["The mechanism", "A small example", "Use your own values"][hint.level]}</summary>
-                {hint.level === 2 && (selectedOrder.task.kind === "reveal-share" || selectedOrder.task.kind === "zk-sudoku") ?
+                {/* [Issue #740] The sudoku guide is the PROVE procedure; a disclosure Order (LEAK only) keeps its own rung-3 text. */}
+                {hint.level === 2 && (selectedOrder.task.kind === "reveal-share" || selectedOrder.task.kind === "zk-sudoku") && selectedOrder.allowedMethods.includes("prove") ?
                   <SudokuGuide order={selectedOrder} projection={projection} table={proveTable} locale={locale} onOpenProof={() => { setProveOpen(true); requestAnimationFrame(() => document.querySelector(".tc-proof-inputs")?.scrollIntoView({ block: "start" })); }} /> :
                   <p className="tc-hint-text">{hint.text?.[locale]}</p>}
               </details>
@@ -1668,6 +1681,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             attack. State the price while the button is still unpressed, and
             count the Orders actually at stake rather than quoting a rule.
           */}
+          {(projection.vault.rotateMinimumPenalty ?? 0) > 0 && <div className="tc-card-warn">{locale === "ja" ? `公開専用Orderに回答済み：ROTATEは少なくとも −${projection.vault.rotateMinimumPenalty} 点。未処理Orderの減点がこれ以上なら、その減点だけです。` : `A disclosure Order was answered: ROTATE costs at least −${projection.vault.rotateMinimumPenalty} points, or the unanswered-Order penalty if larger.`}</div>}
           {rotateVoidCount(projection) > 0 ? (
             <div className="tc-card-warn">{copy.rotateCost(rotateVoidCount(projection))}</div>
           ) : null}

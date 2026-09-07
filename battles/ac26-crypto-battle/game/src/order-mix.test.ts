@@ -137,8 +137,34 @@ describe("the Order belt a participant actually sees", () => {
       expect(order.allowedMethods).toEqual(["prove"]);
     }
     for (const share of orders.filter((o) => o.task.kind === "reveal-share")) {
-      expect(share.privacyConstraint).toBe("none");
+      expect(["none", "must-disclose"]).toContain(share.privacyConstraint);
     }
+  });
+
+  /**
+   * [Issue #740] The disclosure Order: a share Order whose client is buying
+   * the share, so LEAK is the only answer and it pays full price. Consecutive
+   * disclosures name distinct indices, which is what makes three of them on
+   * one generation reach the threshold -- the exposure every team carries by
+   * rule, so a match between two competent teams has something to HUNT.
+   */
+  test("disclosure Orders exist: LEAK only, full price, distinct consecutive indices", () => {
+    const disclosures = orders.filter((o) => o.privacyConstraint === "must-disclose");
+    expect(disclosures.length).toBeGreaterThanOrEqual(3);
+    for (const order of disclosures) {
+      expect(order.task.kind).toBe("reveal-share");
+      expect(order.allowedMethods).toEqual(["leak"]);
+      expect(order.leakPoints).toBe(order.points);
+    }
+    const indices = disclosures.map((o) => (o.task.kind === "reveal-share" ? o.task.shareIndices[0] : -1));
+    for (let i = 0; i + DEFAULT_CONFIG.threshold <= indices.length; i += 1) {
+      const window = indices.slice(i, i + DEFAULT_CONFIG.threshold);
+      expect(new Set(window).size).toBe(DEFAULT_CONFIG.threshold);
+    }
+    // The free share Order is still there, still a choice.
+    const free = orders.filter((o) => o.task.kind === "reveal-share" && o.privacyConstraint === "none");
+    expect(free.length).toBeGreaterThan(0);
+    for (const order of free) expect(order.leakPoints).toBeLessThan(order.points);
   });
 
   test("no Order publishes raw material unless its rule permits it", () => {
