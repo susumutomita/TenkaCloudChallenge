@@ -142,3 +142,9 @@ make solvability
 The hidden suite reruns eight unseen seeds per checkpoint. The mutation suite must kill wrong
 signed-byte order, signature-always-true, UP/UV confusion, position-based selection, omitted UV
 enforcement and omitted final signature verification.
+
+## Issue #716: hints and supplied context handling
+
+Three checks now have three hints in each locale: mechanism, small example, then implementation and submission (2 points each). A participant-only independent reader identified the unexplained manual base64url step, undefined origin/type, and exceptions in supplied context handling. The instructions now explain _decode and zero-based positions. Non-object JSON is rejected as malformed-assertion; missing signatures are rejected by signature verification.
+
+make install, make agent-gate (116 problems), and two internal regressions pass. The regressions cover malformed JSON shapes and missing signatures. The reader did not access private materials. Live submissions were not run.
