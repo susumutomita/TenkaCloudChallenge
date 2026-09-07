@@ -108,16 +108,17 @@ def check_counterexamples_separate_results() -> str:
 
 
 CHECKS = (
-    ("counterexamples-separate-results", check_counterexamples_separate_results),
     ("encode-matches-the-rule", check_encode_matches_the_rule),
     ("an-exact-point-decodes-to-itself", check_an_exact_point_decodes_to_itself),
     ("a-little-noise-survives", check_a_little_noise_survives),
+    ("counterexamples-separate-results", check_counterexamples_separate_results),
 )
 
 
 def main(argv: list[str]) -> int:
     only = argv[argv.index("--only") + 1] if "--only" in argv else ""
     failed = 0
+    print("Check each line separately. Start with encode-matches-the-rule; later FAIL lines do not block submitting encode.")
     for name, check in CHECKS:
         if only and only not in name:
             continue
