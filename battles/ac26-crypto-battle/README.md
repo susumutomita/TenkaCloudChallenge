@@ -412,3 +412,9 @@ The server assigns y per Order; a caller cannot replace it. In this tiny-group t
 ## Elliptic-curve point addition (#784)
 New matches offer EC addition at every thirteenth sequence slot, with duels taking priority. Calculate addition, doubling and the identity O on y²=x³+2x+3 modulo7. This is foundational arithmetic used by ECDSA, not a complete signature scheme. Submit `x y` separated by one space, or `O`. The worksheet contains equations, an inverse table and a coordinate plot. Wrong answers use the existing wrongProve penalty; correct answers receive the Order reward. Existing expiry, ownership and replay gates apply. Legacy matches do not enable these Orders. No platform changes.
 Verify with `cd game && bun test src/ec.test.ts && bun run typecheck`, then the dev `ec-order` scenario.
+
+### Score and mandatory-disclosure regressions (#777 / #778)
+
+`streaming-orders.test.ts` isolates expiry penalties over 30 minutes and verifies that pruning completed Orders does not remove earned points. `disclosure-score-regression.test.ts` uses normal penalties to verify a missed deadline deducts once while completed history survives. Scores are cumulative team state, not a sum over visible Orders.
+
+The latter also runs 90 minutes with the current 30-second arrival / 60-second deadline, Schnorr and EC configuration. Both teams LEAK only mandatory-disclosure Orders and successfully HUNT using only participant-projected public shares. No voluntary disclosure is required. The originally reported deployed revision is unidentified; this evidence exercises the local production reducer/projection. Verify the deployed environment after the owner deploys.
