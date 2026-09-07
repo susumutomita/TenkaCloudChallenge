@@ -53,6 +53,10 @@ def check_keygen(module, seed: str) -> list[str]:
         other = toy_group(seed, f"{label}-other")
         if other.params != group.params and module.validate_public_key(other.generator, group):
             failures.append("a point from another curve was accepted as a public key")
+        off_curve = next(group.point(a, b) for a in range(group.p) for b in range(group.p)
+                         if not group.contains(group.point(a, b)))
+        if module.validate_public_key(off_curve, group):
+            failures.append("an off-curve public key was accepted")
         for bad in (0, group.n, -1, True, False, 1.5, "1", None):
             try:
                 module.public_key(bad, group)
@@ -132,6 +136,12 @@ def check_transcript(module, seed: str) -> list[str]:
                     failures.append("an unusable commitment was accepted")
             except Exception as error:
                 failures.append(f"invalid commitment raised {type(error).__name__} instead of False")
+        for bad_public in (off_curve, foreign):
+            try:
+                if module.verify_transcript(bad_public, commitment, 0, k, group):
+                    failures.append("an unusable public key was accepted")
+            except Exception as error:
+                failures.append(f"invalid public key raised {type(error).__name__} instead of False")
         if module.verify_transcript(group.infinity(), commitment, 1, 1, group):
             failures.append("a transcript against the identity as a public key was accepted")
     return failures
@@ -164,6 +174,15 @@ def check_serialization(module, seed: str) -> list[str]:
                 pass
             except Exception as error:  # noqa: BLE001
                 failures.append(f"a non-reduced coordinate raised {type(error).__name__}")
+        if group.p + public.y < 1 << (8 * width):
+            overflow_y = raw[:width] + (group.p + public.y).to_bytes(width, "big")
+            try:
+                module.decode_point(overflow_y, group)
+                failures.append("a non-reduced y coordinate was accepted")
+            except module.InvalidEncoding:
+                pass
+            except Exception as error:
+                failures.append(f"a non-reduced y coordinate raised {type(error).__name__}")
         try:
             module.decode_point(raw[:-1], group)
             failures.append("a truncated encoding was accepted")
@@ -218,6 +237,10 @@ def check_fiat_shamir(module, seed: str) -> list[str]:
             failures.append("the challenge is not deterministic")
             continue
         base = module.challenge_preimage(DOMAINS[0], commitment, public, message, group)
+        expected = int.from_bytes(hashlib.sha256(base).digest(), "big") % group.n
+        if base_challenge != expected:
+            failures.append("the challenge is not SHA-256 of its preimage reduced by the group order")
+
         variants = {
             "the domain": module.challenge_preimage(
                 DOMAINS[1], commitment, public, message, group
@@ -246,6 +269,7 @@ def check_fiat_shamir(module, seed: str) -> list[str]:
         message = messages(seed, label, 1)[0]
         base_challenge = module.challenge(DOMAINS[0], commitment, public, message, group)
         others = [
+            module.challenge(DOMAINS[0], commitment, group.generator.scalar_mul((x + 1) % group.n), message, group),
             module.challenge(DOMAINS[1], commitment, public, message, group),
             module.challenge(DOMAINS[0], commitment, public, message + b"!", group),
             module.challenge(

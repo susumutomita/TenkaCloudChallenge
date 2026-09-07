@@ -183,6 +183,21 @@ MUTATIONS += (("accepts off-curve encodings", [(
 )]),)
 
 
+MUTATIONS += (
+    ("accepts off-curve public keys with matching parameters", [(
+        "    return group.contains(point) and not point.is_infinity",
+        "    return point.params == group.params and not point.is_infinity",
+    )]),
+    ("silently reduces y overflow", [(
+        "    if x >= group.p or y >= group.p:", "    if x >= group.p:",
+    )]),
+    ("hashes a different preimage from the advertised one", [(
+        "hashlib.sha256(challenge_preimage(domain, commitment, public, message, group))",
+        "hashlib.sha256(domain.encode() + encode_point(commitment, group) + message)",
+    )]),
+)
+
+
 def _load(source: str):
     import types
 

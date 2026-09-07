@@ -34,7 +34,7 @@ the problem starts, because now *you* decide what goes into the hash.
 | the domain | a signature made for another protocol verifies here |
 
 None of that shows on the happy path. Sign, verify, green — every time. Five of this problem's
-sixteen mutations are exactly that shape, which is why the checkpoints go after it directly.
+nineteen mutations are exactly that shape, which is why the checkpoints go after it directly.
 
 ## Participant Portal workflow
 
@@ -137,7 +137,7 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: sixteen broken implementations. Five of them sign and
+`make reference-test` runs the mutation suite: nineteen broken implementations. Five of them sign and
 verify perfectly and are broken only against an attacker. The length-prefix mutation is the reason
 the reference's preimage layout puts its two variable-length fields adjacent — with the points in
 between, that mutation survived.
@@ -148,4 +148,4 @@ Eight checkpoints now have three hint rungs. A participant-only reader found mis
 
 Review follow-up adds an encoding round trip to the public suite and enforces documented invalid secret, nonce and response inputs in the grader. Public tests passed against the reference (four cases); all thirteen mutations were rejected. These author runs are not participant-play evidence.
 
-Additional review validation rejects malformed signature shapes and identity, foreign-curve, and off-curve commitments. The reference and all sixteen mutation checks pass. These are author-side grading checks, not live participant-play evidence.
+Additional review validation rejects malformed signature shapes and identity, foreign-curve, and off-curve commitments. The reference and all nineteen mutation checks pass. These are author-side grading checks, not live participant-play evidence.
