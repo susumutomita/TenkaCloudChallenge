@@ -1,23 +1,17 @@
-"""The only file you edit.
+"""編集するのはこのファイルだけ / Edit only this file.
 
-An elliptic curve over F_p is a set of points plus one extra element, and the claim is
-that they form a group. You will build it and check the claim.
+曲線は y²=x³+a*x+b を p で割った余りで満たす座標の集まりです。
+The curve contains coordinate pairs satisfying that remainder equation.
+p is the divisor (modulus); `% p` gives the remainder between 0 and p-1.
 
-    y^2 = x^3 + a*x + b   (mod p)
+O は足しても相手を変えない点。座標は両方Noneで、(0,0)とは別です。
+O changes nothing when added: use (None,None), not the ordinary point (0,0).
+Point addition uses the four cases and formulas in the problem statement.
+Division means multiplying by an inverse: pow(d % p, -1, p), after handling d=0.
 
-Four things this exercise will not let you skip:
-
-  * **The point at infinity is not (0, 0).** On most of the curves here b = 0, which
-    means (0, 0) satisfies the equation and is an ordinary point of order two. Use a
-    representation that cannot be confused with a real point.
-  * **Doubling does not use the chord's slope.** P + Q and P + P are different formulas,
-    and the second is not a special case of the first — the chord's slope is 0/0 there.
-  * **Some points have no tangent to speak of.** When y = 0 the tangent is vertical, and
-    P + P is the identity.
-  * **Field arithmetic, not integer arithmetic.** Division is multiplication by the
-    modular inverse. You built that in the previous problem.
-
-`make inspect K=13` traces double-and-add bit by bit.
+まず「証拠を確認」で自分の設定を見る → 1つ直す →「公開テストを実行」。
+Inspect your settings, repair one method, then run public tests.
+The starter intentionally has incorrect methods; the statement defines the API.
 """
 
 from __future__ import annotations
@@ -41,7 +35,7 @@ class Point:
 
     @property
     def is_infinity(self) -> bool:
-        """True for the group's identity element and for nothing else."""
+        """OだけTrue / True only when x and y are both None."""
         return False
 
     def __eq__(self, other: object) -> bool:
@@ -58,8 +52,8 @@ class Point:
         return Point(self.curve, self.x, self.y)
 
     def __add__(self, other: "Point") -> "Point":
-        """The group law. Identity, inverse, doubling and the generic case are four
-        different situations, and only one of them is the textbook slope formula."""
+        """O・逆の点・同じ点・違う点を分ける / Follow the four addition cases.
+        Different curve settings raise CurveMismatch; keep input points unchanged."""
         return Point(self.curve, self.x, self.y)
 
     def __mul__(self, scalar: int) -> "Point":
@@ -69,13 +63,13 @@ class Point:
         return self.scalar_mul(scalar)
 
     def scalar_mul(self, scalar: int) -> "Point":
-        """k*P by double-and-add. Repeated addition works and is unusably slow; the
-        point of this one is the bit decomposition. Decide what a negative k means."""
+        """2で割った余りを見て足し、相手を2倍 / Double-and-add from low bits.
+        k=0 gives O. For negative k, multiply -P by the positive count."""
         return self.curve.infinity()
 
 
 class Curve:
-    """y^2 = x^3 + a*x + b over F_p."""
+    """同じ(p,a,b)なら同じ曲線 / Same (p,a,b) means the same curve."""
 
     def __init__(self, p: int, a: int, b: int) -> None:
         self.p = p
@@ -91,7 +85,7 @@ class Curve:
         return True
 
     def point(self, x: int, y: int) -> Point:
-        """An affine point, or NotOnCurve if the pair is not one."""
+        """座標を余りに直して点を作る / Normalize; raise NotOnCurve off the curve."""
         return Point(self, x, y)
 
     def infinity(self) -> Point:
@@ -100,7 +94,8 @@ class Curve:
 
 
 def double_and_add_trace(point: Point, scalar: int) -> list[dict]:
-    """One row per bit of the scalar, least significant bit first.
+    """0以上のscalarを記録 / Nonnegative scalar, low binary digit first.
+    Zero gives no rows. Each row records the values before and after a step.
 
     Each row: {"index", "bit", "accumulator_before", "addend_before", "added",
                "accumulator_after", "addend_after", "on_curve"}
