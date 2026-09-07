@@ -1,3 +1,4 @@
+import {orderReward} from "../../portal/orderReward.ts";
 import {isCryptoBattleProjection} from "../../portal/coordination.ts";
 import {expect,test} from 'bun:test';
 import {constraintTask,constraintResiduals,parseResiduals} from './snark.ts';
@@ -41,4 +42,11 @@ test('SNARK worksheet is graded by the owned order, pays once, and rejects forei
  expect(validateOp(tick(s,order.expiresAtMs),'a',op).ok).toBe(false);
  expect(scoreReasons(s,hit,{kind:'op',teamId:'a',op})).toEqual({a:'snark'});
  for (const version of [14,15]) expect(migrateState(initialState({eventId:'old',teamIds:['a']}),version).config.snarkOrders).toBeUndefined();
+});
+
+test('Order receipt ignores unrelated net-score changes and uses the matching settled multiplier',()=>{
+ const order={id:'own-c1',points:30};
+ expect(orderReward(order,{lightning:undefined})).toBe(30);
+ expect(orderReward(order,{lightning:{status:'spent',outcome:'hit',contractId:'own-c1',points:60,remainingMs:0,startAfterMs:0}})).toBe(60);
+ expect(orderReward(order,{lightning:{status:'spent',outcome:'hit',contractId:'other-c1',points:60,remainingMs:0,startAfterMs:0}})).toBe(30);
 });
