@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {anamorphicEncrypt,anamorphicDecrypt,ANAMORPHIC_LOOKUPS,anamorphicTask,anamorphicAnswer,parseAnamorphicAnswer} from './anamorphic.ts';
+import {anamorphicEncrypt,anamorphicDecrypt,ANAMORPHIC_LOOKUPS,anamorphicTask,anamorphicAnswer,parseAnamorphicAnswer,anamorphicUniformIndex} from './anamorphic.ts';
 test('normal decryption remains correct for every message, key and randomness',()=>{
  for(let key=1;key<=5;key++)for(let m=1;m<=6;m++){
   const ciphertexts=Array.from({length:6},(_,r)=>anamorphicEncrypt(m,key,r));
@@ -22,10 +22,10 @@ test('balanced hidden lookup averaged over secret tables gives the ordinary sing
 });
 test('worksheet selects the first matching trial and transfers rejection sampling to biased randomness',()=>{
  for(let n=0;n<256;n++){
-  const t=anamorphicTask([n,n*3,n*5,n*7,n*11,n*13,n*17,n*19,n*23,n*29]),a=anamorphicAnswer(t);
+  let index=0;const t=anamorphicTask(()=>(n+index++)%256),a=anamorphicAnswer(t);
   expect(t.secretBits[a[0]!-1]).toBe(t.targetBit);
   expect(t.secretBits.slice(0,a[0]!-1).every(b=>b!==t.targetBit)).toBe(true);
-  expect(a[1]).toBe(1+n*3%6);expect(a[2]).toBe(t.tickets.filter((_,i)=>t.secretBits[i]===t.targetBit).reduce((x,y)=>x+y,0));
+  expect(a[1]).toBeGreaterThanOrEqual(1);expect(a[1]).toBeLessThanOrEqual(6);expect(a[2]).toBe(t.tickets.filter((_,i)=>t.secretBits[i]===t.targetBit).reduce((x,y)=>x+y,0));
   expect(parseAnamorphicAnswer(a.join(' '))).toEqual(a);
  }
  expect(parseAnamorphicAnswer('0 1 0')).toBeUndefined();
@@ -69,7 +69,7 @@ test('old match configurations do not silently acquire anamorphic orders',()=>{
 });
 
 test('biased random trials break the balanced-table single-packet distribution',()=>{
- const base=anamorphicTask([1,2,3,4,5,6,7,8,9,10]);
+ const base=anamorphicTask(()=>1);
  for(const targetBit of [0,1]) {
   const tickets=[2,1,1,1,1,1];
   let probability=0;
@@ -81,4 +81,17 @@ test('biased random trials break the balanced-table single-packet distribution',
   expect(probability).not.toBeCloseTo(2/7,6);
  }
  for(let w=1;w<=3;w++)expect(anamorphicAnswer({...base,tickets:Array(6).fill(w)})[2]).toBe(3*w);
+});
+
+test('all generated choice bounds remove byte modulo bias and retry rejected tails',()=>{
+ for(const bound of [2,3,4,5,6,20]){
+  const counts=Array(bound).fill(0),limit=256-256%bound;
+  for(let byte=0;byte<limit;byte++)counts[anamorphicUniformIndex(()=>byte,bound)]++;
+  expect(new Set(counts).size).toBe(1);
+  for(let byte=limit;byte<256;byte++){
+   let calls=0;expect(anamorphicUniformIndex(()=>calls++===0?byte:bound-1,bound)).toBe(bound-1);
+   expect(calls).toBe(2);
+  }
+ }
+ expect(()=>anamorphicUniformIndex(()=>256,6)).toThrow('invalid random byte');
 });

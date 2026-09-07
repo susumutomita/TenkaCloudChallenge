@@ -364,7 +364,15 @@ function buildOrderTask(
   generation: number,
 ): OrderTask {
   switch (plan.taskKind) {
-    case "anamorphic-rejection": return anamorphicTask([...createHmac("sha256",seed).update(`anamorphic:${contractId}`).digest()]);
+    case "anamorphic-rejection": {
+      let counter=0,index=0,bytes=Buffer.alloc(0);
+      return anamorphicTask(()=>{
+        if(index===bytes.length){
+          bytes=createHmac("sha256",seed).update(JSON.stringify(["anamorphic-v1",contractId,counter++])).digest();index=0;
+        }
+        return bytes[index++]!;
+      });
+    }
     case "stark-trace": return starkTask([...createHmac("sha256",seed).update(`stark:${contractId}`).digest()]);
     case "io-equivalence": return ioTask([...createHmac("sha256",seed).update(`io:${contractId}`).digest()]);
     case "snark-constraints": return constraintTask([...createHmac("sha256",seed).update(`snark:${contractId}`).digest()]);

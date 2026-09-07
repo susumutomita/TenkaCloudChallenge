@@ -31,13 +31,23 @@ export function anamorphicAnswer(task:AnamorphicTask):readonly number[]{
  if(selected<0)throw new Error('no matching candidate');
  return [selected+1,anamorphicDecrypt(task.candidates[selected]!,task.ordinaryKey),task.tickets.reduce((sum,count,i)=>sum+(task.secretBits[i]===task.targetBit?count:0),0)];
 }
-export function anamorphicTask(bytes:readonly number[]):AnamorphicTask{
- if(bytes.length<10)throw new Error('ten bytes required');
- const ordinaryKey=1+bytes[0]!%5,message=1+bytes[1]!%6;
+/** Reject the incomplete tail so every result has exactly the same number of byte preimages. */
+export function anamorphicUniformIndex(nextByte:()=>number,bound:number):number{
+ if(!Number.isInteger(bound)||bound<1||bound>256)throw new Error('invalid random bound');
+ const limit=256-256%bound;
+ for(;;){
+  const byte=nextByte();
+  if(!Number.isInteger(byte)||byte<0||byte>255)throw new Error('invalid random byte');
+  if(byte<limit)return byte%bound;
+ }
+}
+export function anamorphicTask(nextByte:()=>number):AnamorphicTask{
+ const pick=(bound:number)=>anamorphicUniformIndex(nextByte,bound);
+ const ordinaryKey=1+pick(5),message=1+pick(6);
+ const lookup=ANAMORPHIC_LOOKUPS[pick(20)]!,targetBit=pick(2);
  const trials=[0,1,2,3,4,5];
- for(let i=5;i>0;i--){const j=bytes[10-i]!%(i+1);[trials[i],trials[j]]=[trials[j]!,trials[i]!];}
- const lookup=ANAMORPHIC_LOOKUPS[bytes[2]!%20]!;
- return {kind:'anamorphic-rejection',ordinaryKey,candidates:trials.map(r=>anamorphicEncrypt(message,ordinaryKey,r)),secretBits:trials.map(r=>lookup[r]!),targetBit:bytes[3]!%2,tickets:trials.map((_,i)=>1+bytes[(4+i)%10]!%3)};
+ for(let i=5;i>0;i--){const j=pick(i+1);[trials[i],trials[j]]=[trials[j]!,trials[i]!];}
+ return {kind:'anamorphic-rejection',ordinaryKey,candidates:trials.map(r=>anamorphicEncrypt(message,ordinaryKey,r)),secretBits:trials.map(r=>lookup[r]!),targetBit,tickets:trials.map(()=>1+pick(3))};
 }
 export function parseAnamorphicAnswer(answer:unknown):readonly number[]|undefined{
  return typeof answer==='string'&&/^[1-6] [1-6] [3-9]$/.test(answer)?answer.split(' ').map(Number):undefined;
