@@ -38,108 +38,55 @@ def initialization_error(error, filename):
     return {'file': filename, 'line': line, 'type': type(error).__name__}
 
 
-def main():
-    # Capture native classification primitives before any submitted code executes.
-    # They describe ordinary Python exceptions only; the parent still treats the
-    # resulting labels as claims and verifies the allowed error mathematically.
-    native_type = type
-    native_getattribute = type.__getattribute__
-    native_isinstance = isinstance
-    native_issubclass = issubclass
-    native_exception = Exception
-    native_tuple = tuple
-    # Instantiate the CPython encoder before learner imports. Capturing dumps
-    # alone still resolves JSONEncoder and encoder helpers through mutable json
-    # globals on every response. This runtime pins CPython in its Docker image.
-    encode = json.encoder.c_make_encoder(
-        {}, json.JSONEncoder().default, json.encoder.encode_basestring_ascii,
-        None, ':', ',', False, False, True,
-    )
-    decode = json.JSONDecoder().decode
-    join = ''.join
-    input_stream = sys.stdin
-    write, flush = sys.stdout.write, sys.stdout.flush
+import _native_driver
 
-    def send(response):
-        write(join(encode(response, 0)) + '\n')
-        flush()
+objects = {}
+next_handle = 0
+active_module = None
 
-    initial = decode(input_stream.readline())
+def save(value, kind):
+    global next_handle
+    next_handle += 1
+    objects[next_handle] = value
+    if kind == 'field':
+        return {'id': next_handle, 'modulus': value.modulus}
+    return {'id': next_handle, 'modulus': value.field.modulus, 'value': value.value}
+
+
+def bootstrap(initial):
+    global active_module
     restrict_learner()
-    modules = {name: types.ModuleType(name) for name in ('field',)}
-    sys.modules.update(modules)
-    for name, module in modules.items():
-        filename = name+'.py'
-        try:
-            exec(compile(initial['sources'][filename], filename, 'exec'), module.__dict__)
-            # Keep the declared custom classes, not lookups of mutable module
-            # globals on each call. Minimal partial submissions may omit them.
-            exception_types = []
-            for declared in ('NotInvertible', 'FieldMismatch'):
-                if declared not in module.__dict__:
-                    continue
-                candidate = module.__dict__[declared]
-                if (not native_isinstance(candidate, native_type)
-                        or not native_issubclass(candidate, native_exception)
-                        or native_getattribute(candidate, '__module__') == 'builtins'):
-                    raise TypeError('Keep custom exception classes for the supplied names.')
-                exception_types.append((declared, candidate))
-            exception_types = native_tuple(exception_types)
-        except BaseException as error:
-            send({'initializationError': initialization_error(error, filename)})
-            return
-    send({'ready': True})
-    objects = {}
-    next_handle = 0
-
-    def save(value, kind):
-        nonlocal next_handle
-        next_handle += 1
-        objects[next_handle] = value
-        if kind == 'field':
-            return {'id': next_handle, 'modulus': value.modulus}
-        return {'id': next_handle, 'modulus': value.field.modulus, 'value': value.value}
-
-    for line in input_stream:
-        call = decode(line)
-        try:
-            module = modules['field']
-            name, args = call['function'], call['args']
-            if name == 'Field':
-                value = save(module.Field(*args), 'field')
-            elif name == 'element':
-                value = save(objects[args[0]].element(args[1]), 'element')
-            elif name in ('add', 'sub', 'mul', 'div', 'eq'):
-                x, y = objects[args[0]], objects[args[1]]
-                if name == 'add': value = x + y
-                elif name == 'sub': value = x - y
-                elif name == 'mul': value = x * y
-                elif name == 'div': value = x / y
-                else: value = x == y
-                if name != 'eq': value = save(value, 'element')
-            elif name == 'inverse':
-                value = save(objects[args[0]].inverse(), 'element')
-            elif name == 'hash':
-                value = hash(objects[args[0]])
-            elif name in ('egcd', 'egcd_trace', 'non_invertible_element'):
-                value = getattr(module, name)(*args)
-            else:
-                raise ValueError('Unknown operation')
-            response = {'callId': call['callId'], 'value': value}
-        except BaseException as error:
-            # Report all memberships: multiple inheritance must not depend on
-            # tuple order. These are untrusted claims; the parent selects the
-            # only permitted error from its own operands and operation.
-            ancestry = native_getattribute(native_type(error), "__mro__")
-            kinds = []
-            for declared, cls in exception_types:
-                for base in ancestry:
-                    if base is cls:
-                        kinds.append(declared)
-                        break
-            response = {'callId': call['callId'], 'error': True, 'errorKinds': kinds}
-        send(response)
+    active_module = types.ModuleType('field')
+    sys.modules['field'] = active_module
+    exec(compile(initial["sources"]['field.py'], 'field.py', "exec"), active_module.__dict__)
+    return active_module
 
 
-if __name__ == '__main__':
-    main()
+def dispatch(call):
+    module = active_module
+    name, args = call['function'], call['args']
+    if name == 'Field':
+        value = save(module.Field(*args), 'field')
+    elif name == 'element':
+        value = save(objects[args[0]].element(args[1]), 'element')
+    elif name in ('add', 'sub', 'mul', 'div', 'eq'):
+        x, y = objects[args[0]], objects[args[1]]
+        if name == 'add': value = x + y
+        elif name == 'sub': value = x - y
+        elif name == 'mul': value = x * y
+        elif name == 'div': value = x / y
+        else: value = x == y
+        if name != 'eq': value = save(value, 'element')
+    elif name == 'inverse':
+        value = save(objects[args[0]].inverse(), 'element')
+    elif name == 'hash':
+        value = hash(objects[args[0]])
+    elif name in ('egcd', 'egcd_trace', 'non_invertible_element'):
+        value = getattr(module, name)(*args)
+    else:
+        raise ValueError('Unknown operation')
+    return value
+
+
+if __name__ == "__main__":
+    _native_driver.run(bootstrap, dispatch, initialization_error, 'field.py', ('NotInvertible', 'FieldMismatch'))

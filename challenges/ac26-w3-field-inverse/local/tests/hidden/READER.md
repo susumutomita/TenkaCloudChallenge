@@ -288,3 +288,28 @@ After the fix, all 30 Linux regressions passed (25.028 seconds), all 14 mutation
 were rejected, and the 116-item catalog gate passed. The runtime/mutation log is
 `/private/tmp/field-770-json-final.log`; the catalog log is
 `/private/tmp/field-770-json-gate.log`. No AWS deployment was run.
+
+
+### Native exception observation (2026-09-07)
+
+Review of `303c0c04` found that the learner could still replace the serializer's
+closure cell through `sys._getframe`. The same escape was reproduced in the EC
+sibling before changing its adapter: exactly one of 11 boundary tests failed in
+`/private/tmp/ec-group-boundary-regressions.log`.
+
+Field's worker now delegates the call loop, observation of the returned exception's
+native MRO, and response construction to `participant/native_driver.c`. These have
+no Python frame locals or closure cells for submitted code to replace. Python
+helpers dispatch objects and produce untrusted values only; the parent continues
+to own mathematical checks. The protocol-speaking positive control remains valid:
+it now locates dispatch state in globals and locals, and valid arithmetic data is
+still accepted while wrong moduli, booleans, floats and wrong values are rejected.
+This is not native-return provenance attestation against an arbitrary wire-protocol
+implementation, nor protection from the owner of the local Docker runtime.
+
+The adapter builds against the image's pinned CPython headers in a separate builder
+stage. A compiler is not installed in participant/verifier runtime stages. The
+31 Linux regressions passed (23.028 seconds), including the frame-cell escape,
+all previous exception subclasses/metaclass/JSON cases, and valid reader/reference
+submissions. The 14 existing mutations were all rejected. Runtime and mutation log:
+`/private/tmp/field-native-second.log`. No AWS deployment was run.

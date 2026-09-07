@@ -270,7 +270,7 @@ def altered(self,field,value):
     f=sys._getframe(1)
     while f and 'call' not in f.f_locals:f=f.f_back
     if f and f.f_locals['call']['function']=='element':
-        scope=f.f_locals
+        scope={**f.f_globals, **f.f_locals}
         # A protocol-speaking solution can send mathematically valid object data.
         # The object is also retained so following operations can use this handle.
         next_id=scope['next_handle']+1
@@ -419,6 +419,21 @@ json._default_encoder.encode = changed_helper
         for checkpoint in server.CHECKPOINTS:
             self.assertTrue(server.evaluate(checkpoint, source), checkpoint)
         self.assertTrue(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+
+    def test_python_frames_cannot_replace_native_response_classification(self):
+        source=reader().replace('raise NotInvertible(', 'raise ValueError(').replace('raise FieldMismatch(', 'raise TypeError(')+"""
+import sys
+_send=sys._getframe(1).f_locals['send']
+_cell=dict(zip(_send.__code__.co_freevars,_send.__closure__))['encode']
+_encode=_cell.cell_contents
+def fake(value,*args):
+    if isinstance(value,dict) and value.get('error'):
+        value['errorKinds']=['NotInvertible','FieldMismatch']
+    return _encode(value,*args)
+_cell.cell_contents=fake
+"""
+        self.assertFalse(server.evaluate('errors', source))
+        self.assertFalse(_WORKBENCH.run_public_tests({'field.py':source})['passed'])
 
     def test_field_identity_is_not_mathematical_equality(self):
         source = reader() + "\nFieldElement.__eq__ = lambda self, other: self.field is other.field and self.value == other.value\n"

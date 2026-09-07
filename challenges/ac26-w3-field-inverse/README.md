@@ -117,6 +117,13 @@ native Python returns. A participant who implements the live value protocol must
 satisfy the same mathematical checks. The finite tested cases are not a proof about
 all possible inputs or implementations.
 
+Exception observation and response construction use a small CPython native adapter
+inside the isolated worker. The learner cannot replace these through Python frame
+locals or closure cells. This observes the actual type returned by a dispatched
+Python call; it does not authenticate a submission that writes its own protocol.
+The compiler is used only in the Docker build stage and is absent from runtime
+images. The adapter implements no field solution or private test.
+
 The per-run limits remain 25 seconds, 512 MiB address space, 64 processes and 64 KiB
 output frames / accumulated non-result output. Linux restrictions deny file/network,
 persistent IPC, filesystem metadata changes and changes to supervisor scheduling.
