@@ -2937,15 +2937,17 @@ function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<Cryp
   const contract=state.contracts.find(c=>c.id===op.contractId)!;
   if(op.kind==="schnorr-commit") {
     const e=schnorrRandom(state.seed,"challenge",[teamId,contract.id,op.y,op.a]);
-    return {...state, contracts:state.contracts.map(c=>c.id===contract.id?{...c,schnorr:{y:op.y,a:op.a,e}}:c)};
+    return {...state, contracts:state.contracts.map(c=>c.id===contract.id?{...c,answerAttempted:true,schnorr:{y:op.y,a:op.a,e}}:c)};
   }
   const pending=contract.schnorr!;
   const y=pending.y;
   const outcome = verifySchnorr(y,pending.a,pending.e,op.z) ? "hit" as const : "miss" as const;
   const consumed={...state,contracts:state.contracts.map(c=>c.id===contract.id?{...c,answerAttempted:true,schnorr:{...pending,used:true,outcome}}:c)};
   if(outcome === "miss") {
-    // A failed proof consumes the challenge, preventing brute-force retries for points.
-    return {...consumed, teams:{...state.teams,[teamId]:{...state.teams[teamId]!,score:Math.max(0,state.teams[teamId]!.score-Math.abs(state.config.scores.wrongProve))}}};
+    // A one-shot miss ends PROVE-only Orders; LEAK remains available when allowed.
+    const terminal = contract.allowedMethods.length === 1 && contract.allowedMethods[0] === "prove";
+    const contracts = terminal ? consumed.contracts.map(c => c.id === contract.id ? {...c, status:"completed" as const, resolution:"prove" as const} : c) : consumed.contracts;
+    return {...consumed, contracts, teams:{...state.teams,[teamId]:{...state.teams[teamId]!,score:Math.max(0,state.teams[teamId]!.score-Math.abs(state.config.scores.wrongProve))}}};
   }
   return completeOrder(consumed,teamId,contract,{
     kind:"proof",id:`${contract.id}-proof`,teamId,generation:state.teams[teamId]!.generation,method:"prove",contractId:contract.id,

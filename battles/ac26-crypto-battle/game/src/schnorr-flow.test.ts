@@ -70,6 +70,8 @@ test("failed response prevents wasting lightning and reports the actual score de
  expect(lightningEligible(state,order)).toBe(true);
  const y=projectForTeam(state,"a").myContracts[0]!.schnorr!.y;
  state=applyOp(state,"a",{kind:"schnorr-commit",contractId:order.id,y,a:8});
+ expect(lightningEligible(state,state.contracts.find(c=>c.id===order.id)!)).toBe(false);
+ expect(validateOp(state,"a",{kind:"declare-lightning",contractId:order.id}).ok).toBe(false);
  const e=state.contracts.find(c=>c.id===order.id)!.schnorr!.e;
  const x=Array.from({length:11},(_,i)=>i).find(i=>power(2,i)===y)!;
  const op={kind:"schnorr-response" as const,contractId:order.id,z:(3+e*x+1)%11};
@@ -78,4 +80,32 @@ test("failed response prevents wasting lightning and reports the actual score de
  expect(scoreReasons(state,after,{kind:"op",teamId:"a",op})).toEqual({a:"prove"});
  expect(lightningEligible(after,after.contracts.find(c=>c.id===order.id)!)).toBe(false);
  expect(validateOp(after,"a",{kind:"declare-lightning",contractId:order.id}).ok).toBe(false);
+});
+
+for (const proveOnly of [true, false]) test(`one-shot miss: terminal=${proveOnly}, with no forced second penalty`,()=>{
+ let state=create(); const id="a-c0";
+ state={...state,contracts:state.contracts.filter(c=>c.id===id).map(c=>({...c,allowedMethods:proveOnly?["prove" as const]:c.allowedMethods})),teams:{...state.teams,a:{...state.teams.a!,score:100}}};
+ if(proveOnly) {
+   state={...state,phase:"endgame",endgameLightning:{status:"awarded",cards:{a:{status:"available"}}}};
+   state=applyOp(state,"a",{kind:"declare-lightning",contractId:id});
+ }
+ const y=projectForTeam(state,"a").myContracts[0]!.schnorr!.y;
+ state=applyOp(state,"a",{kind:"schnorr-commit",contractId:id,y,a:8});
+ const e=state.contracts[0]!.schnorr!.e;
+ const x=Array.from({length:11},(_,i)=>i).find(i=>power(2,i)===y)!;
+ state=applyOp(state,"a",{kind:"schnorr-response",contractId:id,z:(3+e*x+1)%11});
+ const afterMiss=state.teams.a!.score;
+ expect(afterMiss).toBe(100-Math.abs(state.config.scores.wrongProve));
+ expect(state.contracts[0]!.status).toBe(proveOnly?"completed":"open");
+ expect(validateOp(state,"a",{kind:"reveal-hint",contractId:id}).ok).toBe(!proveOnly);
+ expect(validateOp(state,"a",{kind:"leak",contractId:id}).ok).toBe(!proveOnly);
+ if(proveOnly){
+   expect(projectForTeam(state,"a").lightning).toMatchObject({status:"spent",outcome:"miss",points:0});
+   const restored=JSON.parse(JSON.stringify(state));
+   expect(projectForTeam(restored,"a").myContracts[0]!.schnorr!.pending!.outcome).toBe("miss");
+   state=tick(restored,state.contracts[0]!.expiresAtMs);
+   expect(state.teams.a!.score).toBe(afterMiss);
+   state=tick(state,state.nowMs!);
+   expect(state.teams.a!.score).toBe(afterMiss);
+ }
 });
