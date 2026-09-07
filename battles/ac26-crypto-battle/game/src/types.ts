@@ -441,6 +441,8 @@ export interface RpsSubmission {
 }
 
 export interface Contract {
+  /** Actual points awarded or deducted by the most recent accepted worksheet answer. */
+  readonly lastSubmissionPoints?: number;
   readonly schnorr?: { readonly y: number; readonly a: number; readonly e: number; readonly used?: boolean; readonly outcome?: "hit" | "miss" };
   /** Vigenère/RSA: an accepted wrong answer permanently forfeits this Order's CIPHER reward. */
   readonly cipherFailed?: boolean;
@@ -1276,6 +1278,7 @@ export type OrderTaskProjection =
       readonly outcome?: DuelOutcome; readonly drawPoints: number; readonly expiryPenalty: number };
 
 export interface ContractProjection {
+  readonly lastSubmissionPoints?: number;
   readonly schnorr?: { readonly y: number; readonly pending?: { readonly y: number; readonly a: number; readonly e: number; readonly used?: boolean; readonly outcome?: "hit" | "miss" } };
   readonly cipherFailed?: boolean;
   /** Authoritative eligibility before any accepted answer; missing means unknown. */
