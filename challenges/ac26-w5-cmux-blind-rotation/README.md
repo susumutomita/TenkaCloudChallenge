@@ -95,7 +95,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `trace` | 35 | One record per step plus the offset, ending at the rotation it describes, public fields independent of the secret |
 | `transfer` | 30 | All of it under a degree, dimension, base and modulus you have not seen |
 
-Hints on seven of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at 2 points each (48 total), within each checkpoint's 50% cap.
 
 ## What the `constant` checkpoint does and does not claim
 

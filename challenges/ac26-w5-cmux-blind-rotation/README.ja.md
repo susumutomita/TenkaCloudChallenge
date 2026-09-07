@@ -94,7 +94,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `trace` | 35 | offset を含め step ごとに 1 レコード、最後が回転そのもの、公開 field が secret に依存しないこと |
 | `transfer` | 30 | 見たことのない degree・dimension・base・modulus で上記すべて |
 
-8 つのうち 7 つに hint があり、いずれもその checkpoint の 50% 上限の内側です。
+8項目すべてに3段のヒントがあり、各2点（合計48点）、各項目の50%上限内です。
 
 ## `constant` checkpoint が主張すること・しないこと
 
