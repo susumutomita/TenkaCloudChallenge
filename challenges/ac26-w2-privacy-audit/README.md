@@ -67,3 +67,7 @@ A person controlling Docker can inspect or change their own containers; these lo
 ## Filesystem metadata boundary follow-up
 
 The learner's Linux filter also denies file/directory creation, links, renames, removal and metadata writes. Blocking file opens alone did not stop those operations from persisting after a worker exited. The problem-local regression applies the actual filter in 16 disposable children, checks 19 operations return EPERM, and verifies unchanged parent-owned fixture contents, directory entries, permissions, ownership, timestamps and extended attributes. Its temporary fixture is removed afterward. This adds no API, scoring, mathematical rule or execution deadline; existing positive sources and suites remain the acceptance baseline. See `local/tests/hidden/READER.md` for before/after scope and commands.
+
+## Computational tools and execution time
+
+Available computational standard libraries (tools included with Python): `collections`, `decimal`, `fractions`, `functools`, `hashlib`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `statistics`, `time`, `typing`. Import them in your submitted files. Installing packages, file access and network access are unavailable. Submitted code has a 20-second execution deadline.
