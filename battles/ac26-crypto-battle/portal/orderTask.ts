@@ -28,7 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
-    case "io-equivalence": return "iO function and distribution";
+    case "io-equivalence": return "iO outputs and their probabilities";
     case "snark-constraints": return "SNARK gate/copy constraints";
     case "ec-add": return "EC P + Q";
     case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
@@ -53,7 +53,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
-    "io-equivalence":"iO：計算の答えと分布を比べる",
+    "io-equivalence":"iO：答えと、その出る確率を比べる",
     "snark-constraints":"SNARK：計算と配線を検査",
     "ec-add":"楕円曲線：2点を足す",
     "rotor-encrypt": "進む車輪で4文字を暗号にする",
@@ -72,7 +72,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
-    "io-equivalence":"iO: compare functions and distributions",
+    "io-equivalence":"iO: compare answers and their probabilities",
     "snark-constraints":"SNARK: check gates and wires",
     "ec-add":"Elliptic curve: add two points",
     "rotor-encrypt": "Encrypt four digits with advancing wheels",
