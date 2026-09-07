@@ -63,7 +63,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `transcript` | 35 | The challenge depends on commitment, domain and statement |
 | `lenient` | 30 | For each of the setter's verifiers A–E, an opening that passes with a claim outside the table, or `None` (scored only when all five are right) |
 
-Hints on six of the eight (100 points in all), each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at two points each (48 points total), within the hint penalty cap.
 
 ## The setter's five verifiers
 
@@ -156,3 +156,6 @@ successfully and differ only in what an adversary can do afterwards. The suite f
 five verifiers themselves on five seeds: every honest opening passes, the reference forges exactly
 A, B and E, C, D and E reject every relabelling, and a flipped side flag is rejected by A, B and C
 and ignored by D and E.
+
+
+All eight checkpoints now have three two-point hints. Participant-only review caught incorrect hash-collision, position-binding and publication-order claims, plus missing path-length and scheme-E byte conversion steps. The bilingual statement corrects these and gives the required procedures for free. Catalog validation passed. Runtime and grader are unchanged; live Portal play was not run.
