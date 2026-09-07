@@ -253,6 +253,15 @@ export function resolveMatchSeed(ctx: CoordinationContext): string {
   return ctx.matchSecret ?? `${LOCAL_PLAY_SEED_PREFIX}${ctx.eventId}`;
 }
 
+/** Current deployed pacing; persisted legacy matches retain their own configuration. */
+export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
+  contractIntervalMs: 30_000,
+  contractsPerIssue: 1,
+  onboardingFollowUpMs: 30_000,
+  contractTtlMs: 60_000,
+  rushContractTtlMs: 60_000,
+};
+
 export function initialState(
   ctx: CoordinationContext,
   config?: Partial<CryptoBattleConfig>,
@@ -785,6 +794,8 @@ function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleS
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
+  // Migrate legacy rows even when this clock snapshot is stale.
+  if (state.nowMs !== undefined && eventNowMs < state.nowMs) return state;
   const boundary = boosterStartAt(state);
   if ((state.endgameBooster?.status === "pending" || state.endgameLightning?.status === "pending") && boundary !== undefined && eventNowMs >= boundary) {
     // Only read the boundary ranking. Carrying this intermediate tick forward
@@ -2807,6 +2818,7 @@ export function projectForTeam(
         : Math.max(0, state.startedAtMs + state.config.matchDurationMs - state.nowMs);
 
   return {
+    clockMs: state.nowMs,
     phase: state.phase,
     prime: state.config.prime,
     threshold: state.config.threshold,

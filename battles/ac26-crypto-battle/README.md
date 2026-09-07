@@ -1,6 +1,6 @@
 # Cryptography Battle
 
-For hint-assisted play, finish one selected Order before opening the next Order's hints. The Caesar ladder and share procedure are kept to that route; the normal five-minute deadline and hint costs are unchanged. See [the reading check](dev/HINT-READING.md) for its measured scope and limitations.
+For hint-assisted play, finish one selected Order before opening the next Order's hints. The Caesar ladder and share procedure are kept to that route; new matches allow 60 seconds per Order, with hint costs shown on the buttons. See [the reading check](dev/HINT-READING.md) for its measured scope and limitations.
 
 Four optional entries appear above the game: “How to play”, “Cryptography in diagrams and formulas”, “One-digit practice”, and “Rules reference”. They open on a separate scroll surface. Closing returns to the original Order, unfinished answer and page position. An ongoing match keeps running. Practice connects remainders, sharing, reconstruction, publication risk, MPC, ZK, FHE, Caesar and commit-reveal with small numbers. Reading without answering is allowed.
 Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
@@ -51,9 +51,9 @@ Each team's secret is split into five shares. Three distinct shares from the sam
 
 Repeating one share index still counts as one distinct share. Shares from different generations cannot be mixed.
 
-## Orders arrive six at a time, every five minutes
+## One Order arrives every 30 seconds
 
-The opening has one Order. The first batch of six arrives one minute later; further batches arrive every five minutes. Ordinary Orders expire after five minutes and rush Orders after two and a half. Choose which calculations, disclosures and attacks to attempt before their deadlines.
+New matches start with one Order and receive one more every 30 seconds. Both ordinary and rush Orders expire after 60 seconds. Existing matches retain their stored settings. Choose which calculations, disclosures and attacks to attempt before their deadlines.
 
 ## ORDER types
 
@@ -311,8 +311,8 @@ catalog gate. See [the local walkthrough](dev/LIGHTNING-PLAYTHROUGH.md).
 At the existing endgame boundary (default minute 60), newly scheduled **normal**
 cipher slots become `rsa-encrypt`: original integer m=2…9, public n≤77 and
 exponent e=3, 5 or 7. Existing Orders keep their task and deadline; delayed ticks
-use the scheduled issue time. Each normal RSA Order keeps five minutes and 30
-points. Rush slots remain the existing Vigenère exercise, 2.5 minutes / 45 points.
+use the scheduled issue time. In new matches, normal RSA Orders allow 60 seconds and award 30
+points. Rush Vigenère Orders allow 60 seconds and award 45 points.
 
 Calculate `c=m^e mod n` (multiply e copies of m and take the remainder after
 division by n). Intermediate remainders preserve the result. **CIPHER** submits
@@ -373,8 +373,8 @@ second LEAK or a client-side uniqueness claim. A miss costs8 and an attempt from
 the existing shared Shamir/RPS budget (3); Sudoku's separate budget is unchanged.
 Success gives25, costs the victim12 (floor0), and is recorded once in replay.
 Wrong CIPHER uses the existing6-point penalty and forfeits that Order's subsequent
-reward, including lightning. The normal five-minute deadline, six-Order batch,
-endgame RSA and rush Vigenère are unchanged. ROTATE voids old Orders and attack
+reward, including lightning. New matches use the 60-second deadline and one Order every 30 seconds;
+endgame RSA and rush Vigenère remain. ROTATE voids old Orders and attack
 eligibility; the tiny16-state key space can repeat numeric initial positions.
 
 This is a small reversible model, not actual Enigma and not a security ranking.

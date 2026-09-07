@@ -49,6 +49,7 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
     initialState(ctx: CoordinationContext): State;
     validateOp(state: State, teamId: string, op: Op): ValidateResult;
     applyOp(state: State, teamId: string, op: Op): State;
+    readonly tickOnRequest?: boolean;
     tick?(state: State, eventNowMs: number): State;
     projectForTeam(state: State, teamId: string): Projection;
     /**

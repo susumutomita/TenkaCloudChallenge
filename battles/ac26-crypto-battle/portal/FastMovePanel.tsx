@@ -1053,9 +1053,18 @@ export default function FastMovePanel(props: PortalSlotProps) {
     }
   }, [feedback?.attempt]);
 
+  const snapshotClock = useRef<{ clockMs: number; anchorMs: number; teamId: string } | null>(null);
   const setProjection = (next: CryptoBattleProjection) => {
+    const receivedAt = Date.now();
+    const previous = snapshotClock.current;
+    const sameTeam = previous?.teamId === next.vault.teamId;
+    // Ignore a late poll that was computed before the operation response.
+    if (sameTeam && next.clockMs !== undefined && next.clockMs < previous.clockMs) return;
+    const anchorMs = sameTeam && next.clockMs !== undefined
+      ? Math.min(receivedAt, previous.anchorMs + next.clockMs - previous.clockMs) : receivedAt;
+    snapshotClock.current = next.clockMs === undefined ? null : { clockMs: next.clockMs, anchorMs, teamId: next.vault.teamId };
     setPolledProjection(next);
-    setProjectionAtMs(Date.now());
+    setProjectionAtMs(anchorMs);
   };
 
   useEffect(() => {
