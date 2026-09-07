@@ -1,6 +1,6 @@
 import { exposedKeyPositions } from "../game/src/ladder.ts";
 import type { ContractProjection, CryptoBattleProjection } from "../game/src/types.ts";
-import { taskLabel } from "./orderTask.ts";
+import { orderLabel } from "./orderTask.ts";
 
 type Locale = "ja" | "en";
 
@@ -17,7 +17,7 @@ export function orderHeading(order: ContractProjection, locale: Locale): string 
     }
     return locale === "ja" ? `秘密を公開して即答するか、計算で証明する` : `A request for your secret share ${pieces}`;
   }
-  return taskLabel(order.task, locale);
+  return orderLabel(order, locale);
 }
 
 /** Count only distinct indices of this team's current generation, including this request. */

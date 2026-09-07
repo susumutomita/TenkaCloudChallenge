@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import type { ContractProjection, CryptoBattleProjection } from "../game/src/types.ts";
 import { OrderBelt } from "./GameBoard.tsx";
-import { taskLabel } from "./orderTask.ts";
+import { orderLabel } from "./orderTask.ts";
 
 export interface OrderReceipt { readonly id: string; readonly points: number }
 type Locale = "ja" | "en";
@@ -103,7 +103,7 @@ export default function OrderQueue({ projection, locale, selectedId, onSelect, r
     {recent.length > 0 && <ul className="tc-order-recent" aria-label={locale === "ja" ? "直近のお題の結果" : "Recent Order results"}>
       {recent.map(order => <li key={order.id} data-order-result={orderDisplayState(order)}>
         <strong>{orderResultLabel(order, locale)}</strong>
-        <span>{order.id.replace(/^.*-c/, "ORDER #")} · {taskLabel(order.task, locale)}</span>
+        <span>{order.id.replace(/^.*-c/, "ORDER #")} · {orderLabel(order, locale)}</span>
         {receipts[order.id] !== undefined && <b>+{receipts[order.id]} {locale === "ja" ? "点" : "pt"}</b>}
       </li>)}
     </ul>}

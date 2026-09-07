@@ -450,3 +450,7 @@ The three trace values are interpolated at 1,2,4. C(X)=T(2X)-T(X)^2 is divided b
 Inputs: Advanced Cryptography 2026 Week4 slides20–23 (PDF pages24–27), revision bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732, and the Week4 personal note at revision58344a29ea39c25839475ba9a594c115ed89989b. This adapts the lecture’s trace/AIR/quotient/fold chain to single-digit parameters. It does not implement Merkle commitments, verifier random queries, repeated FRI rounds or zero-knowledge masking, and is not a complete STARK.
 
 Validation: all343 traces satisfy interpolation and quotient/remainder identities; all nonzero query pairs and challenges satisfy the one-fold equation. Owned-order tests cover wrong/correct scores, Lightning, replay, expiry, foreign teams and malformed projection rejection. Ordinary regression:764 tests; dev harness:82 tests; types and catalog:pass. In the real local Portal `stark-order`, trace6→6→5, Q=4+3X+6X², β=6 gave submitted5 4 6 1, success feedback and score30. Production deployment not run; deployment remains with the user.
+
+### Issue #780 — Labels follow the actual proof protocol
+
+The Order belt, recent receipts, and status labels use the projected protocol: Schnorr responses, the legacy Sudoku model, or required share publication. A local real-component walkthrough calculated a=3 and z=4 from the displayed inputs and observed proof success, +30 points, and verification 16=16. This verifies local UI behavior, not production score persistence.

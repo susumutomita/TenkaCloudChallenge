@@ -13,7 +13,7 @@
  */
 
 import { rungSpec } from "../game/src/ladder.ts";
-import type { OrderTaskProjection, PublicArtifact } from "../game/src/types.ts";
+import type { ContractProjection, OrderTaskProjection, PublicArtifact } from "../game/src/types.ts";
 import { describeRevealGroup } from "./SudokuGrid.tsx";
 
 export type Locale = "ja" | "en";
@@ -94,6 +94,20 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
   return task.kind === "caesar-shift" && task.rung === "vigenere"
     ? locale === "ja" ? "3個の鍵を順に使って暗号にする" : "Encrypt with a repeating three-key cycle"
     : TASK_LABELS[locale][task.kind];
+}
+
+/** Participant labels follow the protocol supplied on this specific Order. */
+export function orderLabel(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint">, locale: Locale): string {
+  if (order.task.kind === "reveal-share" && order.privacyConstraint === "must-disclose") {
+    return locale === "ja" ? "秘密分散：シェアを公開して答える" : "Secret sharing: publish a share";
+  }
+  if (order.schnorr && (order.task.kind === "reveal-share" || order.task.kind === "zk-sudoku")) {
+    return locale === "ja" ? "ゼロ知識証明（Schnorr）：応答を計算する" : "Zero-knowledge proof (Schnorr): calculate a response";
+  }
+  if (order.task.kind === "zk-sudoku") {
+    return locale === "ja" ? "ゼロ知識証明の数独模型：4マスを埋める" : "Sudoku model of zero knowledge: fill four cells";
+  }
+  return taskLabel(order.task, locale);
 }
 
 /**
