@@ -101,7 +101,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `failure` | 40 | Levels needed, and the smallest value that stops round-tripping |
 | `transfer` | 40 | All of it under a base, level count, degree and modulus you have not seen |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at 2 points each (48 total), within each checkpoint's 50% cap.
 
 ## A note on equivalent mutants
 
@@ -180,3 +180,6 @@ Zero. No cloud account, no AWS resources.
 `make reference-test` runs the mutation suite: eighteen broken implementations. Most are
 self-consistent and only separate from the reference once something built by the fixtures
 has to agree with something built by the submission.
+
+
+Independent participant-only reading found missing formulas and shapes, integer versus polynomial decomposition confusion, and overclaims about noise and secrecy. A second pass caught array concatenation in a Python-looking formula and stale English claims; these were corrected. Portal run_public_tests with only decompose/recompose implemented confirms the first checkpoint test passes while unfinished stages fail. make install and make agent-gate passed (116 metadata files), as did git diff --check. Browser play and deployed scoring were not exercised. The grading algorithm and platform are unchanged; hint penalties and guidance changed.

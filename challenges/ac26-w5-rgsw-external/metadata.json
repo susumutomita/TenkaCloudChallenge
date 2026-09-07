@@ -32,9 +32,9 @@
   },
   "difficulty": 4,
   "estimatedDuration": "75-105 分",
-  "shortDescription": "「どちらを選んだか」を隠したまま選ばせたい。だが暗号文に大きな数を掛けると、中のノイズも同じ倍率で暴れる。掛ける数を桁にバラしてから掛ける — gadget — で、暗号化された 0/1 の掛け算を、ノイズを頭打ちにしたまま通す。",
+  "shortDescription": "数を桁へ分けて足し戻す仕組みを使い、暗号化した0/1を別の暗号文へ掛ける模型を組み立てます。各行の寄与と累計を記録し、桁数が不足するとどこで壊れるかを調べます。",
   "description": "Week 5 の 3 問目。 TFHE で encrypted control bit を RLWE 暗号文へ作用させる土台として、 gadget decomposition・gadget vector・toy RGSW・external product を順に実装する。\n\n環と RLWE は支給される。 それらは ac26-w5-lwe-rlwe の成果物で、 この問題は gadget と積そのもの。\n\n分解の規約は固定してある。 q = base**levels、 unsigned、 大きい重みが先頭 (MSB 先頭)、 桁数はちょうど levels、 gadget は (B^(L-1), ..., B, 1) の降順。 講義スライド 30 の例のとおり、 B=4、 L=3、 q=64 で 47 は (2, 3, 3) に分解される (47 = 2*16 + 3*4 + 3*1)。 q = base**levels が復元を厳密にしており、 それが何を買っていたかは failure checkpoint で分かる。 実装は本来 approximate な gadget を使い誤差と付き合う。\n\nRGSW は 2L 行を持ち、 前半が gadget 項を a スロットへ、 後半が b スロットへ入れる。 external product は暗号文の両方の半分を分解して長さ 2L の digit ベクトルにし、 この行列へ掛ける。 d . G が (a, b) をちょうど組み立て直すので、 結果は RLWE(0) + mu*(a, b) になる。 gadget 項を片方のスロットに集めると、 積はほとんど正しく見えるものへ復号される。\n\nexternal_product に secret は渡らない。 selector を復号できず、 する必要もない。 両方の分岐が同じ算術になることが、 暗号化されたまま分岐できる理由そのもの。\n\n採点の設計として、 digit の順序と gadget vector を両方逆にしても往復は通り、 RGSW の行レイアウトを逆にして同じく逆な product で掛けても selector 1 はメッセージを返す。 だから gadget vector は直接採点し、 RGSW の検査はすべて交差させる。 fixture が作った行を submission の product へ、 submission の行を fixture の product へ通す。\n\nこれは安全ではない。 パラメータは全列挙でき、 secret は線形代数で復元できる。",
-  "instructions": "## 隠したまま選ばせたい\n\n秘匿スマートコントラクト（Fhenix や Inco）は、「条件を満たせば送金、満たさなければ何もしない」という分岐を、**どちらに進んだか誰にも見せずに**実行します。条件は暗号化された 0 か 1 のビット。このビットを復号せずにメッセージへ掛けて、「1 なら残す、0 なら消す」を暗号文のまま起こす — それがこの問題で作る external product です。この掛け算が 1 つできれば、次の問題でそれを積んで「表を回す」装置になります。\n\n## ただし、掛け算はノイズを暴れさせる\n\n暗号文には中身を隠すためのずれ（ノイズ）が入っていて、暗号文に数を掛けるとノイズも同じ倍率で膨らみます。47 を掛ければ 47 倍。数回で予算を突き抜け、答えが読めなくなります。\n\n逃げ道は小 3 の位取りです。253 = 2×100 + 5×10 + 3×1 — 大きな数も、桁に分ければ**どの桁も小さい**。掛ける側を桁にバラし、桁ごとに掛けて、足し戻す。1 回の掛け算は高々 B − 1 倍で頭打ちになります。この「重みの並び (B^(L−1), …, B, 1) と、そこへの分解」を **gadget** と呼びます。この問題で初めて出てくる道具は、これ 1 つです。\n\n## 前提（前の問題から持ち込むもの）\n\n- 環（X^N = −1 の多項式の世界）と RLWE 暗号文（マスク `a` と本体 `b` の組）は、`ac26-w5-lwe-rlwe` で作ったものが `participant.ring` から完成品で渡されます。作り直しません\n- 係数は mod q。この問題では **q = B^L** にそろえてあり、「L 桁ちょうど取る」ことと「q で割ったあまり」が同じ意味になります\n- ノイズの予算の数え方は `ac26-w5-encoding-noise` のとおり\n\n## 桁の実演を 1 つ\n\nbase B = 4、桁数 L = 3、q = 4³ = 64。47 を分解すると、大きい桁から **(2, 3, 3)** — 47 = 2×16 + 3×4 + 3×1。重みは (16, 4, 1) = (B², B, 1) で、どの桁も 0〜3 に収まります。「分けて、重みを掛けて、足し戻すと元に戻る」— この往復が、8 つの checkpoint 全部の土台です。\n\n多項式も同じで、係数 1 つずつをこの桁に割ります。束ね方だけ注意 — この問題では**段（level）ごとに 1 本の多項式**にまとめます。\n\n## selector が 0 でも 1 でも、手順は同じ\n\nもう半分は、掛けるビット（selector）の側です。selector を暗号化するとき、gadget の重みを 2L 本の行にあらかじめ焼き込みます（これが RGSW）。external product は、暗号文の `a` と `b` を桁にバラした長さ 2L の並びを、その 2L 本の行に掛けて足すだけです。\n\n要は、**selector が 0 でも 1 でも計算の手順が完全に同じ**であること。途中の形からどちらだったかは分かりません（分かるなら暗号として終わっています）。だから `external_product` には秘密鍵が渡されませんし、必要にもなりません。**「どっちのビットか知りたい」と思ったら、そこが設計の勘所です。**\n\n## 最初の一手\n\n**「起動」** で専用の環境が立ち上がり、`rgsw.py` が 1 つだけ入ったエディタが出ます。埋めるのは書きかけの関数だけで、**「初期状態に戻す」** でいつでも戻せます。\n\n**「証拠を確認」** を押すと、この起動のためだけに作られた数値が並びます。\n\n- パラメータ: base B、桁数 L、法 q（= B^L）、多項式の長さ N、gadget の重みの並び、ノイズの上限と予算。\n- **分解の実演**: ある値の桁（大きい桁が先頭）、gadget の重み、そして桁と重みを掛けて足した結果が元の値に戻るところ。\n- RLWE 暗号文 1 つ: メッセージ、`a`、`b`。\n- **`a` を分解すると L 個の「環の元」が出る**ところ。各段が長さ N の並びで、level ごとに 1 本です — 「係数 1 つぶんの桁」を集めたものではありません。\n- 2L 本の行のどこに gadget の重みが入るかの一覧（行番号 / どちらのスロットか / どの重みか）。\n- external product を 1 行ずつ足し上げた表（行 / スロット / level / そこまでの合計）、最後に出た `a`・`b`、それを復号した結果、そして元のメッセージ。\n- L を足りない値に減らしたときの様子: 必要な桁数、最初に往復できなくなる値、そして**分解はそれを文句も言わずに切り捨てる**という注意。\n\n**先に見るのはこの 2 か所です。** ひとつは分解の実演 — 桁と重みを掛けて足すと元に戻る、この往復が全部の土台です。もうひとつは足し上げの表 — 2L 行を上から足していくと、最後の行の合計がそのまま答えになっています。表の「level」の列と gadget の重みを見比べて、**なぜ行が a 側と b 側に分かれているのか**を考えてください。ここが最大の山です。\n\n数値は起動のたびに変わり、採点は画面に出ていない別のパラメータでも同じコードを走らせます。画面の数を書き写した実装はそこで落ちます。**「公開テストを実行」** で形の検査を手元で先に試せます。\n\n## 答えるもの — checkpoint は 8 つ\n\n8 つともコードで答えます（文字を打ち込む回答欄はありません）。`params` は `base`、`levels`、`degree`（N）、`modulus`（q）を持つ dict で、checkpoint ごとに中身が変わります。\n\n1. **decompose** — `decompose(params, value)`: 整数を受け取り、base B の桁を**大きい重みが先頭**で、**ちょうど L 個**返します。0 以上 q 未満の外の値は、断らずに先に q で割ったあまりへ直します。`recompose(params, digits)`: 桁の並びを受け取り、それが表す値を返します。\n2. **gadget** — `gadget_vector(params)`: 重みの並び (B^(L−1), …, B, 1) を返します。**`decompose` と順番が一致していること**。両方を逆にすると往復だけは通ってしまうので、ここは単独で採点されます。\n3. **polynomial** — `decompose_poly(params, poly)`: 長さ N の多項式を受け取り、**L 個の環の元**（それぞれ長さ N の並び）を返します。level i の並びには、元の多項式の各係数の i 桁目が入ります。`recompose_poly(params, levels)`: その L 個から元の多項式を組み立てて返します。\n4. **rgsw** — `rgsw_encrypt(params, secret, selector, material)`: **2L 本の行**を返します。1 行は `(a, b)` の組です。`material[\"masks\"][j]` と `material[\"noises\"][j]` が j 行目に使う材料で、各行はまず「0 の RLWE 暗号化」（マスク `a` と本体 `a·s + e`）になり、そこへ gadget の重みが載ります。載り方は、**0 行目から L−1 行目は a のスロットへ、L 行目から 2L−1 行目は b のスロットへ**。載せるのは**定数の係数に足すスカラー**であって、ずらす操作ではありません。返すのは行だけで、selector を持ち帰らせないこと。0 と 1 以外の selector は断ります。\n5. **external** — `external_product(params, rgsw, ciphertext)`: `{\"a\": …, \"b\": …}` を返します。掛ける側の桁の並びは `decompose(a)` と `decompose(b)` をつないだ**長さ 2L** で、それを 2L 本の行に掛けて足し上げます。**秘密鍵は渡されませんし、要りません。**\n6. **trace** — `external_trace(params, rgsw, ciphertext)`: 1 行につき 1 件、`row`（行番号 0〜2L−1）、`slot`（L より前なら `\"a\"`、以降は `\"b\"`）、`level`（その行が運ぶ重みの段）、`digits`（掛けた桁の多項式）、`partial_a` / `partial_b`（その行だけの積）、`accumulated_a` / `accumulated_b`（そこまでの合計）を持つ記録を返します。**最後の記録の合計が、5 の答えそのものになること。**\n7. **failure** — `levels_needed(base, modulus)`: その法のすべての値に届くのに必要な桁数を返します。`smallest_unrepresentable(base, levels, modulus)`: L 桁では往復できなくなる、法より小さい最小の値を返します（そんな値が無ければ `None`）。「往復できない」がここの言葉で、分解は文句を言わず、入りきらないぶんを黙って落とします。\n8. **transfer** — 同じ `rgsw.py` が、**画面に出ていない base・L・N・q** で 1 から 7 まで全部走ります。\n\ncheckpoint ごとに提出ボタンがあります。押すと、そのときのエディタの中身がそのまま採点へ送られます。8 つは独立に採点されるので、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計が 0 未満にはなりません）。正解した checkpoint は「解答済み」になり、それ以上は提出しません。\n\n## この掛け算が、暗号文のままの「もし〜なら」になる\n\n8 つ通れば終わりです。selector が 0 でも 1 でも、あなたのコードは同じ道を通っています。\n\n次の問題では、この external product を 1 本の式 `ct₀ + ビット ⊠ (ct₁ − ct₀)` に差し込み、暗号化されたビットで 2 つの暗号文から選ぶ部品（CMUX）にします。それを秘密鍵のビットの数だけ積めば、「誰も知らない量だけ表を回す」装置が動き出します。ノイズを桁で頭打ちにしたのは、その積み重ねに耐えるためです。\n",
+  "instructions": "## 最初にすること\n\nあなたは、暗号化した0/1を掛ける教材部品の実装担当です。まず数を桁へ分け、足し戻す部品を作ります。「起動」→ rgsw.pyを開く → gadget_vectorで重みを作り、decomposeとrecomposeを実装 → 「公開テストを実行」のdecompose-round-tripsを確認 → decomposeを提出。後続の未実装テストがFAILでも、この項目は独立に提出できます。\n\n## 前提 — 桁と暗号文の形\n\nビットは0か1。暗号文は、メッセージから変換したデータです。本問は暗号化したビットを復号せずに掛ける外部積（external product）の小さい数の模型を作ります。小さい鍵は候補を調べ尽くせるので、実用の安全性はありません。\n\n多項式は1+2Xのような式。係数1,2を[1,2]の順で表します。XのN乗を−1へ置き換え、数をqで割った余りへ戻す規則を使います。この規則を持つ入れ物を環と呼びます。N=params['degree']、q=params['modulus']です。配布済みのring_add(params,a,b)とring_mul(params,a,b)が、この規則で係数列の足し算と掛け算をします。\n\nRLWEはa,bという2本の係数列を持つ暗号の形。RGSWはビットを別の暗号文へ掛けるために、RLWEの行を並べた形です。どちらもこの教材では計算模型です。selectorは掛ける0/1の値、noiseは暗号計算に加えるずれを表します。\n\nB=params['base']は位取りの基数、L=params['levels']は桁数です。通常q=BのL乗。重みg[i]=Bの(L−1−i)乗を大きい順に並べます。これがgadget_vectorの値です。桁に重みを掛けて足す道具をgadgetと呼びます。Pythonの**はべき乗、//は整数除算、%は割った余りです。\n\nmaterialのmasks/noisesは2L本あり、各々N個の整数の列です。selectorには整数を渡します（True/Falseは入力対象外）。failureだけはq=B**Lと限らず、B≥2、q≥1、L≥0を扱います。\n\n## 無料の式と小さい例\n\n- x=value%qとしたとき、桁iは `(x // g[i]) % B`。足し戻しは各digits[i]×g[i]の合計をqで割った余りです。\n- B=2,L=3,q=8なら重みは[4,2,1]。5の桁は[1,0,1]で、1×4+0×2+1×1=5。\n- 多項式は各係数を分解し、同じ桁を横に集めます。係数[5,2]なら、桁の列は[[1,0],[0,1],[1,0]]。外側はL個、内側はN個です。足し戻すと[5,2]になります。\n- RGSWのj行はa=material['masks'][j]、b=ring_add(params, ring_mul(params,a,secret), material['noises'][j])を土台とします。係数はqの余りへ戻します。j<Lならaの定数係数にselector×g[j]を加え、j≥Lならbの定数係数にselector×g[j−L]を加えます。定数係数は位置0であり、列を移動する操作ではありません。返す1行の形は(a,b)、全体は2L行。selectorが0/1以外ならValueErrorを発生させます。\n- B=2,L=1,q=2の行の例：a=[0,1],b=[1,0],selector=1。a側に載せる行なら([1,1],[1,0])、b側なら([0,1],[0,0])です。\n- 外部積の桁列Dはdecompose_poly(a)の後ろにdecompose_poly(b)をつないだ2L本。行jのa側の寄与はring_mul(params,D[j],rgsw[j][0])、b側は末尾を[1]にしたものです。各側で全行の寄与を環の足し算で合計します。出力にselectorや秘密鍵は含めません。\n- traceのpartial_a/bはその行だけの寄与、accumulated_a/bはその行を含む累計。levelはj%Lです。最後の累計はexternal_productのa/bと一致します。\n- levels_needed(B,q)はBのL乗≥qとなる最小の非負整数L。1からBを掛けて、初めてq以上になるまでの回数です。smallest_unrepresentableはBのL乗がq未満ならその値、それ以外はNoneを返します。例えばB=2,q=5なら3桁必要。2桁だと4が最初に入りません。\n\n桁は0〜B−1に収まりますが、外部積全体のノイズがB−1以下になるわけではありません。各行のずれと多項式の積を足したものが残ります。同じ計算経路を使うことや少数の出力を観察することだけで、秘密や実行時間の漏れがないと証明はできません。\n\n## なぜ両側を分解する？\n\n桁×重みを全部足すとaが戻り、bについても同じです。だからRGSWの重みの部分の合計はselector×(a,b)。残りは各行の0暗号文を桁の多項式で掛けた合計になります。\n\n位相はb−a×秘密鍵です。出力の位相は「selector×入力の位相 + D[0]×行0のノイズ + D[1]×行1のノイズ + …」。各積は多項式の掛け算です。selector=0ならメッセージ部分は0、1なら元のメッセージ部分が残りますが、合計ノイズが許容範囲を越えれば正しく復号できません。\n\n## 答えるもの — checkpoint は 8 つ\n\n8 つともコードで答えます（文字を打ち込む回答欄はありません）。`params` は `base`、`levels`、`degree`（N）、`modulus`（q）を持つ dict で、checkpoint ごとに中身が変わります。\n\n1. **decompose** — `decompose(params, value)`: 整数を受け取り、base B の桁を**大きい重みが先頭**で、**ちょうど L 個**返します。0 以上 q 未満の外の値は、断らずに先に q で割ったあまりへ直します。`recompose(params, digits)`: 桁の並びを受け取り、それが表す値を返します。\n2. **gadget** — `gadget_vector(params)`: 重みの並び (B^(L−1), …, B, 1) を返します。**`decompose` と順番が一致していること**。両方を逆にすると往復だけは通ってしまうので、ここは単独で採点されます。\n3. **polynomial** — `decompose_poly(params, poly)`: 長さ N の多項式を受け取り、**L 個の環の元**（それぞれ長さ N の並び）を返します。level i の並びには、元の多項式の各係数の i 桁目が入ります。`recompose_poly(params, levels)`: その L 個から元の多項式を組み立てて返します。\n4. **rgsw** — `rgsw_encrypt(params, secret, selector, material)`: **2L 本の行**を返します。1 行は `(a, b)` の組です。`material[\"masks\"][j]` と `material[\"noises\"][j]` が j 行目に使う材料で、各行はまず「0 の RLWE 暗号化」（マスク `a` と本体 `a·s + e`）になり、そこへ gadget の重みが載ります。載り方は、**0 行目から L−1 行目は a のスロットへ、L 行目から 2L−1 行目は b のスロットへ**。載せるのは**定数の係数に足すスカラー**であって、ずらす操作ではありません。返すのは行だけで、selector を持ち帰らせないこと。0 と 1 以外の selector は断ります。\n5. **external** — `external_product(params, rgsw, ciphertext)`: `{\"a\": …, \"b\": …}` を返します。掛ける側の桁の並びは `decompose_poly(a)` と `decompose_poly(b)` をつないだ**長さ 2L** で、それを 2L 本の行に掛けて足し上げます。**秘密鍵は渡されませんし、要りません。**\n6. **trace** — `external_trace(params, rgsw, ciphertext)`: 1 行につき 1 件、`row`（行番号 0〜2L−1）、`slot`（L より前なら `\"a\"`、以降は `\"b\"`）、`level`（その行が運ぶ重みの段）、`digits`（掛けた桁の多項式）、`partial_a` / `partial_b`（その行だけの積）、`accumulated_a` / `accumulated_b`（そこまでの合計）を持つ記録を返します。**最後の記録の合計が、5 の答えそのものになること。**\n7. **failure** — `levels_needed(base, modulus)`: その法のすべての値に届くのに必要な桁数を返します。`smallest_unrepresentable(base, levels, modulus)`: L 桁では往復できなくなる、法より小さい最小の値を返します（そんな値が無ければ `None`）。「往復できない」がここの言葉で、分解は文句を言わず、入りきらないぶんを黙って落とします。\n8. **transfer** — 同じ `rgsw.py` が、**画面に出ていない base・L・N・q** で 1 から 7 まで全部走ります。\n\ncheckpoint ごとに提出ボタンがあります。押すと、そのときのエディタの中身がそのまま採点へ送られます。8 つは独立に採点されるので、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計が 0 未満にはなりません）。正解した checkpoint は「解答済み」になり、それ以上は提出しません。\n\n## この掛け算が、暗号文のままの「もし〜なら」になる\n\n8項目が解答済みなら完了です。暗号化したビットを復号せずに掛ける計算を組み立てました。\n\n次の問題では、この external product を 1 本の式 `ct₀ + ビット ⊠ (ct₁ − ct₀)` に差し込み、暗号化されたビットで 2 つの暗号文から選ぶ部品（CMUX）にします。それを秘密鍵のビットの数だけ積めば、「秘密鍵を復号せずに表を回す」装置が動き出します。桁分解は、各乗数を小さくしてノイズの増え方を扱うための道具です。\n",
   "writeup": "## 分割こそが要点\n\nRGSW の 2L 行は、 前半が gadget 項を a スロットへ、 後半が b スロットへ入れる。 external product が暗号文の両方の半分を分解して連結するのは、 `d . G` が `(a, b)` をちょうど組み立て直すため。 gadget 項を片方に集めると、 積は 「ほとんど正しい」 ものへ復号される。 ほとんど正しいは、 この文脈では間違い。\n\n## 自己整合的な間違いは交差させないと見えない\n\ndigit の順序と gadget vector を両方逆にすれば往復は通る。 RGSW の行レイアウトを逆にして、 同じく逆な product で掛ければ selector 1 はメッセージを返す。 どちらも自分自身とは完全に整合している。\n\nだから gadget vector は往復からではなく直接採点し、 RGSW の検査はすべて交差させる。 fixture が作った行を submission の product へ通し、 submission の行を fixture の product へ通す。\n\n## secret を渡さないことが仕様\n\nexternal_product に secret は渡らない。 selector を復号できず、 する必要もない。 両方の分岐が同じ算術になることが、 暗号化されたまま分岐できる理由そのもの。 どちらのビットか知りたくなったら、 設計が何かを教えようとしている。\n\n## q = base**levels は選択である\n\nそれが復元を厳密にしている。 level が modulus に届かなくなると、 decompose は文句を言わずに切り捨て、 recompose は自信を持って間違う。 最小の失敗値は base**levels そのもの。 float の logarithm で level 数を数えると、 厳密な冪でずれる — (5, 125) と (6, 216) がその例。\n\n## 対象外\n\nproduction の noise 解析、 最適化された分解や FFT、 RGSW の security proof、 bootstrapping key の圧縮。\n\n## これは安全ではない\n\nパラメータは全列挙でき、 secret は線形代数で復元できる。 機構の toy であって困難性の toy ではない。",
   "tags": [
     "advanced-cryptography-2026",
@@ -82,8 +82,18 @@
         "hints": [
           {
             "id": "decompose-hint-1",
-            "content": "桁は大きい重みが先頭 (MSB 先頭) でちょうど levels 個。講義スライド 30 の並び。 q = base**levels なので、ちょうど L 桁取ることが剰余そのものになる。",
-            "penalty": 15
+            "content": "桁分解は1個の数を、小さい数字と位置の重みに分ける操作です。戻すときは各桁にその重みを掛けて足します。",
+            "penalty": 2
+          },
+          {
+            "id": "decompose-hint-2",
+            "content": "B=2,L=3,q=8なら5=1×4+0×2+1で桁は[1,0,1]。−1は先に8の余り7へ戻し、[1,1,1]です。",
+            "penalty": 2
+          },
+          {
+            "id": "decompose-hint-3",
+            "content": "まずgadget_vectorで重みB**(L−1−i)をL個作ります。rgsw.pyのdecomposeでvalue%qを計算し、大きい重みから整数除算してBの余りを取ります。recomposeでは各桁と重みの積を合計しqの余りへ戻します。decompose-round-tripsを確認しdecomposeを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -96,8 +106,18 @@
         "hints": [
           {
             "id": "gadget-hint-1",
-            "content": "decompose と順序が一致していなければならない。両方を逆にすると往復は通るので、ここは直接採点される。",
-            "penalty": 14
+            "content": "gadgetは桁の位置ごとの重みです。桁が大きい順なら、重みも同じ順でなければ元の数に戻りません。",
+            "penalty": 2
+          },
+          {
+            "id": "gadget-hint-2",
+            "content": "B=2,L=3の重みは[4,2,1]。桁[1,0,0]は4です。重みを逆にすれば1になってしまいます。",
+            "penalty": 2
+          },
+          {
+            "id": "gadget-hint-3",
+            "content": "gadget_vectorでparamsのbaseとlevelsを読み、指数L−1から0までのBのべきを並べます。証拠を確認のgadget重みと比較し、gadgetを提出して解答済みか確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -110,8 +130,18 @@
         "hints": [
           {
             "id": "polynomial-hint-1",
-            "content": "level ごとに 1 つの環の元。係数ごとの桁のタプルではない。 levels == degree のとき転置は同じ形になる。",
-            "penalty": 14
+            "content": "係数ごとの桁を、同じ桁の段ごとに並べ替えます。外部積は段ごとに多項式を掛けるため、この向きで渡します。",
+            "penalty": 2
+          },
+          {
+            "id": "polynomial-hint-2",
+            "content": "B=2,L=3で係数[5,2]の桁は[1,0,1]と[0,1,0]。段ごとに集めると[[1,0],[0,1],[1,0]]です。",
+            "penalty": 2
+          },
+          {
+            "id": "polynomial-hint-3",
+            "content": "decompose_polyは各係数をdecomposeし、levelごとにN個を集めます。recompose_polyは同じ係数位置の各段に重みを掛けて足します。polynomial-round-tripsを確認しpolynomialを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -124,8 +154,18 @@
         "hints": [
           {
             "id": "rgsw-hint-1",
-            "content": "2L 行。前半は gadget 項が a、後半は b。 gadget 項は定数係数へ足すスカラーであってシフトではない。",
-            "penalty": 18
+            "content": "RGSWは、0を暗号化した行にselector倍の重みを載せたものです。a側とb側に分けることで、あとで元の暗号文の両側を再構成します。",
+            "penalty": 2
+          },
+          {
+            "id": "rgsw-hint-2",
+            "content": "B=2,L=2なら重みは[2,1]、全4行。selector=1なら行0,1はaの定数へ2,1、行2,3はbの定数へ2,1を足します。selector=0なら追加は全部0です。",
+            "penalty": 2
+          },
+          {
+            "id": "rgsw-hint-3",
+            "content": "rgsw_encryptでselectorを検査し、各行のmaskとnoiseからbを計算します。前半a・後半bの位置0にselector×重みを足し、各係数をqの余りにします。2L個の(a,b)を返してrgswを提出し、行の検査結果を確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -138,8 +178,18 @@
         "hints": [
           {
             "id": "external-hint-1",
-            "content": "d = decompose(a) ++ decompose(b) で長さ 2L。 d . G が (a, b) を組み立て直すことを確かめてから書く。",
-            "penalty": 24
+            "content": "桁と重みの積を足すと、暗号文のa/bが再構成されます。0を暗号化した行の部分も一緒に足されるため、selectorを直接読みません。",
+            "penalty": 2
+          },
+          {
+            "id": "external-hint-2",
+            "content": "重み[4,2,1]、a=5の桁[1,0,1]ならa側への寄与は4+0+1=5。b=2なら0+2+0=2。selector倍した2側が組み直されます。",
+            "penalty": 2
+          },
+          {
+            "id": "external-hint-3",
+            "content": "external_productでaとbをdecompose_polyし、その順につなぎます。各段を対応する行のa/bへring_mulで掛け、ring_addで累計します。selector-one-keeps-the-messageを確認しexternalを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -148,7 +198,24 @@
         "input": "multiline",
         "label": "積み上がりを見せる",
         "points": 35,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "trace-hint-1",
+            "content": "記録は各行だけの寄与と、それまでの合計を分けて見せます。最後に答えだけを置くと、どの段でずれたか分かりません。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-2",
+            "content": "普通の数の寄与が[2,3,1]なら累計は[2,5,6]。2行目のpartialは3、accumulatedは5です。本問ではこれを係数列のa/b両側で行います。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-3",
+            "content": "external_traceでexternal_productと同じ行の計算を行い、足す前の積をpartial、足した後をaccumulatedへ記録します。rowとslot、level=j%L、digitsも入れます。最後の合計とexternal_productの一致、2L件の記録を確認してtraceを提出します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "failure",
@@ -159,8 +226,18 @@
         "hints": [
           {
             "id": "failure-hint-1",
-            "content": "float の logarithm は厳密な冪でずれる。数えたほうが安全。最小の失敗値は base**levels そのもの。",
-            "penalty": 18
+            "content": "桁数が足りないと、大きい桁が失われて別の数に戻ります。この項目は通常のq=BのL乗という条件を外して、不足が始まる位置を探します。",
+            "penalty": 2
+          },
+          {
+            "id": "failure-hint-2",
+            "content": "B=2の2桁は0〜3まで。q=5では4が最初に入らず、必要なのは3桁。q=4なら全値が入るので最初の失敗値はNoneです。",
+            "penalty": 2
+          },
+          {
+            "id": "failure-hint-3",
+            "content": "levels_neededで1からBを掛けてq以上になるまで数えます。smallest_unrepresentableではB**levelsとmodulusを比較します。証拠を確認の必要桁数・最初の失敗値と比べ、failureを提出します。",
+            "penalty": 2
           }
         ]
       },
@@ -169,16 +246,33 @@
         "input": "multiline",
         "label": "見たことのない設定で成立させる",
         "points": 40,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "別の基数・桁数・列の長さでも、同じ規則で分解と再構成ができるかを確認します。特定の表を写す方法では対応できません。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "5はB=2,L=3では[1,0,1]、B=3,L=2では[1,2]。桁の数も値も変わりますが、重みを掛けて戻す規則は同じです。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "base/levels/degree/modulusをparamsから読むか、a/b両側と全2L行を扱うか確認します。公開テストが通っても別設定の保証ではありません。transferを提出し、失敗した性質に対応する関数を直します。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
   "i18n": {
     "en": {
       "name": "Multiply by a bit nobody can read",
-      "shortDescription": "You want a choice made without showing which way it went. But multiplying a ciphertext by a large number swells its noise by the same factor. Split the multiplier into digits first — the gadget — and an encrypted 0-or-1 multiplies in with the noise capped.",
+      "shortDescription": "Use digit decomposition and reconstruction to build an encrypted-bit multiplication model. Record each row contribution and running total, then investigate where too few digits break reconstruction.",
       "description": "The third Week 5 problem. As the groundwork for applying an encrypted control bit to an RLWE ciphertext, build gadget decomposition, the gadget vector, a toy RGSW, and the external product in that order.\n\nThe ring and RLWE are supplied -- they are ac26-w5-lwe-rlwe's output, and this problem is the gadget and the product itself.\n\nThe decomposition convention is fixed: q = base**levels, unsigned, most-significant weight first, exactly `levels` digits, gadget (B^(L-1), ..., B, 1) descending. As in lecture slide 30's worked example, with B=4, L=3, q=64 the value 47 decomposes to (2, 3, 3) (47 = 2*16 + 3*4 + 3*1). That q makes recomposition exact, and the `failure` checkpoint is where you find out what it was buying -- a real implementation uses an approximate gadget and lives with the error.\n\nRGSW has 2L rows: the first half puts the gadget term in the a slot, the second in b. The external product decomposes both halves of the ciphertext into one digit vector of length 2L and multiplies it into that matrix. `d . G` reassembles (a, b) exactly, so the result is RLWE(0) + mu*(a, b). Collect every gadget term into one slot and the product decrypts to something that looks almost right.\n\n`external_product` is not given the secret. It cannot decrypt the selector and must not need to: both branches being the same arithmetic is exactly what makes encrypted branching possible.\n\nOn scoring: reversing the digit order and the gadget vector together leaves every round trip passing, and building the RGSW rows backwards then multiplying them with a product that is backwards the same way still returns the message. So the gadget vector is graded directly, and every RGSW check is crossed -- fixture rows through the submission's product, and the submission's rows through the fixtures'.\n\nNone of this is secure. The parameters are small enough to enumerate and the secret falls to linear algebra.",
-      "instructions": "## Let them choose without showing which\n\nConfidential smart contracts (Fhenix, Inco) run branches like \"transfer if the balance covers it, otherwise do nothing\" — **without showing anyone which way it went**. The condition is an encrypted bit, 0 or 1. Multiplying that bit into a message without decrypting either — \"keep it if 1, wipe it if 0\", entirely on ciphertexts — is the external product this problem builds. Once this one multiplication exists, the next problem stacks it into the machine that rotates a table.\n\n## But multiplication makes the noise run wild\n\nA ciphertext carries a small drift (noise) that hides its contents, and multiplying a ciphertext by a number grows the noise by the same factor. Multiply by 47 and the noise is 47 times larger; a few of those and the budget is gone.\n\nThe way out is grade-school place value. 253 = 2×100 + 5×10 + 3×1 — a large number split into digits has **only small digits**. Split the multiplier into digits, multiply digit by digit, add back, and each multiplication is capped at B − 1. The row of weights (B^(L−1), …, B, 1), together with the split against it, is called the **gadget** — the one new tool this problem introduces.\n\n## Before you start (what you carry in)\n\n- The ring (the X^N = −1 polynomial world) and RLWE ciphertexts (a mask `a` paired with a body `b`) arrive finished from `participant.ring` — they are `ac26-w5-lwe-rlwe`'s output and are not rebuilt here\n- Coefficients live mod q, and here **q = B^L** by construction, so \"take exactly L digits\" and \"reduce mod q\" mean the same thing\n- Noise budgets are counted as in `ac26-w5-encoding-noise`\n\n## One worked decomposition\n\nBase B = 4, L = 3 digits, q = 4³ = 64. Decomposing 47 gives **(2, 3, 3)**, largest digit first — 47 = 2×16 + 3×4 + 3×1, with weights (16, 4, 1) = (B², B, 1), every digit within 0…3. Split, multiply by the weights, add back, and the original returns: that round trip is the ground under all eight checkpoints.\n\nPolynomials split the same way, one coefficient at a time. Watch only the grouping — here the digits are bundled **one polynomial per level**.\n\n## The procedure is the same for selector 0 and 1\n\nThe other half is the bit being multiplied (the selector). Encrypting the selector bakes the gadget weights into 2L rows in advance (that is RGSW). The external product then splits the ciphertext's `a` and `b` into one digit row of length 2L and multiplies it into those rows.\n\nThe heart of it: **the arithmetic is identical whether the selector is 0 or 1**. Nothing in the shape of the computation says which it was (and if anything did, it would be broken as encryption). That is why `external_product` is never handed the secret, and why it must never need it. **If you catch yourself wanting to know which bit it is, that is the design telling you something.**\n\n## First move\n\n**Start** brings up your own environment with one file, `rgsw.py`, in the editor, already scaffolded — you fill in the existing functions. **Restore starter** puts it back at any time.\n\nPress **Inspect evidence** and this run's numbers appear.\n\n- The parameters: base B, the digit count L, the modulus q (= B^L), the polynomial length N, the row of gadget weights, and the noise bound and budget.\n- **A decomposition worked out**: some value's digits (largest first), the gadget weights, and the digits multiplied by the weights and summed back to the original value.\n- One RLWE ciphertext: its message, its `a`, its `b`.\n- **Decomposing `a` producing L \"ring elements\"**, one per level, each a row of N numbers — not a collection of \"one coefficient's digits\".\n- A listing of where the gadget weight sits in each of the 2L rows (row number / which slot / which weight).\n- The external product accumulated a row at a time (row / slot / level / running total), then the resulting `a` and `b`, what they decrypt to, and the original message.\n- What happens with L reduced below what is needed: the digit count actually required, the first value that stops round-tripping, and the warning that **decomposition drops the overflow without complaining**.\n\n**Two places are worth looking at first.** One is the worked decomposition — digits times weights sums back to the original, and that round trip is the foundation of everything else. The other is the accumulation table — add the 2L rows top to bottom and the last row's total is the answer itself. Put its `level` column beside the gadget weights and work out **why the rows are split between the a side and the b side**. That is the biggest step here.\n\nThe numbers change every run, and grading re-runs your code on parameters that were never shown, so copying the on-screen numbers fails there. **Run public tests** checks the shapes locally first.\n\n## What you answer — eight checkpoints\n\nAll eight are answered with code; there is no field to type a value into. `params` is a dict carrying `base`, `levels`, `degree` (N) and `modulus` (q), and its contents differ between checkpoints.\n\n1. **decompose** — `decompose(params, value)`: takes an integer and returns its base-B digits, **largest weight first**, **exactly L of them**. A value outside 0 … q − 1 is not rejected; it is reduced mod q first. `recompose(params, digits)`: takes a row of digits and returns the value they stand for.\n2. **gadget** — `gadget_vector(params)`: returns the weights (B^(L−1), …, B, 1). **Its order must agree with `decompose`.** Reverse both and the round trip still works, which is why this is graded on its own.\n3. **polynomial** — `decompose_poly(params, poly)`: takes a polynomial of length N and returns **L ring elements**, each a row of N numbers, where level i holds digit i of every coefficient. `recompose_poly(params, levels)`: rebuilds the polynomial from those L levels.\n4. **rgsw** — `rgsw_encrypt(params, secret, selector, material)`: returns **2L rows**, each row a single `(a, b)` pair. `material[\"masks\"][j]` and `material[\"noises\"][j]` are row j's randomness; each row is first an RLWE encryption of zero (mask `a`, body `a·s + e`), and then its gadget weight is added. Where it is added: **rows 0 … L−1 into the a slot, rows L … 2L−1 into the b slot**. What is added is **a scalar onto the constant coefficient**, not a shift. Return the rows and nothing else — do not carry the selector out. A selector that is not 0 or 1 must be refused.\n5. **external** — `external_product(params, rgsw, ciphertext)`: returns `{\"a\": …, \"b\": …}`. The digit row being multiplied in is `decompose(a)` followed by `decompose(b)` — **length 2L** — multiplied into the 2L rows and summed. **No secret is passed in, and none is needed.**\n6. **trace** — `external_trace(params, rgsw, ciphertext)`: one record per row, carrying `row` (0 … 2L−1), `slot` (`\"a\"` for rows below L, `\"b\"` for the rest), `level` (which gadget power that row carries), `digits` (the digit polynomial multiplied in), `partial_a` / `partial_b` (that row's product alone), and `accumulated_a` / `accumulated_b` (the running sum). **The last record's totals must be exactly checkpoint 5's answer.**\n7. **failure** — `levels_needed(base, modulus)`: how many digits it takes to reach every value below that modulus. `smallest_unrepresentable(base, levels, modulus)`: the smallest value below the modulus that L levels cannot round-trip, or `None` if there is none. \"Cannot round-trip\" is the operative phrase: decomposition does not complain, it silently drops what will not fit.\n8. **transfer** — the same `rgsw.py` runs checkpoints 1 to 7 again on **a base, L, N and q that were never shown**.\n\nEach checkpoint has its own submit button; pressing it sends the editor's current contents straight to grading. The eight are graded independently, so one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below zero). A solved checkpoint is marked solved and is not submitted again.\n\n## This multiplication becomes the encrypted \"if\"\n\nPass all eight and you are done — and your code takes the same path whether the selector is 0 or 1.\n\nThe next problem drops this external product into the single expression `ct₀ + bit ⊠ (ct₁ − ct₀)`, making CMUX: choosing one of two ciphertexts with an encrypted bit. Stack that once per secret-key bit and the machine that rotates a table by an amount nobody knows starts turning. Capping the noise digit by digit is what lets it survive that stacking.\n",
+      "instructions": "## First action\n\nYou are implementing a teaching component that multiplies an encrypted bit. Start with splitting a number into digits and recomposing it. Start → open rgsw.py → implement gadget_vector, then decompose and recompose → Run public tests and inspect decompose-round-trips → submit decompose. Later unfinished tests may fail; this checkpoint is independent.\n\n## Before you start — digits and ciphertext shapes\n\nA bit is 0 or 1. A ciphertext is data transformed from a message. This exercise builds a small model of an external product, multiplying an encrypted bit without decrypting it. The tiny key candidates can be enumerated; this is not practical security.\n\nA polynomial is an expression such as 1+2X, represented by its coefficients [1,2]. Here X to the power N becomes −1 and coefficients become remainders after division by q. This arithmetic container is called a ring. N=params['degree'],q=params['modulus']. Supplied ring_add(params,a,b) and ring_mul(params,a,b) perform addition and multiplication of coefficient arrays under these rules.\n\nRLWE is a ciphertext form containing two coefficient arrays a,b. RGSW arranges RLWE rows to multiply an encrypted bit into another ciphertext. Both are arithmetic models here. selector means the bit 0/1; noise means the added calculation shift.\n\nB=params['base'] is the numeral base and L=params['levels'] is the number of digits. Normally q=B**L. The descending weights g[i]=B**(L−1−i) are gadget_vector. The gadget is the tool for multiplying digits by weights and adding them back. Python ** is a power, // integer division, and % a remainder.\n\nmaterial masks/noises each contain 2L arrays of N integers. selector inputs are integers (booleans are outside this input domain). Only failure permits q different from B**L, with B≥2,q≥1,L≥0.\n\n## Free formulas and small examples\n\n- Set x=value%q. Digit i is `(x // g[i]) % B`. Recompose by summing digits[i]*g[i] and reducing by q.\n- For B=2,L=3,q=8, weights are [4,2,1]. Digits of 5 are [1,0,1]: 1*4+0*2+1*1=5.\n- Decompose each polynomial coefficient and collect equal digit positions across coefficients. [5,2] becomes [[1,0],[0,1],[1,0]]: L arrays, each of length N. Recomposing returns [5,2].\n- RGSW row j starts with a=material['masks'][j] and b=ring_add(params, ring_mul(params,a,secret), material['noises'][j]), with coefficients reduced by q. For j<L add selector*g[j] to the constant coefficient of a; otherwise add selector*g[j−L] to the constant coefficient of b. Constant means slot 0, not shifting the array. Each returned row is (a,b); return 2L rows. Reject selector outside 0/1 with ValueError.\n- For B=2,L=1,q=2, a=[0,1],b=[1,0],selector=1: an a-side row becomes ([1,1],[1,0]); a b-side row becomes ([0,1],[0,0]).\n- External-product digit arrays D concatenate decompose_poly(a) then decompose_poly(b), giving 2L arrays. Row j contributes ring_mul(params,D[j],rgsw[j][0]) to a and the same call with rgsw[j][1] to b. Sum all contributions on each side with ring arithmetic. Do not return the selector or key.\n- In trace, partial_a/b is that row's contribution; accumulated_a/b includes all contributions through that row. level=j%L. Final totals equal external_product's a/b.\n- levels_needed(B,q) is the smallest nonnegative L with B**L≥q: count multiplications by B starting from 1 until reaching q. smallest_unrepresentable returns B**L if it is below q, otherwise None. B=2,q=5 needs 3 digits; with 2 digits, 4 is the first value that does not fit.\n\nEach digit is at most B−1, but this does not bound the whole external-product noise by B−1. Row noises are multiplied by polynomials and added together. A common calculation path or a few observed outputs do not prove absence of secret or timing leakage.\n\n## Why decompose both sides?\n\nAdding each a digit times its weight reconstructs a, and likewise for b. The weighted part of RGSW therefore reconstructs selector*(a,b). The remaining part is the sum of each zero-ciphertext row multiplied by its digit polynomial.\n\nPhase means b−a*secret. Output phase equals selector*input phase + D[0]*row0 noise + D[1]*row1 noise + …, using polynomial products. Selector 0 removes the message term; selector 1 preserves it. Excessive total noise can still prevent correct decoding.\n\n## What you answer — eight checkpoints\n\nAll eight are answered with code; there is no field to type a value into. `params` is a dict carrying `base`, `levels`, `degree` (N) and `modulus` (q), and its contents differ between checkpoints.\n\n1. **decompose** — `decompose(params, value)`: takes an integer and returns its base-B digits, **largest weight first**, **exactly L of them**. A value outside 0 … q − 1 is not rejected; it is reduced mod q first. `recompose(params, digits)`: takes a row of digits and returns the value they stand for.\n2. **gadget** — `gadget_vector(params)`: returns the weights (B^(L−1), …, B, 1). **Its order must agree with `decompose`.** Reverse both and the round trip still works, which is why this is graded on its own.\n3. **polynomial** — `decompose_poly(params, poly)`: takes a polynomial of length N and returns **L ring elements**, each a row of N numbers, where level i holds digit i of every coefficient. `recompose_poly(params, levels)`: rebuilds the polynomial from those L levels.\n4. **rgsw** — `rgsw_encrypt(params, secret, selector, material)`: returns **2L rows**, each row a single `(a, b)` pair. `material[\"masks\"][j]` and `material[\"noises\"][j]` are row j's randomness; each row is first an RLWE encryption of zero (mask `a`, body `a·s + e`), and then its gadget weight is added. Where it is added: **rows 0 … L−1 into the a slot, rows L … 2L−1 into the b slot**. What is added is **a scalar onto the constant coefficient**, not a shift. Return the rows and nothing else — do not carry the selector out. A selector that is not 0 or 1 must be refused.\n5. **external** — `external_product(params, rgsw, ciphertext)`: returns `{\"a\": …, \"b\": …}`. The digit row being multiplied in is `decompose_poly(a)` followed by `decompose_poly(b)` — **length 2L** — multiplied into the 2L rows and summed. **No secret is passed in, and none is needed.**\n6. **trace** — `external_trace(params, rgsw, ciphertext)`: one record per row, carrying `row` (0 … 2L−1), `slot` (`\"a\"` for rows below L, `\"b\"` for the rest), `level` (which gadget power that row carries), `digits` (the digit polynomial multiplied in), `partial_a` / `partial_b` (that row's product alone), and `accumulated_a` / `accumulated_b` (the running sum). **The last record's totals must be exactly checkpoint 5's answer.**\n7. **failure** — `levels_needed(base, modulus)`: how many digits it takes to reach every value below that modulus. `smallest_unrepresentable(base, levels, modulus)`: the smallest value below the modulus that L levels cannot round-trip, or `None` if there is none. \"Cannot round-trip\" is the operative phrase: decomposition does not complain, it silently drops what will not fit.\n8. **transfer** — the same `rgsw.py` runs checkpoints 1 to 7 again on **a base, L, N and q that were never shown**.\n\nEach checkpoint has its own submit button; pressing it sends the editor's current contents straight to grading. The eight are graded independently, so one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below zero). A solved checkpoint is marked solved and is not submitted again.\n\n## This multiplication becomes the encrypted \"if\"\n\nAll eight checkpoints solved completes this arithmetic exercise; it does not prove absence of leakage.\n\nThe next problem drops this external product into the single expression `ct₀ + bit ⊠ (ct₁ − ct₀)`, making CMUX: choosing one of two ciphertexts with an encrypted bit. Stack that once per secret-key bit and the machine that rotates a table by an amount handled without decrypting the key starts turning. Digit decomposition keeps each multiplier small; the accumulated noise still needs to fit the decoding budget.\n",
       "writeup": "## The split is the point\n\nRGSW's 2L rows put the gadget term in the a slot for the first half and the b slot for the second. The external product decomposes both halves of the ciphertext and concatenates them because that is what makes `d . G` reassemble `(a, b)` exactly. Collect the gadget terms into one slot and the product decrypts to something almost right -- which, here, is wrong.\n\n## Self-consistent mistakes need a crossed test\n\nReverse the digit order and the gadget vector together and every round trip still passes. Build the RGSW rows with the layout backwards, multiply them with a product that is backwards the same way, and selector 1 still returns the message. Both are perfectly consistent with themselves.\n\nSo the gadget vector is graded directly rather than through a round trip, and every RGSW check is crossed: fixture-built rows through the submission's product, and the submission's rows through the fixtures'.\n\n## Withholding the secret is the specification\n\n`external_product` is not given the secret. It cannot decrypt the selector and does not need to. Both branches being the same arithmetic is exactly what makes encrypted branching possible -- if you want to know which bit it is, the design is telling you something.\n\n## q = base**levels is a choice\n\nIt is what makes recomposition exact. Once the levels stop reaching the modulus, `decompose` truncates without complaining and `recompose` is confidently wrong. The smallest failing value is `base**levels` itself. Counting the levels beats a float logarithm, which is off at an exact power -- `(5, 125)` and `(6, 216)` are the cases that show it.\n\n## Not in scope\n\nProduction noise analysis, optimized decomposition or FFT, an RGSW security proof, bootstrapping key compression.\n\n## This is not secure\n\nThe parameters are small enough to enumerate and the secret falls to linear algebra. A toy of the mechanism, not of the hardness.",
       "learningGoals": [
         "Split a large number into base-B digits and rebuild it from the weights",
@@ -197,7 +291,15 @@
           "hints": [
             {
               "id": "decompose-hint-1",
-              "content": "Digits are most-significant first and exactly `levels` of them — lecture slide 30's order. Since q = base**levels, taking exactly L digits is the reduction."
+              "content": "Digit decomposition separates a number into small digits and place weights. Multiply each digit by its weight and add to reconstruct it."
+            },
+            {
+              "id": "decompose-hint-2",
+              "content": "For B=2,L=3,q=8, 5=1*4+0*2+1 gives [1,0,1]. Reduce −1 to remainder 7 first, giving [1,1,1]."
+            },
+            {
+              "id": "decompose-hint-3",
+              "content": "First implement gadget_vector with the L weights B**(L-1-i). In rgsw.py decompose, reduce value by q, divide by descending weights and take each remainder by B. In recompose sum each digit times its weight and reduce by q. Inspect decompose-round-trips and submit decompose."
             }
           ]
         },
@@ -207,7 +309,15 @@
           "hints": [
             {
               "id": "gadget-hint-1",
-              "content": "It has to agree with `decompose`. Reversing both leaves the round trip working, which is why this is graded directly."
+              "content": "The gadget contains place weights. Most-significant-first digits need weights in the same order to reconstruct the number."
+            },
+            {
+              "id": "gadget-hint-2",
+              "content": "B=2,L=3 gives weights [4,2,1]. Digits [1,0,0] represent 4; reversing the weights incorrectly gives 1."
+            },
+            {
+              "id": "gadget-hint-3",
+              "content": "Read base and levels in gadget_vector and list powers from L−1 down to 0. Compare with gadget weights in Inspect evidence, submit gadget, and check that it is solved."
             }
           ]
         },
@@ -217,7 +327,15 @@
           "hints": [
             {
               "id": "polynomial-hint-1",
-              "content": "One ring element per level, not a tuple of per-coefficient digits. A transpose has the same shape when levels == degree."
+              "content": "Regroup coefficient digits by level. The external product multiplies a whole polynomial at each level, so orientation matters."
+            },
+            {
+              "id": "polynomial-hint-2",
+              "content": "With B=2,L=3, coefficients [5,2] have digits [1,0,1] and [0,1,0]. Collect levels as [[1,0],[0,1],[1,0]]."
+            },
+            {
+              "id": "polynomial-hint-3",
+              "content": "In decompose_poly decompose each coefficient and collect N entries per level. In recompose_poly combine weighted levels at each coefficient position. Inspect polynomial-round-trips and submit polynomial."
             }
           ]
         },
@@ -227,7 +345,15 @@
           "hints": [
             {
               "id": "rgsw-hint-1",
-              "content": "2L rows: the first half puts the gadget term in `a`, the second in `b`. It is a scalar added to the constant coefficient, not a shift."
+              "content": "RGSW adds selector times a weight to rows encrypting zero. Splitting a-side and b-side rows reconstructs both halves of the ciphertext later."
+            },
+            {
+              "id": "rgsw-hint-2",
+              "content": "For B=2,L=2, weights [2,1] require four rows. Selector 1 adds 2,1 to the a constant in rows 0,1 and to the b constant in rows 2,3. Selector 0 adds zero throughout."
+            },
+            {
+              "id": "rgsw-hint-3",
+              "content": "Validate selector in rgsw_encrypt. Compute b from each mask and noise, add selector times the weight at slot 0 of a for the first half or b for the second, and reduce by q. Return 2L (a,b) rows, submit rgsw and inspect the row-check verdict."
             }
           ]
         },
@@ -237,13 +363,35 @@
           "hints": [
             {
               "id": "external-hint-1",
-              "content": "d = decompose(a) ++ decompose(b), length 2L. Check that d . G reassembles (a, b) before writing it."
+              "content": "Weighted digits reconstruct ciphertext a/b. The rows encrypting zero are included too, so the selector is not read directly."
+            },
+            {
+              "id": "external-hint-2",
+              "content": "For weights [4,2,1], a=5 has digits [1,0,1], contributing 4+0+1=5 to a. For b=2 the contribution is 0+2+0=2. Both sides reconstruct scaled by selector."
+            },
+            {
+              "id": "external-hint-3",
+              "content": "Use decompose_poly on a then b and concatenate. Multiply each level by the corresponding row a/b with ring_mul, accumulating with ring_add. Inspect selector-one-keeps-the-message and submit external."
             }
           ]
         },
         {
           "id": "trace",
-          "label": "Show the accumulation"
+          "label": "Show the accumulation",
+          "hints": [
+            {
+              "id": "trace-hint-1",
+              "content": "The trace separates each row contribution from the running total. Showing only the final result would hide where a mismatch began."
+            },
+            {
+              "id": "trace-hint-2",
+              "content": "For scalar contributions [2,3,1], totals are [2,5,6]. At the second row partial is 3 and accumulated is 5. Here track coefficient arrays on both a/b sides."
+            },
+            {
+              "id": "trace-hint-3",
+              "content": "Follow the same row calculations in external_trace, recording each product as partial and updated totals as accumulated. Include row, slot, level=j%L and digits. Check 2L records and final totals equal external_product, then submit trace."
+            }
+          ]
         },
         {
           "id": "failure",
@@ -251,13 +399,35 @@
           "hints": [
             {
               "id": "failure-hint-1",
-              "content": "A float logarithm is off at an exact power. Counting is safer. The smallest failing value is base**levels itself."
+              "content": "Too few digits discard high places and reconstruct another number. This checkpoint deliberately leaves the usual q=B**L condition to locate where truncation starts."
+            },
+            {
+              "id": "failure-hint-2",
+              "content": "Two base-2 digits cover 0..3. For q=5, 4 is the first missing value and three digits are needed. For q=4 everything fits, so the first failure is None."
+            },
+            {
+              "id": "failure-hint-3",
+              "content": "In levels_needed count multiplications by B starting at 1 until reaching q. In smallest_unrepresentable compare B**levels with modulus. Compare against needed levels and first failure in Inspect evidence and submit failure."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in a setting you have not seen"
+          "label": "Hold up in a setting you have not seen",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "Transfer checks decomposition and reconstruction under other bases, level counts and array lengths. Copying one displayed table cannot cover them."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "5 is [1,0,1] with B=2,L=3 and [1,2] with B=3,L=2. Both digit count and values change; weighted reconstruction follows the same rule."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "Check that base/levels/degree/modulus come from params and both a/b sides and all 2L rows are handled. Public tests do not guarantee other settings. Submit transfer and repair the function corresponding to a failed property."
+            }
+          ]
         }
       ]
     }

@@ -98,7 +98,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `failure` | 40 | 必要な level 数と、往復しなくなる最小の値 |
 | `transfer` | 40 | 見たことのない base・level 数・degree・modulus で上記すべて |
 
-8 つのうち 5 つに hint があり、いずれもその checkpoint の 50% 上限の内側です。
+8項目すべてに3段のヒントがあり、各2点（合計48点）、各項目の50%上限内です。
 
 ## equivalent mutant について
 
@@ -176,3 +176,6 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 `make reference-test` が mutation suite を走らせます。 18 個の壊れた実装のほとんどは自己整合的で、
 fixture が作ったものと submission が作ったものが一致しなければならなくなって初めて
 reference と分かれます。
+
+
+参加者資料のみの独立読解で、式・形の不足、整数と多項式の分解の混同、ノイズと秘匿性の過大な説明を検出。再読でPython風の式が列の連結になる問題と英語の旧文を検出して修正しました。Portalのrun_public_testsへdecompose/recomposeだけの実装を渡し、最初の成功と後続の未実装の失敗を確認。make install、make agent-gate（116件有効）、git diff --check成功。ブラウザ実プレー・デプロイ先採点は未実施です。採点アルゴリズムとプラットフォームは変更せず、ヒント文と減点を変更しています。
