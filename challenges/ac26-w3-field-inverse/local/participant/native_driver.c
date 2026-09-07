@@ -2,12 +2,15 @@
 #include <Python.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* The parent still owns all mathematical checks. This driver only observes the
  * actual exception returned by a Python call and constructs its response outside
- * Python frames. It does not authenticate a process that writes its own protocol.
+ * Python frames. Per-call nonces stay in C and never enter a learner-visible
+ * dictionary, JSON decoder, serializer callback, or Python frame. Arbitrary native
+ * memory access and a user controlling Docker are outside this process boundary.
  */
-static int send_value(PyObject *encoder, PyObject *value) {
+static int send_value(PyObject *encoder, PyObject *value, const char *nonce) {
     PyObject *chunks = PyObject_CallFunction(encoder, "Oi", value, 0);
     if (!chunks) return -1;
     PyObject *empty = PyUnicode_FromString("");
@@ -16,14 +19,17 @@ static int send_value(PyObject *encoder, PyObject *value) {
     if (!text) return -1;
     Py_ssize_t length;
     const char *bytes = PyUnicode_AsUTF8AndSize(text, &length);
-    int failed = !bytes || fwrite(bytes, 1, (size_t)length, stdout) != (size_t)length;
+    int failed = !bytes;
+    /* All Python callbacks finish before the private envelope is written. */
+    if (!failed && nonce) failed = fwrite(nonce, 1, 32, stdout) != 32 || fputc(' ', stdout) == EOF;
+    if (!failed) failed = fwrite(bytes, 1, (size_t)length, stdout) != (size_t)length;
     if (!failed) failed = fputc('\n', stdout) == EOF || fflush(stdout) != 0;
     Py_DECREF(text);
     if (failed && !PyErr_Occurred()) PyErr_SetString(PyExc_OSError, "Response write failed");
     return failed ? -1 : 0;
 }
 
-static PyObject *read_value(PyObject *decoder) {
+static PyObject *read_value(PyObject *decoder, char *nonce) {
     char *line = NULL;
     size_t allocated = 0;
     ssize_t length = getline(&line, &allocated, stdin);
@@ -31,7 +37,17 @@ static PyObject *read_value(PyObject *decoder) {
     if (length > 1024 * 1024) {
         free(line); PyErr_SetString(PyExc_ValueError, "Input frame too large"); return NULL;
     }
-    PyObject *text = PyUnicode_DecodeUTF8(line, length, "strict");
+    size_t offset = 0;
+    if (nonce) {
+        if (length < 34 || line[32] != ' ') {
+            free(line); PyErr_SetString(PyExc_ValueError, "Call envelope required"); return NULL;
+        }
+        for (int i = 0; i < 32; ++i) if (!((line[i] >= '0' && line[i] <= '9') || (line[i] >= 'a' && line[i] <= 'f'))) {
+            free(line); PyErr_SetString(PyExc_ValueError, "Invalid call envelope"); return NULL;
+        }
+        memcpy(nonce, line, 32); nonce[32] = 0; offset = 33;
+    }
+    PyObject *text = PyUnicode_DecodeUTF8(line + offset, length - offset, "strict");
     free(line);
     if (!text) return NULL;
     PyObject *value = PyObject_CallOneArg(decoder, text);
@@ -67,7 +83,7 @@ static PyObject *run(PyObject *self, PyObject *args) {
     encoder = PyObject_CallFunctionObjArgs(factory, markers, default_fn, string_encoder,
         Py_None, colon, comma, Py_False, Py_False, Py_True, NULL);
     if (!encoder) goto done;
-    initial = read_value(decoder);
+    initial = read_value(decoder, NULL);
     if (!initial) goto done;
     module = PyObject_CallOneArg(bootstrap, initial);
     Py_CLEAR(initial);
@@ -81,7 +97,7 @@ static PyObject *run(PyObject *self, PyObject *args) {
         if (!info) goto done;
         response = Py_BuildValue("{s:O}", "initializationError", info);
         Py_DECREF(info);
-        if (!response || send_value(encoder, response) < 0) goto done;
+        if (!response || send_value(encoder, response, NULL) < 0) goto done;
         failed = 0; goto done;
     }
     if (!PyModule_Check(module)) { PyErr_SetString(PyExc_TypeError, "Source module required"); goto done; }
@@ -99,25 +115,23 @@ static PyObject *run(PyObject *self, PyObject *args) {
         classes[i] = Py_NewRef(candidate);
     }
     response = Py_BuildValue("{s:O}", "ready", Py_True);
-    if (!response || send_value(encoder, response) < 0) goto done;
+    if (!response || send_value(encoder, response, NULL) < 0) goto done;
     Py_CLEAR(response);
     for (;;) {
-        PyObject *call = read_value(decoder);
+        char nonce[33] = {0};
+        PyObject *call = read_value(decoder, nonce);
         if (!call) { if (PyErr_Occurred()) goto done; break; }
-        PyObject *id = PyDict_Check(call) ? PyDict_GetItemString(call, "callId") : NULL;
-        if (!id || !PyUnicode_Check(id)) { Py_DECREF(call); PyErr_SetString(PyExc_ValueError, "Call id required"); goto done; }
-        Py_INCREF(id);
         PyObject *value = PyObject_CallOneArg(dispatch, call);
         Py_DECREF(call);
         if (value) {
-            response = Py_BuildValue("{s:O,s:O}", "callId", id, "value", value);
+            response = Py_BuildValue("{s:O}", "value", value);
             Py_DECREF(value);
         } else {
             PyObject *type = NULL, *error = NULL, *tb = NULL;
             PyErr_Fetch(&type, &error, &tb);
             PyErr_NormalizeException(&type, &error, &tb);
             PyObject *kinds = PyList_New(0);
-            if (!kinds) { Py_XDECREF(type); Py_XDECREF(error); Py_XDECREF(tb); Py_DECREF(id); goto done; }
+            if (!kinds) { Py_XDECREF(type); Py_XDECREF(error); Py_XDECREF(tb); goto done; }
             /* Read the actual native MRO, never metaclass hooks, builtins.type,
              * Python globals or a Python response serializer. */
             PyObject *mro = error ? Py_TYPE(error)->tp_mro : NULL;
@@ -125,18 +139,17 @@ static PyObject *run(PyObject *self, PyObject *args) {
                 for (Py_ssize_t j = 0; j < PyTuple_Size(mro); ++j) {
                     if (PyTuple_GetItem(mro, j) == classes[i]) {
                         if (PyList_Append(kinds, PyTuple_GetItem(names, i)) < 0) {
-                            Py_DECREF(kinds); Py_XDECREF(type); Py_XDECREF(error); Py_XDECREF(tb); Py_DECREF(id); goto done;
+                            Py_DECREF(kinds); Py_XDECREF(type); Py_XDECREF(error); Py_XDECREF(tb); goto done;
                         }
                         break;
                     }
                 }
             }
             Py_XDECREF(type); Py_XDECREF(error); Py_XDECREF(tb);
-            response = Py_BuildValue("{s:O,s:O,s:O}", "callId", id, "error", Py_True, "errorKinds", kinds);
+            response = Py_BuildValue("{s:O,s:O}", "error", Py_True, "errorKinds", kinds);
             Py_DECREF(kinds);
         }
-        Py_DECREF(id);
-        if (!response || send_value(encoder, response) < 0) goto done;
+        if (!response || send_value(encoder, response, nonce) < 0) goto done;
         Py_CLEAR(response);
     }
     failed = 0;

@@ -1,6 +1,10 @@
 """Execute only submitted functions on supplied inputs; there is no checker or seed here."""
 from __future__ import annotations
 
+import copy
+import dataclasses
+import enum
+import re
 import collections
 import decimal
 import fractions

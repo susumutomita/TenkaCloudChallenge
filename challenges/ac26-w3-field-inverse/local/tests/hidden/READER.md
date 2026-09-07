@@ -313,3 +313,35 @@ stage. A compiler is not installed in participant/verifier runtime stages. The
 all previous exception subclasses/metaclass/JSON cases, and valid reader/reference
 submissions. The 14 existing mutations were all rejected. Runtime and mutation log:
 `/private/tmp/field-native-second.log`. No AWS deployment was run.
+
+
+## 2026-09-07: field exception-reply forgery follow-up
+
+PR #774 exposed the same protocol weakness in this problem: learner Python could
+read dispatch's callId and print a matching errorKinds reply, then raise ValueError
+instead of the required NotInvertible or FieldMismatch. A regression against the
+unmodified runtime accepted this source on `errors` (one expected failing test).
+
+The nonce now remains in a C-only envelope: removed before JSON decoding, absent
+from dispatch, attached after serialization. Parent mathematical checks remain in
+place. The former positive test for hand-written live-ID replies now rejects those
+replies even when their payload is mathematically correct; ordinary correct method
+returns, valid exception subclasses and colliding hashes still pass. Fixed/stale
+replies are ignored. Normal imports also cover copy, dataclasses, enum and re,
+matching the updated bilingual supported-library list.
+
+Evidence from actual Linux author images:
+- Before: `test_call_id_injection_cannot_forge_exception_provenance` FAIL because
+  `server.evaluate('errors', source)` returned True.
+- After: all 32 execution-boundary regressions PASS (27.700 s).
+- Expanded documented-import regression PASS across all seven checkpoints/public tests.
+- Reference accepted on all seven checkpoints; all 14 mutation cases rejected.
+- Real ContainerWorkbenchPanel with local HTTP on port 18174: one acceptance test
+  PASS, including all seven submissions and 200 points (2.07 s test duration).
+- Catalog gate: all 116 metadata files valid; diff whitespace check clean.
+
+The first Compose start exhausted Docker's default address pools. Stopping the
+previously verified FFT test environment freed its two networks; the field services
+then started healthy. This was local component/HTTP acceptance, not a deployed AWS
+browser run. Arbitrary native memory access and Docker-owner control remain outside
+the stated boundary. No production deployment or parent submodule update is included.
