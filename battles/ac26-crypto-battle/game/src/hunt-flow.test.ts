@@ -2,7 +2,7 @@ import { artifactFields } from "./ledger-codec.ts";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import HuntPanel, { HuntWorkspace, huntOptions } from "../../portal/HuntPanel.tsx";
+import HuntPanel, { HuntWorkspace, huntOptions, huntOpponentPage } from "../../portal/HuntPanel.tsx";
 import { FeedbackBanner, huntFeedback } from "../../portal/FastMovePanel.tsx";
 import RpsDuel from "../../portal/RpsDuel.tsx";
 import { buildScenario } from "../../dev/scenarios.ts";
@@ -28,7 +28,7 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
       const p = view(buildScenario(scenario).host.state), html = render(p);
       expect(html).toContain("材料待ち");
       expect(html).toContain("同じ番号の重複は1個");
-      expect(html).toContain("必要な総数は固定ではありません");
+      expect(huntOptions(p).find(o => o.mode === "sudoku")?.detail.ja).toContain("必要な総数は固定ではありません");
       expect(html).not.toContain("fast-hunt-secret");
       expect(html).not.toContain("相手の数独の解");
       expect(workspace(p, "share")).toBe("");
@@ -39,10 +39,10 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
     const p = view(buildScenario("hunt-reachable").host.state);
     const option = huntOptions(p).find(o => o.mode === "share")!;
     expect(option.status).toBe("ready");
-    expect(render(p)).toContain("秘密のかけらの材料・計算へ");
+    expect(render(p)).toContain("fast-hunt-secret");
     const { completedHunts: _newField, ...legacy } = p;
     expect(render(legacy)).toContain("攻撃済み状態を更新中");
-    expect(render(legacy)).not.toContain("秘密のかけらの材料・計算へ");
+    expect(render(legacy)).not.toContain("fast-hunt-secret");
     expect(workspace(legacy, "share")).toBe("");
     const html = workspace(p, "share");
     expect(html).toContain("fast-hunt-secret");
@@ -110,7 +110,7 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
   test("sudoku worksheet uses public tag reuse, and a participant-computed answer is adjudicated", () => {
     const state = buildScenario("pi-reuse").host.state, p = view(state);
     expect(huntOptions(p).find(o => o.mode === "sudoku")?.status).toBe("ready");
-    expect(render(p)).toContain("材料を確認して解く");
+    expect(render(p)).toContain("元の公開問題 A");
     expect(render(p)).not.toContain("解が1つです");
     const html = workspace(p, "sudoku");
     expect(html).toContain("元の公開問題 A");
@@ -142,7 +142,7 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
     const settled = projectForTeam(state, "alpha");
     expect(settled.rpsHunt?.lastResult).toMatchObject({ outcome: "hit", points: 25 });
     expect(huntOptions(settled).find(o => o.mode === "rps")?.status).toBe("completed");
-    expect(render(settled)).toContain("次の対戦の受付を待ちます");
+    expect(huntOptions(settled).find(o => o.mode === "rps")?.detail.ja).toContain("次の対戦");
   });
 });
 
@@ -159,4 +159,28 @@ test("#739: projection and actual RPS component distinguish opponent waiting fro
   expect(order("alpha").task).toMatchObject({ opponentCommitted: true });
   expect(renderDuel()).toContain("開封できます");
   expect(order("alpha").task).not.toHaveProperty("opponentOpening");
+});
+
+test("100 opponents are bounded, searchable and ordered by available evidence", () => {
+  const base = view(buildScenario("hunt-reachable").host.state);
+  const teams = { ...base.teams };
+  for (let i = 0; i < 99; i++) {
+    const teamId = `team-${String(i).padStart(3, "0")}`;
+    teams[teamId] = { ...base.teams.alpha!, teamId, teamName: `Team ${i}` };
+  }
+  const p = { ...base, teams }, options = huntOptions(p);
+  const first = huntOpponentPage(p, options, "", false, 0);
+  expect(first.total).toBe(100);
+  expect(first.items).toHaveLength(5);
+  expect(first.items[0]?.teamId).toBe("alpha");
+  const last = huntOpponentPage(p, options, "", false, 1000);
+  expect(last.page).toBe(19);
+  expect(last.items).toHaveLength(5);
+  expect(huntOpponentPage(p, options, "", true, 0).items.map(t => t.teamId)).toEqual(["alpha"]);
+  expect(huntOpponentPage(p, options, "TEAM-098", false, 0).items.map(t => t.teamId)).toEqual(["team-098"]);
+  expect(huntOpponentPage(p, options, "no such team", false, 0).total).toBe(0);
+  const html = render(p);
+  expect(html).toContain('type="search"');
+  expect(html).not.toContain("Team 98");
+  expect((html.match(/tc-hunt-card/g) ?? []).length).toBe(1);
 });

@@ -387,3 +387,7 @@ No new resources, services, IAM, timers, score prices or cleanup steps are added
 ### Answer workspace (#780)
 
 New Caesar orders contain five symbols. The answer field explicitly requests space-separated numbers. Sudoku PROVE prepares a private random unused relabeling and immediately shows four marked inputs; clock updates and identical poll responses retain the relabeling. This remains the trusted-judge teaching model, not a full ZK protocol. MPC includes a three-party mask-cancellation diagram and its general equation; duel powers use superscripts and expanded products.
+
+### HUNT opponent selection (#782)
+
+The HUNT panel prioritizes opponents with public evidence, lists five teams per page, and supports name/ID search and an evidence-only filter. Select a team and method to see one worksheet. New evidence does not replace the selected worksheet. Successful attacks disable that method for the current generation; ROTATE remains a separate defense action.
