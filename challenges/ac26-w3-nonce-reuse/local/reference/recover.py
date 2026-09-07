@@ -109,6 +109,10 @@ def recover_secret(first, second, group) -> int:
     """
     from participant.schnorr import DOMAINS, challenge
 
+    first = parse_record(first, group)
+    second = parse_record(second, group)
+    if not accepts(first, group) or not accepts(second, group):
+        raise MalformedRecord("a transcript does not verify")
     if first["commitment"] != second["commitment"]:
         raise MalformedRecord("the two transcripts do not share a commitment")
     if first["public_key"] != second["public_key"]:
@@ -123,6 +127,12 @@ def recover_secret(first, second, group) -> int:
 def confirms(secret: int, public, group) -> bool:
     """Whether the recovered scalar really is the key. Never claim a recovery you have
     not checked -- the arithmetic succeeds on the wrong pair too."""
+    if isinstance(public, dict):
+        public = public.get("public_key")
+    try:
+        public = _point(public, group)
+    except MalformedRecord:
+        return False
     return group.generator.scalar_mul(secret % group.n) == public
 
 

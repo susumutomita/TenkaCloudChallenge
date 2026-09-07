@@ -259,7 +259,7 @@
           },
           {
             "id": "repair-hint-2",
-            "content": "HMAC-SHA256は秘密鍵とデータから32バイトの値を作る関数です。バイトは0〜255の数1個、bytesはその列。結果を整数hへ読み替え、1+h%(n−1)なら0を避けて1〜n−1へ入ります。例：h=10,n=7なら1+4=5。",
+            "content": "HMAC-SHA256は秘密鍵とデータから32バイトの値を作る関数です。バイトは0〜255の数1個、bytesはその列。結果を整数hへ読み替え、1+h%(n−1)なら0を避けて1〜n−1へ入ります。例：h=8,n=7なら1+2=3。",
             "penalty": 2
           },
           {
@@ -424,7 +424,7 @@
             },
             {
               "id": "repair-hint-2",
-              "content": "HMAC-SHA256 takes a secret key and data and produces32 bytes. A byte is an integer0–255; bytes is a sequence of them. Read the output as integer h and use1+h%(n−1), in1..n−1. For h=10,n=7, this gives5."
+              "content": "HMAC-SHA256 takes a secret key and data and produces32 bytes. A byte is an integer0–255; bytes is a sequence of them. Read the output as integer h and use1+h%(n−1), in1..n−1. For h=8,n=7, this gives3."
             },
             {
               "id": "repair-hint-3",

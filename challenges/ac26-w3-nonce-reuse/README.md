@@ -77,7 +77,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `collision` | 40 | The truncated generator measured, against its actual space |
 | `repair` | 35 | A generator that collides on nothing it must not |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints, two points per hint (48 points in total).
 
 ## Three nonce generators
 

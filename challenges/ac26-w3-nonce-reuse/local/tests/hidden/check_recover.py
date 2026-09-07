@@ -167,6 +167,11 @@ def check_confirm(module, seed: str) -> list[str]:
         group = toy_group(seed, label)
         secret, first, _second = _reuse_pair(seed, label, group)
         public = group.generator.scalar_mul(secret)
+        for form in [(public.x, public.y), {"public_key": public}]:
+            if not module.confirms(secret, form, group):
+                failures.append("a supported public-key input form was rejected")
+            if module.confirms((secret + 1) % group.n, form, group):
+                failures.append("a wrong secret was confirmed through a converted input")
         if not module.confirms(secret, public, group):
             failures.append("the correct secret was not confirmed against its public key")
         if module.confirms((secret + 1) % group.n, public, group):
@@ -184,6 +189,15 @@ def check_reject(module, seed: str) -> list[str]:
         secret, first, second = _reuse_pair(seed, label, group)
         parsed_first = module.parse_record(dict(first), group)
 
+        invalid = module.parse_record(dict(second), group)
+        invalid["response"] = (invalid["response"] + 1) % group.n
+        try:
+            module.recover_secret(parsed_first, invalid, group)
+            failures.append("a rejected transcript was used for recovery")
+        except module.MalformedRecord:
+            pass
+        except Exception as error:
+            failures.append(f"invalid transcript recovery raised {type(error).__name__}")
         # Same commitment AND the same message, so e1 == e2: one equation twice.
         duplicate = module.parse_record(dict(first), group)
         try:
