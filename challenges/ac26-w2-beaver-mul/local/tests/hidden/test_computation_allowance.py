@@ -76,6 +76,26 @@ class ComputationalAllowance(unittest.TestCase):
         with execution.LearnerSession({'beaver.py':source}, timeout=20) as learner:
             return learner.call('beaver','probe',[])
 
+    def test_public_api_deadline_is_shorter_than_private_grading(self):
+        from urllib.request import Request, urlopen
+        from verifier import server as verifier_server
+        source = (ROOT / 'reference/beaver.py').read_text() + '\nimport time\ntime.sleep(16)\n'
+        http = ThreadingHTTPServer(('127.0.0.1', 0), workbench_server.Handler)
+        thread = Thread(target=http.serve_forever, kwargs={'poll_interval': .01}, daemon=True)
+        thread.start()
+        try:
+            request = Request(f'http://127.0.0.1:{http.server_port}/api/test',
+                              data=json.dumps({'files': {'beaver.py': source}}).encode(),
+                              headers={'Content-Type': 'application/json'})
+            with urlopen(request, timeout=30) as response:
+                result = json.load(response)
+            self.assertFalse(result['passed'], result)
+        finally:
+            http.shutdown()
+            http.server_close()
+            thread.join()
+        self.assertTrue(verifier_server.evaluate('mask', source))
+
     def test_documented_libraries_are_importable_inside_submission(self):
         source = """
 import collections, decimal, fractions, functools, hashlib, hmac, itertools

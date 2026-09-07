@@ -227,3 +227,19 @@ Final verification passed: `make reference-test computation-test`, including the
 existing Linux boundary tests, reference answers and mutation checks. The new
 computation tests pass after the same tests rejected unavailable imports in the
 pre-fix image. All 116 catalog entries validate.
+
+### Review follow-up: standard author command (2026-09-07)
+
+`make reference-test` now runs `test_computation_allowance.py` as well as the
+existing boundary and mutation suites. The standalone `computation-test` remains
+available for focused reruns. The standard command passed for all three affected
+Week 2 problems (65 Linux tests total and 43 existing mutants rejected).
+
+The actual `/api/test` HTTP route previously accepted a correct submission with
+a 16-second startup delay, contradicting the documented 15-second public deadline.
+The new regression failed before the fix. Workbench public tests now receive their
+own 15-second deadline while private grading retains 20 seconds. After the fix,
+the same HTTP submission is rejected publicly and accepted by private grading.
+Logs: `/private/tmp/week2-public-deadline-before.log` and
+`/private/tmp/week2-beaver-review-after.log`. This exercises local Linux and HTTP,
+not an AWS deployment or a new independent reader.

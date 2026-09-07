@@ -61,6 +61,7 @@ reference-test: build
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
 	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python -m unittest discover -s tests/hidden -p 'test_execution_boundary.py'
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python tests/hidden/test_computation_allowance.py -v
 
 .PHONY: computation-test
 computation-test:

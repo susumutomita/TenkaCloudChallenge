@@ -307,3 +307,10 @@ Final verification passed: `make reference-test computation-test`, including the
 existing Linux boundary tests, reference answers and mutation checks. The new
 computation tests pass after the same tests rejected unavailable imports in the
 pre-fix image. All 116 catalog entries validate.
+
+### Review follow-up: standard author command (2026-09-07)
+
+`make reference-test` now runs `test_computation_allowance.py` as well as the
+existing boundary and mutation suites. The standalone `computation-test` remains
+available for focused reruns. The standard command passed for all three affected
+Week 2 problems (65 Linux tests total and 43 existing mutants rejected).

@@ -43,6 +43,7 @@ VERIFIER_URL = os.environ.get("VERIFIER_URL", "")
 
 MAX_BODY_BYTES = 256 * 1024
 RUN_TIMEOUT_SECONDS = 20
+PUBLIC_TEST_TIMEOUT_SECONDS = 15
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
@@ -81,7 +82,7 @@ _WORKBENCH = PortalEditorSupport(
     code_checkpoints=('mask', 'open', 'combine', 'protocol', 'transfer'),
     checkpoints=('mask', 'open', 'combine', 'protocol', 'transfer'),
     max_body_bytes=MAX_BODY_BYTES,
-    run_timeout_seconds=RUN_TIMEOUT_SECONDS,
+    run_timeout_seconds=PUBLIC_TEST_TIMEOUT_SECONDS,
     max_output_bytes=MAX_OUTPUT_BYTES,
     limit_fn=_limits,
 )
