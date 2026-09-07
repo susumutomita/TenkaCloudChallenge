@@ -11,12 +11,9 @@ and Noise · **Role:** `mechanism` · **Time:** 45–60 minutes · **Points:** 2
 
 ## The story
 
-A homomorphic ciphertext hides a message by putting it somewhere on a ring and then
-pushing it off that spot. Decryption is "which spot was this nearest to". Every question
-about correctness reduces to how far it can be pushed before the answer changes — and that
-distance is a number you can compute before running anything.
-
-Nothing is hidden from you. The whole model is four lines:
+This public encoding model places messages on spaced positions and studies how far
+a position can shift before decoding changes. There is no secret key: anyone can
+decode. The model studies correctness, not secrecy or real encryption noise growth.
 
 ```text
 message      m   in [0, p)
@@ -33,7 +30,7 @@ wrong somewhere.
 
 | | Why it bites |
 |---|---|
-| **the tie** | A value exactly halfway between two points rounds **up**. Once that is decided, the tolerated noise interval is no longer symmetric — one end loses a point, and `delta` being even or odd decides whether there is a halfway point at all. |
+| **the tie** | A value exactly halfway between two points rounds **up**. Even delta has an integer tie and an asymmetric interval; odd delta has no integer tie and a symmetric interval. |
 | **negative noise** | `e` can be negative. Python's `%` already returns a non-negative result for a positive modulus, so this needs no special case — `abs(e)` is a different function. |
 | **the wrap** | The point past the last message is message 0, not message p. Only two of the p messages notice. |
 
@@ -71,7 +68,7 @@ Seven checkpoints, scored independently. Wrong answers cost 10 points each.
 | `transfer` | 25 | All of the above under parameters derived from a seed you have not seen |
 | `validate` | 30 | Five unusable parameter sets rejected, three usable ones — including `delta = 1` — kept |
 
-Hints on four of the seven, each inside that checkpoint's 50% cap.
+All seven checkpoints have three 2-point hints each, within each checkpoint's 50% cap.
 
 ## A note on equivalent mutants
 
@@ -135,3 +132,6 @@ Zero. No cloud account, no AWS resources.
 `make reference-test` runs the mutation suite: seventeen broken implementations. Most
 decode every exact encoding point correctly, which is the property a learner checks first
 and the reason it is not enough.
+
+
+All seven checkpoints now have three 2-point hints (42 points total). The free statement supplies integer rounding, centered positions, the zero-containing safe interval, first-failure construction and exact parameter validity rules. Public encoding is distinguished from encryption; this does not model real noise growth or security. An independent participant-only reader caught missing validation bounds, ambiguous wraparound and incorrect secrecy/interval claims; the rewrite addresses those findings. Runtime and grading are unchanged. Catalog validation and copy review are author checks, not a browser playtest.
