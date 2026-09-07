@@ -2450,10 +2450,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   };
   // Charged through the same helper the deadline path uses, so the two causes
   // cannot drift apart into different prices for the same unanswered Order.
-  const penalty = Math.max(
-    disclosureRotateMinimum(state, teamId),
-    voided.length * Math.abs(state.config.scores.expiredOrder),
-  );
+  const penalty = rotationPenalty(state, teamId, voided.length);
   const teams = applyExpiryPenalties(
     { ...state.teams, [teamId]: updatedTeam },
     [teamId],
@@ -2646,7 +2643,16 @@ function applyStart(state: CryptoBattleState): CryptoBattleState {
 
 /** A declaration and its terminal result persist in the same operation/state write. */
 export function applyOp(state: CryptoBattleState, teamId: string, op: CryptoBattleOp): CryptoBattleState {
-  return settleLightning(applyMethodOp(state, teamId, op));
+  const next = settleLightning(applyMethodOp(state, teamId, op));
+  if (op.kind !== "hunt" && op.kind !== "hunt-sudoku" && op.kind !== "hunt-rotor" && op.kind !== "hunt-cipher" && op.kind !== "hunt-rsa") return next;
+  const beforeTarget=state.teams[op.targetTeamId], target=next.teams[op.targetTeamId];
+  const result=next.teams[teamId]?.lastHunt;
+  const hit=op.kind === "hunt-cipher" || op.kind === "hunt-rsa" || (result && readLastHunt(next,result).outcome === "hit");
+  if (!hit || !beforeTarget || !target || target === beforeTarget) return next;
+  const method=op.kind === "hunt" ? "share" : op.kind === "hunt-sudoku" ? "sudoku" : op.kind === "hunt-rotor" ? "rotor" : op.kind === "hunt-rsa" ? "rsa" : op.rung;
+  return {...next,teams:{...next.teams,[op.targetTeamId]:{...target,lastBreach:{
+    sequence:(beforeTarget.lastBreach?.sequence ?? 0)+1,attackerTeamId:teamId,generation:op.generation,method,atMs:next.nowMs ?? 0,points:target.score-beforeTarget.score,
+  }}}};
 }
 
 function applyMethodOp(
@@ -2730,6 +2736,7 @@ export function projectForTeam(
     lastRotateAtMs: team.lastRotateAtMs,
     rotateCooldownRemainingMs,
     rotateMinimumPenalty: disclosureRotateMinimum(state, teamId),
+    rotatePenalty: Math.min(team.score, rotationPenalty(state, teamId, state.contracts.filter(c => c.teamId === teamId && c.status === "open" && c.task.kind !== "rps-duel").length)),
     completedContractIds: team.completedContractIds.map(c => contractId({ tm: teamId, c })),
     huntedGenerations: team.huntedGenerations,
     sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
@@ -2819,6 +2826,7 @@ export function projectForTeam(
 
   return {
     clockMs: state.nowMs,
+    ...(team.lastBreach ? { lastBreach: team.lastBreach } : {}),
     phase: state.phase,
     prime: state.config.prime,
     threshold: state.config.threshold,
@@ -2876,4 +2884,8 @@ export function projectForTeam(
     ...(team.lastProve === undefined ? {} : { lastProve: team.lastProve }),
     ...(team.lastCipher === undefined ? {} : { lastCipher: team.lastCipher }),
   };
+}
+
+function rotationPenalty(state: CryptoBattleState, teamId: string, openCount: number): number {
+  return Math.max(disclosureRotateMinimum(state, teamId), openCount * Math.abs(state.config.scores.expiredOrder));
 }

@@ -391,3 +391,7 @@ New Caesar orders contain five symbols. The answer field explicitly requests spa
 ### HUNT opponent selection (#782)
 
 The HUNT panel prioritizes opponents with public evidence, lists five teams per page, and supports name/ID search and an evidence-only filter. Select a team and method to see one worksheet. New evidence does not replace the selected worksheet. Successful attacks disable that method for the current generation; ROTATE remains a separate defense action.
+
+## When an opponent recovers your secret
+
+A notice above the answer workspace identifies the attacker, secret type, generation and actual score loss. Draft input stays intact. Review defense opens the ROTATE impact before committing that action. After rotation, the notice is labeled as a previous-generation event. Only the latest notice is retained; polling does not replay it. Old history is not backfilled with guessed penalties.
