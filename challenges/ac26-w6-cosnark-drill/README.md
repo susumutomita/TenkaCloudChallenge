@@ -86,3 +86,5 @@ rehearsals are optional.
 The arithmetic scope follows the [pinned co-snark-prove assignment](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732/week6/problems/co-snark-prove/README.md): shared linear forms and their product.
 
 Reader revision: the primary route is hand calculation; comma-separated answer syntax, unchanged coefficient indices, independent one-use masks, and the product expansion before constructing shares are explicit.
+
+All generated operands and masks now lie in 0–6, with fixed divisor7, so the paper-first route uses one-digit factors. The independent full-range mask distribution is retained.

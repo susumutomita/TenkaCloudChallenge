@@ -22,10 +22,10 @@ from __future__ import annotations
 
 import hashlib
 
-#: Candidate field moduli. All six are prime; none is a modulus the assignment's README
+#: Hand-calculation field modulus. Seven is prime; none is a modulus the assignment's README
 #: or test suite ever uses (see EXCLUDED_PRIMES / EXCLUDED_WITNESS below for what those
 #: were).
-PRIMES = (83, 103, 107, 109, 113, 127)
+PRIMES = (7,)
 
 #: The assignment `co-snark-prove`'s own moduli (README worked example: modulus 97; the
 #: `python/tests/public.py` suite: 97, 101, 89, 101). None of these three is drawable from

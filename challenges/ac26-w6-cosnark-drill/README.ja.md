@@ -78,3 +78,5 @@ starterへそのまま写す経路、全ての隠す数、seedの非転送、別
 参照する算術の範囲は、[講座の固定版 co-snark-prove 課題](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732/week6/problems/co-snark-prove/README.md)の分担した線形計算と積です。
 
 読者レビュー対応：手計算を最初の導線にし、カンマ区切りの回答形式、係数の番号を変えないこと、独立な使い捨ての隠す数、積のかけらを作る前の展開式を明示しました。
+
+出題する係数・入力・隠す数はすべて0〜6、割る数は7に統一しました。紙で計算する入口に合わせ、隠す数を全範囲から独立に選ぶ前提も維持しています。
