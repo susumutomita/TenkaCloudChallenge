@@ -14,9 +14,9 @@ setter's own five verifiers — which missing detail lets a forged claim through
 The commitment is a Merkle tree over a small vector. **It is not a polynomial
 commitment**, and one opening does not say anything about the rows nobody asked about.
 
-Two things have to be bound into a leaf or the ordering does not help:
+This exercise encodes both the index and unambiguous fields in each leaf:
 
-  * its **index** — otherwise a leaf can be presented as coming from anywhere;
+  * its **index** — binding position directly (scheme D instead checks index-derived path directions);
   * unambiguous **field boundaries** — otherwise two different (index, value) pairs
     encode to the same bytes.
 
