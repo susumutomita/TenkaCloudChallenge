@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {starkPolynomials,type StarkTask} from '../game/src/stark.ts';
-export function StarkWorksheet({task,locale,busy,onSubmit}:{task:StarkTask;locale:'ja'|'en';busy:boolean;onSubmit:(answer:string)=>void}){
+export function StarkWorksheet({task,locale,busy,wrongCost,onSubmit}:{task:StarkTask;locale:'ja'|'en';busy:boolean;wrongCost:number;onSubmit:(answer:string)=>void}){
  const ja=locale==='ja',p=starkPolynomials(task),[values,setValues]=useState(['','','','']);
  const input=(i:number,label:string)=><label>{label}<input aria-label={label} inputMode="numeric" value={values[i]} onChange={e=>setValues(values.map((v,j)=>j===i?e.target.value:v))}/></label>;
  return <section className="tc-input-panel">
@@ -21,6 +21,7 @@ export function StarkWorksheet({task,locale,busy,onSubmit}:{task:StarkTask;local
  <p>{ja?'商の係数は計算済みです。偶数乗の部分と奇数乗の部分に分け、Y=X²と置きます。検査側が指定する数βを奇数側に掛けて足すと、最高の乗数（次数）が2から1に下がります。これはFRIという低次数検査の1回の折り畳みです。':'The quotient coefficients are supplied. Split even and odd powers and write Y=X². Multiply the odd part by the verifier’s number β and add it to the even part. The highest power (degree) drops from two to one. This is one fold from the low-degree test FRI.'}</p>
  <p>{ja?'一般式：Q=q₀+q₁X+q₂X² → F(Y)=(q₀+βq₁)+q₂Y。qは上の係数です。例：Q=2+3X+4X²、β=2ならF=1+4Y（2+2×3=8の余り1）。':'Writing q for the coefficients: Q=q₀+q₁X+q₂X² → F(Y)=(q₀+βq₁)+q₂Y. Example: Q=2+3X+4X² and β=2 gives F=1+4Y because 2+2×3=8 has remainder 1.'}</p>
  {input(3,`β=${task.beta}：${p.quotient[0]} + ${task.beta}×${p.quotient[1]} = □`)}
+ <p>{ja?`不正解は最大 ${wrongCost} 点減点。期限内なら再提出できます。`:`Incorrect answers cost up to ${wrongCost} points. Retry before the deadline.`}</p>
  <button disabled={busy||!values.every(v=>/^[0-6]$/.test(v))} onClick={()=>onSubmit(values.join(' '))}>{ja?'4個の計算を提出':'Submit four calculations'}</button>
  <p>{ja?'折り畳めてもRが0とは限りません。実行の正しさと折り畳みの正しさは別の検査です。':'A successful fold does not imply R is zero. Execution correctness and fold correctness are separate checks.'}</p>
  <details><summary>{ja?'本物のSTARKでさらに必要なこと':'What a full STARK additionally needs'}</summary><p>{ja?'本物では、マークル木（値の一覧を一つのハッシュへ束ねる構造）へのコミットメントで、質問前に値を固定します。次にランダムな場所の値と確認用データを開き、何度も折り畳んで低次数を検査します。秘密を隠すゼロ知識性には追加の乱数が必要です。この模型は全記録と式を表示し、割り切れる条件と1回の折り畳みを手計算します。コミットメント・ランダム質問・ゼロ知識化を実装したSTARKではありません。':'A full system commits to values before questions using a Merkle tree, which combines a list into a hash. It opens randomly requested values with authentication data and repeatedly folds to test low degree. Zero knowledge additionally requires randomness to hide secrets. This model displays the full trace and equations and practices divisibility and one fold. It does not implement commitments, random queries or zero-knowledge masking.'}</p></details>

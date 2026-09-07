@@ -146,7 +146,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (v.myContracts.some(c => c.task?.kind === "io-equivalence" &&
     (!rsaValue(c.task.a,5) || c.task.a < 1 || !rsaValue(c.task.b,5) || !rsaValue(c.task.c,5) ||
       !rsaValue(c.task.d,5) || c.task.d < 1 || !Array.isArray(c.task.missing) ||
-      c.task.missing.length !== 2 || c.task.missing.some((n:unknown)=>!rsaValue(n,4))))) return false;
+      c.task.missing.length !== 2 || c.task.missing.some((n:unknown)=>!rsaValue(n,4)) || (c.task.rotations !== undefined && (!Array.isArray(c.task.rotations) || c.task.rotations.length !== 2 || c.task.rotations.some((n:unknown)=>!rsaValue(n,16) || Number(n)<1)))))) return false;
   if (v.myContracts.some(c => c.task?.kind === "stark-trace" &&
     (!rsaValue(c.task.beta,7) || c.task.beta < 1 || !Array.isArray(c.task.trace) ||
       c.task.trace.length !== 3 || c.task.trace.some((n:unknown)=>!rsaValue(n,7))))) return false;
