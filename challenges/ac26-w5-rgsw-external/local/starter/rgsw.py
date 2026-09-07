@@ -1,9 +1,13 @@
 """The only file you edit.
 
-The goal: multiply an **encrypted bit** into an RLWE ciphertext, without anyone learning
-which way it went. Selector 0 turns the ciphertext into an encryption of zero; selector 1
-leaves the message alone; and the arithmetic is identical either way, so nothing about the
-result says which happened.
+Multiply a bit (0 or 1) supplied in encrypted form into a ciphertext, the data
+representing a message. This is a small arithmetic model, not practical security.
+Selector 0 gives an encryption of zero and selector 1 preserves the message when
+noise remains within the decoding budget. This does not prove freedom from leakage.
+A polynomial is an expression such as 1+2X, represented by coefficients [1,2].
+A ring is the supplied addition/multiplication rule for these coefficient arrays.
+RLWE has two arrays a,b; RGSW is a row structure for multiplying an encrypted bit.
+A gadget is the descending list of place weights used to reconstruct digits.
 
 You are not rebuilding the ring or RLWE — `participant.ring` supplies `ring_add`,
 `ring_mul`, `rlwe_encrypt` and the rest, correct. `ac26-w5-lwe-rlwe` is where those come
@@ -41,17 +45,16 @@ slot decrypts to something that looks almost right.
 
 ## No secret, deliberately
 
-`external_product` is not given the secret. It cannot decrypt the selector, and it must not
-need to: the two branches are the same arithmetic. If you find yourself wanting to know
+`external_product` is not given the secret. Do not decrypt the selector in this task; the two branches are the same arithmetic. If you find yourself wanting to know
 which bit it is, the design is telling you something.
 
 `params` carries `base`, `levels`, `degree`, `modulus`. They all change between
 checkpoints. Anything hardcoded is wrong somewhere.
 
-Run `make inspect` first.
+Use Inspect evidence in Participant Portal; implement decompose/recompose first and inspect decompose-round-trips.
 
-None of this is secure — the parameters are small enough to enumerate and the secret falls
-to linear algebra. It is a toy of the mechanism.
+These tiny key candidates can be enumerated. Unknown noise prevents treating
+the samples as exact linear equations. This is a toy of the mechanism.
 """
 
 from __future__ import annotations
@@ -155,7 +158,7 @@ def rgsw_encrypt(params: dict, secret, selector: int, material: dict) -> tuple:
 
 
 def external_product(params: dict, rgsw, ciphertext: dict) -> dict:
-    """`d . RGSW`, where `d` is `decompose(a) ++ decompose(b)` — length 2L.
+    """`d . RGSW`, where `d` is `decompose_poly(a) ++ decompose_poly(b)` — length 2L.
 
     Return `{"a": ..., "b": ...}`. No secret, and none needed.
     """
