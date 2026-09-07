@@ -354,6 +354,7 @@ export function buildScenario(id: ScenarioId): Scenario {
 
     case "snark-order": {
       for(let t=0;t<=1_200_000;t+=30_000){driver.advance(30_000);if(driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="snark-constraints"))break;}
+      if(!driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="snark-constraints"))throw new Error("no SNARK worksheet reached");
       break;
     }
     case "schnorr-lightning": {
