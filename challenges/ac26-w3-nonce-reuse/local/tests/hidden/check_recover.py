@@ -364,6 +364,15 @@ def check_repair(module, seed: str) -> list[str]:
     failures: list[str] = []
     group = secp_group()
     for label in LABELS:
+        witness_seed = f"{seed}:{label}:repair-witness"
+        try:
+            pair = module.repair_witness(witness_seed, group)
+            if not isinstance(pair, (tuple, list)) or len(pair) != 2 or any(type(i) is not int or not 0 <= i <= 64 for i in pair) or pair[0] == pair[1]:
+                failures.append("repair witness must contain two different allowed indices")
+            elif truncated_nonce(witness_seed, 1, f"trial-{pair[0]}".encode(), group) != truncated_nonce(witness_seed, 1, f"trial-{pair[1]}".encode(), group):
+                failures.append("repair witness inputs do not collide under the weak generator")
+        except Exception:
+            failures.append("repair witness could not be evaluated")
         secret = secret_key(seed, f"{label}-repair", group)
         note_list = [b"", b"\x00\xff", *[f"payment {index}".encode() for index in range(60)]]
         produced: dict[int, bytes] = {}

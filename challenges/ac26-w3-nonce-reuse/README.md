@@ -75,7 +75,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `reject` | 40 | `e1 = e2`, a cross-signer pair, and a log with no reuse |
 | `hunt` | 40 | The victim's key out of the noisy log, and whose it is |
 | `collision` | 40 | The truncated generator measured, against its actual space |
-| `repair` | 35 | A generator that collides on nothing it must not |
+| `repair` | 35 | Documented HMAC generator plus a weak-generator collision witness |
 
 All eight checkpoints have three hints, two points per hint (48 points in total).
 
@@ -140,22 +140,14 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: nine broken implementations. Three of them found
+`make reference-test` runs the mutation suite: 24 broken implementations. Three of them found
 real holes in the hidden tests while this problem was being written — the log had no
 non-accepting duplicate, no cross-signer duplicate, and the nonce-space check was distinctness
 rather than range. A fourth, "reports a recovery without confirming it", turned out to be an
 equivalent mutant on its own and is now mutated together with the validation it depends on.
 
-## Three-rung hint reader check (Issue #716)
+## Three-rung hints and verification (Issue #716)
 
-All eight checks now have mechanism, small example, and edit/submit hints, costing 2 points each (6 total). An independent reader used only participant instructions, hints, and the starter. Findings covered existing Point values, point-arithmetic APIs, prime group orders, HMAC byte encoding, and overstated security claims. Both locales now distinguish finite-range collisions from the inputs tested by this exercise.
+All eight checkpoints have three bilingual hints: mechanism, small example, named action. Required formulas and APIs are free. Repair grades the documented HMAC-SHA256 encoding and repair_witness(seed, group), which constructs two distinct trial-message indices colliding under the supplied weak generator. The function is called with different seeds; each returned pair is checked with that call’s seed. This is a finite regression test, not proof of collision freedom.
 
-This checks whether the explanation leads to implementation; it is not evidence of a successful live submission or a security proof for the signature scheme. The collision experiment now specifies key1, trial-{i} messages and the supplied seed. The checker independently recomputes counts, accepts a matching zero-collision result and rejects fabricated positive counts. The reference and starter describe the same conditions. Three checker regressions cover zero collisions, fabricated counts and the reference measurement.
-
-
-Review follow-up: detect now excludes equal-challenge pairs, parse covers normalized Point input, and the reference-test runner discovers the collision regressions. Direct Python execution passed three regressions and rejected all eleven mutants. Catalog validation passed; Docker and live Portal were not exercised for this follow-up.
-
-Review follow-up adds isolated equal-challenge logs and malformed normalized Points to grading, plus explicit imports and exception-handling syntax in both languages. All fifteen mutations are rejected; these are author-side checks, not participant play.
-
-
-Repair now grades the exact HMAC-SHA256 encoding published in the free statement, including empty and binary messages. The reference uses that same construction. Author validation: all 16 mutations were rejected, including plain SHA256 in place of HMAC. This is verifier evidence, not a participant browser playtest.
+Author validation rejected all 24 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.

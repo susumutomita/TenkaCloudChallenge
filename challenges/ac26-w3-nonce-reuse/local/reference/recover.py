@@ -188,3 +188,14 @@ def safe_nonce(secret: int, message: bytes, group) -> int:
     data = b"nonce-drill-v1" + len(message).to_bytes(8, "big") + message
     digest = hmac.new(key, data, hashlib.sha256).digest()
     return 1 + int.from_bytes(digest, "big") % (group.n - 1)
+
+
+def repair_witness(seed: str, group) -> tuple[int, int]:
+    from participant.schnorr import truncated_nonce
+    seen = {}
+    for i in range(65):
+        value = truncated_nonce(seed, 1, f"trial-{i}".encode(), group)
+        if value in seen:
+            return (seen[value], i)
+        seen[value] = i
+    raise AssertionError("65 draws from 64 outputs must collide")

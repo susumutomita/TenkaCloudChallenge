@@ -99,3 +99,13 @@ def safe_nonce(secret: int, message: bytes, group) -> int:
     output range cannot guarantee zero collisions for all inputs.
     """
     return 1
+
+
+def repair_witness(seed: str, group) -> tuple[int, int]:
+    """Return distinct i,j in 0..64 whose trial messages collide in truncated_nonce.
+
+    Use secret=1 and messages f"trial-{i}".encode(); the supplied weak generator
+    takes (seed, secret, message, group). Different seeds may need different pairs.
+    A constant pair is not a general regression witness.
+    """
+    return (0, 0)

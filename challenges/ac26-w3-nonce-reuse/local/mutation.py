@@ -20,6 +20,9 @@ REFERENCE = (ROOT / "reference" / "recover.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+    ("witness reuses one index", [("return (seen[value], i)", "return (i, i)")]),
+    ("witness ignores seed", [("value = truncated_nonce(seed, 1,", "value = truncated_nonce('fixed', 1,")]),
+    ("witness returns noncolliding pair", [("return (seen[value], i)", "return (0, 1)")]),
     ("accepts mismatched commitments", [('    if first["commitment"] != second["commitment"]:', '    if False:')]),
     ("recovers from a rejected transcript", [("    if not accepts(first, group) or not accepts(second, group):", "    if False:")]),
     ("confirms only Point input", [('    if isinstance(public, dict):', '    if isinstance(public, (dict, tuple, list)):\n        return False\n    if isinstance(public, dict):')]),
