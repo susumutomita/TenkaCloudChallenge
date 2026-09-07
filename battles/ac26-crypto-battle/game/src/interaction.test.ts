@@ -108,6 +108,7 @@ class Bot {
         return buildLeakOp(order.id);
       case "zk-sudoku":
         return freshPermutation(view.vault) ? buildProveSudokuOp(view.vault, order.id) : undefined;
+      case "stark-trace":
       case "io-equivalence":
       case "snark-constraints":
       case "ec-add":

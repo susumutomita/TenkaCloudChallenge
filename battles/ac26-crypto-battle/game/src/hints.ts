@@ -123,6 +123,11 @@ export const HINT_LEVELS = 3;
  * these rungs alone (three seeds x four kinds) before this landed.
  */
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
+  "stark-trace": [
+    {id:"stark-trace/1",text:()=>({ja:"まず実行表の各一歩が2乗の規則に合うか検査します。そのずれを式の余りへつなぎ、最後に商を折り畳みます。折り畳みが正しくても、実行表のずれは消えません。",en:"Check whether each trace step follows squaring, connect the mismatches to a remainder polynomial, then fold the quotient. A correct fold does not remove trace mismatches."})},
+    {id:"stark-trace/2",text:()=>({ja:"7で割った余りにします。2→5は5−2²=1。ずれu=1,v=3なら余りの定数2u−v=−1を7で割った余り6。商の定数2、Xの係数3、β=2なら折り畳みの定数は2+2×3=8の余り1です。",en:"Take remainders by7. Step2→5 gives5−2²=1. Mismatches u=1,v=3 give remainder constant2u−v=−1, hence6. Quotient constant2, X coefficient3 and β=2 give fold constant2+2×3=8, hence1."})},
+    {id:"stark-trace/3",text:ctx=>{if(ctx.task.kind!=="stark-trace")throw new Error("wrong hint task");const [a,b,c]=ctx.task.trace;return {ja:`最初は${b}−${a}²、次は${c}−${b}²の余りを入力。その答えをu,vとして2u−vの余りを3欄目へ。表示された商Qの定数に、${ctx.task.beta}×Xの係数を足した余りを最後の欄へ入れます。`,en:`Enter remainders of ${b}−${a}² and ${c}−${b}². Call them u,v and enter remainder2u−v in field3. In the final field enter Q’s displayed constant plus ${ctx.task.beta} times its X coefficient, reduced by7.`};}},
+  ],
   "io-equivalence": [
     {id:"io-equivalence/1",text:()=>({ja:"まず全入力で同じ答えになるかを確認します。次に答えを保って表へ変換した結果を比べます。同じ機能なら、元がどちらかを結果から見分けられないことがiOの条件です。",en:"First compare the answers on every input. Then compare the transformed tables that preserve these answers. iO requires equivalent programs to have indistinguishable transformed results."})},
     {id:"io-equivalence/2",text:()=>({ja:"5で割った余りを使います。2×3+1=7なら余り2。表[0,1,2,3]を右へ1個回すと[3,0,1,2]で、入力2は位置(2+1)の3から答え2を読みます。",en:"Take remainders by5. 2×3+1=7 gives remainder2. Rotate [0,1,2,3] right by1 to get [3,0,1,2]; input2 reads position(2+1)=3 and returns2."})},
