@@ -141,3 +141,6 @@ Zero. No cloud account, no AWS resources.
 verify perfectly and are broken only against an attacker. The length-prefix mutation is the reason
 the reference's preimage layout puts its two variable-length fields adjacent — with the points in
 between, that mutation survived.
+
+
+Eight checkpoints now have three hint rungs. A participant-only reader found missing byte-encoding APIs, an incorrect collision guarantee, ambiguous input rules, and a set-shaped dictionary example. The bilingual text and starter explanation were corrected. Author inspection of the existing reference confirmed the challenge-reduction contract; that inspection is not participant-play evidence. Catalog checks passed. Runtime/Portal play was not performed for this documentation revision.

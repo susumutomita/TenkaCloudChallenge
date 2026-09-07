@@ -102,7 +102,7 @@ def cross_protocol_witness(group) -> dict:
         {"domain_a", "domain_b", "message", "secret", "nonce"}
 
     such that ONE signature, produced with that weak challenge, verifies under BOTH
-    domains. Your own `challenge` must then reject the second one, which is the whole
-    point of the exercise.
+    domains. Your own `challenge_preimage` must encode the two domains differently.
+    `challenge` returns a number; it is not an acceptance decision.
     """
     return {}
