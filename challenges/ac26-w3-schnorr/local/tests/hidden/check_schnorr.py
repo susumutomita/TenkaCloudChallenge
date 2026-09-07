@@ -306,9 +306,9 @@ def check_sign_verify(module, seed: str) -> list[str]:
                               (group.generator, 1, 2), None):
                 try:
                     if module.verify(public, message, malformed, DOMAINS[0], group):
-                        failures.append("a malformed signature was accepted")
+                        failures.append("signature verification did not satisfy its acceptance contract")
                 except Exception as error:
-                    failures.append(f"malformed signature raised {type(error).__name__} instead of False")
+                    failures.append("signature verification did not return a result")
             if not module.verify(public, message, signature, DOMAINS[0], group):
                 failures.append("an honest signature was rejected")
                 break

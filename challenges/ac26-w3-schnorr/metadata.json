@@ -96,7 +96,7 @@
           },
           {
             "id": "keygen-hint-3",
-            "content": "schnorr.pyのpublic_keyでsecretが整数で1以上group.n未満か検査し、group.generator.scalar_mul(secret)を返します。validate_public_keyではgroup.contains(point)とpoint.is_infinityを確認し、不適切な点はFalse。keygenを提出します。 public_keyのsecretとcommitのnonceは `type(value) is int and 1 <= value < group.n` で検査し、満たさなければInvalidKeyを送出します。True/Falseは整数として受け付けません。",
+            "content": "schnorr.pyのpublic_keyで `type(secret) is int and 1 <= secret < group.n` を検査します。満たさなければInvalidKey、満たせばgroup.generator.scalar_mul(secret)を返します。validate_public_keyではgroup.contains(point)とpoint.is_infinityを確認し、不適切な点はFalse。両方を実装してkeygenを提出します。",
             "penalty": 2
           }
         ]
@@ -120,7 +120,7 @@
           },
           {
             "id": "sigma-hint-3",
-            "content": "commitは1〜n−1のnonceからgroup.generator.scalar_mul(nonce)を返します。respondはnonce、challenge、secretで足し算と掛け算をし、group.nで余りを取ります。sigmaを提出します。 public_keyのsecretとcommitのnonceは `type(value) is int and 1 <= value < group.n` で検査し、満たさなければInvalidKeyを送出します。True/Falseは整数として受け付けません。",
+            "content": "commitで `type(nonce) is int and 1 <= nonce < group.n` を検査し、満たさなければInvalidKeyを送出します。満たせばgroup.generator.scalar_mul(nonce)を返します。respondはchallenge*secretにnonceを足し、group.nで割った余りを返します。両方を実装してsigmaを提出します。",
             "penalty": 2
           }
         ]
@@ -301,7 +301,7 @@
             },
             {
               "id": "keygen-hint-3",
-              "content": "In schnorr.py, public_key checks that secret is an integer from1 through group.n−1 and returns group.generator.scalar_mul(secret). In validate_public_key check group.contains(point) and point.is_infinity, returning False for unusable points. Submit keygen. Check secret in public_key and nonce in commit with `type(value) is int and 1 <= value < group.n`; otherwise raise InvalidKey. True and False are booleans, not accepted integers here."
+              "content": "In public_key check `type(secret) is int and 1 <= secret < group.n`. Raise InvalidKey if it fails; otherwise return group.generator.scalar_mul(secret). In validate_public_key check group.contains(point) and point.is_infinity and return False for unusable points. Implement both, then submit keygen."
             }
           ]
         },
@@ -319,7 +319,7 @@
             },
             {
               "id": "sigma-hint-3",
-              "content": "commit returns group.generator.scalar_mul(nonce) for a nonce in1..n−1. respond multiplies challenge by secret, adds nonce, and takes the remainder modulo group.n. Submit sigma. Check secret in public_key and nonce in commit with `type(value) is int and 1 <= value < group.n`; otherwise raise InvalidKey. True and False are booleans, not accepted integers here."
+              "content": "In commit check `type(nonce) is int and 1 <= nonce < group.n`; raise InvalidKey if it fails. Otherwise return group.generator.scalar_mul(nonce). In respond add nonce to challenge*secret and return the remainder by group.n. Implement both, then submit sigma."
             }
           ]
         },
