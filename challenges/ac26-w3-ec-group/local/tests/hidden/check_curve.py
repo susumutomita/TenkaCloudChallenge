@@ -36,7 +36,7 @@ def _valid_point(module, curve, point, p: int) -> bool:
         return False
     if point.is_infinity:
         return point.x is None and point.y is None
-    return isinstance(point.x, int) and isinstance(point.y, int) and 0 <= point.x < p
+    return isinstance(point.x, int) and isinstance(point.y, int) and 0 <= point.x < p and 0 <= point.y < p and point.curve.params == curve.params
 
 
 def check_on_curve(module, seed: str) -> list[str]:
@@ -141,7 +141,7 @@ def check_double(module, seed: str) -> list[str]:
         reference = _ReferenceCurve(p, a, b)
         exceptional = set(order_two_points(p, a, b))
         if not exceptional:
-            failures.append("fixture is degenerate: this curve has no vertical-tangent point")
+            failures.append("this parameter set has no point with y=0")
             continue
         for coords in every:
             point = curve.point(*coords)
@@ -155,7 +155,7 @@ def check_double(module, seed: str) -> list[str]:
             want = reference.add(coords, coords)
             if _coords(got) != want:
                 if coords in exceptional:
-                    failures.append("doubling a point whose tangent is vertical is wrong")
+                    failures.append("doubling a point whose y coordinate is zero is wrong")
                 else:
                     failures.append("doubling a point gives the wrong result")
                 return failures
@@ -189,6 +189,9 @@ def check_scalar(module, seed: str) -> list[str]:
                     else:
                         failures.append("scalar multiplication gives the wrong point")
                     return failures
+            for k in (0, 2, -3):
+                if _coords(k * point) != reference.mul(coords, k) or _coords(point * k) != reference.mul(coords, k):
+                    return ["the multiplication operators must agree with scalar multiplication"]
             # A negative scalar has to mean something, and there is only one sane choice.
             if _coords(point.scalar_mul(-3)) != reference.mul(coords, -3):
                 failures.append("a negative scalar does not give the inverse of the positive one")
@@ -203,7 +206,7 @@ def check_trace(module, seed: str) -> list[str]:
         reference = _ReferenceCurve(p, a, b)
         for coords in sample_points(seed, label)[:3]:
             point = curve.point(*coords)
-            for k in (5, 13, 27):
+            for k in (0, 5, 13, 27):
                 try:
                     rows = module.double_and_add_trace(point, k)
                 except Exception as error:  # noqa: BLE001
@@ -215,10 +218,16 @@ def check_trace(module, seed: str) -> list[str]:
                     if not isinstance(row, dict):
                         failures.append("a trace row is not a row")
                         return failures
-                    if row.get("bit") != ((k >> index) & 1):
+                    if type(row.get("index")) is not int or row["index"] != index:
+                        return ["trace row indices must count from zero"]
+                    if row.get("accumulator_before") != _render(reference.mul(coords, k & ((1 << index) - 1))):
+                        return ["the accumulator before the step is wrong"]
+                    if row.get("addend_before") != _render(reference.mul(coords, 1 << index)):
+                        return ["the addend before the step is wrong"]
+                    if type(row.get("bit")) is not int or row.get("bit") != ((k >> index) & 1):
                         failures.append("a trace row's bit does not match the scalar")
                         return failures
-                    if bool(row.get("added")) != bool((k >> index) & 1):
+                    if type(row.get("added")) is not bool or row["added"] != bool((k >> index) & 1):
                         failures.append("a trace row adds when its bit says otherwise")
                         return failures
                     # The accumulator after step i must be the low i+1 bits times P.
@@ -264,6 +273,13 @@ def check_properties(module, seed: str) -> list[str]:
             if base.scalar_mul(k * m) != base.scalar_mul(k).scalar_mul(m):
                 failures.append("(k*m)P is not k(mP)")
                 return failures
+    equivalent = module.Curve(p, a, b)
+    for coords in every[:6]:
+        left, right = curve.point(*coords), equivalent.point(*coords)
+        if left != right or hash(left) != hash(right):
+            return ["equivalent curves must produce equal points with equal hashes"]
+        if _coords(left + right) != _ReferenceCurve(p, a, b).add(coords, coords):
+            return ["equal curve parameters must permit addition across instances"]
     # Picked so it is always a different curve. Deriving it from the seed instead would
     # sometimes land on the same one, and the check would silently skip itself -- which
     # is how a "curves may be mixed" mutation survived this suite once.
@@ -296,6 +312,12 @@ def check_secp256k1(module, _seed: str) -> list[str]:
     if not curve.contains(g):
         return ["the standard generator was not accepted as being on the curve"]
     n = params["n"]
+    reference = _ReferenceCurve(params["p"], params["a"], params["b"])
+    base_coords = (params["gx"], params["gy"])
+    for scalar in (2, 7, 11, n - 1, n, n + 1):
+        got = g.scalar_mul(scalar)
+        if not _valid_point(module, curve, got, params["p"]) or _coords(got) != reference.mul(base_coords, scalar):
+            return ["scalar multiplication on the real curve gives the wrong point"]
     if not g.scalar_mul(n).is_infinity:
         failures.append("multiplying the generator by the group order is not the identity")
     if g.scalar_mul(n - 1) != -g:
@@ -306,7 +328,7 @@ def check_secp256k1(module, _seed: str) -> list[str]:
     if doubled != g.scalar_mul(2) or not curve.contains(doubled):
         failures.append("doubling the generator disagrees with multiplying it by two")
     if g.scalar_mul(7) + g.scalar_mul(11) != g.scalar_mul(18):
-        failures.append("the homomorphism fails on the real curve")
+        failures.append("adding scalar multiples disagrees with adding their counts on the large curve")
     return failures
 
 

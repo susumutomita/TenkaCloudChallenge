@@ -35,6 +35,7 @@ from urllib.request import Request, urlopen
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from participant.workbench import PortalEditorSupport
+from participant.isolation import protect_supervisor
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-ec-group"
@@ -48,6 +49,7 @@ MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
 REQUEST_TIMEOUT_SECONDS = 15
+VERIFIER_TIMEOUT_SECONDS = RUN_TIMEOUT_SECONDS + 5
 #: Cap for a forwarded verdict message; matches the platform schema's limit.
 MAX_MESSAGE_CHARS = 2000
 
@@ -83,8 +85,8 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w3-ec-group',
     problem_name='(0, 0) は無限遠点ではない',
     problem_name_en='(0, 0) is not the point at infinity',
-    description='有限体上の楕円曲線の点が群をなすことを、例外ケースまで含めて実装で確かめる。toy 曲線の多くは (0, 0) を含むので、それを単位元に流用する実装は本物の点と単位元を区別できなくなる。',
-    description_en='Verify by building it that the points of an elliptic curve over a finite field form a group, exceptional cases included. Most of the toy curves here contain (0, 0), so an implementation that borrows it for the identity cannot tell the identity from a real point.',
+    description='署名の土台になる点の計算を作ります。まず7で割った余りで(1,3)が曲線上か確認。特別な点Oと普通の点(0,0)を分け、足し算から大きな数の計算へ進みます。',
+    description_en='Build point arithmetic used by signatures. Start by checking (1,3) with remainders after division by 7. Keep the special point O separate from (0,0), then extend addition to large inputs.',
     checkpoint_labels={'on-curve': '曲線上かどうかを判定する', 'identity': '単位元と逆元', 'add': '相異なる点を足す', 'double': '同じ点を足す', 'scalar': 'double-and-add で k 倍する', 'trace': '各ビットで何が起きたかを出す', 'properties': '見たことのない曲線で群の公理を通す', 'secp256k1': '実運用パラメータでも同じ抽象を動かす'},
     checkpoint_labels_en={'on-curve': 'Decide what is on the curve', 'identity': 'The identity and the inverse', 'add': 'Add two different points', 'double': 'Add a point to itself', 'scalar': 'Multiply by k with double-and-add', 'trace': 'Show what each bit did', 'properties': 'Hold the axioms on a curve you have not seen', 'secp256k1': 'Run the same abstraction on real parameters'},
     submitted_files=('curve.py',),
@@ -121,7 +123,7 @@ def proxy_verdict(
     )
     try:
         # VERIFIER_URL is a trusted Compose-only environment value.
-        with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urlopen(request, timeout=VERIFIER_TIMEOUT_SECONDS) as response:  # noqa: S310
             response_body = response.read(MAX_BODY_BYTES + 1)
             if len(response_body) > MAX_BODY_BYTES:
                 return failed_verdict(body)
@@ -239,6 +241,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    protect_supervisor()
     # Host reachability is restricted by docker-compose.yml to the loopback publish.
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # noqa: S104
 
