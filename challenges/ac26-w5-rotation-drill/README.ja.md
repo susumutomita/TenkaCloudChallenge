@@ -77,3 +77,5 @@ inspect/testは採点用コンテナを残すので、`make verifier-down` で�
 [講義の位置付け](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/c088f8e6f301dedcd80b6dd9c321a1cd83410637/week5/README.md)。
 [Pythonの丸め規則](https://docs.python.org/3/library/functions.html#round)。
 [実際のTFHEブートストラップ](https://www.zama.org/post/tfhe-deep-dive-part-4)。
+
+参加者に見える資料だけの独立読みで、2n位置の一周と0/1の鍵が説明より先に使われている点を確認しました。目盛りの変換より前に、符号付き8位置の図と鍵の値域を定義しています。採点・配布データは変更していません。

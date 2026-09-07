@@ -84,3 +84,5 @@ Participant-only reading and runtime evidence are recorded in
 [Course context](https://github.com/zk-tokyo/advanced-cryptography-2026/blob/c088f8e6f301dedcd80b6dd9c321a1cd83410637/week5/README.md).
 [Python rounding rule](https://docs.python.org/3/library/functions.html#round).
 [Real TFHE bootstrapping](https://www.zama.org/post/tfhe-deep-dive-part-4).
+
+Independent participant-only reading found that the 2n-position cycle and binary key were used before being defined. The statement now introduces both before table scaling, with a signed eight-position diagram. Grading and fixtures are unchanged.
