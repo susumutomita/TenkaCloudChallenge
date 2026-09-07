@@ -98,6 +98,16 @@ class LearningContract(unittest.TestCase):
         self.assertEqual(message_outcomes,{(True,True),(True,False)})
         self.assertEqual(divisors,{5,7})
 
+    def test_final_hint_construction_passes_every_small_domain(self):
+        people = {5: {1:(2,0),4:(1,0)},7:{1:(2,0),2:(0,1),4:(1,0)}}
+        for p in (5,7):
+            for secret in range(1,p):
+                for scope in range(p):
+                    u,v=people[p][secret*secret%p]
+                    rows=[[secret,scope,0],[secret,scope,1],[p-secret,scope,0],[u,scope,0],[v,scope+1,0]]
+                    self.assertTrue(valid_schedule({'p':p,'secret':secret,'scope':scope},rows))
+                    self.assertEqual(normalize_answer('collision',str(rows)),tuple(tuple(r) for r in rows))
+
     def test_every_small_domain_has_a_joint_schedule_witness(self):
         for p in (5,7):
             for secret in range(1,p):
