@@ -38,3 +38,5 @@ AWSリソースは作りません。起動中は手元のDockerのCPU・メモ�
 - rootの `make install && make agent-gate`: metadataとカタログの検証。
 
 実参加者HTTP経路と、hidden/referenceを読まない初回読解の飛躍・再読結果は `local/tests/hidden/READER.md` に記録します。実AWS・第三者参加者のプレイは未実施です。
+
+Issue #716 の再読で、遅い関数の保存名と小例での比較手順を明記しました。証跡は `local/tests/hidden/READER.md`。参照検証で変異14件を検出し、公開プロセスの分離検証が成功。実workbenchが必要な2件はauthorターゲットではスキップです。
