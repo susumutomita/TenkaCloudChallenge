@@ -34,7 +34,7 @@
   "estimatedDuration": "30-45 分",
   "shortDescription": "小さな数を足すプログラムを一歩ずつ追います。機械の承認と、本来の規則を比べ、主張の条件を確かめる8つの演習です。",
   "description": "小さな数を足すプログラムを一歩ずつ追います。機械の承認と、本来の規則を比べ、主張の条件を確かめる8つの演習です。 zkVMで証明対象とする計算・主張の条件の模型。暗号証明の生成は対象外。",
-  "instructions": "## 前提\n\n割引を足して、上限以下のときだけ承認するプログラムを調べます。この機械は0〜m−1までしか保存できず、**足すたびにmで割った余りへ戻します**。普通の合計と違う値になったら、承認の結果も変わるでしょうか。\n\n**最初の操作：**「証拠を確認」の `m =` から `other_limit =` までの代入文だけを `python3` に貼り、1行目の合計を出してください。出た数を `exact` の回答欄へ提出し、正解になれば最初の一歩です。全8欄を順に進めます。\n\nPythonの対話入力では、`for` の字下げした行の後に空行を1回入れてから最後の式を入力します。\n\nPythonを開けないときは、エディタの `zkvm_trace_drill.py` を使います。1〜7行目の各関数の `return None` を対応する行のコード全体に置き換え、最後の式へ `return` を付けます。「公開テストを実行」で自分の値が出ます。\n\n`discounts` は足す三つの数、`limit` は承認できる上限、`m` は割る数です。`x % m` は「xをmで割った余り」で、例は `9 % 8 = 1`。`sum` は合計。`<=` は以下、`>=` は以上、`==` は等しいか、`and` は両方を満たす、`not` は反対の判定です。`True` ははい、`False` はいいえ。`[i]` は0番目から数えた位置、`case[\"limit\"]` はその例の上限です。\n\nプログラムがそのとおりに実行されたことを証明する仕組みをzkVMと呼びます。この演習では暗号証明は作らず、**証明で確かめる計算と主張の条件**を扱います。同じ入力でも、プログラムの規則が違えば主張の成否も変わります。最後はその違いが出る入力を自分で作ります。\n\n**一桁の見本（提出は自分の画面の数）：** m=8、discounts=[7,2,1]、limit=3。機械は7→1→2と保存します。普通の合計は10です。\n\n### 1. 普通に足した合計 — `exact`\n\nまず、上限や機械の制限を考えずに合計を出します。後で「本来は承認してよいか」を比べる基準になります。\n\n```python\nsum(discounts)\n```\n\n### 2. 機械の途中経過を記録する — `trace`\n\n各足し算の直後にmで割った余りを保存します。この途中経過の列をtrace（計算の記録）と呼びます。appendはリストの末尾に追加する操作です。\n\n```python\ntotal = 0\nsteps = []\nfor amount in discounts:\n    total = (total + amount) % m\n    steps.append(total)\n\nsteps\n```\n\n### 3. どの足し算で桁があふれたか — `overflow`\n\n今回の足し算で、余りに直す前の合計rawがm以上なら、保存できる範囲を超えています。これをoverflow（桁あふれ）と呼びます。前の足し算であふれていても、今回もあふれたとは限りません。\n\n```python\ntotal = 0\nflags = []\nfor amount in discounts:\n    raw = total + amount\n    flags.append(raw >= m)\n    total = raw % m\n\nflags\n```\n\n### 4. 二つの承認結果を比べる — `decision`\n\n余りに戻す操作はmの倍数を取り除くだけなので、最後にまとめて `full % m` としても同じ値です。見本では途中で8を一つ除いた2と、10を8で割った余り2が一致します。\n\n左は機械の合計で承認するか、右は普通の合計で承認するかです。Trueは「はい」、Falseは「いいえ」。承認は上限limit以下のときです。\n\n```python\nfull = sum(discounts)\n(full % m <= limit), (full <= limit)\n```\n\n### 5. 不正な承認を見つける — `exploit`\n\n不正な承認（exploit）は「機械が承認した」「普通の合計は上限を超える」の両方が必要です。上限を超えていても、機械が拒否した入力は含めません。casesは四つの入力例です。\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    answers.append(full % m <= case[\"limit\"] and full > case[\"limit\"])\n\nanswers\n```\n\n### 6. 足りない条件の反例を選ぶ — `predicate`\n\n「普通の合計が上限を超える」だけを検査する人がいます。その人は通すが、本当は不正な承認でない例をTrueにします。条件の不足を示す例を反例と呼びます。\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    weak = full > case[\"limit\"]\n    genuine = full % m <= case[\"limit\"] and weak\n    answers.append(weak and not genuine)\n\nanswers\n```\n\n### 7. 報告を計算し直して確かめる — `tamper`\n\nreportsには別の人の「不正な承認だった」という報告が並びます。自分で計算した判定と一致すればTrue。報告をそのまま採点すると、計算の正しさを確かめられません。lenは個数、rangeは0から順にその個数分をたどります。\n\n```python\nanswers = []\nfor i in range(len(cases)):\n    case = cases[i]\n    full = sum(case[\"discounts\"])\n    actual = full % m <= case[\"limit\"] and full > case[\"limit\"]\n    answers.append(reports[i] == actual)\n\nanswers\n```\n\n### 8. 別のプログラムでしか通らない入力を作る — `binding`\n\n同じ機械の足し算でも、今回の `program` は上限 `limit`、別の `other_program` は上限 `other_limit` を使います。別のプログラムで不正な承認を示せても、今回のプログラムの証拠になるでしょうか。\n\n上限は `0 <= limit < other_limit < m` になるように用意されています。\n\n**自分で三つの数 `[a,b,c]` を選んでください。** 各数は0〜m−1。普通の合計を `full=a+b+c`、保存値を `stored=full % m` として、次の両方を満たす入力を提出します。\n\n- 普通の合計が別の上限も超える：`full > other_limit`\n- 今回は拒否、別のプログラムでは承認：`limit < stored <= other_limit`\n\n一桁の見本：m=8、今回の上限3、別の上限5なら、[7,5,0]は普通の合計12、保存値4。今回は4>3で拒否し、別のプログラムは4<=5で不正に承認します。\n\n見本の数を自分の画面の条件に合わせて作り直し、三つを `binding` 欄へ提出します。条件を満たす入力ならどれでも正解です。自動で探す場合は、スターターの `binding(m, limit, other_limit)` を自分で実装してください。\n\n",
+  "instructions": "## 前提\n\n割引を足して、上限以下のときだけ承認するプログラムを調べます。この機械は0〜m−1までしか保存できず、**足すたびにmで割った余りへ戻します**。普通の合計と違う値になったら、承認の結果も変わるでしょうか。\n\n**最初の操作：**「証拠を確認」の `m =` から `other_limit =` までの代入文だけを `python3` に貼り、1行目の合計を出してください。出た数を `exact` の回答欄へ提出し、正解になれば最初の一歩です。全8欄を順に進めます。\n\n**回答形式：** 複数の結果は `[7,1,2]` や `[True,False]` のように角括弧と半角カンマを使います。一つの数なら数だけを入力します。見本ではなく、自分の画面の値を使ってください。\n\nPythonの対話入力では、`for` の字下げした行の後に空行を1回入れてから最後の式を入力します。\n\nPythonを開けないときは、エディタの `zkvm_trace_drill.py` を使います。1〜7行目の各関数の `return None` を対応する行のコード全体に置き換え、最後の式へ `return` を付けます。「公開テストを実行」で自分の値が出ます。\n\n`discounts` は足す三つの数、`limit` は承認できる上限、`m` は割る数です。`x % m` は「xをmで割った余り」で、例は `9 % 8 = 1`。`sum` は合計。`<=` は以下、`>=` は以上、`==` は等しいか、`and` は両方を満たす、`not` は反対の判定です。`True` ははい、`False` はいいえ。`[i]` は0番目から数えた位置、`case[\"limit\"]` はその例の上限です。\n\nプログラムがそのとおりに実行されたことを証明する仕組みをzkVMと呼びます。この演習では暗号証明は作らず、**証明で確かめる計算と主張の条件**を扱います。同じ入力でも、プログラムの規則が違えば主張の成否も変わります。最後はその違いが出る入力を自分で作ります。\n\n**一桁の見本（提出は自分の画面の数）：** m=8、discounts=[7,2,1]、limit=3。機械は7→1→2と保存します。普通の合計は10です。\n\n### 1. 普通に足した合計 — `exact`\n\nまず、上限や機械の制限を考えずに合計を出します。後で「本来は承認してよいか」を比べる基準になります。\n\n```python\nsum(discounts)\n```\n\n### 2. 機械の途中経過を記録する — `trace`\n\n各足し算の直後にmで割った余りを保存します。この途中経過の列をtrace（計算の記録）と呼びます。appendはリストの末尾に追加する操作です。\n\n```python\ntotal = 0\nsteps = []\nfor amount in discounts:\n    total = (total + amount) % m\n    steps.append(total)\n\nsteps\n```\n\n### 3. どの足し算で桁があふれたか — `overflow`\n\n今回の足し算で、余りに直す前の合計rawがm以上なら、保存できる範囲を超えています。これをoverflow（桁あふれ）と呼びます。前の足し算であふれていても、今回もあふれたとは限りません。\n\n```python\ntotal = 0\nflags = []\nfor amount in discounts:\n    raw = total + amount\n    flags.append(raw >= m)\n    total = raw % m\n\nflags\n```\n\n### 4. 二つの承認結果を比べる — `decision`\n\n余りに戻す操作はmの倍数を取り除くだけなので、最後にまとめて `full % m` としても同じ値です。見本では途中で8を一つ除いた2と、10を8で割った余り2が一致します。\n\n左は機械の合計で承認するか、右は普通の合計で承認するかです。Trueは「はい」、Falseは「いいえ」。承認は上限limit以下のときです。\n\n```python\nfull = sum(discounts)\n(full % m <= limit), (full <= limit)\n```\n\n### 5. 不正な承認を見つける — `exploit`\n\n不正な承認（exploit）は「機械が承認した」「普通の合計は上限を超える」の両方が必要です。上限を超えていても、機械が拒否した入力は含めません。casesは四つの入力例です。\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    answers.append(full % m <= case[\"limit\"] and full > case[\"limit\"])\n\nanswers\n```\n\n### 6. 足りない条件の反例を選ぶ — `predicate`\n\n「普通の合計が上限を超える」だけを検査する人がいます。その人は通すが、本当は不正な承認でない例をTrueにします。条件の不足を示す例を反例と呼びます。\n\n```python\nanswers = []\nfor case in cases:\n    full = sum(case[\"discounts\"])\n    weak = full > case[\"limit\"]\n    genuine = full % m <= case[\"limit\"] and weak\n    answers.append(weak and not genuine)\n\nanswers\n```\n\n### 7. 報告を計算し直して確かめる — `tamper`\n\nreportsには別の人の「不正な承認だった」という報告が並びます。自分で計算した判定と一致すればTrue。報告をそのまま採点すると、計算の正しさを確かめられません。lenは個数、rangeは0から順にその個数分をたどります。\n\n```python\nanswers = []\nfor i in range(len(cases)):\n    case = cases[i]\n    full = sum(case[\"discounts\"])\n    actual = full % m <= case[\"limit\"] and full > case[\"limit\"]\n    answers.append(reports[i] == actual)\n\nanswers\n```\n\n### 8. 別のプログラムでしか通らない入力を作る — `binding`\n\n同じ機械の足し算でも、今回の `program` は上限 `limit`、別の `other_program` は上限 `other_limit` を使います。別のプログラムで不正な承認を示せても、今回のプログラムの証拠になるでしょうか。\n\n上限は `0 <= limit < other_limit < m` になるように用意されています。\n\n**自分で三つの数 `[a,b,c]` を選んでください。** 各数は0〜m−1。普通の合計を `full=a+b+c`、保存値を `stored=full % m` として、次の両方を満たす入力を提出します。\n\n- 普通の合計が別の上限も超える：`full > other_limit`\n- 今回は拒否、別のプログラムでは承認：`limit < stored <= other_limit`\n\n一桁の見本：m=8、今回の上限3、別の上限5なら、[7,5,0]は普通の合計12、保存値4。今回は4>3で拒否し、別のプログラムは4<=5で不正に承認します。\n\n見本の数を自分の画面の条件に合わせて作り直し、三つを `binding` 欄へ提出します。条件を満たす入力ならどれでも正解です。自動で探す場合は、スターターの `binding(m, limit, other_limit)` を自分で実装してください。\n\n",
   "writeup": "実行どおりの記録があっても、主張の条件は別に確かめます。不正な承認には機械の承認と普通の合計の超過が両方必要です。さらに、確認したプログラム番号と主張が、依頼と同じでなければなりません。",
   "tags": [
     "advanced-cryptography-2026",
@@ -112,7 +112,7 @@
           },
           {
             "id": "trace-hint-3",
-            "content": "totalを0にする。自分のdiscountsの一つ目を足してmで割った余りを記録。同じtotalへ次の数を足して余りを記録。三つ目までの三つの記録をtraceへ。",
+            "content": "totalを0にする。自分のdiscountsの一つ目を足してmで割った余りを記録。同じtotalへ次の数を足して余りを記録。三つ目までの三つの記録をtraceへ。 複数の結果は角括弧と半角カンマで囲みます。",
             "penalty": 2
           }
         ]
@@ -135,7 +135,7 @@
           },
           {
             "id": "overflow-hint-3",
-            "content": "各段で、今保存しているtotalへ次のamountを足したrawを見る。rawがm以上ならTrue、未満ならFalseを記録。その後totalをrawの余りに替え、三つの判定をoverflowへ。",
+            "content": "各段で、今保存しているtotalへ次のamountを足したrawを見る。rawがm以上ならTrue、未満ならFalseを記録。その後totalをrawの余りに替え、三つの判定をoverflowへ。 複数の結果は角括弧と半角カンマで囲みます。",
             "penalty": 2
           }
         ]
@@ -153,12 +153,12 @@
           },
           {
             "id": "decision-hint-2",
-            "content": "見本の機械の合計は2、普通は10、上限3。2<=3はTrue、10<=3はFalseなので(True,False)。",
+            "content": "見本の機械の合計は2、普通は10、上限3。2<=3はTrue、10<=3はFalseなので[True,False]。",
             "penalty": 2
           },
           {
             "id": "decision-hint-3",
-            "content": "自分の三つの合計fullを出す。fullをmで割った余りがlimit以下かを左に、fullそのものがlimit以下かを右にしてdecisionへ。",
+            "content": "自分の三つの合計fullを出す。fullをmで割った余りがlimit以下かを左に、fullそのものがlimit以下かを右にしてdecisionへ。 複数の結果は角括弧と半角カンマで囲みます。",
             "penalty": 2
           }
         ]
@@ -181,7 +181,7 @@
           },
           {
             "id": "exploit-hint-3",
-            "content": "casesの各例でdiscountsを足す。合計の余りがその例のlimit以下、かつ普通の合計がlimitより大きければTrue。それ以外はFalse。表示順の四つをexploitへ。",
+            "content": "casesの各例でdiscountsを足す。合計の余りがその例のlimit以下、かつ普通の合計がlimitより大きければTrue。それ以外はFalse。表示順の四つをexploitへ。 複数の結果は角括弧と半角カンマで囲みます。",
             "penalty": 2
           }
         ]
@@ -204,7 +204,7 @@
           },
           {
             "id": "predicate-hint-3",
-            "content": "各例で普通の合計>limitをweakとする。5行目と同じ二条件を満たすかをgenuineとする。weakがTrueでgenuineがFalseの例だけTrue。四つをpredicateへ。",
+            "content": "各例で普通の合計>limitをweakとする。5行目と同じ二条件を満たすかをgenuineとする。weakがTrueでgenuineがFalseの例だけTrue。四つをpredicateへ。 複数の結果は角括弧と半角カンマで囲みます。",
             "penalty": 2
           }
         ]
@@ -227,7 +227,7 @@
           },
           {
             "id": "tamper-hint-3",
-            "content": "cases[i]で5行目の判定を計算し直す。その結果がreports[i]と等しければTrue、違えばFalse。i=0〜3の順に四つをtamperへ。",
+            "content": "cases[i]で5行目の判定を計算し直す。その結果がreports[i]と等しければTrue、違えばFalse。i=0〜3の順に四つをtamperへ。 複数の結果は角括弧と半角カンマで囲みます。",
             "penalty": 2
           }
         ]
@@ -240,7 +240,7 @@
         "hints": [
           {
             "id": "binding-hint-1",
-            "content": "証明が確かめた規則が違えば、同じ入力でも結論は変わります。今回では拒否され、別の規則では不正に承認される入力を作り、番号の照合が必要な理由を示します。",
+            "content": "証拠が示すプログラムと、確認したいプログラムが同じかを照合する必要があります。上限の異なる別のプログラムで不正な承認を示しても、今回の不正の証拠にはなりません。",
             "penalty": 2
           },
           {
@@ -250,7 +250,7 @@
           },
           {
             "id": "binding-hint-3",
-            "content": "自分のlimitより大きくother_limit以下の保存値を一つ選ぶ。mを足した普通の合計を、各0〜m−1の三つに分ける。二条件を確認し、三つの数をbinding欄へ。",
+            "content": "画面のlimitに1を足し、保存値sとします。limit < other_limitなので、sは別の上限以下です。三つの数をm−1、s、1の順にします。普通の合計はm+s、mで割った余りはs。各数が0〜m−1で、二つの条件を満たすことを確かめ、[m−1の値,sの値,1]をbinding欄へ入力します。 複数の結果は角括弧と半角カンマで囲みます。",
             "penalty": 2
           }
         ]
@@ -304,7 +304,7 @@
             },
             {
               "id": "trace-hint-3",
-              "content": "Start total at 0. Add each of your discounts, take the remainder by m, and record it. Submit the three stored totals in order."
+              "content": "Start total at 0. Add each of your discounts, take the remainder by m, and record it. Submit the three stored totals in order. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         },
@@ -322,7 +322,7 @@
             },
             {
               "id": "overflow-hint-3",
-              "content": "At each step compute raw=stored total+next amount. Record True if raw>=m, otherwise False. Then replace total by raw’s remainder. Submit the three flags in order."
+              "content": "At each step compute raw=stored total+next amount. Record True if raw>=m, otherwise False. Then replace total by raw’s remainder. Submit the three flags in order. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         },
@@ -336,11 +336,11 @@
             },
             {
               "id": "decision-hint-2",
-              "content": "Stored total 2 is at most limit 3: True. Ordinary total 10 is not: False. Shape: (True,False)."
+              "content": "Stored total 2 is at most limit 3: True. Ordinary total 10 is not: False. Shape: [True,False]."
             },
             {
               "id": "decision-hint-3",
-              "content": "Compute full from your discounts. First decide whether its remainder by m is at most limit. Then decide whether full itself is at most limit. Submit those two decisions."
+              "content": "Compute full from your discounts. First decide whether its remainder by m is at most limit. Then decide whether full itself is at most limit. Submit those two decisions. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         },
@@ -358,7 +358,7 @@
             },
             {
               "id": "exploit-hint-3",
-              "content": "For each case, sum its discounts. Return True only if the remainder is at most that case’s limit AND the full sum is over the limit. Submit the four results in displayed order."
+              "content": "For each case, sum its discounts. Return True only if the remainder is at most that case’s limit AND the full sum is over the limit. Submit the four results in displayed order. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         },
@@ -376,7 +376,7 @@
             },
             {
               "id": "predicate-hint-3",
-              "content": "For each case let weak mean full total>limit, and genuine mean both conditions from row 5. Mark True only when weak is True and genuine is False. Submit all four flags."
+              "content": "For each case let weak mean full total>limit, and genuine mean both conditions from row 5. Mark True only when weak is True and genuine is False. Submit all four flags. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         },
@@ -394,7 +394,7 @@
             },
             {
               "id": "tamper-hint-3",
-              "content": "Recompute row 5’s decision for cases[i]. Compare it with reports[i]. Record True for equality, False for disagreement, for i=0 through 3."
+              "content": "Recompute row 5’s decision for cases[i]. Compare it with reports[i]. Record True for equality, False for disagreement, for i=0 through 3. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         },
@@ -404,7 +404,7 @@
           "hints": [
             {
               "id": "binding-hint-1",
-              "content": "A proof about different program rules can establish a different claim for the same input. Construct a rejection here and an improper acceptance there to show why program identity matters."
+              "content": "The program established by the evidence must match the program being checked. Demonstrating an invalid approval in a different program with a different limit is not evidence of an invalid approval here."
             },
             {
               "id": "binding-hint-2",
@@ -412,7 +412,7 @@
             },
             {
               "id": "binding-hint-3",
-              "content": "Choose a stored value greater than your limit and at most other_limit. Add m, split that ordinary total into three numbers each from 0 through m−1, check both conditions, and submit them to binding."
+              "content": "Set stored value s to your limit+1. Since limit < other_limit, s is at most the other limit. Choose the three numbers m−1, s, 1. Their ordinary sum is m+s and their remainder is s. Check each number is in0..m−1 and both conditions hold; enter the evaluated list [m−1,s,1] in binding. Format multiple results as a square-bracketed comma-separated list."
             }
           ]
         }

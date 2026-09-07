@@ -44,6 +44,13 @@ def editor_solution(instructions: str):
 
 
 class LearningContract(unittest.TestCase):
+    def test_final_hint_constructs_a_valid_binding_for_every_limit(self):
+        for m in (8,16):
+            for limit in range(m-1):
+                for other in range(limit+1,m):
+                    answer=[m-1,limit+1,1]
+                    self.assertTrue(valid_binding({'m':m,'limit':limit,'other_limit':other},answer))
+
     def test_both_languages_work_when_copied_into_the_real_starter(self):
         # metadata is author input, not shipped in the participant image.
         metadata = METADATA
