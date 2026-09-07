@@ -1,7 +1,7 @@
 """Public tests. They show the shape of an answer; they do not prove one correct.
 
 They sign one message and verify it. They never change a byte and re-verify, never look
-at malformed encodings, never compare two domains, and never touch secp256k1.
+at malformed encodings, never compare two domains, and do not exhaust malformed inputs. A separate secp256k1 smoke checks large widths.
 
 A challenge function that hashes only the message passes this file. So does one with no
 length prefixes. Both are broken, and both are broken in ways that only show up when
@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "starter"))
 
 import schnorr as submission  # noqa: E402
-from fixtures.generate import DOMAINS, nonce, secret_key, toy_group  # noqa: E402
+from fixtures.generate import DOMAINS, nonce, secret_key, toy_group, secp_group  # noqa: E402
 
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
@@ -67,7 +67,24 @@ def check_point_encoding_round_trip() -> str:
     return ""
 
 
+def check_secp256k1_round_trip() -> str:
+    group = secp_group()
+    x, k = 3, 5
+    public = submission.public_key(x, group)
+    raw = submission.encode_point(public, group)
+    if not isinstance(raw, bytes) or len(raw) != 2 * group.as_public()["coordinate_bytes"]:
+        return "secp256k1 encoding does not use its coordinate width"
+    if submission.decode_point(raw, group) != public:
+        return "secp256k1 point encoding did not round-trip"
+    message = b"public transfer smoke"
+    signature = submission.sign(x, k, message, DOMAINS[0], group)
+    if not submission.verify(public, message, signature, DOMAINS[0], group):
+        return "secp256k1 signature did not verify"
+    return ""
+
+
 CHECKS = (
+    ("secp256k1-round-trip", check_secp256k1_round_trip),
     ("point-encoding-round-trip", check_point_encoding_round_trip),
     ("public-key-is-xg", check_public_key_is_the_secret_times_g),
     ("honest-transcript-verifies", check_honest_transcript_verifies),
