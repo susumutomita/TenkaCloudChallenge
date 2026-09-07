@@ -63,6 +63,13 @@ def check_parse(module, seed: str) -> list[str]:
             continue
         if parsed["response"] != record["response"]:
             failures.append("the parsed response is not the record's response")
+        normalized = {**record, "public_key": group.point(*record["public_key"]), "commitment": group.point(*record["commitment"])}
+        try:
+            reparsed = module.parse_record(normalized, group)
+            if reparsed != normalized:
+                failures.append("normalized Point input changed during parsing")
+        except Exception as error:
+            failures.append(f"normalized Point input raised {type(error).__name__}")
         broken = [
             {},
             {"message": b"x", "public_key": (0, 0), "commitment": (0, 0)},
@@ -103,14 +110,16 @@ def check_detect(module, seed: str) -> list[str]:
     for label in LABELS:
         group = toy_group(seed, label)
         log = audit_log(seed, label, group)
+        records = list(log["records"])
+        _secret, duplicate, _other = _reuse_pair(seed, label, group)
+        records.extend([duplicate, dict(duplicate)])
         try:
-            pairs = module.find_reuse(list(log["records"]), group)
+            pairs = module.find_reuse(records, group)
         except Exception as error:  # noqa: BLE001
             return [f"scanning the log raised {type(error).__name__}"]
         if not isinstance(pairs, list) or not pairs:
             failures.append("the reused commitment was not found")
             continue
-        records = log["records"]
         for left, right in pairs:
             a, b = records[left], records[right]
             if a["commitment"] != b["commitment"]:
@@ -118,6 +127,11 @@ def check_detect(module, seed: str) -> list[str]:
                 break
             if a["public_key"] != b["public_key"]:
                 failures.append("a reported pair is not from the same signer")
+                break
+            ea = challenge(DOMAINS[0], group.point(*a["commitment"]), group.point(*a["public_key"]), a["message"], group)
+            eb = challenge(DOMAINS[0], group.point(*b["commitment"]), group.point(*b["public_key"]), b["message"], group)
+            if ea == eb:
+                failures.append("a reported pair has equal challenges")
                 break
             # The log contains a record that parses cleanly, shares the reused
             # commitment and key, and does not verify. Reuse inside a rejected

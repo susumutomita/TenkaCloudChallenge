@@ -37,6 +37,14 @@ def parse_record(record, group):
 
 
 def _point(value, group):
+    from participant.schnorr import Point
+
+    if isinstance(value, Point):
+        if value.is_infinity or not group.contains(value):
+            raise MalformedRecord("the point is not a usable group element")
+        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:
+            raise MalformedRecord("a coordinate is not canonical")
+        return value
     if not isinstance(value, (tuple, list)) or len(value) != 2:
         raise MalformedRecord("a point is a pair of coordinates")
     x, y = value
@@ -82,7 +90,11 @@ def find_reuse(records, group) -> list[tuple[int, int]]:
         for right in indices[position + 1 :]:
             a, b = parsed[left], parsed[right]
             if a["commitment"] == b["commitment"] and a["public_key"] == b["public_key"]:
-                pairs.append((left, right))
+                from participant.schnorr import DOMAINS, challenge
+                e1 = challenge(DOMAINS[0], a["commitment"], a["public_key"], a["message"], group)
+                e2 = challenge(DOMAINS[0], b["commitment"], b["public_key"], b["message"], group)
+                if e1 != e2:
+                    pairs.append((left, right))
     return pairs
 
 

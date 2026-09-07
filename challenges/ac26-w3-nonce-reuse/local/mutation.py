@@ -8,6 +8,7 @@ just not the key. That is why every extraction path ends at `confirms`.
 from __future__ import annotations
 
 import sys
+import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -19,6 +20,8 @@ REFERENCE = (ROOT / "reference" / "recover.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+    ("includes equal-challenge pairs", [("                if e1 != e2:", "                if True:")]),
+    ("rejects normalized Point input", [("    if isinstance(value, Point):", "    if False and isinstance(value, Point):")]),
     (
         "divides instead of inverting",
         [
@@ -127,6 +130,9 @@ def _load(source: str):
 
 
 def main() -> int:
+    suite = unittest.defaultTestLoader.discover(str(ROOT / "tests" / "hidden"), pattern="test_*.py")
+    if not unittest.TextTestRunner().run(suite).wasSuccessful():
+        return 1
     baseline = check_recover.run(_load(REFERENCE), SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")

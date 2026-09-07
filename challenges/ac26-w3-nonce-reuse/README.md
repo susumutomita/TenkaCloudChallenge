@@ -152,3 +152,6 @@ equivalent mutant on its own and is now mutated together with the validation it 
 All eight checks now have mechanism, small example, and edit/submit hints, costing 2 points each (6 total). An independent reader used only participant instructions, hints, and the starter. Findings covered existing Point values, point-arithmetic APIs, prime group orders, HMAC byte encoding, and overstated security claims. Both locales now distinguish finite-range collisions from the inputs tested by this exercise.
 
 This checks whether the explanation leads to implementation; it is not evidence of a successful live submission or a security proof for the signature scheme. The collision experiment now specifies key1, trial-{i} messages and the supplied seed. The checker independently recomputes counts, accepts a matching zero-collision result and rejects fabricated positive counts. The reference and starter describe the same conditions. Three checker regressions cover zero collisions, fabricated counts and the reference measurement.
+
+
+Review follow-up: detect now excludes equal-challenge pairs, parse covers normalized Point input, and the reference-test runner discovers the collision regressions. Direct Python execution passed three regressions and rejected all eleven mutants. Catalog validation passed; Docker and live Portal were not exercised for this follow-up.
