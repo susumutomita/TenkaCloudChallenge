@@ -89,7 +89,7 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
 
 
 def safe_nonce(secret: int, message: bytes, group) -> int:
-    """Your repair. Derive nonces from the key and message using the full scalar range.
+    """Your repair. Use the exact HMAC-SHA256 encoding in the free statement.
 
     Deterministic is allowed, and is probably what you want. Think about what has to go
     into it to make collisions unlikely for different messages and signers. A finite

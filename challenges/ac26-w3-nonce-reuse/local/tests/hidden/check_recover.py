@@ -9,6 +9,8 @@ and are not.
 from __future__ import annotations
 
 import sys
+import hashlib
+import hmac
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -322,7 +324,7 @@ def check_repair(module, seed: str) -> list[str]:
     group = secp_group()
     for label in LABELS:
         secret = secret_key(seed, f"{label}-repair", group)
-        note_list = [f"payment {index}".encode() for index in range(60)]
+        note_list = [b"", b"\x00\xff", *[f"payment {index}".encode() for index in range(60)]]
         produced: dict[int, bytes] = {}
         for note in note_list:
             try:
@@ -331,6 +333,13 @@ def check_repair(module, seed: str) -> list[str]:
                 return [f"the repaired generator raised {type(error).__name__}"]
             if not isinstance(k, int) or not 1 <= k <= group.n - 1:
                 failures.append("a nonce is outside [1, n-1]")
+                break
+            width = (group.n.bit_length() + 7) // 8
+            data = b"nonce-drill-v1" + len(note).to_bytes(8, "big") + note
+            digest = hmac.new(secret.to_bytes(width, "big"), data, hashlib.sha256).digest()
+            expected = 1 + int.from_bytes(digest, "big") % (group.n - 1)
+            if k != expected:
+                failures.append("the nonce differs from the stated HMAC-SHA256 construction")
                 break
             if k in produced and produced[k] != note:
                 failures.append("two different messages were given the same nonce")

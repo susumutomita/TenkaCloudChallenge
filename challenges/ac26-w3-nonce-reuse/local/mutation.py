@@ -96,8 +96,8 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         "derives the nonce from the message alone, binding no key",
         [
             (
-                '        b"nonce/v1" + secret.to_bytes(32, "big") + len(message).to_bytes(4, "big") + message',
-                '        b"nonce/v1" + len(message).to_bytes(4, "big") + message',
+                '    digest = hmac.new(key, data, hashlib.sha256).digest()',
+                '    digest = hmac.new(b"", data, hashlib.sha256).digest()',
             )
         ],
     ),
@@ -124,6 +124,11 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 
 
 MUTATIONS += (
+    ("uses plain SHA256 instead of HMAC", [(
+        "digest = hmac.new(key, data, hashlib.sha256).digest()",
+        "digest = hashlib.sha256(key + data).digest()",
+    )]),
+
     ("trusts every normalized Point", [(
         "    if isinstance(value, Point):",
         "    if isinstance(value, Point):\n        return value",

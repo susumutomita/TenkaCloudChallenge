@@ -156,3 +156,6 @@ This checks whether the explanation leads to implementation; it is not evidence 
 Review follow-up: detect now excludes equal-challenge pairs, parse covers normalized Point input, and the reference-test runner discovers the collision regressions. Direct Python execution passed three regressions and rejected all eleven mutants. Catalog validation passed; Docker and live Portal were not exercised for this follow-up.
 
 Review follow-up adds isolated equal-challenge logs and malformed normalized Points to grading, plus explicit imports and exception-handling syntax in both languages. All fifteen mutations are rejected; these are author-side checks, not participant play.
+
+
+Repair now grades the exact HMAC-SHA256 encoding published in the free statement, including empty and binary messages. The reference uses that same construction. Author validation: all 16 mutations were rejected, including plain SHA256 in place of HMAC. This is verifier evidence, not a participant browser playtest.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 
 
 class MalformedRecord(Exception):
@@ -182,7 +183,8 @@ def safe_nonce(secret: int, message: bytes, group) -> int:
     even without a hash collision. The key is in the hash too:
     without it, two signers of the same message would use the same nonce.
     """
-    digest = hashlib.sha256(
-        b"nonce/v1" + secret.to_bytes(32, "big") + len(message).to_bytes(4, "big") + message
-    ).digest()
+    width = (group.n.bit_length() + 7) // 8
+    key = secret.to_bytes(width, "big")
+    data = b"nonce-drill-v1" + len(message).to_bytes(8, "big") + message
+    digest = hmac.new(key, data, hashlib.sha256).digest()
     return 1 + int.from_bytes(digest, "big") % (group.n - 1)
