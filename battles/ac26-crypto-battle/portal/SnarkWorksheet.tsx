@@ -22,7 +22,7 @@ export function SnarkWorksheet({task,locale,busy,onSubmit}:{task:ConstraintTask;
   <details><summary>{ja?'SNARK全体との関係・数学の式':'Relation to SNARKs and the general equation'}</summary>
    <p>Q<sub>L</sub>L + Q<sub>R</sub>R + Q<sub>M</sub>LR + Q<sub>O</sub>O + Q<sub>C</sub> = 0 (mod 7)</p>
    <p>{ja?'Qは計算の種類を選ぶ係数です。足し算は(1,1,0,−1,0)、掛け算は(0,0,1,−1,0)。この5つの係数を使うと、同じ式で両方の計算を表せます。':'The Q coefficients select the operation. Addition uses (1,1,0,−1,0); multiplication uses (0,0,1,−1,0). One equation describes both.'}</p>
-   <p>{ja?'PLONKでは、この表を多項式（数の累乗を足し合わせた式）にし、値を後から変えられないコミットメントと評価の証明を組み合わせます。配線も多項式で検証します。このお題ではその前段のゲートと配線を直接検査し、表の値は隠していません。':'PLONK encodes the table as polynomials (sums of powers), then uses commitments that bind the values and proofs of their evaluations. Wiring is also checked through polynomials. This worksheet directly checks the underlying gates and wires and does not hide the table.'}</p>
+   <p>{ja?'PLONK（SNARKを作る方式の一つ）では、この表を多項式（数の累乗を足し合わせた式）にし、値を後から変えられないコミットメントと評価の証明を組み合わせます。配線も多項式で検証します。このお題ではその前段のゲートと配線を直接検査し、表の値は隠していません。':'PLONK, one design for SNARKs, encodes the table as polynomials (sums of powers), then uses commitments that bind the values and proofs of their evaluations. Wiring is also checked through polynomials. This worksheet directly checks the underlying gates and wires and does not hide the table.'}</p>
   </details>
  </section>;
 }

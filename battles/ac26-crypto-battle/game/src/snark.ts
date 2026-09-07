@@ -13,12 +13,15 @@ export function constraintResiduals(task: ConstraintTask): readonly number[] {
 }
 export function constraintTask(bytes: readonly number[]): ConstraintTask {
   const a = bytes[0]! % 7, b = bytes[1]! % 7, c = bytes[2]! % 7, d = bytes[3]! % 7;
-  const sum = mod(a + b), product = mod(c * d);
-  const mode = bytes[4]! % 3;
-  // A valid circuit, a wrong gate output, or locally valid gates with broken wiring.
-  const copied = mode === 2 ? mod(sum + 1) : sum;
-  return {kind: 'snark-constraints', rows: [[a, b, sum], [c, d, product],
-    [copied, product, mod(copied + product + (mode === 1 ? 1 : 0))]]};
+  // Each constraint can fail independently, with any remainder. Occasionally
+  // issue a consistent table as well; no fixed three-answer retry template.
+  const residuals = bytes[4]! % 8 === 0 ? [0,0,0,0,0]
+    : bytes.slice(5,10).map(n=>n%7);
+  if(residuals.length !== 5) throw new Error('constraintTask requires ten bytes');
+  const [r0,r1,r2,r3,r4]=residuals as [number,number,number,number,number];
+  const sum=mod(a+b-r0), product=mod(c*d-r1);
+  const left=mod(sum-r3), right=mod(product-r4);
+  return {kind:'snark-constraints',rows:[[a,b,sum],[c,d,product],[left,right,mod(left+right-r2)]]};
 }
 export function parseResiduals(answer: unknown): readonly number[] | undefined {
   return typeof answer === 'string' && /^[0-6]( [0-6]){4}$/.test(answer)
