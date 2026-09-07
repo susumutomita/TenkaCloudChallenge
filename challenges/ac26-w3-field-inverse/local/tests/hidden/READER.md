@@ -183,3 +183,32 @@ while26s startup fails in25.056s; helper imports succeed
 Portal component against the rebuilt services: all7 fields and solved-row folding
 pass,1 test/11.82s total/5.11s test (`/private/tmp/field-716-root-portal.log`).
 The frozen reader SHA and all scoring/hint IDs and amounts remain unchanged.
+
+
+## PR770 exception classification review
+
+At d7ccd9f the original image reproduced both review cases: appending
+`NotInvertible=ValueError; FieldMismatch=TypeError` to the unchanged frozen answer
+incorrectly passed all7 checkpoints; a class inheriting both supplied exceptions
+incorrectly failed the errors checkpoint.
+
+The worker now validates that supplied error names refer to custom exception
+classes, captures those references once after initialization, and reports every
+matching membership. Rebinding a module global later does not change that lookup.
+The trusted parent computes the permitted error from its own validated operands
+and operation: different moduli require FieldMismatch; an inverse or divisor with
+nonunit gcd requires NotInvertible. An error for an otherwise valid operation is
+rejected. Multiple inheritance therefore does not depend on classification order.
+These protocol fields remain untrusted data; this does not attest the origin of
+native Python exception objects against an arbitrary implementation of the wire
+protocol, just as handles do not attest native objects.
+
+Validation after this correction:24 Linux tests PASS in18.515s, including both
+new regressions and the prior20 mathematical/isolation cases plus2 forwarding
+cases. Builtin aliases are rejected in all7/private and public routes; late
+rebinding is rejected; the dual-inheritance answer passes all7/private and public
+routes, but using that class to refuse an invertible value fails. The frozen answer
+and ordinary subclass/constant-hash positive controls remain unchanged. All14
+existing mutants are killed, reference passes, catalog116 passes. Runtime and
+mutation logs: `/private/tmp/field-770-exception-runtime.log` and
+`/private/tmp/field-770-mutations.log`.

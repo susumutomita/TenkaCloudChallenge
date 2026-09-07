@@ -47,6 +47,19 @@ def main():
         filename = name+'.py'
         try:
             exec(compile(initial['sources'][filename], filename, 'exec'), module.__dict__)
+            # Keep the declared custom classes, not lookups of mutable module
+            # globals on each call. Minimal partial submissions may omit them.
+            exception_types = []
+            for declared in ('NotInvertible', 'FieldMismatch'):
+                if declared not in module.__dict__:
+                    continue
+                candidate = module.__dict__[declared]
+                if (not isinstance(candidate, type)
+                        or not issubclass(candidate, Exception)
+                        or candidate.__module__ == 'builtins'):
+                    raise TypeError('Keep custom exception classes for the supplied names.')
+                exception_types.append((declared, candidate))
+            exception_types = tuple(exception_types)
         except BaseException as error:
             print(json.dumps({'initializationError': initialization_error(error, filename)}), flush=True)
             return
@@ -89,15 +102,11 @@ def main():
                 raise ValueError('Unknown operation')
             response = {'callId': call['callId'], 'value': value}
         except BaseException as error:
-            # Report only the type. The parent checks whether that exception is
-            # appropriate for the mathematical operation and actual operands.
-            kind = type(error).__name__
-            for declared in ('NotInvertible', 'FieldMismatch'):
-                exception_type = getattr(module, declared, None)
-                if isinstance(exception_type, type) and isinstance(error, exception_type):
-                    kind = declared
-                    break
-            response = {'callId': call['callId'], 'error': kind}
+            # Report all memberships: multiple inheritance must not depend on
+            # tuple order. These are untrusted claims; the parent selects the
+            # only permitted error from its own operands and operation.
+            kinds = [name for name, cls in exception_types if isinstance(error, cls)]
+            response = {'callId': call['callId'], 'error': True, 'errorKinds': kinds}
         print(json.dumps(response, separators=(',', ':')), flush=True)
 
 

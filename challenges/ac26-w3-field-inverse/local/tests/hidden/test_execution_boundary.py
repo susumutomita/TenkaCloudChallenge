@@ -331,6 +331,48 @@ def egcd(*args):
             self.assertTrue(server.evaluate(checkpoint,source),checkpoint)
         self.assertTrue(_WORKBENCH.run_public_tests({'field.py':source})['passed'])
 
+    def test_builtin_aliases_and_late_exception_rebinding_do_not_pass(self):
+        source = reader() + '\nNotInvertible=ValueError\nFieldMismatch=TypeError\n'
+        for checkpoint in server.CHECKPOINTS:
+            self.assertFalse(server.evaluate(checkpoint, source), checkpoint)
+        self.assertFalse(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+        late = reader() + '''
+_inverse_before_rebinding = FieldElement.inverse
+def inverse(self):
+    if self.value == 0:
+        globals()['NotInvertible'] = ValueError
+    return _inverse_before_rebinding(self)
+FieldElement.inverse = inverse
+'''
+        self.assertFalse(server.evaluate('errors', late))
+
+    def test_dual_exception_subclass_uses_the_operation_context(self):
+        source = reader() + '''
+class Both(NotInvertible, FieldMismatch):
+    pass
+def wrap(operation):
+    def call(*args):
+        try:
+            return operation(*args)
+        except (NotInvertible, FieldMismatch):
+            raise Both()
+    return call
+for name in ('inverse', '__add__', '__sub__', '__mul__', '__truediv__'):
+    setattr(FieldElement, name, wrap(getattr(FieldElement, name)))
+'''
+        for checkpoint in server.CHECKPOINTS:
+            self.assertTrue(server.evaluate(checkpoint, source), checkpoint)
+        self.assertTrue(_WORKBENCH.run_public_tests({'field.py': source})['passed'])
+        # Membership is not permission to fail an operation that has an inverse.
+        inappropriate = reader() + '''
+class Both(NotInvertible, FieldMismatch):
+    pass
+def inverse(self):
+    raise Both()
+FieldElement.inverse = inverse
+'''
+        self.assertFalse(server.evaluate('inverse', inappropriate))
+
     def test_sequence_representations_and_integer_types(self):
         source=reader()+"\n_old_egcd=egcd\n_old_trace=egcd_trace\ndef egcd(*a):return list(_old_egcd(*a))\ndef egcd_trace(*a):return tuple(_old_trace(*a))\n"
         self.assertTrue(server.evaluate('egcd-trace',source))

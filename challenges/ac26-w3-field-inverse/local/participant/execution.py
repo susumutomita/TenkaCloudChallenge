@@ -129,7 +129,7 @@ class LearnerSession:
         line, self.pending = self.pending.split(b'\n', 1)
         return line.decode(errors='replace')
 
-    def call(self, module, function, args, modulus=None):
+    def call(self, module, function, args, modulus=None, *, expected_error=None):
         if time.monotonic() >= self.deadline:
             raise LearnerError('Function evaluation timed out.')
         self.sequence = secrets.token_hex(16)
@@ -147,7 +147,13 @@ class LearnerSession:
                 value = None
             if isinstance(value, dict) and value.get('callId') == self.sequence:
                 if 'error' in value:
-                    raise {'NotInvertible': NotInvertible, 'FieldMismatch': FieldMismatch}.get(value['error'], LearnerError)('The submitted operation raised an error.')
+                    error_types = {'NotInvertible': NotInvertible, 'FieldMismatch': FieldMismatch}
+                    kinds = value.get('errorKinds')
+                    if (isinstance(kinds, list)
+                            and all(type(kind) is str and kind in error_types for kind in kinds)
+                            and expected_error in error_types and expected_error in kinds):
+                        raise error_types[expected_error]('The submitted operation raised its required error.')
+                    raise LearnerError('The submitted operation raised an inappropriate error.')
                 if 'value' in value:
                     return value['value']  # untrusted JSON data, checked by the caller
             self._log_line(line)
@@ -241,7 +247,14 @@ class RemoteElement:
     def _binary(self, other, operation):
         if not isinstance(other, RemoteElement):
             raise LearnerError('The operand is not an element.')
-        result = self.field.session.call('field', operation, [self.handle, other.handle])
+        from math import gcd
+        expected_error = None
+        if self.field.modulus != other.field.modulus:
+            expected_error = 'FieldMismatch'
+        elif operation == 'div' and gcd(other.value, self.field.modulus) != 1:
+            expected_error = 'NotInvertible'
+        result = self.field.session.call('field', operation, [self.handle, other.handle],
+                                         expected_error=expected_error)
         if self.field.modulus != other.field.modulus:
             raise LearnerError('Different moduli were combined without FieldMismatch.')
         a, b, m = self.value, other.value, self.field.modulus
@@ -268,7 +281,9 @@ class RemoteElement:
 
     def inverse(self):
         from math import gcd
-        result = self.field.session.call('field', 'inverse', [self.handle])
+        expected_error = 'NotInvertible' if gcd(self.value, self.field.modulus) != 1 else None
+        result = self.field.session.call('field', 'inverse', [self.handle],
+                                         expected_error=expected_error)
         if gcd(self.value, self.field.modulus) != 1:
             raise LearnerError('An element with no inverse was accepted.')
         return RemoteElement(self.field, result, pow(self.value, -1, self.field.modulus))
