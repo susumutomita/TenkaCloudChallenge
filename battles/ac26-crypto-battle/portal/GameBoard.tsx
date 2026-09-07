@@ -85,7 +85,7 @@ const COPY = {
     phase: "フェーズ",
     solution: "自分の解",
     solutionHint: "自分だけに見えます。PROVE は数字を付け替えて出すもので、このまま出してはいけません。",
-    puzzle: "問題",
+    puzzle: "最初から全員に見えているマス",
     puzzleRetired: "退役した世代 — 問題はもう表示しません",
     tag: "付け替え",
   },
@@ -280,7 +280,7 @@ export function OrderBelt({
             // is running. The list is sorted by deadline, so the first card is
             // the answer; saying so out loud costs one chip.
             const isNext = index === 0;
-            const pct = Math.max(4, Math.min(100, (order.remainingMs / 300_000) * 100));
+            const pct = Math.max(4, Math.min(100, (order.remainingMs / (order.durationMs ?? 300_000)) * 100));
             return (
               <article
                 className={`tc-order-card${urgency}${isNext ? " tc-order-next" : ""}${
@@ -385,7 +385,7 @@ export function Vault({ projection, locale }: { readonly projection: CryptoBattl
           <div>
             <div className="tc-section-label">{copy.vault}</div>
             <strong>{copy.generation} {projection.vault.generation}</strong>
-            <p className="tc-terms-note">{locale === "ja" ? "秘密とシェアを置く場所です。他チームには見えません。世代は同じ秘密から作った一組です。" : "Your private secret and shares. A generation is one set made from one secret."}</p>
+            <p className="tc-terms-note">{locale === "ja" ? "自分だけが確認できる数字です。下のボタンでシェア（秘密を分けて持つ番号と数の組）を確認できます。開くだけでは相手に公開されません。" : "Numbers only you can see. Expand to inspect shares (numbered pieces of a secret). Opening this panel does not publish them."}</p>
           </div>
           <span className="tc-score-chip">{copy.vaultOpen}</span>
         </summary>
@@ -419,7 +419,7 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
   return (
     <section className="tc-game-card">
       <div className="tc-section-label">{copy.ledger}</div>
-      <p className="tc-terms-note">{locale === "ja" ? "各チームが公開した数字の記録です。相手の秘密を見破る材料になります。英語では Ledger（台帳）と呼びます。" : "A ledger records numbers each team has published. Use an opponent’s records as evidence for an attack."}</p>
+      <p className="tc-terms-note">{locale === "ja" ? "ここは回答欄ではありません。「あなた」は相手にも見えている自分の情報です。攻撃するときは、上の「相手を攻撃する」で相手と材料を選びます。" : "This is a record, not an answer form. Your entries are visible to opponents too. To attack, select an opponent and evidence in the attack panel above."}</p>
       {groups.length === 0 ? (
         <div className="tc-empty">{copy.emptyLedger}</div>
       ) : (
@@ -439,6 +439,7 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                 <strong>{ledgerTeamLabel(projection, group.teamId, copy.ledgerSelf)}</strong>
                 <span>{copy.generation} {group.generation}</span>
               </div>
+              {group.reveals.length > 0 && <p className="tc-terms-note">{locale === "ja" ? "証明で公開した行・列・箱と、その4つの数字です。同じ置き換えの印が重なると、秘密を推測する手がかりになります。" : "Rows, columns or boxes revealed by a proof, with their four digits. Repeated replacement IDs can provide clues to the secret."}</p>}
               <div className="tc-share-grid">
                 {group.shares.map((share) => (
                   <details className={`tc-share-card tc-public${share.id === lastId ? " tc-new-public" : ""}`} key={share.id}>
@@ -486,7 +487,7 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
                 {group.reveals.map((reveal) => (
                   <div className={`tc-proof-card tc-reveal-card${reveal.id === lastId ? " tc-new-public" : ""}`} key={reveal.id}>
                     {describeRevealGroup(reveal.group, locale)} <code>{reveal.cells.join(" ")}</code>{" "}
-                    <span className="tc-reveal-tag" title={copy.tag}>{reveal.tag}</span>
+                    <span className="tc-reveal-tag" title={copy.tag}>{locale === "ja" ? "置き換えの印：" : "Replacement ID: "}{reveal.tag}</span>
                   </div>
                 ))}
                 {group.duels.map(entry => <div className="tc-proof-card" key={entry.id}>

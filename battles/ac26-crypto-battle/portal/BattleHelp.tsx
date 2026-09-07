@@ -23,7 +23,7 @@ export default function BattleHelp(props: PortalSlotProps) {
   const open = (next: Topic) => { setTopic(next); dialog.current?.showModal(); };
   return <>
     <style>{`
-      .tc-help-entry{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;max-width:1080px;margin:0 auto 8px;color:#16212e}
+      .tc-help-entry{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;width:100%;box-sizing:border-box;margin:0 0 8px;color:#16212e}
       .tc-help-entry button,.tc-help-dialog button.tc-help-control{font:inherit;font-size:13px;background:#fff;color:#245986;border:1px solid #b8c9db;border-radius:6px;padding:7px 10px;cursor:pointer}
       .tc-help-entry button:focus-visible,.tc-help-dialog button:focus-visible{outline:3px solid #0972d3;outline-offset:3px}
       .tc-help-dialog{box-sizing:border-box;width:min(960px,calc(100% - 24px));max-height:calc(100dvh - 24px);border:1px solid #b8c9db;border-radius:12px;padding:0;background:#fff;color:#16212e;overflow:auto;overscroll-behavior:contain}

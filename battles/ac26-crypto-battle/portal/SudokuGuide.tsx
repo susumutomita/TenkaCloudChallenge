@@ -19,11 +19,11 @@ export function RelabelDiagram({ solution, table, locale }: {
     <div className="tc-relabel-flow">
       <div><small>{ja ? "左の同じ位置" : "Same cell on the left"}</small><b>{from}</b></div>
       <span aria-hidden="true">→</span>
-      <div><small>{ja ? "選んだ表" : "Your table"}</small><b>{table ? `${from} → ${to}` : "?"}</b></div>
+      <div><small>{ja ? "今回の置き換え" : "Assigned replacements"}</small><b>{table ? `${from} → ${to}` : "?"}</b></div>
       <span aria-hidden="true">→</span>
       <div><small>{ja ? "右に入れる数字" : "Digit on the right"}</small><b>{to ?? "□"}</b></div>
     </div>
-    {table ? <><PermutationChips pi={table} /><p>{ja ? "この見本と同じように、空欄4マスを埋めます。" : "Use this same rule for the four holes."}</p></> : <p>{ja ? "先に「1. 付け替え表を選ぶ」で表を選びます。" : "First use “1. Choose a relabelling table”."}</p>}
+    {table ? <><PermutationChips pi={table} /><p>{ja ? "この見本と同じように、空欄4マスを埋めます。" : "Use this same rule for the four holes."}</p></> : <p>{ja ? "PROVEを開くと、今回の置き換えと盤面が表示されます。" : "Open PROVE to see the assigned replacements and board."}</p>}
   </figure>;
 }
 

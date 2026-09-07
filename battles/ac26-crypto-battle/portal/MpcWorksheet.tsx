@@ -8,8 +8,8 @@ export function mpcWorksheet(task: MpcTask, prime: string, locale: "ja" | "en") 
   const received = task.incomingMasks.join(" + ") || "0";
   const sent = task.outgoingMasks.join(" + ") || "0";
   return locale === "ja" ? [
-    { label: "足す数をまとめる", calculation: `${received} = ${incoming}`, note: "受け取った覆面は、全部足します。" },
-    { label: "引く数をまとめる", calculation: `${sent} = ${outgoing}`, note: "送った覆面も、先に全部足します。" },
+    { label: "足す数をまとめる", calculation: `${received} = ${incoming}`, note: "相手から内緒で受け取った数を、全部足します。" },
+    { label: "引く数をまとめる", calculation: `${sent} = ${outgoing}`, note: "相手へ内緒で送った数を、全部足してから引きます。" },
     { label: "自分の数に足し引きする", calculation: `${task.myInput} + ${incoming} − ${outgoing} = □`, note: `自分の数は ${task.myInput} です。上の 2 つの合計を使って計算してください。` },
     { label: "最後に、割った余りを入力する", calculation: `③ の答えを ${prime} で割った余り → 下の回答欄`, note: `答えがマイナスなら ${prime} を足し、${prime} 以上なら ${prime} を引きます。0〜${BigInt(prime) - 1n} に入るまで繰り返します。` },
   ] : [

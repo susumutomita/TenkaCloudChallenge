@@ -62,6 +62,7 @@ export function SudokuInput({
   size = 30,
   ariaLabel,
   givens,
+  numberedHoles = false,
 }: {
   readonly value: readonly string[];
   readonly onChange: (next: readonly string[]) => void;
@@ -69,6 +70,7 @@ export function SudokuInput({
   readonly ariaLabel: string;
   /** Worked cells are read-only; empty entries still require a typed answer. */
   readonly givens?: readonly string[];
+  readonly numberedHoles?: boolean;
 }) {
   return (
     <div className="tc-sudoku" aria-label={ariaLabel}>
@@ -76,6 +78,8 @@ export function SudokuInput({
         <span key={i} className="tc-sudoku-cell" style={{ width: size, height: size, fontSize: size * 0.55 }}>
           {givens?.[i] ? <span aria-label={`${ariaLabel}-${i}: ${givens[i]}`}>{givens[i]}</span> : <input
             className="tc-sudoku-input"
+            placeholder={numberedHoles ? ["①", "②", "③", "④"][givens!.slice(0, i).filter(cell => !cell).length] : undefined}
+            style={numberedHoles ? { background: "#e8f3ff", border: "2px solid #2876bd", color: "#123f69" } : undefined}
             aria-label={`${ariaLabel}-${i}`}
             inputMode="numeric"
             maxLength={1}

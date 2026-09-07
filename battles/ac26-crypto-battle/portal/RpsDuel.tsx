@@ -40,13 +40,26 @@ export default function RpsDuel({ order, opponentName, locale, submitting, onSub
     </>}
     {!sealed && <>
       <ol style={{ lineHeight: 1.9, paddingLeft: 24, fontSize: 14 }}>
-        <li>{ja ? "4^m は 4 を m 回掛ける意味です。表で、選んだ m に対応する「4^m を 23 で割った余り」を読みます。" : "4^m means m factors of 4. Read the remainder of 4^m after division by 23 for your m."}<br />{POWER_FOURS.map(({m,value}) => `m=${m} → ${value}`).join("　/　")}</li>
-        <li>{ja ? "表は 9^r を 23 で割った余りです。例：9^2=81、81−23−23−23=12。0 回掛ける値は 1 とします。" : "The table gives the remainder of 9^r after division by 23. Example: 9^2=81; 81−23−23−23=12. A zeroth power is 1."}
+        <li>
+          <span><i>4</i><sup>m</sup>{ja ? " は、4を m 回掛けた数です。手の番号 m の行を見ます。" : " means m factors of 4. Find the row for your hand m."}</span>
+          <table style={{ borderCollapse: "collapse", margin: "10px 0", width: "100%", maxWidth: 520, textAlign: "center" }}>
+            <thead><tr><th scope="col"><i>m</i></th><th scope="col">4<sup>m</sup>{ja ? " の計算" : " calculation"}</th><th scope="col">{ja ? "23で割った余り" : "Remainder after division by 23"}</th></tr></thead>
+            <tbody>{POWER_FOURS.map(({m,value}) => <tr key={m} style={{ borderTop: "1px solid #cfd8e3", background: handText === String(m) ? "#e8f3ff" : undefined }}>
+              <th scope="row" style={{ padding: 8 }}>{m}</th><td>{Array(m).fill("4").join(" × ")} = {4 ** m}</td><td><strong>{value}</strong></td>
+            </tr>)}</tbody>
+          </table>
+        </li>
+        <li><span>9<sup>r</sup>{ja ? " を23で割った余りを、下から読みます。" : " — find its remainder after division by 23 below."}<br />9<sup>2</sup> = 9 × 9 = 81 → 81 − 23 × 3 = 12<br />9<sup>0</sup> = 1</span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 14px" }}>{POWER_NINES.map(({r,value}) => <span key={r}>r={r} → {value}</span>)}</div>
         </li>
         <li>{ja ? "読んだ 2 つの値を掛け、23 で割った余りを入力します。23 以上なら 23 を引き、0〜22 に入るまで繰り返します。" : "Multiply those two values and enter the remainder after division by 23. Subtract 23 until you reach 0–22."}</li>
       </ol>
-      <p className="tc-card-hint">{ja ? "見本：m=1、r=1 → 4×9=36 → 36−23=13。式では c = 4^m × 9^r mod 23（mod は割った余り）。表では途中の数も 23 で割った余りにしています。先に 23 の倍数を引いてから掛けると、積からも 23 の倍数が減るだけなので、最後の余りは変わりません。" : "Example: m=1, r=1 → 4×9=36 → 36−23=13. Formula: c = 4^m × 9^r mod 23; mod means the remainder. The tables reduce intermediate values too. Subtracting a multiple of 23 before multiplying only removes a multiple of 23 from the product, leaving its final remainder unchanged."}</p>
+      <div style={{ padding: "12px 16px", borderLeft: "3px solid #2876bd", background: "#f4f8fd", margin: "12px 0" }}>
+        <div style={{ fontSize: 21 }}><i>c</i> = (4<sup>m</sup> × 9<sup>r</sup>) mod 23</div>
+        <p className="tc-card-hint">{ja ? "mod 23 は「23で割った余り」です。" : "mod 23 means the remainder after division by 23."}</p>
+        <div>{ja ? "見本：" : "Example: "}<i>m</i> = 1, <i>r</i> = 1 → 4 × 9 = 36 → 36 − 23 = <strong>13</strong></div>
+        <p className="tc-card-hint">{ja ? "途中で23の倍数を引いても、積から23の倍数が減るだけなので、最後の余りは変わりません。" : "Subtracting multiples of 23 before multiplying only removes a multiple of 23 from the product, leaving its final remainder unchanged."}</p>
+      </div>
       <label className="tc-answer-label">{ja ? "封じる数字 c（計算した余り）" : "Sealed number c (your calculated remainder)"}
         <input aria-label={ja ? "封じる数字" : "Sealed number"} value={sealedText} inputMode="numeric" maxLength={2} onChange={e => setSealed(e.target.value)} />
       </label>

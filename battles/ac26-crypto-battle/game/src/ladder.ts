@@ -77,7 +77,7 @@ export const CIPHER_RUNGS: Readonly<Record<CipherRung, CipherRungSpec>> = {
     keyLength: 1,
     symbols: DICE,
     pairsToBreak: 1,
-    plaintextLength: 12,
+    plaintextLength: 5,
     huntBonus: 8,
   },
   vigenere: {

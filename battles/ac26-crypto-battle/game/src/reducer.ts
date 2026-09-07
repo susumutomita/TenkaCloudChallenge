@@ -2756,6 +2756,7 @@ export function projectForTeam(
         // it) -- so the `?? c.expiresAtMs` fallback (remainingMs 0) is
         // unreachable in practice. It exists only to keep this arithmetic
         // total without an unsafe assertion.
+        durationMs: c.expiresAtMs - c.issuedAtMs,
         remainingMs: Math.max(0, c.expiresAtMs - (state.nowMs ?? c.expiresAtMs)),
         hints: projectHints(state, c, task, vault, exposedShareIndices),
         ...(c.expiryCause ? { expiryCause: c.expiryCause } : {}),
