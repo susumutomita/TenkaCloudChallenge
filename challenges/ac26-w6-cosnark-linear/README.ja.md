@@ -1,170 +1,116 @@
-# 誰も witness を持たないまま、証明の半分を組み立てる
+# 共同証明の準備：秘密を分けたまま足す
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
-> その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
-> 作成しています。このトラックに関する質問は講座運営ではなく TenkaCloud リポジトリへお願いします。
+> このトラックは Advanced Cryptography Program 2026 の非公式・独立した補助教材です。
+> 講座・運営者との提携や承認はありません。問題文、コード、fixture、図は独自作成です。
+> このトラックへの質問は講座運営者ではなく TenkaCloud へお願いします。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 610 · **Chapter:** Week 6 / Programmable
-Cryptography Stack Design · **Role:** `mechanism` · **想定時間:** 60〜90 分 · **配点:** 300
-· **必須前提:** `ac26-w2-secret-sharing`、`ac26-w2-linear-shares` · **Status:** draft
+**Track:** `advanced-cryptography-2026` · **Order:** 610 · **Week:** 6 · **Role:** `mechanism`
+· **想定時間:** 60〜90 分 · **配点:** 300 · **Status:** draft。
 
-## ストーリー
+## 到達点と範囲
 
-co-SNARK は、**どの prover も単独では持っていない** witness についての証明を作ります。witness は
-party 間に秘密分散されていて、prover の計算そのものが MPC の上で走ります。
+秘密を分け持つ共同証明者の、線形の準備計算を実装します。witness は秘密の数の並び、シェアは
+持ち主に配る一部分の数です。公開の数を掛ける操作と加算は分配法則により各自の手元ででき、
+結果も `A = sum(a[j]*w[j]) % p`、`B = sum(b[j]*w[j]) % p` のシェアとして残ります。
+最初の秘密分散は支給済みです。その準備後、この段階で通信は要りません。計算費用がゼロに
+なるわけではなく、SNARK の証明そのものを生成する問題でもありません。
 
-高くつきそうに聞こえますが、半分はただです。
+後半では結果の出所と通信を記録から監査し、0 の係数を取り除いて元の位置を忘れる最適化の
+反例を自作します。数値結果が合うだけでは出所・入力検証・報告の正しさは確認できません。
+最後は未知の設定でも同じ実装を動かします。
 
-```text
-A = Σ_j a_j w_j        B = Σ_j b_j w_j        (mod p)
-```
+## 参加者の導線
 
-`a` と `b` は公開の係数ベクトル、`w` は分散された witness。加法的 sharing では
+1. Participant Portal で起動し、問題エディタの `prover.py` を編集します。
+2. 無料の関数契約から `parse_relation` を実装し、**relation** を提出します。通れば **Solved** と
+   なり 30 点。他の未実装関数が失敗していても最初の項目は提出できます。
+3. **証拠を確認**で公開設定、シェアのラベル、操作記録を見ます。Inspect はシェア値を表示しません。
+   公開テストは別の公開練習値を使います。
+4. ラベル照合、各自の計算、出所の監査、記録の集計を実装します。全項目で現在のファイル全体を
+   提出します。直接回答欄はありません。
+5. `sparse_counterexample(p, width)` で誤った最適化の反例を作り、前の関数も残して **transfer** を
+   提出します。
 
-```text
-Σ_j a_j * [w_j]_party  =  [Σ_j a_j * w_j]_party
-```
-
-が party ごとに**独立**に成り立ちます。公開定数倍も、同じ party が持つ share 同士の加算も、1 party
-が単独でできることなので、co-SNARK prover の線形層は全部で 0 round です。これが崩れるのは乗算で、
-それが次の問題です。
-
-## 支給されるものと、変わったところ
-
-Week 2 の加法的秘密分散と share 上の局所演算は支給されます。どちらも再実装しません。変わったのは
-share の型です。
-
-```text
-Share.party    どの party が持っているか
-Share.field    どの体の元か
-Share.id       trace が値を言わずに operand を名指すための名前
-```
-
-Week 2 は sharing を `list[int]` として扱い、添字を引かせました。授業内容が算術ならそれで十分です。
-**誰が何を読んでよいか**が授業内容になった時点で、share を int のままにしておくことはできません。
-
-渡される runtime には `party_scope`、`value_of`、`add`、`mul_public`、`zero`、`events()`、
-`violations()`、`ancestry()`、`issued()` があります。`reconstruct` はありません。
-
-## Participant Portal での進め方
-
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
-2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
-3. Portal のエディタで starter のソースを編集する。
-4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
-5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
-
-checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
-エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
-値は拒否されます。
+日本語・英語の説明に用語、tuple の形、余りの計算、全 API、例外条件、一桁の例を無料で掲載します。
+8 項目すべてに「仕組み→小例→実際の編集・提出・結果確認」の 3 段ヒントがあります。
+24 ヒントは各 2 点、合計 48 点。配点 300 点・誤答 15 点の契約は維持します。
+公開テストは一部の契約と反例を確認するもので、全入力での正しさの証明ではありません。
 
 ## 採点
 
-8 つの checkpoint を独立に採点します。誤答は 1 回 15 点減点です。
-
-| Checkpoint | 配点 | 何を検査するか |
+| 項目 | 配点 | 確かめる性質 |
 |---|---:|---|
-| `relation` | 30 | 係数の正準形と、体を記述していない行の拒否 |
-| `witness` | 30 | shape・party 順・field stamp・重複を、値を読まずに検める |
-| `combine-a` | 40 | 局所演算だけで組み、witness を位置で引く |
-| `combine-b` | 40 | 両半分をそれぞれの係数から。畳む前に witness を検める |
-| `audit` | 50 | 結果が runtime 発行で、その party 自身の入力だけを祖先に持つ |
-| `trace` | 45 | round・message・party を log から読み出す |
-| `equivalence` | 40 | 全 4 shape で平文の関係式と一致し、再分散しても不変 |
-| `transfer` | 25 | 未知の体・party 数・witness 長で全部成立させる |
+| `relation` | 30 | 係数をそろえ、不正な指示書は `ValueError` で拒否する |
+| `witness` | 30 | 値を読まず形・体・持ち主順・id の重複を照合する |
+| `combine-a` | 40 | 元の位置を保って各自のシェアを掛けて足す |
+| `combine-b` | 40 | 入力を照合し、A と B をそれぞれの係数で計算する |
+| `audit` | 50 | 発行元・祖先・拒否記録・復元機能の有無を実際の道具から調べる |
+| `trace` | 45 | 実行後の全ログから操作・通信回数・通数・持ち主を集計する |
+| `equivalence` | 40 | 係数の形やシェアの分け方を変えても計算結果を保つ |
+| `transfer` | 25 | 未知の設定で動き、位置を詰めた計算が誤る入力を自作する |
 
-hint は 8 つ中 7 つにあります (各 12〜20)。全部開いても 300 点中 188 点が残ります。
+`transfer` は公開された条件を満たす任意の反例を受け付けます。参考解との一致を要求せず、
+元の位置での計算と、位置を詰めた計算を採点側が別に計算します。
+作問者テストでは誤実装 30 種類と採点結果を偽装する提出 1 種類を検出しました。30 種類中 24 種類は
+試した全形で A/B の数値結果を正しく復元します。数値以外も検証する理由を示す実測であり、
+全入力・全 seed に関する証明ではありません。
 
-## 正しい A と B は、見た目ほど何も保証しない
+## 監査が分かる範囲
 
-この問題は 24 個の壊れた実装を同梱していて、そのうち **18 個は全 shape で A と B を正しく復元し
-ます**。`make reference-test` が毎回この数を測ります。
+`Share.party`、`.field`、`.id` は公開ラベルです。runtime は使った入力 id、結果 id、通信フラグを
+記録し、値はログへ書きません。通常の参加者用道具には `reconstruct` がなく、`value_of` は他の
+持ち主の値を拒否します。ラベル照合で値を読む必要はありません。
 
-内訳は 3 つ。**値は正しいが形が違う** — `-3` を、その元の正準な名前である `94` に直さずに relation
-を保存する。**値は正しいが検めていない** — party 順が入れ替わった sharing や、同じ sharing が 2 箇所
-に入った witness を、そのまま畳む。**値は正しいが自己申告が嘘** — `rounds: 0` を log ではなく信念
-から返す。
+未発行の結果なら `issued=False` とし、`singleParty` の祖先照合から除きます。発行済みの結果では
+入力祖先に別の持ち主が混ざるかを調べます。0 の計算で入力祖先がない場合は正常です。
 
-このうち 1 つがこの問題の本題です。各 sharing を足して `w` を復元し、平文で `A` と `B` を計算して
-share し直す実装は、全 seed・全 shape で完璧な `A` と `B` を返します。実測すると、これを落とす
-checkpoint は `audit` **1 つだけ**です。
+これは処理を記録する教材です。人が持ち主の実行範囲を順番に切り替えて全値を読むことや、Python の
+内部属性を別に調べることまで、結果の出所から排除できません。「秘密が一度も復元されなかった」とは
+保証しません。本物の SNARK 生成、不正な参加者にも耐える MPC、通信プロトコルは対象外です。
 
-## audit が証明できることと、できないこと
+## 実行環境・費用・終了
 
-証明できるのは、結果の share が runtime によって発行され、その ancestry がその party 自身の入力
-share にしか行き着かず、refused read が 1 件も無いことです。これは本物の性質で、上の shortcut は
-ここで落ちます。
+`local/docker-compose.yml` は参加者用 Workbench と独立した verifier を起動します。
+参加者イメージには starter、公開テスト、支給の `participant/mpc.py`、表示スクリプトを含めます。
+fixture 導出・非公開テスト・参考解は verifier/作問者イメージへ分離しています。
+Workbench は Compose 内で公開練習値を取得し、採点要求を転送します。host へ公開するのは
+Workbench の `127.0.0.1:18113` だけです。両コンテナは非 root、ファイルシステムは読み取り専用で、
+一時領域と資源制限を使います。
 
-証明**できない**のは「witness が一度も組み立てられなかった」ことです。各 party の scope を順に開いて
-自分の share を読むのは合法で、全 party 分やれば `w` が手に入ります。そのあと正直に畳めば trace は
-完全に無害に見えます。`Share._value` に至っては属性 1 つ分の距離です。runtime は sandbox ではなく
-instrument で、記録しているのは「その計算が何を消費したか」であって「書いた人が何を見たか」では
-ありません。
+このローカル演習は AWS リソースを作らず、Region 設定もありません。Docker の CPU・メモリ・ディスクを
+使います。イベントのホスティング費用はプラットフォーム側で別に扱います。想定時間は 60〜90 分。
+`make verifier-down` で Compose のサービスとネットワークを終了します。ビルド済みローカルイメージは
+削除するまで残ります。Docker 管理権限を持つ人は両方のコンテナを調べられるので、自習用の検証であり、
+host 所有者に対する秘密保持は提供しません。
 
-これは演習の穴ではありません。本物の MPC の transcript が示すのは protocol の message pattern で
-あって、ある party の運用者が入力の写しを持っていなかったことではない。この 2 つを混同すると
-「MPC を使ったのだから漏れない」という結論に着地します。
+## 検証と出典
 
-## 0 round は答えであって、測定ではない
+この問題ディレクトリで実行します。
 
-1 行も書く前から答えは分かっているので、`rounds: 0` と書いて返す報告には点がありません。`trace`
-checkpoint は毎回、通信 event の入った log を渡します。1 round で 3 通運んだ log、2 round で 5 通の
-log、何も運ばなかった round、この行の委員会の外の party からの message。log を読んでいれば全部
-通ります。
+```sh
+make test                 # 現在の starter の公開テスト。初期状態では失敗する
+make test-one ID=parse_relation
+make inspect
+make reference-test       # 作問者イメージで全採点・誤実装検出
+make verifier-down
+```
 
-## 次につながるところ
+Issue #716 の修正で 3 段ヒントと無料の関数契約を整備し、監査の能力を超えた説明を修正しました。
+さらに参加者が反例を構成する課題を追加し、bool の拒否と、指定の `ValueError` で拒否する契約を
+採点でも確認します。秘密がすべて 0 の場合を追加し、A=B=0 の正解を A/B の逆順と誤判定しない
+ことも確認します。失敗メッセージは公開された性質だけを説明します。
 
-次の問題は乗算です。和の積は積の和ではないので、party は masked value を交換しなければなりません。
-co-SNARK が払うコストは全部そこにあり、だからこそここで引く境界を正確に引く価値があります。
+Docker の `make reference-test` は 31 種類の誤実装・偽装を検出しました。catalog gate は metadata
+全 116 件に合格しました。実際のローカル Workbench API で、無料契約だけから書いた parser の
+`relation` が合格し、後続関数は未実装のままでも進めることを確認しました。正規化を省くと説明済みの
+性質だけを失敗表示します。別途、作問者参考実装は公開テスト 7 件と prepare 後の 8 項目の提出が
+すべて合格し、両計算が同じになる反例はその公開性質だけのメッセージで拒否されました。
+CLI の `make test` は一時 worktree からの Colima bind mount 越しに starter を import できず停止
+したため、Workbench API から同じ公開テストをビルド済みイメージ内で確認しました。独立した参加者役が日英の問題文・ヒント・starter・Workbench 表示・公開テストだけを
+読み、公開テストの説明が実装と食い違う箇所を指摘しました。その説明を直し、未発行結果を監査する
+規則も無料本文へ補いました。これらは実ブラウザの配置、デプロイ済み得点反映、実 AWS の検証を
+証明するものではありません。
 
-## 対象外
-
-実際の SNARK proof 生成、malicious-secure MPC、network transport、prover 性能最適化。
-
-## これは安全ではない
-
-体は列挙できる小さい素数、party は 2〜5、敵対者は semi-honest ですらなく単に不在で、通信路も
-committed randomness も preprocessing もありません。機構の toy です。
-
-## 出典との対応
-
-Week 6 の教材は上流で公開されているので、`courseAlignment` は `curriculum.md` が記録している commit
-の `week6/README.md` と `week6/problems/co-snark-prove/README.md` を pin します。公式演習の template・
-係数・fixture・解答は転載していません。relation も runtime も instrumentation も独自に書いたもので、
-公式演習が支給する秘密分散 primitive はこの問題が土台にするものであって、この問題が採点するコード
-ではありません。
-
-## 保証範囲
-
-ローカル実行は**自習用の honor-system 検証**です。 Docker デーモンと compose stack の
-全コンテナを持っている人に対して、隠された材料の閲覧を防ぐことはできません。ここでの境界は
-誤配防止であって、その人に対する秘匿ではありません。あなたが build して動かす Workbench
-コンテナが持つのは starter、公開テスト、`make inspect` の表示、そして支給される sharing 層
-(`participant/mpc.py` — share、計測付き runtime、participant facade。 これは先行 2 問の答えで、
-意図して渡しています) だけです。 seed 導出、隠しテスト、reference solution、verifier は
-**入っていません**。それらは Workbench が compose network 越しに叩く、公開されない 2 つ目の
-コンテナと、`make reference-test` が build する author 専用 image にしかありません。
-
-そのため `make test` / `make test-one` / `make inspect` は先に verifier を起動します
-(`make verifier-up` が自動で走ります)。`make inspect` はこのデプロイの setting・行・witness を
-ローカルで導出せず、compose network 越しに verifier から読みます。停止は `make verifier-down` です。
-
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-提出は時間・メモリ・プロセス数・出力量の上限つきで実行され、両コンテナとも非 root・read-only・
-特権なしで動き、host に公開されるのは Workbench だけ、しかも loopback だけです。
-
-これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
-それらには participant が管理しない verifier が必要で、
-[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
-
-## コスト
-
-ゼロです。クラウドアカウントも AWS リソースも使いません。
-
-## 作問者向け
-
-`make reference-test` が mutation suite を実行します。壊した提出 24 種類と verifier を狙った 1 種類が
-あります。24 種類のうち何個が依然として正しい `A` と `B` を復元するかを毎回印字します。この README が
-引用しているのはその数で、後の変更で checkpoint が安くなればその数が動き、主張のほうを直します。
+講座との対応は commit `a3aa4b56fa88fbe803b57d320fbc87c1a203b480` の `week6/README.md` と
+`week6/problems/co-snark-prove/README.md` に固定しています。この問題の runtime・係数・採点は
+独自作成で、公式演習の解答を転載していません。

@@ -1,178 +1,125 @@
-# Build half a proof over a witness nobody holds
+# Prepare a joint proof: add without combining secrets
 
 > This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
-> It is not affiliated with or endorsed by the course or its operators. All problem statements,
-> code, fixtures, and figures here are written independently. Questions about this track go to
-> the TenkaCloud repository, not to the course operators.
+> It is not affiliated with or endorsed by the course or its operators. Statements, code,
+> fixtures and figures are independently authored. Direct questions about this track to
+> TenkaCloud, not to the course operators.
 
-**Track:** `advanced-cryptography-2026` · **Order:** 610 · **Chapter:** Week 6 / Programmable
-Cryptography Stack Design · **Role:** `mechanism` · **Time:** 60–90 minutes · **Points:** 300
-· **Required first:** `ac26-w2-secret-sharing`, `ac26-w2-linear-shares` · **Status:** draft
+**Track:** `advanced-cryptography-2026` · **Order:** 610 · **Week:** 6 · **Role:** `mechanism`
+· **Time:** 60–90 minutes · **Points:** 300 · **Status:** draft.
 
-## The story
+## Outcome and scope
 
-A co-SNARK proves a statement about a witness that **no single prover holds**. The witness is
-secret-shared across parties, and the prover computation itself runs on top of MPC.
+Participants build the linear preparation of a joint prover over secret-shared inputs.
+A witness is the list of secret values; a share is one holder's part. Multiplication by a
+public number and addition work separately for each holder by the distributive law. Their
+outputs remain shares of `A = sum(a[j]*w[j]) % p` and `B = sum(b[j]*w[j]) % p`.
+Initial sharing is supplied. This stage needs no communication after that preparation; it
+is not free computation and does not generate a SNARK proof.
 
-That sounds expensive, and half of it is free.
+The later checkpoints audit the result's recorded origin and communication, then require a
+counterexample to an optimization that removes zero coefficients but forgets their original
+positions. Correct final numbers alone do not establish correct provenance, input validation,
+or a truthful report. The same implementation must survive unseen parameters.
 
-```text
-A = sum_j a_j w_j        B = sum_j b_j w_j        (mod p)
-```
+## Participant route
 
-`a` and `b` are public coefficient vectors. `w` is the shared witness. Under an additive
-sharing,
+1. Start the problem in Participant Portal. Edit `prover.py` in the problem editor.
+2. Implement `parse_relation` from its free contract and submit **relation**. A pass marks
+   that checkpoint **Solved** and awards 30 points. Unfinished later functions do not block it.
+3. Use **Inspect evidence** for the public configuration, share labels and operation records.
+   Inspect prints no share values. Public tests use separate, public practice values.
+4. Implement the label validation, local calculations, provenance audit and log report. Every
+   checkpoint submits the current whole file; there are no direct-answer fields.
+5. Implement `sparse_counterexample(p, width)`, check the two different results, then submit
+   **transfer** together with the earlier functions.
 
-```text
-sum_j a_j * [w_j]_party  =  [sum_j a_j * w_j]_party
-```
+The Japanese and English statements define the vocabulary, tuple shape, remainder arithmetic,
+all required APIs, exception rules and one-digit examples for free. Each of eight checkpoints
+has three optional hints: mechanism, small example, then editor action and observable feedback.
+All 24 hints cost 2 points each, 48 total; the score and wrong-answer penalty remain 300 and 15.
+Public tests check selected contracts and one counterexample; they are not complete verification.
 
-holds for each party **independently**. Scaling by a public constant and adding two shares held
-by the same party are both things one party does alone, so the entire linear layer of a
-co-SNARK prover costs zero rounds. Multiplication is where that stops being true, and that is
-the next problem.
+## Grading
 
-## What is supplied, and what changed
-
-Week 2's additive secret sharing and its local operations are supplied. You rebuild neither.
-What changed is the type of a share.
-
-```text
-Share.party    which party holds it
-Share.field    which field its value lives in
-Share.id       a name, so a trace can name an operand without naming a value
-```
-
-Week 2 modelled a sharing as `list[int]` and let you index it. That is fine when the lesson is
-the arithmetic. Once the lesson is *who may read what*, a share cannot stay an int.
-
-The runtime you are handed has `party_scope`, `value_of`, `add`, `mul_public`, `zero`,
-`events()`, `violations()`, `ancestry()` and `issued()`. It does not have `reconstruct`.
-
-## Participant Portal workflow
-
-1. Start the problem in Participant Portal; the problem editor appears on the same page.
-2. Select **Inspect evidence** to read this deployment's fixture and published evidence.
-3. Edit the starter source in the Portal editor.
-4. Select **Run public tests** and fill any direct-answer fields from the evidence.
-5. Submit each checkpoint directly. Portal prepares and sends the current files and answers.
-
-No checkout, terminal, local editor, second screen, or copy-and-paste step is required. Code
-checkpoints use the current editor source. Direct answers are bound to the current deployment
-seed, so a value copied from another deployment is rejected.
-
-## Scoring
-
-Eight checkpoints, scored independently. Wrong answers cost 15 points each.
-
-| Checkpoint | Points | What is checked |
+| Checkpoint | Points | Property |
 |---|---:|---|
-| `relation` | 30 | Canonical coefficients, and rows that do not describe a field are refused |
-| `witness` | 30 | Shape, party order, field stamp and duplicates — checked without reading a value |
-| `combine-a` | 40 | A combination built from local operations, indexed by witness position |
-| `combine-b` | 40 | Both halves from their own vectors, over a witness that was checked first |
-| `audit` | 50 | Every result issued by the runtime, descending only from its own party's inputs |
-| `trace` | 45 | Rounds, messages and parties read out of the log rather than asserted |
-| `equivalence` | 40 | Agreement with the plain relation on all four shapes, under rerandomization |
-| `transfer` | 25 | All of it at a field, party count and witness length you have not seen |
+| `relation` | 30 | Normalize coefficients; reject malformed rows with `ValueError` |
+| `witness` | 30 | Match shape, field, holder order and unique ids without value reads |
+| `combine-a` | 40 | Scale and add the correct position of each holder's shares |
+| `combine-b` | 40 | Validate inputs and calculate A and B from their respective coefficients |
+| `audit` | 50 | Ask the runtime about issuance, ancestry, refused reads and reconstruction access |
+| `trace` | 45 | Count operations, rounds, messages and holders from the entire post-run log |
+| `equivalence` | 40 | Preserve the plain result under coefficient shapes and resharing |
+| `transfer` | 25 | Pass unseen settings and construct an input exposing compacted-position errors |
 
-Hints on seven of the eight (12–20 each). Opening every one still leaves 188 of 300.
+`transfer` accepts any construction satisfying its public predicates; it does not compare to
+one reference answer. Its checker independently computes the original and compacted products.
+The author mutation run kills 30 broken implementations plus one verdict-spoofing submission.
+Of the 30, 24 still reconstruct A/B correctly on every tested shape, demonstrating why the
+other properties need their own checks. These are measured test results, not all-input proofs.
 
-## A correct A and B proves less than it looks
+## Audit boundary
 
-This problem ships 24 deliberately broken implementations, and **18 of them reconstruct to the
-right A and B on every shape**. `make reference-test` re-measures that count on every run.
+`Share.party`, `.field` and `.id` are public labels. The supplied runtime records operand ids,
+result ids and communication flags; it does not record values. Its usual participant facade
+omits `reconstruct`. `value_of` refuses cross-holder reads, and label validation must not call it.
 
-They split three ways. **Right value, wrong form** — a relation stored with `-3` where the
-canonical name for that element is `94`. **Right value, nothing checked** — folding a sharing
-whose parties are out of order, or that appears at two witness positions. **Right value, false
-account of itself** — `rounds: 0` returned from belief rather than from the log.
+The audit tests recorded origins. An unissued output makes `issued=False` and is excluded from
+`singleParty`'s ancestry test. For issued outputs, `singleParty` checks whether any ancestor
+input belongs to another holder. Empty input ancestry is valid for a zero combination.
 
-One of them is the point of the problem. An implementation that adds up each sharing to recover
-`w`, computes `A` and `B` in the clear, and re-shares the answers returns a perfect `A` and `B`
-at every seed and every shape. Measured, exactly **one** checkpoint kills it: `audit`.
+This instrument is not a sandbox against its operator. Reading each holder's values through
+separate scopes, or inspecting internal Python attributes, is not ruled out by an honest-looking
+result trace. No claim that the witness was never assembled follows from this report. Real
+SNARK generation, malicious-secure MPC and network protocols are outside this exercise.
 
-## What the audit proves, and what it does not
+## Runtime, costs and teardown
 
-It proves that every result share was issued by the runtime, that its ancestry reaches only
-that party's own input shares, and that no read was refused. That is real, and it is what the
-shortcut above fails.
+`local/docker-compose.yml` runs a participant Workbench and a separate verifier. The Workbench
+image contains the starter, public tests, supplied `participant/mpc.py` and display script.
+Fixture derivations, hidden checks and reference answers remain in verifier/author images.
+The Workbench fetches public practice evidence and forwards verdict requests on the Compose
+network. Only the Workbench publishes a loopback port (`127.0.0.1:18113`). Containers run
+non-root, with read-only filesystems, temporary writable space and resource limits.
 
-It does **not** prove that the witness was never assembled. Opening each party's scope in turn
-and reading that party's own share is legal; do it for every party and you have `w`, and folding
-honestly afterwards leaves a completely innocent trace. `Share._value` is one attribute access
-away besides. The runtime is an instrument, not a sandbox — it records what a computation
-consumed, not what its author looked at.
+This local exercise creates no AWS resources and has no Region setting. Docker CPU, memory
+and disk are used; event-hosting resources belong to the platform's separate cost model.
+The intended session is 60–90 minutes. `make verifier-down` removes the Compose services and
+network. Built local images remain until removed. A participant controlling the Docker daemon
+can inspect all containers: this is self-study verification, not secrecy against the host owner.
 
-That is not a gap in the exercise. A real MPC transcript shows the protocol's message pattern;
-it does not show that a party's operator kept no copy of their input. Conflating the two lands
-you at "we used MPC, so nothing leaked".
+## Verification and provenance
 
-## Zero rounds is the answer, not a measurement
+From this problem directory:
 
-You knew the answer before you wrote a line, so a report that returns `rounds: 0` earns nothing.
-The `trace` checkpoint hands the report a log with communication in it every time: three
-messages in one round, five in two, a round that carried nothing, and a message from a party
-outside this row's committee. Read the log and all of them pass.
+```sh
+make test                 # runs public tests against the current starter; stubs fail initially
+make test-one ID=parse_relation
+make inspect
+make reference-test       # author image: full checker and mutation suite
+make verifier-down
+```
 
-## Where this leads
+The Issue #716 revision adds the three-rung hints and free function contracts, fixes claims
+that exceeded the runtime's audit, and adds the participant-constructed transfer case.
+It also checks bool rejection and the declared `ValueError` contract rather than accepting any
+exception as a successful refusal. A zero witness now has its own case: A=B=0 must not be
+misclassified as swapped outputs. Failure messages describe public properties only.
 
-The next problem is multiplication, which cannot be done this way: the product of the sums is
-not the sum of the products, so parties have to exchange masked values. Everything a co-SNARK
-spends is spent there, which is why the boundary drawn here is worth drawing precisely.
+The Docker `make reference-test` run passes (31 mutants killed). The catalog gate validates all
+116 metadata files. In the real local Workbench API, a parser written from only the free
+contract passes `relation` while later functions remain unfinished; omitting coefficient
+normalization returns the documented property-level failure. Separately, the author reference
+passes all seven public tests and all eight prepared checkpoint submissions. A construction
+that does not distinguish the two products is rejected with only that public property.
+The CLI `make test` attempt could not import the starter through the Colima bind mount from
+this temporary worktree; the Workbench API ran those same public tests from its built image
+without that host-mount dependency. An independent participant-role read reviewed only the bilingual statement,
+hints, starter, Workbench text and public tests. It caught a stale public-test description;
+that description and the free statement's unissued-result rule were clarified. These checks
+do not establish rendered Portal usability, deployed score persistence or a live AWS run.
 
-## Not in scope
-
-Actual SNARK proof generation, malicious-secure MPC, network transport, prover performance.
-
-## This is not secure
-
-The field is a small enumerable prime, there are two to five parties, the adversary is not
-semi-honest so much as absent, and there is no channel, no committed randomness and no
-preprocessing. It is a toy of the mechanism.
-
-## Source alignment
-
-Week 6's material is published upstream, so `courseAlignment` pins `week6/README.md` and
-`week6/problems/co-snark-prove/README.md` at the commit `curriculum.md` records. The exercise's
-template, coefficients, fixtures and solution are not reproduced here: the relation, the runtime
-and the instrumentation are written independently, and the course's exercise supplies the
-secret-sharing primitives this one builds on rather than the code this one grades.
-
-## Assurance scope
-
-Local mode is **self-paced, honor-system verification**. Someone who owns the Docker daemon and
-every container in the compose stack cannot be prevented from inspecting hidden material. The
-boundary here is misdelivery, not confidentiality against that person: the Workbench container
-you build and run carries the starter, the public tests, the orientation printer and the
-supplied sharing layer (`participant/mpc.py` — the shares, the instrumented runtime and the
-participant facade, which are two earlier problems' answers and are handed to you on purpose).
-It does **not** carry the seed derivation, the hidden tests, the reference solution or the
-verifier. Those live only in a second, unpublished container the Workbench reaches over the
-compose network, and in the author-only image `make reference-test` builds.
-
-Because of that, `make test`, `make test-one` and `make inspect` bring the verifier up first
-(`make verifier-up`, run for you): `make inspect` reads this deployment's setting, row and
-witness from it over the compose network instead of deriving them locally. `make verifier-down`
-stops it.
-
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry. Submissions run
-with time, memory, process and output caps; both containers run non-root, read-only, without
-privileges, and only the Workbench is published, on loopback.
-
-That supports self-study and honest practice. It does **not** support competition ranking,
-examination, or completion certification — those need a verifier the participant does not
-administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271).
-
-## Cost
-
-Zero. No cloud account, no AWS resources.
-
-## For authors
-
-`make reference-test` runs the mutation suite: 24 broken submissions plus one aimed at the
-verifier. It prints how many of the 24 still reconstruct to the right `A` and `B`, which is the
-number this README quotes — if a later edit makes the checkpoints cheaper, that number moves and
-the claim has to move with it.
+The course alignment pins `week6/README.md` and `week6/problems/co-snark-prove/README.md` at
+commit `a3aa4b56fa88fbe803b57d320fbc87c1a203b480`. This problem's runtime, coefficients and
+checks are independently authored; official exercise answers are not copied.

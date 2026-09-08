@@ -157,3 +157,8 @@ def communication_report(runtime, relation: dict, shares) -> dict:
         "parties": tuple(sorted({event["party"] for event in events})),
         "localOnly": not any(event.get("communication") for event in events),
     }
+
+
+def sparse_counterexample(p: int, width: int) -> dict:
+    """Author construction: moving the second coefficient changes its paired value."""
+    return {"a": [0, 1] + [0] * (width - 2), "w": [0, 1] + [0] * (width - 2)}

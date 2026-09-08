@@ -1,6 +1,6 @@
 {
   "id": "ac26-w6-cosnark-linear",
-  "name": "誰も witness を持たないまま、証明の半分を組み立てる",
+  "name": "共同証明の準備：秘密を分けたまま足す",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
@@ -32,10 +32,10 @@
   },
   "difficulty": 4,
   "estimatedDuration": "60-90 分",
-  "shortDescription": "複数人の秘密を合わせた結果が正しいと、外の誰かに証明したい。でも誰にも全部は見せられない。証明の線形部分だけは、witness を一度も組み立てず、通信も 1 度も起こさず、破片(share)のまま組み立てられる。それを書く。",
-  "description": "Week 6 の最初の問題。 co-SNARK は、 **どの prover も単独では持っていない** witness についての証明を作る。 witness は party 間に秘密分散され、 prover の計算は MPC の上で走る。 この問題はその計算のうち、 通信を 1 round も必要としない半分を書く。\n\n```text\nA = Σ_j a_j w_j        B = Σ_j b_j w_j        (mod p)\n```\n\n`a` と `b` は公開係数、 `w` は秘密。 加法的 sharing では `Σ_j a_j [w_j]_party = [Σ_j a_j w_j]_party` が party ごとに独立に成り立つので、 公開定数倍と同一 party の share 同士の加算だけで済む。 誰も何も送らない。 次の問題の乗算でこれが崩れることが、 co-SNARK のコストが乗算の数で決まる理由になる。\n\nWeek 2 の 2 問 (`ac26-w2-secret-sharing` / `ac26-w2-linear-shares`) は支給される。 違うのは share の型で、 Week 2 が `list[int]` だったのに対しここでは `Share` が party・field・id を持ち、 値は runtime 越しに読む。 誰が何を読んでよいかが授業内容になった時点で、 share を int にしておくことはできない。\n\nparticipant が受け取る runtime には `reconstruct` が無い。 「再構成して平文で計算して share し直す」 が、 お願いではなく API として書けない形にしてある。 ただしこれは security boundary ではなく instrument で、 `Share._value` は属性 1 つ分の距離にある。 audit が証明できるのは 「その結果が runtime によって、 その party 自身の入力だけから作られた」 ことであって、 「witness が一度も組み立てられなかった」 ことではない。 その差は writeup で明示する。\n\n採点の設計として、 この問題は 24 個の壊れた実装を同梱していて、 そのうち **18 個は A と B を全 shape で正しく復元する**。 `make reference-test` が毎回この数を測る。 内訳は 「値は正しいが正準形でない」 「値は正しいが検めていない」 「値は正しいが自己申告が嘘」 の 3 種で、 prover の出力を見るテストにはどれも見えない。 だから checkpoint は最終値ではなく stage ごとに置く。 なかでも 「witness を再構成して平文で畳んで share し直す」 実装は、 全 seed・全 shape で完璧な A と B を返しながら **audit checkpoint だけ**が落とす。\n\ntoy であることも明示しておく。 field は列挙可能な小さい素数、 party は 2〜5、 semi-honest かつ通信路も無い。",
-  "instructions": "## Week 6 は、枝が合流するところ\n\nコースはここまで 3 本の枝に分かれていました。**隠す**(準同型暗号)、**分ける**(秘密計算)、**示す**(ゼロ知識証明)。Week 6 は、それを組み合わせる週です。\n\n```\n分ける + 示す = co-SNARK      誰も全体を知らないまま、1 つの証明を作る\n```\n\n**単体ではできないことが、重ねるとできる。** この問題は、その最初の一歩です。\n\n## 誰にも全部は見せられない\n\n何人かが、それぞれ秘密の値を持っている。合わせた結果が正しいと、外の誰かに証明したい。ところが、**誰にも自分の値の全部は見せられない。**\n\nふつうの証明者(SNARK の prover)は、証明のもとになる値(witness)を丸ごと手元に持ちます。証明は作れますが、その 1 人が漏らせば witness も漏れます。プライベート DeFi や、複数人で 1 つの資産を預かる共同保管では、その「全部を持つ 1 人」がいないことが前提です。だから証明者を**分散したまま**動かす — 誰も witness を組み立てないので、漏らす経路そのものが消えます。これが co-SNARK です。\n\n証明者の計算は 2 つに割れます。公開の数を掛けて足すだけの**線形部分**と、秘密どうしを掛ける**非線形部分**。この問題は前半、**線形部分だけ**を扱います。\n\n## なぜ線形部分は、通信が要らないのか\n\n芯は、中 1 の分配法則 `c·(a + b) = c·a + c·b` です。\n\n秘密を「足し合わせると元に戻る破片(share)」に割っておくと、**公開の数を掛ける操作は各自が手元だけでできます** — 全部の破片を同じ倍率にすれば、合計も同じ倍率になるからです。破片どうしの足し算も同じ。だから「公開の係数 × 秘密の値」を並べて足すだけの計算(= 線形結合)は、**誰とも通信せずに終わります**。\n\n1 桁で見ます(7 で割ったあまりの世界)。秘密 x = 4 を 3 人に配った破片が [5, 6, 0] のとき、5 + 6 + 0 = 11、7 で割ったあまりは 4 — たしかに戻ります。公開の係数 3 を各自が自分の破片に掛けると [1, 4, 0]、合計は 5。一方 3 × 4 = 12 のあまりも 5。**誰も x = 4 を知らないまま、3x の破片ができました。** これが証明者が MPC の上でやることの最小形です。\n\n## 前提（知っていれば飛ばしてください）\n\n数はすべて「素数 p で割ったあまり」です(`(-3) % 7` は 4)。本番の p は「証拠を確認」に出ます。share の作り方・戻し方・足し方・公開の数の掛け方は Week 2 で自分で書きましたが、**この問題では書きません** — `runtime` の中に道具として入っています。破片が party・field・id を持つ点だけが Week 2 と違います。**relation** = 「witness が条件を満たす」1 行分の式。ここでは公開の係数 `a`・`b`、体の名前、p、witness の長さ width、party 数の **6 項目**でできていて、`A = a₀w₀ + a₁w₁ + a₂w₂ + …`、`B = b₀w₀ + b₁w₁ + b₂w₂ + …` を意味します（係数と witness を 1 つずつ掛けて、全部足す。項の数は width 個）。以降これを短く `Σ a_j w_j` と書きます — Σ は「並んだ項を全部足す」の略記です。**round** = party 間の通信 1 往復。\n\nshare が初めてなら、先に `ac26-w2-linear-shares` を解いてください。\n\n## 結果が合っていても、証明にはならない\n\n線形部分は前提のとおり 0 round で終わる「はず」です。この「はず」を「そうだった」に変えるのが、この問題の後半です。\n\nA と B の数が合っていることは、**witness を組み立てなかったことの証明にはなりません**。裏で一度 witness を復元し、平文で計算して share し直しても、A も B も完璧に合います。だから最後の 3 つは、**自分が作った share がどこから来たか**(祖先)と、**log が実際に何を言っているか**(通信の列)を見に行きます。ここがこの問題の 1 つの新しいことです。\n\n## 最初の一手\n\nParticipant Portal(この問題文が表示されているサイト)で **「起動」** を押すと、あなた専用の実行環境(コンテナ)が立ち上がり、問題文と同じ画面に **問題エディタ** が出ます。書くファイルは **`prover.py` 1 つだけ**、言語は **Python** です。6 つの関数の枠が最初から入っていて、引数・返り値・例外の条件は各関数の先頭の説明文(docstring)に書いてあります。\n\n**「証拠を確認」** を押すと、この起動のためだけに作られた値が表示されます。出るのは次の 4 つです。\n\n1. **あなたの設定** — p と体の名前、party の人数、witness の長さ(width)、設定の id。\n2. **1 行分の relation** — 公開の係数の並び `a` と `b`(ここに出るのは全部埋まった shape のものです)。\n3. **share のラベル一覧** — `w0: [id, id, …]` のように、witness の位置ごと・party ごとの **id だけ**。**値は表示されませんし、witness そのものもどこにも出ません。** あなたが見られるのは、証明者が見てよいものと同じだけです。\n4. **操作 1 回が log に残す形** — 公開のデモ値で `zero` → `mul_public` → `add` を 1 回ずつ実行した log、できた share の party / field / id、その share の祖先(ancestry)の一覧、そして「この runtime が発行した share か」の答え。\n\n**4 番の log をよく見てください。** どの行にも値が入っておらず、`communication` はすべて `False` です。log に値が出ないという事実が、2 番目の checkpoint(値を読まずに検める)が可能である理由で、`communication` の列があるという事実が、6 番目の checkpoint が暗唱ではなく測定である理由です。\n\n数はどれも起動するたびに変わるので、他の人の値を写しても合いません。採点では、ここに出たものとは別の shape の係数(0 を含むもの、負の数で書かれたもの、1 か所だけ 1 のもの)でも同じコードが試されます。\n\n**「公開テストを実行」** を押すと、形だけの検査(それぞれの関数が決められた型と項目を返すか、正直な 1 往復が通るか)を手元で試せます。正しい答えと、もっともらしい間違いの区別はここではつきません。 エディタを最初の状態に戻したくなったら **「初期状態に戻す」** を押します。\n\n## 答えるもの — checkpoint は 8 つ、この順で\n\n8 つとも**コードの checkpoint**で、答えを直接書き込む欄はありません。手順は「エディタに書く → その checkpoint の **「提出 (+点数)」** を押す」だけで、押した時点の `prover.py` 全体がそのまま採点へ送られます — **同じ 1 ファイルを 8 通りの角度から採点します**。不正解でも出し直せます(1 回まちがえるごとに 15 点引かれますが、合計が 0 点未満になることはありません)。checkpoint は独立なので、1 つ詰まっても他は取れます。\n\n1. **relation** — `parse_relation(relation) -> dict`。渡ってくるのは上の 6 項目の辞書で、**届いた形のまま**です。同じ 6 つのキーを返し、`a` と `b` は体の要素として正準の形(0 以上 p 未満)に直したタプルにします。行として成り立たないもの(長さが width でない、`fieldId` が p の体を指していない、整数でない値がある、など)は `ValueError` です。\n2. **witness** — `validate_shared_witness(runtime, relation, shares) -> dict`。`shares[j][party]` が、party の持つ w_j の断片です。**値を 1 つも読まずに**、id と party 番号と field 名だけで形を検めます(読んだ回数は数えられています)。返すのは `{\"width\", \"parties\", \"fieldId\", \"shareIds\"}` です。\n3. **combine-a** — `shared_linear_combination(runtime, coefficients, shares) -> tuple`。party ごとに 1 つ、party 順に並べた share のタプルを返します。中で使ってよいのは `runtime.party_scope` / `zero` / `mul_public` / `add` です。係数 `c_j` が掛かる相手は「j 番目の位置」であって「j 番目の 0 でない項」ではありません。\n4. **combine-b** — `prove_linear(runtime, relation, shares) -> dict`。`{\"A\": …, \"B\": …}` を返します。A は `a` から、B は `b` から作ります。同じ witness の上の別のベクトルなので、片方から両方を作ると「同じ 1 つの間違った主張」の share が 2 本できます。\n5. **audit** — `no_reconstruction_report(runtime, relation, shares) -> dict`。行を証明したうえで、自分が作った結果を監査して `{\"issued\", \"singleParty\", \"violations\", \"reconstructAvailable\", \"width\"}` を返します。`ancestry(share)` はその share が作られた元の id を、途中のものまで全部返します。\n6. **trace** — `communication_report(runtime, relation, shares) -> dict`。`{\"operations\", \"rounds\", \"messages\", \"parties\", \"localOnly\"}` を返します。**log を読んで報告する**関数で、期待した値を書く関数ではありません — 採点では通信が記録された log も渡されます。`rounds` と `messages` は別の質問です(1 round が何通も運べます)。\n7. **equivalence** — 新しい関数はありません。3 と 4 が作った share を party 全員ぶん足したものが、witness を平文で使って計算した `a₀w₀ + a₁w₁ + …` と `b₀w₀ + b₁w₁ + …` に一致するかを見ます。\n8. **transfer** — いまの `prover.py` がそのまま、**見たことのない p・party 数・width・係数**で 1〜7 をもう一度全部走ります。画面に出た数値を書き写した実装はここで落ちます。\n\n## 線形はタダ、では掛け算は\n\n線形部分は 0 round で済みました。**残るのは掛け算だけ** — そして掛け算には通信が要ります。次の問題(`ac26-w6-cosnark-beaver`)はそこを 1 往復で片づけ、その次(`ac26-w6-cosnark-privacy`)は「結果は同じでも漏らしている実装」を記録から見分けます。co-SNARK の費用が乗算の数で決まるのは、この問題で「線形はタダ」を見たことが出発点です。\n",
-  "writeup": "## 正しい A と B は、 正しい prover の証拠にならない\n\nこの問題は 24 個の壊れた実装を同梱していて、 そのうち **18 個は A と B を全 shape・全 label で正しく復元します**。 `make reference-test` が毎回この数を測り、 数が動いたら数のほうを直します。\n\n内訳は 3 つ。 **値は正しいが正準形でない** (`-3` を `94` に直さないまま relation を保存する)。 **値は正しいが検めていない** (party 順が入れ替わった sharing、 別の体の share、 同じ sharing が 2 箇所に入った witness を、 そのまま畳む)。 **値は正しいが自己申告が嘘** (`rounds: 0` を log ではなく信念から返す、 issued を訊かずに主張する)。\n\nこのうち 1 つが本題です。\n\n## witness を組み立ててから畳む実装は、 値のテストを 1 つも落とさない\n\n各 sharing を足して `w` を復元し、 平文で `A` と `B` を計算し、 結果を share し直す実装は、 全 seed・全 shape で **完璧に正しい A と B** を返します。 復元値の一致、 rerandomize 不変性、 sparse も signed も unit も、 すべて通ります。\n\n実測すると、 この実装を落とす checkpoint は `audit` **1 つだけ**です (`transfer` が同じ検査を別 seed で再実行する分を除く)。 出力を見るテストで捕まえる方法はありません。 `issued` と `ancestry` が見ているのは値ではなく出自だからです。\n\n## audit が証明できることと、 できないこと\n\n証明できるのは次です。 結果の share は runtime が発行したものであり、 その ancestry を辿ると **その party 自身の入力 share** にしか行き着かず、 refused read は 1 件も無い。 これは本物の性質で、 上の shortcut はここで落ちます。\n\n証明できないのは 「witness が一度も組み立てられなかった」 です。 各 party の scope を順に開いて自分の share を読むのは合法で、 それを全 party 分やれば `w` が手に入り、 そのあと正直に畳めば trace は完全に無害に見えます。 `Share._value` に至っては属性 1 つ分の距離です。 runtime は sandbox ではなく instrument で、 記録しているのは 「その計算が何を消費したか」 であって 「書いた人が何を見たか」 ではありません。\n\nこれは実装の穴ではなく、 本物の MPC prover でも同じです。 transcript が示すのは protocol の message pattern であって、 ある party の運用者が witness の写しを持っていなかったことではありません。 後者は暗号ではなく信頼境界と運用の問題で、 混同すると 「MPC を使ったのだから漏れない」 という結論に着地します。\n\n## 「0 round」 は答えであって、 測定ではない\n\nこの問題の答えが 0 round であることは、 1 行も書く前に全員が知っています。 だからこそ `rounds: 0` と書いて返す報告には点がありません。 `trace` checkpoint は毎回、 通信 event を含む log を渡します。 3 通の message を 1 round で運んだ log、 5 通を 2 round で運んだ log、 何も運ばなかった round、 この行の委員会の外の party からの message。 信念ではなく log を読んでいれば全部通ります。\n\n`rounds` と `messages` が別の数であることも同じ理由です。 1 round が何通運ぶかは protocol 次第で、 「通信したか」 は違います。\n\n## sparse が dense より難しい理由\n\n`a_j` が掛かるのは witness の位置 `j` であって、 「非零な係数のうち何番目か」 ではありません。 dense な係数ベクトルではこの 2 つは一致するので、 dense だけで書いたコードは静かに通ります。 零係数を飛ばす最適化それ自体は正しく、 飛ばしたぶん `shares` の側も進めてしまうのが誤りです。\n\n## 負の係数は間違いではない\n\n`-3` は `F_97` の元の名前として完全に正しく、 正準な名前ではありません。 下流の演算は毎回 mod p するので `A` と `B` は正しく出ます。 正しく出ないのは、 保存された relation を別の prover が書いた同じ relation と比較したときです。 「同じ主張を証明しているか」 の照合は、 まさにその比較です。\n\n## toy と production の差\n\nここで書いたものは機構の toy です。 field は列挙できる小さい素数、 party は 2〜5、 敵対者は semi-honest ですらなく単に不在で、 通信路も committed randomness も preprocessing もありません。 本物の co-SNARK は乗算に Beaver triple を使い、 その triple をどこから調達するかが設計の中心になります。 それが次の問題です。\n\n## 対象外\n\n実際の SNARK proof 生成、 malicious-secure MPC、 network transport、 prover 性能最適化。",
+  "shortDescription": "秘密を分け持つ人たちが、公開の数を掛けて足すプログラムを作ります。まず prover.py の parse_relation を直して提出。後半は記録から計算の経路を監査し、位置を取り違える実装の反例を作ります。",
+  "description": "co-SNARK の線形準備計算を、支給された加法的秘密分散と計測用 runtime の上で実装する。公開係数による A/B の計算を各 party のシェアで行い、結果を共有したまま返す。通常経路は準備後の通信を必要としない。実際の SNARK 証明生成や敵対者に対する秘密保持はこの模型の保証範囲外。\n\n後半は数値の一致に加え、入力の整合性・結果の発行と祖先・ログからの通信集計を確認する。最後は未見設定へ適用し、0係数だけを詰める誤実装を壊す公開入力を参加者自身が構成する。\n\n作問者テストは誤実装30種類と採点偽装1種類を検出し、30種類中24種類が試した係数の形でA/Bの値だけなら合うことを確認している。入力シェアの値や採点設定を公開する課題ではない。公開テストは別の公開練習値を使う。",
+  "instructions": "## 前提 — 最初は、計算の指示書を読めるようにする\n\nあなたは、秘密を分け持つ人たちの**共同証明プログラム**を作ります。まず公開の計算指示を読み、そのあと秘密をまとめずに計算し、記録で処理を確かめます。\n\n**「起動」→ エディタの `prover.py` → `parse_relation` を実装 → `relation` の「提出」**。書き方は下の「1. 指示書」を使います。通るとこの項目が **Solved** になり、30 点。失敗したら表示された性質を直して再提出します。他の未実装項目の失敗は、最初の項目の提出を妨げません。\n\n## 何を分けて、何を作る？\n\n**witness（ウィットネス）**は、証明の根拠になる秘密の数の並びです。ここでは `w[0], w[1], …`。**party** は分け持つ人で、番号は 0 から始まります。\n\n**秘密分散**は、秘密をいくつかの数に分けて持たせること。配る数を **シェア（share）** と呼びます。この問題では全員のシェアを足し、素数 `p` で割った余りにすると元の数に戻る方式です。Python では余りを `%` で書きます。例えば `(-3) % 7 = 4`。この余りの計算で使う数のまとまりを**体（field）**、その名前を `fieldId` と呼びます。\n\n```text\n                  party 0   party 1   party 2\n秘密 x = 4 のシェア      5         6         0     足すと 11 → 7 の余りは 4\n各自が公開の 3 を掛ける  1         4         0     足すと  5 → 3×4 の余りも 5\n                         他の人へ送らずに計算\n```\n\n**秘密計算（MPC）**は、複数人が入力を明かさず共同で計算する方法です。公開の数を掛けて足す**線形計算**なら、上のように各自のシェアだけで進められます。理由は分配法則 `c×(x+y) = c×x + c×y` です。シェアを配る準備は支給済みで、この段階の通信は数えません。\n\n**co-SNARK** は、秘密を分け持つ複数の証明者が共同で SNARK（短く検証できる証明）を作る方式です。本問で作るのはその準備計算の模型で、SNARK の証明そのものは生成しません。\n\n```text\n公開の指示 a, b → 各自のシェアで計算 → A のシェア、B のシェア\n                                       ↓\n                           結果の出所と通信の記録を監査\n```\n\n`A = (a[0]×w[0] + a[1]×w[1] + …) % p`、`B` は同じ式の `a` を `b` に替えたものです。**係数**は掛ける公開の数、**線形結合**は「同じ位置の係数と値を掛け、全部足す」操作です。例：`p=7, a=[2,1], w=[3,4]` なら `(2×3 + 1×4) % 7 = 3`。結果もシェアのまま返し、参加者のコードで全員分を集め直しません。\n\n## 画面と道具\n\n「証拠を確認」では `p`、人数 `parties`、秘密の数の個数 `width`、指示書 `relation`、シェアのラベル、操作記録の例を見ます。ラベルは `party`（持ち主）、`field`（体の名前）、`id`（重複しない識別名）。ここでは数の値を表示しません。公開テストは別の公開練習値を使います。\n\n**runtime** は支給される計算道具です。`runtime.setting` に設定があり、次の関数が使えます。**log（ログ）**は操作の記録、**event** はその 1 行です。\n\n| 書き方 | 意味 |\n|---|---|\n| `with runtime.party_scope(party):` | 次の字下げした行を、その持ち主として実行する |\n| `runtime.zero()` | その持ち主の 0 のシェアを作る |\n| `runtime.mul_public(share, c)` | シェアに公開の `c` を掛ける |\n| `runtime.add(left, right)` | 同じ持ち主のシェアを足す。上の演算は余りまで取る |\n| `runtime.events()` | これまでの操作の辞書を並べて返す |\n| `runtime.issued(result)` | この道具が発行した結果かを True/False で返す |\n| `runtime.ancestry(result)` | 結果を作るのに使った入力・途中結果の id を返す。これが**祖先** |\n| `runtime.violations()` | 拒否された値の読み取りの記録を返す |\n\n`runtime.value_of(share)` は値を読む道具ですが、この課題の実装には不要です。持ち主以外を読むと拒否されます。`reconstruct`（全員分からの復元）は通常の runtime にありません。監査はこれらの道具に残った出所を調べるもので、**人が別の経路で秘密を読まなかったことまでは保証しません**。\n\n## 実装するもの — 必要な規則はここにあります\n\nすべてコードの提出です。現在の `prover.py` 全体が送られます。「公開テストを実行」は部分的な確認で、すべて通っても未見の入力で正しいとは限りません。誤答は 15 点減点、合計は 0 点未満になりません。「初期状態に戻す」は編集を消すので注意します。\n\n### 1. 指示書 — `relation`\n\n`parse_relation(relation)` は辞書の `p, width, parties, fieldId, a, b` を読み、同じ 6 項目を返します。`a, b` は長さ `width` の list または tuple（固定した並び）。戻す係数は `c % p` を使い 0〜p−1 にそろえた tuple にします。このそろえ方を**正準形**と呼びます。例：`p=7, a=[-1,9] → (6,2)`。\n\n`p, width, parties` と各係数は整数で、`True/False` は整数として扱いません。`p>=2, width>=1, parties>=2`、`fieldId == \"F\" + str(p)`、係数の長さが `width`、以上を満たさなければ `ValueError` を送出します。2 以上の整数として渡る `p` は素数が支給されます。係数の値が負や p 以上なのは正常です。`from participant.mpc import field_id` の `field_id(p)` でも同じ名前を作れます。\n\n### 2. 値を読まずにラベルを照合 — `witness`\n\n`validate_shared_witness(runtime, relation, shares)` では、正準形の `relation` が渡ります。`shares[j][party]` は秘密の位置 `j`、持ち主 `party` のシェアです。\n\n- 外側も各内側も list または tuple。長さは順に `width` と `parties`。\n- 各シェアの `.party` は内側の位置、`.field` は `fieldId` に一致する。\n- `.id` は全体で重複しない。例えば `[[u0,u1],[v0,v1]]` は別々の 4 個ですが、2 行とも `[u0,u1]` なら拒否。\n\n不一致は `ValueError`。戻り値は `{\"width\": …, \"parties\": …, \"fieldId\": …, \"shareIds\": …}`。`shareIds` は元と同じ順の id の二重 tuple にします。値を読んだり演算したりしないので、読み取り数もログの長さも増えません。\n\n### 3・4. 持ち主ごとの計算 — `combine-a` / `combine-b`\n\n`shared_linear_combination(runtime, coefficients, shares)`：持ち主ごとに `with runtime.party_scope(party):` を開き、`total = runtime.zero()` から始めます。位置 `j` の `shares[j][party]` に `coefficients[j]` を `mul_public` で掛け、`add` で `total` に足します。各持ち主の結果を番号順の tuple にします。**0 の係数を省いても元の位置 j は動かしません**。全部 0 でも各持ち主の 0 のシェアを返します。\n\n`prove_linear(runtime, relation, shares)`：`parse_relation` → `validate_shared_witness` → `a` と `b` それぞれで上の関数を呼び、`{\"A\": Aのシェアの並び, \"B\": Bのシェアの並び}` を返します。例：`a=[1,0], b=[0,1], w=[3,4]` なら A は 3、B は 4 を表す別々のシェアです。\n\n### 5. 結果の出所 — `audit`\n\n`no_reconstruction_report(runtime, relation, shares)` はまず `prove_linear` を呼びます。入力の id と持ち主を対応付け、発行済みの A/B の各結果の祖先に、その結果と違う持ち主の入力が混ざっていないか調べます。途中結果の id は入力との照合から除きます。係数が全部 0 なら入力の祖先がなくても正常です。\n\n戻す項目は `issued`（全結果が発行済みか）、`singleParty`（発行済みの結果に別の持ち主の入力が混ざらないか）、`violations=len(runtime.violations())`、`reconstructAvailable=hasattr(runtime, \"reconstruct\")`、`width`。`hasattr` はその名前の道具があるか調べます。未発行なら `issued=False` にし、その結果を `singleParty` の祖先照合から除きます。出所の検査を通ったものと混同しません。\n\n例：party 0 の結果の祖先 `[u0,t1]` のうち、入力 id が `u0`、持ち主が 0 なら問題ありません。入力 `v1`（持ち主 1）も混ざれば `singleParty=False`。**数の答えが正しいだけでは、この違いは見えません。**\n\n### 6. 記録を数える — `trace`\n\n`communication_report(runtime, relation, shares)` も最初に `prove_linear`。その後の **全ログ** `runtime.events()` を読み、次を返します。新しく増えた部分だけに切り詰めません。\n\n| 項目 | 数え方 |\n|---|---|\n| `operations` | 行数 |\n| `rounds` | `communication` が True の行数。この模型では 1 行が通信 1 回分 |\n| `messages` | 各行の `messages` を足す。項目がなければ 0 |\n| `parties` | 行に現れた `party` を重複なし・昇順の tuple にする |\n| `localOnly` | `communication` が True の行が一つもなければ True |\n\n例えば `(communication, messages, party)` が `(False,0,0), (True,3,1), (True,0,1)` なら操作 3、通信 2 回、3 通、持ち主 `(0,1)`、`localOnly=False`。0 通の通信行も数えます。通常の局所計算のログは通信 0 回ですが、報告は実際に渡されたログから作ります。\n\n### 7・8. 分け方を変えても成立するか — `equivalence` / `transfer`\n\n`equivalence` に新しい関数はありません。全員の A/B を足した余りが公開係数と秘密の計算に合うか、シェアの分け方を変えても同じかを確認します。係数が全部非ゼロ（dense）、0 を含む（sparse）、負を含む（signed）、1 か所だけ 1（unit）のどれでも、位置を保つ必要があります。\n\n`transfer` は別の `p, width, parties` でここまでを確認し、さらに `sparse_counterexample(p, width)` を呼びます。これは**反例**（誤った方法が誤答する入力）を自分で作る仕事です。秘密は使わず、自作した公開の数を返します。\n\n次の誤った方法を壊してください：`a` から 0 だけを除いた `compact` を作り、`compact[k]` と **元の `w[k]`** を掛けて足す。\n\n- 入力は素数 `p>=5`、`width>=2`。\n- `{\"a\": …, \"w\": …}` を返す。両方とも長さ `width` の list/tuple、各値は 0〜p−1 の整数（bool 不可）。\n- `a` の少なくとも一つの 0 より後に、0 でない係数が必要。\n- 正しい `(a[0]×w[0] + …) % p` と、詰めた後の `(compact[0]×w[0] + …) % p` が異なること。\n\n例：`p=7, a=[1,0], w=[2,4]` は両方 2 なので**反例ではありません**。どの位置がずれるか、ずれた先の値と同じ余りにならないかを、自分の数で確かめます。数と並びを選ぶのはここでの仕事です。\n\n本問が扱う通信不要の範囲は公開定数倍と加算です。秘密どうしの掛け算や、本当の証明生成の費用までゼロという意味ではありません。次の Beaver 乗算の問題で、その境界を扱います。\n",
+  "writeup": "## 分配法則が、通信を省ける理由\n\n全 party のシェアを足した余りが w_j です。各自が公開係数 c_j を掛けると、全員の結果の和は分配法則により c_j×w_j の余りになります。位置ごとの結果をさらに足しても同じです。ここで使うのは公開定数倍と加算で、秘密どうしの掛け算にはこの処理をそのまま適用できません。入力シェアを配る準備の通信は、本問の測定範囲より前にあります。\n\n## 数値と出所は、別に確かめる\n\n各シェアを集めて秘密を復元し、平文で計算して分け直す方法も、A/B の数値は正しくなります。しかし結果を計測用 runtime の演算で発行していなければ、issued の確認に通りません。別 party の入力が記録へ混ざった場合は ancestry で確認できます。\n\nこれが証明するのは記録された計算の出所です。各 party の scope を順に開いて値を読んだり、Python 内部の値を別に調べたりしたあとで正規の計算を行えば、結果の出所の記録だけでは別の読み取りを否定できません。実 MPC の各 party の分離を、この 1 プロセスの教材が提供するわけではありません。\n\n## 「0 回のはず」を書くのは測定ではない\n\ntrace は prove_linear を動かしたあとの全ログを読んで報告します。この模型は通信フラグのある各行を 1 回と数え、通数は messages の合計です。メッセージ 0 通の通信行も区別します。既存の通信記録がある場合でも、期待した 0 を返すだけでは正しい報告になりません。\n\n## 最後に反例を作る意味\n\n元の位置を保って 0 の項を省くのは正しい最適化です。係数だけを詰めて w の先頭から掛け直すのは別の計算になります。反例では、係数が動く位置を作っただけで満足せず、そこで参照する値も異なる結果を作るかを確認します。式の見た目が違っても、p で割った余りが偶然一致すれば反例になりません。採点は構成された二つの積和を独立に比較し、特定の参考解への一致は要求しません。\n\n## 測ったこと\n\nmutation suite は誤実装30種類と偽の採点結果を出力する提出1種類を検出しました。30種類中24種類は、試した全係数の形でA/Bの数値だけなら正しく復元します。これが入力検証・監査・記録・反例を別々に確かめる理由です。全seed・全実装に関する証明ではありません。\n",
   "tags": [
     "advanced-cryptography-2026",
     "week6",
@@ -61,7 +61,8 @@
     "log を読んで、手元だけの操作と、通信が起きた操作を見分けられる",
     "破片を全部足したものが、平文で計算した答えと一致することを確かめられる",
     "係数の順番・witness の位置・体の取り違えを、欠陥として名指せる",
-    "「誰も witness を組み立てなかった」ことの、証明できる範囲と、できない範囲を言い分けられる"
+    "「誰も witness を組み立てなかった」ことの、証明できる範囲と、できない範囲を言い分けられる",
+    "元の係数位置を失う誤実装の反例を構成し、余りを取っても結果が違うと確認する"
   ],
   "runtime": {
     "provider": "docker",
@@ -78,117 +79,204 @@
       {
         "id": "relation",
         "input": "multiline",
-        "label": "行を読み、 体の言葉に直す",
+        "label": "公開の指示書を読む",
         "points": 30,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "relation-hint-1",
-            "content": "拒否する条件は素直です。 難しいのは受理したあとで、 係数がどの形で保存されるか。 `-3` は `F_97` の元として完全に正しい名前ですが、 正準な名前ではありません。 下流は毎回 mod p するので A も B も正しく出ます。 合わなくなるのは、 保存した relation を別の prover の同じ relation と突き合わせたときです。",
-            "penalty": 12
+            "content": "指示書 relation は「どの秘密の位置に、どの公開の数を掛けるか」を伝えます。同じ計算を指していても数の書き方が違うと比較できません。受け取った係数を一つの書き方にそろえるのが parse_relation です。",
+            "penalty": 2
+          },
+          {
+            "id": "relation-hint-2",
+            "content": "係数を p で割った余りにそろえます。p=7 なら -1 と 6 はどちらも余り 6、9 は余り 2。a=[-1,9] を (6,2) にします。負の数を絶対値に替えるのではありません。長さ 2 なのに width=3 なら値の正規化では直せず、ValueError です。",
+            "penalty": 2
+          },
+          {
+            "id": "relation-hint-3",
+            "content": "prover.py の parse_relation で p/width/parties の型と範囲、fieldId、a/b の型・長さ・各係数の型を確認します。True/False は拒否し、各 c を c % p にした tuple を同じ 6 項目の辞書で返します。relation の「提出」→ Solved。失敗が範囲か形かを表示で確認して直します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "witness",
         "input": "multiline",
-        "label": "値を見ずに sharing を検める",
+        "label": "値を読まずラベルを照合する",
         "points": 30,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "witness-hint-1",
-            "content": "必要な情報は全部 metadata の側にあります。 sharing の数、 各 sharing の長さ、 `share.party` が位置と一致するか、 `share.field` が relation の体か、 同じ share id が 2 箇所に出てこないか。 `value_of` は自分の party の scope でなら通りますが、 label を検めるのに値は要りません。 この checkpoint は読んだ回数を数えています。",
-            "penalty": 12
+            "content": "シェアのラベルは封筒の宛名に相当します。中身の値を読まなくても、必要な位置と人数がそろい、持ち主と計算の体が合うか確認できます。同じシェアを別の位置に使う取り違えもここで止めます。",
+            "penalty": 2
+          },
+          {
+            "id": "witness-hint-2",
+            "content": "width=2、parties=2 なら id は例えば ((u0,u1),(v0,v1)) の 2 行 2 列。各行は party 0、1 の順です。2 行とも (u0,u1) なら、4 枠あっても同じ id の再使用なので拒否します。値を読む回数の増加は 0 です。",
+            "penalty": 2
+          },
+          {
+            "id": "witness-hint-3",
+            "content": "validate_shared_witness で外側の長さ→各内側の長さ→.party/.field→全 id の重複を順に見ます。正常なら width/parties/fieldId と二重 tuple の shareIds を返します。value_of や演算関数は呼びません。witness を提出し、失敗がラベル照合か不要な読み取りかを確認します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "combine-a",
         "input": "multiline",
-        "label": "share のまま線形結合を組む",
+        "label": "各自のシェアを掛けて足す",
         "points": 40,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "combine-a-hint-1",
-            "content": "party ごとに scope を開き、 その party の zero から始めて `c_j * [w_j]` を畳みます。 掛かる相手は witness の**位置** `j` であって、 非零な係数のうち何番目か、 ではありません。 dense な係数ではこの 2 つが一致するので、 `Participant Portal editor の `inspect` S=sparse` を先に見てください。 零係数は特別扱いの要らない普通の係数です。",
-            "penalty": 18
+            "content": "公開の数を掛ける計算は各自のシェアだけでできます。各自の結果を後で足したとき、元の秘密に同じ計算をした結果になるためです。秘密を全部集める必要がありません。",
+            "penalty": 2
+          },
+          {
+            "id": "combine-a-hint-2",
+            "content": "7 で割る例：x=4 のシェア (5,6,0) に公開の 3 を掛けると (1,4,0)。合計の余りは 5 で、3×4 の余りも 5 です。複数の位置では、同じ位置の係数とシェアを掛けて足します。0 の項も位置を一つ持ちます。",
+            "penalty": 2
+          },
+          {
+            "id": "combine-a-hint-3",
+            "content": "shared_linear_combination で runtime.setting[\"parties\"] 人を順に処理します。with runtime.party_scope(party): の中で zero から始め、位置 j の shares[j][party] を coefficients[j] 倍して add。結果を番号順の tuple にし combine-a を提出します。全係数が 0 でも人数分の結果が必要です。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "combine-b",
         "input": "multiline",
-        "label": "行の両半分を、 別々の係数から",
+        "label": "A と B を別の係数で作る",
         "points": 40,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "combine-b-hint-1",
-            "content": "`A` は `a` から、 `B` は `b` から。 同じ witness の上の別のベクトルなので、 2 度目に 1 度目の係数を渡すと、 完全に valid な sharing 2 つが同じ間違った主張を表します。 それから、 畳む前に witness を検めてください。 shape が壊れた sharing の多くは畳んだ瞬間に例外になりますが、 同じ sharing が 2 箇所に入っている witness は静かに通ります。",
-            "penalty": 15
+            "content": "A と B は同じ秘密の並びに対する二つの計算です。公開の係数が違うので、片方をコピーすると別々の条件を確認できません。まず指示とシェアの組合せを照合してから両方を作ります。",
+            "penalty": 2
+          },
+          {
+            "id": "combine-b-hint-2",
+            "content": "p=7、w=[3,4]、a=[1,0]、b=[0,1] なら A=1×3+0×4=3、B=0×3+1×4=4。a を 2 回使うと A も B も 3 になり、B の指示を実行していません。返すのはその数のシェアです。",
+            "penalty": 2
+          },
+          {
+            "id": "combine-b-hint-3",
+            "content": "prove_linear で parse_relation→validate_shared_witness の順に呼びます。shared_linear_combination へ parsed[\"a\"] を渡した結果を A、parsed[\"b\"] の結果を B に置きます。同じ shares を使い、辞書を返して combine-b を提出。表示が係数・順番・未照合のどれを指すか確認します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "audit",
         "input": "multiline",
-        "label": "結果がどこから来たかを辿る",
+        "label": "結果の出所を監査する",
         "points": 50,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "audit-hint-1",
-            "content": "4 つの欄はどれも runtime に訊けば分かります。 主張してはいけません。 `ancestry(share)` は結果が消費した operand id を推移的に返し、 入力 share の id と party は `shares` の側にあります。 その 2 つを突き合わせると 「この結果はどの party の入力から来たか」 が出ます。 `issued` と `reconstructAvailable` も、 決め打ちではなくその場の runtime に訊いてください。",
-            "penalty": 20
+            "content": "監査は「結果の数が合ったか」と別の問いです。結果が支給の道具から発行され、持ち主自身の入力だけを使ったか、記録をたどります。記録にない結果を、自分の入力だけから作ったと判断してはいけません。",
+            "penalty": 2
+          },
+          {
+            "id": "audit-hint-2",
+            "content": "party 0 の結果の祖先が u0 と途中結果 t1 で、入力 u0 の持ち主が 0 なら singleParty は True のまま。入力 v1（持ち主 1）が混ざれば False です。未発行なら issued=False。拒否記録が 2 行なら violations=2 と数えます。",
+            "penalty": 2
+          },
+          {
+            "id": "audit-hint-3",
+            "content": "no_reconstruction_report で prove_linear の A/B を取得。入力 id→party の対応を作り、issued を確認した各結果の ancestry を入力 id と照合します。途中 id は除き、別の持ち主がいれば singleParty=False。violations の件数、hasattr(runtime,\"reconstruct\")、width も返して audit を提出します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "trace",
         "input": "multiline",
-        "label": "log が言っていることを報告する",
+        "label": "記録から通信を数える",
         "points": 45,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "trace-hint-1",
-            "content": "答えが 0 round であることは書く前から知っています。 だからこの checkpoint は、 通信 event の入った log を渡してきます。 数えるのは信念ではなく `events()` の中身です。 `rounds` と `messages` は別の数で、 1 round が何通運ぶかは event の `messages` 欄にあります。 `parties` も setting ではなく log が名指した party です。",
-            "penalty": 20
+            "content": "通信をしないはず、という予想と、記録に通信がないという観測は別です。報告関数は実行後のログを数えます。通信の回数と、運んだメッセージの通数も分けます。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-2",
+            "content": "3 行が (False,0,0)、(True,3,1)、(True,0,1) — 順に通信フラグ・通数・持ち主 — なら、operations=3、rounds=2、messages=3、parties=(0,1)、localOnly=False。通数 0 でも通信フラグのある行は 1 回です。",
+            "penalty": 2
+          },
+          {
+            "id": "trace-hint-3",
+            "content": "communication_report で先に prove_linear を実行し、次に runtime.events() の全体を取得。行数、True の数、messages の合計、party の重複を除いた昇順、通信が一つもないかを返します。trace を提出し、実行前のログを数えていないか、設定の人数を報告していないか確かめます。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "equivalence",
         "input": "multiline",
-        "label": "平文の関係式と一致させる",
+        "label": "分け方を変えて結果を確かめる",
         "points": 40,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "equivalence-hint-1",
-            "content": "ここで初めて 4 つの shape が全部回ります。 `sparse` は index の取り違えを、 `signed` は正準形の扱いを、 `unit` は 1 個の witness をそのまま読み出せるかを見ています。 同じ witness を別の乱数で分散し直しても、 復元した A と B は変わりません — 変わったら、 結果が witness ではなく sharing に依存しています。",
-            "penalty": 15
+            "content": "同じ秘密でも配り方は何通りもあります。配り方が変わると答えも変わるなら、プログラムは秘密の計算ではなく、配られた数そのものに依存しています。係数の位置を保つことがこの確認の土台です。",
+            "penalty": 2
+          },
+          {
+            "id": "equivalence-hint-2",
+            "content": "p=7 の秘密 4 は (5,6,0) でも (1,1,2) でも表せます。公開の 3 を掛けると順に (1,4,0)、(3,3,6)。どちらも合計の余りは 5 です。途中のシェアが同じである必要はありません。",
+            "penalty": 2
+          },
+          {
+            "id": "equivalence-hint-3",
+            "content": "equivalence 用の関数を増やす必要はありません。parse_relation と二つの計算関数を確認し、0・負の係数・1 か所だけ 1 の場合でも元の j を使います。equivalence を提出。失敗したら配り方、位置、A/B の対応のうち表示された性質を直します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "transfer",
         "input": "multiline",
-        "label": "見たことのない設定で成立させる",
+        "label": "未見の設定と、自作の反例で確かめる",
         "points": 25,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "未見の設定で動くことに加え、誤った最適化が壊れる入力を自作します。反例とは「この方法はいつも正しい」という主張を崩す一例です。0 を消して係数だけ左に詰めると、秘密の位置との対応が失われます。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "p=7、a=[1,0]、w=[2,4] だと正しい方法も詰める方法も 2。これは反例になりません。正しい値は a の元の位置で掛けた和の余り、誤った値は compact[k] と w[k] の和の余りです。単に 0 を含めるだけでなく、後ろの非ゼロ係数を動かす必要があります。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "sparse_counterexample(p,width) に、長さ width の a と w を構成する処理を書きます。0 より後に非ゼロ係数を置き、正しい位置と詰めた位置の計算が異なる余りになるか手で確認します。{\"a\":a,\"w\":w} を返し、前の関数も残して transfer を提出。形・位置・二つの結果のどの性質が失敗したか確認します。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
   "i18n": {
     "en": {
-      "name": "Build half a proof over a witness nobody holds",
-      "shortDescription": "You want to prove to an outsider that several people's secrets combine to the right result, without showing anyone's value in full. The linear part of the proof can be built entirely on shares, with the witness never assembled and not one round of communication. Write that.",
-      "description": "Week 6's first problem. A co-SNARK proves a statement about a witness that **no single prover holds**: the witness is secret-shared across parties and the prover computation runs on top of MPC. What you write here is the half of that computation which costs no communication at all.\n\n```text\nA = sum_j a_j w_j        B = sum_j b_j w_j        (mod p)\n```\n\n`a` and `b` are public, `w` is secret. Under an additive sharing, `sum_j a_j [w_j]_party = [sum_j a_j w_j]_party` holds for each party independently, so scaling by a public constant and adding two same-party shares is the whole of it. Nobody sends anything. Multiplication, in the next problem, is where that stops being true -- which is why a co-SNARK's cost is counted in multiplications.\n\nWeek 2's two problems (`ac26-w2-secret-sharing`, `ac26-w2-linear-shares`) are supplied. What changes is the type of a share: Week 2 modelled a sharing as `list[int]`, and here a `Share` carries a party, a field and an id, and its value is read through a runtime. Once the lesson is who may read what, a share cannot stay an int.\n\nThe runtime handed to the participant has no `reconstruct`. \"Reconstruct, do the arithmetic in the clear, re-share\" is absent from the API rather than discouraged in a comment. It is an instrument and not a security boundary, though: `Share._value` is one attribute access away. What the audit can prove is that a result was produced by the runtime out of that party's own inputs -- not that the witness was never assembled. The writeup is explicit about the difference.\n\nOn scoring: this problem ships 24 deliberately broken implementations, and **18 of them reconstruct to the right A and B on every shape**. `make reference-test` re-measures the count on every run. They split three ways: right value, non-canonical form; right value, nothing checked; right value, false account of itself. None of them is visible to a test that looks at the prover's output, so the checkpoints grade stages instead. One in particular -- reconstruct the witness, fold it in the clear, re-share the answer -- returns a perfect A and B at every seed and every shape, and is caught by the **audit checkpoint alone**.\n\nThis is a toy and says so. The field is a small enumerable prime, there are two to five parties, and there is no adversary and no channel.",
-      "instructions": "## Week 6 is where the branches meet\n\nThe course has run in three separate branches so far: **hiding** (homomorphic encryption), **splitting** (secure computation), and **showing** (zero-knowledge proofs). Week 6 is the week they combine.\n\n```\nsplitting + showing = co-SNARK      one proof, with nobody holding the whole\n```\n\n**What no single branch can do, the combination can.** This problem is the first step into it.\n\n## No one can be shown the whole\n\nSeveral people each hold a secret value. Together they want to prove to an outsider that the combined result is correct. But **no one can be shown anyone else's value in full.**\n\nAn ordinary prover (a SNARK's prover) holds the whole witness — the values a proof is built from. It can make the proof, but if that one party leaks, the witness leaks with it. In private DeFi, or in joint custody where several people guard one asset between them, the whole point is that no such all-holding party exists. So the prover is kept **split the whole way through** — nobody assembles the witness, and the path by which it could leak stops existing. That is a co-SNARK.\n\nA prover's computation divides in two: a **linear part** (multiply by public numbers and add) and a **non-linear part** (multiply two secrets). This problem is the first half — **the linear part only**.\n\n## Why the linear part needs no communication\n\nThe core is the distributive law from year 7: `c·(a + b) = c·a + c·b`.\n\nSplit a secret into pieces (shares) that add back up to it, and **multiplying by a public number is something each holder does alone** — scale every piece by the same factor and the total is scaled by that factor too. Adding two pieces is the same. So a computation that is only \"public coefficient × secret value, summed\" — a linear combination — **finishes with nobody sending anything**.\n\nOne digit (remainders mod 7): a secret x = 4 dealt to three parties as [5, 6, 0]. 5 + 6 + 0 = 11, remainder 4 — it comes back. Each party multiplies its own piece by the public coefficient 3: [1, 4, 0], summing to 5; and 3 × 4 = 12 has remainder 5 too. **Shares of 3x now exist and nobody learned x = 4.** That is the smallest form of what a prover does on top of MPC.\n\n## Before you start (skip if you know this)\n\nEvery number is a \"remainder after dividing by a prime p\" (`(-3) % 7` is 4); your actual p is shown by **Inspect evidence**. You wrote dealing, reconstructing, adding and public-scaling yourself in Week 2 — **here you write none of them**, they are tools inside `runtime`. The only difference from Week 2 is that a piece now carries a party, a field and an id. A **relation** is one row's worth of \"the witness satisfies the condition\" — here **six items**: the coefficient vectors `a` and `b`, the field's name, p, the witness length width, and the party count — meaning the two sums `A = a₀w₀ + a₁w₁ + a₂w₂ + …` and `B = b₀w₀ + b₁w₁ + b₂w₂ + …` (pair each coefficient with each witness entry, multiply, add them all up — width terms in total). Written short from here on as `Σ a_j w_j`; Σ is just shorthand for \"add up the listed terms\". A **round** is one exchange of messages between parties.\n\nIf shares are new, solve `ac26-w2-linear-shares` first.\n\n## The numbers coming out right is not the proof\n\nThe linear part should finish in zero rounds, as the premise showed. Turning that \"should\" into \"did\" is the second half of the problem.\n\nA and B being correct is **not evidence that the witness was never assembled**. Reconstruct the witness once, fold it in the clear, re-share the result, and A and B still come out perfect. So the last three checkpoints go and look at **where the shares you produced came from** (their ancestry) and **what the log actually says** (its communication column). That is the one new thing here.\n\n## First move\n\nIn Participant Portal (the site showing this statement), select **起動 (Start)**. Your own container starts and the **problem editor** appears on the same page. The one file you edit is **`prover.py`** and the language is **Python**. Six function stubs are already there, and each one's arguments, return shape and raising conditions are in its docstring.\n\nSelect **Inspect evidence** to see the values built for this start only. It prints four blocks:\n\n1. **Your setting** — p and the field's name, the number of parties, the witness length (width), and the setting id.\n2. **One relation row** — the public coefficient vectors `a` and `b` (the fully populated shape).\n3. **The share labels** — `w0: [id, id, …]`: for each witness position, the **ids only**, one per party. **No value is printed, and the witness itself appears nowhere.** You see exactly what a prover is allowed to see.\n4. **What one operation leaves in the log** — a `zero` → `mul_public` → `add` on a public demo value, the resulting share's party / field / id, the full list of that share's ancestry, and whether this runtime issued it.\n\n**Read block 4 carefully.** No row carries a value, and `communication` is `False` on all of them. That no value appears in a log is why checkpoint 2 (validating without reading values) is possible at all; that the log has a `communication` column is why checkpoint 6 is a measurement rather than a recital.\n\nEvery number changes per start, so copying someone else's values will not match. Grading also runs your code on coefficient shapes other than the one printed here: vectors with zeros in them, vectors written with negative numbers, and a vector with a single 1.\n\n**Run public tests** checks shapes only — that each function returns the declared type and fields, and that one honest round trip works. It cannot tell a right answer from a plausible wrong one. To put the editor back the way it started, select **Restore starter**.\n\n## What you answer — eight checkpoints, in this order\n\nAll eight are **code checkpoints**; there is no answer field to type into. The whole flow is: write in the editor, then press that checkpoint's **Submit (+points)**. Whatever is in `prover.py` at that moment is sent for grading — **one file graded from eight angles**. A wrong answer can be resubmitted; each wrong attempt costs 15 points and the total never falls below zero. The checkpoints are independent, so being stuck on one does not block the rest.\n\n1. **relation** — `parse_relation(relation) -> dict`. The six items arrive **as delivered, not as they should be stored**. Return the same six keys with `a` and `b` as tuples of field elements in canonical form (0 … p − 1). Raise `ValueError` for anything that is not a row: a vector whose length is not width, a `fieldId` that does not name p's field, a non-integer anywhere.\n2. **witness** — `validate_shared_witness(runtime, relation, shares) -> dict`. `shares[j][party]` is that party's share of `w_j`. Check the sharing against the relation **without reading a single value** — ids, party numbers and field names are enough, and the reads are counted. Return `{\"width\", \"parties\", \"fieldId\", \"shareIds\"}`.\n3. **combine-a** — `shared_linear_combination(runtime, coefficients, shares) -> tuple`. Return one result share per party, in party order. Inside, use only `runtime.party_scope` / `zero` / `mul_public` / `add`. `c_j` multiplies the sharing at position `j`, not the j-th surviving non-zero term.\n4. **combine-b** — `prove_linear(runtime, relation, shares) -> dict`, returning `{\"A\": …, \"B\": …}`. `A` comes from `a` and `B` from `b`. They are different vectors over the same shared witness, so building both from one of them yields two perfectly valid sharings of the same wrong statement.\n5. **audit** — `no_reconstruction_report(runtime, relation, shares) -> dict`. Prove the row, then audit what you produced: `{\"issued\", \"singleParty\", \"violations\", \"reconstructAvailable\", \"width\"}`. `ancestry(share)` gives every operand id a result was built from, intermediates included.\n6. **trace** — `communication_report(runtime, relation, shares) -> dict`, returning `{\"operations\", \"rounds\", \"messages\", \"parties\", \"localOnly\"}`. This function **reads the log and reports it**; it does not assert what it expects. Logs that do record communication are handed to it during grading. `rounds` and `messages` are different questions — one round can carry many messages.\n7. **equivalence** — no new function. The shares from 3 and 4, summed over all parties, are compared against `a₀w₀ + a₁w₁ + …` and `b₀w₀ + b₁w₁ + …` computed in the clear.\n8. **transfer** — your `prover.py` runs all of 1–7 again on **a p, a party count, a width and coefficients you have not seen**. An implementation that copied numbers off the screen fails here.\n\n## The linear part was free — now the multiplication\n\nThe linear part cost zero rounds. **All that is left is multiplication** — and multiplication needs communication. The next problem (`ac26-w6-cosnark-beaver`) settles that in a single round trip, and the one after (`ac26-w6-cosnark-privacy`) tells apart implementations that return the same answer while leaking. That a co-SNARK's cost is measured in multiplications starts here, from seeing that the linear part is free.\n",
-      "writeup": "## A correct A and B is not evidence of a correct prover\n\nThis problem ships 24 deliberately broken implementations, and **18 of them reconstruct to the right A and B on every shape and every label**. `make reference-test` re-measures that count on every run; if it moves, the number moves with it.\n\nThey split three ways. **Right value, wrong form**: a relation stored with `-3` where the field's canonical name for that element is `94`. **Right value, nothing checked**: folding a sharing whose parties are out of order, whose shares belong to another field, or that appears at two witness positions. **Right value, false account of itself**: returning `rounds: 0` from belief rather than from the log, or asserting `issued` instead of asking.\n\nOne of them is the point.\n\n## Reconstructing the witness first does not fail a single value test\n\nAn implementation that adds up each sharing to recover `w`, computes `A` and `B` in the clear, and re-shares the answers returns a **perfectly correct A and B** at every seed and every shape. The reconstruction values agree, rerandomizing the sharing changes nothing, and sparse, signed and unit vectors all pass.\n\nMeasured, exactly **one** checkpoint kills it: `audit` (plus `transfer`, which re-runs the same checks under another seed). There is no way to catch it from the output, because `issued` and `ancestry` are not looking at values. They are looking at where a share came from.\n\n## What the audit proves, and what it does not\n\nIt proves this: every result share was issued by the runtime, its ancestry reaches **only that party's own input shares**, and not one read was refused. That is a real property, and it is what the shortcut above fails.\n\nIt does not prove that the witness was never assembled. Opening each party's scope in turn and reading that party's own share is legal; do it for every party and you have `w`, and if you then fold honestly the trace looks completely innocent. `Share._value` is one attribute access away besides. The runtime is an instrument, not a sandbox: it records what a computation consumed, not what the person writing it looked at.\n\nThis is not a hole in the exercise -- it is the same in a real MPC prover. A transcript shows the protocol's message pattern; it does not show that a party's operator kept no copy of their input. That second thing is a trust boundary and an operational question rather than a cryptographic one, and conflating them lands you at \"we used MPC, so nothing leaked\".\n\n## \"Zero rounds\" is the answer, not a measurement\n\nEveryone knows this problem's answer is zero rounds before writing a line. That is exactly why a report that returns `rounds: 0` earns nothing. The `trace` checkpoint hands the report a log with communication in it every time: three messages carried in one round, five carried in two, a round that carried nothing at all, and a message from a party outside this row's committee. Read the log rather than your expectations and all of them pass.\n\n`rounds` and `messages` being different numbers is the same lesson. How many messages a round carries is protocol-dependent; whether anything was sent is not.\n\n## Why sparse is harder than dense\n\n`a_j` multiplies the witness at position `j`, not \"the j-th surviving term\". For a dense coefficient vector those are the same thing, so code written against dense vectors passes quietly. Skipping zero coefficients is a fine optimization in itself; advancing `shares` alongside the skips is the bug.\n\n## A negative coefficient is not a mistake\n\n`-3` is a perfectly correct name for an element of `F_97`, and not the canonical one. Everything downstream reduces mod p anyway, so `A` and `B` come out right. What does not come out right is comparing your stored relation with the same relation as another prover wrote it -- which is exactly how two provers agree they are proving the same statement.\n\n## Toy versus production\n\nThis is a toy of the mechanism. The field is a small enumerable prime, there are two to five parties, the adversary is not semi-honest so much as absent, and there is no channel, no committed randomness and no preprocessing. A real co-SNARK spends Beaver triples on its multiplications, and where those triples come from is the centre of the design. That is the next problem.\n\n## Not in scope\n\nActual SNARK proof generation, malicious-secure MPC, network transport, prover performance.",
+      "name": "Prepare a joint proof: add without combining secrets",
+      "shortDescription": "Build a program that multiplies shared secrets by public numbers and adds them. First edit parse_relation in prover.py and submit relation. Then audit the recorded computation and construct an input that exposes a position-mixing bug.",
+      "description": "Implement a co-SNARK’s linear preparation over supplied additive sharing and an instrumented runtime. Compute A/B with public coefficients on each holder’s shares, and keep the results shared. The normal path needs no communication after initial preparation. Actual SNARK proof generation and adversarial secrecy are outside this model’s guarantees.\n\nLater checkpoints check input consistency, result issuance and ancestry, and communication counted from logs rather than numerical agreement alone. The final checkpoint applies the code in unseen settings and asks the participant to construct public inputs that break an implementation which compacts only zero coefficients.\n\nThe author suite detects 30 broken implementations and one verdict-spoofing submission. Of those 30, 24 still produce correct A/B values on the coefficient shapes tested. Public tests use separate public practice values, not hidden grading inputs.",
+      "instructions": "## Before you start — read the calculation instructions\n\nYou are building a **joint proving program** for people who hold shares of secrets. Read the public instructions, compute without combining those secrets, then inspect the computation's record.\n\n**Start → editor `prover.py` → implement `parse_relation` → Submit for `relation`.** Use the free rules in section 1 below. A pass marks this checkpoint **Solved** and earns 30 points. On failure, repair the reported property and resubmit. Other unfinished functions do not block this first checkpoint.\n\n## What is shared, and what are you making?\n\nA **witness** is the list of secret numbers supporting a proof: `w[0], w[1], …` here. A **party** is one holder, numbered from 0.\n\n**Secret sharing** distributes a secret as several numbers called **shares**. In this problem, add all parties' shares and take the remainder after dividing by the prime `p` to recover a number. Python writes remainder as `%`: `(-3) % 7 = 4`. The collection of numbers with this remainder arithmetic is called a **field**, and `fieldId` is its name.\n\n```text\n                       party 0   party 1   party 2\nshares of secret x = 4      5         6         0    sum 11 → remainder 4 after division by 7\neach scales by public 3    1         4         0    sum  5 → also the remainder of 3×4\n                           no messages sent for this calculation\n```\n\n**Secure multi-party computation (MPC)** lets several parties compute without revealing their inputs. A **linear calculation** multiplies by public numbers and adds. Each party can do this on its own shares because `c×(x+y) = c×x + c×y`. Dealing the initial shares is supplied; its preparation is outside this stage's communication count.\n\nA **co-SNARK** lets multiple provers who share a witness jointly produce a SNARK (a short, efficiently checkable proof). This exercise models its preparation arithmetic. It does not generate a SNARK proof itself.\n\n```text\npublic instructions a, b → compute on each holder's shares → shares of A and B\n                                                              ↓\n                                            audit origin and communication records\n```\n\n`A = (a[0]×w[0] + a[1]×w[1] + …) % p`; B uses `b` in place of `a`. A **coefficient** is a public multiplier. A **linear combination** multiplies each coefficient and value at the same position, then adds. Example: `p=7, a=[2,1], w=[3,4]` gives `(2×3 + 1×4) % 7 = 3`. Return shares of the result, without collecting all holders' values in your submitted code.\n\n## Screen and supplied tools\n\n**Inspect evidence** shows `p`, the party count `parties`, the number of witness entries `width`, a `relation` instruction row, share labels, and example operation records. A label has `party` (owner), `field` (field name), and `id` (unique identifier). Inspect does not print their values. Public tests use separate public practice values.\n\nThe **runtime** is the supplied calculation tool. `runtime.setting` holds its configuration. A **log** is its operation record; an **event** is one row.\n\n| Call | Meaning |\n|---|---|\n| `with runtime.party_scope(party):` | Run the following indented lines as this holder |\n| `runtime.zero()` | Make this holder's share of zero |\n| `runtime.mul_public(share, c)` | Multiply a share by public `c` |\n| `runtime.add(left, right)` | Add shares of the same holder. These arithmetic calls also take the remainder |\n| `runtime.events()` | Return all operation dictionaries so far |\n| `runtime.issued(result)` | True/False: did this runtime issue the result? |\n| `runtime.ancestry(result)` | Return the ids of inputs and intermediate results used to build it: its **ancestors** |\n| `runtime.violations()` | Return refused value-read records |\n\n`runtime.value_of(share)` reads a value but is unnecessary for your implementation; reading another holder's value is refused. The usual runtime has no `reconstruct` (recovering from all shares). This audit checks recorded origins. **It cannot prove that a person never read a secret through another route.**\n\n## Implementations — all required rules are free below\n\nEvery checkpoint submits code: the current whole `prover.py`. **Run public tests** provides partial checks; passing it does not prove correctness for unseen inputs. Each wrong submission costs 15 points, with the total floored at zero. **Restore starter** discards edits.\n\n### 1. Read the instructions — `relation`\n\n`parse_relation(relation)` reads `p, width, parties, fieldId, a, b` and returns those six keys. `a, b` are lists or tuples (fixed sequences) of length `width`. Return their coefficients as tuples of `c % p`, in 0…p−1. This common representation is the **canonical form**. Example: `p=7, a=[-1,9] → (6,2)`.\n\n`p, width, parties` and each coefficient must be integers; do not treat `True/False` as integers. Require `p>=2, width>=1, parties>=2`, `fieldId == \"F\" + str(p)`, and coefficient lengths equal to `width`. Otherwise raise `ValueError`. A supplied integer `p>=2` is prime; no primality algorithm is required. Negative coefficients or coefficients at least p are valid. `from participant.mpc import field_id` supplies the same name via `field_id(p)`.\n\n### 2. Match labels without reading values — `witness`\n\n`validate_shared_witness(runtime, relation, shares)` receives a canonical relation. `shares[j][party]` belongs to witness position `j` and holder `party`.\n\n- The outer and inner containers are lists or tuples, with lengths `width` and `parties` respectively.\n- Each share's `.party` equals its inner position, and `.field` equals `fieldId`.\n- Every `.id` is unique across the input. `[[u0,u1],[v0,v1]]` names four different shares; two copies of `[u0,u1]` must be rejected.\n\nRaise `ValueError` for a mismatch. Return `{\"width\": …, \"parties\": …, \"fieldId\": …, \"shareIds\": …}` with ids in the original order as a tuple of tuples. Do not read values or perform arithmetic: neither the read count nor the log length should increase.\n\n### 3–4. Calculate for each holder — `combine-a` / `combine-b`\n\n`shared_linear_combination(runtime, coefficients, shares)`: for each holder enter `with runtime.party_scope(party):`, starting with `total = runtime.zero()`. At position `j`, scale `shares[j][party]` by `coefficients[j]` using `mul_public`, then add it to `total` using `add`. Return one result per holder as a tuple in holder order. **Skipping a zero coefficient must not change its original position j.** All-zero coefficients still produce a zero share per holder.\n\n`prove_linear(runtime, relation, shares)`: call `parse_relation`, then `validate_shared_witness`, then the combination function once with `a` and once with `b`. Return `{\"A\": A_shares, \"B\": B_shares}`. For `a=[1,0], b=[0,1], w=[3,4]`, A represents 3 and B represents 4: two different sharings.\n\n### 5. Check where the result came from — `audit`\n\n`no_reconstruction_report(runtime, relation, shares)` first calls `prove_linear`. Associate input ids with owners. For each issued A/B result, check whether any ancestor input belongs to a different holder. Ignore intermediate-result ids when matching against input ids. An all-zero combination may have no input ancestors and still be valid.\n\nReturn `issued` (all results were issued), `singleParty` (no issued result descends from another holder's input), `violations=len(runtime.violations())`, `reconstructAvailable=hasattr(runtime, \"reconstruct\")`, and `width`. `hasattr` checks whether a named tool exists. For an unissued result set `issued=False` and exclude it from the `singleParty` ancestry test; do not confuse missing provenance with a passed provenance check.\n\nExample: a party-0 result has ancestors `[u0,t1]`; `u0` is an input owned by party 0, and `t1` is intermediate. That is fine. If input `v1` owned by party 1 is also present, `singleParty=False`. **The correct numerical answer alone cannot reveal this difference.**\n\n### 6. Count the record — `trace`\n\n`communication_report(runtime, relation, shares)` also calls `prove_linear` first. Then read the **entire** `runtime.events()` log, including earlier rows, and return:\n\n| Field | Counting rule |\n|---|---|\n| `operations` | Number of rows |\n| `rounds` | Number of rows with `communication=True`; this model records one communication round per flagged row |\n| `messages` | Sum each row's `messages`, using 0 if the field is absent |\n| `parties` | Tuple of distinct `party` values appearing in the log, in increasing order |\n| `localOnly` | True exactly when no row has `communication=True` |\n\nExample `(communication, messages, party)` rows: `(False,0,0), (True,3,1), (True,0,1)` yield 3 operations, 2 rounds, 3 messages, parties `(0,1)`, and `localOnly=False`. Count a flagged round even with zero messages. Normal local computation uses zero communication rounds, but report the log you actually received.\n\n### 7–8. Does a different sharing still work? — `equivalence` / `transfer`\n\n`equivalence` adds no function. It checks that summing all A/B shares gives the public-coefficient calculation on the secret, and that changing how the same secret was shared does not change this result. Keep positions correct for coefficients that are all nonzero (dense), contain zeros (sparse), include negative representatives (signed), or have one 1 and otherwise zeros (unit).\n\n`transfer` reruns these checks with different `p, width, parties`, then calls `sparse_counterexample(p, width)`. Construct a **counterexample**: an input that makes a wrong method return the wrong answer. This uses your own public numbers, not a secret.\n\nBreak this faulty method: remove zeros from `a` to obtain `compact`, then multiply `compact[k]` by the **original `w[k]`** and add.\n\n- Inputs are prime `p>=5` and `width>=2`.\n- Return `{\"a\": …, \"w\": …}` as lists/tuples of length `width`, with integer entries in 0…p−1 (no bools).\n- At least one zero in `a` must precede a nonzero coefficient.\n- Correct `(a[0]×w[0] + …) % p` must differ from shifted `(compact[0]×w[0] + …) % p`.\n\nExample: `p=7, a=[1,0], w=[2,4]` gives 2 by both methods, so it is **not** a counterexample. Check which position shifts, and whether your chosen values still produce the same remainder. Selecting the numbers and positions is your work here.\n\nZero communication here applies to public scaling and addition. It does not mean secret multiplication or real proof generation is free. The next Beaver-multiplication problem explores that boundary.\n",
+      "writeup": "## Why distributivity avoids communication here\n\nAll holders’ shares add to w_j after taking the remainder. Scaling every share by public c_j makes the sum equal to the remainder of c_j*w_j, by distributivity. Adding these results over positions preserves the same identity. This applies to public scaling and addition, not directly to secret-by-secret multiplication. Communication used to distribute initial shares precedes the measured stage.\n\n## Check numbers and origins separately\n\nReconstructing each secret, calculating in the clear and resharing also yields correct A/B numbers. But results not produced by the instrumented operations fail issuance checks. Ancestry detects another holder’s input when it appears in recorded operands.\n\nThis proves recorded origins only. A person can read holders’ values in separate scopes, or inspect Python internals, then calculate through normal operations. The resulting provenance does not rule out that separate reading. This single-process teaching model does not provide the party separation of a real MPC deployment.\n\n## Writing “it should be zero” is not measurement\n\ntrace reports the entire log after running prove_linear. Each flagged communication row counts as a round in this model; messages are summed separately. A flagged row with zero messages still matters. Earlier communication records must be reflected rather than overwritten with the expected zero for local arithmetic.\n\n## Why construct a counterexample?\n\nSkipping zero terms while retaining their original positions is valid. Compacting only coefficients and pairing them with the front of w computes a different expression. A counterexample must both create a position shift and choose values exposing it. Even different expressions may coincide after taking the remainder, so compare both final results. Grading independently evaluates the submitted construction rather than matching one reference answer.\n\n## What was measured\n\nThe mutation suite detects 30 broken implementations and one submission that prints a forged grading result. Of the 30, 24 still reconstruct correct A/B values on all tested coefficient shapes. This motivates checking validation, provenance, logs and counterexamples separately. It is not a proof about every seed or implementation.\n",
       "learningGoals": [
         "Say where responsibility divides between the public coefficients and the secret shares",
         "Check a witness's shape (length, field, party count) without reading a single value",
@@ -198,82 +286,153 @@
         "Read the log and tell local-only operations apart from ones that communicated",
         "Confirm the shares summed over all parties match the answer computed in the clear",
         "Name a coefficient-order, witness-position or field mismatch as the defect it is",
-        "Say what a provenance check does and does not prove about \"nobody assembled the witness\""
+        "Say what a provenance check does and does not prove about \"nobody assembled the witness\"",
+        "Construct an input exposing lost coefficient positions and verify different remainders"
       ],
       "checks": [
         {
           "id": "relation",
-          "label": "Read the row, in the field's own words",
+          "label": "Read the public instruction row",
           "hints": [
             {
               "id": "relation-hint-1",
-              "content": "The rejections are the easy half. The interesting part is what happens after you accept: which form the coefficients are stored in. `-3` is a perfectly good name for an element of `F_97` and not the canonical one. Everything downstream reduces mod p, so A and B still come out right. What stops matching is your stored relation against the same relation as another prover wrote it."
+              "content": "A relation says which public multiplier belongs to each secret position. Different number spellings can describe the same computation yet compare differently. parse_relation puts accepted coefficients into one common representation."
+            },
+            {
+              "id": "relation-hint-2",
+              "content": "Take the remainder after division by p. With p=7, both -1 and 6 have remainder 6, while 9 has remainder 2: a=[-1,9] becomes (6,2). Absolute value is not this operation. Two entries with width=3 cannot be repaired by normalization: raise ValueError."
+            },
+            {
+              "id": "relation-hint-3",
+              "content": "In prover.py, check types and ranges for p/width/parties, then fieldId and the types, lengths and entries of a/b. Reject bools. Return the same six fields, with coefficient tuples using c % p. Submit relation; check Solved or repair the reported shape/range property."
             }
           ]
         },
         {
           "id": "witness",
-          "label": "Check the sharing without reading it",
+          "label": "Match labels without reading values",
           "hints": [
             {
               "id": "witness-hint-1",
-              "content": "Everything you need is on the metadata side: how many sharings, how long each one is, whether `share.party` matches its slot, whether `share.field` is the relation's field, and whether any share id shows up at two positions. `value_of` would succeed inside its own party's scope, but checking labels needs no values -- and this checkpoint counts the reads."
+              "content": "Share labels work like addresses on envelopes. Without reading contents, you can check positions, holders and the arithmetic field. Reusing the same share at another position is also caught here."
+            },
+            {
+              "id": "witness-hint-2",
+              "content": "For width=2 and parties=2, ids might be ((u0,u1),(v0,v1)), two rows of two holders in order 0,1. Two copies of (u0,u1) still occupy four slots but reuse ids, so reject them. The value-read count should increase by zero."
+            },
+            {
+              "id": "witness-hint-3",
+              "content": "In validate_shared_witness check outer length, each inner length, .party/.field, and uniqueness of all ids. Return width/parties/fieldId and the tuple-of-tuples shareIds. Call neither value_of nor arithmetic. Submit witness and distinguish a label mismatch from an unnecessary read in its feedback."
             }
           ]
         },
         {
           "id": "combine-a",
-          "label": "Build the combination on shares",
+          "label": "Scale and add each holder’s shares",
           "hints": [
             {
               "id": "combine-a-hint-1",
-              "content": "Open each party's scope, start from that party's zero, and fold in `c_j * [w_j]`. The coefficient multiplies the witness **position** `j`, not the j-th non-zero term. For dense vectors those coincide, so run `Participant Portal editor `inspect` S=sparse` before you decide they are the same thing. A zero coefficient is an ordinary coefficient with no special case."
+              "content": "Each holder can multiply its own share by a public number. Adding their results later gives the same result as computing on the whole secret. No holder needs to gather the secret first."
+            },
+            {
+              "id": "combine-a-hint-2",
+              "content": "Dividing by 7: shares (5,6,0) of x=4 become (1,4,0) after public scaling by 3. Their sum has remainder 5, just like 3×4. For several positions, multiply coefficients and shares at the same position before adding. A zero term still has a position."
+            },
+            {
+              "id": "combine-a-hint-3",
+              "content": "In shared_linear_combination loop over runtime.setting[\"parties\"]. Inside with runtime.party_scope(party): start with zero, scale shares[j][party] by coefficients[j], and add to the total. Return a tuple in holder order and submit combine-a. All-zero coefficients still need one result per holder."
             }
           ]
         },
         {
           "id": "combine-b",
-          "label": "Both halves of the row, from different vectors",
+          "label": "Build A and B with different coefficients",
           "hints": [
             {
               "id": "combine-b-hint-1",
-              "content": "`A` from `a`, `B` from `b`. They are different vectors over the same shared witness, so passing the first one twice gives you two perfectly valid sharings of the same wrong statement. And check the witness before folding it: most broken shapes raise on their own, but the same sharing at two positions goes through quietly."
+              "content": "A and B apply two instructions to the same secret list. Their public coefficients differ; copying one result cannot implement both instructions. Match the instruction and share labels before calculating either."
+            },
+            {
+              "id": "combine-b-hint-2",
+              "content": "With p=7, w=[3,4], a=[1,0], b=[0,1], A=1×3+0×4=3 and B=0×3+1×4=4. Using a twice makes both 3 and ignores the instruction for B. Return shares representing these results."
+            },
+            {
+              "id": "combine-b-hint-3",
+              "content": "In prove_linear call parse_relation then validate_shared_witness. Use shared_linear_combination with parsed[\"a\"] for A and parsed[\"b\"] for B, over the same shares. Return the dictionary and submit combine-b. Feedback distinguishes coefficient, order and missing-validation properties."
             }
           ]
         },
         {
           "id": "audit",
-          "label": "Trace where the result came from",
+          "label": "Audit where results came from",
           "hints": [
             {
               "id": "audit-hint-1",
-              "content": "All four fields are things the runtime can be asked. Do not assert them. `ancestry(share)` returns the operand ids a result consumed, transitively, and the input shares' ids and parties are in `shares` -- intersect the two and you have which parties a result descends from. `issued` and `reconstructAvailable` are also questions for whichever runtime you were handed, not constants."
+              "content": "An audit asks something different from whether the number is right. Follow records to check that the supplied tool issued a result and it used only its holder’s inputs. Missing provenance is not proof of local computation."
+            },
+            {
+              "id": "audit-hint-2",
+              "content": "A party-0 result with ancestor input u0 (owner 0) and intermediate t1 keeps singleParty=True. Adding ancestor input v1 (owner 1) makes it False. An unissued result makes issued=False. Two refused-read records mean violations=2."
+            },
+            {
+              "id": "audit-hint-3",
+              "content": "Obtain A/B from prove_linear in no_reconstruction_report. Map input ids to owners, check issued on each result, then compare ancestry with input ids, ignoring intermediates. A different owner makes singleParty=False. Also return the violation count, hasattr(runtime,\"reconstruct\") and width; submit audit."
             }
           ]
         },
         {
           "id": "trace",
-          "label": "Report what the log says",
+          "label": "Count communication from the record",
           "hints": [
             {
               "id": "trace-hint-1",
-              "content": "You knew the answer was zero rounds before you started, which is why this checkpoint hands you a log with communication in it. Count what is in `events()`, not what you expect. `rounds` and `messages` are different numbers, and how many a round carried is in the event's `messages` field. `parties` is who the log names, not what the setting declares."
+              "content": "Expecting no communication is different from observing none. The report counts the log after execution. Count communication rounds and messages separately."
+            },
+            {
+              "id": "trace-hint-2",
+              "content": "Three rows (False,0,0), (True,3,1), (True,0,1), ordered as communication flag/messages/holder, mean operations=3, rounds=2, messages=3, parties=(0,1), localOnly=False. A flagged row counts even if it carried zero messages."
+            },
+            {
+              "id": "trace-hint-3",
+              "content": "In communication_report run prove_linear before reading all runtime.events(). Return row count, flagged-row count, total messages, distinct sorted parties and whether all rows lack communication. Submit trace. Check you counted the post-execution log rather than configuration values or an earlier snapshot."
             }
           ]
         },
         {
           "id": "equivalence",
-          "label": "Agree with the plain relation",
+          "label": "Check results after sharing changes",
           "hints": [
             {
               "id": "equivalence-hint-1",
-              "content": "This is where all four shapes run. `sparse` is aimed at the index mix-up, `signed` at canonical form, and `unit` at reading a single witness element straight back out. Re-sharing the same witness with different randomness must not change the reconstructed A and B -- if it does, your result depends on the sharing rather than on the witness."
+              "content": "One secret can have many sharings. If changing its sharing changes the answer, the program depends on the dealt numbers rather than the secret calculation. Keeping coefficient positions is the foundation of this check."
+            },
+            {
+              "id": "equivalence-hint-2",
+              "content": "For p=7, secret 4 can be shared as (5,6,0) or (1,1,2). Scaling by public 3 yields (1,4,0) or (3,3,6). Both sums have remainder 5. Intermediate shares need not be identical."
+            },
+            {
+              "id": "equivalence-hint-3",
+              "content": "There is no new equivalence function. Check parse_relation and the two calculation functions: preserve the original j for zeros, negative coefficients and a single 1. Submit equivalence and repair the reported sharing, position or A/B correspondence property."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in a setting you have not seen"
+          "label": "Check unseen settings and build a counterexample",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "Besides running in unseen settings, construct an input that breaks a faulty optimization. A counterexample disproves a claim that a method always works. Removing zeros and shifting only coefficients loses their correspondence with secret positions."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "With p=7, a=[1,0], w=[2,4], both methods return 2: this is not a counterexample. The correct result multiplies at original positions; the faulty result pairs compact[k] with w[k]. Merely including a zero is insufficient: a later nonzero coefficient must move."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "In sparse_counterexample(p,width), construct a and w of length width. Place a nonzero coefficient after a zero, and check by hand that the correct and shifted products have different remainders. Return {\"a\":a,\"w\":w}, retain the earlier functions, and submit transfer. Inspect shape, position or differing-result failure feedback."
+            }
+          ]
         }
       ]
     }

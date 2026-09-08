@@ -1,8 +1,8 @@
-"""Public tests: shapes and one honest round trip. Nothing here is hard to satisfy.
+"""Public tests: selected shapes and one participant-constructed counterexample.
 
-They never contrast a right answer with the plausible wrong one, never look at a
-coefficient's canonical form, and never look at the log at all. The hidden verifier does all
-three, and two of the eight checkpoints cannot be reached by looking at `A` and `B`.
+The counterexample test compares the original and compacted coefficient positions.
+These tests do not establish relation normalization, A/B reconstruction or truthful
+log reporting for all inputs; submit the relevant checkpoint for those properties.
 """
 
 from __future__ import annotations
@@ -107,6 +107,26 @@ def test_no_reconstruction_report_answers_every_field() -> None:
         assert key in report
 
 
+def test_sparse_counterexample_exposes_a_position_change() -> None:
+    # Public construction, independent of deployment secrets. Many answers are valid.
+    prime, width = 7, 3
+    result = prover.sparse_counterexample(prime, width)
+    assert isinstance(result, dict), "return a dictionary with a and w"
+    coefficients, values = result.get("a"), result.get("w")
+    for vector in (coefficients, values):
+        assert isinstance(vector, (list, tuple)) and len(vector) == width, "match width"
+        assert all(
+            type(value) is int and 0 <= value < prime for value in vector
+        ), "use canonical integers"
+    assert any(
+        coefficients[j] == 0 and any(coefficients[j + 1:]) for j in range(width)
+    ), "include a zero before a nonzero coefficient"
+    correct = sum(c * value for c, value in zip(coefficients, values)) % prime
+    compact = [c for c in coefficients if c != 0]
+    shifted = sum(c * value for c, value in zip(compact, values)) % prime
+    assert correct != shifted, "your constructed input does not expose the position change"
+
+
 def main() -> int:
     only = ""
     if "--only" in sys.argv:
@@ -135,8 +155,9 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("Note what is missing above: nothing checks what A and B reconstruct to, nothing")
-    print("checks a coefficient's canonical form, and nothing reads the log.")
+    print("These tests check some shapes and one public counterexample construction.")
+    print("They do not establish A/B reconstruction, relation normalization or log auditing")
+    print("for all inputs; submit the corresponding checkpoint for those properties.")
     return 1 if failures else 0
 
 
