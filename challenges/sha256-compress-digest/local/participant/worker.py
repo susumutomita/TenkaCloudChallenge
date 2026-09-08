@@ -1,6 +1,9 @@
 """Execute only submitted functions on supplied inputs; there is no checker or seed here."""
 from __future__ import annotations
 
+# time.strptime loads these helpers lazily; cache them before restricting files.
+import _strptime
+
 # Supported computational helpers are loaded before the restricted evaluation.
 import array
 import bisect

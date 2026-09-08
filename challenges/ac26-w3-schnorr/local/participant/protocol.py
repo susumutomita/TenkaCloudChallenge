@@ -25,8 +25,8 @@ def encode(value, depth=0):
         return ['none', None]
     if kind is bool:
         return ['bool', value]
-    if kind is int:
-        return ['int', value]
+    if isinstance(value, int):
+        return ['int', int(value)]
     if kind is float and math.isfinite(value):
         return ['float', value]
     if kind is bytearray:

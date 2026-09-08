@@ -8,7 +8,7 @@ CHECKPOINTS = ('generalize', 'count-no-walkback')
 
 class EvaluationTests(unittest.TestCase):
     def test_supported_computation_imports(self):
-        source = Path('reference/counter.py').read_text() + '\nimport array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing\nassert array.array("i", [1, 2]).tolist() == [1, 2]\nassert string.ascii_lowercase[:3] == "abc"\n'
+        source = Path('reference/counter.py').read_text() + '\nimport array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing\nassert array.array("i", [1, 2]).tolist() == [1, 2]\nassert string.ascii_lowercase[:3] == "abc"\nassert time.strptime("2000-01-02", "%Y-%m-%d").tm_mday == 2\n'
         for checkpoint in CHECKPOINTS:
             result = server.evaluate(checkpoint, source)
             self.assertTrue(result[0] if isinstance(result, tuple) else result, result)
@@ -25,6 +25,18 @@ class EvaluationTests(unittest.TestCase):
             with self.subTest(checkpoint=checkpoint):
                 result = server.evaluate(checkpoint, 'pass')
                 self.assertFalse(result[0] if isinstance(result, tuple) else result)
+
+    def test_integer_subclass_answers(self):
+        source = Path('reference/counter.py').read_text() + '\nclass AnswerInt(int): pass\n_base_advance = advance\n_base_count = count_no_walkback\ndef advance(*args): return [AnswerInt(x) for x in _base_advance(*args)]\ndef count_no_walkback(*args): return AnswerInt(_base_count(*args))\n'
+        for checkpoint in CHECKPOINTS:
+            result = server.evaluate(checkpoint, source)
+            self.assertTrue(result[0] if isinstance(result, tuple) else result, result)
+
+    def test_integer_subclass_value(self):
+        class AnswerInt(int):
+            pass
+        self.assertEqual(decode(encode(AnswerInt(3))), 3)
+        self.assertIs(type(decode(encode(True))), bool)
 
     def test_value_types_are_preserved(self):
         values = [b'abc', bytearray(b'abc'), (1, 2), [1, 2], True, 1, {1: (False, None)}]
