@@ -144,7 +144,8 @@ describe("prediction privacy and delayed settlement",()=>{
 
 /** Read ONLY rendered text; no fixture state, commitment helper or private answer. */
 function predictionFromScreen(html:string):number|undefined {
-  const text=html.replace(/<[^>]*>/g," ");
+  // Retain the meaning of visible superscripts before stripping other markup.
+  const text=html.replace(/<sup>([^<]+)<\/sup>/g,"^$1").replace(/<[^>]*>/g," ");
   const sealed=Number(text.match(/sealed c=(\d+)/)?.[1]);
   const rows=[...html.matchAll(/<tr><td>Past [12] \([^<]+<\/td><td>(\d+)<\/td><td>([123]) = [^<]+<\/td><td>(\d+)<\/td><\/tr>/g)];
   if(rows.length!==2||rows[0]![3]!==rows[1]![3]) throw new Error("screen lacks matching public r values");

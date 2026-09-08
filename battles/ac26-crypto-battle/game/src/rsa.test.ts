@@ -257,7 +257,7 @@ describe("small textbook RSA, with public encryption and a separate recovery key
     expect(openBefore).toHaveLength(6);
     for (const locale of ["ja", "en"] as const) {
       const material = renderToStaticMarkup(createElement(RsaMaterials, { task: order.task, locale }));
-      expect(material).toContain("m^e mod n"); expect(material).toContain("3×3=9"); expect(material).not.toContain("m=9、n=77、e=7");
+      expect(material).toContain("m<sup>e</sup> mod n"); expect(material).toContain("3<sup>3</sup> mod 7"); expect(material).toContain("3×3=9"); expect(material).not.toContain("m=9、n=77、e=7");
       expect(material).not.toContain("r4×r2"); // own-value guided decomposition stays in purchased hints
       const form = renderToStaticMarkup(createElement(HuntWorkspace, { target: option, projection: view, locale, submitting: false, onSubmit: async () => {} }));
       expect(form).toContain(locale === "ja" ? "素数 p" : "Prime factor p"); expect(form).toContain(locale === "ja" ? "素数 q" : "Prime factor q");
@@ -295,5 +295,5 @@ test("the actual participant bundle omits key generation, match fixture seed and
   expect(result.success).toBe(true);
   const bundle = (await Promise.all(result.outputs.map(output => output.text()))).join("\n");
   for (const privateMarker of ["deriveRsaKey", "RSA_PARAMETERS", "rsa-max-110", "rsa-plaintext:", "rsa-key:", "Finish this one Order before moving on.", "自分の値：m="]) expect(bundle).not.toContain(privateMarker);
-  expect(bundle).toContain("m^e mod n");
+  expect(bundle).toContain("tc-rsa-materials");
 });

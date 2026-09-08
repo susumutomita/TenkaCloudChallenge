@@ -1,3 +1,4 @@
+import MathText from "./MathText.tsx";
 import type { RsaTask } from "../game/src/rsa.ts";
 
 type Locale = "ja" | "en";
@@ -16,7 +17,7 @@ export const RSA_EXPLANATIONS = {
 export function RsaRecoveryExplanation({ locale }: { readonly locale: Locale }) {
   const step = RSA_EXPLANATIONS[locale].steps[1];
   return <details style={{ margin: "8px 0", overflowWrap: "anywhere" }}><summary>{locale === "ja" ? "なぜ因数で元に戻す鍵が分かる？" : "Why do factors reveal a recovery key?"}</summary>
-    {step.lines.map(line => <p key={line}>{line}</p>)}
+    {step.lines.map(line => <p key={line}><MathText>{line}</MathText></p>)}
   </details>;
 }
 
@@ -25,12 +26,12 @@ export default function RsaMaterials({ task, locale }: { readonly task: RsaTask;
   return <div className="tc-rsa-materials" style={{ fontSize: 13, lineHeight: 1.45 }}>
     <style>{`.tc-rsa-materials p{margin:5px 0}.tc-rsa-materials .tc-hunt-formula{margin:5px 0}`}</style>
     <p>{ja ? "RSAは公開鍵 n・e で暗号化し、元に戻す鍵を隠します。" : "RSA encrypts with public n and e, keeping a recovery key secret."}</p>
-    <p>{ja ? "^e は e 回掛けること、mod n は n で割った余り。途中も余りにできます。0以上n未満の整数1個で答えます。" : "^e means e copies multiplied; mod n means remainder after division by n. Intermediate remainders are allowed. Enter one integer from 0 to n−1."}</p>
-    <details><summary>{ja ? "一桁の余りの例" : "One-digit remainder example"}</summary><p>{ja ? "別の数で練習：3^3 mod 7 → 3×3=9、余り2 → 2×3=6。これは余りの練習で、RSAの鍵の例ではありません。" : "Practice with different values: 3^3 mod 7 → 3×3=9, remainder 2 → 2×3=6. This is a remainder exercise, not an RSA key example."}</p></details>
+    <p>{ja ? "上付きの e は元の数を e 回掛けること、mod n は n で割った余り。途中も余りにできます。0以上n未満の整数1個で答えます。" : "The superscript e means e copies of the original multiplied; mod n means remainder after division by n. Intermediate remainders are allowed. Enter one integer from 0 to n−1."}</p>
+    <details><summary>{ja ? "一桁の余りの例" : "One-digit remainder example"}</summary><p><MathText>{ja ? "別の数で練習：3^3 mod 7 → 3×3=9、余り2 → 2×3=6。これは余りの練習で、RSAの鍵の例ではありません。" : "Practice with different values: 3^3 mod 7 → 3×3=9, remainder 2 → 2×3=6. This is a remainder exercise, not an RSA key example."}</MathText></p></details>
     <p className="tc-card-hint">{ja ? "CIPHERでも、小さい公開nから鍵を計算されます。段は安全性の順位ではありません。" : "Even with CIPHER, this tiny public n reveals a recovery key through factoring. Rungs do not rank security."}</p>
     <RsaRecoveryExplanation locale={locale} />
     <p><strong>{ja ? "元の数" : "Original"} m = {task.plaintext}</strong> · {ja ? "公開鍵" : "Public key"} n = {task.n}, e = {task.e}</p>
-    <code className="tc-hunt-formula">c = m^e mod n</code>
+    <code className="tc-hunt-formula">c = m<sup>e</sup> mod n</code>
     <div role="img" aria-label={ja ? "元の数を繰り返し掛け、余りを暗号の答えにする" : "Repeatedly multiply the original and use its remainder as the encrypted answer"} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", margin: "8px 0" }}>
       <code>m</code><span aria-hidden="true">→</span><code>m × … × m</code><span>({ja ? "e個" : "e copies"})</span><span aria-hidden="true">→</span><code>mod n</code><span aria-hidden="true">→</span><code>c</code>
     </div>

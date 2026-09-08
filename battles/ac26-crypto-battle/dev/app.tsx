@@ -250,7 +250,8 @@ function Harness() {
         */}
         <section className="dev-slot">
           <h2>StatusPanel</h2>
-          <StatusPanel {...slotProps} />
+          {/* A scenario is a new match, not an older poll of the current one. */}
+          <StatusPanel key={session.scenarioId} {...slotProps} />
         </section>
       </div>
     </>

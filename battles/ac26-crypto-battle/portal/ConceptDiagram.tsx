@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SudokuBoard, SUDOKU_CSS } from "./SudokuGrid.tsx";
+import MpcMaskDiagram from "./MpcMaskDiagram.tsx";
 
 export default function ConceptDiagram({ kind, locale }: { readonly kind: "zk" | "relabel" | "sharing" | "mpc"; readonly locale: "ja" | "en" }) {
   const ja = locale === "ja";
@@ -7,7 +8,8 @@ export default function ConceptDiagram({ kind, locale }: { readonly kind: "zk" |
   const solution = [2,1,3,4,3,4,1,2,4,3,2,1,1,2,4,3];
   const table = [3,1,4,2];
   const lit = solution.flatMap((n, i) => n === digit ? [i] : []);
-  const nodes = kind === "zk" ? (ja ? ["証明する人\n秘密を知っている", "証明だけを送る\n秘密は送らない", "確認する人\n正しさを確かめる"] : ["Prover\nKnows a secret", "Send a proof\nKeep the secret", "Verifier\nChecks the claim"]) : kind === "sharing" ? (ja ? ["秘密分散\n秘密から複数の数を作る", "シェア（share）\nその数の1個", "必要な個数を集める\n元の秘密を戻せる"] : ["Secret sharing\nCreate several numbers", "A share\nOne of those numbers", "Collect enough shares\nRecover the secret"]) : (ja ? ["Aの入力 2\nBの入力 3", "互いの入力は隠す\n協力して計算", "合計 5 だけ分かる"] : ["A’s input: 2\nB’s input: 3", "Keep inputs private\nCompute together", "Learn only the sum: 5"]);
+  if (kind === "mpc") return <MpcMaskDiagram locale={locale} />;
+  const nodes = kind === "zk" ? (ja ? ["証明する人\n秘密を知っている", "証明だけを送る\n秘密は送らない", "確認する人\n正しさを確かめる"] : ["Prover\nKnows a secret", "Send a proof\nKeep the secret", "Verifier\nChecks the claim"]) : (ja ? ["秘密分散\n秘密から複数の数を作る", "シェア（share）\n番号と数の組", "必要な個数を集める\n元の秘密を戻せる"] : ["Secret sharing\nCreate several numbers", "A share\nAn index and a value", "Collect enough shares\nRecover the secret"]);
   return <figure style={{ margin: "14px 0" }} aria-label={ja ? "しくみの図" : "Mechanism diagram"}>
     <style>{SUDOKU_CSS}</style>
     {kind === "relabel" ? <>
