@@ -238,5 +238,5 @@ transferには、切り捨てた誤差上限を超える自作の数を構成す
 
 Supported computation imports / 計算用に使える標準ライブラリ:
 array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
-Other imports and file/network access are not supported in grading.
-採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
