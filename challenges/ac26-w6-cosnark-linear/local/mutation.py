@@ -56,6 +56,30 @@ _VALIDATION_BODY = "            row.append(share.id)"
 def _mutations() -> list[tuple[str, str]]:
     return [
         (
+            "counterexample returns identical values at every witness position",
+            REFERENCE.replace('"w": [0, 1] + [0] * (width - 2)', '"w": [1] * width'),
+        ),
+        (
+            "counterexample omits zeros before nonzero coefficients",
+            REFERENCE.replace('"a": [0, 1] + [0] * (width - 2)', '"a": [1] * width'),
+        ),
+        (
+            "counterexample fixes the width to a public example",
+            REFERENCE.replace('"a": [0, 1] + [0] * (width - 2)', '"a": [0, 1, 0]'),
+        ),
+        (
+            "counterexample uses bools as witness values",
+            REFERENCE.replace('"w": [0, 1] + [0] * (width - 2)', '"w": [False, True] + [False] * (width - 2)'),
+        ),
+        (
+            "parser raises the wrong exception for malformed input",
+            REFERENCE.replace('raise ValueError(', 'raise TypeError('),
+        ),
+        (
+            "parser treats boolean values as integers",
+            REFERENCE.replace('isinstance(value, bool) or not isinstance(value, int)', 'not isinstance(value, int)').replace('isinstance(c, bool) or not isinstance(c, int)', 'not isinstance(c, int)'),
+        ),
+        (
             "coefficients left as the representative they arrived as",
             REFERENCE.replace(
                 "        vectors[name] = tuple(c % prime for c in raw)",

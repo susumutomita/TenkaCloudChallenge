@@ -268,7 +268,7 @@ class Runtime:
         """Messages sent: the `messages` field summed over the log.
 
         Not the same number as `rounds`. One round can carry many messages, and a round with
-        no messages in it is not a round -- both are recorded per event so a trace can be
+        no messages still counts when its communication flag is true -- both fields let a trace be
         read rather than guessed at.
         """
         return sum(int(event.get("messages", 0)) for event in self.events)

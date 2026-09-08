@@ -111,8 +111,10 @@ def _valid_sharing(result: object, cfg: dict) -> bool:
 def _rejects(module, relation_value: dict, what: str) -> list[str]:
     try:
         module.parse_relation(relation_value)
-    except Exception:  # noqa: BLE001 - any refusal is a refusal
+    except ValueError:
         return []
+    except Exception as error:  # noqa: BLE001
+        return [f"parse_relation must reject {what} with ValueError, not {type(error).__name__}"]
     return [f"parse_relation accepted {what}"]
 
 
@@ -165,6 +167,11 @@ def check_relation(module, seed: str) -> list[str]:
         ({**base, "a": ("3", *tuple(base["a"])[1:])}, "a coefficient that is not an integer"),
         ({**base, "p": "97"}, "a modulus that is not an integer"),
         ({**base, "a": None}, "a coefficient vector that is not a sequence"),
+        ({**base, "a": (True, *tuple(base["a"])[1:])}, "a boolean coefficient"),
+        ({**base, "p": True}, "a boolean modulus"),
+        ({**base, "width": True}, "a boolean width"),
+        ({**base, "parties": True}, "a boolean party count"),
+        ({**base, "p": 1, "fieldId": "F1"}, "a modulus below two"),
     ]
     for candidate, what in malformed:
         failures.extend(_rejects(module, candidate, what))
@@ -228,7 +235,12 @@ def check_witness(module, seed: str) -> list[str]:
         runtime = Runtime(cfg)
         try:
             module.validate_shared_witness(ParticipantRuntime(runtime), canonical, candidate)
-        except Exception:  # noqa: BLE001 - any refusal is a refusal
+        except ValueError:
+            continue
+        except Exception as error:  # noqa: BLE001
+            failures.append(
+                f"validate_shared_witness must reject {what} with ValueError, not {type(error).__name__}"
+            )
             continue
         failures.append(f"validate_shared_witness accepted {what}")
     return failures
@@ -285,8 +297,13 @@ def check_combine_a(module, seed: str) -> list[str]:
 def check_combine_b(module, seed: str) -> list[str]:
     failures: list[str] = []
     for label in LABELS:
-        for shape in ("dense", "unit"):
-            scenario = _Scenario(seed, label, shape)
+        for shape in ("dense", "unit", "zero-witness"):
+            scenario = _Scenario(seed, label, "dense" if shape == "zero-witness" else shape)
+            if shape == "zero-witness":
+                scenario.witness = (0,) * scenario.cfg["width"]
+                scenario.shares = scenario.runtime.deal_witness(
+                    seed, scenario.witness, label=f"{label}-zero"
+                )
             scenario.separate_halves()
             canonical, cfg = scenario.canonical(), scenario.cfg
             runtime = scenario.runtime
@@ -308,7 +325,7 @@ def check_combine_b(module, seed: str) -> list[str]:
             expected_b = dot(canonical["b"], scenario.witness, cfg["p"])
             actual_a = runtime.reconstruct(proof["A"])
             actual_b = runtime.reconstruct(proof["B"])
-            if actual_a == expected_b and actual_b == expected_a:
+            if expected_a != expected_b and actual_a == expected_b and actual_b == expected_a:
                 failures.append("prove_linear returned A and B the wrong way round")
                 continue
             if actual_a != expected_a:
@@ -631,6 +648,49 @@ def check_equivalence(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def check_counterexample(module, seed: str) -> list[str]:
+    """Check constructed inputs independently, without a prescribed reference answer."""
+    construct = getattr(module, "sparse_counterexample", None)
+    if not callable(construct):
+        return ["transfer needs sparse_counterexample(p, width)"]
+    cfg = setting(seed, "counterexample")
+    cases = ((5, 2), (7, 3), (11, 5), (cfg["p"], cfg["width"]))
+    failures: list[str] = []
+    for prime, width in cases:
+        try:
+            result = construct(prime, width)
+        except Exception as error:  # noqa: BLE001
+            failures.append(f"sparse_counterexample raised {type(error).__name__}")
+            continue
+        if not isinstance(result, dict):
+            failures.append("sparse_counterexample must return a dictionary")
+            continue
+        vectors = (result.get("a"), result.get("w"))
+        if any(not isinstance(v, (list, tuple)) or len(v) != width for v in vectors):
+            failures.append("counterexample a and w must both match the requested width")
+            continue
+        if any(type(value) is not int or not 0 <= value < prime for v in vectors for value in v):
+            failures.append("counterexample entries must be canonical integers, not bools")
+            continue
+        coefficients, values = vectors
+        zero_seen = False
+        gap = False
+        for coefficient in coefficients:
+            if coefficient == 0:
+                zero_seen = True
+            elif zero_seen:
+                gap = True
+        if not gap:
+            failures.append("counterexample needs a zero before a nonzero coefficient")
+            continue
+        correct = sum(c * value for c, value in zip(coefficients, values)) % prime
+        compact = [c for c in coefficients if c != 0]
+        shifted = sum(c * value for c, value in zip(compact, values)) % prime
+        if correct == shifted:
+            failures.append("the constructed input does not distinguish original and compacted positions")
+    return failures
+
+
 def check_transfer(module, seed: str) -> list[str]:
     transferred = f"{seed}:transfer"
     return [
@@ -641,6 +701,7 @@ def check_transfer(module, seed: str) -> list[str]:
         *check_audit(module, transferred),
         *check_trace(module, transferred),
         *check_equivalence(module, transferred),
+        *check_counterexample(module, transferred),
     ]
 
 
