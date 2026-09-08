@@ -19,4 +19,7 @@ check $'battle=true\ncapacity=true' battles/ac26-crypto-battle/game/src/reducer.
 check $'battle=true\ncapacity=true' battles/ac26-crypto-battle/game/src/state-size.test.ts
 check $'battle=true\ncapacity=true' battles/ac26-crypto-battle/game/bun.lock
 check $'battle=true\ncapacity=true' challenges/example/metadata.json battles/ac26-crypto-battle/game/package.json
-printf 'CI path routing: 8 cases passed\n'
+check $'battle=true\ncapacity=false' battles/ac26-crypto-battle/portal/StatusPanel.tsx
+check $'battle=true\ncapacity=false' battles/ac26-crypto-battle/coordination/crypto-battle.ts
+check $'battle=true\ncapacity=true' battles/ac26-crypto-battle/metadata.json
+printf 'CI path routing: 11 cases passed\n'
