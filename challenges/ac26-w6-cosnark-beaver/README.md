@@ -80,7 +80,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `audit` | 50 | Every published value under a reserved mask, measured from the opening records |
 | `transfer` | 25 | All of it at a field, party count and witness length you have not seen |
 
-Hints on seven of the eight (12–20 each). Opening every one still leaves 190 of 300.
+Each of the eight checkpoints has three hints at two points each. Opening all 24 costs 48 points and leaves 252 of 300.
 
 ## A correct C proves less than it looks
 
@@ -164,11 +164,16 @@ Because of that, `make test`, `make test-one` and `make inspect` bring the verif
 witness from it over the compose network instead of deriving them locally. `make verifier-down`
 stops it.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry. Submissions run
-with time, memory, process and output caps; both containers run non-root, read-only, without
-privileges, and only the Workbench is published, on loopback.
+The trusted parent evaluates checkpoints; submitted Python runs in a separate worker and
+returns typed values and requests for the supplied runtime API. Runtime, Share and Triple
+objects remain in the parent. Their opaque handles are scoped to one function call. Printed
+JSON and process exit status do not decide correctness. Linux workers have file/network/signal
+restrictions, a 12-second submission deadline, and memory, process and output caps. The deadline
+is below the Workbench proxy's 15-second timeout. Both Compose services use non-root users and
+an init process, read-only filesystems and no added privileges; only the Workbench is published
+on loopback. These are the controls tested below, not a guarantee against every isolation flaw.
+Checkpoint ids and bounded failure feedback retain their existing contract; expected answers
+are not returned. Fixtures are derived from this deployment's seed.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not
@@ -184,3 +189,46 @@ Zero. No cloud account, no AWS resources.
 verifier. It prints how many of the 31 still reconstruct `C` to `A * B`, which is the number
 this README quotes — if a later edit makes the checkpoints cheaper, that number moves and the
 claim has to move with it.
+
+## Hint staircase and final construction
+
+The final transfer requires `mask_cancellation_witness`: construct local issued shares that
+preserve A while retaining `triple.x` ancestry. This distinguishes the runtime log from a
+secrecy proof. All eight checkpoints have three hints at two points each (48 total). Required
+formulas, APIs and a candidate to check are free in metadata; the final construction itself
+is left to the participant. Participant-only independent reading found four instruction
+inconsistencies, which were corrected.
+
+The parent owns the runtime operation records. It also profiles the native `Runtime.value_of`
+code, including unbound calls, and compares observed reads with successful local operations.
+Changing worker counters cannot erase those observations. A saved capability from an earlier
+function call cannot inspect the current call's shares. This execution boundary preserves the
+exercise's supplied API; the mathematical secrecy assumptions remain separate.
+
+Validation on the revised Linux Docker author image: 10 construction regressions and the earlier 11
+execution-boundary regressions passed; 31 logic mutations were killed and a separate legacy
+verdict-spoofing probe was rejected. The boundary suite includes reference solutions for all
+eight checkpoints, an alternative valid cancellation construction, fabricated output/early
+exit, private-file and parent-signal access, handle lifetime, typed values, nesting limits,
+non-root execution and the HTTP deadline relationship. As before, 24 of the 31 logic mutations
+still compute the right product, showing why a value-only test is insufficient.
+
+The actual non-root Workbench HTTP path fetched config, live public evidence and starter;
+an author-derived plan-only edit passed its first checkpoint while later functions remained
+unfinished. The author reference passed nine public tests and all eight checkpoints through
+prepare and the verifier proxy; saved-handle misuse and fabricated verdicts were rejected.
+This is route and author-regression evidence, not independent first-time participant success.
+Catalog validation passed for 116 entries. Browser interaction, deployed scoring and deployment
+were not tested.
+
+Additional compatibility check: the restricted runtime retains the advertised ParticipantRuntime type; a reference implementation with an isinstance guard and all eight reference checkpoints pass.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same optional standard-library helpers. Its original imports (including __future__ and supplied problem APIs) remain supported. Other optional imports and file/network operations are not supported by the evaluator.
+スターターにも同じ追加用の一覧を表示します。最初からあるimport（__future__や教材のAPIなど）は引き続き使えます。それ以外の追加importとファイル・通信操作は採点環境では対応しません。
+
+The execution-boundary suite now contains 13 test methods, including the added facade-type and supported-import compatibility checks. The new checks are recorded separately from the earlier full-suite run.
+実行境界のテストは現在13件です。追加した公開型と標準ライブラリの互換性確認は、以前の全体実行と分けて記録しています。

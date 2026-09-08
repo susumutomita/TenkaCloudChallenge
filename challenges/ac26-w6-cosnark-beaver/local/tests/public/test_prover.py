@@ -1,8 +1,8 @@
-"""Public tests: shapes and one honest round trip. Nothing here is hard to satisfy.
+"""Public tests: pipeline shapes and one cancellation example.
 
-They never check what `C` reconstructs to, never look at how many rounds the step cost, and
-never look at an opening record. The hidden verifier does all three, and the checkpoint that
-separates a private prover from a correct one is the last of them.
+Normal pipeline tests do not establish its product value or communication schedule.
+The cancellation example checks value, ancestry and absence of openings; it demonstrates
+why ancestry alone cannot establish secrecy. The verifier checks the full public contract.
 """
 
 from __future__ import annotations
@@ -137,6 +137,19 @@ def test_privacy_audit_answers_every_field() -> None:
         assert key in report
 
 
+def test_mask_cancellation_witness_preserves_value_but_mentions_mask() -> None:
+    runtime, _, halves, triple = _fresh()
+    participant = ParticipantRuntime(runtime)
+    participant.reserve_triple(triple)
+    result = prover.mask_cancellation_witness(participant, halves, triple)
+    assert isinstance(result, tuple) and len(result) == CFG["parties"]
+    assert runtime.reconstruct(result) == runtime.reconstruct(halves["A"])
+    for i, share in enumerate(result):
+        assert runtime.issued(share) and share.party == i
+        assert triple.x[i].id in runtime.ancestry(share)
+    assert not participant.openings()
+
+
 def main() -> int:
     only = ""
     if "--only" in sys.argv:
@@ -165,8 +178,8 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("Note what is missing above: nothing checks what C reconstructs to, nothing counts")
-    print("the rounds, and nothing looks at an opening record.")
+    print("These examples do not establish the complete pipeline product or round schedule.")
+    print("The final example checks cancellation, ancestry and absence of openings.")
     return 1 if failures else 0
 
 

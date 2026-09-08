@@ -744,6 +744,64 @@ def check_audit(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def check_mask_cancellation(module, seed: str) -> list[str]:
+    failures = []
+    for label in LABELS:
+        scenario = _Scenario(seed, label)
+        runtime = scenario.runtime
+        runtime.reserve_triple(scenario.triple)
+        before = len(runtime.events)
+        issued_objects = []
+        observed_reads = 0
+        arithmetic_reads = 0
+        previous_profile = sys.getprofile()
+        read_code = Runtime.value_of.__code__
+        def observe(frame, event, arg):
+            nonlocal observed_reads
+            if event == "call" and frame.f_code is read_code and frame.f_locals.get("self") is runtime:
+                observed_reads += 1
+            if previous_profile is not None:
+                previous_profile(frame, event, arg)
+        original_emit = runtime._emit
+        def track_emit(*args, **kwargs):
+            nonlocal arithmetic_reads
+            share = original_emit(*args, **kwargs)
+            # Each successful built-in local operation consumes this many reads.
+            # Count the actual Runtime, so unbound facade calls cannot evade it.
+            arithmetic_reads += {"add": 2, "sub": 2, "mul-public": 1, "add-public": 1, "zero": 0}[args[0]]
+            issued_objects.append(share)
+            return share
+        runtime._emit = track_emit
+        try:
+            sys.setprofile(observe)
+            result = module.mask_cancellation_witness(
+                ParticipantRuntime(runtime), scenario.halves, scenario.triple
+            )
+            if observed_reads != arithmetic_reads:
+                failures.append("cancellation witness must not read values directly")
+            if not isinstance(result, tuple) or len(result) != scenario.cfg["parties"]:
+                failures.append("cancellation witness must return a tuple with one share per party")
+                continue
+            for i, share in enumerate(result):
+                if (not any(share is value for value in issued_objects)
+                        or not runtime.issued(share) or share.party != i
+                        or share.field != scenario.cfg["fieldId"]
+                        or scenario.triple.x[i].id not in runtime.ancestry(share)):
+                    failures.append("cancellation witness needs issued same-party shares with triple.x ancestry")
+                    break
+            if runtime.reconstruct(result) != scenario.value_of_a():
+                failures.append("cancellation witness must preserve A's value")
+            if any(event.get("communication") for event in runtime.events[before:]):
+                failures.append("cancellation witness must not communicate")
+            if runtime.violations:
+                failures.append("cancellation witness must use own-party arithmetic")
+        except Exception as error:
+            failures.append(f"cancellation witness raised {type(error).__name__}")
+        finally:
+            sys.setprofile(previous_profile)
+    return failures
+
+
 def check_transfer(module, seed: str) -> list[str]:
     transferred = f"{seed}:transfer"
     return [
@@ -754,6 +812,7 @@ def check_transfer(module, seed: str) -> list[str]:
         *check_product(module, transferred),
         *check_artifact(module, transferred),
         *check_audit(module, transferred),
+        *check_mask_cancellation(module, transferred),
     ]
 
 

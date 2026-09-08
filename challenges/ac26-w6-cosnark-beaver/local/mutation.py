@@ -11,6 +11,7 @@ moves and the claim moves with it.
 from __future__ import annotations
 
 import sys
+import subprocess
 import types
 from pathlib import Path
 
@@ -345,6 +346,20 @@ SPOOF = "\n".join(
 
 
 def main() -> int:
+    regression = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "tests/test_cancellation.py")],
+        check=False,
+    )
+    if regression.returncode:
+        print("FAIL cancellation construction regressions")
+        return 1
+    boundary = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "tests/hidden/test_execution_boundary.py")],
+        check=False,
+    )
+    if boundary.returncode:
+        print("FAIL isolated execution regressions")
+        return 1
     reference = _load(REFERENCE)
     reference_failures = run(reference, SEED)
     if reference_failures:
@@ -395,7 +410,7 @@ def main() -> int:
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(mutations) + 1} mutations killed.")
+    print(f"All {len(mutations)} logic mutations killed; one separate grading-verdict probe rejected.")
     return 0
 
 

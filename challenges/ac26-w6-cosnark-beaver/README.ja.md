@@ -77,7 +77,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `audit` | 50 | 公開された値がすべて予約済み mask 下にあることを、開示記録から測る |
 | `transfer` | 25 | 未知の体・party 数・witness 長で全部成立させる |
 
-hint は 8 つ中 7 つにあります (各 12〜20)。全部開いても 300 点中 190 点が残ります。
+8項目すべてに各2点のヒントが3段あります。24段すべて開くと48点を使い、300点中252点が残ります。
 
 ## 正しい C は、見た目ほど何も保証しない
 
@@ -157,11 +157,15 @@ starter、public test、orientation printer、そして供給される共有レ�
 （`make verifier-up` が自動で走ります）。`make inspect` はこのデプロイの setting・row・witness を、
 ローカルで導出せずに compose network ごしに読みます。停止は `make verifier-down` です。
 
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
-結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
-提出コードには時間・memory・process・output の上限をかけ、両 container は non-root、read-only、
-privilege 無しで動き、公開されるのは Workbench の loopback だけです。
+採点は信頼する親プロセスで行い、提出 Python は別の worker で実行します。worker が返すのは
+型付きの値と、提供 runtime API への操作要求です。Runtime・Share・Triple の実体は親に置き、
+参照用の識別子は関数の呼び出しごとに区切ります。標準出力の JSON や終了コードで正解にはしません。
+Linux worker にはファイル・ネットワーク・signal の制限と、時間・memory・process・output の
+上限を設けます。提出全体の上限 12 秒は Workbench proxy の 15 秒より短くします。
+Compose の両サービスは non-root・init あり・read-only・追加 privilege 無しで動き、公開するのは
+Workbench の loopback だけです。これは下記で検査した対策の範囲であり、あらゆる隔離の欠陥を
+防ぐ保証ではありません。checkpoint id と長さを制限した誤答メッセージの契約を維持し、期待する
+答えは返しません。fixture はこのデプロイの seed から作ります。
 
 これは自習と誠実な練習を支えます。競技順位・試験・修了判定は**支えません**。
 それらには participant が管理しない verifier が必要で、
@@ -176,3 +180,39 @@ privilege 無しで動き、公開されるのは Workbench の loopback だけ�
 `make reference-test` が mutation suite を実行します。壊した提出 31 種類と verifier を狙った 1 種類が
 あります。31 種類のうち何個が依然として `C` を `A × B` に復元するかを毎回印字します。この README が
 引用しているのはその数で、後の変更で checkpoint が安くなればその数が動き、主張のほうを直します。
+
+## 段階ヒントと最後の構成問題
+
+最終 transfer では `mask_cancellation_witness` を実装します。A の値を保ちながら
+`triple.x` の系譜が残る新しい共有値をローカル演算で構成し、記録と秘密性の証明の違いを確かめます。
+8 項目 × 3 段 × 2 点で計 48 点です。必要な式・API と候補の検算例は無料本文に置き、
+最後の構成は参加者自身が考えます。参加者資料だけの独立読解で見つかった説明の不整合 4 件を修正しました。
+
+runtime の操作記録は親が保持します。ネイティブの `Runtime.value_of` の実行を、基底クラスからの
+呼び出しを含めて親で計測し、成功したローカル演算に必要な読取数と比較します。worker 側のカウンターを
+変更しても記録は消えません。前の関数呼び出しで保存した操作権限から、今回の共有値を調べることも拒否します。
+これは提供 API の実行境界です。数学的な秘密性に必要な仮定とは区別します。
+
+変更後の Linux Docker 作者 image で、構成回帰 10 件と、互換性確認を追加する前の実行境界回帰 11 件が成功しました。
+論理の変異 31 件を検出し、別枠の既存採点偽装プローブ 1 件も拒否しました。実行境界回帰には、
+参考解の全 8 checkpoint、別の正しい相殺構成、偽の出力・早期終了、非公開ファイルと親 signal、
+参照権限の寿命、型保持、入れ子の上限、non-root、HTTP の期限関係を含みます。
+31 変異のうち 24 件は積の値だけなら正しいため、値だけの検査では不十分な点も再確認しました。
+
+non-root の実 Workbench HTTP 経路で config・公開資料・starter を取得し、作者由来の plan だけの
+部分実装で初手が合格し、後半が未完成のまま失敗することを確認しました。参考解は公開 9 テストと
+prepare・verifier proxy 経由の全 8 checkpoint に合格し、古い参照権限の悪用と偽の採点出力は拒否されました。
+これは提出経路と作者回帰の証拠で、初見参加者の自力成功を示すものではありません。
+カタログは 116 件有効です。ブラウザ操作・デプロイ先の採点・デプロイは未実施です。
+
+追加の互換性確認：採点側でも公開APIのParticipantRuntime型を維持します。isinstanceで型を確認する正しい実装と、全8項目の参考解が通過しています。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same optional standard-library helpers. Its original imports (including __future__ and supplied problem APIs) remain supported. Other optional imports and file/network operations are not supported by the evaluator.
+スターターにも同じ追加用の一覧を表示します。最初からあるimport（__future__や教材のAPIなど）は引き続き使えます。それ以外の追加importとファイル・通信操作は採点環境では対応しません。
+
+The execution-boundary suite now contains 13 test methods, including the added facade-type and supported-import compatibility checks. The new checks are recorded separately from the earlier full-suite run.
+実行境界のテストは現在13件です。追加した公開型と標準ライブラリの互換性確認は、以前の全体実行と分けて記録しています。

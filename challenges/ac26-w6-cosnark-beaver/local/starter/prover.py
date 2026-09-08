@@ -1,4 +1,17 @@
-"""The only file you edit.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
+The only file you edit.
+
+You implement the shared multiplication stage of a joint proof computation: compute C=A*B
+without publishing A or B. Begin by planning its communication cost; the later stages
+implement and audit that plan.
+
+A co-SNARK is a short proof produced jointly by parties that hold shares of secrets.
+ZK (zero knowledge) shows a claim is true without revealing its secret. This exercise
+builds the multiplication component, not a complete ZK prover or verifier.
 
 The previous problem built the half of a co-SNARK prover's row that costs nothing:
 
@@ -30,13 +43,17 @@ d, e opened                                   one round, two values
 Substituting `A = d + x` and `B = e + y` into `A * B` and expanding is worth doing on paper
 once; the four terms above are what comes out.
 
-`d` and `e` are `A` and `B` masked by uniform values nobody chose, so opening them reveals
-nothing about either — **provided the mask is used once**. That sentence is the whole security
-of the step, which is why `reserve_triple` refuses to hand the same triple out twice.
+The trusted dealer (the party we assume prepares correct triples) chooses masks.
+Uniform means every value 0..p-1 has probability 1/p. Independent means learning an
+input or the other mask does not change that probability. An adversary is someone
+trying to learn A or B. The masks must remain unknown to that observer and be used
+once. These are security assumptions: conditions needed for the secrecy argument,
+not facts proved by this runtime. Under them, d and e have the same distribution
+for every A and B. The free statement illustrates this with a table.
 
 ## What you are handed
 
-`runtime` is a `ParticipantRuntime`. Everything the previous problem gave you, plus three:
+`runtime` is a `ParticipantRuntime`. Everything the previous problem gave you, plus these calls:
 
 ```text
 runtime.reserve_triple(triple)   check a triple and spend it; a second call raises
@@ -52,14 +69,19 @@ runtime.setting / party_scope / value_of / add / sub / mul_public / add_public /
 runtime.events() / violations() / ancestry(share) / issued(share)
 ```
 
+Use the runtime, Share and Triple objects supplied to the current function call;
+do not save and reuse objects from another call.
+
 There is still no `reconstruct`.
 
 A `Triple` carries `id`, `fieldId`, `parties`, and the three sharings `x`, `y`, `z`.
 
-Run `make inspect` first.
+Start with multiplication_plan in the Portal editor, then submit plan. Inspect evidence is optional context. The free statement documents every API and return field.
 """
 
 from __future__ import annotations
+
+from participant.mpc import field_id
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +118,7 @@ def multiplication_plan(relation: dict, products: int = 1) -> dict:
     the four terms of `[C]` and read off which runtime call builds each one.
 
     Raise `ValueError` for a relation that does not describe a field (a `fieldId` that does not
-    name `p`, fewer than two parties, a non-integer anywhere) or for a negative layer width.
+    name `p`, fewer than two parties, a non-integer/bool p, parties or products) or for a negative layer width.
     """
     return {}
 
@@ -271,8 +293,8 @@ def privacy_audit(runtime, relation: dict, halves: dict, triple) -> dict:
     ```
 
     `unmasked` is the one worth slowing down on. Each opening record carries `maskedBy`: the
-    reserved triple shares the runtime found in that opening's ancestry. An empty one means a
-    value was published that nothing was hiding.
+    reserved triple shares the runtime found in that opening's ancestry. An empty one means no reserved triple ancestry was recorded. A nonempty
+    ancestry is not proof of secrecy: the final cancellation witness demonstrates this.
 
     There is a shortcut this problem exists to make visible. Open `[A]` and `[B]` directly, and
     you can compute `C` in the clear and re-share it — the result is correct on every seed and
@@ -282,3 +304,14 @@ def privacy_audit(runtime, relation: dict, halves: dict, triple) -> dict:
     Read the writeup afterwards for what this audit does **not** prove.
     """
     return {}
+
+
+def mask_cancellation_witness(runtime, halves: dict, triple) -> tuple:
+    """Construct local issued shares with A's value and each party's triple.x ancestry.
+
+    Triple is already reserved. Return one Share per party, same field and party.
+    Use local arithmetic only: no open, communication, or value_of reads.
+    The grader independently checks reconstructed value, issuance, ancestry and messages.
+    This exhibits why an ancestry label alone does not prove secrecy.
+    """
+    return ()
