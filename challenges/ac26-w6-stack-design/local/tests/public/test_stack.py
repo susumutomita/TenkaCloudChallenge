@@ -1,16 +1,8 @@
-"""Public tests: shapes, plus the one answer the problem text already handed you.
+"""Public previews: return shapes and the statement's two-wire example.
 
-They check that every function answers for every edge, node and property it was asked about,
-that a violation is a pair of a wire and a boundary class, that a repair and a counterexample
-come back as architectures rather than as edits, that a design names all five of its fields, and
-that a sound architecture has nothing wrong with it. That last one is not a spoiler — it is
-stated outright in the starter, and every stack gets it right.
-
-What is missing is everything else. Nothing here hands over an architecture that is broken,
-nothing asks which of several symptoms came first, nothing checks that a counterexample left
-every component content, nothing checks that a repair changed the deployment rather than the
-requirement, and nothing hands over a brief that needs two primitives at once. The hidden
-verifier does all five, one checkpoint at a time.
+The small example checks actual carried labels, conditional coverage and its
+publication violation. Deployment-wide diagnosis, counterexample construction,
+minimal repair and all combinations of briefs still need checkpoint verification.
 """
 
 from __future__ import annotations
@@ -35,19 +27,50 @@ from participant.lab import (  # noqa: E402
 from show import briefs, public_evidence, sound_architectures  # noqa: E402
 import stack  # noqa: E402
 
-# Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the participant
-# image any more -- it holds this problem's whole ground truth under other names (`constrained`
-# is `carried`, `violations` is `contract_violations`, `first_broken` is `first_failure`,
-# `selection_truth` is `select`, and so on) as well as `BREAKS`, which names what each variant
-# broke on every seed at once. `show.public_evidence` reads `GET /public` over the
-# Compose-internal network (or `PUBLIC_EVIDENCE_JSON`, or the checkout's own fixtures when
-# neither is set), and hands back the same architectures and briefs this file has always used.
+# Read only the public diagrams supplied by the current deployment.
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 EVIDENCE = public_evidence()
 SOUND = sound_architectures(EVIDENCE)["mpc-prover"]
 BRIEFS = briefs(EVIDENCE)
 EDGE_IDS = {edge["id"] for edge in SOUND["edges"]}
 NODE_IDS = {node["id"] for node in SOUND["nodes"]}
+
+
+def _two_wire_example(public_output=False):
+    labels = dict(representation="plaintext", classification="secret", algebra=None,
+                  keyDomain=None, identity=None, serialization="canonical-v1")
+    return {
+        "caseId": "two-wire-example",
+        "nodes": (
+            dict(id="source", layer="host-orchestration", domain="one", transformation="carry"),
+            dict(id="carry", layer="primitive-inside", domain="one", transformation="carry"),
+            dict(id="sink", layer="host-orchestration", domain="one", transformation="carry"),
+        ),
+        "edges": (
+            dict(id="e1", source="source", target="carry", **labels),
+            dict(id="e2", source="carry", target="sink", **{
+                **labels, "classification": "public" if public_output else "secret"}),
+        ),
+        "obligations": {},
+        "policy": dict(mayDeclassify=(), mayCombine=(), mayKeySwitch=(), mayLift=(),
+                       distinctDomains=(), maxCrossings=0),
+    }
+
+
+def test_carried_matches_the_two_wire_example():
+    result = stack.carried(_two_wire_example(public_output=True))
+    assert result == {"e1": {}, "e2": {
+        "representation": "plaintext", "classification": "secret", "algebra": None,
+        "keyDomain": None, "identity": None, "serialization": "canonical-v1"}}
+
+
+def test_contracts_finds_the_two_wire_publication():
+    assert tuple(stack.contract_violations(_two_wire_example(True))) == (("e2", "data-classification"),)
+
+
+def test_underwrites_checks_the_two_wire_input_and_output():
+    assert tuple(stack.underwrites(_two_wire_example())["carry"]) == ("correctness", "privacy")
+    assert tuple(stack.underwrites(_two_wire_example(True))["carry"]) == ()
 
 
 def test_carried_answers_for_every_edge_in_the_graph() -> None:
@@ -82,7 +105,7 @@ def test_contract_violations_returns_edge_and_boundary_class_pairs() -> None:
 
 
 def test_a_sound_architecture_breaks_nothing() -> None:
-    # The happy path, and the only one of the categories the problem text states outright.
+    # This happy-path preview is one public rule; it does not check all contracts.
     # A stack that gets this and nothing else clears no checkpoint.
     assert tuple(stack.contract_violations(dict(SOUND))) == ()
 
@@ -106,9 +129,7 @@ def test_repair_returns_an_architecture_rather_than_an_edit() -> None:
 
 
 def test_every_variant_rebuilds_into_an_architecture_you_can_read() -> None:
-    # Issue 543 option B2: the thirteen deployments arrive as data now rather than from
-    # `broken(seed, variant)`. This pins the round trip -- the shape the starter is written
-    # against, not the diagnosis, which is the checkpoint.
+    # These public inputs must retain the dictionary shape described in the statement.
     from show import broken_architectures
 
     deployments = broken_architectures(EVIDENCE)
@@ -167,11 +188,8 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("Note what is missing above: nothing here hands over an architecture that is broken,")
-    print("nothing asks which of several symptoms came first, nothing checks that a")
-    print("counterexample left every component content, nothing checks that a repair changed the")
-    print("deployment rather than the requirement, and nothing hands over a brief that needs two")
-    print("primitives at once.")
+    print("The two-wire example checks a public rule. Passing previews does not grade every")
+    print("deployment, first-failure order, counterexample, minimal repair, or combined brief.")
     return 1 if failures else 0
 
 
