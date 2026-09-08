@@ -13,8 +13,8 @@ and `tests/hidden/` are reachable only over the Compose-internal network (see
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
     on a missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
+  - Grading stays in the parent. Restricted learner processes return function
+    values, never grading verdicts. The source tree is never written to.
   - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
     capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
     checkpoint instead of the verifier.
@@ -32,22 +32,22 @@ import hashlib
 import hmac
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from participant.execution import LearnerError, LearnerSession
+from tests.hidden import check_schnorr
+
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w3-schnorr"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 30
+RUN_TIMEOUT_SECONDS = 12
 MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
 MAX_PROCESSES = 64
 MAX_OUTPUT_BYTES = 64 * 1024
@@ -75,53 +75,6 @@ CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 
 
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`, which
-# aborts the exec -- so on a macOS checkout every submission run failed, including the
-# reference. The lab runs on Linux, where the cap does apply, so skipping it on Darwin
-# does not change what participants run.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_schnorr
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import schnorr
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-failures = []
-for name in {phases!r}:
-    failures.extend(getattr(check_schnorr, name)(schnorr, {seed!r}))
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
 
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
@@ -134,58 +87,18 @@ def _failure_message(failures: list[object]) -> str | None:
     return text[:MAX_MESSAGE_CHARS] if text else None
 
 
-def _run_submission(
-    submission: object, phases: tuple[str, ...], seed: str
-) -> tuple[bool, str | None]:
-    """Run the named hidden phases against the learner's file in a throwaway workspace."""
-    source = submission
-    if isinstance(source, dict):
-        source = source.get("schnorr.py")
-    if not isinstance(source, str) or not source.strip():
+def _run_submission(submission: object, phases: tuple[str, ...], seed: str):
+    source = submission.get('schnorr.py') if isinstance(submission, dict) else submission
+    if not isinstance(source, str) or not source.strip() or len(source) > MAX_BODY_BYTES:
         return False, None
-    if len(source) > MAX_BODY_BYTES:
-        return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "schnorr.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    try:
+        with LearnerSession({'schnorr.py': source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            failures = []
+            for name in phases:
+                failures.extend(getattr(check_schnorr, name)(learner.module(), seed))
+    except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        return False, 'The submitted functions could not be evaluated within the time limit.'
+    return not failures, _failure_message(failures)
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:

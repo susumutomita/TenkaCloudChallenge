@@ -154,3 +154,7 @@ them would be the wrong test. See the comment at the top of `local/mutation.py`.
 `local/given/primitives.py` derives K and the initial state from prime roots instead of pasting the
 tables. That is not decoration: a single mistyped digit in a 64-entry constant table produces a
 wrong digest with nothing to point at, and deriving them makes that failure impossible.
+
+## Function evaluation boundary
+
+The trusted parent grades returned function values. Learner functions run in a restricted Linux process with a 12-second total limit; their output does not decide the score. Public arithmetic inputs and API signatures are unchanged, including bytes/bytearray and tuple/list results where supported. `make evaluation-test` checks the reference through the actual evaluator, missing implementations, and type preservation. Deployment and platform score-history persistence are not covered by this local check.

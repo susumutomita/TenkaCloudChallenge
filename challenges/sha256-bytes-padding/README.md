@@ -162,3 +162,7 @@ instead of appending to a `bytearray`, and reading the bit length from `len(mess
 than after copying the message into the buffer, both produce byte-for-byte identical output, so no
 correct test could distinguish them. Listing them would produce a permanent "survived" and train
 the next author to ignore the suite. See the comment at the top of `local/mutation.py`.
+
+## Function evaluation boundary
+
+The trusted parent grades returned function values. Learner functions run in a restricted Linux process with a 12-second total limit; their output does not decide the score. Public arithmetic inputs and API signatures are unchanged, including bytes/bytearray and tuple/list results where supported. `make evaluation-test` checks the reference through the actual evaluator, missing implementations, and type preservation. Deployment and platform score-history persistence are not covered by this local check.

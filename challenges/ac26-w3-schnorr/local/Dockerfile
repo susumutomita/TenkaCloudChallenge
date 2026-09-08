@@ -2,6 +2,8 @@
 # because a base image moved underneath them.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+
 RUN useradd --create-home --uid 10001 lab
 
 WORKDIR /problem
@@ -38,6 +40,7 @@ CMD ["python", "participant/server.py"]
 # Compose-internal network (see docker-compose.yml). The Workbench above has the public
 # tests and the answer-sealing adapter, but no hidden checker and no scoring process.
 FROM base AS verifier
+COPY participant/execution.py participant/isolation.py participant/protocol.py participant/worker.py participant/group.py ./participant/
 COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
 COPY --chown=lab:lab verifier/ ./verifier/

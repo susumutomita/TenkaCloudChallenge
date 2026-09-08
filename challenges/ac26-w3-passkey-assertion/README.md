@@ -151,3 +151,7 @@ make install, make agent-gate (116 problems), and two internal regressions pass.
 
 
 Review follow-up: the graded signature and policy checkers now reject missing signatures, with two additional mutants covering dictionary indexing failures. The documented reference-test runner also discovers the internal regression tests. Direct Python execution passed both regression tests and killed all eight mutants; catalog validation passed. Docker and live Portal were not run for this follow-up.
+
+## Function evaluation boundary
+
+The trusted parent grades returned function values. Learner functions run in a restricted Linux process with a 12-second total limit; their output does not decide the score. Public arithmetic inputs and API signatures are unchanged, including bytes/bytearray and tuple/list results where supported. `make evaluation-test` checks the reference through the actual evaluator, missing implementations, and type preservation. Deployment and platform score-history persistence are not covered by this local check.

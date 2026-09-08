@@ -2,6 +2,11 @@
 # because a base image moved underneath them.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+
+RUN useradd --uid 10001 --create-home lab
+USER lab
+
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -39,6 +44,7 @@ CMD ["python", "participant/server.py"]
 # tests and the Portal editor API, but no fixture derivation, no hidden checker and no
 # scoring process.
 FROM base AS verifier
+COPY participant/execution.py participant/isolation.py participant/protocol.py participant/worker.py ./participant/
 COPY fixtures/ ./fixtures/
 COPY tests/hidden/ ./tests/hidden/
 COPY verifier/ ./verifier/

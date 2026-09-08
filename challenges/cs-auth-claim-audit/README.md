@@ -135,3 +135,7 @@ administer, tracked in [#271](https://github.com/susumutomita/TenkaCloudChalleng
 "The check passed, therefore it is allowed" recurs through this track in other clothes. A
 committed transaction does not mean the state a reader saw was correct. A cache hit does not mean
 the value is still true. Same shape of mistake, green tests every time.
+
+## Function evaluation boundary
+
+The trusted parent grades returned function values. Learner functions run in a restricted Linux process with a 12-second total limit; their output does not decide the score. Public arithmetic inputs and API signatures are unchanged, including bytes/bytearray and tuple/list results where supported. `make evaluation-test` checks the reference through the actual evaluator, missing implementations, and type preservation. Deployment and platform score-history persistence are not covered by this local check.

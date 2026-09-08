@@ -149,3 +149,7 @@ Five obvious-looking mutations are deliberately **not** in the list, because the
 mathematically identical to the reference — including Maj written with `|` instead of `^`, and Ch
 written without masking the complement. Two of those five were in the list until they survived a
 run. See the comment at the top of `local/mutation.py`; that comment is the point of the exercise.
+
+## Function evaluation boundary
+
+The trusted parent grades returned function values. Learner functions run in a restricted Linux process with a 12-second total limit; their output does not decide the score. Public arithmetic inputs and API signatures are unchanged, including bytes/bytearray and tuple/list results where supported. `make evaluation-test` checks the reference through the actual evaluator, missing implementations, and type preservation. Deployment and platform score-history persistence are not covered by this local check.

@@ -21,7 +21,7 @@ IMAGE := ac26-w3-schnorr
 # neither one needs a verdict. `reference/` and `mutation.py` remain author-stage only.
 # Whoever controls the Docker daemon can still build any stage: this is misdelivery
 # prevention, not confidentiality. See TEMPLATE.md "Assurance scope".
-RUN := docker run --rm -e FLAG_SEED=$(FLAG_SEED) \
+RUN := docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) \
 	-v $(CURDIR)/local/starter:/problem/starter:ro $(IMAGE)
 
 .PHONY: build test test-one inspect reset reference-test
@@ -48,4 +48,9 @@ reset:
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+
+.PHONY: evaluation-test
+evaluation-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init $(IMAGE)-author python -m unittest discover -s tests/hidden -p test_evaluation.py -v

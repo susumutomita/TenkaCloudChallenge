@@ -40,3 +40,7 @@ No AWS resources are created. Running containers consume local Docker CPU, memor
 The participant HTTP route and independent first-reading gaps and reread outcomes are recorded in `local/tests/hidden/READER.md`. Live AWS and third-party participant play remain unrun.
 
 Issue #716 reader follow-up documents the slow-copy name and a small comparison before submission; see `local/tests/hidden/READER.md`. Reference validation killed14 mutants and passed the public-process isolation check. Two live-workbench checks were skipped by the author target.
+
+## Function evaluation boundary
+
+The trusted parent grades returned function values. Learner functions run in a restricted Linux process with a 12-second total limit; their output does not decide the score. Public arithmetic inputs and API signatures are unchanged, including bytes/bytearray and tuple/list results where supported. `make evaluation-test` checks the reference through the actual evaluator, missing implementations, and type preservation. Deployment and platform score-history persistence are not covered by this local check.

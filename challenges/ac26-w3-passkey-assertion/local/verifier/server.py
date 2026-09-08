@@ -3,8 +3,8 @@
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
     on a missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
+  - Grading stays in the parent. Restricted learner processes return function
+    values, never grading verdicts. The source tree is never written to.
   - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
     capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
     checkpoint instead of the verifier.
@@ -37,15 +37,15 @@ from __future__ import annotations
 
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from participant.execution import LearnerError, LearnerSession
+from tests.hidden import check_assertion
 
 from fixtures.generate import public_payload
 
@@ -53,10 +53,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 10
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
+RUN_TIMEOUT_SECONDS = 12
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 #: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
@@ -67,99 +64,6 @@ CHECKPOINTS = ("signature", "find-uv-gap", "enforce-uv")
 #: this process only ever receives source. The Portal editor contract -- config, starter,
 #: inspect, public tests, prepare -- lives in `participant/server.py` since Issue 543 B2.
 CODE_CHECKPOINTS = CHECKPOINTS
-
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
-# which aborts the exec — so on a macOS checkout the address-space cap turned
-# every submission run into "could not run at all", including the reference.
-#
-# The lab itself is python:3.12-slim on Linux, where this cap does apply. Skipping
-# it on Darwin therefore does not weaken what participants actually run; it makes
-# `make reference-test` and `bun run validate` work on a macOS checkout, where the
-# alternative was no verification at all. The timeout, process cap, file-size cap,
-# `-I` isolation, and throwaway workspace all still apply on every platform.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-def _run_submission_script(
-    sources: dict[str, str], script: str, seed: str
-) -> tuple[int, str] | None:
-    """Run Portal-edited Python with the verifier's existing resource limits."""
-    with tempfile.TemporaryDirectory() as workspace:
-        for name, text in sources.items():
-            (Path(workspace) / name).write_text(text, encoding="utf-8")
-        transcript = Path(workspace) / "stdout"
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [
-                        sys.executable,
-                        "-I",
-                        "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed),
-                    ],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
-
-
-RUNNER = """
-import json, os, sys
-from pathlib import Path
-sys.path.insert(0, {root!r})
-from tests.hidden.check_assertion import run
-
-# Keep the private callable reference, then drop the answer packages and the problem root
-# before importing participant code -- the same guard cs-transaction-visibility-audit's
-# verifier applies for the same reason. `fixtures/` and `tests/hidden/` are on disk *in
-# this image* because grading needs them, so without this the submission itself could
-# import exactly what the participant image stopped shipping (Issue 543 option B2), and
-# read this deployment's assertion kinds or the hidden suite's own expectations out of
-# them. `run` already holds its references, so removing these does not affect grading.
-#
-# This closes the one-import path, not the filesystem: a submission that deliberately
-# puts the root back on `sys.path` can still reach those files. Local mode is honor-system
-# verification for whoever controls the image -- see TEMPLATE.md "Assurance scope".
-for module_name in tuple(sys.modules):
-    if module_name in ("fixtures", "tests") or module_name.startswith(("fixtures.", "tests.")):
-        sys.modules.pop(module_name, None)
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-sys.path.insert(0, {workspace!r})
-
-try:
-    import assertion
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-print(json.dumps({{"failures": run(assertion, {seed!r}, __CHECKPOINT__)}}))
-sys.stdout.flush()
-os._exit(0)
-"""
 
 
 def _failure_detail(failures: list[object]) -> str:
@@ -172,31 +76,17 @@ def _failure_detail(failures: list[object]) -> str:
     return "; ".join(dict.fromkeys(item for item in failures if isinstance(item, str)))[:MAX_MESSAGE_CHARS]
 
 
-def _check_source(checkpoint_id: str, submission: object) -> tuple[bool, str]:
-    """Run the hidden suite against the learner's file in a throwaway workspace.
+def _check_source(checkpoint_id: str, submission: object):
+    source = submission
+    if not isinstance(source, str) or not source.strip() or len(source) > MAX_BODY_BYTES:
+        return False, ""
+    try:
+        with LearnerSession({'assertion.py': source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            failures = check_assertion.run(learner.module(), SEED, checkpoint_id)
+    except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        return False, 'The submitted functions could not be evaluated within the time limit.'
+    return not failures, _failure_detail(failures)
 
-    Returns the verdict and, on failure, the checker's failure summary for the
-    response `message`. An empty string means no detail is surfaced.
-    """
-    if not isinstance(submission, str) or not submission.strip():
-        return False, ""
-    if len(submission) > MAX_BODY_BYTES:
-        return False, ""
-    result = _run_submission_script(
-        {"assertion.py": submission}, RUNNER.replace("__CHECKPOINT__", repr(checkpoint_id)), SEED
-    )
-    if result is None or result[0] != 0:
-        return False, ""
-    for line in reversed(result[1].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, ""
-        return len(failures) == 0, _failure_detail(failures)
-    return False, ""
 
 
 def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:
