@@ -13,7 +13,7 @@
  */
 
 import { rungSpec } from "../game/src/ladder.ts";
-import type { OrderTaskProjection, PublicArtifact } from "../game/src/types.ts";
+import type { ContractProjection, OrderTaskProjection, PublicArtifact } from "../game/src/types.ts";
 import { describeRevealGroup } from "./SudokuGrid.tsx";
 
 export type Locale = "ja" | "en";
@@ -97,6 +97,35 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
   return task.kind === "caesar-shift" && task.rung === "vigenere"
     ? locale === "ja" ? "3個の鍵を順に使って暗号にする" : "Encrypt with a repeating three-key cycle"
     : TASK_LABELS[locale][task.kind];
+}
+
+/** Participant labels follow the protocol supplied on this specific Order. */
+export function orderLabel(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint" | "allowedMethods">, locale: Locale): string {
+  if (order.task.kind === "reveal-share" && (order.privacyConstraint === "must-disclose" || (order.allowedMethods.includes("leak") && order.schnorr?.pending?.used && order.schnorr.pending.outcome === "miss"))) {
+    return locale === "ja" ? "秘密分散：シェアを公開して答える" : "Secret sharing: publish a share";
+  }
+  if (order.schnorr && (order.task.kind === "reveal-share" || order.task.kind === "zk-sudoku")) {
+    if (order.allowedMethods.includes("leak") && order.allowedMethods.includes("prove")) {
+      return locale === "ja" ? "シェアを公開、またはSchnorrで証明" : "Publish a share or prove with Schnorr";
+    }
+    return locale === "ja" ? "ゼロ知識証明（Schnorr）：応答を計算する" : "Zero-knowledge proof (Schnorr): calculate a response";
+  }
+  if (order.task.kind === "zk-sudoku") {
+    return locale === "ja" ? "ゼロ知識証明の数独模型：4マスを埋める" : "Sudoku model of zero knowledge: fill four cells";
+  }
+  return taskLabel(order.task, locale);
+}
+
+/** Do not append legacy Sudoku instructions to a Schnorr-labelled Order. */
+export function orderDetail(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint" | "allowedMethods">, locale: Locale): string {
+  if (order.privacyConstraint === "must-disclose" || (order.task.kind === "reveal-share" && order.allowedMethods.includes("leak") && order.schnorr?.pending?.used && order.schnorr.pending.outcome === "miss")) return taskDetail(order.task, locale);
+  if (order.schnorr && (order.task.kind === "reveal-share" || order.task.kind === "zk-sudoku")) {
+    const proof = locale === "ja" ? "証明：aを送る → eを受け取る → zを返す" : "Proof: send a → receive e → return z";
+    return order.task.kind === "reveal-share" && order.allowedMethods.includes("leak")
+      ? `${taskDetail(order.task, locale)} · ${proof}`
+      : proof;
+  }
+  return taskDetail(order.task, locale);
 }
 
 /**

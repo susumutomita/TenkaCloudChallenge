@@ -451,6 +451,10 @@ Inputs: Advanced Cryptography 2026 Week4 slides20–23 (PDF pages24–27), revis
 
 Validation: all343 traces satisfy interpolation and quotient/remainder identities; all nonzero query pairs and challenges satisfy the one-fold equation. Owned-order tests cover wrong/correct scores, Lightning, replay, expiry, foreign teams and malformed projection rejection. Ordinary regression:764 tests; dev harness:82 tests; types and catalog:pass. In the real local Portal `stark-order`, trace6→6→5, Q=4+3X+6X², β=6 gave submitted5 4 6 1, success feedback and score30. Production deployment not run; deployment remains with the user.
 
+### Issue #780 — Labels follow the actual proof protocol
+
+The Order belt, recent receipts, and status labels use the projected protocol: Schnorr responses, the legacy Sudoku model, or required share publication. A local real-component walkthrough calculated a=3 and z=4 from the displayed inputs and observed proof success, +30 points, and verification 16=16. This verifies local UI behavior, not production score persistence.
+
 ### Anamorphic rejection sampling (#794)
 
 Based on Persiano–Phan–Yung, EUROCRYPT2022, section5.1: https://iacr.org/archive/eurocrypt2022/132760134/132760134.pdf . This is the rejection-sampling route, not the appended-payload approach the paper rejects. A participant selects a normal ciphertext whose secret lookup bit matches the intended bit, performs ordinary decryption with the monitor’s key, and transfers rejection sampling to a biased random-ticket distribution. The role diagram distinguishes sender, monitor and receiver. The final field sums accepted tickets, rather than transcribing a lookup bit. A biased-draw counterexample shows1/4 differs from the ordinary2/7 probability. Three fields, formulas, a small worked example and pre-submit deduction are bilingual.
