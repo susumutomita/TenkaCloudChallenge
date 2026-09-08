@@ -1,18 +1,8 @@
-"""The vocabulary a design is written in: the properties, and the option table.
+"""Completed option and property vocabulary for design.py.
 
-This is the supplied half of the problem — the part it deliberately hands over. Nothing here
-is graded. `starter/design.py` names all four of these, so your submission imports this module
-directly, and so do the public tests, `show.py` and the reference.
-
-Toy warning: `PRIMITIVES` is a teaching abstraction. Real deployments differ in ways this
-table flattens (setup assumptions, malicious-versus-semi-honest security, circuit size,
-ciphertext expansion). It is chosen for observability, not as production guidance.
-
-Issue 537/538 (Issue 543 option B2): this table used to live in `fixtures/generate.py`, which
-also carried the brief population every checkpoint is graded on and shipped in the same Docker
-stage as `tests/hidden/check_design.py`. Only the vocabulary belongs on the participant side,
-so only the vocabulary stayed here; `fixtures/generate.py` imports it rather than restating it,
-so what is inspected and what is graded cannot drift apart.
+This is a teaching comparison, not a cryptographic implementation or production
+recommendation. The free statement defines each name and how to use these tables.
+A real protocol's assumptions, guarantees and implementation require separate review.
 """
 
 from __future__ import annotations

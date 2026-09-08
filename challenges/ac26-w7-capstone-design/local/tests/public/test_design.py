@@ -1,11 +1,7 @@
-"""Public tests: they show you the shape of the answer. They do not prove it.
+"""Public previews: a 2x2 asset example, a reader/source example and output links.
 
-They work through exactly one brief — the one `make inspect` prints — and they check
-structure, not judgement. Nothing here asks whether your requirements follow from the brief,
-whether your selection is minimal, whether an asset leaks across an edge, or what happens
-when the facts change. All of that is graded, and none of it is visible from here.
-
-Read `misconception.public-tests-are-complete` in the README before trusting a green run.
+These test explicit statement rules and return shapes. Passing does not establish
+minimal selection, every flow, prose quality, or generalization to changed briefs.
 """
 
 from __future__ import annotations
@@ -30,15 +26,57 @@ from starter.design import (  # noqa: E402
 
 
 def _brief() -> dict:
-    """This deployment's brief, read from the verifier rather than derived here.
-
-    Issue 537/538 (Issue 543 option B2): `fixtures/generate.py` does not ship in the
-    participant image any more -- it draws the whole population every checkpoint is graded
-    over. `show.public_evidence` reads `GET /public` over the Compose-internal network (or
-    `PUBLIC_EVIDENCE_JSON`, or the checkout's own fixtures when neither is set).
-    """
+    """Read the current deployment's public brief."""
     return public_evidence()["brief"]
 
+
+
+def _small_brief():
+    return {"id":"example", "statement":"B checks A's result without learning x",
+            "actors":[{"id":"A", "role":"input_provider"}, {"id":"B", "role":"relying_party"}],
+            "assets":[
+                {"id":"x", "owner":"A", "known_to":["A"], "must_not_learn":["B"], "integrity_relied_on_by":[]},
+                {"id":"y", "owner":"A", "known_to":["A","B"], "must_not_learn":[], "derived_from":["x"], "integrity_relied_on_by":["B"]}],
+            "constraints":{}}
+
+
+def test_asset_labels_follow_two_independent_facts():
+    brief = _small_brief()
+    brief["assets"] = [
+        {"id":"a", "owner":"A", "known_to":["A"], "must_not_learn":[], "integrity_relied_on_by":[]},
+        {"id":"b", "owner":"A", "known_to":["A"], "must_not_learn":["B"], "integrity_relied_on_by":[]},
+        {"id":"c", "owner":"A", "known_to":["A"], "must_not_learn":[], "derived_from":["a"], "integrity_relied_on_by":[]},
+        {"id":"d", "owner":"A", "known_to":["A"], "must_not_learn":["B"], "derived_from":["b"], "integrity_relied_on_by":[]}]
+    assert classify_assets(brief) == {key:{"owner":"A", "classification":value} for key,value in
+                                    (("a","public"),("b","private"),("c","derived-public"),("d","derived-private"))}
+
+
+def test_reader_example_separates_zero_knowledge_from_computation_privacy():
+    assert required_properties(_small_brief()) == dict(correctness=True, privacy=False, soundness=True,
+                                                     zero_knowledge=True, binding=False, availability=False)
+
+
+def test_comparison_contains_every_option_and_the_supplied_table_values():
+    comparison = compare_alternatives(_small_brief())
+    assert len(comparison) == len(PRIMITIVES)
+    assert {entry["primitive"] for entry in comparison} == set(PRIMITIVES)
+    for entry in comparison:
+        option = PRIMITIVES[entry["primitive"]]
+        assert set(entry["satisfies"]) == set(option["provides"])
+        assert set(entry["assumptions"]) == set(option["assumptions"])
+        assert set(entry["non_goals"]) == set(option["non_goals"])
+        assert type(entry["admissible"]) is bool
+
+
+def test_attack_plan_identifies_placed_trust_assumptions():
+    brief = _brief()
+    graph = architecture(brief, select_primitive(brief))
+    plan = attack_plan(brief, graph)
+    expected = {(primitive, trusted) for node in graph["nodes"] for primitive in node["primitives"]
+                for trusted in PRIMITIVES[primitive]["trusts"]}
+    reported = {(entry["assumption"]["primitive"], entry["assumption"]["trust"])
+                for entry in plan if "assumption" in entry}
+    assert reported == expected
 
 def test_every_asset_is_classified() -> None:
     brief = _brief()
@@ -63,7 +101,7 @@ def test_the_comparison_includes_using_no_cryptography() -> None:
 
 def test_the_selection_names_real_options() -> None:
     selection = select_primitive(_brief())
-    assert isinstance(selection, list)
+    assert isinstance(selection, (list, tuple))
     assert all(name in PRIMITIVES for name in selection)
 
 
@@ -122,8 +160,8 @@ def main() -> int:
         return 1
     print("public tests:", "all passed" if failures == 0 else f"{failures} failed")
     print()
-    print("Passing these does not mean you are done. They read one brief, and they never")
-    print("ask whether your answers follow from it — only whether they have the right shape.")
+    print("These previews cover small public rules and shapes. They do not prove every")
+    print("selection, flow, experiment link or revised design is correct.")
     return 1 if failures else 0
 
 

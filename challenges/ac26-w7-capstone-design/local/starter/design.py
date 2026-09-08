@@ -1,139 +1,157 @@
-"""The only file you edit in this problem.
+"""Implement this file in the Portal editor; submit code, not a prose design.
 
-You are handed a *brief*: who the actors are, what the assets are, who must not learn what,
-who acts on what they did not compute, and what the deadline rules are. Nothing in a brief
-names a cryptographic primitive. That is deliberate — the primitive is the last decision,
-not the first.
+You turn a brief (request) into a design. Inspect evidence shows actors (parties),
+assets (information), their permitted/forbidden readers and constraints. First edit
+classify_assets using the free statement's 2x2 table. Run public tests and find
+PASS test_asset_labels_follow_two_independent_facts, then submit assets: Solved is
+success. Later unfinished functions can still fail. Finish all eight checkpoints.
 
-Your job is to turn a brief into a design, as code. Eight functions, each one deriving its
-answer from the brief in front of it. Write them that way and the last checkpoint costs you
-nothing; write down an answer instead and the last checkpoint is where that shows.
+This is a rule-based design model, not running cryptography or a security proof.
+Node/edge labels, coverage and references are checked; prose quality and actual
+experiment execution are not. The statement defines all rules and dependencies.
 
-`participant.lab` gives you the vocabulary:
+Input brief: id, statement, actors, assets, constraints. Actors have id/role, where
+role is input_provider (input owner), operator/evaluator (computation service), or
+relying_party (reader acting on results). Assets have id/owner/known_to,
+must_not_learn/integrity_relied_on_by, and optional derived_from (source asset IDs).
+Missing derived_from means []; missing boolean constraints mean False. IDs are
+unique with existing references. There is at least one actor/asset. An owner is not
+forbidden to learn its asset. constraints.parties is not used by the decision rules.
 
-    PROPERTIES     the six properties a design can be required to hold
-    PRIMITIVES     each option, what it provides, what it makes you trust, what it does not do
-    ACTOR_TRUSTS   which of those trusts name a *party* rather than an assumption
-    OPERATOR_ROLES the actor roles that run infrastructure
+Six model properties: correctness (right result), privacy (secrets from computing
+parties), soundness (reject false results), zero_knowledge (proof readers learn no
+secret input), binding (cannot change a fixed value), availability (finish without
+all responses). ZK means zero-knowledge proof; MPC means multi-party computation;
+FHE means fully homomorphic encryption, computation on encrypted data. A share is
+a number distributed through secret sharing; a ciphertext hides its contents.
 
-Run `make inspect` for a worked brief, `make test` to check yourself.
+Completed imports below: PROPERTIES lists six names. PRIMITIVES maps option names
+none/mpc/fhe/zk/commitment/threshold to provides, trusts, assumptions and non_goals.
+none is trusted plain computation; commitment fixes a value; threshold needs only
+a sufficient number of parties. These are simplified teaching guarantees.
+ACTOR_TRUSTS contains operator/key_holder, and OPERATOR_ROLES operator/evaluator.
+operator means a party allowed to hold everything, key_holder one decryption-key
+owner, non_collusion a bound on parties combining their secrets. The latter is an
+assumption, not a party. assumptions/non_goals text can be copied from the table.
+
+set removes duplicates; union A|B combines elements; R<=P means every R member is
+in P. sorted creates a name-sorted list. tuple is an ordered sequence; frozenset an
+immutable set. Any is a type-annotation marker, not an operation. Returned name
+sequences have no duplicates; order is not graded. Inputs can be copied or edited,
+but the grader keeps the original requirements before calling a function.
 """
-
 from __future__ import annotations
 
 from typing import Any
+from participant.lab import ACTOR_TRUSTS, OPERATOR_ROLES, PRIMITIVES, PROPERTIES
 
 
 def classify_assets(brief: dict[str, Any]) -> dict[str, dict[str, str]]:
-    """Every asset in the brief, as {"owner": ..., "classification": ...}.
+    """Every asset ID -> {owner: original owner, classification: one label}.
 
-    The four classifications are `public`, `private`, `derived-public` and `derived-private`.
-    Two facts in the brief decide which one applies, and neither is a matter of taste.
-
-    Every asset gets an entry. An asset you did not classify is an asset nobody is
-    protecting.
+    A nonempty must_not_learn means private; otherwise public. A nonempty
+    asset.get('derived_from', []) adds the 'derived-' prefix. known_to count does
+    not decide it. Example: x owned by A, hidden from B, no sources ->
+    {'x': {'owner':'A', 'classification':'private'}}. Include every asset.
     """
     return {}
 
 
 def required_properties(brief: dict[str, Any]) -> dict[str, bool]:
-    """Which of `PROPERTIES` this brief requires. Every property gets a yes or a no.
+    """All six PROPERTIES -> bool, even when False. Rules of this model:
 
-    Some are easier than they look:
-
-      - being hidden from a party that *takes part* in producing the result, and being
-        hidden from a party that only *reads* the result, are not the same requirement;
-      - somebody acting on a value they did not compute is what puts soundness on the list;
-      - soundness on its own is an ordinary signature. Something else has to be true before
-        zero knowledge is also required — look at what the relied-upon value is derived from.
+    correctness: True. privacy: a forbidden reader has an input_provider,
+    operator or evaluator role. soundness: an asset has a relying party other
+    than its owner. zero_knowledge: one of those non-owner relying parties is
+    forbidden to learn a direct derived_from source of that SAME asset.
+    binding: bool(constraints.get('commit_then_reveal', False)).
+    availability: bool(constraints.get('must_complete_without_all_parties', False)).
+    No recursive source traversal. A reader-only secret is not privacy by itself.
     """
     return {}
 
 
 def compare_alternatives(brief: dict[str, Any]) -> list[dict[str, Any]]:
-    """Every option, judged against this brief.
+    """Every PRIMITIVES option exactly once, including none, as five fields:
 
-    One entry per primitive, each carrying `primitive`, `satisfies`, `assumptions`,
-    `non_goals`, and `admissible`.
-
-    Four of those are lookups. `admissible` is not: it asks whether *this* brief supplies
-    the party the option needs you to trust. An option that trusts an assumption about the
-    world is available anywhere; an option that trusts a party is only available where the
-    brief has one to spare.
-
-    Include the option that uses no cryptography. A comparison that leaves it out cannot
-    show that cryptography bought anything.
+    primitive=name; satisfies=provides; assumptions/non_goals=the table's strings;
+    admissible=bool. Table-value sequences can be lists or tuples, order-free.
+    For every option trust: operator needs any actor absent from the union of all
+    must_not_learn; key_holder needs exactly one distinct owner of private original
+    inputs (not derived assets). Other trust names are admissible in this model.
+    Neither empty owner sets nor multiple owners supply a single key_holder.
     """
     return []
 
 
 def select_primitive(brief: dict[str, Any]) -> list[str]:
-    """The options this design uses. A list, because some briefs need more than one.
+    """Unique option names, list/tuple in any order.
 
-    Three conditions, and one rule that comes before them.
-
-    The rule: if the brief requires nothing that cryptography provides, the answer is the
-    option that uses none.
-
-    The conditions: the selection covers every required property; every option in it is
-    admissible for this brief; and nothing in it could be removed with the cover intact.
+    Prefer ['none'] whenever admissible and sufficient. Otherwise the union of
+    provides must cover required properties, every option must be admissible, and
+    removing any single option must lose coverage. Any inclusion-minimal solution
+    is accepted, even if another has fewer options. Extra supplied properties are
+    allowed. Enumerate the 2**6=64 subsets if useful; valid graded briefs are solvable.
     """
     return []
 
 
 def architecture(brief: dict[str, Any], selection: list[str]) -> dict[str, Any]:
-    """A typed data-flow graph: {"nodes": [...], "edges": [...]}.
+    """Return {nodes: [...], edges: [...]}; selection is also checked.
 
-    A node is {"id", "operated_by", "primitives", "trusts"} — who runs this component, what
-    it implements, and which other components it takes on faith. An edge is
-    {"from", "to", "asset", "visibility"}, where visibility is one of `plaintext`,
-    `ciphertext`, `share`, `proof`, `public`.
-
-    The type on the edge is the design. "the record reaches the evaluator" says nothing;
-    "the record reaches the evaluator as ciphertext" is a claim that can be wrong.
-
-    Two things are checked that a diagram usually hides: no asset may arrive readably at a
-    party that must not learn it, and every asset in the brief has to appear somewhere —
-    including one held by the very component that computes on it.
+    Node: {id: nonempty unique string, operated_by: actor ID,
+           primitives: [option names], trusts: [node IDs]}.
+    Edge: {from: node ID, to: node ID, asset: asset ID, visibility: type name}.
+    All IDs refer to real items. Every selected option appears on a node, no
+    unselected option is placed. No repeated names within one node's lists.
+    Node trusts means component dependencies, not PRIMITIVES trust names; no cycles
+    or self-trust. [] is allowed. Types: plaintext/public (readable), ciphertext,
+    share, proof (non-revealing model labels). A readable edge must not arrive at
+    an actor in that asset's must_not_learn. Every asset appears on an edge; local
+    data self-loops are allowed. Nodes/edges are lists; there is no fixed layout.
+    This does not verify encryption, decryption or the actual computation.
     """
     return {}
 
 
 def attack_plan(brief: dict[str, Any], graph: dict[str, Any]) -> list[dict[str, Any]]:
-    """At least five hypotheses about how this design fails.
+    """At least five rows with unique string IDs. Selection/graph must be valid.
 
-    Each is {"id", "property", "hypothesis", "experiment"}, and the experiment is
-    {"kind", "observable", "expected"}. `kind` says how it is attacked; `observable` says
-    what you would see if it worked. An entry with nothing observable is a sentence.
-
-    Every required property needs at least one. And every trust the architecture took on is
-    itself an attack somebody can run — those are the ones a plan written from the happy
-    path always misses.
+    {id, property, hypothesis, experiment:{kind, observable, expected}}.
+    property is a PROPERTIES name. Explanatory texts must be nonempty strings.
+    kind: observe (inspect), forge (fake), collude (pool secrets), withhold (no
+    response), replace (swap). Cover every required property. Also cover every
+    distinct (option, trust) pair from placed options' PRIMITIVES[*]['trusts'].
+    On that row add assumption:{primitive: option, trust: trust_name}; ordinary
+    property rows omit it. One row may cover both needs. A repeated placement
+    needs only one row per pair. Prose meaning and execution are not graded.
+    Example: observe whether B's received records reveal a forbidden x.
+    A broken assumption may expose a limit; expected need not always be 'rejected'.
     """
     return []
 
 
 def property_matrix(brief: dict[str, Any], graph: dict[str, Any]) -> dict[str, dict[str, str]]:
-    """One row per required property: what it protects, from whom, where, and how you know.
+    """Exactly the required properties -> five-field rows:
 
-    Each row is {"asset", "adversary", "component", "evidence", "limitation"}. `component`
-    names a node in your architecture, `evidence` names an entry in your attack plan, and
-    `limitation` says what the property still rests on once the primitive has done its job.
-
-    The row that is easiest to get wrong: a component can only be responsible for a property
-    that one of its own options actually provides. Check `PRIMITIVES` before writing it down
-    — several options are widely believed to provide things they list under `non_goals`.
+    {asset: existing asset ID, adversary: existing actor ID, component: node ID,
+     evidence: attack ID, limitation: nonempty text}.
+    The component must place an option that provides this property; the cited
+    attack_plan row must attack this SAME property. Regenerate attack_plan for the
+    same brief/graph with stable IDs; the grader calls it again for references.
+    Selection, graph and attack
+    plan must be valid. Explain your asset/adversary and limitation choices; the
+    grader checks their existence/text shape, not the quality of the reasoning.
     """
     return {}
 
 
 def revise(brief: dict[str, Any]) -> dict[str, Any]:
-    """The whole design again, for a brief whose facts have changed.
+    """Reconstruct {required, selection, architecture, matrix} for changed facts.
 
-    Return {"required", "selection", "architecture", "matrix"}.
-
-    Nothing new is asked for here. If the seven functions above read the brief, this one is
-    four calls; if any of them decided something once, this is where it has to be decided
-    again — for a brief you have not seen.
+    Use the argument, not an old fixed design. The graph and matrix use the same
+    newly derived selection and brief. attack_plan is checked for this graph too.
+    All previous rules still apply. No additional formula or function is required;
+    the work is producing a valid construction for unseen relationships and names.
     """
     return {}

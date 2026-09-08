@@ -1,42 +1,8 @@
-"""POST /verify — the scoring seam. Compose-internal only, stdlib only.
+"""Compose-internal scoring service: the parent owns all checks and verdicts.
 
-Issue 537/538 (Issue 543 option B2): this used to be the same process that also served the
-Participant Portal's config, inspect, starter, public-test and prepare endpoints, in the single
-Docker stage a learner's own `make build` produced -- so `tests/hidden/check_design.py` shipped
-in the learner's own image alongside it. That file states, in full, the rule each of this
-problem's eight checkpoints is graded on: `_spec_requirements` is `required_properties`'
-answer written out, `_spec_admissible` is the `admissible` column of `compare_alternatives`,
-`_selection_failures` states the four conditions `select_primitive` is accepted on,
-`_graph_failures` states every condition an `architecture` must meet, `_plan_failures` states
-the attack plan's floor and its vocabulary, and `_matrix_failures` states each row's contract
-down to "a component can only be responsible for a property one of its own options provides".
-`fixtures/generate.py` shipped beside it with the whole graded population. A submission
-transcribed from those two files, with no reasoning past copying, scored 4 of 8 checkpoints
-(155 of 300 points) from the stated rules alone, and 8 of 8 (300 of 300) once the remaining
-four artifacts were built to the conditions the same file writes out.
-
-That Portal-facing surface now lives in `participant/server.py`, in a separate image (see
-../Dockerfile) that this process's own container never builds; this file, `fixtures/` and
-`tests/hidden/` are reachable only over the Compose-internal network (see
-../docker-compose.yml), never from the participant container's filesystem.
-
-`GET /public` below is what the participant image reads instead of importing
-`fixtures.generate`.
-
-Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
-  - `checkpointId` is required and is echoed back verbatim. The platform fails closed on a
-    missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
-  - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a capped
-    output size. A hang, a fork bomb, or a gigabyte of prints fails the checkpoint instead
-    of the verifier.
-  - No learner input is ever concatenated into a shell command; the subprocess is invoked
-    with an argument list and `shell=False`.
-  - Responses carry `checkpointId`, `correct` and, on a failed code checkpoint, a
-    `message` summarizing the checker's property-level failures (Issue 630). Never
-    the hidden test names, the expected values, or reference output.
-  - Malformed input produces a failed checkpoint, never a crashed process.
+The isolated worker receives the submission and individual public-shape function
+arguments. It returns inert values only; its stdout, exceptions, modules and exit
+status cannot claim checkpoint success. GET /public serves the deployment's brief.
 """
 
 from __future__ import annotations
@@ -46,10 +12,7 @@ import hashlib
 import hmac
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -57,16 +20,16 @@ from urllib.parse import urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert
+from participant.execution import LearnerError, LearnerSession
+from participant.isolation import protect_supervisor
+from tests.hidden import check_design
 
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w7-capstone-design"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 30
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
+RUN_TIMEOUT_SECONDS = 12
 #: Cap for the verdict's optional human-readable failure summary. Kept under the
 #: platform's 2000-character message limit with room to spare.
 MAX_MESSAGE_CHARS = 1900
@@ -88,73 +51,6 @@ CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 
 
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still reporting
-# RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`, which aborts the exec
-# — so on a macOS checkout every submission run failed, including the reference. The lab
-# runs on Linux, where the cap does apply, so skipping it on Darwin does not change what
-# participants run. The timeout, process cap, file-size cap, `-I` isolation, and throwaway
-# workspace all still apply on every platform.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-# The child's stdout is scanned in reverse, so the *last* parseable JSON line wins. Falling
-# off the end of this script runs normal interpreter shutdown, and that dispatches any
-# atexit callback registered while the submission was imported -- two lines at module scope
-# were enough to print a passing verdict after the trusted one and win the scan. Flushing
-# and calling os._exit(0) immediately after the trusted line ends the process before
-# anything the import left behind gets another turn. os._exit skips atexit by design;
-# SystemExit does not, which is why the import-failure path needs it too.
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_design
-# Issue 543 option B2: the supplied half lives outside `fixtures/` now, in
-# `participant/lab.py`, and `starter/design.py` tells the learner to build against it --
-# `PROPERTIES`, `PRIMITIVES`, `ACTOR_TRUSTS` and `OPERATOR_ROLES` are named in its own
-# docstring, so a submission's natural top-level `from participant.lab import ...` has to keep
-# resolving. The guard below takes the problem root off `sys.path`, so without preloading it
-# here that import would fail and every checkpoint would fail with it. It stays in
-# `sys.modules` across the guard on purpose; `fixtures` and `tests` do not.
-import participant.lab  # noqa: F401
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly -- and `fixtures.generate`
-# re-exports the supplied layer, so an unguarded `from fixtures.generate import *` would also
-# pull in `all_briefs`, `variants` and `synthetic_briefs`, which are the population every
-# checkpoint is graded over.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import design
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-failures = []
-for name in {phases!r}:
-    failures.extend(getattr(check_design, name)(design, {seed!r}))
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
 
@@ -169,55 +65,22 @@ def _failure_message(failures: list[object]) -> str | None:
 def _run_submission(
     submission: object, phases: tuple[str, ...], seed: str
 ) -> tuple[bool, str | None]:
-    """Run the named hidden phases against the learner's file in a throwaway workspace."""
-    source = submission
-    if isinstance(source, dict):
-        source = source.get("design.py")
-    if not isinstance(source, str) or not source.strip():
+    """Validate worker function values in this trusted process, never learner stdout."""
+    source = submission.get("design.py") if isinstance(submission, dict) else submission
+    if not isinstance(source, str) or not source.strip() or len(source.encode()) > MAX_BODY_BYTES:
         return False, None
-    if len(source) > MAX_BODY_BYTES:
-        return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "design.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    if sys.platform != "linux":
+        return False, "the deployed evaluator requires Linux isolation"
+    try:
+        protect_supervisor()
+        with LearnerSession({"design.py": source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            module = learner.module()
+            failures = []
+            for name in phases:
+                failures.extend(getattr(check_design, name)(module, seed))
+        return (False, _failure_message(failures)) if failures else (True, None)
+    except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        return False, "design.py could not produce the required values within the execution limits"
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:
