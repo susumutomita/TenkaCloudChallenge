@@ -49,7 +49,7 @@ def _point(value, group):
     if not isinstance(value, (tuple, list)) or len(value) != 2:
         raise MalformedRecord("a point is a pair of coordinates")
     x, y = value
-    if not isinstance(x, int) or not isinstance(y, int):
+    if type(x) is not int or type(y) is not int:
         raise MalformedRecord("a coordinate is not an integer")
     if not 0 <= x < group.p or not 0 <= y < group.p:
         raise MalformedRecord("a coordinate is not reduced")

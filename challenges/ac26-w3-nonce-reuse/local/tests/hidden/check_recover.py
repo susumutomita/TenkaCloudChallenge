@@ -100,6 +100,13 @@ def check_parse(module, seed: str) -> list[str]:
         )
         for key in ("public_key", "commitment"):
             broken.extend({**normalized, key: point} for point in invalid_points)
+            # Exercise the raw tuple/list branch too, including coordinates whose
+            # integer equivalents are on the curve. Python bool is an int subclass.
+            for pair_type in (tuple, list):
+                for boolean in (False, True):
+                    for other in range(group.p):
+                        broken.append({**record, key: pair_type((boolean, other))})
+                        broken.append({**record, key: pair_type((other, boolean))})
         for candidate in broken:
             try:
                 module.parse_record(candidate, group)
