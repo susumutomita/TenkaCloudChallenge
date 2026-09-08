@@ -12,6 +12,10 @@ REFERENCE = (ROOT/'reference/prover.py').read_text()
 
 
 class ExecutionBoundaryTests(unittest.TestCase):
+    def test_documented_runtime_type_is_preserved(self):
+        source = REFERENCE + '\n_original_reserve = reserve_fresh_triple\ndef reserve_fresh_triple(runtime, relation, triple):\n    from participant.mpc import ParticipantRuntime\n    assert isinstance(runtime, ParticipantRuntime)\n    return _original_reserve(runtime, relation, triple)\n'
+        self.assertEqual(evaluate_with_message('triple', source), (True, None))
+
     def test_reference_all_checkpoints(self):
         for checkpoint in CHECKPOINTS:
             with self.subTest(checkpoint=checkpoint):

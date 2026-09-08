@@ -27,15 +27,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from participant.isolation import restrict_learner
 from participant.protocol import Codec
-from participant.mpc import CrossPartyRead, TripleMisuse
+from participant.mpc import CrossPartyRead, TripleMisuse, ParticipantRuntime
 from contextlib import contextmanager
 
 
-class RemoteRuntime:
+class RemoteRuntime(ParticipantRuntime):
     """Only named public MPC operations cross to the parent's actual runtime."""
     def __init__(self, token, setting, methods, channel, codec):
-        self.token, self.setting, self.methods = token, setting, methods
+        self.token, self._setting, self.methods = token, setting, methods
         self.channel, self.codec = channel, codec
+
+    @property
+    def setting(self):
+        return self._setting
 
     def _operation(self, method, *args, **kwargs):
         sequence = self.channel['sequence']
@@ -65,6 +69,17 @@ class RemoteRuntime:
         if method not in self.methods:
             raise AttributeError(method)
         return lambda *args, **kwargs: self._operation(method, *args, **kwargs)
+
+
+# Preserve the advertised facade type while sending each public operation through
+# the value channel. Inherited implementations expect an in-process Runtime.
+def _remote_method(name):
+    return lambda self, *args, **kwargs: self._operation(name, *args, **kwargs)
+
+for _name in ('value_of', 'add', 'sub', 'mul_public', 'add_public', 'zero', 'open',
+              'reserve_triple', 'events', 'openings', 'violations',
+              'consumed_triples', 'ancestry', 'issued'):
+    setattr(RemoteRuntime, _name, _remote_method(_name))
 
 
 def main():

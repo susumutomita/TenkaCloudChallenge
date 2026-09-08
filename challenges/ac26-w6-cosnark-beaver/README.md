@@ -220,3 +220,5 @@ prepare and the verifier proxy; saved-handle misuse and fabricated verdicts were
 This is route and author-regression evidence, not independent first-time participant success.
 Catalog validation passed for 116 entries. Browser interaction, deployed scoring and deployment
 were not tested.
+
+Additional compatibility check: the restricted runtime retains the advertised ParticipantRuntime type; a reference implementation with an isinstance guard and all eight reference checkpoints pass.

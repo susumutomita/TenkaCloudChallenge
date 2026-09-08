@@ -204,3 +204,5 @@ non-root の実 Workbench HTTP 経路で config・公開資料・starter を取�
 prepare・verifier proxy 経由の全 8 checkpoint に合格し、古い参照権限の悪用と偽の採点出力は拒否されました。
 これは提出経路と作者回帰の証拠で、初見参加者の自力成功を示すものではありません。
 カタログは 116 件有効です。ブラウザ操作・デプロイ先の採点・デプロイは未実施です。
+
+追加の互換性確認：採点側でも公開APIのParticipantRuntime型を維持します。isinstanceで型を確認する正しい実装と、全8項目の参考解が通過しています。
