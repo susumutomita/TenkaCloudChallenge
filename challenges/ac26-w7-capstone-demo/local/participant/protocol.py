@@ -74,14 +74,29 @@ def decode(frame, depth=0):
     raise ValueError('invalid value type')
 
 
+def _record_fields(record, required):
+    """Retain inert extras; omit only opaque diagnostics the wire cannot carry."""
+    if not isinstance(record, dict):
+        return record
+    result = {}
+    for key, item in record.items():
+        if key not in required:
+            try:
+                encode((key, item))
+            except (TypeError, ValueError, OverflowError, RecursionError):
+                continue
+        result[key] = item
+    return result
+
+
 def transcript_fields(value):
-    """Public contract ignores diagnostic extras, including noncopyable objects."""
+    """Keep serializable extras available when the transcript returns to view."""
     if not isinstance(value, dict):
         return value
-    result = {key: value[key] for key in ('output', 'messages', 'public', 'rounds') if key in value}
+    result = _record_fields(value, ('output', 'messages', 'public', 'rounds'))
     for name, keys in (('messages', ('from', 'to', 'value')), ('public', ('kind', 'from', 'value'))):
         records = result.get(name)
         if isinstance(records, (list, tuple)):
-            projected = [{key: row[key] for key in keys if key in row} if isinstance(row, dict) else row for row in records]
+            projected = [_record_fields(row, keys) for row in records]
             result[name] = tuple(projected) if isinstance(records, tuple) else projected
     return result
