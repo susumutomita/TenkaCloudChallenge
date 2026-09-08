@@ -5,8 +5,8 @@ hidden checker, and once through a **weak probe** that asks the two questions an
 test for a guest contract asks first -- *does the happy path produce a receipt that verifies,
 and is a receipt offered against a different program refused?* Both are stated outright in the
 problem text, and both are one call away from fixtures the learner was handed. The count of
-mutations the weak probe cannot see is printed on every run and both READMEs quote it. If a
-later edit makes the checkpoints cheaper, that number moves and the claim moves with it.
+mutations the weak probe cannot see is printed on every run. Documentation describes the
+measurement without freezing a count that may change.
 
 Every replacement below is asserted to have changed the reference text. A mutation whose anchor
 has drifted out of the reference would otherwise be reported as killed while testing nothing.
@@ -139,7 +139,7 @@ _ACCEPT_JOURNAL_SHAPE = """    if not isinstance(journal, dict) or set(journal) 
 """
 
 _ACCEPT_MEASUREMENTS = """    measurements = journal["measurements"]
-    if not isinstance(measurements, dict) or not set(measurements) <= set(MEASUREMENT_NAMES):
+    if not isinstance(measurements, dict) or set(measurements) != set(MEASUREMENT_NAMES):
         return False
 """
 
@@ -176,14 +176,14 @@ _LEAK_NAME_RULE = """        if name not in PUBLIC_NAMES:
             out.add((channel, name))
 """
 
-_LEAK_PARAM_RULE = """        elif name in PARAM_NAMES and value != statement["params"][name]:
+_LEAK_PARAM_RULE = """        elif name in PARAM_NAMES and (type(value) is not int or value != statement["params"][name]):
             # An approved label is not an approval. `spent` may be published; the machine's own
             # total wearing the name `spent` is a different disclosure, and the price is public
             # and invertible, so it is the quantity with one step of arithmetic left to do.
             out.add((channel, name))
 """
 
-_LEAK_MEASUREMENT_RULE = """        elif name in MEASUREMENT_NAMES and value != steps:
+_LEAK_MEASUREMENT_RULE = """        elif name in MEASUREMENT_NAMES and (type(value) is not int or value != steps):
             # A measurement is safe when a reader could already compute it. One that varies with
             # the witness is not a measurement, it is the witness at lower resolution.
             out.add((channel, name))
@@ -194,7 +194,7 @@ _LEAK_SORT = """    return tuple(sorted(out))
 
 
 def _mutations() -> list[tuple[str, str]]:
-    return [
+    mutations = [
         # -- the canonical statement encoding --------------------------------
         (
             "the encoding has no length prefixes",
@@ -452,7 +452,7 @@ def _mutations() -> list[tuple[str, str]]:
         (
             "the journal carries a cycle count next to the step count",
             REFERENCE.replace(
-                '        "measurements": {"steps": run["steps"]},\n',
+                '        "measurements": {"steps": run["programSteps"]},\n',
                 '        "measurements": {"steps": run["steps"], "cycles": run["steps"] * 17},\n',
             ),
         ),
@@ -544,6 +544,33 @@ def _mutations() -> list[tuple[str, str]]:
         ),
     ]
 
+    mutations.extend([
+        ("the verifier returns an integer instead of a boolean decision",
+         REFERENCE.replace('    return journal["claimResult"] is True',
+                           '    return int(journal["claimResult"] is True)')),
+        ("image identity rejects the documented bytearray representation",
+         REFERENCE.replace('    decode_program(image["body"])',
+                           '    if not isinstance(image["body"], bytes):\n        raise ValueError("bytes only")\n    decode_program(image["body"])')),
+        ("a journal publishes private completed steps after a checked trap",
+         REFERENCE.replace('"measurements": {"steps": run["programSteps"]}',
+                           '"measurements": {"steps": run["steps"]}')),
+        ("the runner reports an integer instead of a boolean decision",
+         REFERENCE.replace('"accepted": accepted,', '"accepted": int(accepted),')),
+        ("the runner reports a floating-point instruction count",
+         REFERENCE.replace('"steps": steps,', '"steps": float(steps),')),
+        ("the journal reports text instead of a boolean claim",
+         REFERENCE.replace('"claimResult": bool(run["claimResult"]),', '"claimResult": str(run["claimResult"]),')),
+        ("the statement validator accepts a non-string semantics value",
+         REFERENCE.replace('    if any(not isinstance(record[field], str) for field in STATEMENT_FIELDS if field != "params"):\n        return False\n', '')),
+        ("the privacy audit accepts floats equal to public integer values",
+         REFERENCE.replace('type(value) is not int or value !=', 'value !=')),
+        ("the verifier accepts missing public measurements",
+         REFERENCE.replace('    if type(measurements["steps"]) is not int or measurements["steps"] < 1:\n        return False\n', '').replace('set(measurements) != set(MEASUREMENT_NAMES)', 'not set(measurements) <= set(MEASUREMENT_NAMES)')),
+        ("the input loader writes a witness before validating it",
+         REFERENCE.replace('    _require_statement(statement)\n    profile = SEMANTICS[statement["semantics"]]', '    env.write_private(witness)\n    _require_statement(statement)\n    profile = SEMANTICS[statement["semantics"]]').replace('    env.write_private(witness)\n\n\n#', '\n\n#')),
+    ])
+    return mutations
+
 
 def _load(source: str) -> types.ModuleType:
     module = types.ModuleType("mut_guest")
@@ -634,11 +661,17 @@ def main() -> int:
 
     from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path
 
-    if evaluate("encoding", SPOOF):
-        survivors.append("verifier credits a submission that prints its own verdict")
-        print("SURVIVED verifier credits a submission that prints its own verdict")
-    else:
-        print("KILLED verifier credits a submission that prints its own verdict")
+    boundary_sources = (
+        SPOOF,
+        'import os\nprint(\'{"failures": []}\', flush=True)\nos._exit(0)',
+        'import os\nos._exit(0)',
+    )
+    for index, source in enumerate(boundary_sources):
+        if evaluate("encoding", source):
+            survivors.append(f"verifier accepts forged or absent verdict {index}")
+            print(f"SURVIVED verifier accepts forged or absent verdict {index}")
+        else:
+            print(f"REJECTED grader boundary probe {index}")
 
     print()
     print(f"{len(invisible)} of {len(mutations)} broken guests still get the easy two right:")
@@ -651,7 +684,7 @@ def main() -> int:
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(mutations) + 1} mutations killed.")
+    print(f"All {len(mutations)} logic mutations killed; {len(boundary_sources)} grader boundary probes rejected.")
     return 0
 
 

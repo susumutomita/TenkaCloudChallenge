@@ -1,9 +1,3 @@
-# 証明は valid だった。ただし、別の口座についての証明だった
-
-> Advanced Cryptography Program 2026 の非公式・独立した教材です。講座・運営者とは提携していません。問題文、コード、データは独自作成です。
-
-**Week 6 · 60〜90分 · 300点 · 前提：ac26-w6-zkvm-exploit-predicate**
-
 ## 前提
 
 足し算・掛け算・割った余りと、Pythonの変数・if・for・関数・リスト・辞書を使います。必要な暗号の言葉とAPIは下で説明します。
@@ -164,41 +158,3 @@ journalと各valuesを調べ、値が辞書なら**その直下1段の項目も*
 例：公開spent=1なのに `stdout`のvaluesが `{"spent":3}` → `(("stdout","spent"),)`。許可名でも秘密の計算結果を入れてはいけません。下の階層全て・見出し・タイミングまで安全だと証明する検査ではありません。
 
 **8. transfer。** 新しい関数は増やしません。変わった幅・口座・主張・プログラム・版で7関数を確かめ、入力→実行→journal→照合をつなぎます。単体で通っても、渡す形や対象が境界で食い違えば失敗します。数値やidを見本に固定せず、同じ対象は受理・別の対象は拒否・失敗時も秘密を公開しないことが終点です。
-
-## 採点と運用
-
-| 項目 | 点数 |
-|---|---:|
-| encoding | 45 |
-| identity | 30 |
-| ingestion | 35 |
-| reexec | 45 |
-| journal | 35 |
-| replay | 50 |
-| privacy | 35 |
-| transfer | 25 |
-
-各不正解は15点、24個のヒントは各2点、全ヒントで48点です。関数の実装とデータの値は採点し、特定の書き方への一致を要求しません。誤答の返答は公開された条件名に限り、非公開の期待値は返しません。
-
-実行環境はローカルのDocker Composeです。Participant Workbenchは公開教材・starter・公開テストを持ち、`/verify`を内部ネットワークの採点サービスへ転送します。`fixtures/`・非公開テスト・参考解・mutation（意図的に壊した実装の試験）は参加者imageに含めません。公開データは採点サービスの`/public`から読みます。採点器は親プロセスで動かし、制限したLinux子プロセスから受け取るのは関数の値とEnv操作要求だけです。入力の記録と最終判定は親が持ち、提出コードが成功文字列を出しても採点結果として使いません。自分でDockerを管理するローカル演習は自習用で、手元のコンテナに対する秘匿を保証しません。
-
-教材のreceiptには暗号の封印がありません。本物のzkVM証明生成・検証、出力内容全般の秘密性、実行時間を含む副経路の安全性は対象外です。今回の修正は停止位置による数量情報を公開記録へ入れないことを検査しますが、一般のプログラムの秘密性の証明にはなりません。
-
-クラウドアカウント・AWSリソース・Region設定は使いません。計算資源はローカルのDockerとディスクです。終了時は `make verifier-down` でComposeサービスを停止・削除します。ローカルimageは残ります。
-
-## 作者向けの確認
-
-```sh
-make inspect
-make test                         # 未実装starterの失敗は想定内
-make reference-test               # 正答と意図的に壊した実装を確認
-make verifier-down
-```
-
-カタログルートでは `make install && make agent-gate`。各コマンドの実施範囲は [ACCEPTANCE.md](ACCEPTANCE.md) に記録します。今回の確認は実WorkbenchのHTTP経路・ネイティブPython・Dockerでの作者テスト・カタログ検査です。実行境界を分離した後のDocker `make reference-test`では、65件の論理変異、3件の採点偽装プローブ、正常解の全8項目を含む12件の境界試験が通りました。分離後の非root Linux imageでも、実WorkbenchのHTTP初手・公開11テスト・全8項目のprepare/proxy提出・偽装拒否を確認しました。各非公開採点は総12秒を上限にし、画面側の15秒の待ち時間内に終了します。ブラウザ画面、Composeでのデプロイ、AWS再デプロイは今回実施していません。API経路の検証を画面全体の実プレーと呼びません。
-
-## 講座資料との対応
-
-`courseAlignment`は `zk-tokyo/advanced-cryptography-2026` の `week6/README.md` と `week6/problems/zkvm-exploit/README.md` をcommit `a3aa4b56fa88fbe803b57d320fbc87c1a203b480`へ固定しています。取り入れる主題は、実行を検証するだけでなく初期条件・対象プログラム・公開する主張を結び付けることです。数値、image形式、Python API、採点はこの教材独自です。講座課題の解答は転載していません。
-
-ユーザー作成ノート `advanced-cryptography-note/week6/index.html` のguest/public claim・初期条件/出力の境界説明も照合しています。ノートの「本物のproofは未実装」という区別を、この教材にも保ちます。本物の一例では [RISC Zero Receipt::verify](https://docs.rs/risc0-zkvm/latest/risc0_zkvm/struct.Receipt.html) が期待するimage IDと証明されたjournalを検証するため、「zkVMはどのプログラムかを証明しない」と一般化しません。

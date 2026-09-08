@@ -37,6 +37,7 @@ services:
     depends_on:
       verifier:
         condition: service_healthy
+    init: true
     read_only: true
     tmpfs:
       - /tmp
@@ -74,6 +75,7 @@ services:
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       VERIFY_PORT: "18161"
+    init: true
     read_only: true
     tmpfs:
       - /tmp
@@ -93,7 +95,7 @@ services:
       timeout: "3s"
       retries: 20
       start_period: "2s"
-    # The rlimits in verifier/server.py bound the submission's child process. These bound the
+    # The rlimits in participant/execution.py bound the submission's child process. These bound the
     # verifier itself, which is the process that would still be standing if a submission found
     # a way past them.
     mem_limit: 1g

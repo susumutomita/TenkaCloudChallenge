@@ -22,8 +22,10 @@ That Portal-facing surface now lives in `participant/server.py`, in a separate i
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
     on a missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
+  - The trusted process owns hidden checks. A fresh restricted worker receives only
+    submitted source and function inputs, never a checker, fixture seed or verdict.
+    Function values and Env operations cross a bounded channel; the parent computes
+    the final decision and records all Env observations. The source tree is never written.
   - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
     capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
     checkpoint instead of the verifier.
@@ -42,17 +44,16 @@ import hashlib
 import hmac
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert above
+from fixtures.generate import public_payload  # noqa: E402
+from tests.hidden import check_guest  # noqa: E402
+from participant.execution import LearnerSession  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -118,10 +119,7 @@ def _unwrap_submission(checkpoint_id: str, submission: object) -> object:
     return answer
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 60
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
+RUN_TIMEOUT_SECONDS = 12
 #: Cap for the verdict's optional human-readable failure summary. Kept under the
 #: platform's 2000-character message limit with room to spare.
 MAX_MESSAGE_CHARS = 1900
@@ -148,67 +146,6 @@ CODE_CHECKPOINTS = {
 CHECKPOINTS = tuple(CODE_CHECKPOINTS)
 
 
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`, which
-# aborts the exec -- so on a macOS checkout every submission run failed, including the
-# reference. The lab runs on Linux, where the cap does apply, so skipping it on Darwin
-# does not change what participants run.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
-
-
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_guest
-# Issue 543 option B2: the supplied half lives outside `fixtures/` now, in `participant/lab.py`,
-# and `starter/guest.py` names it in its own docstring -- so a submission's natural top-level
-# `from participant.lab import ...` has to keep resolving. The guard below takes the problem
-# root off `sys.path`, so without preloading it here that import would fail and every
-# checkpoint would fail with it. It stays in `sys.modules` across the guard on purpose;
-# `fixtures` and `tests` do not.
-import participant.lab  # noqa: F401
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly -- and `fixtures.generate` holds
-# `_machine`, `replay_truth` and `disclosure_truth`, while `tests.hidden.check_guest`
-# implements four of the eight graded functions outright.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import guest
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-phases = {phases!r}
-if phases:
-    failures = []
-    for name in phases:
-        failures.extend(getattr(check_guest, name)(guest, {seed!r}))
-else:
-    failures = check_guest.run(guest, {seed!r})
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
 
@@ -223,7 +160,7 @@ def _failure_message(failures: list[object]) -> str | None:
 def _run_submission(
     submission: object, phases: tuple[str, ...], seed: str
 ) -> tuple[bool, str | None]:
-    """Run the named hidden phases against the learner's file in a throwaway workspace."""
+    """Keep hidden checks in the parent; treat worker replies only as function values."""
     source = submission
     if isinstance(source, dict):
         source = source.get("guest.py")
@@ -231,47 +168,15 @@ def _run_submission(
         return False, None
     if len(source) > MAX_BODY_BYTES:
         return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "guest.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    failures = []
+    try:
+        with LearnerSession({'guest.py': source}, timeout=RUN_TIMEOUT_SECONDS) as session:
+            module = session.module()
+            for name in phases:
+                failures.extend(getattr(check_guest, name)(module, seed))
+    except Exception:
+        return False, 'The submitted functions did not complete the required input/output contract.'
+    return not failures, _failure_message(failures)
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:

@@ -395,10 +395,13 @@ MEASUREMENT_NAMES = ("steps",)
 #: is useless without is not.
 RECEIPT_FIELDS = ("journal",)
 
-#: What one run reports back to the host that started it.
+#: Internal execution result. steps counts completed instructions; programSteps is the
+#: total decoded public body length, unaffected by private checked-stop positions.
+#: Only programSteps is suitable for the journal's public measurements["steps"].
 RUN_FIELDS = (
     "imageDigest",
     "steps",
+    "programSteps",
     "accepted",
     "violated",
     "wrapped",

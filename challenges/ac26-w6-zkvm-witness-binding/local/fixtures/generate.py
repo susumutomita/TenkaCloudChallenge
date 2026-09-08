@@ -169,10 +169,10 @@ def sibling_images(seed: str, label: str = "public") -> dict:
 
     A digest over the source path calls `rebuilt` the base image, which it is not: the two of
     them disagree about every order whose total lands exactly on the budget. A digest over the
-    toolchain's `imageId` calls `relabelled` a different program, which it also is not. Only
-    `restamped` is a judgement call, and it is settled the way real proving systems settle it:
-    a rebuild is a different image even when nothing observable changed, because "nothing
-    observable changed" is the claim under audit rather than an input to it.
+    toolchain's `imageId` calls `relabelled` a different program, which it also is not.
+    In this model the complete body is the image identity, including its embedded stamp.
+    This is a declared byte-format contract, not a claim that every zkVM/toolchain treats
+    every rebuild as a new image.
     """
     base = image(seed, label)
     body = base["body"]

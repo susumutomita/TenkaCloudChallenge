@@ -8,7 +8,7 @@ the problem text, and every guest gets it right.
 
 What is missing is everything else. Nothing here offers a receipt against a statement one field
 away from the one that sealed it, nothing hands the guest a host hint that is confidently wrong,
-nothing runs the image under a semantics where the claim has no witness, nothing offers the two
+the full image/profile combinations are not covered, nothing offers the two
 accounts a length-free encoder cannot tell apart, and nothing audits a run that published an
 approved name carrying the machine's own total. The hidden verifier does all five, one
 checkpoint at a time.
@@ -28,7 +28,9 @@ from participant.lab import (  # noqa: E402
     JOURNAL_FIELDS,
     RUN_FIELDS,
     STATEMENT_FIELDS,
+    SEMANTICS,
     Env,
+    Disclosure,
     shuffled,
 )
 from show import (  # noqa: E402
@@ -109,6 +111,31 @@ def test_leak_report_returns_channel_and_name_pairs() -> None:
     assert isinstance(reported, (list, tuple))
     for pair in reported:
         assert isinstance(pair, (list, tuple)) and len(pair) == 2
+
+
+
+def test_composed_journal_agrees_with_the_submission_disclosure_policy() -> None:
+    run = guest.run_guest(dict(IMAGE), _loaded())
+    journal = guest.seal_journal(dict(STATEMENT), run)
+    assert guest.leak_report(Disclosure(journal), dict(STATEMENT), dict(IMAGE)) == (), (
+        "自分のjournalが自分の公開規則に違反 / Your journal violates your disclosure policy"
+    )
+
+
+def test_public_journal_does_not_reveal_where_a_checked_run_stopped() -> None:
+    width = SEMANTICS[STATEMENT["semantics"]]["width"]
+    checked = {**STATEMENT, "semantics": f"u{width}-checked"}
+    ordinary = {"quantity": 1, "aux": {"machineCost": 0, "machineTotal": 0}, "search": ()}
+    runs, journals = [], []
+    for witness in (ordinary, WITNESS):
+        env = Env()
+        guest.guest_input(env, dict(checked), dict(witness))
+        run = guest.run_guest(dict(IMAGE), env)
+        runs.append(run)
+        journals.append(guest.seal_journal(dict(checked), run))
+    assert runs[0]["steps"] != runs[1]["steps"], "公開fixtureに異なる停止位置が必要 / fixture needs different stop positions"
+    assert all(run["claimResult"] is False for run in runs)
+    assert journals[0] == journals[1], "秘密の実行進捗を公開しない / Do not publish private execution progress"
 
 
 def main() -> int:
