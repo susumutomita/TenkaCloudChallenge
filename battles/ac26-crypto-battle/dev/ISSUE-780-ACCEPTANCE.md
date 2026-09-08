@@ -65,6 +65,10 @@ Aggregation for Privacy-Preserving Machine Learning (CCS 2017)](https://research
 - The harness toolbar pauses its server clock, while the real component still
   animates a local countdown between projections. Change scenarios to start a
   fresh fixture; do not confuse a paused server clock with frozen UI time.
+- Follow-up verification ran the complete game suite excluding the separately
+  scheduled state-size file, matching the normal CI validate job. All tests passed.
+  RSA assertions check actual superscript markup, and the RPS participant reader
+  retains superscript meaning while deriving the prediction from rendered text.
 - A duplicate full-game run was stopped during the long state-size cases;
   no full-suite completion is claimed here. That run had passed the three
   12-team size scenarios before interruption. The scoped UI verification above
