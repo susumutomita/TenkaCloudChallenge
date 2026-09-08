@@ -195,7 +195,7 @@ make reference-test               # correct answer and deliberately broken imple
 make verifier-down
 ```
 
-Run `make install && make agent-gate` from the catalog root. [ACCEPTANCE.md](ACCEPTANCE.md) records the actual boundary: real Workbench HTTP routes, native Python and catalog validation. This revision has not been verified in a rendered browser, a Docker build or an AWS redeployment. An API smoke test is not a complete visual playtest.
+Run `make install && make agent-gate` from the catalog root. [ACCEPTANCE.md](ACCEPTANCE.md) records the actual boundary: real Workbench HTTP routes, native Python, Docker author tests and catalog validation. Rendered browser, Compose deployment and AWS redeployment checks were not run. An API smoke test is not a complete visual playtest.
 
 ## Course and note alignment
 

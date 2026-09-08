@@ -195,7 +195,7 @@ make reference-test               # 正答と意図的に壊した実装を確�
 make verifier-down
 ```
 
-カタログルートでは `make install && make agent-gate`。各コマンドの実施範囲は [ACCEPTANCE.md](ACCEPTANCE.md) に記録します。今回の確認は実WorkbenchのHTTP経路・ネイティブPython・カタログ検査で、ブラウザ画面、Docker build、AWS再デプロイは今回実施していません。API経路の検証を画面全体の実プレーと呼びません。
+カタログルートでは `make install && make agent-gate`。各コマンドの実施範囲は [ACCEPTANCE.md](ACCEPTANCE.md) に記録します。今回の確認は実WorkbenchのHTTP経路・ネイティブPython・Dockerでの作者テスト・カタログ検査です。ブラウザ画面、Composeでのデプロイ、AWS再デプロイは今回実施していません。API経路の検証を画面全体の実プレーと呼びません。
 
 ## 講座資料との対応
 
