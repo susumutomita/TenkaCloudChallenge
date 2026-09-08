@@ -22,7 +22,7 @@ test("new matches issue EC; real answer pays once, wrong and foreign answers can
  s={...s,teams:{...s.teams,a:{...s.teams.a!,score:50}}};
  const c=s.contracts.find(c=>c.teamId==="a"&&c.task.kind==="ec-add"&&c.status==="open")!;
  expect(c).toBeDefined();if(c.task.kind!=="ec-add")throw new Error("missing EC");
- expect(c.allowedMethods).toEqual(["ec"]);expect(c.expiresAtMs-c.issuedAtMs).toBe(60000);
+ expect(c.allowedMethods).toEqual(["ec"]);expect(c.expiresAtMs-c.issuedAtMs).toBe(180000);
  const result=addPoints(c.task.left,c.task.right),answer=result?.join(" ")??"O";
  const op={kind:"ec" as const,contractId:c.id,answer};
  expect(validateOp(s,"b",op).ok).toBe(false);

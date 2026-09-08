@@ -1,3 +1,5 @@
+import { MATCH_PACING, pacingConfig } from "./pacing.ts";
+import { deriveBigInt } from "./prng.ts";
 import {anamorphicTask,anamorphicAnswer,parseAnamorphicAnswer} from "./anamorphic.ts";
 import {starkTask,starkAnswer,parseStarkAnswer} from "./stark.ts";
 import {ioTask,ioAnswer,parseIoAnswer} from "./io.ts";
@@ -268,11 +270,8 @@ export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   starkOrders:true,
   anamorphicOrders:true,
   snarkOrders:true,
-  contractIntervalMs: 30_000,
+  ...pacingConfig(MATCH_PACING),
   contractsPerIssue: 1,
-  onboardingFollowUpMs: 30_000,
-  contractTtlMs: 60_000,
-  rushContractTtlMs: 60_000,
 };
 
 export function initialState(
@@ -669,7 +668,8 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 19;
+// v20 blocks pre-three-symbol readers on rollback; v19 tasks/config remain intact.
+export const STATE_SCHEMA_VERSION = 20;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -712,9 +712,9 @@ export const STATE_SCHEMA_VERSION = 19;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17 and v18 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18 and v19 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -1001,9 +1001,12 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
     // no-prefetch rule the LEAK/PROVE economy rests on is untouched for the
     // rest of the match. See `onboardingFollowUpMs` in types.ts for the one
     // bounded overlap this accepts.
-    nextContractAtMs += isOpeningBatch
-      ? state.config.onboardingFollowUpMs
-      : state.config.contractIntervalMs;
+    const baseInterval = isOpeningBatch ? state.config.onboardingFollowUpMs : state.config.contractIntervalMs;
+    const jitter = Math.min(baseInterval - 1, Math.max(0, Math.floor(state.config.orderArrivalJitterMs ?? 0)));
+    // One shared schedule for all teams; deriving from the scheduled time keeps
+    // delayed ticks and replays identical. Old persisted configs have no jitter.
+    const offset = jitter === 0 ? 0 : Number(deriveBigInt(state.seed, "order-arrival", nextContractAtMs - startedAtMs, BigInt(2 * jitter + 1))) - jitter;
+    nextContractAtMs += baseInterval + offset;
   }
 
   // [Issue #659] Charge the expiry penalty to whoever let the Order lapse.
@@ -1836,7 +1839,8 @@ function expectedCipherAnswer(
   const generation = state.teams[teamId]?.generation ?? 1;
   const key = deriveCipherKey(state.seed, teamId, generation, rung);
   const task = state.contracts.find(c => c.id === contractId)?.task;
-  return encryptWithRung(derivePlaintext(state.seed, contractId, rung), key, rung, task?.kind === "caesar-shift" ? task.keyPosition ?? 0 : 0);
+  if (task?.kind !== "caesar-shift") throw new Error("missing stored cipher task");
+  return encryptWithRung(task.plaintext, key, rung, task.keyPosition ?? 0);
 }
 
 /**

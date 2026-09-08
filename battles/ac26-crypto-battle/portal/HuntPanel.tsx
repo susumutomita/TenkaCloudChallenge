@@ -109,13 +109,13 @@ export function huntOpponentPage(projection: CryptoBattleProjection, options: re
 export default function HuntPanel(props: Props) {
   const { projection, locale } = props;
   const [selected, setSelected] = useState("");
-  const [query, setQuery] = useState("");
   const [readyOnly, setReadyOnly] = useState(false);
-  const [page, setPage] = useState(0);
   const options = useMemo(() => huntOptions(projection), [projection]);
-  const listing = huntOpponentPage(projection, options, query, readyOnly, page);
+  const listing = huntOpponentPage(projection, options, "", readyOnly, 0);
+  const opponents = Object.values(projection.teams).filter(team => team.teamId !== projection.vault.teamId && (!readyOnly || listing.ready.has(team.teamId)))
+    .sort((a, b) => Number(listing.ready.has(b.teamId)) - Number(listing.ready.has(a.teamId)) || a.teamId.localeCompare(b.teamId));
   const firstTeam = listing.items[0]?.teamId;
-  const choice = options.find(o => o.key === selected) ?? options.find(o => o.teamId === firstTeam && o.status === "ready") ?? options.find(o => o.teamId === firstTeam);
+  const choice = options.find(o => o.key === selected && opponents.some(team => team.teamId === o.teamId)) ?? options.find(o => o.teamId === firstTeam && o.status === "ready") ?? options.find(o => o.teamId === firstTeam);
   // Keep the inspected team and worksheet stable when new evidence arrives.
   useEffect(() => { if (choice && choice.key !== selected) setSelected(choice.key); }, [choice?.key, selected]);
   const target = choice?.status === "ready" ? choice : undefined;
@@ -129,20 +129,13 @@ export default function HuntPanel(props: Props) {
     <p className="tc-hunt-notice" role="status" aria-live="polite">{ja ? `材料を確認できる相手：${readyTeams}チーム。` : `Opponents with available worksheets: ${readyTeams}.`}{!readyTeams && (ja ? "材料が集まるまでは、自分のお題を進めましょう。" : "Work on your Orders while evidence accumulates.")}</p>
     <h3>{ja ? "1. 相手を選ぶ" : "1. Choose an opponent"}</h3>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-      <label>{ja ? "チーム名で検索 " : "Search teams "}<input type="search" value={query} onChange={e => { setQuery(e.target.value); setPage(0); }} /></label>
-      <label><input type="checkbox" checked={readyOnly} onChange={e => { setReadyOnly(e.target.checked); setPage(0); }} />{ja ? "材料のある相手だけ" : "With evidence only"}</label>
+      <label>{ja ? "相手チーム " : "Opponent team "}<select value={choice?.teamId ?? ""} disabled={!opponents.length} onChange={e => chooseTeam(e.target.value)} style={{maxWidth:"100%"}}>
+        {!opponents.length && <option value="">{ja ? "該当する相手がいません" : "No matching opponents"}</option>}
+        {opponents.map(team => <option key={team.teamId} value={team.teamId}>{name(team.teamId)}{name(team.teamId) !== team.teamId ? ` (${team.teamId})` : ""} · {team.score}{ja ? "点" : "pt"} · {listing.ready.has(team.teamId) ? (ja ? "材料あり" : "Evidence available") : (ja ? "材料待ち" : "Waiting for evidence")}</option>)}
+      </select></label>
+      <label><input type="checkbox" checked={readyOnly} onChange={e => setReadyOnly(e.target.checked)} />{ja ? "材料のある相手だけ" : "With evidence only"}</label>
     </div>
-    <div className="tc-hunt-opponents" style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0" }}>
-      {listing.items.map(team => <button type="button" key={team.teamId} className="tc-target-chip" aria-pressed={choice?.teamId === team.teamId} onClick={() => chooseTeam(team.teamId)}>
-        {name(team.teamId)} · {team.score}{ja ? "点" : "pt"} · {listing.ready.has(team.teamId) ? (ja ? "材料あり" : "Evidence available") : (ja ? "材料待ち・状況を確認" : "Waiting · inspect status")}
-      </button>)}
-    </div>
-    {listing.total === 0 && <p role="status">{ja ? "条件に合う相手はいません。検索や絞り込みを変更してください。" : "No matching opponents. Change the search or filter."}</p>}
-    {listing.lastPage > 0 && <nav aria-label={ja ? "相手一覧のページ" : "Opponent pages"}>
-      <button type="button" disabled={listing.page === 0} onClick={() => setPage(listing.page - 1)}>{ja ? "前の5件" : "Previous five"}</button>
-      <span> {listing.page + 1} / {listing.lastPage + 1} · {listing.total}{ja ? "チーム" : " teams"} </span>
-      <button type="button" disabled={listing.page === listing.lastPage} onClick={() => setPage(listing.page + 1)}>{ja ? "次の5件" : "Next five"}</button>
-    </nav>}
+    {!opponents.length && <p role="status">{ja ? "条件に合う相手はいません。絞り込みを変更してください。" : "No matching opponents. Change the filter."}</p>}
     {choice && <section aria-label={ja ? "選択中の相手と攻撃方法" : "Selected opponent and method"}>
       <h3>{ja ? "2. " : "2. "}{name(choice.teamId)} · {ja ? "攻撃方法と材料を確認" : "Choose a method and inspect evidence"}</h3>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>{options.filter(o => o.teamId === choice.teamId).map(option => <button key={option.key} type="button" className="tc-target-chip" aria-pressed={choice.key === option.key} onClick={() => setSelected(option.key)}>{copy[option.mode]} · {(option.mode === "sudoku" || option.mode === "rotor") && option.status === "ready" ? (ja ? "材料を確認して解く" : "Inspect evidence and solve") : copy[option.status]}</button>)}</div>
@@ -209,7 +202,7 @@ function CipherHuntGuide({ target, locale }: { readonly target: CipherHuntCandid
         <td style={{ textAlign: "center", padding: 6 }}><DieRow values={[sample.a]} size={22} /><code>{sample.a}</code></td>
         <td style={{ textAlign: "center", padding: 6 }}><DieRow values={[sample.b]} size={22} /><code>{sample.b}</code></td>
       </tr>)}</tbody>
-    </table> : target.pairs.slice(0, target.pairsToBreak).map(pair => <div key={pair.id}><strong>a</strong><DieRow values={pair.plaintext} size={22} /><strong>b</strong><DieRow values={pair.ciphertext} size={22} /><code>a: {pair.plaintext.join(" ")}<br />b: {pair.ciphertext.join(" ")}</code></div>)}
+    </table> : target.pairs.slice(0, target.pairsToBreak).map(pair => <div key={pair.id} style={{overflowX:"auto"}}><table aria-label={ja ? "同じ位置の元の数と暗号" : "Original and encrypted values by position"}><tbody>{([{label:"a", values:pair.plaintext}, {label:"b", values:pair.ciphertext}]).map(({label, values}) => <tr key={label}><th scope="row">{label} · {label === "a" ? (ja ? "元の数" : "Original") : (ja ? "暗号" : "Encrypted")}</th>{values.map((value, index) => <td key={index} style={{textAlign:"center",padding:8}}><DieRow values={[value]} size={22} /><code style={{display:"block"}}>{value}</code></td>)}</tr>)}</tbody></table></div>)}
     <code className="tc-hunt-formula">a → (a + k) ÷ {modulus} {ja ? "の余り" : "remainder"} = b<br />k = (b − a) ÷ {modulus} {ja ? "の余り" : "remainder"}</code>
     {target.rung === "vigenere" && <p>{ja ? "周期は3です。公開された鍵の位置ごとに式を使い、鍵1・鍵2・鍵3の順で空白区切りの3個を入力します。各位置が揃うまでは、他の位置の鍵を決められません。長い1組に3位置全部が含まれる場合は、その1組だけで回収できます。" : "The period is 3. Apply the formula at each published key position; enter keys 1, 2, 3 separated by spaces. Missing positions are undetermined. A single long pair covering all positions would suffice."}</p>}
     <p>{ja ? `kが鍵です。b−aが負なら${modulus}を足します。見本：a=4、b=1なら1−4=−3、−3+6=3。鍵は3です。同じ鍵の位置を使った、ほかの公開とも合うか確かめましょう。` : `k is the key. If b−a is negative, add ${modulus}. Example: a=4, b=1 gives 1−4=−3; −3+6=3, so k=3. Check other records using the same key position too.`}</p>

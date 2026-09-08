@@ -1,3 +1,4 @@
+import RawStatusPanel from "../../portal/StatusPanelCore.tsx";
 import { artifactFields } from "./ledger-codec.ts";
 /**
  * Portal plugin tests (Issue #486, PR4).
@@ -356,7 +357,7 @@ describe("StatusPanel.tsx -- ja/en smoke render + fail-closed", () => {
       expect(html).not.toContain("My Vault");
       expect(html).not.toContain("Public Ledger");
       expect(html).toContain(
-        locale === "ja" ? "coordination が未配線" : "Coordination is not wired up",
+        locale === "ja" ? "試合に接続できません" : "Cannot connect to the match",
       );
     });
 
@@ -366,7 +367,7 @@ describe("StatusPanel.tsx -- ja/en smoke render + fail-closed", () => {
       // With a client, the intro (not the fail-closed notice) renders --
       // renderToStaticMarkup never runs the polling effect, so the lanes
       // themselves have not loaded yet.
-      expect(html).not.toContain(locale === "ja" ? "coordination が未配線" : "Coordination is not wired up");
+      expect(html).not.toContain(locale === "ja" ? "試合に接続できません" : "Cannot connect to the match");
       expect(html).toContain(locale === "ja" ? "最初の更新を待っています" : "Waiting for the first match update");
     });
   }
@@ -657,7 +658,7 @@ describe("RegistrationPanel.tsx -- ja/en smoke render + fail-closed", () => {
       const html = renderToStaticMarkup(createElement(RegistrationPanel, baseProps({ locale })));
       expect(html.length).toBeGreaterThan(0);
       expect(html).not.toContain("ROTATE する");
-      expect(html).toContain(locale === "ja" ? "coordination が未配線" : "Coordination is not wired up");
+      expect(html).toContain(locale === "ja" ? "試合に接続できません" : "Cannot connect to the match");
     });
 
     it(`renders the 4 move forms without crashing when a coordinationClient IS present (${locale})`, () => {
@@ -2134,4 +2135,14 @@ it("the last PROVE hint leaves the same four answer cells blank", () => {
   expect(highlighted).toEqual(["2", "1"]);
   expect(html).toContain('aria-label=". 1 4 2 4 2 3 . 1 3 2 . . 4 1 3"');
   expect(html).not.toContain('aria-label="3 1 4 2 4 2 3 1 1 3 2 4 2 4 1 3"');
+});
+
+
+describe("raw status missing connection recovery",()=>{
+ for(const locale of ["ja","en"] as const)it(locale,()=>{
+  const markup=renderToStaticMarkup(createElement(RawStatusPanel,{locale} as PortalSlotProps));
+  expect(markup).toContain(locale==="ja"?"ページを再読み込み":"Reload the page");
+  expect(markup).toContain(locale==="ja"?"運営に連絡":"contact the event organizer");
+  expect(markup).not.toContain("接続できませんのため");
+ });
 });

@@ -209,6 +209,8 @@ export interface CryptoBattleConfig {
   readonly phaseBoundaries: PhaseBoundaries;
   /** How often (ms) a fresh batch of Orders is issued per team. */
   readonly contractIntervalMs: number;
+  /** New matches may vary each shared arrival gap by up to this many milliseconds. */
+  readonly orderArrivalJitterMs?: number;
   /**
    * [Issue #659] How many Orders arrive per team per issue, all at once.
    *

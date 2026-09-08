@@ -115,7 +115,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
   "stark-order": {ja:"STARK — 実行表と折り畳みを検査",en:"STARK — trace and fold"},
   "io-order": {ja:"iO — 同じ機能と公開分布を比べる",en:"iO — compare functions and distributions"},
   "ec-order": {ja:"楕円曲線 — 7で割った余りで2点を足す",en:"Elliptic curve — add two points modulo7"},
-  streaming: { ja: "新設定 — 30秒ごとに到着・回答は1分", en: "Current pacing — arrives every 30s, answer within 1m" },
+  streaming: { ja: "新設定 — 間隔に変化・回答は3分", en: "Current pacing — varying arrivals, answer within 3m" },
   fresh: {
     ja: "開始直後 — Order が出たところ",
     en: "Just started — first Orders issued",

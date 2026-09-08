@@ -35,8 +35,8 @@ function calculateWrittenSteps(text: string, locale: "ja" | "en") {
 describe("one selected hint ladder leads to a submitted Order", () => {
   test("the independently hand-computed response is accepted at its measured wall-clock offset", () => {
     const { host, order, issuedAt } = openCipher("hint-reading-3");
-    const answer = ["5", "4", "1", "1", "2"];
-    const elapsedMs = 72_516; // Historical read-through offset; the new five-symbol order retains its first five values. Not a new reading-speed measurement.
+    const answer = ["5", "4", "1"];
+    const elapsedMs = 72_516; // Historical read-through offset; the new three-symbol order retains its first three values. Not a new reading-speed measurement.
     const before = host.state.teams.reader!.score;
     expect(submitOp(host, "reader", { kind: "cipher", contractId: order.id, answer }, issuedAt + elapsedMs).kind).toBe("ok");
     expect(host.state.contracts.find(c => c.id === order.id)?.status).toBe("completed");

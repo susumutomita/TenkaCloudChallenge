@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import ConceptExplanation from "./ConceptExplanation.tsx";
+import CoreStatusPanel from "./StatusPanelCore.tsx";
 import CoreHelpDrawer from "./HelpDrawerCore.tsx";
 import QuickRules from "./QuickRules.tsx";
 import TutorialWalkthrough from "./TutorialWalkthrough.tsx";
@@ -47,7 +48,7 @@ export default function BattleHelp(props: PortalSlotProps) {
         {topic === "play" && <QuickRules locale={locale} />}
         {topic === "concepts" && <ConceptExplanation locale={locale} embedded />}
         {topic === "practice" && <TutorialWalkthrough locale={locale} embedded onDone={close} />}
-        {topic === "reference" && <CoreHelpDrawer {...props} />}
+        {topic === "reference" && <><CoreHelpDrawer {...props} /><details><summary>{ja ? "詳細な試合データ" : "Detailed match data"}</summary><CoreStatusPanel {...props} /></details></>}
       </div>
     </dialog>
   </>;
