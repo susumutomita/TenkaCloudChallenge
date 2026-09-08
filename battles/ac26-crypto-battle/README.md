@@ -434,6 +434,8 @@ PR #790 follow-up: accepting a Schnorr commitment starts the answer attempt, so 
 
 `streaming-orders.test.ts` isolates expiry penalties over 30 minutes and verifies that pruning completed Orders does not remove earned points. `disclosure-score-regression.test.ts` uses normal penalties to verify a missed deadline deducts once while completed history survives. Scores are cumulative team state, not a sum over visible Orders.
 
+`score-polling-regression.test.ts` checks both teams every five seconds for 15 minutes: reading projections never opens hints, and each waiting-period deduction matches newly expired own Orders. Explicit hint purchases deduct only from their owner. The score header shows the stored match's per-Order deadline penalty and zero floor; waiting does not pause deadlines. The historical #777 sequence was traced to a concurrent test agent buying three hints for the same team: saved operation responses show 28, 24, then 16 points, followed by deadline penalties. The regression reproduces 30 → 28 → 24 → 16 → 1 → 0 with those explicit operations and deadlines.
+
 The earlier run covered 90 minutes with the then-current 30-second arrival / 60-second deadline, Schnorr and EC configuration. Both teams LEAK only mandatory-disclosure Orders and successfully HUNT using only participant-projected public shares. No voluntary disclosure is required. The originally reported deployed revision is unidentified; this evidence exercises the local production reducer/projection. Verify the deployed environment after the owner deploys.
 
 ### Finite iO definition worksheet (#793)

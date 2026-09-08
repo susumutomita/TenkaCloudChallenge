@@ -1255,7 +1255,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
             {projection.teams[projection.vault.teamId]?.score ?? 0}
           </strong>
         </div>
-        <span className="tc-scoreline-hint">{copy.scoreHint}</span>
+        <span className="tc-scoreline-hint">{projection.expiryPenalty !== undefined && projection.expiryPenalty < 0
+          ? locale === "ja"
+            ? `未回答のお題は締切ごとに ${projection.expiryPenalty} 点。待機中も減点されます（最低0点）。`
+            : `Each unanswered Order costs ${Math.abs(projection.expiryPenalty)} pt at its deadline, even while waiting (minimum score: 0).`
+          : projection.expiryPenalty === 0
+            ? locale === "ja" ? "この試合は期限切れの減点なし" : "No deadline penalty in this match"
+            : copy.scoreHint}</span>
         <div className="tc-rival-score">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(t => <span key={t.teamId}>{locale === "ja" ? "相手" : "Opponent"} · {t.teamName || t.teamId} <strong>{t.score} {locale === "ja" ? "点" : "pt"}</strong></span>)}</div>
       </div>
       <BreachNotice key={`${props.team.eventId}:${projection.vault.teamId}:${projection.lastBreach?.sequence ?? 0}`} projection={projection} locale={locale} onDefend={()=>{

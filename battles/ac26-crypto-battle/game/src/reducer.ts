@@ -2999,6 +2999,7 @@ export function projectForTeam(
       })),
     wrongHuntCost: state.config.scores.wrongHunt,
     wrongProveCost: state.config.scores.wrongProve,
+    expiryPenalty: state.config.scores.expiredOrder,
     // [Issue #696] The reader's OWN last HUNT only -- `team` is the row
     // `teamId` resolved to above, never another team's. Spread conditionally
     // so a team that has never HUNTed projects no key at all, which keeps the
