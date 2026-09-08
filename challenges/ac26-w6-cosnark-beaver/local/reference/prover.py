@@ -150,3 +150,12 @@ def privacy_audit(runtime, relation: dict, halves: dict, triple) -> dict:
         "triplesConsumed": tuple(runtime.consumed_triples()),
         "reconstructAvailable": hasattr(runtime, "reconstruct"),
     }
+
+
+def mask_cancellation_witness(runtime, halves: dict, triple) -> tuple:
+    out = []
+    for i in range(runtime.setting["parties"]):
+        with runtime.party_scope(i):
+            cancelled = runtime.sub(triple.x[i], triple.x[i])
+            out.append(runtime.add(halves["A"][i], cancelled))
+    return tuple(out)

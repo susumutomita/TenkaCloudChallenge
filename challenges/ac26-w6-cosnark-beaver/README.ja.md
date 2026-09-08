@@ -176,3 +176,9 @@ privilege 無しで動き、公開されるのは Workbench の loopback だけ�
 `make reference-test` が mutation suite を実行します。壊した提出 31 種類と verifier を狙った 1 種類が
 あります。31 種類のうち何個が依然として `C` を `A × B` に復元するかを毎回印字します。この README が
 引用しているのはその数で、後の変更で checkpoint が安くなればその数が動き、主張のほうを直します。
+
+## Hint staircase and final construction
+
+最終transferにはmask_cancellation_witnessを追加。Aの値を保ちながらtriple.xの系譜が残る共有値をローカル演算で構成し、記録と秘密性の証明の違いを確かめます。8項目×3段×2点=48点。必要式とAPIは無料本文にあり、公開テストでも相殺例を確認します。
+
+`make reference-test`はmutation.pyから構成回帰6件と既存32変異検査を実行します。ホストの作者検査ではすべて成功。参加者資料だけの独立読解で4件の説明不整合を見つけ修正しました。実Workbenchのハンドラメソッドでstarter取得・提出準備・公開9テスト成功を確認。sandboxでHTTP起動できず、ブラウザ操作・配備後採点・デプロイは未実施です。カタログ116件有効。

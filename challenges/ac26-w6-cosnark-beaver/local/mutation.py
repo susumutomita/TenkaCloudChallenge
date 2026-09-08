@@ -11,6 +11,7 @@ moves and the claim moves with it.
 from __future__ import annotations
 
 import sys
+import subprocess
 import types
 from pathlib import Path
 
@@ -345,6 +346,13 @@ SPOOF = "\n".join(
 
 
 def main() -> int:
+    regression = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parent / "tests/test_cancellation.py")],
+        check=False,
+    )
+    if regression.returncode:
+        print("FAIL cancellation construction regressions")
+        return 1
     reference = _load(REFERENCE)
     reference_failures = run(reference, SEED)
     if reference_failures:

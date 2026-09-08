@@ -31,12 +31,12 @@ Substituting `A = d + x` and `B = e + y` into `A * B` and expanding is worth doi
 once; the four terms above are what comes out.
 
 `d` and `e` are `A` and `B` masked by uniform values nobody chose, so opening them reveals
-nothing about either — **provided the mask is used once**. That sentence is the whole security
+nothing about either — **provided the mask is used once**. Uniform independent masks unknown to the adversary are also required; this is the security assumption
 of the step, which is why `reserve_triple` refuses to hand the same triple out twice.
 
 ## What you are handed
 
-`runtime` is a `ParticipantRuntime`. Everything the previous problem gave you, plus three:
+`runtime` is a `ParticipantRuntime`. Everything the previous problem gave you, plus these calls:
 
 ```text
 runtime.reserve_triple(triple)   check a triple and spend it; a second call raises
@@ -56,10 +56,12 @@ There is still no `reconstruct`.
 
 A `Triple` carries `id`, `fieldId`, `parties`, and the three sharings `x`, `y`, `z`.
 
-Run `make inspect` first.
+Start with multiplication_plan in the Portal editor, then submit plan. Inspect evidence is optional context. The free statement documents every API and return field.
 """
 
 from __future__ import annotations
+
+from participant.mpc import field_id
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +98,7 @@ def multiplication_plan(relation: dict, products: int = 1) -> dict:
     the four terms of `[C]` and read off which runtime call builds each one.
 
     Raise `ValueError` for a relation that does not describe a field (a `fieldId` that does not
-    name `p`, fewer than two parties, a non-integer anywhere) or for a negative layer width.
+    name `p`, fewer than two parties, a non-integer/bool p, parties or products) or for a negative layer width.
     """
     return {}
 
@@ -271,8 +273,8 @@ def privacy_audit(runtime, relation: dict, halves: dict, triple) -> dict:
     ```
 
     `unmasked` is the one worth slowing down on. Each opening record carries `maskedBy`: the
-    reserved triple shares the runtime found in that opening's ancestry. An empty one means a
-    value was published that nothing was hiding.
+    reserved triple shares the runtime found in that opening's ancestry. An empty one means no reserved triple ancestry was recorded. A nonempty
+    ancestry is not proof of secrecy: the final cancellation witness demonstrates this.
 
     There is a shortcut this problem exists to make visible. Open `[A]` and `[B]` directly, and
     you can compute `C` in the clear and re-share it — the result is correct on every seed and
@@ -282,3 +284,14 @@ def privacy_audit(runtime, relation: dict, halves: dict, triple) -> dict:
     Read the writeup afterwards for what this audit does **not** prove.
     """
     return {}
+
+
+def mask_cancellation_witness(runtime, halves: dict, triple) -> tuple:
+    """Construct local issued shares with A's value and each party's triple.x ancestry.
+
+    Triple is already reserved. Return one Share per party, same field and party.
+    Use local arithmetic only: no open, communication, or value_of reads.
+    The grader independently checks reconstructed value, issuance, ancestry and messages.
+    This exhibits why an ancestry label alone does not prove secrecy.
+    """
+    return ()

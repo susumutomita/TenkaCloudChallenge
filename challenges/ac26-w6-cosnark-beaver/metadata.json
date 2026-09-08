@@ -34,7 +34,7 @@
   "estimatedDuration": "60-90 分",
   "shortDescription": "誰も全体を持っていない 2 つの秘密 A と B の積が欲しい。でもどちらも平文には戻したくない。前もって配った三つ組(Beaver triple)と、1 往復だけの開示で、A も B も積も平文にせずに掛ける。",
   "description": "Week 6 の 2 問目。 前の問題 (`ac26-w6-cosnark-linear`) が作った co-SNARK prover の線形部分は 0 round で済んだ。 この問題はその続きで、 **通信が要る側**を書く。\n\n```text\nA = Σ_j a_j w_j        B = Σ_j b_j w_j        C = A × B        (mod p)\n```\n\n`[A]` と `[B]` は組み立て済みで支給される。 和の積は積の和ではないので、 局所演算をどう並べても `[C]` は出ない。 代価は通信 1 round で、 それを 1 round に抑えるのが Beaver の trick である。\n\n```text\n[d] = [A] - [x]        [e] = [B] - [y]        どちらも local\nd, e を open                                   1 round、 2 値\n[C] = [z] + d[y] + e[x] + de\n```\n\nWeek 2 の `ac26-w2-beaver-mul` が general MPC の乗算として作ったものを、 co-SNARK prover という上位 layer に正しく組み込む transfer 問題である。 triple の消費、 d/e の batch、 公開定数 `de` を 1 party だけが畳むこと — Week 2 で学んだ 3 つが、 ここでは prover の privacy に直結する。\n\nruntime は前問と同じ instrument で、 `open` だけが通信する。 round は 「開いた値の数」 ではなく **distinct な roundId** として数える。 だから 「2 値を 1 round で」 は主張ではなく測定になり、 それが checkpoint `open` の採点対象である。 `reserve_triple` は消費する: 同じ triple を 2 度予約すると例外になる。 mask が uniform なのはちょうど 1 回だけ、 という一文がこの step の安全性の全部だからである。\n\n採点の設計として、 この問題は 31 個の壊れた実装を同梱していて、 そのうち **24 個は全 shape で `C` を `A × B` に正しく復元する**。 `make reference-test` が毎回この数を測る。 なかでも本題は 「`[A]` と `[B]` をそのまま open して平文で掛け、 答えを share し直す」 実装で、 これは全 seed・全 shape で完璧な `C` を返し、 round も 1、 triple もちゃんと消費する。 実測すると、 これを落とす checkpoint は `audit` **1 つだけ**である (別 seed で再実行する `transfer` を除く)。\n\ntoy であることも明示しておく。 field は列挙可能な小さい素数、 party は 2〜5、 semi-honest ですらなく敵対者は不在、 triple は trusted dealer が配る。 dealer は `z = x*y` を自分で検算するが、 **本物の protocol はそれができない** — party は share しか持たず、 積を確認することは 3 つとも再構成することだからである。",
-  "instructions": "## 足し算はタダだった。掛け算だけが進まない\n\n前問(`ac26-w6-cosnark-linear`)で、**分ける**(MPC)と**示す**(ZK)を重ねた証明 — co-SNARK — の線形部分を組みました。公開の数を掛けて足すだけなら、誰とも通信せずに終わりました。\n\n残ったのは掛け算です。そしてここだけは、**分けたままでは進みません**。破片どうしの積を足しても、もとの積にはならないからです。co-SNARK の費用が「掛け算が何個あるか」で決まるのは、このためです。\n\n## 平文に戻さずに、掛けたい\n\n誰も全体を持っていない 2 つの秘密 A と B があって、その積 A × B が欲しい。でも A も B も、平文には**戻したくない**。掛けるために一度復元してしまえば、そこで秘密は消えます。\n\n素朴にやると、掛け算 1 個ごとに全員が 1 回待ち合わせます。掛け算が 1000 個ある層なら 1000 回。これでは使いものになりません。**この問題で作るのは、待ち合わせを層ぜんぶで 1 回に畳む方法です。** MPC ウォレットのしきい値署名や、プライベート DeFi の照合が、実際にこの形で動いています。\n\n## 中 3 の展開が、そのまま答えになる\n\n`(d + x)(e + y) = d·e + d·y + x·e + x·y`。右辺の最後を z と書き直すと、**掛け算の答えが「公開してよい d と e」と「前もって配っておいた 3 つの値」だけで組み上がります**。これが以下の全部です。\n\n1 桁で見ます(7 で割ったあまり)。掛けたい秘密が A = 3、B = 4。前もって配られた三つ組が (x, y, z) = (1, 2, 2)(z = 1 × 2)。公開するのは d = A − x = 2 と e = B − y = 2 だけ。すると z + d·y + e·x + d·e = 2 + 4 + 2 + 4 = 12、あまりは 5。一方 A × B = 12 のあまりも 5 — 一致します。**外に出たのは d と e だけ**で、A も B も積も平文になっていません。しかも d と e は、誰も選んでいない x と y でずらした数なので、それ自体は何も語りません — **ただし、その三つ組を二度使わない限りは**。\n\n## 前提（知っていれば飛ばしてください）\n\n数は「素数 p で割ったあまり」(本番の p は「証拠を確認」に出ます)。**share** = 秘密を、足し合わせると戻る破片に割ったもの。`[A]` のように角括弧で書くと「A が破片のまま」の意味です。**Beaver triple(三つ組)** = 何を掛けるか誰も知らないうちに配っておいた `[x]` `[y]` `[z]`(z = x·y)。**fresh** = その三つ組を一度しか使わないこと。**open(開示)** = 破片を持ち寄って値を 1 つ表に出すこと。この問題で通信するのはこれだけです。**round** = 開示のために全員が一度待ち合わせること。同じ round id で出した開示は、何個あっても 1 round です。\n\n三つ組の作り方は `ac26-w2-beaver-mul`、線形部分は前問にあります。`[A]` と `[B]` は前問の答えにあたる部分で、**すでに組み上がった状態で渡されます**。書くのはその先です。\n\n## この問題の 2 つの山\n\n1 つ目は**待ち合わせの数**です。d と e は互いに待たずに計算できるので、層の中の全部の d と e をまとめて 1 回で出せます。層の幅がいくつでも待ち合わせは 1 回 — この設計判断が最初の checkpoint です。\n\n2 つ目は**覆いの使い回し**です。d が何も語らないのは、x が一度きりの覆いだからです。同じ三つ組を 2 回使うと、2 つの d の差がそのまま 2 つの A の差になります。答えは正しいまま、覆いだけが剥がれる。しかも「覆いのない値」を表に出しても、計算そのものは正しく進んでしまう — だから「二度使っていないこと」「裸で出していないこと」を、期待ではなく**記録(何が覆っていたか)から**確かめます。\n\n## 最初の一手\n\nParticipant Portal(この問題文が表示されているサイト)で **「起動」** を押すと、あなた専用の実行環境(コンテナ)が立ち上がり、問題文と同じ画面に **問題エディタ** が出ます。書くファイルは **`prover.py` 1 つだけ**、言語は **Python** です。8 つの関数の枠が最初から入っていて、引数・返り値・例外の条件は各関数の先頭の説明文(docstring)に書いてあります。\n\n**「証拠を確認」** を押すと、この起動のためだけに作られた値が表示されます。出るのは次の 5 つです。\n\n1. **あなたの設定** — p と体の名前、party の人数、witness の長さ、設定の id。\n2. **1 行分の relation** — 公開の係数の並び `a` と `b`、その id、そして「A = Σ a_j w_j、B = Σ b_j w_j、あなたが作るのは C = A × B」という関係。\n3. **渡される 2 つの半分** — `[A]` と `[B]` の share の **id だけ**を party 順に並べたもの。前問の答えにあたる部分で、すでに組み上がっています。**値は表示されません。**\n4. **配られる三つ組** — その id、体の名前、party 数、`[x]` `[y]` `[z]` の share の id。**値は表示されません**(z = x·y は、何を掛けるか決まる前に固定されています)。\n5. **開示 1 回が記録に残す形** — 公開のデモ値を 2 回 open した記録、その `rounds` と `messages`、そして 2 回の開示の違い。\n\n**5 番をよく見てください。** 2 つの開示は同じ round id で出ているので `rounds` は 1、`messages` はそれより大きい数です。そして 1 つ目の記録には `maskedBy`(何が覆っていたか)が入っていて、2 つ目は**空**です。空のほうは**拒否されていません** — 記録されただけです。何も覆っていない値を出しても計算は正しいまま進む、という事実がそのまま最後の checkpoint になります。\n\n数はどれも起動するたびに変わるので、他の人の値を写しても合いません。\n\n**「公開テストを実行」** を押すと、形だけの検査(各関数が決められた型と項目を返すか、正直な 1 往復が通るか)を手元で試せます。正しい答えと、もっともらしい間違いの区別はここではつきません。 エディタを最初の状態に戻したくなったら **「初期状態に戻す」** を押します。\n\n## 答えるもの — checkpoint は 8 つ、この順で\n\n8 つとも**コードの checkpoint**で、答えを直接書き込む欄はありません。手順は「エディタに書く → その checkpoint の **「提出 (+点数)」** を押す」だけで、押した時点の `prover.py` 全体がそのまま採点へ送られます — **同じ 1 ファイルを 8 通りの角度から採点します**。不正解でも出し直せます(1 回まちがえるごとに 15 点引かれますが、合計が 0 点未満になることはありません)。checkpoint は独立なので、1 つ詰まっても他は取れます。\n\n1. **plan** — `multiplication_plan(relation, products=1) -> dict`。**1 行も通信する前に**、掛け算 `products` 個の層の費用を見積もります。返すのは `{\"products\", \"triples\", \"opens\", \"rounds\", \"messages\", \"local\", \"fieldId\", \"relationId\"}`。`rounds` は開示した値の個数ではなく、掛け算の個数でもありません(幅 0 の層だけは別の数になります)。`local` は回数ではなく**操作の名前**を並べ替えたもので、`open` はそこに入りません — 上の 4 つの項を書き出して、どの項がどの操作で作られるかを読み取ってください。relation として成り立たないものと、負の幅は `ValueError` です。\n2. **triple** — `reserve_fresh_triple(runtime, relation, triple) -> dict`。三つ組を検めて消費し、`{\"tripleId\", \"fieldId\", \"parties\", \"consumed\"}` を返します。`consumed` は runtime に**訊いて**得る、これまでに使った三つ組の id です。runtime 自身が断る種類の三つ組(使い回し、壊れているもの、z ≠ x·y、別の設定のもの)は、捕まえずにそのまま通します。ただし runtime が知らない情報が 1 つだけあなたの手元にあります。\n3. **masks** — `masked_operands(runtime, triple, halves) -> dict`。`halves` は `{\"A\": …, \"B\": …}`(party ごとに 1 share)。`{\"d\": …, \"e\": …}` を同じ形で返します。**ここでは誰も通信しません** — 各 party が自分の持つ share から自分の持つ share を引くだけです。どの覆いがどちらの半分に付くか、引き算がどちら向きかは、覚えるのではなく上の展開から導いてください(まちがえても形の整った share ができてしまい、4 段あとまで気づけません)。\n4. **open** — `open_masks(runtime, round_id, masked) -> dict`。2 つをまとめて開示し、`{\"d\", \"e\", \"roundId\", \"openings\", \"rounds\"}` を返します。`openings` と `rounds` は `runtime.openings()` を**読んで**答えます — この checkpoint では、すでに何かを開示済みの runtime が渡されます。\n5. **product** — `shared_product(runtime, triple, d, e) -> tuple` と `prove_product(runtime, relation, halves, triple) -> dict`。前者は `[z] + d·[y] + e·[x] + d·e` を party ごとに 1 つ返します。**4 つ目の項だけ性質が違います** — `d·e` は全員がすでに知っている「ただの数」で、`[d·e]` という share は存在しません。後者は 1〜4 をつないで `{\"A\", \"B\", \"C\", \"d\", \"e\", \"tripleId\", \"roundId\", \"rounds\"}` を返します。round id は自分で決めますが、2 つの開示は同じ id で出します。\n6. **artifact** — `proof_artifact(runtime, relation, halves, triple) -> dict`。次の段が受け取れる形に整えます。キーは `{\"relationId\", \"fieldId\", \"parties\", \"A\", \"B\", \"C\", \"tripleId\", \"roundId\"}` **ちょうど**。いちばん考えどころは `C` です。あと 1 回 open すれば `C = A × B` を満たす普通の整数になり、いかにも証明の部品らしく見えますが、次の段が食べるのは share のままの `C` です。\n7. **audit** — `privacy_audit(runtime, relation, halves, triple) -> dict`。実際に走らせてから、runtime が記録したものを `{\"opened\", \"rounds\", \"unmasked\", \"violations\", \"triplesConsumed\", \"reconstructAvailable\"}` として報告します。`unmasked` は、開示記録の `maskedBy` が空だったもの — つまり**何も覆っていない値を表に出した回数**です。\n8. **transfer** — いまの `prover.py` がそのまま、**見たことのない p・party 数・width・係数**で 1〜7 をもう一度全部走ります。画面に出た数値を書き写した実装はここで落ちます。\n\n## 正しい答えは、漏れていない証拠ではない\n\n掛け算が 1 往復で済み、A も B も積も平文にならずに `[C]` ができました。8 つ通ればこの問題は終わりです。ただし「正しい答えを返す」ことと「途中で何も漏らしていない」ことは別です — 次の問題(`ac26-w6-cosnark-privacy`)は、同じ `C = A × B` を返す 8 つの実装が、それぞれ何を漏らしているかを記録から見分けます。ここで作った「d と e だけを開示する」形が、その基準線になります。\n",
+  "instructions": "## 前提\n\n正負の数の足し算・掛け算・余りと、Pythonの関数・tuple・dictを使います。必要なAPIと式は無料で以下に示します。\n\n## 共有した秘密の積を、1回の待ち合わせで作る\n\n秘密A,Bは複数人の持つ数（シェア）に分かれています。各人の数を足してpで割った余りが秘密になります。[A]はシェアのままのAです。この問題では[A],[B]が渡されます。秘密を開かず[C]=[A×B]を作るprover.pyを実装します。起動→問題エディタ→planから順に提出、が操作の流れです。\n\n前もって配られるBeaver三つ組は[x],[y],[z]で、z=x*y mod pです。d=A−x,e=B−yだけを開示すると、展開から\n\n```text\nA*B=(x+d)(y+e)=z+d*y+e*x+d*e  (mod p)\n```\n\nとなります。p=7,A=3,B=4,x=1,y=2,z=2の小例ならd=e=2、2+4+2+4=12→5で積と一致。実装ではA,B,Cを開示せず、共有値の演算でこの式を作ります。小例の数字は仕組みを見るためのもので、コードへ固定しません。安全性のための乱数条件は後で明示します。\n\n## 実装に使う無料の契約\n\n最初はprover.pyのmultiplication_planを編集し、planへ提出します。「解答済み」が成功です。公開テストを実行するとPASS/FAILが出ます。後の関数が未実装ならそのFAILは残して、先へ進めます。共有値はparty番号0から順に並ぶShareのtupleで、整数のリストではありません。partyは計算に参加する人、witnessは秘密の入力の並び、relationは計算したい関係のdictです。Σは同じ添字の積を全部足す記号です。\n\nrelationのこの段で使う欄はp、parties、fieldId、relationIdです。pとpartiesとproductsはboolを除く整数。p≥2、parties≥2、products≥0を要求し、違えばValueError。配布pは素数で、素数判定の実装は不要です。fieldIdは文字列`F`にpを続けたもの（p=7ならF7）。relationIdは与えられる文字列の識別名です。widthとa,bは前段の情報で、この段では検証・再計算しません。\n\nplanはtriples=products、opens=2*products、messages=opens*parties。1つの開示で各partyが1shareを送るという教材の数え方です。roundsはproducts>0なら1、0なら0。localはproducts>0ならtuple `(\"add\", \"add-public\", \"mul-public\", \"sub\")`、products=0なら空tupleです。maskの引き算もこの層のローカル操作に含みます。\n\nruntime.settingはp/partiesなどのdict。Tripleは.id/.fieldId/.parties/.x/.y/.zを持ちます。reserveではtriple.fieldIdとrelation[\"fieldId\"]、triple.partiesとrelation[\"parties\"]を比較し、不一致ならValueError。relationIdとtriple.idは別の名前です。次にruntime.reserve_triple(triple)を呼びます。例外は捕まえません。consumedはtuple(runtime.consumed_triples())です。\n\n```python\n# APIの使い方。iは0からparties-1。\nwith runtime.party_scope(i):\n    difference = runtime.sub(left_share, right_share)\n# add(left,right)、mul_public(share,整数)、add_public(share,整数)も同じscope内。\n```\n\n演算はpの余りへ自動で直します。maskはd[i]=A[i]−x[i]、e[i]=B[i]−y[i]。productは各partyでz[i]+d*y[i]+e*x[i]を作り、ただ1人（例えばi=0）だけdeをadd_publicで足します。全員に足すとparties*deが加わります。値を読む必要はありません。\n\nopenはruntime.open(round_id, masked[\"d\"])とeの2回。同じidなら1roundです。records=runtime.openings()を読み、openings=len(records)、rounds=len({r[\"roundId\"] for r in records})。setは重複を除くPythonの集合です。既存記録も数えます。prove_productではrelationIdから区別できるround名（例えばrelationId+\":mul\"）を作ります。この呼出しには同名の既存roundは渡しません。返すroundsは追加分ではなく総数です。\n\nartifactはprove_productを一度実行した結果から指定8キーだけを返します。auditも一度実行して全記録を読みます。opened=len(records)、roundsは上と同じ、unmaskedはmaskedByが空の記録数、violations=len(runtime.violations())、triplesConsumed=tuple(runtime.consumed_triples())、reconstructAvailable=hasattr(runtime,\"reconstruct\")。hasattrはその名前の機能があるかをTrue/Falseで返します。\n\n## 安全性の前提と、この記録の限界\n\nこの部品はco-SNARKの共有乗算段で、ZK証明そのものを生成・検証しません。信頼する配布役（trusted dealer）がx,yを互いにも入力にも独立な一様乱数として選び、攻撃者がその全体を知らない状態で一度だけ使います。一様とは0〜p−1が同じ確率、独立とは一方を知っても他方の確率が変わらないことです。一度きりという条件だけでは十分ではありません。\n\np=3で一様なxを引くと、Aが違っても公開dの分布は同じです。\n\n| 秘密A | x=0 | x=1 | x=2 |\n|---|---|---|---|\n| 1 | d=1 | d=0 | d=2 |\n| 2 | d=2 | d=1 | d=0 |\n\nどちらの行もd=0,1,2が1回ずつ。一般にも固定したAに対してx→(A−x)%pは一対一なので、各dの確率は1/pです。Aと独立な未知の一様xなら、dからAを区別できません。しかし同じxを2回使うとd1−d2=A1−A2となり、秘密の差が分かります。使い回しで失われるのはこの秘密性で、一様分布そのものではありません。\n\nmaskedByは計算に使ったShareの履歴（系譜）です。非空でも値としてマスクが残る証明にはなりません。例えば普通の数で3+2−2=3は2を使った履歴があっても3を隠しません。これを最後に自分で確かめます。runtimeは観測器で、安全な実行環境や一般的な秘密性証明ではありません。\n\n## transfer：系譜と隠れる値を区別する反例を作る\n\n通常の1〜7に加え`mask_cancellation_witness(runtime, halves, triple)`を実装します。三つ組は予約済みなので再予約しません。返すのはparty順のShareのtupleです。各shareは自分のpartyのruntime演算で作られ、系譜にそのpartyのtriple.xを含み、しかし全体の値は元のAと同じ、というデータを構成します。公開・通信・value_ofでの読み出しはせず、既存のadd/sub/mul_public等を組み合わせます。式のどの項が消えるかを紙で考えてください。\n\n採点側が発行元、party、系譜、復元値、通信ゼロを独立に確認します。入力をそのまま返すだけでは三つ組を使った系譜がありません。これは自作の監査反例です。秘密の復元を競技者コードに書く課題ではありません。同じprover.pyをtransferへ提出し、8項目の解答済みを確認します。\n\n",
   "writeup": "## 正しい C は、 正しい prover の証拠にならない\n\nこの問題は 31 個の壊れた実装を同梱していて、 そのうち **24 個は全 shape で `C` を `A × B` に正しく復元します**。 `make reference-test` が毎回この数を測り、 数が動いたら数のほうを直します。\n\n## `[A]` と `[B]` を開いてから掛ける実装は、 値のテストを 1 つも落とさない\n\n`[A]` と `[B]` をそのまま open すれば平文の `A` と `B` が手に入ります。 掛けて、 答えを share し直す。 出てくる `C` は全 seed・全 shape で完璧に正しく、 round は 1 のまま (2 つの開示を同じ roundId に入れれば済む)、 triple もちゃんと 1 つ消費できます。 `prove_product` の契約 — 「C が正しく、 schedule が 1 round」 — を、 この実装は完全に満たします。\n\n満たしていないのは 「公開された値が mask されたものだけだった」 ことです。 実測すると、 これを落とす checkpoint は `audit` **1 つだけ**です (`transfer` が同じ検査を別 seed で再実行する分を除く)。 `openings()` の各記録が持つ `maskedBy` — その開示の祖先に予約済み triple share があったか — だけが見ています。\n\nこれが 「d と e を開いても A と B は漏れない」 という主張の実際の中身です。 主張は `d = A - x` の `x` が uniform で、 かつ **1 度しか使われない**ことに全部乗っています。 mask のない開示はその条件を満たさないので、 同じ `open` という操作でも意味が違います。 runtime はそれを拒否せず、 記録します。 拒否したら shortcut は 「不可能」 になり、 「見える」 にはならないからです。\n\n## audit が証明できることと、 できないこと\n\n証明できるのは、 この runtime 上で公開された値がどれも予約済み mask の下にあり、 refused read が無く、 triple が ledger の通りに消費されたことです。\n\n証明できないのは 「A と B が誰の目にも触れなかった」 ことです。 前問と同じで、 各 party の scope を開いて自分の share を読むのは合法で、 全 party 分やれば `A` が手に入ります。 `Share._value` は属性 1 つ分の距離です。 runtime は sandbox ではなく instrument で、 記録しているのは 「その計算が何を公開したか」 であって 「書いた人が何を見たか」 ではありません。\n\n## 「1 round」 は答えであって、 測定ではない\n\n答えが 1 round であることは、 1 行も書く前から分かっています。 だから `rounds: 1` と書いて返す報告には点がありません。 `open` と `product` の checkpoint は毎回、 **すでに何かを開示した後の** runtime を渡します。 そこでの正解は 1 ではなく、 「この step が足した round が 1」 です。\n\nround が開示の数ではないことも同じ理由です。 2 値を 1 round で運ぶ schedule と 2 round で運ぶ schedule は出力が同一で、 違いは latency にしか出ません。 本物の prover では、 その差が回路の乗算 layer の数だけ積み上がります。\n\n## 公開定数は 1 party だけが畳む\n\n`de` は全員が知っている数です。 `[de]` という共有値は存在しません。 全 party の share に足すと `value + parties × de` の sharing になり、 2 party なら `de` 1 個分ずれます。 Week 2 が checkpoint 1 つを割いた話が、 ここでは 「`C` が `A × B` にならない」 という形で返ってきます。 実測でずれは正確に `(parties - 1) × d × e` です。\n\n## triple を 2 度使うと何が起きるか\n\n何も壊れません。 `C` は正しく出ます。 壊れるのは mask のほうで、 同じ `x` で 2 つの値を隠すと、 その 2 つの差が公開されます。 だから `reserve_triple` は 2 度目を例外にします — docstring での注意ではなく、 API として。 「triple の再利用は性能の話」 という誤解は、 性能の話であるうちは何も起きないので生き延びます。\n\n## dealer が検算できて、 本物の protocol ができないこと\n\n`reserve_triple` は `z == x * y` を確認してから triple を渡します。 **本物の protocol はこれができません。** party は share しか持たず、 積を確認することは 3 つとも再構成することで、 それは mask を破壊します。 本物の preprocessing は triple をもう 1 つ潰して 1 つを検査する (sacrificing) か、 malicious-secure な protocol で triple を生成します。 ここでは trusted dealer が自分の仕事を検算しているだけで、 その限界は暗黙にせず書いてあります。\n\n## artifact に平文を入れない\n\n`[C]` はあと 1 回 `open` すれば `C = A × B` を満たす整数になり、 それらしい proof artifact に見えます。 入れてはいけません。 本物の prover の次の段は sharing を消費しますし、 平文の `C` は witness 由来の値を理由なく公開したものです。 `d` と `e` は公開値で transcript には属しますが、 artifact には属しません。\n\nmetadata も飾りではありません。 どの relation の、 どの体の、 何 party 分かを言わない artifact は何とも突き合わせられず、 別の relation の名札が付いた `C` は誰もしていない主張の valid な proof です。\n\n## toy と production の差\n\nfield は列挙できる小さい素数、 party は 2〜5、 敵対者は不在、 triple は trusted dealer が配ります。 本物の co-SNARK では triple の調達が設計の中心で、 online phase の 1 round はその preprocessing を前提にした数字です。 コストは消えたのではなく、 input に依存しない側へ移動しただけです。\n\n## 対象外\n\n実際の proof encoding / verification、 複数の乗算 layer の scheduling 最適化、 malicious-secure triple、 network transport。",
   "tags": [
     "advanced-cryptography-2026",
@@ -85,8 +85,18 @@
         "hints": [
           {
             "id": "plan-hint-1",
-            "content": "triple 数と開示数は layer の幅に比例します。 round は違います。 layer の中の乗算は互いを待たないので、 d も e も全部同時に計算でき、 まとめて出ていきます。 数えているのは 「何回待ち合わせるか」 です。 幅 0 の layer で自分の式を試してください。 それから `local` は数ではなく演算名で、 `open` はそこに入りません。",
-            "penalty": 12
+            "content": "待ち合わせ前に通信の費用を数えます。開示2個は同じ待ち合わせにまとめます。",
+            "penalty": 2
+          },
+          {
+            "id": "plan-hint-2",
+            "content": "products=2・3人ならtriple2、open4、message12、round1。products=0はすべて0。",
+            "penalty": 2
+          },
+          {
+            "id": "plan-hint-3",
+            "content": "multiplication_planで無料の型条件を検査→productsから各費用→planへ提出。 解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -99,8 +109,18 @@
         "hints": [
           {
             "id": "triple-hint-1",
-            "content": "runtime が拒否するもの (再利用・不正形・`z != x*y`・別 setting) は、 捕まえずにそのまま通してください。 壊れた triple で続けると `C` がただ間違うだけですが、 **再利用**した triple で続けると `C` は完璧に正しく出ます。 runtime に見えないものが 1 つあります: relation です。 それと triple が食い違っていないかは、 relation を持っているあなたにしか訊けません。 `consumed` も runtime の台帳で、 この呼び出しの領収書ではありません。",
-            "penalty": 14
+            "content": "予約は一度きりの覆いを消費する操作です。関係の体と人数も一致させます。",
+            "penalty": 2
+          },
+          {
+            "id": "triple-hint-2",
+            "content": "F7の関係へF11の三つ組は使えません。前に1個使用済みなら台帳はそのidも含みます。",
+            "penalty": 2
+          },
+          {
+            "id": "triple-hint-3",
+            "content": "reserve_fresh_tripleで体と人数比較→reserve_triple→consumed_triplesをtupleへ→triple提出。 解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -113,8 +133,18 @@
         "hints": [
           {
             "id": "masks-hint-1",
-            "content": "`A = d + x` と `B = e + y` になるように `[d]` と `[e]` を置いてから、 `A × B` を展開してみてください。 引く向きも、 どちらの mask がどちらの半分に付くかも、 そこから出ます。 間違えても sharing としては完全に正しい形のものが 2 つできて、 気づくのは 4 段あとに積が合わないときです。 この段では何も open しません。",
-            "penalty": 16
+            "content": "秘密から覆いを引いた共有値を各partyが作ります。まだ開示しません。",
+            "penalty": 2
+          },
+          {
+            "id": "masks-hint-2",
+            "content": "p=7,A=3,x=1ならd=2。d+x=3へ戻る向きです。",
+            "penalty": 2
+          },
+          {
+            "id": "masks-hint-3",
+            "content": "masked_operandsでparty_scope(i)→A[i]−x[i]とB[i]−y[i]→tupleへ→masks提出。 解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -127,8 +157,18 @@
         "hints": [
           {
             "id": "open-hint-1",
-            "content": "round は開示した値の数ではありません。 runtime は開示のたびに渡された roundId を刻み、 同じ id を持つ開示は 「一緒に起きた」 ものとして数えられます。 それが batch です。 報告する 2 つの数は `runtime.openings()` から出します — この checkpoint は、 **すでに何かを開示済みの** runtime を渡してきます。 そのとき正解は 2 と 1 ではありません。",
-            "penalty": 18
+            "content": "同じroundIdを持つ開示を一度の待ち合わせとして数えます。",
+            "penalty": 2
+          },
+          {
+            "id": "open-hint-2",
+            "content": "記録のidがold,new,newなら開示3個、round2個です。",
+            "penalty": 2
+          },
+          {
+            "id": "open-hint-3",
+            "content": "open_masksで同idのopen2回→全recordsの長さとid集合の長さ→open提出。 解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -141,8 +181,18 @@
         "hints": [
           {
             "id": "product-hint-1",
-            "content": "`[z]`、 `d[y]`、 `e[x]` は共有値の公開定数倍と加算なので、 全 party が自分の share に対して行います。 `de` は違います。 これは全員が知っている 1 つの数で、 `[de]` という共有値は存在しません。 全 party の share に足すと `value + parties × de` の sharing になります。 `add_public` は言われた通りに現在の party の share へ畳みます。 それから round id は relation を名乗らせてください。",
-            "penalty": 18
+            "content": "展開の4項で積を共有したまま作ります。公開定数は全体に一度だけ足します。",
+            "penalty": 2
+          },
+          {
+            "id": "product-hint-2",
+            "content": "p=7,z=2,d=e=2,x=1,y=2なら2+4+2+4=12→5。",
+            "penalty": 2
+          },
+          {
+            "id": "product-hint-3",
+            "content": "shared_productを各partyの4項で実装→prove_productで予約から接続→product提出。 解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -155,8 +205,18 @@
         "hints": [
           {
             "id": "artifact-hint-1",
-            "content": "鍵は `C` の型です。 あと 1 回 open すれば `C = A × B` を満たす整数が手に入り、 proof artifact としてそれらしく見えます。 本物の prover の次の段は sharing を消費しますし、 平文の `C` は witness 由来の値を理由なく公開したものです。 `d` と `e` は公開値ですが transcript のものであって artifact のものではありません。 列挙された key ちょうど、 それ以外なしです。",
-            "penalty": 12
+            "content": "次の段へ整数ではなく共有値と識別名を渡します。",
+            "penalty": 2
+          },
+          {
+            "id": "artifact-hint-2",
+            "content": "Aが2人分のShareならartifactのAも2人分のtupleで、合計の整数ではありません。",
+            "penalty": 2
+          },
+          {
+            "id": "artifact-hint-3",
+            "content": "proof_artifactで一度実行→指定8キーを共有値のまま返す→artifact提出。 解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -169,17 +229,44 @@
         "hints": [
           {
             "id": "audit-hint-1",
-            "content": "6 つの欄はどれも runtime に訊けば分かります。 主張してはいけません。 `openings()` の各記録が持つ `maskedBy` は、 その開示の祖先にあった予約済み triple share です。 空なら、 何にも隠されていない値が公開されたということです。 runtime はそれを拒みません — 記録します。 `triplesConsumed` も `violations` も `reconstructAvailable` も、 決め打ちではなくその場の runtime に訊いてください。",
-            "penalty": 20
+            "content": "実行の記録を測ります。系譜は秘密性そのものの証明ではありません。",
+            "penalty": 2
+          },
+          {
+            "id": "audit-hint-2",
+            "content": "3記録中1個のmaskedByが空ならunmasked=1です。",
+            "penalty": 2
+          },
+          {
+            "id": "audit-hint-3",
+            "content": "privacy_auditで実行後の全記録→無料契約の6欄を測る→audit提出。 解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "transfer",
         "input": "multiline",
-        "label": "見たことのない設定で成立させる",
+        "label": "未見の設定と、マスク相殺の反例で確かめる",
         "points": 25,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "値が消えても演算の系譜は残ります。この違いを反例にします。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "3+2−2=3でも、式には2が登場します。秘密の値と履歴は違います。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "mask_cancellation_witnessで各partyのxを使う消える項を考える→Aに組み合わせる→通信せずtuple→transfer提出。 解答済みを確認します。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
@@ -188,7 +275,7 @@
       "name": "Multiply two values nobody holds, with one round of talking",
       "shortDescription": "You want the product of two secrets A and B that nobody holds in full, and neither may go back to plaintext. Using a triple (a Beaver triple) dealt in advance and a single round of opening, multiply them without A, B or the product ever becoming plaintext.",
       "description": "Week 6's second problem. The previous one (`ac26-w6-cosnark-linear`) built the linear half of a co-SNARK prover's row and it cost zero rounds. This is the other half -- **the one that has to talk**.\n\n```text\nA = sum_j a_j w_j        B = sum_j b_j w_j        C = A * B        (mod p)\n```\n\n`[A]` and `[B]` are handed over already built. The product of the sums is not the sum of the products, so no arrangement of local operations produces `[C]`. One round of communication is the price, and Beaver's trick is what makes it exactly one.\n\n```text\n[d] = [A] - [x]        [e] = [B] - [y]        both local\nd, e opened                                   one round, two values\n[C] = [z] + d*[y] + e*[x] + d*e\n```\n\nThis is a transfer problem: `ac26-w2-beaver-mul` built the multiplication as general MPC, and here it goes into a co-SNARK prover one layer up. Spending the triple, batching d and e, and folding the public `d*e` at exactly one party -- Week 2's three lessons -- are what the prover's privacy rests on here.\n\nThe runtime is the same instrument as the previous problem's, and `open` is the only thing in it that communicates. A round is a **distinct roundId**, not an opened value, which makes \"two values, one round\" a measurement rather than a claim -- and it is what the `open` checkpoint grades. `reserve_triple` consumes: reserving the same triple twice raises, because the mask being uniform *exactly once* is the whole security of the step.\n\nOn scoring: this problem ships 31 deliberately broken implementations, and **24 of them reconstruct C to A * B on every shape**. `make reference-test` re-measures the count on every run. The one that matters opens `[A]` and `[B]` directly, multiplies in the clear, and re-shares the answer: it returns a perfect C at every seed and every shape, still costs one round, and still spends its triple. Measured, exactly **one** checkpoint kills it -- `audit` (plus `transfer`, which re-runs the same checks under another seed).\n\nThis is a toy and says so. The field is a small enumerable prime, there are two to five parties, the adversary is not semi-honest so much as absent, and a trusted dealer produces the triples. That dealer verifies `z = x*y` on its own work, which **a real protocol cannot do**: the parties hold only shares, and checking the product means reconstructing all three.",
-      "instructions": "## Addition was free. Only multiplication is stuck\n\nIn the previous problem (`ac26-w6-cosnark-linear`) you built the linear part of a co-SNARK — the proof that layers **splitting** (MPC) over **showing** (ZK). Multiplying by public numbers and adding finished with nobody communicating.\n\nWhat is left is multiplication, and it is **the one thing that cannot proceed split** — the product of the pieces is not the sum of the products. That is why a co-SNARK's cost is measured in \"how many multiplications\".\n\n## Multiply without going back to plaintext\n\nThere are two secrets A and B, neither held by anyone in full, and you want the product A × B. But neither A nor B may **go back to plaintext** — reconstruct one to multiply it and the secret is gone at that point.\n\nDone naively, every multiplication costs one wait for everybody; a layer with a thousand multiplications costs a thousand waits, which is unusable. **What you build here folds the whole layer's waiting into a single round.** Threshold signatures in MPC wallets and matching in private DeFi run in exactly this shape.\n\n## Expanding a product gives the whole answer (year 9)\n\n`(d + x)(e + y) = d·e + d·y + x·e + x·y`. Rename that last term z and **the answer to a multiplication is assembled out of two values you may publish (d and e) and three handed out in advance**. That is the whole of what follows.\n\nOne digit (remainders mod 7): the secrets to multiply are A = 3 and B = 4. The triple dealt in advance is (x, y, z) = (1, 2, 2), where z = 1 × 2. Publish only d = A − x = 2 and e = B − y = 2. Then z + d·y + e·x + d·e = 2 + 4 + 2 + 4 = 12, remainder 5; and A × B = 12 has remainder 5 too — they agree. **Only d and e left the building**; A, B and the product never appeared in the clear. And d and e are shifted by x and y, which nobody chose, so they say nothing on their own — **as long as that triple is never used twice**.\n\n## Before you start (skip if you know this)\n\nNumbers are \"remainders after dividing by a prime p\" (your p is shown by **Inspect evidence**). A **share** is one of the pieces a secret splits into, which add back up to it; square brackets, `[A]`, mean \"A, still in share form\". A **Beaver triple** is `[x]` `[y]` `[z]` with z = x·y, dealt before anyone knew what would be multiplied. **fresh** = used exactly once. **open** = bringing shares together to reveal one value; it is the only thing here that communicates. A **round** is one point where everyone waits for an opening; openings sent under the same round id are one round, however many there are.\n\nTriples come from `ac26-w2-beaver-mul`; the linear part is the previous problem. `[A]` and `[B]` — that previous problem's answer — **arrive already built**. You write what happens next.\n\n## The two hard parts\n\nThe first is **the number of waits**. Every d and every e is computable without waiting for any other, so the whole layer's masked values go out together. Whatever the layer's width, there is one wait — that design decision is the first checkpoint.\n\nThe second is **reusing a cover**. d says nothing only because x is a one-time cover. Use the same triple twice and the difference between the two d values is exactly the difference between the two A values: the answers stay correct while the cover comes off. And publishing a value with *no* cover lets the arithmetic proceed correctly too — so \"the triple was not reused\" and \"nothing went out bare\" are confirmed **from the record (what was covering each value)**, not from expectation.\n\n## First move\n\nIn Participant Portal (the site showing this statement), select **起動 (Start)**. Your own container starts and the **problem editor** appears on the same page. The one file you edit is **`prover.py`** and the language is **Python**. Eight function stubs are already there, each documenting its arguments, return shape and raising conditions in its docstring.\n\nSelect **Inspect evidence** to see the values built for this start only. It prints five blocks:\n\n1. **Your setting** — p and the field's name, the party count, the witness length, the setting id.\n2. **One relation row** — the public coefficient vectors `a` and `b`, its id, and the relationship: A = Σ a_j w_j, B = Σ b_j w_j, and what you build is C = A × B.\n3. **The two halves you are handed** — the share **ids only** of `[A]` and `[B]`, in party order. This is the previous problem's answer, already built. **No values are printed.**\n4. **The triple you are dealt** — its id, field name, party count, and the share ids of `[x]`, `[y]`, `[z]`. **No values are printed** (z = x·y was fixed before anyone knew what would be multiplied).\n5. **What one opening leaves in the record** — two demo openings of public values, their `rounds` and `messages`, and how the two records differ.\n\n**Read block 5 carefully.** Both openings went out under the same round id, so `rounds` is 1 while `messages` is larger. The first record carries a `maskedBy` (what was covering it); the second one is **empty**. The empty one was **not refused** — it was merely recorded. That a value published with nothing hiding it lets the arithmetic downstream stay perfectly correct is exactly what the last checkpoint is about.\n\nEvery number changes per start, so copying someone else's values will not match.\n\n**Run public tests** checks shapes only — that each function returns the declared type and fields and that one honest round trip works. It cannot tell a right answer from a plausible wrong one. To put the editor back the way it started, select **Restore starter**.\n\n## What you answer — eight checkpoints, in this order\n\nAll eight are **code checkpoints**; there is no answer field to type into. The whole flow is: write in the editor, then press that checkpoint's **Submit (+points)**. Whatever is in `prover.py` at that moment is sent for grading — **one file graded from eight angles**. A wrong answer can be resubmitted; each wrong attempt costs 15 points and the total never falls below zero. The checkpoints are independent, so being stuck on one does not block the rest.\n\n1. **plan** — `multiplication_plan(relation, products=1) -> dict`. **Before a single message goes out**, cost a layer of `products` multiplications: `{\"products\", \"triples\", \"opens\", \"rounds\", \"messages\", \"local\", \"fieldId\", \"relationId\"}`. `rounds` is not the number of opened values and not one per multiplication (a layer of no width is the one different case). `local` is the sorted operation **names**, not a count, and `open` is not among them — write out the four terms above and read off which call builds each. Raise `ValueError` for a relation that is not one and for a negative layer width.\n2. **triple** — `reserve_fresh_triple(runtime, relation, triple) -> dict`. Check the triple, spend it, and return `{\"tripleId\", \"fieldId\", \"parties\", \"consumed\"}`, where `consumed` is **asked of** the runtime rather than assumed. Let the runtime's own refusals through instead of catching them (reused, malformed, z ≠ x·y, drawn for another setting). There is exactly one thing the runtime cannot check, because only you are holding it.\n3. **masks** — `masked_operands(runtime, triple, halves) -> dict`. `halves` is `{\"A\": …, \"B\": …}`, one share per party; return `{\"d\": …, \"e\": …}` in the same form. **Nothing here communicates** — each party subtracts one share it holds from another it holds. Which mask goes with which half, and which way round the subtraction goes, are worth deriving from the expansion rather than remembering: both mistakes produce well-formed sharings and stay invisible for four more stages.\n4. **open** — `open_masks(runtime, round_id, masked) -> dict`. Open both together and return `{\"d\", \"e\", \"roundId\", \"openings\", \"rounds\"}`. `openings` and `rounds` are **read from** `runtime.openings()` — this checkpoint hands you a runtime that has already opened something.\n5. **product** — `shared_product(runtime, triple, d, e) -> tuple` and `prove_product(runtime, relation, halves, triple) -> dict`. The first returns `[z] + d·[y] + e·[x] + d·e`, one share per party. **The fourth term is not like the others** — `d·e` is a plain number everybody already knows, and there is no `[d·e]` to add. The second wires stages 1–4 together into `{\"A\", \"B\", \"C\", \"d\", \"e\", \"tripleId\", \"roundId\", \"rounds\"}`. You choose the round id, and both openings go out under the same one.\n6. **artifact** — `proof_artifact(runtime, relation, halves, triple) -> dict`, in the shape a next stage consumes: `{\"relationId\", \"fieldId\", \"parties\", \"A\", \"B\", \"C\", \"tripleId\", \"roundId\"}` and **no other keys**. `C` is the one to think about: one more `open` turns it into an ordinary integer satisfying `C = A × B` that looks like a perfectly good proof artifact, but what the next stage consumes is a sharing.\n7. **audit** — `privacy_audit(runtime, relation, halves, triple) -> dict`. Run the step, then report what the runtime recorded: `{\"opened\", \"rounds\", \"unmasked\", \"violations\", \"triplesConsumed\", \"reconstructAvailable\"}`. `unmasked` counts the openings whose `maskedBy` was empty — values published with nothing hiding them.\n8. **transfer** — your `prover.py` runs all of 1–7 again on **a p, a party count, a width and coefficients you have not seen**. An implementation that copied numbers off the screen fails here.\n\n## A correct answer is not proof of no leak\n\nThe multiplication cost one round trip, and `[C]` was built without A, B or the product ever becoming plaintext. Pass all eight and this problem is done. But \"returns the correct answer\" and \"leaked nothing on the way\" are two different things — the next problem (`ac26-w6-cosnark-privacy`) tells apart eight implementations that all return the same `C = A × B` by what each one lets slip. The \"publish only d and e\" shape you built here is its baseline.\n",
+      "instructions": "## Before you start\n\nUse signed arithmetic, multiplication, remainders and Python functions, tuples and dicts. Required APIs and formulas are given below for free.\n\n## Multiply shared secrets with one wait\n\nSecrets A,B are split into shares held by parties: adding the shares modulo p recovers a secret. [A] denotes A still shared. You receive [A],[B] and implement prover.py to construct [C]=[A*B] without opening them. Start the environment, edit in the problem editor, submit plan first.\n\nA supplied Beaver triple consists of [x],[y],[z], where z=x*y mod p. Open only d=A-x and e=B-y. Expanding gives\n\n```text\nA*B=(x+d)(y+e)=z+d*y+e*x+d*e (mod p)\n```\n\nAt p7,A3,B4,x1,y2,z2, d=e2 and2+4+2+4=12→5, matching the product. Code performs this with shared values, never opening A,B,C. These numbers explain the mechanism, not constants to copy. Required randomness assumptions are stated below.\n\n## Free implementation contract\n\nStart by editing multiplication_plan in prover.py, then submit plan. Solved means success. Run public tests reports PASS/FAIL; failures in later unfinished functions can remain while you advance. A sharing is a tuple of Share objects in party order starting at0, not a list of integers. A party is a participant, witness means secret inputs, relation is the dict describing the calculation. Σ adds all corresponding products.\n\nThis stage uses relation's p,parties,fieldId,relationId. p,parties,products must be integers excluding bool; require p>=2,parties>=2,products>=0, otherwise ValueError. Supplied p is prime; no primality test is required. fieldId is F followed by p, e.g. F7. relationId is a supplied string label. width,a,b belong to the previous stage and need no validation or recomputation here.\n\nPlan: triples=products, opens=2*products, messages=opens*parties. Each opening sends one share per party in this model. rounds=1 for positive products, otherwise0. local is (\"add\",\"add-public\",\"mul-public\",\"sub\") when products>0, otherwise(). Mask subtraction is included.\n\nruntime.setting is a dict containing p/parties. Triple has .id/.fieldId/.parties/.x/.y/.z. Before reserve_triple compare triple.fieldId with relation[\"fieldId\"] and triple.parties with relation[\"parties\"]; mismatch raises ValueError. relationId is not triple.id. Call runtime.reserve_triple(triple), letting its exceptions propagate. consumed is tuple(runtime.consumed_triples()).\n\n```python\nwith runtime.party_scope(i):  # i from0 to parties-1\n    difference = runtime.sub(left_share, right_share)\n# Same scope: add(left,right), mul_public(share,integer), add_public(share,integer).\n```\n\nArithmetic automatically reduces modulo p. Masks: d[i]=A[i]-x[i],e[i]=B[i]-y[i]. Product: each party builds z[i]+d*y[i]+e*x[i]; exactly one party, e.g. i=0, adds de with add_public. Adding at every party adds parties*de instead. No value reads are needed.\n\nOpen d and e with runtime.open(round_id,masked[\"d\"]) and the corresponding e call using the same id. Read records=runtime.openings(): openings=len(records), rounds=len({r[\"roundId\"] for r in records}). A set removes duplicates. Count earlier records too. prove_product chooses a name identifying relationId, e.g. relationId+\":mul\"; no earlier round with that name is supplied. Its reported rounds is the total, not the increment.\n\nartifact runs prove_product once and returns only its eight declared fields. audit also runs it once: opened=len(records), rounds as above, unmasked=count of empty maskedBy records, violations=len(runtime.violations()), triplesConsumed=tuple(runtime.consumed_triples()), reconstructAvailable=hasattr(runtime,\"reconstruct\"). hasattr returns whether that named feature exists.\n\n## Security assumptions and the record's limits\n\nThis is the shared multiplication component of co-SNARK, not ZK proof generation or verification. A trusted dealer samples x,y uniformly and independently of each other and the inputs, keeps their full values unknown to the adversary, and uses each triple once. Uniform means each remainder has equal probability; independent means learning one does not change the other's distribution. Single use alone is insufficient.\n\nAt p=3, a uniform x gives the same public d distribution for different secrets A:\n\n| secret A | x=0 | x=1 | x=2 |\n|---|---|---|---|\n| 1 | d=1 | d=0 | d=2 |\n| 2 | d=2 | d=1 | d=0 |\n\nEach row contains d=0,1,2 exactly once. In general x→(A-x)%p is one-to-one for fixed A, so each d has probability1/p. With an unknown uniform x independent of A, d does not distinguish A. Reusing x instead exposes d1-d2=A1-A2. Reuse breaks this secrecy, not the uniform marginal distribution itself.\n\nmaskedBy records Share ancestry, not a proof that a mask remains in the value. Ordinary arithmetic3+2-2=3 mentions2 but does not hide3. The last task tests this difference. The runtime is an observation instrument, not a security sandbox or a general secrecy proof.\n\n## transfer: construct a counterexample to ancestry implying secrecy\n\nBesides stages1-7 implement mask_cancellation_witness(runtime,halves,triple). The triple is already reserved; do not reserve again. Return a tuple of Shares in party order. Each must be produced by that party's runtime arithmetic, include that party's triple.x in its ancestry, yet the complete sharing must have the same value as A. Do not open, communicate or read values with value_of; combine existing add/sub/mul_public operations. Work out on paper which term disappears.\n\nGrading independently checks issuance, party, ancestry, reconstructed value and zero communication. Returning the input unchanged has no triple ancestry. These are synthetic audit test data; do not implement reconstruction. Submit the same prover.py to transfer and check all eight Solved states.\n\n",
       "writeup": "## A correct C is not evidence of a correct prover\n\nThis problem ships 31 deliberately broken implementations, and **24 of them reconstruct C to A * B on every shape**. `make reference-test` re-measures that count on every run; if it moves, the number moves with it.\n\n## Opening A and B first does not fail a single value test\n\nOpen `[A]` and `[B]` directly and you have the plaintext `A` and `B`. Multiply, re-share the answer. The `C` that comes out is perfectly correct at every seed and every shape, the round count is still one (put both openings under the same round id), and a triple is still spent. `prove_product`'s contract -- C is right, the schedule is one round -- is satisfied completely.\n\nWhat is not satisfied is that the only values published were masked ones. Measured, exactly **one** checkpoint kills it: `audit` (plus `transfer`, which re-runs the same checks under another seed). The only thing that sees it is `maskedBy` on each opening record -- whether a reserved triple share was in that opening's ancestry.\n\nThat is what the claim \"opening d and e reveals nothing about A and B\" actually rests on. It rests entirely on the `x` in `d = A - x` being uniform **and used once**. An unmasked opening does not meet that condition, so the same `open` operation means something different. The runtime does not refuse it. It records it -- refusing would make the shortcut impossible rather than visible.\n\n## What the audit proves, and what it does not\n\nIt proves that every value published on this runtime went out under a reserved mask, that no read was refused, and that triples were spent as the ledger says.\n\nIt does not prove that nobody ever saw A or B. As in the previous problem, opening each party's scope and reading that party's own share is legal, and doing it for every party gives you `A`. `Share._value` is one attribute access away besides. The runtime is an instrument, not a sandbox: it records what a computation published, not what its author looked at.\n\n## \"One round\" is the answer, not a measurement\n\nYou knew the answer was one round before writing a line, so a report that returns `rounds: 1` earns nothing. The `open` and `product` checkpoints hand you a runtime that has **already opened something**. The right answer there is not 1; it is that this step added one.\n\nA round not being an opened value is the same lesson. Two values in one round and two values in two rounds have identical output and differ only in latency -- which, in a real prover, accumulates once per multiplication layer in the circuit.\n\n## A public constant is folded in by one party\n\n`d*e` is a number everybody knows. There is no shared `[d*e]` to add. Adding it to every party's share gives a sharing of `value + parties*d*e`, which at two parties is off by exactly one `d*e`. The lesson Week 2 spent a checkpoint on comes back here as \"C is not A * B\", and the measured gap is exactly `(parties - 1) * d * e`.\n\n## What happens if you use a triple twice\n\nNothing breaks. `C` comes out right. What breaks is the mask: hiding two values behind the same `x` publishes their difference. That is why `reserve_triple` raises on the second reservation rather than discouraging it in a docstring. \"Triple reuse is a performance concern\" survives as a belief precisely because nothing visible happens while it is only a performance concern.\n\n## What the dealer checks and a real protocol cannot\n\n`reserve_triple` verifies `z == x * y` before handing the triple over. **A real protocol cannot do that.** The parties hold only shares, and checking the product would mean reconstructing all three, destroying the mask they exist to provide. Real preprocessing spends a second triple to check the first (sacrificing), or generates triples with a protocol that is maliciously secure end to end. Here a trusted dealer checks its own work, and the limitation is stated rather than implied.\n\n## No plaintext in the artifact\n\n`[C]` is one `open` away from an integer satisfying `C = A * B`, which would look like a perfectly good proof artifact. It is not one. A real prover's next stage consumes a sharing, and a plaintext `C` publishes a witness-derived value for no reason. `d` and `e` are public and belong to the transcript; they do not belong to the artifact either.\n\nMetadata is not decoration. An artifact that does not say which relation, which field and how many parties it is for cannot be checked against anything, and a `C` labelled with the wrong relation is a valid proof of a statement nobody made.\n\n## Toy versus production\n\nThe field is a small enumerable prime, there are two to five parties, the adversary is absent, and a trusted dealer produces the triples. In a real co-SNARK, where the triples come from is the centre of the design, and the online phase's single round is a number that assumes that preprocessing exists. The cost did not disappear; it moved to the input-independent side.\n\n## Not in scope\n\nActual proof encoding and verification, scheduling optimization across multiplication layers, malicious-secure triples, network transport.",
       "learningGoals": [
         "Say why shares add for free but multiplication alone needs communication",
@@ -208,17 +295,33 @@
           "hints": [
             {
               "id": "plan-hint-1",
-              "content": "Triples and openings scale with the layer's width. Rounds do not. Multiplications in a layer do not wait for each other, so every d and every e is computable at once and they all go out together -- what you are counting is how many times the parties stop and wait. Try your formula on a layer of width zero. And `local` is operation names, not a count, and `open` is not one of them."
+              "content": "Count communication before sending. Two openings share one wait."
+            },
+            {
+              "id": "plan-hint-2",
+              "content": "products=2 with3 parties:2 triples,4 opens,12 messages,1 round; products=0 gives zeros."
+            },
+            {
+              "id": "plan-hint-3",
+              "content": "In multiplication_plan validate the free type rules, compute costs from products, submit plan. Check Solved."
             }
           ]
         },
         {
           "id": "triple",
-          "label": "A mask is uniform exactly once",
+          "label": "Use each mask only once",
           "hints": [
             {
               "id": "triple-hint-1",
-              "content": "Let the runtime's refusals through rather than catching them (reuse, malformed, `z != x*y`, another setting). Continuing past a broken triple gives you a C that is merely wrong; continuing past a **reused** one gives you a C that is perfectly right. There is one thing the runtime cannot see: the relation. Whether the triple agrees with it is a question only you, holding it, can ask. And `consumed` is the runtime's ledger, not this call's receipt."
+              "content": "Reservation consumes a one-use mask. Match the relation field and party count."
+            },
+            {
+              "id": "triple-hint-2",
+              "content": "An F11 triple cannot serve an F7 relation. Earlier consumed IDs remain in the ledger."
+            },
+            {
+              "id": "triple-hint-3",
+              "content": "Compare field/parties, reserve_triple, read consumed_triples as a tuple, submit triple. Check Solved."
             }
           ]
         },
@@ -228,7 +331,15 @@
           "hints": [
             {
               "id": "masks-hint-1",
-              "content": "Put `[d]` and `[e]` where `A = d + x` and `B = e + y`, then expand `A * B`. Which way the subtraction goes and which mask pairs with which half both fall out of that. Get either wrong and you still get two perfectly well-formed sharings; you find out four stages later when the product does not match. Nothing is opened in this stage."
+              "content": "Each party subtracts its mask locally; nothing is opened."
+            },
+            {
+              "id": "masks-hint-2",
+              "content": "At p7,A3,x1 gives d2, so d+x=A."
+            },
+            {
+              "id": "masks-hint-3",
+              "content": "In each party_scope subtract A[i]-x[i] and B[i]-y[i], collect tuples, submit masks. Check Solved."
             }
           ]
         },
@@ -238,7 +349,15 @@
           "hints": [
             {
               "id": "open-hint-1",
-              "content": "A round is not an opened value. The runtime stamps every opening with the round id you passed, and openings carrying the same one are counted as having happened together -- that is what batching is. Both numbers you report come out of `runtime.openings()`, and this checkpoint hands you a runtime that has **already opened something**. The right answer there is not 2 and 1."
+              "content": "Openings sharing a roundId count as one wait."
+            },
+            {
+              "id": "open-hint-2",
+              "content": "IDs old,new,new mean3 openings and2 rounds."
+            },
+            {
+              "id": "open-hint-3",
+              "content": "Open twice under one id, count all records and distinct IDs, submit open. Check Solved."
             }
           ]
         },
@@ -248,7 +367,15 @@
           "hints": [
             {
               "id": "product-hint-1",
-              "content": "`[z]`, `d[y]` and `e[x]` are a shared value scaled by a public constant or added to another, so every party does all three on its own shares. `d*e` is not like them: it is one number everybody knows, and there is no shared `[d*e]`. Added to every party's share it gives a sharing of `value + parties*d*e`. `add_public` folds into the current party's share and does what it is told. Also: let the round id name the relation."
+              "content": "Expand four terms while keeping the product shared. Add the public constant once overall."
+            },
+            {
+              "id": "product-hint-2",
+              "content": "At p7,z2,d=e2,x1,y2:2+4+2+4=12→5."
+            },
+            {
+              "id": "product-hint-3",
+              "content": "Build the four terms per party, connect reservation through multiplication in prove_product, submit product. Check Solved."
             }
           ]
         },
@@ -258,7 +385,15 @@
           "hints": [
             {
               "id": "artifact-hint-1",
-              "content": "The type of `C` is the point. One more `open` gives you an integer satisfying `C = A * B` that looks like a perfectly good proof artifact. A real prover's next stage consumes a sharing, and a plaintext C publishes a witness-derived value for no reason. `d` and `e` are public but they belong to the transcript, not to the artifact. Exactly the listed keys, and no others."
+              "content": "Pass sharings and identity labels to the next stage, not plaintext."
+            },
+            {
+              "id": "artifact-hint-2",
+              "content": "Two-party A stays a tuple of two Shares, not its integer sum."
+            },
+            {
+              "id": "artifact-hint-3",
+              "content": "Run once in proof_artifact; return exactly8 declared fields with sharings intact; submit artifact. Check Solved."
             }
           ]
         },
@@ -268,13 +403,35 @@
           "hints": [
             {
               "id": "audit-hint-1",
-              "content": "All six fields are things the runtime can be asked. Do not assert them. Each record from `openings()` carries `maskedBy`: the reserved triple shares found in that opening's ancestry. An empty one means a value was published with nothing hiding it. The runtime does not refuse that -- it records it. `triplesConsumed`, `violations` and `reconstructAvailable` are questions for whichever runtime you were handed, not constants."
+              "content": "Measure actual records. Ancestry is not itself a secrecy proof."
+            },
+            {
+              "id": "audit-hint-2",
+              "content": "One empty maskedBy among3 records gives unmasked1."
+            },
+            {
+              "id": "audit-hint-3",
+              "content": "Run the step, measure all six documented fields from records, submit audit. Check Solved."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in a setting you have not seen"
+          "label": "Check unseen settings and a mask-cancellation counterexample",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "A value can cancel while its ancestry remains. Construct that counterexample."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "3+2-2=3 still mentions2: value and history differ."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "In mask_cancellation_witness design a cancelling term using each party x, combine with A, return tuple without communication, submit transfer. Check Solved."
+            }
+          ]
         }
       ]
     }

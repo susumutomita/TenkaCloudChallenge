@@ -69,3 +69,4 @@ COPY tests/hidden/ ./tests/hidden/
 COPY verifier/ ./verifier/
 COPY reference/ ./reference/
 COPY mutation.py ./mutation.py
+COPY tests/test_cancellation.py ./tests/test_cancellation.py

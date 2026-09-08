@@ -184,3 +184,9 @@ Zero. No cloud account, no AWS resources.
 verifier. It prints how many of the 31 still reconstruct `C` to `A * B`, which is the number
 this README quotes — if a later edit makes the checkpoints cheaper, that number moves and the
 claim has to move with it.
+
+## Hint staircase and final construction
+
+The final transfer also requires mask_cancellation_witness: construct local issued shares that preserve A while retaining triple.x ancestry. This distinguishes the runtime log from a secrecy proof. All eight checkpoints have three hints at two points each (48 total). Required formulas and APIs are free in metadata; the new public test demonstrates cancellation.
+
+`make reference-test` runs the six construction regressions through `mutation.py` and then the existing 32-mutation suite; all passed in the host author run. Participant-only independent reading caught four instruction inconsistencies, now corrected. The actual Workbench handler methods fetched the starter, prepared a submission and ran nine public tests successfully. HTTP binding was unavailable in the sandbox; browser play, remote scoring and deployment were not tested. Catalog validation passed for 116 entries.
