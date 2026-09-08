@@ -76,3 +76,11 @@ Aggregation for Privacy-Preserving Machine Learning (CCS 2017)](https://research
 
 This record covers #780's participant flow criteria. It does not declare every
 cryptography curriculum Issue, every game task, or the entire platform complete.
+
+### Review follow-up: hint layout and cipher answer count
+
+- Actual local harness at 390px width: revealed RPS hint paragraphs compute as `display: block`, with two inline superscripts and equal content/scroll widths (326px). The 390×1200 screenshot below shows the mathematical paragraph without horizontal overflow. This verifies the hint; it is not a complete mobile playtest.
+- The one-value Vigenère Order now says to enter one number, shows no multi-value spacing example, and uses the one-number placeholder. Verified in the real rendered DOM. Caesar still derives the spacing example from its five-value row.
+- RSA's second hint defines the rendered superscript, rather than a standalone caret token. Existing RSA/RPS screen readers retain exponent boundaries in their test parsing.
+
+![RPS mathematical hint at 390px](evidence/issue780-hint-math-mobile-ja.png)

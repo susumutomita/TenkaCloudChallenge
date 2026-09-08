@@ -5,6 +5,7 @@ import MathText from "../../portal/MathText.tsx";
 import RsaMaterials from "../../portal/RsaMaterials.tsx";
 import ConceptDiagram from "../../portal/ConceptDiagram.tsx";
 import { EXPLANATIONS } from "../../portal/ConceptExplanation.tsx";
+import { rsaGuide } from "./rsa-guide.ts";
 
 const math = (text: string) => renderToStaticMarkup(createElement(MathText, { children: text }));
 
@@ -27,6 +28,10 @@ describe("Issue #780: readable math in instructions and worked examples", () => 
       expect(html).toContain("3<sup>3</sup> mod 7");
       expect(html).not.toContain("^e");
       expect(html).not.toContain("3^3");
+      const hint = math(rsaGuide({ kind: "rsa-encrypt", n: 33, e: 3, plaintext: 4 }, 1)[locale]);
+      expect(hint).toContain("m<sup>e</sup>");
+      expect(hint).not.toContain("^e");
+      expect(hint).toContain(locale === "ja" ? "右上のe" : "superscript e");
     }
   });
 

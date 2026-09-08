@@ -908,7 +908,7 @@ ${SUCCESS_CSS}
 .tc-ticket-urgent .tc-ticket-fill{background:#d13212}
 .tc-ticket-urgent .tc-ticket-clock{color:#d13212}
 .tc-hints{margin-top:9px;border-top:1px dashed #c6d0da;padding-top:8px}
-.tc-hint-text{display:flex;gap:7px;font-size:12px;color:#1f2c3d;line-height:1.6;margin:0 0 6px}
+.tc-hint-text{font-size:12px;color:#1f2c3d;line-height:1.6;margin:0 0 6px;overflow-wrap:anywhere}
 .tc-hint-step{flex:none;width:17px;height:17px;border-radius:99px;background:#0b4c8c;color:#fff;font-size:10px;font-weight:900;display:inline-flex;align-items:center;justify-content:center;margin-top:2px}
 .tc-hint-button{width:100%;padding:7px 9px;border:2px solid #0b4c8c;border-radius:8px;background:#fff;color:#0b4c8c;font-size:11px;font-weight:900;letter-spacing:.05em;cursor:pointer}
 .tc-hint-button:disabled{opacity:.5;cursor:not-allowed}
@@ -1094,6 +1094,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
 
   const orders = useMemo(() => openOrders(projection), [projection]);
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0];
+  const selectedCipher = selectedOrder?.task.kind === "caesar-shift" ? selectedOrder.task : undefined;
+  const cipherFormatExample = selectedCipher?.plaintext
+    .map((_, index) => (index + 1) % selectedCipher.symbols.length).join(" ");
   // Pin the initial/fallback choice too: a newly arriving rush Order must not
   // replace the Order whose answer the participant is typing.
   useEffect(() => {
@@ -1478,10 +1481,12 @@ export default function FastMovePanel(props: PortalSlotProps) {
           </>}
           {(selectedOrder.task.kind === "rsa-encrypt" || selectedOrder.task.kind === "rotor-encrypt") && <CipherScoring order={selectedOrder} wrongCost={projection.wrongProveCost} locale={locale} />}
           {selectedOrder.task.kind === "caesar-shift" && <p id="tc-caesar-input-format" className="tc-card-hint">
-            {locale === "ja"
+            {selectedOrder.task.plaintext.length === 1
+              ? (locale === "ja" ? "暗号にした数字を1個だけ入力してください。" : "Enter one encrypted number.")
+              : locale === "ja"
               ? `暗号にした数字を、左から順に ${selectedOrder.task.plaintext.length} 個、半角スペースで区切って入力してください。`
               : `Enter all ${selectedOrder.task.plaintext.length} encrypted numbers in left-to-right order, separated by spaces.`}
-            <br />{locale === "ja" ? "区切り方の例：" : "Spacing example: "}<code>1 2 3 4 5</code>
+            {selectedOrder.task.plaintext.length > 1 && <><br />{locale === "ja" ? "区切り方の例：" : "Spacing example: "}<code>{cipherFormatExample}</code></>}
           </p>}
           <input
             ref={cipherInputRef}
@@ -1489,7 +1494,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             aria-label="fast-cipher-answer"
             value={cipherAnswer}
             onChange={(event) => setCipherAnswer(event.target.value)}
-            placeholder={selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "暗号の4文字（0〜3、空白区切り）" : "Four encrypted digits (0–3, spaces)") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : selectedOrder.task.kind === "caesar-shift" ? (locale === "ja" ? "数字を半角スペースで区切って入力" : "Numbers separated by spaces") : copy.cipherAnswer}
+            placeholder={selectedOrder.task.kind === "rotor-encrypt" ? (locale === "ja" ? "暗号の4文字（0〜3、空白区切り）" : "Four encrypted digits (0–3, spaces)") : selectedOrder.task.kind === "rsa-encrypt" ? (locale === "ja" ? "暗号の答え（整数1個）" : "Encrypted answer (one integer)") : selectedOrder.task.kind === "caesar-shift" ? (selectedOrder.task.plaintext.length === 1 ? (locale === "ja" ? "数字1個" : "One number") : (locale === "ja" ? "数字を半角スペースで区切って入力" : "Numbers separated by spaces")) : copy.cipherAnswer}
           />
           <button
             type="button"
