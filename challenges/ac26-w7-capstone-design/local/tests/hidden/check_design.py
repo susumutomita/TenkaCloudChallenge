@@ -14,6 +14,7 @@ with. Failure messages name the property that broke, never the expected value.
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,9 @@ from fixtures.generate import (  # noqa: E402
     variants,
 )
 
+# Keep the grading vocabulary independent of the mutable participant helper table.
+PRIMITIVES = deepcopy(PRIMITIVES)
+
 #: Every population a checkpoint is graded on.
 Brief = dict[str, Any]
 
@@ -38,6 +42,8 @@ REVEALING = frozenset({"plaintext", "public"})
 #: Attack kinds an experiment may declare. "happy-path" is deliberately absent: a plan made
 #: of things that already work is not an attack plan.
 ATTACK_KINDS = frozenset({"observe", "forge", "collude", "withhold", "replace"})
+
+VISIBILITIES = frozenset({"plaintext", "ciphertext", "share", "proof", "public"})
 
 CLASSIFICATIONS = frozenset({"public", "private", "derived-public", "derived-private"})
 
@@ -127,7 +133,7 @@ def _spec_covers(selection: list[str], required: dict[str, bool]) -> bool:
 def _call(module: Any, name: str, *args: Any) -> tuple[Any, str]:
     """Invoke one entry point, turning a raising submission into a failure rather than a crash."""
     try:
-        return getattr(module, name)(*args), ""
+        return getattr(module, name)(*deepcopy(args)), ""
     except AttributeError:
         return None, f"{name} is not defined"
     except Exception as error:  # noqa: BLE001 - a raising solution is a failing solution
@@ -135,7 +141,7 @@ def _call(module: Any, name: str, *args: Any) -> tuple[Any, str]:
 
 
 def _label(brief: Brief) -> str:
-    return brief["id"]
+    return "brief"
 
 
 # ---------------------------------------------------------------------------
@@ -210,43 +216,40 @@ def check_requirements(module: Any, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _strings(value: Any, *, unique: bool = True) -> bool:
+    return (isinstance(value, (list, tuple))
+            and all(isinstance(item, str) and item.strip() for item in value)
+            and (not unique or len(set(value)) == len(value)))
+
+
 def check_alternatives(module: Any, seed: str) -> list[str]:
     failures: list[str] = []
     for brief in population(seed):
         candidates, error = _call(module, "compare_alternatives", brief)
         if error:
-            failures.append(f"{_label(brief)}: {error}")
+            failures.append(error)
             continue
-        if not isinstance(candidates, list) or not candidates:
-            failures.append(f"{_label(brief)}: compare_alternatives did not return candidates")
+        if not isinstance(candidates, list) or len(candidates) != len(PRIMITIVES):
+            failures.append("comparison must contain every option exactly once")
             continue
-
         named = {}
         for candidate in candidates:
-            if not isinstance(candidate, dict) or "primitive" not in candidate:
-                failures.append(f"{_label(brief)}: a candidate has no primitive")
+            if not isinstance(candidate, dict) or not isinstance(candidate.get("primitive"), str):
+                failures.append("a candidate has no primitive name")
                 break
-            named[candidate["primitive"]] = candidate
-        else:
-            if "none" not in named:
-                failures.append(f"{_label(brief)}: the comparison omits the option that uses no cryptography")
-            if len(named) < 3:
-                failures.append(f"{_label(brief)}: fewer than three options were compared")
-            for name, candidate in named.items():
-                if name not in PRIMITIVES:
-                    failures.append(f"{_label(brief)}: a candidate names an option that does not exist")
-                    continue
-                if set(candidate.get("satisfies") or []) != set(PRIMITIVES[name]["provides"]):
-                    failures.append(f"{_label(brief)}: a candidate claims properties its option does not provide")
-                if not candidate.get("assumptions"):
-                    failures.append(f"{_label(brief)}: a candidate states no assumption")
-                if not candidate.get("non_goals"):
-                    failures.append(f"{_label(brief)}: a candidate states nothing it does not do")
-                if candidate.get("admissible") != _spec_admissible(name, brief):
-                    failures.append(
-                        f"{_label(brief)}: a candidate's availability under this brief's trust "
-                        "assumptions is wrong"
-                    )
+            name = candidate["primitive"]
+            if name in named or name not in PRIMITIVES:
+                failures.append("comparison contains a duplicate or unknown option")
+                break
+            named[name] = candidate
+            for field, table_field in (("satisfies", "provides"), ("assumptions", "assumptions"), ("non_goals", "non_goals")):
+                value = candidate.get(field)
+                if not _strings(value) or set(value) != set(PRIMITIVES[name][table_field]):
+                    failures.append(f"candidate {field} does not match the supplied option table")
+            if type(candidate.get("admissible")) is not bool or candidate["admissible"] != _spec_admissible(name, brief):
+                failures.append("candidate admissibility does not follow from the brief")
+        if set(named) != set(PRIMITIVES):
+            failures.append("comparison must contain every option exactly once")
     return failures
 
 
@@ -258,8 +261,8 @@ def check_alternatives(module: Any, seed: str) -> list[str]:
 def _selection_failures(brief: Brief, selection: Any) -> list[str]:
     """The four conditions a selection has to meet, for any brief."""
     label = _label(brief)
-    if not isinstance(selection, (list, tuple)):
-        return [f"{label}: the selection is not a list"]
+    if not _strings(selection):
+        return [f"{label}: selection must be a sequence of unique option names"]
     selection = list(selection)
     if len(set(selection)) != len(selection):
         return [f"{label}: the selection names the same option twice"]
@@ -306,68 +309,64 @@ def check_selection(module: Any, seed: str) -> list[str]:
 
 
 def _graph_failures(brief: Brief, selection: list[str], graph: Any) -> list[str]:
-    label = _label(brief)
-    if not isinstance(graph, dict) or "nodes" not in graph or "edges" not in graph:
-        return [f"{label}: the architecture is not a graph of nodes and edges"]
+    selection_errors = _selection_failures(brief, selection)
+    if selection_errors:
+        return selection_errors
+    if not isinstance(graph, dict) or not isinstance(graph.get("nodes"), list) or not isinstance(graph.get("edges"), list):
+        return ["architecture needs node and edge lists"]
     nodes, edges = graph["nodes"], graph["edges"]
-    if not isinstance(nodes, list) or not isinstance(edges, list) or not nodes:
-        return [f"{label}: the architecture has no components"]
-
-    failures: list[str] = []
+    if not nodes:
+        return ["architecture needs at least one component"]
     actors = {actor["id"] for actor in brief["actors"]}
     operator_of: dict[str, str] = {}
+    placed: set[str] = set()
     for node in nodes:
-        if not isinstance(node, dict) or "id" not in node or "operated_by" not in node:
-            return [f"{label}: a component has no id or nobody operating it"]
-        if node["operated_by"] not in actors:
-            failures.append(f"{label}: a component is operated by somebody the brief does not name")
+        if not isinstance(node, dict) or not isinstance(node.get("id"), str) or not node["id"].strip():
+            return ["component needs a nonempty string id"]
+        if node["id"] in operator_of:
+            return ["two components share an id"]
+        if not isinstance(node.get("operated_by"), str) or node["operated_by"] not in actors:
+            return ["component operator is not an actor in the brief"]
+        if not _strings(node.get("primitives")) or any(name not in PRIMITIVES for name in node["primitives"]):
+            return ["component primitives must be known, unique option names"]
+        if not _strings(node.get("trusts")):
+            return ["component trusts must be a sequence of unique component ids"]
         operator_of[node["id"]] = node["operated_by"]
-    if len(operator_of) != len(nodes):
-        failures.append(f"{label}: two components share an id")
-
-    placed = {p for node in nodes for p in (node.get("primitives") or [])}
-    if set(selection) - placed:
-        failures.append(f"{label}: a selected option is not placed on any component")
-
+        placed.update(node["primitives"])
+    if placed != set(selection):
+        return ["placed options must match the selection, without adding or omitting one"]
+    trusts = {node["id"]: node["trusts"] for node in nodes}
+    if any(target not in operator_of for targets in trusts.values() for target in targets):
+        return ["a trust points to a component that does not exist"]
     assets = {asset["id"]: asset for asset in brief["assets"]}
     carried: set[str] = set()
     for edge in edges:
-        if not isinstance(edge, dict) or not {"from", "to", "asset", "visibility"} <= set(edge):
-            return [f"{label}: an edge is missing an endpoint, an asset, or a type"]
+        if not isinstance(edge, dict) or any(not isinstance(edge.get(key), str) for key in ("from", "to", "asset", "visibility")):
+            return ["edge needs string endpoints, asset and visibility"]
         if edge["from"] not in operator_of or edge["to"] not in operator_of:
-            failures.append(f"{label}: an edge points at a component that does not exist")
-            continue
-        asset = assets.get(edge["asset"])
-        if asset is None:
-            failures.append(f"{label}: an edge carries an asset the brief does not name")
-            continue
+            return ["edge points to a component that does not exist"]
+        if edge["asset"] not in assets:
+            return ["edge carries an asset outside the brief"]
+        if edge["visibility"] not in VISIBILITIES:
+            return ["edge visibility is outside the five documented types"]
+        asset = assets[edge["asset"]]
         carried.add(edge["asset"])
-        # The boundary check. An asset handed over readably to somebody it must be hidden
-        # from is a leak, whatever the diagram says elsewhere.
         if edge["visibility"] in REVEALING and operator_of[edge["to"]] in asset["must_not_learn"]:
-            failures.append(f"{label}: an asset reaches a party in the clear that must not learn it")
-
-    if set(assets) - carried:
-        failures.append(f"{label}: an asset in the brief appears nowhere in the data flow")
-
-    # A component that trusts another, which trusts it back, has assumed its conclusion.
-    trusts = {node["id"]: list(node.get("trusts") or []) for node in nodes}
+            return ["an asset reaches a forbidden reader in readable form"]
+    if set(assets) != carried:
+        return ["every asset must appear in the data flow"]
     state: dict[str, int] = {}
-
     def cyclic(node: str) -> bool:
         if state.get(node) == 1:
             return True
         if state.get(node) == 2:
             return False
         state[node] = 1
-        if any(cyclic(nxt) for nxt in trusts.get(node, [])):
+        if any(cyclic(target) for target in trusts[node]):
             return True
         state[node] = 2
         return False
-
-    if any(cyclic(node) for node in trusts):
-        failures.append(f"{label}: the trust between components is circular")
-    return failures
+    return ["component trust is circular"] if any(cyclic(node) for node in trusts) else []
 
 
 def check_architecture(module: Any, seed: str) -> list[str]:
@@ -381,7 +380,7 @@ def check_architecture(module: Any, seed: str) -> list[str]:
         if error:
             failures.append(f"{_label(brief)}: {error}")
             continue
-        failures.extend(_graph_failures(brief, list(selection or []), graph))
+        failures.extend(_graph_failures(brief, selection, graph))
     return failures
 
 
@@ -390,42 +389,44 @@ def check_architecture(module: Any, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _plan_failures(brief: Brief, plan: Any) -> list[str]:
-    label = _label(brief)
-    if not isinstance(plan, list):
-        return [f"{label}: the attack plan is not a list"]
-    if len(plan) < 5:
-        return [f"{label}: the attack plan has fewer hypotheses than the design contract requires"]
-
-    failures: list[str] = []
+def _plan_failures(brief: Brief, graph: dict, plan: Any) -> list[str]:
+    if not isinstance(plan, list) or len(plan) < 5:
+        return ["attack plan must contain at least five entries"]
+    required_trusts = {(primitive, trusted) for node in graph["nodes"]
+                      for primitive in node["primitives"] for trusted in PRIMITIVES[primitive]["trusts"]}
     identifiers: set[str] = set()
     attacked: set[str] = set()
+    covered_trusts: set[tuple[str, str]] = set()
     for entry in plan:
-        if not isinstance(entry, dict) or not {"id", "property", "hypothesis", "experiment"} <= set(entry):
-            return [f"{label}: an attack is missing an id, a property, a hypothesis, or an experiment"]
+        if not isinstance(entry, dict) or not isinstance(entry.get("id"), str) or not entry["id"].strip():
+            return ["attack needs a nonempty string id"]
         if entry["id"] in identifiers:
-            failures.append(f"{label}: two attacks share an id")
+            return ["two attacks share an id"]
         identifiers.add(entry["id"])
-        if entry["property"] not in PROPERTIES:
-            failures.append(f"{label}: an attack targets something that is not a property")
-            continue
+        if not isinstance(entry.get("property"), str) or entry["property"] not in PROPERTIES:
+            return ["attack property is outside the supplied vocabulary"]
         attacked.add(entry["property"])
-        experiment = entry["experiment"]
-        if not isinstance(experiment, dict):
-            failures.append(f"{label}: an attack has no experiment")
-            continue
-        if experiment.get("kind") not in ATTACK_KINDS:
-            failures.append(f"{label}: an experiment does not describe an attack")
-        if not str(experiment.get("observable") or "").strip():
-            failures.append(f"{label}: an experiment names nothing that would be observed")
-        if not str(experiment.get("expected") or "").strip():
-            failures.append(f"{label}: an experiment states no expected outcome")
-
-    for prop, needed in _spec_requirements(brief).items():
-        if needed and prop not in attacked:
-            failures.append(f"{label}: a required property is never attacked")
-            break
-    return failures
+        if not isinstance(entry.get("hypothesis"), str) or not entry["hypothesis"].strip():
+            return ["attack needs a nonempty hypothesis"]
+        experiment = entry.get("experiment")
+        if not isinstance(experiment, dict) or not isinstance(experiment.get("kind"), str) or experiment["kind"] not in ATTACK_KINDS:
+            return ["experiment needs one of the five documented attack kinds"]
+        if any(not isinstance(experiment.get(key), str) or not experiment[key].strip() for key in ("observable", "expected")):
+            return ["experiment needs nonempty observable and expected text"]
+        if "assumption" in entry:
+            assumption = entry["assumption"]
+            if (not isinstance(assumption, dict) or not isinstance(assumption.get("primitive"), str)
+                    or not isinstance(assumption.get("trust"), str)):
+                return ["assumption needs primitive and trust names"]
+            pair = (assumption["primitive"], assumption["trust"])
+            if pair not in required_trusts:
+                return ["attack cites an assumption not taken on by this architecture"]
+            covered_trusts.add(pair)
+    if any(needed and prop not in attacked for prop, needed in _spec_requirements(brief).items()):
+        return ["a required property has no attack"]
+    if covered_trusts != required_trusts:
+        return ["every placed option's trust assumption needs an attack"]
+    return []
 
 
 def check_attacks(module: Any, seed: str) -> list[str]:
@@ -439,11 +440,15 @@ def check_attacks(module: Any, seed: str) -> list[str]:
         if error:
             failures.append(f"{_label(brief)}: {error}")
             continue
+        graph_errors = _graph_failures(brief, selection, graph)
+        if graph_errors:
+            failures.extend(graph_errors)
+            continue
         plan, error = _call(module, "attack_plan", brief, graph)
         if error:
             failures.append(f"{_label(brief)}: {error}")
             continue
-        failures.extend(_plan_failures(brief, plan))
+        failures.extend(_plan_failures(brief, graph, plan))
     return failures
 
 
@@ -467,7 +472,7 @@ def _matrix_failures(brief: Brief, graph: Any, plan: Any, matrix: Any) -> list[s
     }
     actors = {actor["id"] for actor in brief["actors"]}
     assets = {asset["id"] for asset in brief["assets"]}
-    evidence_ids = {entry["id"] for entry in plan if isinstance(entry, dict) and "id" in entry}
+    evidence_properties = {entry["id"]: entry["property"] for entry in plan}
 
     failures: list[str] = []
     for prop, row in matrix.items():
@@ -487,9 +492,9 @@ def _matrix_failures(brief: Brief, graph: Any, plan: Any, matrix: Any) -> list[s
         # that does not implement it.
         if not any(prop in PRIMITIVES[name]["provides"] for name in primitives_at[component]):
             failures.append(f"{label}: a property is delegated to a component that does not provide it")
-        if row.get("evidence") not in evidence_ids:
-            failures.append(f"{label}: a property cites no experiment that exists in the attack plan")
-        if not str(row.get("limitation") or "").strip():
+        if evidence_properties.get(row.get("evidence")) != prop:
+            failures.append(f"{label}: evidence must name an attack on the same property")
+        if not isinstance(row.get("limitation"), str) or not row["limitation"].strip():
             failures.append(f"{label}: a property records no limitation")
     return failures
 
@@ -505,9 +510,17 @@ def check_matrix(module: Any, seed: str) -> list[str]:
         if error or not isinstance(graph, dict) or not isinstance(graph.get("nodes"), list):
             failures.append(f"{_label(brief)}: {error or 'the architecture is unusable'}")
             continue
+        graph_errors = _graph_failures(brief, selection, graph)
+        if graph_errors:
+            failures.extend(graph_errors)
+            continue
         plan, error = _call(module, "attack_plan", brief, graph)
         if error or not isinstance(plan, list):
             failures.append(f"{_label(brief)}: {error or 'the attack plan is unusable'}")
+            continue
+        plan_errors = _plan_failures(brief, graph, plan)
+        if plan_errors:
+            failures.extend(plan_errors)
             continue
         matrix, error = _call(module, "property_matrix", brief, graph)
         if error:
@@ -538,23 +551,35 @@ def check_revision(module: Any, seed: str) -> list[str]:
         if not isinstance(revised, dict):
             failures.append(f"{_label(brief)}: revise did not return a design")
             continue
-        if set(revised) < {"required", "selection", "architecture", "matrix"}:
+        if not {"required", "selection", "architecture", "matrix"} <= set(revised):
             failures.append(f"{_label(brief)}: the revised design is missing an artifact")
             continue
 
         expected = _spec_requirements(brief)
-        if revised["required"] != expected:
+        if (not isinstance(revised["required"], dict)
+                or any(type(value) is not bool for value in revised["required"].values())
+                or revised["required"] != expected):
             failures.append(f"{_label(brief)}: the revised requirements do not follow from the changed facts")
             continue
-        failures.extend(_selection_failures(brief, revised["selection"]))
+        selection_errors = _selection_failures(brief, revised["selection"])
+        if selection_errors:
+            failures.extend(selection_errors)
+            continue
         graph = revised["architecture"]
         if not isinstance(graph, dict) or not isinstance(graph.get("nodes"), list):
             failures.append(f"{_label(brief)}: the revised architecture is unusable")
             continue
-        failures.extend(_graph_failures(brief, list(revised["selection"] or []), graph))
+        graph_errors = _graph_failures(brief, revised["selection"], graph)
+        if graph_errors:
+            failures.extend(graph_errors)
+            continue
         plan, error = _call(module, "attack_plan", brief, graph)
         if error or not isinstance(plan, list):
             failures.append(f"{_label(brief)}: {error or 'the revised attack plan is unusable'}")
+            continue
+        plan_errors = _plan_failures(brief, graph, plan)
+        if plan_errors:
+            failures.extend(plan_errors)
             continue
         failures.extend(_matrix_failures(brief, graph, plan, revised["matrix"]))
     return failures

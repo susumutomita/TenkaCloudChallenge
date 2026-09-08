@@ -91,7 +91,7 @@ def required_properties(brief: dict[str, Any]) -> dict[str, bool]:
             source = _asset(brief, source_id)
             if source is None:
                 continue
-            if any(party in source["must_not_learn"] for party in asset["integrity_relied_on_by"]):
+            if any(party in source["must_not_learn"] for party in asset["integrity_relied_on_by"] if party != asset["owner"]):
                 required["zero_knowledge"] = True
 
     required["binding"] = bool(brief["constraints"].get("commit_then_reveal"))
@@ -410,6 +410,7 @@ def attack_plan(brief: dict[str, Any], graph: dict[str, Any]) -> list[dict[str, 
                         "id": identifier,
                         "property": "privacy" if required["privacy"] else "correctness",
                         "hypothesis": f"the {trusted} assumption behind {primitive} does not hold",
+                        "assumption": {"primitive": primitive, "trust": trusted},
                         "experiment": {
                             "kind": kind,
                             "observable": observable,

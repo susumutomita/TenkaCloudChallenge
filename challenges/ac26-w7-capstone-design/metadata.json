@@ -1,6 +1,6 @@
 {
   "id": "ac26-w7-capstone-design",
-  "name": "道具から決めない",
+  "name": "依頼書から暗号システムを設計する",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
@@ -26,10 +26,10 @@
   },
   "difficulty": 5,
   "estimatedDuration": "120-180 分",
-  "shortDescription": "依頼書には登場人物と守るべき情報と信頼関係しか書いていない。道具の名前は 1 つも出てこない。そこから必要な性質を導き、必要な分だけ選び、境界に型をつけ、前提が 1 つ動いた依頼書にもう一度答える。",
-  "description": "Week 7 の 1 問目、 role は synthesis。 Week 1〜6 の primitive を、 流行や library ではなく problem statement・adversary・公開可能情報・秘密情報・trust assumption から選ぶ設計問題として扱う。\n\n設計を自由記述で書かせて LLM に採点させると、 読める文章と正しい設計の区別がつかない。 そこでこの問題は設計を **コード** として書かせる。 brief を入力に取り、 asset 分類・required property・alternative 比較・selection・typed data flow・attack plan・property matrix を返す 8 つの関数である。 いずれも brief の関数として書ける。\n\n**採点の芯は最後の checkpoint にある**。 前提が 1 つ動いた brief (運営が信用できなくなる / 第三者が結果に依存し始める / 1 者欠けても完了しなければならない) 18 種と、 seed から生成されてどのファイルにも存在しない brief 12 種を渡す。 brief を読んで導出する実装なら 4 回呼ぶだけで通り、 答えを 1 度決めて書き込んだ実装はここだけ動かない。\n\n**選定規則は 3 条件 + 1 優先規則**。 required を被覆する / この brief が用意していない相手を信用しない / 1 つ外すと被覆が壊れる。 そしてその前に、 暗号が不要な brief には暗号を選ばない。 6 つの brief のうち `shift-board` がそれで、 ここで primitive を選ぶ実装は落ちる。\n\n**privacy と zero knowledge を分けてある**。 計算に参加する相手から隠すのが privacy、 自分で計算していない値を信じてもらうのが soundness、 信じてもらう値が隠したい値から導かれるときだけ zero knowledge。 `solvency-claim` は privacy を要求せず zero_knowledge を要求するbrief で、 両者を同一視した実装をここで落とす。\n\n**最小性が満たす組を一意に決めるとは限らない**。 `delegated-scoring` は MPC でも FHE でも通る。 採点は reference の出力と一致するかではなく、 被覆・許容・最小の 3 条件だけを見る。",
-  "instructions": "## Week 7 — 道具から決めない\n\nWeek 6 で、部品を組み合わせて「実際に作るもの」の層を通りました。Week 7 は、それを白紙から自分で設計します。この 1 問目は設計、もう 1 問(`ac26-w7-capstone-demo`)は実装です。\n\n## 道具から決めると、要らないものができる\n\n作るものを**道具から**決めると、たいてい要らないものができます。「zk を使おう」から始めた設計は、要求ではなく流行に合っている。多すぎる道具は、要らない前提を買っただけ。少なすぎる道具は、そもそも要求を満たしていない。\n\nだから順番を逆にします。**守りたいものから決める。道具はその後。** 渡されるのは依頼書(brief)という表で、そこには登場人物と守るべき情報と信頼関係しか書いておらず、**暗号の道具の名前は 1 つも出てきません**。道具を選ぶのは最後の決定であって、最初の決定ではないからです。\n\n## ちょうど足りる組を選ぶ\n\n6 種類の道具から「使う・使わない」を選ぶと、組み合わせは 2 を 6 回かけた 64 通り。その中から、**要求を全部満たし(被覆)、かつ 1 つ外すと満たせなくなる(最小)** 組を選ぶのが中心です。\n\n1 桁で見ます。依頼書が correctness(結果が正しい)・privacy(見せたくない人に見えない)・soundness(嘘の結果を通せない)の 3 つを要求したとします。**mpc** は correctness と privacy を、**zk** は correctness と soundness と zero knowledge を提供します。mpc だけでは soundness が足りず、zk だけでは privacy が足りない。だから最小の組は **{mpc, zk}**。mpc を外すと privacy が落ち、zk を外すと soundness が落ちる — これが「1 つ外すと壊れる」の意味です。道具ごとの提供物は「証拠を確認」に表で出ます。\n\n## 前提（知っていれば飛ばしてください）\n\n暗号は 1 つも動きません。**brief(依頼書)** = 何を守り、誰を信じてよいかを書いた仕様 1 件。**asset** = 守るべき情報 1 件で、持ち主・読んでよい人・知ってはいけない人・その正しさに寄りかかっている人・何から作られたかが書かれます。**property(性質)** = 設計が要求されうる 6 つ(correctness / privacy / soundness / zero_knowledge / binding / availability)。**primitive(道具)** = 選べる 6 つで、**そのうち 1 つは「暗号を使わない」**です。**admissible(使える)** = その道具が信じろと言ってくる相手が、この依頼書に実在すること。**被覆** = 要求された性質を全部満たすこと。**最小性** = 1 つ外すと被覆が壊れること。\n\n## 守るものから、順に導く\n\n**守りたいものから決める。道具はその後。** 事実から順に導きます: 守るものを並べる → 要求される性質を取り出す → 選択肢を全部比べる(**暗号を使わない案も含めて**。含めないと、暗号が何を買ってくれたのかを示せません)→ ちょうど足りる組を選ぶ → 何がどんな形で境界を越えるかを書く → どう壊れうるかを観測できる形で書く → 性質ごとに誰が担うのかを表にする。最後に、**事実が 1 つだけ変わった依頼書**が渡されます。前の 7 つが依頼書を読んで導いていれば、最後の 1 つは 4 回呼ぶだけ。どこかで答えを一度決めて書き込んでいたら、それが出るのはここです。\n\n## 最初の一手\n\nParticipant Portal(この問題文が表示されているサイト)で **「起動」** を押すと、あなた専用の実行環境(コンテナ)が立ち上がり、問題文と同じ画面に **問題エディタ** が出ます。\n\n書くファイルは **`design.py` 1 つだけ**、言語は **Python** です。**提出するのは文章の設計書ではなく、コードです** — 依頼書(辞書)を受け取って答えを返す 8 つの関数の枠が最初から入っていて、引数・返り値の形は各関数の先頭の説明文(docstring)に書いてあります。\n\n**「証拠を確認」** を押すと、この起動のためだけに作られた値が表示されます。出るのは次の 3 つです。\n\n1. **語彙** — 6 つの性質の名前と、6 つの選択肢それぞれについて「提供するもの / 代わりに信じることになるもの / **よく誤解されるが提供しないもの**」。この表は玩具向けに単純化したものだと明記されています。\n2. **あなたの依頼書** — id と一文の説明、登場人物とその役割、asset ごとの持ち主・読んでよい人・知ってはいけない人・正しさに寄りかかっている人・何から作られたか、そして条件の一覧。\n3. **事実が 1 つ変わったあとの、同じ依頼書** — 8 番目の checkpoint で答える相手です。要求そのものは書き直されていません。**変わった事実から、あなたが読み直します。**\n\n**まず 2 番と 3 番を、コードを書く前に手で見比べてください。** どの行が変わっていて、その 1 行が要求のどれを動かすのか。それが分かった時点で、この問題の骨組みは全部見えています。\n\n数はどれも起動するたびに変わるので、他の人の値を写しても合いません。**「公開テストを実行」** を押すと形だけの検査ができ、`print()` を仕込んだときの出力もここに返ります。エディタを最初の状態に戻したくなったら **「初期状態に戻す」** を押します。\n\n## 答えるもの — checkpoint は 8 つ、この順で\n\n8 つとも**コードの checkpoint**で、答えを直接書き込む欄はありません。手順は「エディタに書く → その checkpoint の **「提出 (+点数)」** を押す」だけで、押した時点の `design.py` 全体がそのまま採点へ送られます — **同じ 1 ファイルを 8 通りの角度から採点します**。不正解でも出し直せます(1 回まちがえるごとに 15 点引かれますが、合計が 0 点未満になることはありません)。checkpoint は独立なので、1 つ詰まっても他は取れます。\n\n1. **assets** — `classify_assets(brief) -> dict`。依頼書のすべての asset を `{\"owner\": …, \"classification\": …}` にします。分類は `public` / `private` / `derived-public` / `derived-private` の 4 つで、依頼書の**2 つの事実**から決まります(好みの問題ではありません)。**1 件でも分類し忘れたら、その 1 件は誰も守っていません。**\n2. **requirements** — `required_properties(brief) -> dict`。6 つの性質それぞれに、要る / 要らないを付けます。3 つ注意点があります。**結果を作る側から隠すこと**と、**結果を読むだけの人から隠すこと**は同じ要求ではありません。**自分で計算していない値に寄りかかって行動する人**がいると soundness が要ります。そして soundness だけなら普通の署名で足ります — zero_knowledge も要るためには、**その寄りかかられている値が何から作られたか**を見る必要があります。\n3. **alternatives** — `compare_alternatives(brief) -> list`。選択肢 1 つにつき 1 件、`{\"primitive\", \"satisfies\", \"assumptions\", \"non_goals\", \"admissible\"}` を返します。前の 4 つは表を引くだけですが、**`admissible` だけは依頼書を読みます** — その道具が「この相手を信じてください」と言ってきたとき、その相手が依頼書に**実在するか**を見ます(世界についての仮定なら、どこでも使えます)。**「暗号を使わない」案を必ず入れてください。**\n4. **selection** — `select_primitive(brief) -> list`。使う選択肢の一覧を返します。先に効く規則が 1 つ: **暗号が提供するものを依頼書が 1 つも要求していないなら、答えは「使わない」です。** そのうえで 3 条件 — 要求した性質を全部覆う、どれも admissible、そして**どれか 1 つ外すと覆えなくなる**。複数の道具が要る依頼書もあります。\n5. **architecture** — `architecture(brief, selection) -> dict`。`{\"nodes\": [...], \"edges\": [...]}` の図を返します。node は `{\"id\", \"operated_by\", \"primitives\", \"trusts\"}`、edge は `{\"from\", \"to\", \"asset\", \"visibility\"}` で、visibility は `plaintext` / `ciphertext` / `share` / `proof` / `public` のどれか。**この型が設計の中身です** — 「記録が評価器へ届く」は何も言っていませんが、「暗号文として届く」は、まちがえられる主張です。図がふつう隠す 2 点が見られます: 知ってはいけない人のところへ**読める形で**着く asset が無いこと、そして**依頼書の asset が全部どこかに現れる**こと。\n6. **attacks** — `attack_plan(brief, graph) -> list`。**5 件以上**の「こう壊れるかもしれない」を返します。1 件は `{\"id\", \"property\", \"hypothesis\", \"experiment\"}` で、`experiment` は `{\"kind\", \"observable\", \"expected\"}`。**観測できるものが書かれていない項目は、ただの感想です。** 要求した性質にはそれぞれ 1 件以上。そして、**設計が引き受けた「信じること」1 つ 1 つが、そのまま誰かの攻撃です** — うまくいく筋道だけを見て書いた計画が必ず落とすのがここです。\n7. **matrix** — `property_matrix(brief, graph) -> dict`。要求した性質 1 つにつき 1 行、`{\"asset\", \"adversary\", \"component\", \"evidence\", \"limitation\"}` を返します。`component` は 5 番の図の node 名、`evidence` は 6 番の項目の id、`limitation` は「道具が仕事をしたあとも、まだ何に寄りかかっているか」。**間違えやすいのは `component` です** — その部品が実際に提供している性質しか担当できません。語彙の表の「**提供しないもの**」の欄を必ず確かめてください。\n8. **revision** — `revise(brief) -> dict`。事実が 1 つ変わった依頼書に対して、`{\"required\", \"selection\", \"architecture\", \"matrix\"}` を返します。**新しく考えることはありません。**\n\n## 選んだものを、次に動かす\n\nすべての asset を分類し、要求される性質だけを取り出し、暗号を使わない案を含めて全選択肢を比べ、ちょうど足りる組を選び、境界を越える値に型を付け、観測できる形で壊れ方を書き、性質ごとの担当と限界を表にできたら — そして事実が 1 つ動いた依頼書でも同じ導出から答えが出たら終わりです。\n\nここで選んだ道具を、次の `ac26-w7-capstone-demo` が実際に動かし、その主張を実験で裏づけます。設計が「何を選ぶか」で終わるのに対し、実装は「本当にそうなっているか」を測るところまでやります。\n",
-  "writeup": "## 道具から始めない\n\n設計を 「ZK を使うか、 MPC を使うか」 から始めると、 その質問には答えが出る。 出た答えが問題に合っているかは、 別の話である。\n\nこの問題の brief は primitive の名前を 1 つも含んでいない。 含んでいるのは、 誰がいて、 何があって、 誰が何を知ってはいけなくて、 誰が自分で計算していない値を信じるか、 だけである。 そこから必要な property が決まり、 property から選択肢が決まる。 順序が逆になった設計は、 だいたい正しく動いて、 だいたい間違ったものを守っている。\n\n## privacy と zero knowledge は別の欄\n\n`balance` を lender に見せたくない。 これは privacy だろうか。\n\nlender は計算に参加しない。 答えを読むだけである。 つまり 「計算する側から隠す」 話ではなく、 「自分で計算していない値を信じてもらう」 話になる。 前者が privacy、 後者が soundness であり、 信じてもらう値が隠したい値から導かれているときに初めて zero knowledge が要る。\n\nsoundness だけなら、 ただの署名でよい。 この 2 つを一緒にすると、 署名で済む場所に証明系を持ち込むことになる。\n\n## 最小性が効く場所\n\n選んだ組から 1 つ外してみて、 まだ全部の要求を満たしているなら、 その 1 つは何もしていない。 何もしていない primitive は無害ではない。 前提が 1 つ増え、 攻撃面が 1 つ増え、 説明すべきことが 1 つ増える。\n\n`shift-board` は暗号を必要としない brief として入れてある。 秘密が無く、 誰も運営を疑っておらず、 誰も他人の計算結果に依存していない。 ここで primitive を選んだ設計は、 問題ではなく道具から始めている。\n\nなお、 満たす最小の組は 1 つとは限らない。 `delegated-scoring` は MPC でも FHE でも通る。 採点は 「必要を満たし、 この brief が用意していない相手を信用せず、 何も余分でない」 かどうかだけを見る。\n\n## non_goals は飾りではない\n\n`PRIMITIVES` の各 option には `non_goals` がある。 FHE は鍵管理を無くさない。 復号鍵を持つ誰かがいて、 その誰かは脅威モデルの登場人物のままである。 MPC は結託の仮定を無くさない。 置き換えるだけである。 ZK は public input を隠さない。\n\nproperty matrix で 「この component が privacy を担う」 と書くとき、 その component が実装している option が本当に privacy を提供するのかを見る。 提供しないものに委ねた設計は、 図の上では完成している。\n\n## 導出した設計と、決めた設計\n\n最後の checkpoint は、 前提が 1 つ動いた brief を渡す。 運営が信用できなくなる、 第三者が結果に依存し始める、 1 者が落ちても完了しなければならない。\n\nbrief を読んで導出する関数を書いていれば、 ここは 4 回呼ぶだけである。 どこか 1 つでも答えを書き込んでいれば、 そこだけが動かない。 設計文書が古くなるのはこれと同じ理由で、 違いは、 文書は自分が古いと言わないことである。\n\n## 次につながるところ\n\nWeek 7 の実装 challenge は、 ここで作った property matrix と attack plan を、 実際に走る実験へ変換する。 evidence の欄に書いた実験 id が、 そこで実行されるものになる。\n",
+  "shortDescription": "誰から何を隠すかを読み、必要な道具・図・実験を作るPython教材。変更された依頼にも設計を作り直します。",
+  "description": "依頼書から設計を構成する Week 7 の Python 教材です。情報の持ち主・読者・隠す相手・由来・制約から、6つの性質を導きます。次に全6案を比較し、必要な性質を満たす包含最小の組、データの型付きの図、攻撃計画、性質と証拠の対応表を作ります。\n\n最初の assets は2つの真偽条件による分類で得点できます。後半では未知の関係にも合う図や計画を自分で構成するため、参考例の名前を写すだけでは終わりません。全8項目に、仕組み→小例→実際の操作の3ヒントを用意し、必要な規則と用語は日英の無料本文にあります。\n\nPRIMITIVES は比較用の模型です。自動採点が確認するのは、明示した分類・選択・図の型と情報公開・信頼条件の網羅・実験の参照です。文章の論理的妥当性、実験の実行、実暗号の安全性は保証しません。設計が現実に働くことを確認する段階と、条件を満たす設計案を構成する段階を区別します。",
+  "instructions": "## 前提\n\n数えること、文字の比較、Pythonの関数・if・for・リスト・辞書を使います。暗号用語や追加の型は下で説明します。暗号そのものを動かす課題ではなく、**依頼書から設計を作る `design.py` を実装する課題**です。\n\n## 最初の1手：誰の情報を隠すか、分類する\n\nあなたは秘密を扱うサービスの設計担当です。先に道具を決めると、守るべき情報を守れなかったり、不要な仕組みを増やしたりします。依頼書の事実から、必要な性質・道具・データの流れ・確認する実験を順に作ります。\n\n「起動」→「証拠を確認」で依頼書を読み、エディタの `classify_assets` を編集します。最初は下の**2×2の分類表**をそのまま条件分岐にします。「公開テストを実行」の `test_asset_labels_follow_two_independent_facts` が PASS になったら **assets を提出**。成功は「解答済み」、失敗は満たしていない規則で確認できます。後の未実装関数の FAIL は残っていてかまいません。8項目をすべて解答済みにすると完了です。\n\n```text\nAの入力 x ──→ 計算するB ──→ 結果 y ──→ 結果を確認するC\n  Bには隠す       ↑                  ↑\n             計算中の秘密を守る   yが正しいか確かめる\n```\n\nこの2つの要求を分けて、必要な道具を組み合わせます。図の型が正しくても、本当に秘密を守れるかは実装や暗号の証明を別に確認する必要があります。\n\n## 依頼書の読み方\n\n**brief（依頼書）**は1件の仕様、**actor**は登場人物、**asset**は扱う情報です。`id` は名前で、数値の答えではありません。\n\n| 場所 | 入っているもの |\n|---|---|\n| `brief[\"actors\"]` | `id` と `role` を持つ辞書のリスト |\n| role | `input_provider`＝入力の持ち主、`operator`＝運営者、`evaluator`＝計算担当、`relying_party`＝結果を信じて判断する人 |\n| `brief[\"assets\"]` | 下の項目を持つ情報のリスト |\n| assetの`owner` | その情報の持ち主のactor id |\n| `known_to` | 読める人のactor idのリスト |\n| `must_not_learn` | 知ってはいけない人のactor idのリスト |\n| `integrity_relied_on_by` | その値の正しさを前提に判断する人のリスト |\n| `derived_from` | 何から計算したかを表すasset idのリスト。省略または`[]`は元の入力 |\n| `constraints` | `commit_then_reveal`＝先に値を固定して後で見せる、`must_complete_without_all_parties`＝全員が応答しなくても完了する、という真偽値 |\n\n`id`・`statement` は依頼の名前・説明です。`constraints.parties` は背景情報で、以下の判定式では使いません。入力は正しい形です。actorとassetはそれぞれ1件以上、idは重複せず、参照先は存在します。持ち主自身は`must_not_learn`に入りません。`derived_from`の省略は`asset.get(\"derived_from\", [])`で読めます。省略された制約はFalseです。名前や並び順は変わるので、固定のidから答えを決めません。\n\n## 設計で使う言葉と、完成済みの表\n\n**property（性質）**は満たしたい条件、**primitive（道具）**はその条件を提供する選択肢です。以下はこの教材の比較用の模型です。\n\n| 性質 | 意味 |\n|---|---|\n| correctness | 正しい結果を得る |\n| privacy | 計算に参加する相手から入力を隠す |\n| soundness | 自分以外が作った偽の結果を受け付けない |\n| zero_knowledge | 証明を読む人に秘密の入力を知らせない（ゼロ知識性） |\n| binding | 先に固定した値を別の値へ変えられない |\n| availability | 全員の応答を待たずに完了する |\n\n選べる道具は6つです。`none`は暗号を使わず運営者を信頼する、`mpc`（秘密計算）は入力を隠して共同計算する、`fhe`（完全準同型暗号）は暗号化したまま計算する、`zk`（ゼロ知識証明）は秘密を見せず主張を証明する、`commitment`は値を先に固定する、`threshold`は必要な人数がそろえば処理できる仕組みです。share（シェア）は秘密分散で各人へ配る数、暗号文は中身を隠すため変換したデータです。\n\n```python\nfrom participant.lab import PROPERTIES, PRIMITIVES, ACTOR_TRUSTS, OPERATOR_ROLES\n```\n\n採点は Linux コンテナで、1 提出の実行上限は 12 秒です。関数には依頼書など必要な引数が渡ります。支給表は上の import で使えます。外部ファイルや通信は使わず、入力から辞書・リストなどの値を返してください。\n\nこれらは完成済みです。`PROPERTIES`は上の6名称。`PRIMITIVES[name]`には`provides`（提供する性質）、`trusts`（引き受ける信頼条件の名前）、`assumptions`（その条件の説明文）、`non_goals`（提供しないもの）が入っています。`assumptions`と`non_goals`の文は表からコピーして使えます。表は「証拠を確認」と `participant.lab` で読めます。\n\n`trusts`の`operator`は全情報を預けられる人、`key_holder`は復号鍵を持つ1人、`non_collusion`は必要人数以上の人が共謀しない仮定です。共謀は人々が内緒の情報を持ち寄ること。`ACTOR_TRUSTS`は人を必要とする2名称、`OPERATOR_ROLES`はoperator/evaluatorの2役です。ここでの信頼や提供物は実際の技術のすべてを表しません。特にZKは公開入力を隠さず、FHEでも鍵の管理は必要です。\n\n`set(values)`は重複をなくした集まりです。AとBの要素をまとめるのが和集合`A | B`、BがAに全部含まれるかは`B <= A`で調べます。`sorted`は名前順のリスト、tupleは順序のある組、frozensetは変更できないsetです。型注釈の`Any`は色々な型を受け取る記号で、計算には使いません。表のリスト・tupleは順序を問わず比較できます。返却する名前の列には重複を入れません。\n\n## 1. assets：2つの事実で分類する\n\n`classify_assets(brief)` は全asset id → `{\"owner\": 元のowner, \"classification\": 分類}` の辞書を返します。\n\n| 他の情報から計算した？ `bool(derived_from)` | 隠す相手なし `must_not_learn=[]` | 隠す相手あり |\n|---|---|---|\n| いいえ | public | private |\n| はい | derived-public | derived-private |\n\n例：`x`のownerはA、`must_not_learn=[\"B\"]`、`derived_from`なしなら、`\"x\": {\"owner\":\"A\", \"classification\":\"private\"}`。`x`から作った`y`で隠す相手がいなければderived-publicです。`known_to`の人数から分類しません。\n\n## 2. requirements：何を要求するかを決める\n\n`required_properties(brief)` は**全6性質** → `True/False`。必要ない性質もキーを残します。次の規則はこの模型の定義です。\n\n| 性質 | Trueになる条件 |\n|---|---|\n| correctness | 常にTrue |\n| privacy | どれかのassetの`must_not_learn`に、input_provider/operator/evaluator役の人がいる |\n| soundness | どれかのassetで、`integrity_relied_on_by`にowner以外の人がいる |\n| zero_knowledge | 上のowner以外の人のうち誰かが、**同じassetの直接のderived_from先**で`must_not_learn`に入っている |\n| binding | `constraints.get(\"commit_then_reveal\", False)` |\n| availability | `constraints.get(\"must_complete_without_all_parties\", False)` |\n\n例：Cは計算に参加せず`y`を信じて判断する、`y`は`x`から計算され、Cは`x`を読めない。この関係ならsoundnessとzero_knowledgeがTrueです。Cだけから隠すことでprivacyもTrueになるわけではありません。由来は1段だけ調べ、無関係な秘密までたどりません。\n\n## 3. alternatives：暗号なしを含め6案を比較する\n\n`compare_alternatives(brief)` は**各道具がちょうど1回**出るリスト。1行の5項目は次です。\n\n```text\nprimitive = 道具の名前\nsatisfies = PRIMITIVES[name][\"provides\"]\nassumptions = PRIMITIVES[name][\"assumptions\"]\nnon_goals = PRIMITIVES[name][\"non_goals\"]\nadmissible = 下の条件を満たすTrue/False\n```\n\n**admissible**はこの依頼でその道具を使えるという意味です。道具の`trusts`を全部調べます。\n\n- `operator`：全assetの`must_not_learn`を合わせ、そこに一度も現れないactorが1人以上いる。専用のoperator役でなくても構いません。\n- `key_holder`：隠す相手がいる**元の入力**のownerを重複なく集め、ちょうど1人。0人も2人以上も不可。\n- それ以外：この模型では使えるとします。仮定が現実に正しいと証明した意味ではありません。\n\n例：秘密の入力2つをAが持つならownerは1種類なのでkey_holderを用意できます。AとBが1つずつ持つなら2種類なので、この単一鍵のFHE案は使えません。\n\n## 4. selection：足りるが余分でない組を作る\n\n`select_primitive(brief)` は道具名のリスト（tupleも可）です。提供物をまとめた集合をP、必要な性質の集合をRとすると、**R <= P**ならすべて被覆（カバー）しています。\n\n1. `none`が使えて、それだけで全要求を被覆するなら必ず`[\"none\"]`。\n2. それ以外は、全部使える道具で全要求を被覆する組を選びます。\n3. **どの1個を外しても被覆できなくなる**組だけを返します。これを最小と呼びます。別の合格組より個数が少ない必要はなく、順序も問いません。\n\n6つを使う/使わないで選ぶ組は2⁶＝64通り。小例：要求がcorrectness/privacy/soundnessなら、mpcのcorrectness/privacyとzkのcorrectness/soundness/zero_knowledgeを合わせると被覆します。一方を外すと要求が欠けるので最小です。余分な性質を提供しても構いません。採点する依頼には合格する組が存在します。\n\n## 5. architecture：読める形で秘密を渡さない図を作る\n\n`architecture(brief, selection)` は `{\"nodes\": [...], \"edges\": [...]}` を返します。**node**は処理する部品、**edge**は情報を渡す矢印です。図は1通りに固定されません。\n\n```python\nnode = {\"id\":\"nA\", \"operated_by\":\"A\", \"primitives\":[], \"trusts\":[]}\nedge = {\"from\":\"nA\", \"to\":\"nB\", \"asset\":\"x\", \"visibility\":\"ciphertext\"}\n```\n\n- node idは空でない文字列で重複なし。operated_byは実在actor。primitivesには選んだ道具だけを置き、図全体で全選択肢が1回以上登場します。各nodeの一覧内は重複なし。\n- nodeの`trusts`は**他のnode id**の列です。道具表の`trusts`とは別で、「この部品の判断を信じる」という依存関係です。参照先は実在し、A→B→Aや自分自身を信じる循環は禁止。使わなければ`[]`です。\n- edgeの両端はnode id、assetは実在asset id。`visibility`はplaintext（平文）、public（公開の値）、ciphertext（暗号文）、share（シェア）、proof（証明）の5つだけ。\n- plaintext/publicは読めます。受取nodeのoperated_byがそのassetのmust_not_learnにいたら不可。残り3型はこの模型では中身を渡さないラベルとして扱います。\n- **全assetを1本以上の線に載せます**。手元の入力や結果は自分から自分への線でもよく、このデータ線のループとtrustsの循環は別です。\n\n例：Bがxを知ってはいけないなら、図の線のvisibilityをplaintextにすると失敗します。ciphertextならこの読取検査を通りますが、本当に暗号化した証拠ではありません。型の実装・復号・計算順の正しさまではこの課題で証明しません。\n\n## 6. attacks：何を壊し、何を見るかを5件以上書く\n\n`attack_plan(brief, graph)` は5行以上のリスト。各idは空でない文字列で一意、propertyは6名称の1つ。hypothesis（起きるかもしれない失敗）、observable（見るもの）、expected（予想する結果）は空でない説明文です。\n\n```python\n{\"id\":\"probe1\", \"property\":\"privacy\",\n \"hypothesis\":\"秘密を知らないはずのBが受信記録を読む\",\n \"experiment\":{\"kind\":\"observe\", \"observable\":\"記録から元のxを読めるか\",\n               \"expected\":\"正しい設計ならxを特定できない\"}}\n```\n\nkindはobserve（観察）、forge（偽造）、collude（共謀）、withhold（応答しない）、replace（入れ替え）のどれかです。**必要な性質それぞれに1行以上**を用意し、さらに図に置いた道具の`PRIMITIVES[name][\"trusts\"]`の**各(道具,信頼条件)組**にも1行以上を割り当てます。同じ行が両方を満たしても構いません。\n\n信頼条件を試す行には `\"assumption\":{\"primitive\":\"mpc\", \"trust\":\"non_collusion\"}` のように、どの組かを追加します。同じ道具を複数nodeに置いても同じ組は1件で足ります。通常の性質の行にはassumption不要。例：人が共謀しないことを前提にしたら、共謀した場合に何が失われるかも試します。**前提が壊れた場合まで暗号が守るとは限らない**ので、expectedへ必ず「拒否」と書く必要はありません。\n\n採点は形・語彙・網羅と参照を確認します。自由文の質や実験を本当に実行したかは自動判定しません。意味のある観察と予想を書くことも、設計者の仕事です。\n\n## 7. matrix：性質と担当と実験をつなぐ\n\n`property_matrix(brief, graph)` は**必要な性質だけ**をキーにし、各行で次の5項目を返します。\n\n| 項目 | 指すもの |\n|---|---|\n| asset | 守る実在asset id |\n| adversary | 失敗を起こす側として考える実在actor id |\n| component | その性質をprovidesに持つ道具が置かれたnode id |\n| evidence | **同じpropertyを攻撃する**attack_planのid |\n| limitation | 何をまだ仮定しているかという空でない文章 |\n\nproperty_matrixはplanを引数で受けません。同じbrief/graphでattack_planを呼び直して参照するため、同じ入力なら同じ攻撃idを返すようにしてください。採点側もそのidで照合します。\n\n例：privacyの行が`evidence=\"probe1\"`を参照すると、上の「Bがxを読む」実験へつながります。availabilityの実験を参照しても秘密性の証拠にはなりません。asset・adversaryと文章の適切さは設計として説明しますが、自動採点はそのidの実在までです。componentの提供物とevidenceの性質は照合します。\n\n## 8. revision：変更された依頼について、もう一度構成する\n\n`revise(brief)` は `{\"required\": ..., \"selection\": ..., \"architecture\": ..., \"matrix\": ...}`。変更後の引数から、要求・最小の選択・安全な型の図・同じ性質の実験を参照する表を**作り直します**。追加の暗号式を導く課題ではありませんが、以前の図を固定して返すと変更した関係に対応できません。\n\n「証拠を確認」の後半は前半と同じ依頼の変更例です。1種類の要求変更が複数の行を更新する場合があります。どの情報を誰から隠すか、誰が結果を信じるか、全員の応答が必要かを比べます。新しい名前の依頼でも同じ構成規則が通ることが最終到達点です。\n\n後半には依存があります。architectureは選択も、attacksは選択と図も、matrixは選択・図・攻撃計画も確認します。revisionは4成果物に加え、変更後の図に対するattack_planも検査します。入力を直接編集しても元の依頼を変更したことにはならず、採点は呼出し前の条件を保持します。\n\n同じファイルを8項目から採点します。全24ヒントは各2点、誤答は1回15点。公開テストは小例と形の確認で、全依頼への合格を保証しません。実際の暗号の安全性、自由文の説得力、稼働するサービスは次に実験・レビューで確かめる範囲です。\n",
+  "writeup": "## 同じ入力から、一貫した設計を導く\n\n分類は「隠す相手がいるか」「他の情報から作ったか」の2条件です。要求はactorの役、他人の値を信じる関係、その値の直接の由来、制約から作ります。privacy と zero_knowledge を分ける規則はこの教材の模型であり、暗号の一般的な定義を置き換えるものではありません。署名があるだけで任意の計算の正しさが証明されるわけでもありません。\n\n## 被覆と最小性を分けて確かめる\n\n選択肢のprovidesを集め、必要な性質が全部含まれることを調べます。次に使えるかを確認し、各1個を外してみます。外せる道具があるなら余分です。包含最小の組は複数あり、参考実装と同じ並びや組を返す必要はありません。noneが使えて十分な場合は、それを優先します。\n\n## 図から実験へつなぐ\n\n選んだ道具を置き、全assetをデータの線に載せます。秘密を知ってはいけない相手へ平文で届かないかを確認します。これは図のラベルの検査であり、ラベルを書くだけで暗号化したことにはなりません。\n\n必要な性質への攻撃に加え、置いた道具のtrustsを各組1件ずつ実験計画にします。assumptionのprimitive/trustがその対応を明示します。前提を壊したら秘密が分かるかもしれず、そのときの限界をexpectedやlimitationに記録します。matrixのevidenceは、同じ性質を攻撃する行へつなぎます。稼働率の実験を秘密性の証拠に取り違えないためです。\n\n## 変更に対応することが最後の仕事\n\n変更後の依頼書から、要求・最小の組・図・実験との対応を構成し直します。関数を再利用できますが、以前の名前や図を固定してはいけません。最初の公開例に合うことと、変更後にも一貫することは別の確認です。\n\nこの採点は明示した規則と参照を点検します。文章の説得力や実際の実験、暗号方式の安全性まで自動で証明しません。作者検証と未確認範囲はREADMEに記録しています。",
   "tags": [
     "advanced-cryptography-2026",
     "week7",
@@ -68,101 +68,204 @@
       {
         "id": "assets",
         "input": "multiline",
-        "label": "誰の何を、どこまで隠すのかを並べる",
+        "label": "持ち主と秘密の分類を付ける",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "assets-hint-1",
+            "content": "情報を分類すると、その後の設計が何を隠すべきか分かります。「隠す相手がいるか」と「別の情報から作ったか」は独立した事実です。読める人の人数では決まりません。",
+            "penalty": 2
+          },
+          {
+            "id": "assets-hint-2",
+            "content": "情報xはAの持ち物、隠す相手はB、由来は空。この2条件でprivateです。xから作ったyに隠す相手がいなければderived-public。ownerはどちらも依頼書の値をそのまま残します。",
+            "penalty": 2
+          },
+          {
+            "id": "assets-hint-3",
+            "content": "design.pyのclassify_assetsでbrief[\"assets\"]を1件ずつ読む→must_not_learnとget(\"derived_from\",[])が空かを判定→本文の2×2表で分類→asset[\"id\"]の下にownerとclassificationを書く。公開テストの小例をPASSにし、assetsを提出します。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "requirements",
         "input": "multiline",
-        "label": "brief から必要な性質だけを取り出す",
+        "label": "依頼から必要な6性質を判断する",
         "points": 45,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "requirements-hint-1",
-            "content": "結果を作る側に見せない、 と 出来た答えを読むだけの相手に見せない は同じ要求ではない。 後者は誰かが自分で計算していない値を信じる話であり、 別の欄に入る。",
-            "penalty": 20
+            "content": "計算に参加する相手へ秘密を渡さない要求と、結果を読む人へ秘密を見せず正しさを示す要求を分けます。すべてをTrueにすると不要な暗号まで要求したことになります。",
+            "penalty": 2
+          },
+          {
+            "id": "requirements-hint-2",
+            "content": "Cはrelying_partyでyを信じ、yはxから作られ、xをCに隠す。この関係はsoundnessとzero_knowledge。Cしか隠す相手がいなければ、この事実だけでprivacyは必要になりません。計算担当Bからも隠すとprivacyが加わります。",
+            "penalty": 2
+          },
+          {
+            "id": "requirements-hint-3",
+            "content": "required_propertiesで全PROPERTIESをFalseから用意→correctnessをTrue→actorのidからroleを引く→本文6行の条件をassetとconstraintsで調べます。zero_knowledgeはowner以外の頼る人と同じassetの直接の由来だけを照合。requirementsを提出します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "alternatives",
         "input": "multiline",
-        "label": "使わない場合を含めて並べる",
+        "label": "暗号なしを含め6案を比較する",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "alternatives-hint-1",
+            "content": "比較には「暗号を使わない」基準も必要です。提供する性質と前提は道具の表で決まり、使えるかどうかだけは、この依頼に前提となる人がいるかで変わります。",
+            "penalty": 2
+          },
+          {
+            "id": "alternatives-hint-2",
+            "content": "秘密の入力2つのownerがA,Aなら種類は1つでkey_holder可。A,Bなら2つで不可。operatorは役の名前で絞らず、全must_not_learnを合わせた集合の外にいるactorを探します。",
+            "penalty": 2
+          },
+          {
+            "id": "alternatives-hint-3",
+            "content": "compare_alternativesでPRIMITIVESを全件巡回し、primitive・satisfies・assumptions・non_goalsを表から作ります。trustsのoperator/key_holderだけ本文条件で調べ、admissibleへTrue/Falseを入れます。noneを含む6行が重複なくそろったらalternativesを提出。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "selection",
         "input": "multiline",
-        "label": "brief が要求した分だけ選ぶ",
+        "label": "足りるが余分でない組を選ぶ",
         "points": 50,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "selection-hint-1",
-            "content": "選んだものを 1 つ外してみる。 まだ全部の要求を満たしているなら、 それは何もしていない。",
-            "penalty": 10
+            "content": "道具を増やすこと自体が目的ではありません。必要な性質が全部そろい、どれを外しても何か足りなくなる組を探します。別の合格組と個数を競う意味の最小ではありません。",
+            "penalty": 2
           },
           {
             "id": "selection-hint-2",
-            "content": "6 つの brief のうち 1 つは、 暗号を必要としない。 それを暗号で答えた設計は、 問題ではなく道具から出発している。",
-            "penalty": 15
+            "content": "要求correctness/privacy/soundnessにmpc+zkを選ぶと全部そろいます。mpcを外すとprivacy、zkを外すとsoundnessが欠けます。ここへcommitmentを足しても外せるので余分です。",
+            "penalty": 2
+          },
+          {
+            "id": "selection-hint-3",
+            "content": "select_primitiveでrequired_propertiesを読む→noneだけで満たせて使えるなら[\"none\"]→それ以外は6案の部分集合を試す→提供物の集合で被覆と使用可能性を確認→1個ずつ外して不足する組を返す。並び順は任意。selectionを提出します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "architecture",
         "input": "multiline",
-        "label": "何がどの形で境界を越えるかを書く",
+        "label": "秘密の送り方を図として作る",
         "points": 45,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "architecture-hint-1",
-            "content": "「見せない」 と書いた資産が、 平文の辺で相手のところへ着いていないか。 図は矛盾を隠すが、 辺の型は隠さない。",
-            "penalty": 20
+            "content": "図には「情報が届く」だけでなく「読める形で届くか」を書きます。秘密にすべき相手へ平文を渡した設計は、道具を正しく選んでいても失敗します。手元の情報も図から消さないでください。",
+            "penalty": 2
+          },
+          {
+            "id": "architecture-hint-2",
+            "content": "nAがA、nBがBの部品で、Bはxを読めないとします。xのnA→nBをplaintextにすると違反、ciphertextならこの模型の読取検査を通ります。nA→nAというデータの線は可ですが、trustsで自分を信じる循環は不可です。",
+            "penalty": 2
+          },
+          {
+            "id": "architecture-hint-3",
+            "content": "architectureでactorからnodeを作る→selectionの道具を配置→全assetを1回以上線に載せる→本文5種のvisibilityを選ぶ→受取側operated_byとmust_not_learnを比較。trustsは実在nodeだけで循環なし。選択も合格する状態でarchitectureを提出します。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "attacks",
         "input": "multiline",
-        "label": "壊れ方を、観測できる形で書く",
+        "label": "壊れる条件と見るものを記録する",
         "points": 35,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "attacks-hint-1",
+            "content": "設計の主張を確かめるには、失敗したら何が見えるかを決めます。必要な性質に加え、選んだ道具の信頼条件が破れた場合も扱います。これは計画であり、提出だけで実験が走るわけではありません。",
+            "penalty": 2
+          },
+          {
+            "id": "attacks-hint-2",
+            "content": "privacyの実験なら「Bが受信記録を読む→元のxを特定できるか観察」。mpcのnon_collusionを試すならkind=collude、assumption={\"primitive\":\"mpc\",\"trust\":\"non_collusion\"}を付けます。前提を壊す実験で、必ず拒否されると予想してはいけません。",
+            "penalty": 2
+          },
+          {
+            "id": "attacks-hint-3",
+            "content": "attack_planで必要なpropertyの行を作り、graph内の道具のtrustsから各組を集めてassumption付きの行も作ります。全idを一意にし、5件以上、kindは本文5種、hypothesis/observable/expectedは具体的な非空文にします。attacksを提出。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "matrix",
         "input": "multiline",
-        "label": "性質ごとに、誰が担うのかを書く",
+        "label": "性質・担当・実験をつなぐ",
         "points": 35,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "matrix-hint-1",
-            "content": "担当だと書いた component が、 その性質を本当に提供する option を実装しているか。 PRIMITIVES の non_goals は、 よく誤って期待されるものを並べてある。",
-            "penalty": 15
+            "content": "性質を保証すると言うだけでなく、どの情報をどの部品で守り、どの実験で確かめるかをつなぎます。実在する実験でも別の性質を測っていたら、その行の証拠にはなりません。",
+            "penalty": 2
+          },
+          {
+            "id": "matrix-hint-2",
+            "content": "privacyの行なら、privacyをprovidesに持つ道具のnodeと、property=privacyのprobe1を結びます。withholdで応答停止を見るavailabilityの行を引用しても、入力が秘密かどうかは確かめられません。",
+            "penalty": 2
+          },
+          {
+            "id": "matrix-hint-3",
+            "content": "property_matrixでTrueの性質だけに行を作る→実在asset/adversaryを選ぶ→graphのnodeのPRIMITIVES[name][\"provides\"]からcomponentを選ぶ→同じpropertyのattack_planのidをevidenceへ→残る仮定をlimitationへ。matrixを提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "revision",
         "input": "multiline",
-        "label": "前提が 1 つ動いた brief に答える",
+        "label": "変更後の依頼に設計を作り直す",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "revision-hint-1",
+            "content": "前提が変われば、必要な道具だけでなく公開する情報や実験との対応も変わります。前の設計をそのまま返すのではなく、変更後の引数から各成果物を構成し直すことが目的です。",
+            "penalty": 2
+          },
+          {
+            "id": "revision-hint-2",
+            "content": "以前はBがxを読めたが、変更後はmust_not_learnにBが入ったとします。Bへplaintextで送る旧図は失敗します。分類・要求・選択を読み直し、線の型と対応するprivacyの実験をそろえます。",
+            "penalty": 2
+          },
+          {
+            "id": "revision-hint-3",
+            "content": "reviseで新しいbriefをrequired_propertiesとselect_primitiveへ渡す→そのselectionでarchitectureを作る→同じbrief/graphでproperty_matrixを作る→required/selection/architecture/matrixを返す。attack_planも変更後の図で正しく動くようにし、revisionを提出します。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
   "i18n": {
     "en": {
-      "name": "Do not start from the tool",
-      "shortDescription": "The brief names actors, assets and who trusts whom. It names no tool. Derive the properties it requires, select exactly that much, type every boundary, then answer the same brief with one fact moved.",
-      "description": "First problem of Week 7; its role is synthesis. Treat choosing among the Week 1–6 primitives as a design problem driven by the problem statement, the adversary, what may be published, what must stay secret, and the trust assumptions — not by fashion or by library.\n\nHave a design written in prose and graded by an LLM, and readable text becomes indistinguishable from correct design. So this problem has the design written as **code**: eight functions that take a brief and return asset classification, required properties, alternative comparison, selection, typed data flow, attack plan and property matrix. Every one of them can be written as a function of the brief.\n\n**The heart of the scoring is the final checkpoint.** It hands over 18 briefs with one assumption moved (the operator stops being trustworthy / a third party starts depending on the result / completion must survive one absent party) and 12 briefs generated from the seed that exist in no file. An implementation that reads the brief and derives passes with four calls; an implementation that decided its answers once and wrote them down stalls exactly here.\n\n**The selection rule is three conditions plus one priority rule**: cover the required properties / trust no party this brief has not provided / removing any one selection breaks coverage. And before all of that: choose no cryptography for a brief that needs none. Of the six briefs, `shift-board` is that one, and an implementation that picks a primitive there fails.\n\n**Privacy and zero knowledge are kept apart.** Hiding from the parties you compute with is privacy; being believed about a value you did not compute yourself is soundness; zero knowledge only when the value to be believed derives from the value to be hidden. `solvency-claim` is the brief that demands zero_knowledge without demanding privacy, and it fails implementations that equate the two.\n\n**Minimality does not always determine the satisfying set uniquely.** `delegated-scoring` passes with MPC or with FHE. Scoring never compares against the reference's output — only the three conditions: coverage, admissibility, minimality.",
-      "instructions": "## Week 7 — do not decide from the tools\n\nIn Week 6 you passed through the layer of \"what is actually built\", combining components. Week 7 designs it yourself from a blank page. This first problem is the design; the other (`ac26-w7-capstone-demo`) is the build.\n\n## Decide from the tools and you build what nobody needed\n\nDecide what to build **from the tools** and you usually build something with parts nobody needed. A design that starts from \"let's use zk\" is fitted to fashion, not to the requirement. Too many tools has bought an assumption for nothing; too few does not meet the requirement at all.\n\nSo reverse the order. **Decide from what must be protected. The tool comes after.** What you are handed is a **brief**: a table of actors, assets and trust relationships, and **it never names a cryptographic tool**. That is deliberate — the tool is the last decision, not the first.\n\n## Pick the set that is just enough\n\nWith six tools and a use/do-not-use decision on each, there are 2 multiplied by itself six times — 64 — possible sets. The job is to find one that **covers every requirement** and is **minimal**: remove any single member and the cover breaks.\n\nOne digit: suppose a brief requires correctness (the result is right), privacy (those who must not see it do not), and soundness (a false result cannot be passed off as true). **mpc** provides correctness and privacy; **zk** provides correctness, soundness and zero knowledge. mpc alone is short of soundness, zk alone is short of privacy. So the minimal set is **{mpc, zk}** — drop mpc and privacy goes, drop zk and soundness goes. That is what \"remove one and it breaks\" means. What each tool provides is printed as a table by **Inspect evidence**.\n\n## Before you start (skip if you know this)\n\nNo cryptography runs. A **brief** is one specification of what must be protected and who may be trusted. An **asset** is one thing to protect, with its owner, who may read it, who must not learn it, who relies on its integrity, and what it was derived from. A **property** is one of the six a design can be required to hold (correctness / privacy / soundness / zero_knowledge / binding / availability). A **primitive** is one of the six options, **one of which is \"use no cryptography\"**. **admissible** = the party a tool asks you to trust actually exists in this brief. **cover** = every required property is satisfied. **minimality** = removing any one member breaks the cover.\n\n## Derive, in order, from what is protected\n\n**Decide from what must be protected; the tool comes after.** Derive in order: list what is protected → extract which properties are actually required → compare every option, **including the one that uses no cryptography** (leave it out and you cannot show that cryptography bought anything) → pick the set that is just enough → say what crosses each boundary and in what form → write how it could fail, in observable terms → tabulate, per property, who carries it. At the end you are handed **the same brief with one fact changed**. If the previous seven read the brief, the last is four calls. If any of them decided something once and wrote it down, this is where that shows.\n\n## First move\n\nIn Participant Portal (the site showing this statement), select **起動 (Start)**. Your own container starts and the **problem editor** appears on the same page.\n\nThe one file you edit is **`design.py`** and the language is **Python**. **What you submit is code, not a prose design document** — eight function stubs, each taking a brief (a dict) and returning an answer, with arguments and return shapes documented in each docstring.\n\nSelect **Inspect evidence** to see the values built for this start only. It prints three blocks:\n\n1. **The vocabulary** — the six property names, and for each of the six options: what it provides, what it makes you trust instead, and **what it is wrongly assumed to provide**. The table states outright that these are toy characterizations.\n2. **Your brief** — its id and one-line statement, the actors and their roles, and per asset: owner, who may read it, who must not learn it, who relies on its integrity, what it was derived from — plus the constraints.\n3. **The same brief after one fact changes** — the one checkpoint 8 answers. The requirements are not restated. **You re-read the changed fact and see what follows.**\n\n**Compare blocks 2 and 3 by hand before writing any code.** Which line changed, and which requirement that one line moves. Once you can say that, the skeleton of this problem is already visible.\n\nEvery number changes per start, so copying someone else's values will not match. **Run public tests** checks shapes, and is also where `print()` output comes back. To put the editor back the way it started, select **Restore starter**.\n\n## What you answer — eight checkpoints, in this order\n\nAll eight are **code checkpoints**; there is no answer field to type into. The whole flow is: write in the editor, then press that checkpoint's **Submit (+points)**. Whatever is in `design.py` at that moment is sent for grading — **one file graded from eight angles**. A wrong answer can be resubmitted; each wrong attempt costs 15 points and the total never falls below zero. The checkpoints are independent, so being stuck on one does not block the rest.\n\n1. **assets** — `classify_assets(brief) -> dict`. Every asset as `{\"owner\": …, \"classification\": …}`, the classification being one of `public` / `private` / `derived-public` / `derived-private`. **Two facts in the brief decide it**, and neither is a matter of taste. **An asset you did not classify is an asset nobody is protecting.**\n2. **requirements** — `required_properties(brief) -> dict`. A yes or no for each of the six. Three traps: being hidden from a party that **takes part in producing** the result and being hidden from one that only **reads** it are different requirements; somebody **acting on a value they did not compute** is what puts soundness on the list; and soundness on its own is an ordinary signature — for zero knowledge to be required too, look at **what the relied-upon value is derived from**.\n3. **alternatives** — `compare_alternatives(brief) -> list`. One entry per option: `{\"primitive\", \"satisfies\", \"assumptions\", \"non_goals\", \"admissible\"}`. The first four are lookups; **`admissible` reads the brief** — when an option asks you to trust a *party*, does this brief have one to spare (an option that trusts an assumption about the world is available anywhere). **Include the no-cryptography option.**\n4. **selection** — `select_primitive(brief) -> list`. One rule comes first: **if the brief requires nothing that cryptography provides, the answer is the option that uses none.** Then three conditions — the selection covers every required property, every member is admissible, and **nothing in it could be removed with the cover intact**. Some briefs need more than one.\n5. **architecture** — `architecture(brief, selection) -> dict`, returning `{\"nodes\": [...], \"edges\": [...]}`. A node is `{\"id\", \"operated_by\", \"primitives\", \"trusts\"}`; an edge is `{\"from\", \"to\", \"asset\", \"visibility\"}` with visibility one of `plaintext` / `ciphertext` / `share` / `proof` / `public`. **The type on the edge is the design** — \"the record reaches the evaluator\" says nothing, \"reaches it as ciphertext\" is a claim that can be wrong. Two things a diagram usually hides are checked: no asset arrives **readably** at a party that must not learn it, and **every asset in the brief appears somewhere**.\n6. **attacks** — `attack_plan(brief, graph) -> list`. **At least five** hypotheses about how this design fails, each `{\"id\", \"property\", \"hypothesis\", \"experiment\"}` with `experiment` being `{\"kind\", \"observable\", \"expected\"}`. **An entry with nothing observable is a sentence.** Every required property needs at least one — and **every trust the architecture took on is itself an attack somebody can run**, which is exactly what a plan written from the happy path misses.\n7. **matrix** — `property_matrix(brief, graph) -> dict`. One row per required property: `{\"asset\", \"adversary\", \"component\", \"evidence\", \"limitation\"}`, where `component` names a node from checkpoint 5, `evidence` names an entry from checkpoint 6, and `limitation` says what the property still rests on once the primitive has done its job. **`component` is the easy one to get wrong** — a component can only carry a property one of its own options actually provides, so check the \"does NOT\" column of the vocabulary table.\n8. **revision** — `revise(brief) -> dict` for the brief whose facts changed, returning `{\"required\", \"selection\", \"architecture\", \"matrix\"}`. **Nothing new is asked for.**\n\n## Next, run what you chose\n\nDone means: every asset classified, only the required properties extracted, every option compared including the no-cryptography one, a set chosen that is just enough, the values crossing boundaries typed, failures written observably, per-property ownership and limits tabulated — and the same derivation producing the answer for a brief with one fact changed.\n\nThe tool you chose here is what the next problem, `ac26-w7-capstone-demo`, actually runs, backing its claims with experiments. Where the design ends at \"what to choose\", the build goes all the way to measuring whether it is really so.\n",
-      "writeup": "## Not starting from the tool\n\nBegin a design at \"should this be ZK or MPC\" and you will get an answer. Whether the answer\nfits the problem is a separate question, and it is usually asked too late.\n\nNone of the briefs here names a primitive. They name who is involved, what exists, who must\nnot learn what, and who acts on a value they did not compute. The required properties follow\nfrom that, and the options follow from the properties. A design built the other way round\nusually works, and usually protects the wrong thing.\n\n## Privacy and zero knowledge are different columns\n\nThe lender must not see the `balance`. Is that privacy?\n\nThe lender does not take part in the computation; it only reads the answer. So this is not\n\"hide it from the party doing the work\" — it is \"get somebody to believe a value they did not\ncompute\". The first is privacy. The second is soundness, and zero knowledge is required only\nwhen the value they must believe is derived from the value you are hiding.\n\nSoundness alone is an ordinary signature. Collapse the two and you bring a proof system to a\nplace a signature would have done.\n\n## Where minimality bites\n\nDrop one option from your selection. If the requirements are still covered, that option was\ndoing nothing — and an option that does nothing is not free. It adds an assumption, a surface\nto attack, and something you now have to explain.\n\n`shift-board` is in the set as the brief that needs no cryptography. Nothing is secret,\nnobody distrusts the operator, and nobody depends on somebody else's computation. A design\nthat reaches for a primitive there started from the tool.\n\nNote also that the smallest sufficient combination need not be unique: `delegated-scoring`\npasses with MPC and with FHE. The grading asks only whether the selection covers what is\nrequired, relies on no party this brief does not supply, and contains nothing spare.\n\n## `non_goals` is not decoration\n\nEvery option in `PRIMITIVES` carries a `non_goals` list. FHE does not remove key management:\nsomebody holds the decryption key, and that somebody remains an actor in the threat model.\nMPC does not remove the collusion assumption; it relocates it. A ZK proof does not hide the\npublic inputs.\n\nSo when the property matrix says a component is responsible for privacy, check that the\ncomponent implements an option that actually provides it. A design that delegates a property\nto something which does not provide it is complete on the diagram.\n\n## A derived design and a decided one\n\nThe last checkpoint hands you briefs in which one fact has moved: the operator is no longer\ntrusted, an outside party now depends on the result, the answer must arrive with one party\nunreachable.\n\nIf your functions read the brief, this is four calls. If any of them wrote an answer down,\nthat is the one that does not move. Design documents go stale for exactly this reason — the\ndifference being that a document does not tell you it has.\n\n## Where this leads\n\nWeek 7's implementation challenge turns this property matrix and attack plan into experiments\nthat actually run. The experiment ids you put in the `evidence` column are the ones it\nexecutes.\n",
+      "name": "Design a cryptographic system from its requirements",
+      "shortDescription": "Read who must not learn what, then construct tools, flows and experiments in Python. Rebuild the design when the brief changes.",
+      "description": "A Week 7 Python design-construction exercise. Derive six properties from asset ownership, readers, forbidden readers, sources and constraints. Compare all six options, then construct an inclusion-minimal cover, typed data-flow graph, attack plan and property-to-evidence matrix.\n\nThe first assets checkpoint is earned by applying two boolean classification rules. Later work constructs layouts and plans for unseen relationships, so copying example names is insufficient. Each of eight checkpoints has mechanism/example/action hints; every required rule and term is in the free JA/EN statement.\n\nPRIMITIVES is a comparison model. Automatic grading checks the stated classification, selection, flow labels/disclosure, trust-assumption coverage and experiment references. It does not establish the quality of prose, execution of experiments or real cryptographic security. Constructing a design satisfying explicit rules is separate from demonstrating that a deployed design actually works.",
+      "instructions": "## Prerequisites\n\nUse counting, string comparisons and beginner Python functions, if/for, lists and dictionaries. The vocabulary and extra types are defined below. **Implement `design.py` to turn a brief into a design.** This exercise does not run cryptography.\n\n## First action: classify who needs to hide which information\n\nYou design a service handling secrets. Choosing tools first can leave information unprotected or add unnecessary machinery. Derive requirements, tools, data flow and experiments from the brief's facts.\n\nChoose Start → Inspect evidence, then edit `classify_assets` in the editor. Begin with the **2×2 classification table** below. Run public tests and find `PASS test_asset_labels_follow_two_independent_facts`, then submit **assets**. Success is **Solved**; failure names an unmet rule. Tests for later unfinished functions may still FAIL. Finish when all eight checkpoints are Solved.\n\n```text\nA's input x ──→ computing party B ──→ result y ──→ reader C\n hidden from B       ↑                         ↑\n              protect input during computation   check the result\n```\n\nThese are different requirements, so combine tools as needed. Correct labels in a diagram do not prove that a real implementation protects secrets; that requires separate implementation checks and cryptographic arguments.\n\n## Read a brief\n\nA **brief** is one specification, an **actor** is a party, and an **asset** is a piece of information. An `id` is a name, not a numerical answer.\n\n| Location | Contents |\n|---|---|\n| `brief[\"actors\"]` | List of dictionaries with id and role |\n| role | input_provider: input owner; operator: service operator; evaluator: computation service; relying_party: somebody acting on the result |\n| `brief[\"assets\"]` | List of records with the fields below |\n| owner | Actor ID of the information's owner |\n| known_to | Actor IDs allowed to read it |\n| must_not_learn | Actor IDs forbidden to learn it |\n| integrity_relied_on_by | Actor IDs whose decisions depend on this value being correct |\n| derived_from | Asset IDs used to compute it; omitted or [] means an original input |\n| constraints | commit_then_reveal: fix a value before revealing it; must_complete_without_all_parties: complete even without every party responding. Both are booleans |\n\nid and statement name and describe the request. constraints.parties is background information; the decision rules below do not use it. Inputs have the documented shape: at least one actor and asset, unique IDs and existing references. An asset's owner is not forbidden to learn that asset. Use `asset.get(\"derived_from\", [])` for an omitted source list. An omitted constraint means False. Names and order can change; do not decide from a fixed brief ID.\n\n## Design vocabulary and completed tables\n\nA **property** is a requirement; a **primitive** is an option supplying properties. The following is a teaching model for comparison.\n\n| Property | Meaning |\n|---|---|\n| correctness | Obtain the right result |\n| privacy | Hide inputs from a party participating in computation |\n| soundness | Reject false results supplied by somebody else |\n| zero_knowledge | Reveal no secret input to the reader of a proof |\n| binding | Prevent changing a value that was fixed earlier |\n| availability | Complete without all parties responding |\n\nSix options are available. none uses ordinary computation with a trusted operator; mpc (multi-party computation) computes jointly while protecting inputs; fhe (fully homomorphic encryption) computes on encrypted data; zk (zero-knowledge proof) proves a claim without revealing its secret input; commitment fixes a value for later checking; threshold allows a sufficient number of parties to complete an operation. A share is a number distributed through secret sharing. A ciphertext is data transformed to hide its contents.\n\n```python\nfrom participant.lab import PROPERTIES, PRIMITIVES, ACTOR_TRUSTS, OPERATOR_ROLES\n```\n\nGrading runs in a Linux container with a 12-second total limit per submission. Functions receive the brief and their other required arguments; the import above supplies the tool table. Return dict/list values from those inputs without external file access or networking.\n\nThese are completed helpers. PROPERTIES lists the six names above. `PRIMITIVES[name]` has provides (supplied properties), trusts (names of trust assumptions), assumptions (text explaining them), and non_goals (what the option does not provide). Copy assumptions and non_goals from that table; it is visible in Inspect evidence and participant.lab.\n\nIn trusts, operator means a party that may hold every asset, key_holder means one party holding the decryption key, and non_collusion means fewer than the threshold number of parties combine their private information. ACTOR_TRUSTS contains the two names that require a party; OPERATOR_ROLES contains operator/evaluator. These simplified guarantees and assumptions do not describe everything about a real system. In particular, ZK does not hide public inputs, and FHE still requires key management.\n\n`set(values)` removes duplicates. The union `A | B` combines both sets; `B <= A` tests whether all of B is in A. sorted produces a name-sorted list, tuple is an ordered sequence, and frozenset is an immutable set. Any in a type annotation permits different Python types; it performs no computation. Table lists/tuples can be compared without regard to order. Do not repeat names in returned sequences.\n\n## 1. assets: classify from two independent facts\n\n`classify_assets(brief)` returns every asset ID mapped to `{\"owner\": original_owner, \"classification\": label}`.\n\n| Computed from other assets? bool(derived_from) | Nobody forbidden: must_not_learn=[] | Somebody forbidden |\n|---|---|---|\n| No | public | private |\n| Yes | derived-public | derived-private |\n\nExample: x has owner A, must_not_learn=[\"B\"] and no derived_from. Return `\"x\": {\"owner\":\"A\", \"classification\":\"private\"}`. If y is computed from x and has nobody forbidden to learn it, y is derived-public. Classification does not depend on the number of known_to readers.\n\n## 2. requirements: derive the needed properties\n\n`required_properties(brief)` maps **all six names** to True/False, including False entries. These are this model's rules.\n\n| Property | Condition for True |\n|---|---|\n| correctness | Always True |\n| privacy | Some asset's must_not_learn contains an actor with role input_provider, operator or evaluator |\n| soundness | Some asset's integrity_relied_on_by contains somebody other than its owner |\n| zero_knowledge | One of those non-owner relying parties is forbidden to learn a **direct derived_from source of that same asset** |\n| binding | constraints.get(\"commit_then_reveal\", False) |\n| availability | constraints.get(\"must_complete_without_all_parties\", False) |\n\nExample: C only reads and relies on y, y is computed from x, and C may not read x. That relationship requires soundness and zero_knowledge. Hiding x only from reader C does not by itself require privacy in this model. Examine immediate sources only, not unrelated secrets or a transitive chain.\n\n## 3. alternatives: compare all six, including none\n\n`compare_alternatives(brief)` returns a list containing **each option exactly once**. Each row has five fields:\n\n```text\nprimitive = option name\nsatisfies = PRIMITIVES[name][\"provides\"]\nassumptions = PRIMITIVES[name][\"assumptions\"]\nnon_goals = PRIMITIVES[name][\"non_goals\"]\nadmissible = True/False according to the conditions below\n```\n\nAdmissible means available for this brief. Check every entry in the option's trusts:\n\n- operator: union all must_not_learn lists. At least one actor is absent from that union. That party need not have an operator role.\n- key_holder: collect distinct owners of **original inputs** with a nonempty must_not_learn list. There must be exactly one owner; zero or two or more does not qualify.\n- Other trust names: available in this model. Availability does not prove the assumption true in reality.\n\nExample: A owning two private inputs is one owner, so a key_holder exists. If A and B each own one, there are two owners, so this single-key FHE option is unavailable.\n\n## 4. selection: construct a sufficient, irredundant combination\n\n`select_primitive(brief)` returns option names as a list (tuple is also accepted). Let P be the union of their provided properties and R the required properties. **R <= P** means the combination covers every requirement.\n\n1. If none is admissible and alone covers the requirements, return exactly [\"none\"].\n2. Otherwise choose admissible options covering all requirements.\n3. Removing **any single option** must break that coverage. This is inclusion-minimal: a different passing combination may use fewer options. Order does not matter.\n\nChoosing use/do-not-use for six options gives 2⁶=64 subsets. Small example: correctness/privacy/soundness are covered by mpc (correctness/privacy) plus zk (correctness/soundness/zero_knowledge). Removing either loses a requirement, so the pair is minimal. Providing extra properties is allowed. Graded briefs have at least one valid combination.\n\n## 5. architecture: construct flows that do not reveal a forbidden asset\n\n`architecture(brief, selection)` returns `{\"nodes\": [...], \"edges\": [...]}`. A node is a component; an edge is an arrow carrying information. No single layout is required.\n\n```python\nnode = {\"id\":\"nA\", \"operated_by\":\"A\", \"primitives\":[], \"trusts\":[]}\nedge = {\"from\":\"nA\", \"to\":\"nB\", \"asset\":\"x\", \"visibility\":\"ciphertext\"}\n```\n\n- Node IDs are unique, nonempty strings. operated_by names an existing actor. Only selected options are placed; every selected option appears on at least one node. Each node's name lists have no duplicates.\n- A node's trusts lists **other node IDs**, not names from the primitive table's trusts. It means relying on that component's judgement. References must exist, and circular trust such as A→B→A or self-trust is forbidden. Use [] when no such dependency is needed.\n- Edge endpoints are node IDs and asset is an existing asset ID. visibility is one of plaintext (readable value), public (published value), ciphertext (encrypted data), share (secret-sharing data), or proof (evidence of a claim).\n- plaintext/public reveal the value: the receiving node's operated_by must not be in the asset's must_not_learn list. The other three are non-revealing labels in this model.\n- **Every asset occurs on at least one edge.** A locally held input or result can use a self-loop. A data self-loop is different from circular trust.\n\nExample: if B must not learn x, a plaintext edge to B fails. Labelling it ciphertext passes this readability check, but is not evidence that encryption ran. The task does not prove implementations of these types, decryption or computation order.\n\n## 6. attacks: state at least five failures and observations\n\n`attack_plan(brief, graph)` returns at least five entries with unique nonempty string IDs. property names one of the six properties. hypothesis (possible failure), observable (what to inspect), and expected (predicted outcome) are nonempty explanatory strings.\n\n```python\n{\"id\":\"probe1\", \"property\":\"privacy\",\n \"hypothesis\":\"B reads its received records despite being forbidden to learn x\",\n \"experiment\":{\"kind\":\"observe\", \"observable\":\"whether the records reveal the original x\",\n               \"expected\":\"a correct design does not let B identify x\"}}\n```\n\nkind is observe (inspect), forge (create a false artifact), collude (combine parties' secrets), withhold (stop responding), or replace (substitute a value). Include an attack for **every required property**, and for **every (option, trust-name) pair** in the placed options' PRIMITIVES[name][\"trusts\"]. One row may cover both purposes.\n\nFor a trust-assumption attack add, for example, `\"assumption\":{\"primitive\":\"mpc\", \"trust\":\"non_collusion\"}` to identify the pair. The same option on several nodes still requires only one row per pair. Ordinary property attacks omit assumption. If the design assumes parties will not collude, inspect what is lost when they do. **Breaking an assumption can remove the guarantee**, so expected need not always say \"rejected\".\n\nGrading checks structure, vocabulary, coverage and references. It does not evaluate the quality of prose or run these experiments. Writing meaningful observations and expectations remains part of the designer's work.\n\n## 7. matrix: connect each property to a component and experiment\n\n`property_matrix(brief, graph)` uses **only required properties** as keys. Each row has five fields:\n\n| Field | Meaning |\n|---|---|\n| asset | Existing asset ID being protected |\n| adversary | Existing actor ID considered as a source of failure |\n| component | Node containing an option whose provides includes this property |\n| evidence | ID of an attack_plan entry attacking **this same property** |\n| limitation | Nonempty text describing a remaining assumption |\n\nproperty_matrix does not receive a plan argument. Regenerate attack_plan from the same brief/graph and keep its attack IDs stable for the same input; the grader calls it again to resolve those references.\n\nExample: evidence=\"probe1\" in the privacy row points to the experiment where B tries to read x. An availability experiment cannot support privacy. The design should justify the chosen asset/adversary and text; automatic grading checks only that those IDs exist. It checks the component's supplied property and the evidence's matching property.\n\n## 8. revision: reconstruct the design for changed facts\n\n`revise(brief)` returns `{\"required\": ..., \"selection\": ..., \"architecture\": ..., \"matrix\": ...}`. From the changed argument, **construct again** the requirements, a minimal selection, a correctly typed graph and a matrix citing same-property experiments. No new cryptographic formula is needed, but a fixed old diagram cannot adapt to a changed relationship.\n\nThe second half of Inspect evidence is a change to the same request shown first. One kind of requirement change can update several rows. Compare who is forbidden to learn which information, who relies on results, and whether all responses are necessary. The final outcome is that your construction rules also work for briefs with new names.\n\nLater checkpoints have dependencies. architecture also checks selection; attacks checks selection and graph; matrix checks selection, graph and plan. revision checks its four artifacts plus attack_plan for the revised graph. Editing a function argument does not change the task's requirements: the grader preserves them before the call.\n\nThe same file is graded from eight angles. Each of 24 optional hints costs 2 points; an incorrect submission costs 15. Public tests cover small examples and shapes, not all briefs. Real cryptographic security, persuasive prose and a running service require subsequent experiments and review.\n",
+      "writeup": "## Derive a consistent design from the same input\n\nClassification uses two facts: whether somebody is forbidden to learn the asset and whether it is derived. Requirements use actor roles, reliance on another party's value, that value's immediate sources and constraints. The privacy/zero_knowledge distinction is a rule of this teaching model, not a replacement for general cryptographic definitions. A signature alone does not prove an arbitrary computation correct.\n\n## Check coverage and minimality separately\n\nUnion the selected options' provides and check that every required property is present. Check admissibility, then remove each option in turn. Any removable option is redundant. There may be several inclusion-minimal answers; matching the reference's exact combination or order is unnecessary. Prefer none whenever it is available and sufficient.\n\n## Connect flows to experiments\n\nPlace the selected tools and include every asset in a flow. Check that a forbidden reader never receives readable data. This checks diagram labels: writing ciphertext does not execute encryption.\n\nIn addition to attacks on required properties, plan one experiment per placed option/trust pair. The assumption primitive/trust fields identify that relationship. Breaking an assumption may expose information; record that limit in expected or limitation. Each matrix evidence entry must attack the same property. An uptime experiment is not evidence of secrecy.\n\n## Adaptation is the final construction task\n\nFrom the changed brief, reconstruct requirements, a minimal combination, a graph and its experiment links. Reusing functions is appropriate; hard-coding old names or graphs is not. Matching a public example and remaining consistent after a change are different checks.\n\nAutomatic grading checks the explicit rules and references, not persuasive prose, execution of experiments or a cryptographic security proof. The READMEs record author validation and unverified boundaries.",
       "learningGoals": [
         "Break a problem into actors, protected information and trust before thinking about tools",
         "Derive the required properties from the brief, and require nothing beyond them",
@@ -174,63 +277,147 @@
       "checks": [
         {
           "id": "assets",
-          "label": "List what belongs to whom, and how far it is hidden"
+          "label": "Classify ownership and secrecy",
+          "hints": [
+            {
+              "id": "assets-hint-1",
+              "content": "Classifying information tells the design what to protect. Having a forbidden reader and being derived from other information are independent facts. The number of permitted readers does not decide the label."
+            },
+            {
+              "id": "assets-hint-2",
+              "content": "Input x belongs to A, has forbidden reader B, and has no sources: it is private. A result y derived from x with no forbidden reader is derived-public. Preserve each asset’s owner from its own record."
+            },
+            {
+              "id": "assets-hint-3",
+              "content": "In design.py, loop over brief[\"assets\"] in classify_assets. Test whether must_not_learn and get(\"derived_from\",[]) are empty, use the 2×2 table, and put owner/classification under asset[\"id\"]. Pass the public example, then submit assets."
+            }
+          ]
         },
         {
           "id": "requirements",
-          "label": "Take from the brief only the properties it asks for",
+          "label": "Derive which of six properties are required",
           "hints": [
             {
               "id": "requirements-hint-1",
-              "content": "Hiding a value from a party that helps produce the result and hiding it from a party that only reads the answer are not the same requirement. The second one is about somebody trusting a value they did not compute, and it belongs in a different column."
+              "content": "Separate hiding inputs from computing parties from proving a result to its reader without revealing the input. Setting every property True invents requirements and unnecessary cryptography."
+            },
+            {
+              "id": "requirements-hint-2",
+              "content": "Reader C relies on y, y derives from x, and x is hidden from C: require soundness and zero_knowledge. If only C is forbidden, this fact alone does not require privacy. Hiding x from evaluator B adds privacy."
+            },
+            {
+              "id": "requirements-hint-3",
+              "content": "Initialize every PROPERTIES entry False, then correctness=True. Map actor IDs to roles and apply the six free-statement conditions to assets and constraints. For zero_knowledge, match non-owner relying parties only against direct sources of that same asset. Submit requirements."
             }
           ]
         },
         {
           "id": "alternatives",
-          "label": "Lay the options out, including using none of them"
+          "label": "Compare all six options, including no cryptography",
+          "hints": [
+            {
+              "id": "alternatives-hint-1",
+              "content": "A comparison needs the no-cryptography baseline. The table fixes each option’s properties and assumptions; its admissibility changes with whether this brief supplies the party it needs."
+            },
+            {
+              "id": "alternatives-hint-2",
+              "content": "Two private inputs owned by A,A have one distinct owner, so key_holder is available. A,B gives two owners and is unavailable. For operator, look for any actor outside the union of all must_not_learn lists, regardless of role name."
+            },
+            {
+              "id": "alternatives-hint-3",
+              "content": "Iterate all PRIMITIVES in compare_alternatives and copy primitive/satisfies/assumptions/non_goals from the table. Test operator/key_holder trusts using the free rules and return a boolean admissible. Submit alternatives with six unique rows including none."
+            }
+          ]
         },
         {
           "id": "selection",
-          "label": "Select as much as the brief asked for, and no more",
+          "label": "Choose a sufficient, irredundant combination",
           "hints": [
             {
               "id": "selection-hint-1",
-              "content": "Drop one of the options you selected. If the requirements are still covered, that option was doing nothing."
+              "content": "More tools are not the goal. Cover every required property and make each selected option necessary. Minimality means no selected member can be removed, not that you must beat every other valid combination’s size."
             },
             {
               "id": "selection-hint-2",
-              "content": "One of the six briefs requires no cryptography at all. A design that answers it with a primitive started from the tool rather than from the problem."
+              "content": "mpc+zk covers correctness/privacy/soundness. Removing mpc loses privacy; removing zk loses soundness. Adding commitment is redundant because it can be removed without losing a requirement."
+            },
+            {
+              "id": "selection-hint-3",
+              "content": "Read required_properties in select_primitive. Prefer [\"none\"] when admissible and sufficient. Otherwise try subsets of the six options, check coverage/admissibility, and keep a set where removing any member breaks coverage. Order is arbitrary. Submit selection."
             }
           ]
         },
         {
           "id": "architecture",
-          "label": "Say what crosses each boundary, and in what form",
+          "label": "Construct a diagram of how secrets travel",
           "hints": [
             {
               "id": "architecture-hint-1",
-              "content": "Check whether an asset you called hidden arrives at that party along a plaintext edge. A diagram will hide the contradiction; the type on the edge will not."
+              "content": "A flow diagram states whether the received information is readable, not just where it goes. A correct tool selection still fails if a forbidden reader receives plaintext. Include locally held information too."
+            },
+            {
+              "id": "architecture-hint-2",
+              "content": "Suppose nA belongs to A, nB to B, and B must not learn x. A plaintext nA→nB edge violates that rule; ciphertext passes this model’s readability check. A data self-loop nA→nA is allowed, but self-trust in trusts is not."
+            },
+            {
+              "id": "architecture-hint-3",
+              "content": "Build nodes from actors, place the selected options, and put every asset on an edge. Choose one of the five visibility names and compare the receiving operated_by with must_not_learn. Trust references must exist and be acyclic. Submit architecture with a valid selection."
             }
           ]
         },
         {
           "id": "attacks",
-          "label": "Write down how it breaks, in a form you could observe"
+          "label": "State failure conditions and observations",
+          "hints": [
+            {
+              "id": "attacks-hint-1",
+              "content": "To check a design claim, specify what a failure would look like. Cover required properties and broken trust assumptions of placed tools. This is a plan; submitting it does not run the experiments."
+            },
+            {
+              "id": "attacks-hint-2",
+              "content": "For privacy, have B inspect received records and observe whether x can be identified. To test mpc/non_collusion use kind=collude and assumption={\"primitive\":\"mpc\",\"trust\":\"non_collusion\"}. An experiment breaking an assumption need not be rejected by the scheme."
+            },
+            {
+              "id": "attacks-hint-3",
+              "content": "In attack_plan, add rows for required properties, then collect each placed option/trust pair and add assumption rows. Use unique IDs, at least five entries, one of the five kinds, and meaningful nonempty hypothesis/observable/expected strings. Submit attacks."
+            }
+          ]
         },
         {
           "id": "matrix",
-          "label": "Say, for each property, which component carries it",
+          "label": "Connect properties, components and experiments",
           "hints": [
             {
               "id": "matrix-hint-1",
-              "content": "Check that the component you made responsible actually implements an option that provides that property. The `non_goals` in PRIMITIVES list what each option is routinely, wrongly, expected to give you."
+              "content": "Link each property to an asset, a responsible component and an experiment. An existing experiment on a different property is not evidence for this row."
+            },
+            {
+              "id": "matrix-hint-2",
+              "content": "For privacy, link a node whose option provides privacy with probe1 whose property is privacy. Citing an availability experiment that withholds responses does not inspect whether an input stays secret."
+            },
+            {
+              "id": "matrix-hint-3",
+              "content": "Create rows only for required properties. Choose existing asset/adversary IDs, find a graph component with that property in its options’ provides, cite an attack_plan ID on the same property, and state the remaining assumption in limitation. Submit matrix."
             }
           ]
         },
         {
           "id": "revision",
-          "label": "Answer a brief in which one fact has moved"
+          "label": "Reconstruct a design after requirements change",
+          "hints": [
+            {
+              "id": "revision-hint-1",
+              "content": "Changed assumptions can alter the tools, data flows and experiment links. Reconstruct each artifact from the revised argument instead of returning the old design."
+            },
+            {
+              "id": "revision-hint-2",
+              "content": "Suppose B could previously read x but is now in must_not_learn. The old plaintext flow to B fails. Re-derive classification, requirements and selection, then align flow labels with a privacy experiment."
+            },
+            {
+              "id": "revision-hint-3",
+              "content": "Pass the new brief to required_properties and select_primitive, build architecture with that selection, and build property_matrix using the same brief/graph. Return required/selection/architecture/matrix. Make attack_plan work for the changed graph too, then submit revision."
+            }
+          ]
         }
       ]
     }

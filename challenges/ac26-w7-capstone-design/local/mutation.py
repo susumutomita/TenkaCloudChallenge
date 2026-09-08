@@ -13,6 +13,7 @@ Exit code 0 means every mutation was killed.
 from __future__ import annotations
 
 import sys
+import unittest
 import types
 from pathlib import Path
 
@@ -209,6 +210,11 @@ def _load(source: str) -> types.ModuleType:
 
 
 def main() -> int:
+    from tests.hidden.test_design_contracts import CONTRACT_MUTANTS
+    suite = unittest.defaultTestLoader.discover(str(ROOT / "tests/hidden"), pattern="test_*.py")
+    if not unittest.TextTestRunner().run(suite).wasSuccessful():
+        return 1
+    print(f"PASS {len(CONTRACT_MUTANTS)} contract mutants rejected by their own checkpoint")
     baseline = check_design.run(_load(REFERENCE), SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline[:3]}")
@@ -252,13 +258,25 @@ def main() -> int:
     else:
         print("KILLED verifier credits a checkpoint it does not implement")
 
+    table_rewrite = '\n'.join((
+        'from participant.lab import PRIMITIVES, PROPERTIES',
+        'PRIMITIVES["none"]["provides"] = PROPERTIES',
+        'PRIMITIVES["none"]["trusts"] = ()',
+        'def select_primitive(brief): return ["none"]',
+    ))
+    if evaluate("selection", table_rewrite):
+        survivors.append("public option table rewrites grading rules")
+        print("SURVIVED public option table rewrites grading rules")
+    else:
+        print("KILLED public option table rewrites grading rules")
+
     print()
     if survivors:
         print(f"{len(survivors)} mutation(s) survived. The hidden tests have a hole:")
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(MUTATIONS) + 2} mutations killed.")
+    print(f"All {len(MUTATIONS) + 3 + len(CONTRACT_MUTANTS)} mutations killed.")
     return 0
 
 

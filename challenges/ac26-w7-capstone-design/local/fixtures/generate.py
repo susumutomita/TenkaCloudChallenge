@@ -404,7 +404,11 @@ def variants(seed: str) -> list[dict[str, Any]]:
 
 def review_variant(seed: str) -> dict[str, Any]:
     """The one variant `make inspect` walks through, so the learner has a worked example."""
-    return variants(seed)[0]
+    source = public_brief(seed)
+    choices = [build(source) for build in VARIANT_BUILDERS]
+    changed = [candidate for candidate in choices if any(
+        candidate[key] != source[key] for key in ("actors", "assets", "constraints"))]
+    return changed[_stream(seed, "review-change") % len(changed)]
 
 
 # ---------------------------------------------------------------------------

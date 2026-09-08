@@ -7,6 +7,10 @@
 # pinning it: nothing in CI goes through Docker, so a dead pin passes every check.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+RUN useradd --uid 10001 --create-home lab
+USER lab
+
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -51,7 +55,7 @@ CMD ["python", "participant/server.py"]
 # the hidden checker grades against the same table -- one implementation of the supplied
 # vocabulary, graded and inspected, rather than two that can drift.
 FROM base AS verifier
-COPY participant/lab.py ./participant/lab.py
+COPY participant/lab.py participant/execution.py participant/isolation.py participant/worker.py participant/protocol.py ./participant/
 COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/
 COPY verifier/ ./verifier/
