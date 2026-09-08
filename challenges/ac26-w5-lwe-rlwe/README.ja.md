@@ -378,7 +378,7 @@ Week 5 の教材は公開済みなので、`courseAlignment` は `week5/README.m
 ローカル実行は自習用の honor-system 検証です。
 Workbench は starter・公開テスト・公開用の誤実装・表示コードを持ち、fixture・hidden test・verifier は採点側に分離しています。
 
-verifier が保証するのは、提出コードが採点処理をハングさせたり、別 checkpoint の点を得たり、期待値を直接漏らしたりしないことです。
+verifier は提出コードの時間と出力を制限し、親プロセスで結果と checkpoint を検査します。失敗表示は期待値を含めません。一般的なサービス拒否耐性や Docker 管理者への機密性を保証するものではありません。
 fixture は deploy seed 由来なので暗記した答えは持ち越せません。
 
 競技順位・試験・修了判定には participant が管理しない verifier が必要で、[#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271) で追跡しています。
@@ -404,3 +404,13 @@ fixture は deploy seed 由来なので暗記した答えは持ち越せませ�
 
 
 参加者向け資料だけの独立読解で、連続予算と周期的な復号の混同、方式間と実装間の交差検査の混同、ノイズがあるのに線形方程式だけで鍵を得られるという誤説明を発見して修正しました。Portalのrun_public_testsへnormalizeのみの実装を渡し、その成功と後続の未実装の失敗を確認。カタログ116件有効。ブラウザ実プレーとデプロイ先採点は未実施。
+
+## 親プロセスによる採点（Issue #837、2026-09-08）
+
+判定条件・入力生成・最終得点判定を信頼する verifier 側に置き、提出関数だけを別の Linux worker で実行します。親へ渡すのは型を保ったデータ値だけです。tuple/list、辞書の整数キー、bool/int を区別し、契約上の入力拒否は派生型を含む `ValueError` として扱います。他の AC26 教材で使う有界 worker と seccomp による分離を再利用しています。
+
+採点全体の期限は12秒で、既存の転送側15秒以内です。両サービスは UID 10001 と Compose の `init: true` を使います。worker のファイル読み取り・ネットワーク・別プロセスへのアクセス・親へのシグナルを制限し、Linux の分離機能が利用できなければ不合格にします。Docker を管理する人への機密性や本番セキュリティを保証するものではありません。公開 API、得点、入力データ、正しい計算上の別解は維持しています。
+
+作者検証：`make reference-test` で参考解が通り、既存の計算誤り 22 件をすべて拒否しました。`make boundary-test` は 7 個の Linux テストで、全8項目の参考解、未実装・途中終了、型の保持、期限、ファイル/プロセス分離、非 root 実行を検査します。実 Workbench の HTTP 経路（config → inspect → starter → test → prepare → verify）で参考解の公開例 3 件と全8項目の提出が通り、途中終了は全項目で拒否されました。作者による回帰検証であり、独立した参加者プレーや実 Portal の得点履歴の検証ではありません。
+
+このホストでは `make test` を実行しましたが、Docker の既定アドレスプール枯渇でネットワークを作成できませんでした。Workbench 確認には重複しない専用サブネットの一時 Compose override を使い、リポジトリのネットワーク設定や他作業のネットワークは変更していません。実 AWS、実 Portal の得点履歴、チーム間の動作は未確認です。デプロイは行っていません。

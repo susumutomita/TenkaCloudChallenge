@@ -44,6 +44,8 @@ from fixtures.generate import (  # noqa: E402
     test_vector,
 )
 
+from participant.protocol import ObservedRows  # noqa: E402
+
 LABELS = ("h0", "h1", "h2", "h3")
 
 
@@ -237,7 +239,7 @@ def check_cmux(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-class _Recorder(tuple):
+class _Recorder(ObservedRows):
     """An RGSW that records which rows were read, in order.
 
     Used to compare one run against another rather than to police a style: two runs whose
@@ -267,6 +269,9 @@ _FORBIDDEN = ("rlwe_decrypt", "rlwe_phase", "decode", "centered", "lwe_phase")
 
 def _with_tripwires(module, body):
     """Run `body()` with every decryption helper replaced by one that records the attempt."""
+    remote_audit = getattr(module, "_with_tripwires", None)
+    if remote_audit is not None:
+        return remote_audit(body, _FORBIDDEN)
     import fixtures.generate as supplied
 
     attempts: list[str] = []

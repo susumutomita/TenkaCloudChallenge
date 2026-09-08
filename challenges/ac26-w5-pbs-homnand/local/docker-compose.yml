@@ -16,6 +16,7 @@
 name: ac26-w5-pbs-homnand
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -66,6 +67,7 @@ services:
       - workshop-host
 
   verifier:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

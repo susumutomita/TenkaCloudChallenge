@@ -121,9 +121,10 @@ checkpoint's expected value — `fixtures/generate.py` has to implement all elev
 `starter/lwe.py` asks you to write in order to derive them, so it is not in the image you
 run ([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)).
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry.
+The verifier bounds submitted-code runtime and output, checks results in its parent process,
+and echoes the checkpoint being graded. Failure feedback excludes expected values. Fixtures
+come from the deployment seed. These controls do not establish general denial-of-service
+resistance or confidentiality against the Docker administrator.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not
@@ -152,3 +153,13 @@ Bilingual hints now follow mechanism → small example → named Portal action f
 
 
 Independent participant-only reading caught three inconsistencies: continuous budget versus periodic decoding, cross-implementation versus cross-scheme checking, and an unsupported noise-free linear-algebra claim. These were corrected. Portal run_public_tests with only normalize implemented reports that check successful and later unfinished checks failed. Catalog validation passed for all 116 problems. Browser play and deployed scoring were not exercised.
+
+## Parent-owned grading (Issue #837, 2026-09-08)
+
+The checker, fixture generation and final verdict run in the trusted verifier process. Submitted functions run in a separate Linux worker; only typed, inert return values cross back. The transport preserves tuple/list, integer dictionary keys, and bool/int distinctions. Documented input refusals retain `ValueError`, including subclasses. It reuses the existing bounded worker and seccomp isolation used by other AC26 problems.
+
+The evaluator has a 12-second total deadline, below the existing 15-second forwarding timeout. Both services use UID 10001 and Compose `init: true`. The worker cannot open files, create network/process access, or signal the parent; missing Linux isolation fails closed. This is defense inside the local evaluator, not confidentiality against a person controlling Docker or a production-security certification. Public APIs, scoring, fixtures and legal arithmetic alternatives are unchanged.
+
+Author verification: `make reference-test` accepts the reference and rejects all 22 existing arithmetic mutants. `make boundary-test` adds 7 Linux test methods, including all 8 reference checkpoint routes, missing functions/early termination, typed values, timeout, filesystem/process isolation and non-root execution. The actual Workbench HTTP path (`config` → `inspect` → `starter` → `test` → `prepare` → `verify`) passed 3 reference public examples and all 8 checkpoint submissions; early termination was rejected at every checkpoint. These are author regression checks, not an independent participant playtest or a live Portal scoring-persistence test.
+
+`make test` was attempted on this host but could not allocate Docker's exhausted default address pool. A temporary, task-owned Compose override supplied non-overlapping private subnets for the Workbench checks; no repository network settings or unrelated networks were changed. Real AWS, live Portal score history and cross-team behavior were not exercised. No deployment was performed.

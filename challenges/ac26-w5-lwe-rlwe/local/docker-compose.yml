@@ -16,6 +16,7 @@
 name: ac26-w5-lwe-rlwe
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -67,6 +68,7 @@ services:
       - workshop-host
 
   verifier:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
