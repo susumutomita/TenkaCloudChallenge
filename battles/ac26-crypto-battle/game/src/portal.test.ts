@@ -1,3 +1,4 @@
+import RawStatusPanel from "../../portal/StatusPanelCore.tsx";
 import { artifactFields } from "./ledger-codec.ts";
 /**
  * Portal plugin tests (Issue #486, PR4).
@@ -2134,4 +2135,14 @@ it("the last PROVE hint leaves the same four answer cells blank", () => {
   expect(highlighted).toEqual(["2", "1"]);
   expect(html).toContain('aria-label=". 1 4 2 4 2 3 . 1 3 2 . . 4 1 3"');
   expect(html).not.toContain('aria-label="3 1 4 2 4 2 3 1 1 3 2 4 2 4 1 3"');
+});
+
+
+describe("raw status missing connection recovery",()=>{
+ for(const locale of ["ja","en"] as const)it(locale,()=>{
+  const markup=renderToStaticMarkup(createElement(RawStatusPanel,{locale} as PortalSlotProps));
+  expect(markup).toContain(locale==="ja"?"ページを再読み込み":"Reload the page");
+  expect(markup).toContain(locale==="ja"?"運営に連絡":"contact the event organizer");
+  expect(markup).not.toContain("接続できませんのため");
+ });
 });
