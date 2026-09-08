@@ -11,7 +11,6 @@ Failure messages name the property that broke, never the expected value.
 from __future__ import annotations
 
 import sys
-from copy import deepcopy
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable
@@ -267,7 +266,14 @@ def check_privacy(module: Any, seed: str) -> list[str]:
 
     for members in (*_coalitions(setting.parties, 1), *_coalitions(setting.parties, 2)):
         expected = _spec_view(transcript, members)
-        observed, error = _call(module, "view", deepcopy(transcript), members)
+        # Required values are immutable integers/strings. Isolate the lists and
+        # records that view inspects without copying unrestricted diagnostic extras.
+        view_input = {
+            **transcript,
+            "messages": [dict(message) for message in transcript["messages"]],
+            "public": [dict(entry) for entry in transcript["public"]],
+        }
+        observed, error = _call(module, "view", view_input, members)
         if error:
             failures.append(error)
             break

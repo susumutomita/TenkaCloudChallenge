@@ -61,6 +61,17 @@ class ContractTests(unittest.TestCase):
         obj.view = valid
         self.assertEqual(check.check_privacy(obj, 'contract'), [])
 
+    def test_noncopyable_diagnostic_extras_are_allowed(self):
+        obj = module()
+        original = obj.run
+        def valid(setting, randomness):
+            transcript = original(setting, randomness)
+            for record in [transcript, *transcript["messages"], *transcript["public"]]:
+                record["diagnostic"] = (item for item in ())
+            return transcript
+        obj.run = valid
+        self.assertEqual(check.check_privacy(obj, 'contract'), [])
+
     def test_sender_inputs_cannot_be_swapped_with_same_total(self):
         obj = module()
         original = obj.run
