@@ -3,8 +3,8 @@
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
     on a missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
+  - The parent owns grading; the restricted worker returns only function values.
+    Submitted output is never a grading verdict.
   - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
     capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
     checkpoint instead of the verifier.
@@ -33,15 +33,15 @@ import hashlib
 import hmac
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from participant.execution import LearnerError, LearnerSession
+from tests.hidden import check_padding
 
 from fixtures.generate import (
     LENGTH_FIELD_BYTES,
@@ -59,10 +59,6 @@ PROBLEM_ID = "sha256-bytes-padding"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 10
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
 #: Cap for the verdict's optional human-readable failure summary. Kept under the
 #: platform's 2000-character message limit with room to spare.
 MAX_MESSAGE_CHARS = 1900
@@ -84,26 +80,6 @@ MANUAL_CHECKPOINTS = frozenset(CHECKPOINTS) - frozenset(CODE_CHECKPOINTS)
 #: is someone pasting a file, not answering.
 MAX_COLLISION_BYTES = 2 * 64
 
-
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
-# which aborts the exec — so on a macOS checkout the address-space cap turned
-# every submission run into "could not run at all", including the reference.
-#
-# The lab itself is python:3.12-slim on Linux, where this cap does apply. Skipping
-# it on Darwin therefore does not weaken what participants actually run; it makes
-# `make reference-test` and `bun run validate` work on a macOS checkout, where the
-# alternative was no verification at all. The timeout, process cap, file-size cap,
-# `-I` isolation, and throwaway workspace all still apply on every platform.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
 def _normalized_int(value: object) -> int | None:
@@ -182,34 +158,7 @@ def _check_collision(submission: object) -> bool:
     return broken_pad_zeros_only(candidate) == broken_pad_zeros_only(original)
 
 
-RUNNER = """
-import json, os, sys
-from pathlib import Path
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden.check_padding import {entry}
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    from padding import {symbol}
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-print(json.dumps({{"failures": {entry}({symbol}, {seed!r})}}))
-sys.stdout.flush()
-os._exit(0)
-"""
+
 
 
 def _failure_message(failures: list[object]) -> str | None:
@@ -224,53 +173,15 @@ def _failure_message(failures: list[object]) -> str | None:
 
 
 def _run_hidden(submission: object, entry: str, symbol: str) -> tuple[bool, str | None]:
-    """Run one hidden suite against the learner's file in a throwaway workspace."""
-    if not isinstance(submission, str) or not submission.strip():
+    if not isinstance(submission, str) or not submission.strip() or len(submission) > MAX_BODY_BYTES:
         return False, None
-    if len(submission) > MAX_BODY_BYTES:
-        return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "padding.py").write_text(submission, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, seed=SEED, entry=entry, symbol=symbol
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    stdout = captured[-MAX_OUTPUT_BYTES:]
-    for line in reversed(stdout.splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    try:
+        with LearnerSession({'padding.py': submission}) as learner:
+            failures = getattr(check_padding, entry)(getattr(learner.module(), symbol), SEED)
+    except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        return False, 'The submitted functions could not be evaluated.'
+    return not failures, _failure_message(failures)
+
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:

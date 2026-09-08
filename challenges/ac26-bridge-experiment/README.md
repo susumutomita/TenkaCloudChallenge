@@ -40,3 +40,14 @@ No AWS resources are created. Running containers consume local Docker CPU, memor
 The participant HTTP route and independent first-reading gaps and reread outcomes are recorded in `local/tests/hidden/READER.md`. Live AWS and third-party participant play remain unrun.
 
 Issue #716 reader follow-up documents the slow-copy name and a small comparison before submission; see `local/tests/hidden/READER.md`. Reference validation killed14 mutants and passed the public-process isolation check. Two live-workbench checks were skipped by the author target.
+
+## Function evaluation boundary
+
+The trusted parent grades returned function values. Learner functions run in a restricted Linux process with a 12-second total limit; their output does not decide the score. Public arithmetic inputs and API signatures are unchanged, including bytes/bytearray and tuple/list results where supported. `make evaluation-test` checks the reference through the actual evaluator, missing implementations, and type preservation. Deployment and platform score-history persistence are not covered by this local check.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same optional standard-library helpers. Its original imports (including __future__ and supplied problem APIs) remain supported. Other optional imports and file/network operations are not supported by the evaluator.
+スターターにも同じ追加用の一覧を表示します。最初からあるimport（__future__や教材のAPIなど）は引き続き使えます。それ以外の追加importとファイル・通信操作は採点環境では対応しません。

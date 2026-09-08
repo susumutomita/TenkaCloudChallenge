@@ -150,3 +150,14 @@ make install・make agent-gate（116教材）、内部回帰2件を通過。内�
 
 
 レビュー追補：署名欠落を signature と enforce-uv の採点器に追加し、辞書の直接参照で例外になる2種の変異を不合格にしました。reference-test が使う実行器で内部回帰テストも検出します。Python直接実行で回帰2件と変異8種の拒否、カタログ検証を確認しました。この追補ではDocker・実Portalは未実施です。
+
+## 関数の実行と採点の分離
+
+関数の戻り値を、信頼する親プロセスが採点します。提出関数は制限したLinuxプロセスで動かし、全体の期限は12秒です。出力した文字列で得点は決まりません。公開する計算入力・APIは維持し、許可されたbytes/bytearrayやtuple/listも区別して扱います。`make evaluation-test`で正規回答の採点経路・未実装の拒否・型の保持を確認します。デプロイとプラットフォームの得点履歴への保存は、このローカル検証には含みません。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same optional standard-library helpers. Its original imports (including __future__ and supplied problem APIs) remain supported. Other optional imports and file/network operations are not supported by the evaluator.
+スターターにも同じ追加用の一覧を表示します。最初からあるimport（__future__や教材のAPIなど）は引き続き使えます。それ以外の追加importとファイル・通信操作は採点環境では対応しません。

@@ -96,3 +96,14 @@ checkpoint を全部通り、最終行だけの trace は当初の checkpoint �
 
 
 6チェックポイントを3段ヒントに変更しました。参加者向け資料だけの読解で、n乗根の前提の欠落、invalid_values の記載漏れ、候補探索の手順不足を確認し、日英の無料本文にも補いました。この変更ではランタイム・採点器を変更していません。実Portalでのプレーは未実施で、カタログ検証とは区別します。
+
+## 関数の実行と採点の分離
+
+関数の戻り値を、信頼する親プロセスが採点します。提出関数は制限したLinuxプロセスで動かし、全体の期限は12秒です。出力した文字列で得点は決まりません。公開する計算入力・APIは維持し、許可されたbytes/bytearrayやtuple/listも区別して扱います。`make evaluation-test`で正規回答の採点経路・未実装の拒否・型の保持を確認します。デプロイとプラットフォームの得点履歴への保存は、このローカル検証には含みません。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same optional standard-library helpers. Its original imports (including __future__ and supplied problem APIs) remain supported. Other optional imports and file/network operations are not supported by the evaluator.
+スターターにも同じ追加用の一覧を表示します。最初からあるimport（__future__や教材のAPIなど）は引き続き使えます。それ以外の追加importとファイル・通信操作は採点環境では対応しません。

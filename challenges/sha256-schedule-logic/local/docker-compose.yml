@@ -15,6 +15,7 @@
 name: sha256-schedule-logic
 services:
   workbench:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile
@@ -66,6 +67,7 @@ services:
       - workshop-host
 
   verifier:
+    init: true
     build:
       context: .
       dockerfile: Dockerfile

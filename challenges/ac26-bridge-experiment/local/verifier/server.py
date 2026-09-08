@@ -3,8 +3,8 @@
 Security contract (docs/curricula/advanced-cryptography-2026/TEMPLATE.md §/verify):
   - `checkpointId` is required and is echoed back verbatim. The platform fails closed
     on a missing or mismatched echo, so it can never credit another checkpoint.
-  - Submissions are copied into a fresh temporary workspace. The source tree is never
-    written to.
+  - Grading stays in the parent. Restricted learner processes return function
+    values, never grading verdicts. The source tree is never written to.
   - Learner code runs in a subprocess with a wall-clock timeout, a memory cap, and a
     capped output size. A hang, a fork bomb, or a gigabyte of prints fails the
     checkpoint instead of the verifier.
@@ -39,15 +39,15 @@ from __future__ import annotations
 
 import json
 import os
-import resource
-import subprocess
 import sys
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from participant.execution import LearnerError, LearnerSession
+from tests.hidden import check_counter
 
 from math import gcd
 
@@ -58,10 +58,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
 
 MAX_BODY_BYTES = 256 * 1024
-RUN_TIMEOUT_SECONDS = 10
-MAX_ADDRESS_SPACE_BYTES = 512 * 1024 * 1024
-MAX_PROCESSES = 64
-MAX_OUTPUT_BYTES = 64 * 1024
+RUN_TIMEOUT_SECONDS = 12
 #: Wall clock for reading a request body, so a stalled client cannot pin the server.
 REQUEST_TIMEOUT_SECONDS = 15
 #: Cap for the failed-code-checkpoint `message`, under the platform's 2000-char schema.
@@ -77,26 +74,6 @@ CHECKPOINTS = (
     "count-no-walkback",
 )
 SUBMISSION_FILES = ("counter.py",)
-
-# Darwin aliases RLIMIT_AS onto RLIMIT_RSS and refuses to set it, while still
-# reporting RLIM_INFINITY for it. Setting it anyway raises inside `preexec_fn`,
-# which aborts the exec — so on a macOS checkout the address-space cap turned
-# every submission run into "could not run at all", including the reference.
-#
-# The lab itself is python:3.12-slim on Linux, where this cap does apply. Skipping
-# it on Darwin therefore does not weaken what participants actually run; it makes
-# `make reference-test` and `bun run validate` work on a macOS checkout, where the
-# alternative was no verification at all. The timeout, process cap, file-size cap,
-# `-I` isolation, and throwaway workspace all still apply on every platform.
-_ADDRESS_SPACE_CAPPABLE = sys.platform.startswith("linux")
-
-
-def _limits() -> None:
-    """Applied inside the child, before exec. Caps memory, processes, and file size."""
-    if _ADDRESS_SPACE_CAPPABLE:
-        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
-    resource.setrlimit(resource.RLIMIT_NPROC, (MAX_PROCESSES, MAX_PROCESSES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
 def _normalized_int(value: object) -> int | None:
@@ -114,41 +91,7 @@ def _normalized_int(value: object) -> int | None:
     return None
 
 
-def _run_submission_script(
-    sources: dict[str, str], script: str, seed: str, phase: str = "advance"
-) -> tuple[int, str] | None:
-    """Run the submitted `counter.py` with this process's resource limits."""
-    with tempfile.TemporaryDirectory() as workspace:
-        for name, text in sources.items():
-            (Path(workspace) / name).write_text(text, encoding="utf-8")
-        transcript = Path(workspace) / "stdout"
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [
-                        sys.executable,
-                        "-I",
-                        "-c",
-                        script.format(root=str(ROOT), workspace=workspace, seed=seed, phase=phase),
-                    ],
-                    stdout=sink,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return None
-    return completed.returncode, captured[-MAX_OUTPUT_BYTES:]
+
 
 
 def _check_environment(submission: object) -> bool:
@@ -202,45 +145,7 @@ def _check_no_walkback(submission: object) -> bool:
     return gcd(step, modulus) > 1
 
 
-RUNNER = """
-import json, os, sys
-from pathlib import Path
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden.check_counter import run, run_count
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import counter
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-if {phase!r} == "count":
-    target = getattr(counter, "count_no_walkback", None)
-    if not callable(target):
-        print(json.dumps({{"failures": ["count_no_walkback is not defined in counter.py"]}}))
-    else:
-        print(json.dumps({{"failures": run_count(target, {seed!r})}}))
-else:
-    target = getattr(counter, "advance", None)
-    if not callable(target):
-        print(json.dumps({{"failures": ["advance is not defined in counter.py"]}}))
-    else:
-        print(json.dumps({{"failures": run(target, {seed!r})}}))
-sys.stdout.flush()
-os._exit(0)
-"""
+
 
 
 def _failure_detail(failures: list[object]) -> str:
@@ -253,38 +158,18 @@ def _failure_detail(failures: list[object]) -> str:
     return "; ".join(dict.fromkeys(item for item in failures if isinstance(item, str)))[:MAX_MESSAGE_CHARS]
 
 
-def _check_code(submission: object, phase: str = "advance") -> tuple[bool, str]:
-    """Run the hidden suite for one code checkpoint in a throwaway workspace.
+def _check_code(submission: object, phase: str = "advance"):
+    source = submission
+    if not isinstance(source, str) or not source.strip() or len(source) > MAX_BODY_BYTES:
+        return False, ""
+    try:
+        with LearnerSession({'counter.py': source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            target = learner.module()
+            failures = check_counter.run_count(target.count_no_walkback, SEED) if phase == "count" else check_counter.run(target.advance, SEED)
+    except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        return False, 'The submitted functions could not be evaluated within the time limit.'
+    return not failures, _failure_detail(failures)
 
-    Returns the verdict and, on failure, the checker's failure summary for the
-    response `message`. An empty string means no detail is surfaced -- except for a
-    run that hit the time limit on the count checkpoint, where the limit itself is
-    the documented rule the submission broke.
-    """
-    if not isinstance(submission, str) or not submission.strip():
-        return False, ""
-    if len(submission) > MAX_BODY_BYTES:
-        return False, ""
-    result = _run_submission_script({"counter.py": submission}, RUNNER, SEED, phase)
-    if result is None:
-        if phase == "count":
-            return False, (
-                f"the run did not finish within {RUN_TIMEOUT_SECONDS} seconds; "
-                "the graded ranges cannot be walked one number at a time"
-            )
-        return False, ""
-    if result[0] != 0:
-        return False, ""
-    for line in reversed(result[1].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, ""
-        return len(failures) == 0, _failure_detail(failures)
-    return False, ""
 
 
 def evaluate(checkpoint_id: str, submission: object) -> tuple[bool, str]:

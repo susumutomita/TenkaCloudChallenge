@@ -148,3 +148,14 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 レビュー追補で公開テストに符号化の往復を追加し、採点器に秘密鍵・nonce・responseの不正入力を追加しました。参照実装で公開4件が通り、変異13種を拒否しました。作者の実行結果であり、参加者プレーの証拠ではありません。
 
 追加レビューでは、署名の形の不備と、単位元・別の曲線・曲線外のコミットメントを拒否する採点を検証しました。参照実装と全19種類のmutation検査が通過。作者側の採点検証であり、実プレーの証拠ではありません。
+
+## 関数の実行と採点の分離
+
+関数の戻り値を、信頼する親プロセスが採点します。提出関数は制限したLinuxプロセスで動かし、全体の期限は12秒です。出力した文字列で得点は決まりません。公開する計算入力・APIは維持し、許可されたbytes/bytearrayやtuple/listも区別して扱います。`make evaluation-test`で正規回答の採点経路・未実装の拒否・型の保持を確認します。デプロイとプラットフォームの得点履歴への保存は、このローカル検証には含みません。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same optional standard-library helpers. Its original imports (including __future__ and supplied problem APIs) remain supported. Other optional imports and file/network operations are not supported by the evaluator.
+スターターにも同じ追加用の一覧を表示します。最初からあるimport（__future__や教材のAPIなど）は引き続き使えます。それ以外の追加importとファイル・通信操作は採点環境では対応しません。
