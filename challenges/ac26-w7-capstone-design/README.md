@@ -139,3 +139,10 @@ The actual Workbench upload route ran the same 13 public tests successfully, bef
 after the value-boundary change. No platform or
 runtime contract was changed to hide this host mount failure. Browser rendering, Portal score
 persistence, AWS deployment, and a third-party play session were not exercised in this run.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

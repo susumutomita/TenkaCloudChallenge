@@ -183,3 +183,10 @@ reference と分かれます。
 このホストでは `make test` を実行しましたが、Docker の既定アドレスプール枯渇でネットワークを作成できませんでした。Workbench 確認には重複しない専用サブネットの一時 Compose override を使い、リポジトリのネットワーク設定や他作業のネットワークは変更していません。実 AWS、実 Portal の得点履歴、チーム間の動作は未確認です。デプロイは行っていません。
 
 一定経路の監査では行アクセス記録を親が保持し、行読み取りと既存の復号 helper 検出を有界な操作として転送します。シリアライズで監査記録が消えることを防ぎ、行を tuple にまとめる正しい実装も受け入れます。これは限定的な監査であり、定時間実行の証明ではありません。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

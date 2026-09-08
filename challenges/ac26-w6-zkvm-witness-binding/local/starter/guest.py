@@ -1,4 +1,9 @@
-"""JA: このファイルだけを編集。証拠を確認 → encoding → 公開テスト → 提出。
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+JA: このファイルだけを編集。証拠を確認 → encoding → 公開テスト → 提出。
 EN: Edit this file only. Inspect evidence → encoding → public tests → submit.
 
 目的: 公開の主張と秘密の入力を分け、出力をその対象へ結び付ける。

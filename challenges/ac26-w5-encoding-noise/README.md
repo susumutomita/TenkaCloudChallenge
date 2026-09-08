@@ -154,3 +154,10 @@ Author verification: `make reference-test` accepts the reference and rejects all
 `make test` was attempted on this host but could not allocate Docker's exhausted default address pool. A temporary, task-owned Compose override supplied non-overlapping private subnets for the Workbench checks; no repository network settings or unrelated networks were changed. Real AWS, live Portal score history and cross-team behavior were not exercised. No deployment was performed.
 
 A separate first-step check implemented only `encode` from the free formula and earned that checkpoint with all later functions still unfinished.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

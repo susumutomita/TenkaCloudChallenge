@@ -202,3 +202,10 @@ Run `make install && make agent-gate` from the catalog root. [ACCEPTANCE.md](ACC
 `courseAlignment` pins `week6/README.md` and `week6/problems/zkvm-exploit/README.md` in `zk-tokyo/advanced-cryptography-2026` to `a3aa4b56fa88fbe803b57d320fbc87c1a203b480`. The borrowed theme is binding initial conditions, the target program and the public claim around execution verification. Numbers, image format, Python APIs and grading are independent work, not copied assignment solutions.
 
 The user's `advanced-cryptography-note/week6/index.html` was also checked for its guest/public-claim and initial-state/output boundaries. Its distinction that a real proof is not implemented is preserved here. As a real-system example, [RISC Zero Receipt::verify](https://docs.rs/risc0-zkvm/latest/risc0_zkvm/struct.Receipt.html) checks the expected image ID and proven journal. It would be incorrect to generalize that a zkVM does not prove which program ran.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

@@ -1,4 +1,9 @@
-"""Implement this file in the Portal editor; submit code, not a prose design.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+Implement this file in the Portal editor; submit code, not a prose design.
 
 You turn a brief (request) into a design. Inspect evidence shows actors (parties),
 assets (information), their permitted/forbidden readers and constraints. First edit

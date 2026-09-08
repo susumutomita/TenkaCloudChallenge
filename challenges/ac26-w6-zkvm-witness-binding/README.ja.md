@@ -202,3 +202,10 @@ make verifier-down
 `courseAlignment`は `zk-tokyo/advanced-cryptography-2026` の `week6/README.md` と `week6/problems/zkvm-exploit/README.md` をcommit `a3aa4b56fa88fbe803b57d320fbc87c1a203b480`へ固定しています。取り入れる主題は、実行を検証するだけでなく初期条件・対象プログラム・公開する主張を結び付けることです。数値、image形式、Python API、採点はこの教材独自です。講座課題の解答は転載していません。
 
 ユーザー作成ノート `advanced-cryptography-note/week6/index.html` のguest/public claim・初期条件/出力の境界説明も照合しています。ノートの「本物のproofは未実装」という区別を、この教材にも保ちます。本物の一例では [RISC Zero Receipt::verify](https://docs.rs/risc0-zkvm/latest/risc0_zkvm/struct.Receipt.html) が期待するimage IDと証明されたjournalを検証するため、「zkVMはどのプログラムかを証明しない」と一般化しません。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

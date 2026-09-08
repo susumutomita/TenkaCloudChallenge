@@ -414,3 +414,10 @@ fixture は deploy seed 由来なので暗記した答えは持ち越せませ�
 作者検証：`make reference-test` で参考解が通り、既存の計算誤り 22 件をすべて拒否しました。`make boundary-test` は 7 個の Linux テストで、全8項目の参考解、未実装・途中終了、型の保持、期限、ファイル/プロセス分離、非 root 実行を検査します。実 Workbench の HTTP 経路（config → inspect → starter → test → prepare → verify）で参考解の公開例 3 件と全8項目の提出が通り、途中終了は全項目で拒否されました。作者による回帰検証であり、独立した参加者プレーや実 Portal の得点履歴の検証ではありません。
 
 このホストでは `make test` を実行しましたが、Docker の既定アドレスプール枯渇でネットワークを作成できませんでした。Workbench 確認には重複しない専用サブネットの一時 Compose override を使い、リポジトリのネットワーク設定や他作業のネットワークは変更していません。実 AWS、実 Portal の得点履歴、チーム間の動作は未確認です。デプロイは行っていません。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
