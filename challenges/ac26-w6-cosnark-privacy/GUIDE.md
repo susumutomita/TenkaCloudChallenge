@@ -1,5 +1,3 @@
-# Eight provers that agree on the answer and disagree on what they say
-
 ## Before you start
 
 Use addition, multiplication, division remainders and beginner Python: variables, if, for, functions, lists and dictionaries. Cryptographic terms and every required rule are explained below.
@@ -105,36 +103,3 @@ C is an identifier sequence, so do not recover from it. d is an allowed name. ma
 ## Scope
 
 Publishing no artifact is not a repair: the next stage still needs usable output. Correct output alone does not establish that operations or failure paths kept inputs private. This model covers recorded operations and the four channels, not unrecorded attribute reads, timing or secrets written into heading prose.
-
-
-## For authors and operators
-
-The eight checkpoints award 30, 40, 40, 30, 45, 45, 45 and 25 points, totaling 300. A wrong answer costs 15. Each checkpoint has three hints: mechanism, small input/output example, then actions in the actual file. Each hint costs 2 points; all 24 cost 48.
-
-`local/mutation.py` deliberately breaks the reference solution and checks rejection. A correct clean/leaky verdict is insufficient when the source, multiple findings, shared output or failure behavior is wrong. The final checkpoint combines several defects in unseen implementations on normal and failure paths; it is not a rerun of the first seven checkpoints. Counts are printed when the suite runs.
-
-### Runtime and authority
-
-Local Docker Compose runs two services. The participant Workbench supplies evidence, editing, public tests and submission APIs; it forwards grading to a verifier with no published port. `local/participant` contains the supplied computation model, records and runnable specimens. Fixture derivation, hidden tests and the reference solution are excluded from the participant image. Only the author image contains all materials.
-
-The only submitted file is `prover.py`. Submission execution has time, memory, process and output limits. Failed-verdict feedback identifies a broken public contract without disclosing hidden answers. A local Docker administrator can inspect the verifier, so local practice is honor-system verification. Competition scoring requires a verifier participants do not administer.
-
-Shares use small primes. The instrument does not capture every memory read or police secrets embedded in heading prose. maskedBy and round rules are this model's recorded policy, not a security proof for MPC or SNARKs.
-
-### Local checks and cleanup
-
-```bash
-make inspect                    # settings, records and classification examples
-make test                       # public tests using the current starter
-make test-one ID=classify        # focus on one item
-make reference-test             # author reference and mutation checks
-make verifier-down              # stop and remove the local services
-```
-
-The shipped starter is unfinished, so some public tests initially fail. Passing public tests does not prove grading success. test and inspect start the required verifier. This document does not claim an AWS deployment or independent participant playtest.
-
-### Sources and cost
-
-This is an independent, unofficial companion to the Advanced Cryptography Program 2026, not affiliated with its operators. Questions go to TenkaCloud. courseAlignment references the Week 6 material and co-SNARK exercise at the commit recorded in curriculum.md. The text, model, code and fixtures here are original.
-
-Local execution creates no cloud resources; it uses the Docker host's compute. Allow 60–90 minutes. Hosting costs for a cloud event depend on the platform deployment. Run the cleanup command after the exercise.
