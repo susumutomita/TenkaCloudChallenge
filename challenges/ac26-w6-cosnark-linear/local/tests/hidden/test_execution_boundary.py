@@ -10,6 +10,10 @@ REFERENCE_PATH = next((ROOT/'reference').glob('*.py'))
 REFERENCE = REFERENCE_PATH.read_text()
 
 class ExecutionBoundaryTests(unittest.TestCase):
+    def test_advertised_object_types(self):
+        source = REFERENCE + '\n_previous = validate_shared_witness\ndef validate_shared_witness(runtime, relation, shares):\n    from participant.mpc import ParticipantRuntime\n    assert isinstance(runtime, ParticipantRuntime)\n    return _previous(runtime, relation, shares)\n'
+        self.assertEqual(evaluate_with_message('witness', source), (True, None))
+
     def test_reference_all_checkpoints(self):
         for checkpoint in CODE_CHECKPOINTS:
             with self.subTest(checkpoint=checkpoint):

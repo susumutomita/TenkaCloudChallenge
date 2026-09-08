@@ -10,6 +10,10 @@ REFERENCE_PATH = next((ROOT/'reference').glob('*.py'))
 REFERENCE = REFERENCE_PATH.read_text()
 
 class ExecutionBoundaryTests(unittest.TestCase):
+    def test_advertised_object_types(self):
+        source = REFERENCE + '\n_previous = private_prover\ndef private_prover(runtime, row, halves, triple, sink):\n    from participant.mpc import AuditRuntime, Sink\n    assert isinstance(runtime, AuditRuntime)\n    assert isinstance(sink, Sink)\n    return _previous(runtime, row, halves, triple, sink)\n'
+        self.assertEqual(evaluate_with_message('repair', source), (True, None))
+
     def test_reference_all_checkpoints(self):
         for checkpoint in CODE_CHECKPOINTS:
             with self.subTest(checkpoint=checkpoint):

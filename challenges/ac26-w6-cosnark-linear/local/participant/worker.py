@@ -27,15 +27,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from participant.isolation import restrict_learner
 from participant.protocol import Codec
-from participant.mpc import CrossPartyRead
+from participant.mpc import CrossPartyRead, ParticipantRuntime
 from contextlib import contextmanager
 
 
-class RemoteRuntime:
+class RemoteOperations:
     """Only named public MPC operations cross to the parent's actual runtime."""
     def __init__(self, token, setting, methods, channel, codec):
-        self.token, self.setting, self.methods = token, setting, methods
+        self.token, self._setting, self.methods = token, setting, methods
         self.channel, self.codec = channel, codec
+
+    @property
+    def setting(self):
+        return self._setting
+
+    def __getattribute__(self, name):
+        if name not in ('methods', '_operation', '__dict__', '__class__'):
+            methods = object.__getattribute__(self, 'methods')
+            if name in methods:
+                return lambda *args, **kwargs: self._operation(name, *args, **kwargs)
+        return object.__getattribute__(self, name)
 
     def _operation(self, method, *args, **kwargs):
         sequence = self.channel['sequence']
@@ -65,6 +76,10 @@ class RemoteRuntime:
         if method not in self.methods:
             raise AttributeError(method)
         return lambda *args, **kwargs: self._operation(method, *args, **kwargs)
+
+
+class RemoteRuntime(RemoteOperations, ParticipantRuntime):
+    pass
 
 
 def main():

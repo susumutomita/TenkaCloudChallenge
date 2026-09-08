@@ -163,3 +163,5 @@ checks, not evidence of unaided first-time participant comprehension. Browser in
 deployed platform score reflection and deployment were not run for this change.
 
 Runtime and share values stay in the parent. Per-call opaque handles route the supplied API to actual runtime operations; handles from earlier calls cannot be reused. Audit probes run the supplied specimens in the parent and return copied evidence; repair publications go to the parent-owned Sink.
+
+The remote API also preserves its documented Python type relationship. A valid reference with explicit isinstance checks passes the evaluator, alongside all eight reference checkpoints.

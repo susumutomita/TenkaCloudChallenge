@@ -27,17 +27,28 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from participant.isolation import restrict_learner
 from participant.protocol import Codec
-from participant.mpc import CrossPartyRead, TripleMisuse
+from participant.mpc import CrossPartyRead, TripleMisuse, AuditRuntime, Sink
 import participant.lab
 import participant.specimens
 from contextlib import contextmanager
 
 
-class RemoteRuntime:
+class RemoteOperations:
     """Only named public MPC operations cross to the parent's actual runtime."""
     def __init__(self, token, setting, methods, channel, codec):
-        self.token, self.setting, self.methods = token, setting, methods
+        self.token, self._setting, self.methods = token, setting, methods
         self.channel, self.codec = channel, codec
+
+    @property
+    def setting(self):
+        return self._setting
+
+    def __getattribute__(self, name):
+        if name not in ('methods', '_operation', '__dict__', '__class__'):
+            methods = object.__getattribute__(self, 'methods')
+            if name in methods:
+                return lambda *args, **kwargs: self._operation(name, *args, **kwargs)
+        return object.__getattribute__(self, name)
 
     def _operation(self, method, *args, **kwargs):
         sequence = self.channel['sequence']
@@ -74,6 +85,13 @@ class RemoteRuntime:
         return lambda *args, **kwargs: self._operation(method, *args, **kwargs)
 
 
+class RemoteRuntime(RemoteOperations, AuditRuntime):
+    pass
+
+class RemoteSink(RemoteOperations, Sink):
+    pass
+
+
 def main():
     initial = json.loads(sys.stdin.readline())
     restrict_learner()
@@ -89,7 +107,7 @@ def main():
     for line in sys.stdin:
         call = json.loads(line)
         codec = Codec()
-        codec.runtime_factory = lambda token, setting, methods: RemoteRuntime(token, setting, methods, channel, codec)
+        codec.runtime_factory = lambda token, setting, methods: (RemoteSink if 'publish' in methods else RemoteOperations if '__call__' in methods else RemoteRuntime)(token, setting, methods, channel, codec)
         try:
             channel.update(call=call['callId'], sequence=0)
             args = codec.decode(call['args'])
