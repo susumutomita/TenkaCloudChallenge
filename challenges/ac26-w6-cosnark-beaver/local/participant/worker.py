@@ -1,6 +1,17 @@
 """Execute submitted functions only. No fixture seed, checker or verdict is loaded here."""
 from __future__ import annotations
 
+# Supported computational helpers are loaded before the restricted evaluation.
+import array
+import base64
+import binascii
+import bisect
+import contextlib
+import heapq
+import re
+import string
+import struct
+
 # Load standard beginner-facing helpers before filesystem restrictions.
 import collections
 import copy

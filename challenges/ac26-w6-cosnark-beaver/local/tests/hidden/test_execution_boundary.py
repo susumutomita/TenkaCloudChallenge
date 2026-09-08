@@ -12,6 +12,11 @@ REFERENCE = (ROOT/'reference/prover.py').read_text()
 
 
 class ExecutionBoundaryTests(unittest.TestCase):
+    def test_supported_computation_imports(self):
+        source = REFERENCE + '\nimport array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing\nassert array.array("i", [1, 2]).tolist() == [1, 2]\nassert string.ascii_lowercase[:3] == "abc"\n'
+        for checkpoint in CHECKPOINTS:
+            self.assertEqual(evaluate_with_message(checkpoint, source), (True, None))
+
     def test_documented_runtime_type_is_preserved(self):
         source = REFERENCE + '\n_original_reserve = reserve_fresh_triple\ndef reserve_fresh_triple(runtime, relation, triple):\n    from participant.mpc import ParticipantRuntime\n    assert isinstance(runtime, ParticipantRuntime)\n    return _original_reserve(runtime, relation, triple)\n'
         self.assertEqual(evaluate_with_message('triple', source), (True, None))

@@ -193,7 +193,7 @@ runtime の操作記録は親が保持します。ネイティブの `Runtime.va
 変更しても記録は消えません。前の関数呼び出しで保存した操作権限から、今回の共有値を調べることも拒否します。
 これは提供 API の実行境界です。数学的な秘密性に必要な仮定とは区別します。
 
-変更後の Linux Docker 作者 image で、構成回帰 10 件・実行境界回帰 11 件が成功しました。
+変更後の Linux Docker 作者 image で、構成回帰 10 件と、互換性確認を追加する前の実行境界回帰 11 件が成功しました。
 論理の変異 31 件を検出し、別枠の既存採点偽装プローブ 1 件も拒否しました。実行境界回帰には、
 参考解の全 8 checkpoint、別の正しい相殺構成、偽の出力・早期終了、非公開ファイルと親 signal、
 参照権限の寿命、型保持、入れ子の上限、non-root、HTTP の期限関係を含みます。
@@ -206,3 +206,13 @@ prepare・verifier proxy 経由の全 8 checkpoint に合格し、古い参照�
 カタログは 116 件有効です。ブラウザ操作・デプロイ先の採点・デプロイは未実施です。
 
 追加の互換性確認：採点側でも公開APIのParticipantRuntime型を維持します。isinstanceで型を確認する正しい実装と、全8項目の参考解が通過しています。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same supported imports. Other imports and file/network operations are not supported by the evaluator.
+スターターにも同じ一覧を表示します。一覧以外のimportとファイル・通信操作は採点環境では対応しません。
+
+The execution-boundary suite now contains 13 test methods, including the added facade-type and supported-import compatibility checks. The new checks are recorded separately from the earlier full-suite run.
+実行境界のテストは現在13件です。追加した公開型と標準ライブラリの互換性確認は、以前の全体実行と分けて記録しています。

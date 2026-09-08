@@ -205,7 +205,7 @@ Changing worker counters cannot erase those observations. A saved capability fro
 function call cannot inspect the current call's shares. This execution boundary preserves the
 exercise's supplied API; the mathematical secrecy assumptions remain separate.
 
-Validation on the revised Linux Docker author image: 10 construction regressions and 11
+Validation on the revised Linux Docker author image: 10 construction regressions and the earlier 11
 execution-boundary regressions passed; 31 logic mutations were killed and a separate legacy
 verdict-spoofing probe was rejected. The boundary suite includes reference solutions for all
 eight checkpoints, an alternative valid cancellation construction, fabricated output/early
@@ -222,3 +222,13 @@ Catalog validation passed for 116 entries. Browser interaction, deployed scoring
 were not tested.
 
 Additional compatibility check: the restricted runtime retains the advertised ParticipantRuntime type; a reference implementation with an isinstance guard and all eight reference checkpoints pass.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+`array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
+
+The starter lists the same supported imports. Other imports and file/network operations are not supported by the evaluator.
+スターターにも同じ一覧を表示します。一覧以外のimportとファイル・通信操作は採点環境では対応しません。
+
+The execution-boundary suite now contains 13 test methods, including the added facade-type and supported-import compatibility checks. The new checks are recorded separately from the earlier full-suite run.
+実行境界のテストは現在13件です。追加した公開型と標準ライブラリの互換性確認は、以前の全体実行と分けて記録しています。
