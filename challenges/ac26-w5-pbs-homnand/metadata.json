@@ -1,6 +1,6 @@
 {
   "id": "ac26-w5-pbs-homnand",
-  "name": "暗号文のまま関数を引き、鍵を新品に戻す",
+  "name": "暗号文のまま関数を引き、入力の鍵へ戻す",
   "category": "Challenge",
   "status": "draft",
   "visibility": "public",
@@ -33,9 +33,9 @@
   "difficulty": 5,
   "estimatedDuration": "105-150 分",
   "shortDescription": "足し算だけでは、作れる回路が限られる。Week 5 の 5 問が作った部品を 1 本の Programmable Bootstrapping につなぐと、ノイズを新品に入れ替えるついでに、関数が 1 つ引ける。暗号文のまま NAND が 1 回通れば、理論上すべての計算に手が届く。",
-  "description": "Week 5 の総合問題。 encoding/noise・LWE/RLWE・RGSW/external product・CMUX/blind rotation・sample extraction/key switching の 5 問が作った部品はすべて支給され、 この問題はそれらをつなぐ pipeline そのものと、 その上で 1 つのゲートを評価する部分を書く。\n\nbootstrapping を「noise を消す処理」とだけ覚えると、 なぜ関数が引けるのかも、 なぜ引ける関数に条件があるのかも説明できない。 実際に起きているのは、 暗号化された phase に対して lookup 関数を評価し、 出力を新しい鍵と domain へ戻す一連の変換で、 出てくる暗号文の noise が入力の noise を一切含まないことが「refresh」の中身。\n\nencoding が前問までと変わる。 `encode(1) = +q/8`、 `encode(0) = -q/8` の balanced encoding では復号が符号判定そのものになり、 符号判定は negacyclic rotation が `X^N = -1` によって無料で計算してくれる。 「PBS は任意の関数を評価できるわけではない」の具体的な中身はここにある。\n\nlookup table の上半分には `f(0)` ではなく `1 - f(0)` を書く。 rotation の巻き戻りが係数 0 に負号を付けて渡すからで、 balanced encoding では `-encode(x)` が `encode(1 - x)` になる。 これを間違えると 4 つの unary 関数のうち出力が定数でないものが `m = 0` 側だけ反転し、 真理値表の半分だけが壊れる。\n\n各 stage は数値だけでなく「その数値がどこに属するか」も返す。 kind・keyId・dimension・modulus・parameterSetId・noiseBound の 6 つで、 うち 2 つは pipeline の途中で変わる。 extraction は暗号文を ring secret の側 (次元 degree) へ移し、 key switching が元へ戻す。 正しい数値に間違ったラベルを付けた stage は、 次の stage が合わない暗号文と黙って結合する材料を作る。\n\nHomNAND は前処理が本体になる。 `(0, q/8) - c1 - c2` という 1 回の線形結合で、 4 通りの入力に対する phase が `3q/8, q/8, q/8, -q/8` になり、 `(1,1)` のときだけ負になる。 あとは identity table で 1 回 bootstrap するだけ。 平文の NAND はどこにも現れず、 lookup table の中にゲートは無い。\n\n採点の設計として、 この問題は 37 個の壊れた実装を同梱していて、 そのうち **21 個は真理値表が完全に通る**。 全 unary 関数・両 message・NAND 全 4 行を、 全 parameter set で。 それでも 21 個とも壊れた pipeline のままで、 内訳は「数値は正しいがラベルが違う」「答えは正しいが自己申告が嘘」「たまたま当たっている」の 3 種。 最終ビットを見るテストにはどれも見えない。 だから採点は最終ビットではなく stage をその場で見て、 trace は artifact の digest で照合する。 pipeline の stage は 10 個で hidden test は 10 個すべてを別々に採点し、 scored checkpoint はそのうち結び付きの強い 2 組をまとめた 8 個 (multi-verify 契約の上限)。\n\nこれは安全ではない。 パラメータは全列挙でき、 両方の secret は線形代数で復元できる。",
-  "instructions": "## 足し算だけでは、プログラムにならない\n\n暗号文のままの足し算・引き算は、もう手元にあります。でも足し算だけで書けるのは 1 次式だけ。「もし〜なら」も、比較も、任意の回路も組めません。秘匿スマートコントラクト（Fhenix・Inco）が動かしたいのは、プログラムそのものです。\n\n論理回路には古い定理があります — **NAND が 1 つあれば、どんな回路でも組める**。AND も OR も加算器も CPU も、NAND の組み合わせに書き直せます。だから暗号文のまま NAND が 1 回できた瞬間、理論上すべての計算に手が届きます。それがこの問題のゴールで、Week 5 の総合問題です。\n\n## 取り替えのついでに、関数が 1 つ引ける\n\nもう 1 つの積み残しは、1 問目からのノイズです。使うほど溜まり、限界を超えると答えが壊れる。ブートストラップは、暗号文を「中身は同じ、ノイズだけ新品」に取り替える操作です。\n\nTFHE のすごいところは、この取り替えと関数適用が**同じ 1 回の操作**になることです。答えの表を、暗号文が指す量だけ回して読む — 読む位置は入力が決めるので表が引け、読んだ結果は新しい暗号文なのでノイズが入れ替わる。だから Programmable（プログラム可能な）Bootstrapping と呼ばれます。\n\n## 前提（部品はすべて完成品で届く）\n\n- 環と符号化、LWE/RLWE、gadget と external product、CMUX と blind rotation、取り出しと鍵の切り替え — Week 5 の 5 問ぶんが `participant.fhe` から完成品で渡されます。ここで書くのは**配線だけ**です\n- 回して読む手順そのものを 1 行ずつ手で確かめたければ、ドリル `ac26-w5-rotation-drill` が同じ道を平文でなぞります\n- この問題だけ符号化が変わります: **1 は +q/8、0 は −q/8**、復号は「centered（0 以上 q 未満を −q/2 以上 q/2 未満で言い直した形）にして正か負か」だけ。符号の判定は X^N = −1 の折り返しがタダでやってくれるからで、PBS で引ける関数に条件が付く理由もここにあります — 表は、符号つきで読まれても生き残る形でなければいけません\n\n## 配線 — 5 つの部品を 1 本に\n\n順番はこうです。\n\n1. 入力の LWE を、回転の単位（一周 2N）へ丸めで移す\n2. 答えの表を係数に並べた多項式を、**trivial な暗号文**（マスクなし・ノイズなし・自分のメッセージなし。運んでいるのは関数だけ）として用意する — これを accumulator と呼びます\n3. blind rotation で、暗号文が指す量だけ回す\n4. 回った accumulator から、係数 1 個を LWE として取り出す\n5. 鍵を、入口の鍵へ切り替えて戻す\n\n**出口の鍵が入口の鍵と同じ** — 前の問題で閉じた輪 — が要です。これができなければ、回路の 2 つ目のゲートが組めません。\n\n## 山は「入れ替え」の意味と、ゲートの置き場所\n\n出力のノイズは「回転が足した分 + 切り替えが足した分」の和で、**入力のノイズはこの和のどこにも現れません**。減るのではなく、依存が切れる。だから出力は何度でも入れ直せて、だから回路が組めます。\n\nそして NAND は、ほとんど前処理でできています。2 つの暗号化ビットの 1 次式を 1 本作ると、4 通りの入力のうち (1,1) だけ位相が負になる。あとはブートストラップ 1 回で、その符号を新品の暗号文に変えるだけ。**平文の NAND はコードのどこにも現れず、表の中にゲートはありません。** 復号も、どの段にも 1 回も現れません。\n\n## 最初の一手\n\n**「起動」** を押すと、エディタに `pipeline.py` が 1 つだけ開きます。埋めるのは書きかけの関数だけ。**「初期状態に戻す」** でいつでも元に戻せます。\n\n**「証拠を確認」** を押すと、この起動のためだけに作られた数値が並びます。\n\n- パラメータ: パラメータセットの id、base B、桁数 L、法 q（= B^L）、環の次数 N（回転の単位は 2N）、LWE の長さ n、そして符号化（1 が +q/8、0 が −q/8）。\n- ノイズの数: 回転が足す上限、鍵の切り替えが足す上限、ブートストラップ後の暗号文が持つ量、そして**耐えられる入力ノイズの上限**。\n- この起動で使う関数 f、メッセージ m、f(m)、そして表の中身。\n- **配線の表**: 段 / 種類（lwe か rlwe）/ 次元 / 法 / ノイズの上限 / メッセージ（何を運んでいるか）/ どこに載っているか / どの鍵か。\n- 各段が実際に作った暗号文の digest（短い指紋）。\n- 前後の比較: 入力の位相と復号結果、出力の位相と復号結果、そして**出力の鍵が入力と同じ**であること。\n- ノイズの入れ替えの数値（渡した入力ノイズ、耐えられる上限、出てくる量、契約の内か、もう一度入れ直せるか）。\n- **HomNAND の 4 行**: 入力の組ごとの位相と結果。\n\n**先に見るのはこの 2 か所です。** ひとつは配線の表の**ノイズの列を上から下へ読む**こと — どこかの行から先で、入力のノイズが式に出てこなくなります。その行が「入れ替え（refresh）」で、出口の暗号文を入口に戻せる理由そのものです。もうひとつは同じ表の**メッセージの列** — 「何も運んでいない」行がちょうど 1 つあります。それがどの行かに気づくと、「参照表とは暗号文として何なのか」が言葉になります。\n\n数値は起動のたびに変わり、採点は画面に出ていない別のパラメータでも同じコードを走らせます。**「公開テストを実行」** で形の検査を手元で先に試せます。\n\n## 答えるもの — checkpoint は 8 つ\n\n8 つともコードで答えます（文字を打ち込む回答欄はありません）。`params` は `base`、`levels`、`degree`（N）、`dimension`、`modulus`（q）、`plaintext_modulus`、`delta`、`parameterSetId`、`encodingId` を持つ dict です。各段の返り値には、その数がどこに住んでいるかの札（`kind` は `\"lwe\"` か `\"rlwe\"`、`keyId`、`dimension`、`modulus`、`parameterSetId`、`noiseBound`）を付けます。**札は事務作業ではなく判断です** — 正しい数に間違った札を付けると、次の段が合わない暗号文と平気で混ぜてしまい、結果はどちらの鍵でもノイズにしか復号されません。\n\n1. **lut** — `lookup_accumulator(params, table, ring_key_id)`: `table` は `{0: f(0), 1: f(1)}`。`{\"a\": …, \"b\": …}` と札を返します。**trivial**（マスクなし・ノイズなし・自分のメッセージなし）であること。ビットがどの位置に着地するかを先に考えてください: ±q/8 の位相は、回転の単位（1 単位あたり 2N/q）に直すと 1 が N/4、0 が 7N/4 に来ます。回転は**その位置の係数を 0 番地へ持ってきます — ただし位置が上半分なら符号を裏返して**。\n2. **domain** — `to_rotation_domain(params, sample)`: LWE sample の各成分を q の世界から 2N の世界へ直します。回転の指数は 0 以上 2N 未満の整数でなければならないので、**切り捨てではなく最近接へ丸めます**。鍵は変わりません。変わるのは法と `noiseBound` で、丸めは各マスク係数に 1 回と body に 1 回起きます。\n3. **rotate** — `blind_rotate(params, bootstrap_key, rotated, accumulator)`: `bootstrap_key[i]` は LWE 秘密鍵の i ビット目の RGSW です。`cmux(params, rgsw, ct0, ct1)` が渡され、隠れたビットが 0 なら `ct0`、1 なら `ct1` を返します（どちらを返したかは分かりません）。**body の分をまず効かせてから、マスクを添字の順に歩きます。** 各段は「そのままにする」と「a_i だけ回す」の暗号化された二択です。選ばれた段の指数の合計を紙に書き下すと、それが `−(body − マスクと秘密鍵の内積)` になるはずです。\n4. **relabel** — `extract(params, rotated)`: 回った accumulator の係数 1 個を LWE sample として取り出します。`extract_sample(params, ciphertext, index)` が渡され、ノイズは足しません。**どの番号を取り出すかが問い**です。出てきたものは「環の秘密鍵を並びとして読んだ鍵」のもとにあり、次元も入力とは違います — 入力の `keyId` を残したままにすると、次の段が別の鍵用の切り替え鍵を当ててしまいます。`switch(params, switching_key, sample)`: 入力が来たときの鍵と次元へ戻します。`key_switch` は渡されるので、この段の仕事は**合わない鍵（次元・パラメータ・sample の `keyId`）を適用せずに断ること**と、結果がどの鍵のものかを札に書くことです。\n5. **evaluate** — `bootstrap(params, bootstrap_key, switching_key, sample, table)`: 上の 4 段を 1 つの順に並べるだけです。accumulator に付ける鍵の id は、切り替え鍵の**移し元**の id — そこが回転の起きる場所だからです。ここでも秘密鍵は 1 つも渡されません。\n6. **refresh** — 4 つの関数です。`pipeline_trace(params, bootstrap_key, switching_key, sample, table)` は **6 件**の記録を配線の順で返します（`stage`、`kind`、`keyId`、`dimension`、`modulus`、`parameterSetId`、`noiseBound`、`carriesMessage`、`messageIs`（`\"m\"` か `\"f(m)\"`、運んでいなければ `None`）、`located`（`\"whole\"` か `\"coefficient-0\"`、運んでいなければ `None`）、`digest`（`lwe_digest` / `rlwe_digest` で取る））。最初の `input` 行の上限は「実際に載っている量」ではなく `correctness_bound`（許される上限）です — 実測には鍵が要るからです。`output_noise_bound(params)`: ブートストラップ後の暗号文が持つ量（**入力のノイズは、この和の項に現れません**）。`correctness_bound(params)`: 耐えられる入力ノイズの上限。`refresh_report(params, input_noise)`: `inputNoise`、`correctnessBound`、`outputNoiseBound`、`withinContract`、`secondPassFits` を返します。`outputNoiseBound` は `inputNoise` を変えても動いてはいけません。\n7. **nand** — `nand_combine(params, left, right)`: 2 つの暗号化ビットの**1 次式 1 本**だけを作ります。ゲートはここには書きません。狙いは「NAND が 1 のときだけ位相が正になる」ことです（この問題の符号化では、正であることと 1 に復号されることが同じ意味だからです）。q/8 を単位にして 4 通りの位相を書き出し、それを作る組み合わせを探してください。2 つの入力は同じ鍵のものでなければいけません。`homomorphic_nand(params, bootstrap_key, switching_key, left, right)`: その組み合わせに、ブートストラップを 1 回。それでゲートは全部です。出力は入力と同じ鍵の新しい暗号化ビットなので、そのまま次のゲートの入力になります。\n8. **transfer** — 同じ `pipeline.py` が、**画面に出ていないパラメータ**で 1 から 7 まで全部走ります。\n\ncheckpoint ごとに提出ボタンがあります。押すと、そのときのエディタの中身がそのまま採点へ送られます。8 つは独立に採点されるので、1 つ詰まっても他は取れます。不正解でも出し直せます（1 回ごとに決まった減点があり、合計が 0 未満にはなりません）。正解した checkpoint は「解答済み」になり、それ以上は提出しません。\n\n## ここが Week 5 の頂上\n\n8 つ通れば終わりです。出てきた暗号文は入口と同じ鍵なので、そのまま次のゲートに入ります — それが「回路が組める」ということです。\n\n覆いを 1 枚足すことから始めた Week 5 は、ここで「中身を見ないままプログラムを実行する」に届きました。Zama の TFHE-rs が本番のパラメータと FFT でやっていることの機構を、あなたはいま全部、自分の手で持っています。ドリル 2 本（`ac26-w5-rotation-drill`・`ac26-w5-negacyclic-drill`）は、この装置の芯 — 回して読む・符号が裏返る — を 1 行ずつなぞる別ルートです。\n",
-  "writeup": "## 真理値表が通っても、 通っただけ\n\nこの問題は 37 個の壊れた実装を同梱しています。 そのうち **21 個は真理値表が完全に通ります**。 全 unary 関数、 両 message、 NAND の全 4 行を、 全 parameter set で。 それでも 21 個とも壊れた pipeline です。 `make reference-test` は毎回この数を測り、 動いたら落ちます。\n\n内訳は 3 つ。 **数値は正しいがラベルが違う** (extraction が入力の keyId を残す、 次元を入力側で報告する、 出力を RLWE と名乗る)。 **答えは正しいが自己申告が嘘** (trace の noise が全部 0、 accumulator が message を持つと主張、 出力 bound が入力 noise とともに増える)。 **たまたま当たっている** (係数 1 を取り出しても lookup table が半分ごとに定数なので大抵同じ値、 切り捨てても correctness budget が吸収する)。\n\nstage 単位の checkpoint を 10 個も置いているのは、 この 21 という実測値が理由です。 22 個目 — `nand_combine` の `q/8` 落ち — は seed によって見えたり見えなかったりするので、 固定の数には入れていません。\n\n## identity table は何も見せない\n\n`f = identity` の lookup table は下半分が `encode(f(1)) = encode(1)`、 上半分が `encode(1 - f(0)) = encode(1)` で、 全係数が同じ値になります。 定数多項式は rotation がどこに着地したかを区別できないので、 半分の入れ替えも、 取り出す係数の間違いも、 丸めではなく切り捨ても、 すべて通ります。 public test が全部 identity なのはそれを見せるためです。\n\n## refresh は「noise が減ること」ではない\n\n出力の noise bound は blind rotation の分と key switch の分の和で、 入力の noise は項として現れません。 減るのではなく**入力に依存しなくなる**。 だから出力をもう一度 bootstrap できて、 だから回路が組めます。 trace の noise 列を上から読むと、 どの行で入力への依存が切れるかが見えます。\n\n## 正解を返しても domain が違えば壊れている\n\nextraction が入力の keyId をそのまま残すと、 数値は正しいのにラベルが違う暗号文ができます。 その switching key がたまたま合っているので pipeline は端から端まで動き、 回路の中で別の暗号文と結合された瞬間に壊れます。 artifact の envelope はこの種の欠陥のために存在していて、 真理値表からは見えません。\n\n## ゲートは lookup table の中に無い\n\nHomNAND の lookup table は identity です。 4 通りの入力すべてで同じ table を使い、 4 行を分けているのは前処理の線形結合が作った phase の符号だけ。 bootstrap は符号を新しい暗号文に変換しているだけで、 ゲートそのものは `(0, q/8) - c1 - c2` の側にあります。\n\nこの `q/8` を落とすと `(0,1)` と `(1,0)` の phase がちょうど 0 になり、 答えが noise の転び方で決まります。 40 seed で測ると、 この 2 行への 80 回の試行のうち 12 回が誤り、 残り 2 行は 1 度も間違いません。 7 回に 1 回落ちる定数の書き忘れは、 バグではなく flakiness に見えます。\n\n## 3 行で正しいのは正しさではない\n\nNAND の 4 行のうち 0 を返すのは `(1,1)` だけなので、 定数 1 を返す実装は 75% 正しい。 hidden test が毎回 4 行すべてを回すのはそのためです。\n\n## correctness bound を超えたときに起きること\n\n入力の noise が bound を超えると bootstrap は劣化しません。 **逆のビット**を、 自信を持って、 新しい小さな noise とともに返します。 壊れた暗号文ではなく、 間違った答えの正しい暗号文が出てくる。 FHE の failure mode として覚えておく価値があるのはこちらです。\n\n## toy と production の差\n\nここで書いたものは機構の toy です。 production の TFHE は FFT/NTT で多項式積を回し、 bootstrapping key を圧縮し、 パラメータは lattice reduction に対する安全性から逆算します。 この問題のパラメータは全列挙でき、 両方の secret は線形代数で復元できます。 gate 1 回あたりの計算量も、 実用的な bootstrapping key のサイズも、 任意の多ゲート回路のコンパイルも対象外です。\n\n## 対象外\n\nproduction TFHE の security / performance、 最適化された FFT / NTT / SIMD、 bootstrapping key のサイズ最適化、 任意の multi-gate circuit compiler。",
+  "description": "PBSとHomNANDの総合問題。完成済みの暗号部品を接続し、同じ入力鍵へ戻る暗号文と、各段の鍵・次元・単位・誤差上限を実装します。8項目で採点し、全項目に3段ヒントを用意します。出力ノイズの上限式は入力ノイズに依存しませんが、読む位置の正しさは入力誤差の契約内であることが前提です。",
+  "instructions": "## 前提：足し引きと余りで部品をつなぐ\n\n必要なのは正負の数・掛け算・割った余りと、Pythonの関数・リスト・dictです。暗号の部品は渡され、知らない言葉と式は以下で定義します。\n\n## 最初に、答えの表を作る\n\nあなたは、暗号化された0/1に関数を適用するプログラムの担当です。部品は完成していますが、つなぐ `pipeline.py` が未完成です。\n\n**「起動」→ `lookup_accumulator` を下の式で実装 → `lut` の提出ボタン。** 正解すると「解答済み」になります。まずこの1項目を通してください。公開テスト全体は未実装の関数でも失敗するので、最初から全部通す必要はありません。各提出には表示された誤答減点があります。\n\n## 何を作る？\n\n**暗号文**は中身を隠した数の組、**秘密鍵**は中身を戻すための数です。ここでは秘密鍵を受け取らずに部品をつなぎます。**PBS（プログラム可能なブートストラップ）**は、暗号化された入力mに答えの表fを適用し、誤差を小さい範囲に戻した暗号文を作る仕組みです。f(m)は「mに対する表の答え」。mも答えも途中で公開しません。\n\n```text\n入力の暗号文 ── 回転の単位へ ─────────┐\n答えの表 ── 係数の並びにする ── 隠れた量だけ回す\n                                  ↓ 0番の係数を取り出す\n出力の暗号文 ← 元の鍵へ切り替える ←─┘\n```\n\n暗号化したままNANDも作ります。**NAND**は2入力が両方1のときだけ0、それ以外は1になる計算です。組み合わせれば論理回路を作れます。ただし、この小さい数の教材は実用暗号の安全性を保証しません。\n\n## 数の読み方（必要な式はここで読めます）\n\n`params` は設定のdictです。`modulus=q` は割る数、`degree=N` は係数の個数、`dimension=n` は入力のマスクの長さ。`base=B` と `levels=L` は桁の基数と桁数で q=BのL乗。`delta=q//8`、`plaintext_modulus=2`。`parameterSetId` と `encodingId` は設定と符号化の識別名です。教材の設定ではNは4の倍数、qは8の倍数です。\n\n`x % q` はqで割った余り（0〜q−1）、`//` は整数の割り算です。**符号化**は0/1を別の数で表すこと。この問題は1を+q/8、0を−q/8で表します。q=8なら1→1、0→−1→余り7。`centered` は余りを−q/2以上q/2未満に読み直すこと（7→−1）。正なら1、そうでなければ0に復号します。\n\n**LWE**は `mask`（数の並び）と `body`（数1個）の暗号文です。**位相**はbodyから、maskと秘密鍵の同じ位置どうしの積を全部引いた余り。例：body=5、mask=[2,1]、鍵=[1,1]なら5−2−1=2。位相には符号化された値と小さい**ノイズ（誤差）**が入ります。計算する関数には鍵を渡しません。\n\n**RLWE**はa,bという係数の並びを使う暗号文。係数 `[2,3]` は2+3Xの意味です。この教材の**環（足し算・掛け算の規則）**はXのN乗を−1として折り返します。係数をN個先へ回すと符号が反転し、2N個で元に戻ります。**マスク**は秘密を隠すための数の部分です。aを全部0にした答えの表は公開の表なので、それ自身に秘密を隠す必要はありません。\n\n**CMUX**は暗号化された0/1を使う選択部品です。`cmux(params, rgsw, ct0, ct1)` は、0ならct0、1ならct1と同じ中身の暗号文を作ります。バイト列が同じとは限りません。`bootstrap_key[i]` は鍵のi番目のビットをこの選択に使うための**RGSW暗号文**です。\n\n完成部品は `participant.fhe` からimport済みです：`encode(params, bit)`、`normalize(params, coefficients)`（N係数をqの余りへ）、`rotate_ciphertext(params, ciphertext, exponent)`（係数を符号付きで回す）、`extract_sample(params, ciphertext, index)`、`key_switch(params, switching_key, sample)`、`blind_rotation_noise(params)`、`key_switch_noise(params)`。最後の2つは各部品が加える誤差の上限を返します。\n\n## 8項目の実装契約\n\n### 1. lut — 表を係数へ\n\n`table={0:f(0),1:f(1)}` の答えは0/1です。`lookup_accumulator(params, table, ring_key_id)` はaをN個の0にし、bの前半を `encode(params, table[1])`、後半を `encode(params, 1-table[0])` にします。bは `normalize` で余りに直します。例：N=4,q=8,table={0:1,1:1}ならb=[1,1,7,7]。後半を裏返す理由は、回転でその符号がもう一度反転するからです。**accumulator**はこの「回して読む表」の名前です。\n\n\n\nN=4の場合の読み位置を追うと、配置の理由が分かります。\n\n```text\n入力1 → 位相 +q/8 → 回転位置 N/4=1 →  b[1] を読む\n入力0 → 位相 −q/8 → 回転位置 7N/4=7 → −b[3] を読む\n                                                    ↑ 7−N=3\n```\n\n入力0はNを越えた位置なので符号が反転します。b[3]にencode(1−f(0))を置くと、その負数がencode(f(0))になります。\n\n### 2. domain — 回転の単位へ\n\n`to_rotation_domain(params, sample)` はmaskの各数とbodyに、同じ式 `((x % q)*(2*N)+q//2)//q % (2*N)` を使います。ちょうど半分なら大きい側へ丸め、最後に一周分の余りを取ります。例：q=8、2N=4、x=3なら1.5→2（この単位変換だけの例）。Pythonのroundとは同点の規則が違います。\n\n丸め1回の誤差は最大0.5回転単位、n+1回で最大(n+1)/2です。整数の表示上限 `noiseBound` は切り上げた `(n+2)//2`。n=4なら2.5→3。これは入力ノイズ全体を測った値ではありません。\n\n### 3. rotate — 秘密の位置を計算せず回す\n\n`blind_rotate` は最初に `rotate_ciphertext(params, accumulator, -rotated[\"body\"])`。その結果をcurrentとし、iを0から順に、candidate=`rotate_ciphertext(params,current,rotated[\"mask\"][i])`、current=`cmux(params,bootstrap_key[i],current,candidate)` と進めます。例：body=3、mask=[2,1]、説明用の鍵=[1,0]なら合計回転は−3+2=−1。実装は鍵を読まず、この選択部品を使います。\n\n### 4. relabel — 取り出して鍵を戻す\n\n`extract(params, rotated)` は `extract_sample(params,rotated,0)` のmask/bodyを返します。目的の値は0番へ回したためです。出力の鍵はrotatedのkeyId、長さはN、ノイズ上限はrotatedと同じ。\n\n`switch(params,switching_key,sample)` は完成部品 `key_switch` の結果を返します。ただしsourceDimensionがmaskの長さと不一致、targetDimensionがparams[\"dimension\"]と不一致、またはmodulus/base/levelsがparamsと不一致、またはsampleのkeyIdが存在しNoneでなくsourceKeyIdと不一致なら `ValueError` で拒否します。keyIdが省略/Noneならその比較は不要です。例：入力が鍵Aなのに移し元が鍵Bなら拒否。\n\n切り替え鍵の `entries[j][l]` は、古い鍵のj番目×Bの(L−1−l)乗を新しい鍵で暗号化した部品です。大きい桁から並びます。新しい鍵の名前/長さはtargetKeyId/targetDimension。合わない鍵では正しい復号を保証できません。\n\n### 5. evaluate — 一連の計算\n\n`bootstrap` は表を作る（ring_key_id=sourceKeyId）→入力を回転単位へ→blind_rotate→extract→switchの順に呼びます。与えられるbootstrap_keyとswitching_keyは、入力の鍵→環の鍵→元の入力の鍵へ戻す組です。**新しくなるのは暗号文で、鍵は元の鍵です。** 例：table={0:1,1:0}なら隠れた0は隠れた1へ変わります。\n\n### 6. refresh — 記録と誤差の契約\n\n各暗号文の返り値には下表の札を付けます。kindは形式、keyIdは鍵の名前、dimensionはマスクの長さ、modulusは単位の割る数、parameterSetIdはparamsの同名欄、noiseBoundは上限です。R=`blind_rotation_noise(params)`、K=`key_switch_noise(params)` と置きます。\n\n| 段 | kind / keyId / dimension / modulus | noiseBound | carriesMessage / messageIs / located |\n|---|---|---|---|\n| input（記録のみ） | lwe / targetKeyId / n / q | C | True / m / whole |\n| rotation-domain | lwe / 入力keyId / n / 2N | (n+2)//2 | True / m / whole |\n| accumulator | rlwe / ring_key_id / N / q | 0 | False / None / None |\n| blind-rotation | rlwe / accumulatorのkeyId / N / q | R | True / f(m) / coefficient-0 |\n| extraction | lwe / rotatedのkeyId / N / q | rotatedのnoiseBound | True / f(m) / whole |\n| key-switch | lwe / targetKeyId / targetDimension / q | sampleのnoiseBound+K | True / f(m) / whole |\n\n`pipeline_trace` はこの6行を順にtupleで返します。各行のstageは表の英語名、messageIsとlocatedは表の文字列（NoneはPythonのNone）です。**digest**は実際の暗号文から作る指紋で、LWEは `lwe_digest(sample)`、RLWEは `rlwe_digest(params,ciphertext)`。途中結果も実行して記録します。通常の暗号文には最後の3欄とdigestは不要です。\n\n誤差がないとき、入力1は前半の中央N/4、入力0は符号付き後半の中央7N/4を読みます。答えが切り替わる区間境界までの距離は、どちらもN/4回転単位です。\n\n```text\n境界0 ── 距離N/4 ── 読む位置N/4 ── 距離N/4 ── 境界N/2\n```\n\nこの距離から丸めの最大ずれ(n+1)/2を引くと、入力ノイズに使える距離が残ります。1回転単位はq/(2N)なので、掛けて元の数の単位へ戻します。これがCの式です。\n\n`output_noise_bound(params)=R+K`。`correctness_bound(params)` は `C=int((N/4-(n+1)/2)*q/(2*N))`（intは小数部分を捨てる）。教材の有効な設定では括弧内は正です。ここでは切り上げた表示値ではなく元の0.5刻みの上限を使います。単位計算の例：N=8,n=1,q=8ならC=int((2−1)×8/16)=0。この小さい例は回路の運用設定ではありません。\n\n`refresh_report` はinputNoise=input_noise、correctnessBound=C、outputNoiseBound=R+K、withinContract=`abs(input_noise)<=C`、secondPassFits=`2*(R+K)<=C`。absは符号を除いた大きさです。2倍なのは、次のNANDで2個の暗号文の誤差を足すため。例：C=5、R+K=2なら2×2<=5で次段の予算内です。\n\n出力の上限式に入力ノイズがなくても、入力ノイズは読む位置に影響します。契約外では正しい答えを保証できず、必ず反対のビットになるわけでもありません。再利用は同じ鍵・次元と誤差予算の両方が必要です。\n\n### 7. nand — 2入力を組み合わせる\n\n`nand_combine` はmaskを同じ位置どうしで `(-left-right)%q`、bodyを `(delta-left[\"body\"]-right[\"body\"])%q` にします。keyIdが異なる入力はValueError。入力の次元と設定はそろったものが与えられます。札はlwe、左のkeyId、n、q、paramsのparameterSetId、noiseBoundは左右の上限の和（省略時0）。\n\nq/8を1単位とすると、位相は1−左−右です。\n\n| 入力 | 位相の計算 | NAND |\n|---|---|---|\n| 0,0 | 1−(−1)−(−1)=3 | 1 |\n| 0,1 | 1−(−1)−1=1 | 1 |\n| 1,0 | 1−1−(−1)=1 | 1 |\n| 1,1 | 1−1−1=−1 | 0 |\n\n`homomorphic_nand` はnand_combineの結果をtable={0:0,1:1}でbootstrapします。表は符号で決まったビットをそのまま新しい暗号文にする役目です。定数1を抜くと0,1と1,0が位相0になり、誤差で答えが揺れます。\n\n### 8. transfer — 別の設定でも同じコード\n\n同じpipeline.pyの全関数に加え、下記rounding_counterexampleも実装します。別のN,n,q,B,Lと表でも成立するよう、表示された数を固定しないでください。公開テストの表は特定の形なので、それだけでは符号・丸め・全4入力を確認しきれません。4種類の表とNANDの4行で何が変わるかを比較し、transferへ提出します。8項目すべてが解答済みになれば完了です。\n\n\n## transferの最後：上限の誤りを反例で示す\n\n誤実装は丸め誤差の上限を `(n+1)//2` へ切り捨てています。`rounding_counterexample(params)` で、その上限を超える自作の検査用数を構成してください。**奇数nでは(n+1)/2が整数なので、この上限を超える反例はありません。その場合はNone。偶数nならmask/body/secretのdictを返します。**\n\nmaskと検査用の鍵secretはn個、mask/bodyは0〜q−1の整数、secretは整数0/1です。これは盗んだ秘密鍵ではなく、自分で作る検査用の数です。出題する設定はn≥1と `q/(2N)>2(n+1)` を保証します。偶数nで反例を作れる余裕がある設定です。\n\n位相での誤差を、整数のまま比べます。u(x)=`((x%q)*2*N+q//2)//q` は**最後に2Nで割った余りを取る前**の丸め。r(x)=q*u(x)−2N*xは、その丸め誤差をq倍した整数です。Eはr(body)から、各r(mask[i])*secret[i]を全部引いた値。**abs(E)>q*((n+1)//2)** となるデータが反例です。採点はあなたのto_rotation_domainの結果を信用せず、この式を独立に計算します。\n\n小さい例：N=4,n=2,q=64、body=4、mask=[3,3]、secret=[1,1]。回転単位へ直すとbodyは0.5→1、maskは各0.375→0。位相の丸め誤差は+0.5−(−0.375)−(−0.375)=1.25で、誤った上限1を超えます。q倍すればE=80、比較相手は64です。ここで使った固定配列では別の長さに対応できません。渡されたn,N,qから、誤差を同じ方向へ重ねる数を構成してください。\n\n",
+  "writeup": "## 正しい答えと正しい接続を分けて確かめる\n\n恒等表の係数はすべて同じです。この表だけでは、回転・抽出の場所や符号の誤りを見逃す場合があります。4種類の表とNANDの4入力を比べたうえで、鍵の名前・次元・誤差上限も確認します。作者側の37種類の誤実装のうち、21種類は復号結果だけの検査を通ります。だから段ごとの記録も必要です。\n\n## 誤差の上限は単位と条件を含む\n\n5成分の丸めなら最大2.5回転単位なので、整数で報告する上限は3です。2へ切り捨てると実際のずれを覆えません。入力の許容量を求める式では、元の最大ずれ(n+1)/2を境界までの距離から引きます。\n\n出力上限R+Kは入力ノイズを項に含みません。しかし入力ノイズは表の選択位置に影響し、契約外なら正しい関数値を保証できません。必ず反転するという意味でもありません。出力を次のNANDへ渡すには、鍵と次元が合い、2個分の誤差が予算内に収まる必要があります。\n\n## NANDは前処理と再符号化\n\nq/8−左位相−右位相は、0,0 / 0,1 / 1,0 / 1,1に対してq/8単位で3 / 1 / 1 / −1です。恒等表でこの符号を新しい暗号文に戻します。定数を落とすと中間2行が0になり、誤差で結果が揺れます。\n\n## 教材の範囲\n\n部品の接続と条件の検査を学ぶ小さい模型です。実用TFHEの安全性、性能、鍵サイズ、任意の回路をコンパイルする実装までは扱いません。",
   "tags": [
     "advanced-cryptography-2026",
     "week5",
@@ -86,8 +86,18 @@
         "hints": [
           {
             "id": "lut-hint-1",
-            "content": "`+-q/8` の bit は rotation 位置 N/4 と 7N/4 に着地する。 片方は下半分、 もう片方は上半分で、 上半分は係数 0 へ**負号付き**で渡る。 balanced encoding では `-encode(x)` が何になるかを書き下すと、 上半分に何を書くべきかが出る。",
-            "penalty": 15
+            "content": "参照表は「入力ごとの答え」を係数として置くものです。入力を隠すマスクは要らず、回転の符号反転を先に打ち消す形で答えを置きます。",
+            "penalty": 2
+          },
+          {
+            "id": "lut-hint-2",
+            "content": "N=4,q=8、いつも1を返す表なら、前半はencode(1)=1、後半はencode(1−1)=encode(0)=7。b=[1,1,7,7]、a=[0,0,0,0]です。",
+            "penalty": 2
+          },
+          {
+            "id": "lut-hint-3",
+            "content": "エディタのpipeline.pyでlookup_accumulatorを開く → paramsのdegreeだけ係数を作る → table[1]と1−table[0]を前半/後半に符号化 → 無料説明のaccumulator行の札を付ける → lutを提出。解答済みを確認します。",
+            "penalty": 2
           }
         ]
       },
@@ -100,8 +110,18 @@
         "hints": [
           {
             "id": "domain-hint-1",
-            "content": "回転の指数は `[0, 2N)` の整数でなければならない。 切り捨てではなく最近接へ丸める。 丸めは mask の各係数と body に 1 回ずつ起きて、 それがこの stage の noise 寄与のすべて。",
-            "penalty": 12
+            "content": "暗号文の数を、係数を何個回すかという単位へ直します。鍵は同じですが単位が変わり、整数に丸めた分のずれも記録します。",
+            "penalty": 2
+          },
+          {
+            "id": "domain-hint-2",
+            "content": "単位変換の例：q=8、2N=4、x=3なら3×4/8=1.5→2。5回の丸めの上限は5×0.5=2.5、整数表示は3です。",
+            "penalty": 2
+          },
+          {
+            "id": "domain-hint-3",
+            "content": "to_rotation_domainでmaskの各数とbodyに無料説明の整数式を使う → modulusを2*degree、noiseBoundを(dimension+2)//2にする → keyIdは入力から保つ → domainを提出し解答済みを確認。",
+            "penalty": 2
           }
         ]
       },
@@ -114,8 +134,18 @@
         "hints": [
           {
             "id": "rotate-hint-1",
-            "content": "body の分を先に効かせてから mask を歩く。 各段は「そのままにする」と「a_i だけ回す」の暗号化された二択で、 `cmux(params, rgsw, ct0, ct1)` は selector が 0 のとき ct0 を返す。 回っていない側がどちらの引数かと、 body の符号の 2 つが逆になりやすい。",
-            "penalty": 20
+            "content": "隠れた鍵のビットに応じて「そのまま」「回す」を選ぶので、位相を復号せず目的の位置を0番へ運べます。選ぶのは完成部品CMUXです。",
+            "penalty": 2
+          },
+          {
+            "id": "rotate-hint-2",
+            "content": "説明用のbody=3、mask=[2,1]、鍵=[1,0]なら、最初−3、次に+2、最後は+0で合計−1。実装では鍵を見ずにCMUXでこの選択をします。",
+            "penalty": 2
+          },
+          {
+            "id": "rotate-hint-3",
+            "content": "blind_rotateでbodyの負数だけaccumulatorを回す → maskを添字順に読む → currentと、その数だけ回したcandidateを作りCMUXへこの順で渡す → Rを含む札を付けrotateを提出。",
+            "penalty": 2
           }
         ]
       },
@@ -127,14 +157,19 @@
         "wrongAnswerPenalty": 15,
         "hints": [
           {
-            "id": "extract-hint-1",
-            "content": "回転は `-phase` 方向だったので、 目的の値がどの係数に来ているかは 1 つに決まる。 そして出てきた sample の secret は ring secret を vector として読んだもので、 次元も入力とは違う。 keyId をそのままにすると次の stage が別の鍵用の key を当てる。",
-            "penalty": 12
+            "id": "relabel-hint-1",
+            "content": "係数を取り出すと、暗号文の形式と鍵の長さが変わります。鍵切り替えで元の入力鍵に戻すため、数だけでなく「どの鍵のものか」も正しく引き継ぎます。",
+            "penalty": 2
           },
           {
-            "id": "switch-hint-1",
-            "content": "`key_switch` は支給されている。 この stage の仕事は、 合わない鍵 (次元・パラメータ・sample の keyId) を適用せず拒否することと、 結果がどの domain に属するかを stamp すること。 target が入力の鍵であることが、 出力を再投入できる理由。",
-            "penalty": 12
+            "id": "relabel-hint-2",
+            "content": "環の長さN=4なら取り出したmaskは4個。入力鍵の長さn=2へ切り替えると2個になります。移し元が鍵Aなのにsampleが鍵Bなら、数を計算する前にValueErrorです。",
+            "penalty": 2
+          },
+          {
+            "id": "relabel-hint-3",
+            "content": "extractで0番をextract_sampleへ渡し、rotatedの鍵/誤差を保つ → switchでsourceDimensionとmask長、targetDimensionとparamsのdimension、modulus/base/levels、None以外のkeyIdとsourceKeyIdを照合。どれか不一致ならValueError。keyId省略/Noneは許す → key_switchを呼びtargetKeyId/targetDimensionと加算後の誤差を付ける → relabelを提出。",
+            "penalty": 2
           }
         ]
       },
@@ -147,8 +182,18 @@
         "hints": [
           {
             "id": "evaluate-hint-1",
-            "content": "4 つの stage を 1 つの順序で並べるだけ。 accumulator の keyId は switching key の **source** で、 そこが rotation の起きる domain。 出力は入力と同じ鍵・同じ次元なので、 そのまま次の bootstrap の入力になる。",
-            "penalty": 20
+            "content": "表を作る部品と、入力の隠れた値で表を読む部品をつなぎます。関数の答えは変わっても、次に使えるよう出力の鍵は入口に戻ります。",
+            "penalty": 2
+          },
+          {
+            "id": "evaluate-hint-2",
+            "content": "table={0:1,1:0}では0の暗号文は1の暗号文へ変わります。公開される0/1をifで選ぶのではなく、表の係数と暗号化された回転で実現します。",
+            "penalty": 2
+          },
+          {
+            "id": "evaluate-hint-3",
+            "content": "bootstrapでsourceKeyIdのaccumulatorを作る → to_rotation_domainの結果をblind_rotateに渡す → extractの結果をswitchへ渡して返す → evaluateを提出。先の関数が未完成なら、その項目の失敗から直します。",
+            "penalty": 2
           }
         ]
       },
@@ -161,8 +206,18 @@
         "hints": [
           {
             "id": "refresh-hint-1",
-            "content": "6 行、 pipeline の順。 `input` 行の bound は「実際に載っている量」ではなく `correctness_bound`、 つまり許される上限。 measuring には鍵が要るから。 noise 列を上から読んで入力への依存が切れる行を探すと、 それが refresh。 digest は `lwe_digest` / `rlwe_digest` で取る。",
-            "penalty": 15
+            "content": "誤差の上限は、安全に次の計算へ渡せるかの目安です。入力の誤差が出力の上限式から消えても、入力が読む場所を間違えないという条件は残ります。",
+            "penalty": 2
+          },
+          {
+            "id": "refresh-hint-2",
+            "content": "入力の許容上限C=5、出力上限R+K=2なら、入力誤差−4はabs(−4)=4<=5。次のNANDは2個分なので2×2=4<=5です。出力上限だけを見て無制限に再利用できるとは言えません。",
+            "penalty": 2
+          },
+          {
+            "id": "refresh-hint-3",
+            "content": "output_noise_boundとcorrectness_boundに無料説明の式を入れる → refresh_reportの5欄を作る → pipeline_traceで6段を実行し表の札と実物のdigestを記録 → refreshを提出し、失敗なら該当する上限/札を確認。",
+            "penalty": 2
           }
         ]
       },
@@ -174,33 +229,55 @@
         "wrongAnswerPenalty": 15,
         "hints": [
           {
-            "id": "combine-hint-1",
-            "content": "`q/8` 単位で 4 通りの phase を書き出して、 NAND が 1 のときだけ正になる組み合わせを探す。 定数項 1 つと引き算 2 つ。 定数を落とすと `(0,1)` と `(1,0)` の phase がちょうど 0 になり、 答えが noise の転び方で決まる。",
-            "penalty": 12
+            "id": "nand-hint-1",
+            "content": "NANDの答えを位相の正負に表し、そのビットをPBSで新しい暗号文にします。2入力の組み合わせが論理演算で、表は決まったビットをそのまま返します。",
+            "penalty": 2
           },
           {
-            "id": "nand-hint-1",
-            "content": "前処理がすでに何を済ませたかを考えると、 bootstrap に残っている仕事は 1 つしかない。 使う lookup table は 4 通りの入力すべてで同じもので、 見た目より短い。 ゲートは lookup の中に無い。",
-            "penalty": 17
+            "id": "nand-hint-2",
+            "content": "q/8を1単位とすると1−左−右。0,1なら1−(−1)−1=1で正、1,1なら1−1−1=−1で負。先頭の1を抜くと0,1が0になり、誤差で答えが揺れます。",
+            "penalty": 2
+          },
+          {
+            "id": "nand-hint-3",
+            "content": "nand_combineで左右のkeyIdを確認 → maskを両方の負数の和、bodyをdeltaから左右を引いた余りへ → 左右のnoiseBoundを足す → homomorphic_nandで恒等表{0:0,1:1}のbootstrapへ → nandを提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "transfer",
         "input": "multiline",
-        "label": "見たことのない設定で成立させる",
+        "label": "未見の設定と丸め誤差の反例で確かめる",
         "points": 25,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "transfer-hint-1",
+            "content": "実装が別設定でも動くことに加え、誤った誤差上限を破る数を構成します。個々の丸めが位相で足し合わされると、切り捨てが危険になる理由を示します。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-2",
+            "content": "3回の丸めは最大3×0.5=1.5。小例では+0.5から負の誤差−0.375を2回引き、1.25となります。切り捨て上限1では足りません。偶数回の丸めなら最大が整数となり、床との差はありません。",
+            "penalty": 2
+          },
+          {
+            "id": "transfer-hint-3",
+            "content": "rounding_counterexampleでdimensionの奇数/偶数を確認 → 奇数はNone → 偶数はbodyを上へ、鍵1のmaskを下へ丸まる側で探す → 無料のrとEの式で比較 → 別設定対応済みpipeline.pyをtransferへ提出。解答済みを確認。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
   "i18n": {
     "en": {
-      "name": "Look up a function on a ciphertext, and hand back a fresh key",
+      "name": "Look up a function on a ciphertext, and return to the input key",
       "shortDescription": "Addition alone builds only so much. Wire what Week 5's five problems built into one Programmable Bootstrapping and the noise swap comes with one free function lookup. Once a single NAND runs on ciphertexts, every computation is within reach in principle.",
-      "description": "Week 5's capstone. Everything the five earlier problems built is supplied -- encoding and noise, LWE and RLWE, RGSW and the external product, CMUX and blind rotation, sample extraction and key switching. What you write is the pipeline that chains them, and the gate it evaluates.\n\nRemember bootstrapping as \"the thing that removes noise\" and you can explain neither why a function comes out of it nor why only some functions do. What actually happens is a chain of transformations that evaluates a lookup function against an encrypted phase and returns the result under a fresh key and domain -- and the noise the output carries does not mention the input's at all. That absence is the refresh.\n\nThe encoding changes here. Under balanced encoding, `encode(1) = +q/8` and `encode(0) = -q/8`, decoding **is** a sign test -- and a sign test is what negacyclic rotation computes for free, because `X^N = -1` negates whatever wraps past the degree. If you have ever wondered why PBS cannot evaluate any function you like, this is the concrete answer.\n\nThe lookup table's upper half holds `1 - f(0)`, not `f(0)`, because the wrap hands coefficient 0 its value negated and `-encode(x)` is `encode(1 - x)`. Get it wrong and every non-constant unary function comes out inverted for `m = 0`: exactly half the truth table, which looks like a sign bug anywhere else in the pipeline.\n\nEach stage returns its numbers **and** where they live -- kind, keyId, dimension, modulus, parameterSetId, noiseBound. Two of those change mid-pipeline: extraction moves the ciphertext to the ring secret at dimension `degree`, and the key switch moves it back. A stage that returns the right numbers under the wrong label has produced something the next stage will silently combine with a ciphertext it does not match.\n\nHomNAND turns out to be mostly pre-processing. One linear combination, `(0, q/8) - c1 - c2`, gives the four input pairs phases of `3q/8, q/8, q/8, -q/8` -- negative only for `(1,1)`. Then one bootstrap with the identity table. There is no plaintext NAND anywhere, and no gate inside the lookup.\n\nOn scoring: this problem ships 37 deliberately broken implementations, and **21 of them produce a perfect truth table** -- every unary function, both messages, all four NAND rows, at every parameter set. All 21 are broken pipelines anyway: right numbers under the wrong label, a right answer with a false account of itself, or a right answer by luck. A final-answer test sees none of them. So grading happens stage by stage rather than end to end, and the trace is matched by artifact digest. The pipeline has ten stages and the hidden tests grade all ten separately; the eight scored checkpoints are those ten with the two most closely coupled pairs merged, which is the multi-verify contract's cap.\n\nNone of this is secure. The parameters are small enough to enumerate and both secrets fall to linear algebra.",
-      "instructions": "## Addition alone is not a program\n\nAddition and subtraction on ciphertexts are already in hand. But addition alone writes nothing beyond linear expressions — no \"if\", no comparison, no arbitrary circuit. What confidential smart contracts (Fhenix, Inco) want to run are programs.\n\nLogic circuits come with an old theorem: **one NAND is enough to build any circuit**. AND, OR, adders, CPUs — all of them rewrite into combinations of NAND. So the moment one NAND runs on ciphertexts, every computation is within reach in principle. That is this problem's goal, and Week 5's capstone.\n\n## The swap comes with one free function\n\nThe other loose end is the noise, carried since problem one: it accumulates with use, and past the limit the answer breaks. Bootstrapping swaps a ciphertext for one with the same contents and fresh noise.\n\nWhat makes TFHE remarkable is that the swap and a function application are **the same single operation**. Rotate a table of answers by the amount the ciphertext points at, and read — the input decides the read position, so a function gets looked up; the read result is a new ciphertext, so the noise gets replaced. Hence the name: Programmable Bootstrapping.\n\n## Before you start (every part arrives finished)\n\n- The ring and the encoding, LWE/RLWE, the gadget and the external product, CMUX and blind rotation, extraction and key switching — all five problems' worth arrives finished from `participant.fhe`. What you write here is **only the wiring**\n- To retrace the rotate-and-read procedure itself one line at a time, the drill `ac26-w5-rotation-drill` walks the same road in the clear\n- The encoding changes for this problem alone: **1 sits at +q/8, 0 at −q/8**, and decoding is just \"centered (a value in 0 … q − 1 restated in −q/2 … q/2 − 1), then positive or negative?\". A sign test is what the X^N = −1 fold computes for free — and it is also why the functions PBS can look up come with conditions: the table has to survive being read with a sign\n\n## The wiring — five parts, one line\n\nThe order:\n\n1. Move the input LWE into rotation units (a full turn is 2N), by rounding\n2. Build the polynomial whose coefficients spell out the table of answers, as a **trivial ciphertext** (no mask, no noise, no message of its own — what it carries is the function). This is the accumulator\n3. Rotate it blindly, by the amount the ciphertext points at\n4. Take one coefficient of the rotated accumulator out as an LWE sample\n5. Switch the key back to the one the input arrived under\n\n**The key at the exit is the key at the entrance** — the loop the previous problem closed — and that is the crux. Without it there is no second gate.\n\n## The hard part: what \"refresh\" means, and where the gate lives\n\nThe output's noise is \"what the rotation added plus what the switch added\" — **the input's noise appears nowhere in that sum**. It does not shrink; the dependency on it ends. That is why the output can be fed back in as often as needed, and why circuits are possible at all.\n\nAnd NAND turns out to be mostly preprocessing. One linear expression over the two encrypted bits gives the four input pairs phases of which only (1,1)'s is negative. Then a single bootstrap turns that sign into a fresh ciphertext. **No plaintext NAND appears anywhere in the code, and there is no gate inside the table.** Nothing is decrypted at any step either.\n\n## First move\n\nPress **Start** and the editor opens with one file, `pipeline.py`, already scaffolded — you fill in the existing functions. **Restore starter** puts it back at any time.\n\nPress **Inspect evidence** and this run's numbers appear.\n\n- The parameters: the parameter-set id, base B, the digit count L, the modulus q (= B^L), the ring degree N (rotation units run to 2N), the LWE length n, and the encoding (1 at +q/8, 0 at −q/8).\n- The noise numbers: the most the rotation adds, the most the key switch adds, what a bootstrapped ciphertext carries, and **the most input noise one tolerates**.\n- This run's function f, the message m, f(m), and the table's contents.\n- **The wiring table**: stage / kind (lwe or rlwe) / dimension / modulus / noise bound / what message it carries / where that message sits / which key it is under.\n- The digest (a short fingerprint) of the ciphertext each stage actually produced.\n- Before and after: the input phase and what it decodes to, the output phase and what it decodes to, and the fact that **the output key is the key the input came under**.\n- The refresh as numbers (the input noise handed in, the tolerated bound, what comes out, whether it is inside the contract, whether it can be bootstrapped again).\n- **All four rows of HomNAND**: the phase and the result for each pair of inputs.\n\n**Two places are worth looking at first.** One is the wiring table's **noise column, read from top to bottom** — from some row onward the input's noise stops appearing in the expression at all. That row is the refresh, and it is exactly why the output can go back into the entrance. The other is the same table's **message column** — there is exactly one row carrying nothing at all. Working out which row that is turns \"what is a lookup table, as a ciphertext?\" into words.\n\nThe numbers change every run, and grading re-runs your code on parameters that were never shown. **Run public tests** checks the shapes locally first.\n\n## What you answer — eight checkpoints\n\nAll eight are answered with code; there is no field to type a value into. `params` is a dict carrying `base`, `levels`, `degree` (N), `dimension`, `modulus` (q), `plaintext_modulus`, `delta`, `parameterSetId` and `encodingId`. Every stage's return value is stamped with where its numbers live (`kind`, which is `\"lwe\"` or `\"rlwe\"`, plus `keyId`, `dimension`, `modulus`, `parameterSetId` and `noiseBound`). **The stamps are decisions, not bookkeeping** — right numbers under a wrong stamp let the next stage happily combine a ciphertext it does not match, and the result decrypts to noise under both keys.\n\n1. **lut** — `lookup_accumulator(params, table, ring_key_id)`: `table` is `{0: f(0), 1: f(1)}`. Return `{\"a\": …, \"b\": …}` plus the stamps. It must be **trivial**: no mask, no noise, no message of its own. Work out where a bit lands first: a phase of ±q/8, converted into rotation units (2N/q per unit), is N/4 for 1 and 7N/4 for 0. The rotation brings **the coefficient at that position into coefficient 0 — negated if the position was in the upper half**.\n2. **domain** — `to_rotation_domain(params, sample)`: rescale every component of an LWE sample from the q world into the 2N world. A rotation exponent must be an integer in 0 … 2N − 1, so **round to nearest, not down**. The key does not change; the modulus and `noiseBound` do, and the rounding happens once per mask coefficient plus once for the body.\n3. **rotate** — `blind_rotate(params, bootstrap_key, rotated, accumulator)`: `bootstrap_key[i]` is an RGSW encryption of the LWE secret's bit i. `cmux(params, rgsw, ct0, ct1)` is supplied and returns `ct0` when the hidden bit is 0 and `ct1` when it is 1 (and cannot tell you which). **Start from something that accounts for the body, then walk the mask in index order.** Each step is an encrypted choice between leaving the accumulator alone and turning it by `a_i`. Write the total exponent as a sum over the chosen steps and it should come out as `−(body − the inner product of mask and secret)`.\n4. **relabel** — `extract(params, rotated)`: take one coefficient of the rotated accumulator out as an LWE sample. `extract_sample(params, ciphertext, index)` is supplied and adds no noise; **which index is the question**. What comes out sits under \"the ring secret read as a row of numbers\" at a different dimension from what went in — leave the input's `keyId` on it and the next stage applies a switching key built for a different secret. `switch(params, switching_key, sample)`: back to the key and dimension the input arrived under. `key_switch` is supplied, so this stage's job is to **refuse rather than apply a key that does not match** (dimension, parameters, or the sample's `keyId`) and to stamp which key the result belongs to.\n5. **evaluate** — `bootstrap(params, bootstrap_key, switching_key, sample, table)`: the four stages above, in one order. The accumulator's key id is the switching key's **source**, because that is the domain the rotation happens in. Nothing here is handed a secret either.\n6. **refresh** — four functions. `pipeline_trace(params, bootstrap_key, switching_key, sample, table)` returns **six records** in pipeline order, each carrying `stage`, `kind`, `keyId`, `dimension`, `modulus`, `parameterSetId`, `noiseBound`, `carriesMessage`, `messageIs` (`\"m\"` or `\"f(m)\"`, and `None` when it carries none), `located` (`\"whole\"` or `\"coefficient-0\"`, and `None` when it carries none) and `digest` (from `lwe_digest` / `rlwe_digest`). The first `input` row's bound is `correctness_bound` — the most it is *allowed* to carry rather than what it does carry, because measuring that would take a key. `output_noise_bound(params)`: what a bootstrapped ciphertext carries (**the input's noise is not a term in that sum**). `correctness_bound(params)`: the most input noise a bootstrap tolerates. `refresh_report(params, input_noise)`: returns `inputNoise`, `correctnessBound`, `outputNoiseBound`, `withinContract` and `secondPassFits`. `outputNoiseBound` must not move when `inputNoise` changes.\n7. **nand** — `nand_combine(params, left, right)`: **one linear combination** of the two encrypted bits, and no gate anywhere. The aim is a phase that is positive exactly when NAND is 1 (under this encoding, \"positive\" and \"decodes to 1\" are the same thing). Write the four phases you want in units of q/8 and find the combination that produces them. Both inputs must be under the same key. `homomorphic_nand(params, bootstrap_key, switching_key, left, right)`: that combination, then one bootstrap. That is the entire gate. The output is a fresh encrypted bit under the same key as the inputs, so it can be an input to the next gate.\n8. **transfer** — the same `pipeline.py` runs checkpoints 1 to 7 again on **parameters that were never shown**.\n\nEach checkpoint has its own submit button; pressing it sends the editor's current contents straight to grading. The eight are graded independently, so one that will not budge does not block the rest. A wrong answer can be resubmitted (each wrong attempt carries a fixed penalty, and the total never drops below zero). A solved checkpoint is marked solved and is not submitted again.\n\n## The summit of Week 5\n\nPass all eight and you are done. The ciphertext that comes out carries the same key as the one that went in, so it feeds straight into the next gate — that is what \"a circuit can be built\" means.\n\nWeek 5 began by adding one cover to one number; here it reaches \"run a program without seeing what it runs on\". The mechanism of what Zama's TFHE-rs does with production parameters and FFTs is now, all of it, in your hands. The two drills (`ac26-w5-rotation-drill`, `ac26-w5-negacyclic-drill`) retrace this machine's core — rotate-and-read, and the sign flip — one line at a time, as an alternate route.\n",
-      "writeup": "## A correct truth table proves less than it looks\n\nThis problem ships 37 deliberately broken implementations, and **21 of them produce a perfect truth table** -- every unary function, both messages, all four NAND rows, at every parameter set. Every one of the 21 is still a broken pipeline, and `make reference-test` re-measures the count on every run.\n\nThey split three ways. **Right numbers, wrong label**: extraction that keeps the input's keyId, reports the input's dimension instead of the ring's, or calls its output an RLWE ciphertext. **Right answer, wrong account of it**: a trace whose noise bounds are all zero, an accumulator row claiming to carry the message, an output bound that grows with the input's. **Right answer by luck**: extracting coefficient 1 works because the table is constant across each half of the ring, and truncating instead of rounding works because the correctness budget absorbs it at these parameters.\n\nTen stage-level checkpoints are expensive. That measured 21 is what pays for them. A twenty-second -- the dropped `q/8` offset -- is blind on most seeds and caught on the one the suite fixes, so it is left out of the count rather than papered over.\n\n## The identity table shows you nothing\n\nFor `f = identity` the lower half is `encode(f(1)) = encode(1)` and the upper half is `encode(1 - f(0)) = encode(1)`. Every coefficient is the same number. A constant polynomial cannot distinguish where the rotation landed, so swapped halves, the wrong extracted coefficient, and truncation instead of rounding all pass. Every public test uses it, on purpose.\n\n## The refresh is not \"the noise gets smaller\"\n\nThe output's noise bound is blind rotation's contribution plus the key switch's. The input's noise is not a term. It does not shrink -- it stops being **depended on**. That is why the output can be bootstrapped again, and why circuits are possible at all. Read the trace's noise column down and you can see which row the dependency ends at.\n\n## The right answer under the wrong label is still broken\n\nAn extraction that keeps the input's `keyId` produces the correct numbers with the wrong domain stamped on them. The pipeline works end to end because the switching key happens to be the matching one, and it breaks the moment anything else in a circuit reads that label to decide what the ciphertext may be combined with. The artifact envelope exists for this class, and a truth table cannot see it.\n\n## The gate is not in the lookup table\n\nHomNAND's lookup table is the identity. All four input pairs use the same table; what separates the rows is the sign of the phase the pre-processing produced. The bootstrap only turns that sign into a fresh ciphertext. The gate lives in `(0, q/8) - c1 - c2`.\n\nDrop that `q/8` and `(0,1)` and `(1,0)` have a phase of exactly zero, so the answer is settled by whichever way the noise fell. Measured over 40 seeds, 12 of the 80 attempts at those two rows came out wrong and the other two rows never did -- a missing constant that fails one row in seven reads as flakiness rather than as a bug.\n\n## Three rows out of four is not correct\n\n`(1,1)` is the only NAND row that returns 0, so an implementation that returns a constant 1 is 75% right. That is why the hidden tests run all four rows every time.\n\n## What happens past the correctness bound\n\nAn input noisier than the bound does not degrade the bootstrap. It returns the **other** bit, confidently, with a fresh small noise -- a correct-looking ciphertext of the wrong answer rather than a broken one. That is the FHE failure mode worth remembering.\n\n## Toy versus production\n\nThis is a toy of the mechanism. Production TFHE runs the polynomial products through FFT or NTT, compresses the bootstrapping key, and derives its parameters from security against lattice reduction. Here the parameters are small enough to enumerate and both secrets fall to linear algebra. Per-gate cost, realistic bootstrapping-key size, and compiling arbitrary multi-gate circuits are all out of scope.\n\n## Not in scope\n\nProduction TFHE security and performance, optimized FFT / NTT / SIMD, bootstrapping-key size optimization, an arbitrary multi-gate circuit compiler.",
+      "description": "Connect supplied PBS and HomNAND components, returning to the input key and reporting each stage’s key, dimension, units and error bound. Eight checkpoints each have three hints. The output-error bound is independent of input noise; correct table selection still requires the input-error contract.",
+      "instructions": "## Before you start\n\nUse signed arithmetic, multiplication, division remainders and Python functions, lists and dicts. Cryptographic components are supplied; the terms and required formulas are defined below.\n\n## First, build the answer table\n\nYou are connecting finished encryption components in `pipeline.py`. **Press Start → implement lookup_accumulator using the formula below → submit lut.** A correct submission becomes Solved. Earn this checkpoint first; the full public test run also calls unfinished functions and need not pass yet. Wrong submissions incur the displayed penalty.\n\n## What is being built?\n\nA ciphertext is a group of numbers hiding a message; a secret key recovers it. Your pipeline receives no secret keys. Programmable bootstrapping (PBS) applies a public answer table f to an encrypted bit m and produces an encryption of f(m) with a refreshed error bound. NAND outputs0 only for inputs1,1; otherwise it outputs1. Combining NAND gates builds logic circuits. These small teaching parameters do not establish practical cryptographic security.\n\n```text\ninput ciphertext → rotation units ────────┐\nanswer table → coefficient array → hidden rotation\n                                      ↓ extract coefficient0\noutput ciphertext ← switch to input key\n```\n\n## Numbers and supplied components\n\nparams is a dict: modulus=q is the divisor, degree=N the coefficient count, dimension=n the input mask length, base=B and levels=L give q=B**L, delta=q//8, plaintext_modulus=2. parameterSetId and encodingId name the settings and encoding. Supplied settings have N divisible by4 and q divisible by8. x%q means the remainder0..q−1; // is integer division.\n\nEncoding represents1 as+q/8 and0 as−q/8. At q=8:1→1,0→−1→remainder7. centered rewrites a remainder into the interval from−q/2 inclusive to q/2 exclusive:7 becomes−1. Positive decodes to1; otherwise0.\n\nAn LWE ciphertext has mask (a list of numbers) and body (one number). Its phase is body minus the sum of products of corresponding mask and secret-key entries, reduced by q. Example:5−2×1−1×1=2. Phase contains the encoded message plus a small error, called noise. Your functions cannot calculate the phase because they receive no key.\n\nRLWE uses coefficient arrays a,b. [2,3] represents2+3X. The ring is the arithmetic rule X**N=−1: moving a coefficient N positions changes its sign;2N returns it. A mask is the number part used to hide the message. A public answer table can have an all-zero mask: it has no private input of its own.\n\nCMUX selects under encryption: cmux(params,rgsw,ct0,ct1) produces the same message as ct0 for selector0, ct1 for selector1. It need not produce identical ciphertext bytes. bootstrap_key[i] is an RGSW ciphertext encoding key bit i for this selection.\n\nAlready imported from participant.fhe: encode(params,bit); normalize(params,coefficients), which makes N reduced coefficients; rotate_ciphertext(params,ciphertext,exponent); extract_sample(params,ciphertext,index); key_switch(params,switching_key,sample); blind_rotation_noise(params); key_switch_noise(params). The last two return bounds on added error.\n\n## Eight checkpoints: free implementation contracts\n\n### 1. lut\n\nlookup_accumulator(params,table,ring_key_id) receives table={0:f(0),1:f(1)} with bit outputs. Return a as N zeros; b has encode(params,table[1]) in the first half and encode(params,1-table[0]) in the second, reduced with normalize. At N=4,q=8,table={0:1,1:1}, b=[1,1,7,7]. The second-half sign is reversed again when read by rotation. Accumulator means this rotating table.\n\n\n\nAt N=4, the reading positions explain the layout:\n\n```text\nbit1 → phase +q/8 → rotation position N/4=1 → read  b[1]\nbit0 → phase −q/8 → rotation position7N/4=7 → read −b[3]\n                                                 ↑7−N=3\n```\n\nPosition7 crosses N and therefore negates the stored coefficient. Storing encode(1−f(0)) at b[3] makes its negation encode(f(0)).\n\n### 2. domain\n\nto_rotation_domain applies ((x%q)*(2*N)+q//2)//q%(2*N) to each mask value and body. Halfway ties round upward, then wrap to one full revolution; Python round has different tie behavior. Unit-conversion example:q=8,2N=4,x=3 gives1.5→2.\n\nEach of n+1 roundings contributes at most0.5 rotation unit. Report the integer ceiling noiseBound=(n+2)//2: at n=4,2.5→3. This is the rounding contribution, not a measurement of all input noise.\n\n### 3. rotate\n\nblind_rotate starts current=rotate_ciphertext(params,accumulator,-rotated[\"body\"]). For i in increasing mask-index order: candidate=rotate_ciphertext(params,current,rotated[\"mask\"][i]); current=cmux(params,bootstrap_key[i],current,candidate). Explanation-only key[1,0], mask[2,1], body3 gives total rotation−3+2=−1. Code uses the supplied encrypted selection, never that key.\n\n### 4. relabel\n\nextract returns extract_sample(params,rotated,0)'s mask/body, labelled with rotated's keyId, dimension N and unchanged noiseBound. Rotation deliberately brought the desired coefficient to index0.\n\nswitch calls key_switch after compatibility checks. Raise ValueError if sourceDimension differs from len(sample[\"mask\"]), targetDimension differs from params[\"dimension\"], modulus/base/levels differ from params, or sample has a non-None keyId different from sourceKeyId. Omitted/None keyId needs no key-id comparison. For example, a sample labelled keyA cannot use a switch from keyB.\n\nswitching_key entries[j][l] encrypt old_key[j]*B**(L−1−l) under the new key, most-significant digit first. Target label and length are targetKeyId/targetDimension. An incompatible key does not guarantee correct decryption.\n\n### 5. evaluate\n\nbootstrap creates the accumulator with ring_key_id=sourceKeyId, converts the input to rotation units, calls blind_rotate, extract, then switch. Supplied keys connect input key→ring key→original input key. The ciphertext is fresh; the output key is the input key. Example:table={0:1,1:0} changes a hidden0 into a hidden1.\n\n### 6. refresh\n\nEvery stage returns its numbers with kind (format), keyId (key name), dimension (mask length), modulus (divisor for its units), parameterSetId (params' field) and noiseBound (bound). Let R=blind_rotation_noise(params), K=key_switch_noise(params).\n\n| stage | kind / keyId / dimension / modulus | noiseBound | carriesMessage / messageIs / located |\n|---|---|---|---|\n| input (trace only) | lwe / targetKeyId / n / q | C | True / m / whole |\n| rotation-domain | lwe / input keyId / n / 2N | (n+2)//2 | True / m / whole |\n| accumulator | rlwe / ring_key_id / N / q |0| False / None / None |\n| blind-rotation | rlwe / accumulator keyId / N / q | R | True / f(m) / coefficient-0 |\n| extraction | lwe / rotated keyId / N / q | rotated noiseBound | True / f(m) / whole |\n| key-switch | lwe / targetKeyId / targetDimension / q | sample noiseBound+K | True / f(m) / whole |\n\npipeline_trace returns these six rows in a tuple, with stage strings exactly as above. messageIs and located are the listed strings, except None is Python None. A digest is a fingerprint of the actual intermediate artifact: lwe_digest(sample) or rlwe_digest(params,ciphertext). Execute intermediate stages to record them. Ordinary stage ciphertexts need not contain the trace-only columns or digest.\n\nWithout error, bit1 reads the center N/4 of its interval and bit0 reads7N/4. Each lies N/4 rotation units from the nearest interval boundary.\n\n```text\nboundary0 ── N/4 ── read position N/4 ── N/4 ── boundary N/2\n```\n\nSubtract the maximum rounding displacement(n+1)/2 from that distance. Multiply the remaining distance by q/(2N), the size of one rotation unit in original units. This yields C below.\n\noutput_noise_bound(params)=R+K. correctness_bound(params) returns C=int((N/4−(n+1)/2)*q/(2*N)); int discards the fractional part. The bracket is positive for supplied viable settings. Use the original half-unit rounding bound here, not its displayed integer ceiling. A unit-arithmetic example N=8,n=1,q=8 gives int((2−1)*8/16)=0; this tiny example is not a viable circuit setting.\n\nrefresh_report returns inputNoise=input_noise, correctnessBound=C, outputNoiseBound=R+K, withinContract=abs(input_noise)<=C, secondPassFits=2*(R+K)<=C. abs removes the sign. The factor2 reserves room for adding two ciphertext errors in the next NAND. Example:C=5,R+K=2 gives2*2<=5, so it fits.\n\nAlthough the output bound has no input-noise term, input noise still affects the selected position. Outside the contract correctness is not guaranteed; the result does not necessarily flip. Reuse needs matching keys/dimensions AND sufficient error budget.\n\n### 7. nand\n\nnand_combine returns corresponding mask entries(-left-right)%q and body=(delta-left[\"body\"]-right[\"body\"])%q. Different keyId values raise ValueError; input dimensions/settings are supplied matched. Labels: lwe, left keyId, n, q, params' parameterSetId; noiseBound is the sum of input bounds (default0 when omitted).\n\nIn units q/8 the phase is1−left−right:\n\n| bits | phase arithmetic | NAND |\n|---|---|---|\n|0,0|1−(−1)−(−1)=3|1|\n|0,1|1−(−1)−1=1|1|\n|1,0|1−1−(−1)=1|1|\n|1,1|1−1−1=−1|0|\n\nhomomorphic_nand passes nand_combine's result through bootstrap with table={0:0,1:1}. The table re-encodes the bit already determined by the sign. Omitting the constant makes0,1 and1,0 land on phase0, where error can change the result.\n\n### 8. transfer\n\nThe same pipeline.py must handle new N,n,q,B,L and tables, and implement rounding_counterexample below. Do not hardcode Inspect's values. The public tests' particular table cannot establish all sign, rounding and four-input cases. Compare all four unary tables and all four NAND rows before submitting transfer. Completion means all eight checkpoints are Solved.\n\n\n## Finish transfer with a counterexample to a wrong bound\n\nA faulty implementation floors its rounding bound to(n+1)//2. Implement rounding_counterexample(params), constructing test numbers whose phase rounding error exceeds it. If n is odd,(n+1)/2 is already an integer, so no such counterexample exists: return None. For even n return a dict with mask/body/secret.\n\nmask and the synthetic binary test key secret have n entries; mask/body are integer remainders0..q-1 and secret entries are integer0/1. These are your own test data, not a stolen key. Supplied settings guarantee n>=1 and q/(2N)>2(n+1), leaving room to construct an even-dimension example.\n\nCompare errors using integers. u(x)=((x%q)*2*N+q//2)//q is rounding BEFORE the final remainder modulo2N. r(x)=q*u(x)-2N*x is the rounding error multiplied by q. Let E be r(body) minus the sum of r(mask[i])*secret[i]. A witness satisfies abs(E)>q*((n+1)//2). Grading computes this independently of your to_rotation_domain.\n\nExample:N=4,n=2,q=64,body=4,mask=[3,3],secret=[1,1]. Body rounds0.5→1; each mask rounds0.375→0. Phase error is+0.5-(-0.375)-(-0.375)=1.25, exceeding the wrong bound1. After multiplication by q,E=80 compared with64. This fixed array cannot handle new dimensions. Construct values from the supplied n,N,q whose errors accumulate in the same direction.\n\n",
+      "writeup": "## Correct answers and correct composition are separate\n\nThe identity accumulator is constant, so it can hide errors in rotation position, extraction and signs. Compare all four tables and NAND inputs, then check key labels, dimensions and bounds. Of the37 author mutation variants,21 pass a decrypted-output-only test. This motivates stage records.\n\n## Bounds include units and conditions\n\nFive roundings can contribute2.5 rotation units. The integer reported upper bound must be3, not2. The input budget uses the original half-unit bound(n+1)/2 subtracted from boundary distance.\n\nAn input-independent output bound R+K does not make table selection independent of input noise. Outside the input contract correctness is not guaranteed, but the bit need not flip. The next NAND needs matching keys/dimensions and budget for two output errors.\n\n## NAND combines and re-encodes\n\nThe phase q/8−left−right yields3,1,1,−1 in q/8 units for00,01,10,11. Identity bootstrapping re-encodes that sign. Omitting the constant places the middle rows at0 where error can change the bit.\n\n## Scope\n\nThis small model teaches component composition and its conditions. It does not establish production TFHE security, performance, key sizes or an arbitrary circuit compiler.",
       "learningGoals": [
         "Relate an input's phase to the position it points at in the table",
         "Write a function into a polynomial's coefficients as a table of answers",
@@ -220,7 +297,15 @@
           "hints": [
             {
               "id": "lut-hint-1",
-              "content": "A bit encoded as `+-q/8` lands at rotation position N/4 or 7N/4. One is in the lower half, the other in the upper -- and the upper half reaches coefficient 0 **negated**. Write down what `-encode(x)` is under a balanced encoding and the upper half follows."
+              "content": "The accumulator carries a public answer table rather than a hidden input. Its zero mask is intentional. Pre-compensate the sign that rotation will reverse."
+            },
+            {
+              "id": "lut-hint-2",
+              "content": "At N=4,q=8, an always-one table has first-half encode(1)=1 and second-half encode(1−1)=7. Thus b=[1,1,7,7], a=[0,0,0,0]."
+            },
+            {
+              "id": "lut-hint-3",
+              "content": "Open lookup_accumulator in pipeline.py → build degree coefficients → encode table[1] in the first half and1−table[0] in the second → attach the free statement’s accumulator labels → submit lut and check Solved."
             }
           ]
         },
@@ -230,7 +315,15 @@
           "hints": [
             {
               "id": "domain-hint-1",
-              "content": "A rotation exponent has to be an integer in `[0, 2N)`. Round to nearest, not down. There is one rounding per mask coefficient and one for the body, and that total is this stage's entire noise contribution."
+              "content": "Convert ciphertext numbers into coefficient-rotation counts. The key stays the same; the units change, and rounding contributes an error bound."
+            },
+            {
+              "id": "domain-hint-2",
+              "content": "Unit example:q=8,2N=4,x=3 gives3*4/8=1.5→2. Five roundings contribute at most5*0.5=2.5, reported as integer ceiling3."
+            },
+            {
+              "id": "domain-hint-3",
+              "content": "In to_rotation_domain apply the free integer formula to every mask entry and body → set modulus=2*degree, noiseBound=(dimension+2)//2 → preserve input keyId → submit domain and check Solved."
             }
           ]
         },
@@ -240,7 +333,15 @@
           "hints": [
             {
               "id": "rotate-hint-1",
-              "content": "Account for the body first, then walk the mask. Each step is an encrypted choice between leaving the accumulator alone and turning it by `a_i`; `cmux(params, rgsw, ct0, ct1)` returns `ct0` when the selector is 0. Which argument is the unturned one, and the sign on the body, are the two things that go backwards."
+              "content": "Encrypted key bits select “keep” or “rotate,” moving the desired position to coefficient0 without decrypting the phase. The supplied CMUX performs the selection."
+            },
+            {
+              "id": "rotate-hint-2",
+              "content": "For explanation-only body3,mask[2,1],key[1,0], the exponent is−3+2+0=−1. Implementation uses CMUX without reading the key."
+            },
+            {
+              "id": "rotate-hint-3",
+              "content": "In blind_rotate first rotate the accumulator by negative body → walk mask in index order → pass current then its rotated candidate to CMUX → attach labels with bound R → submit rotate and check Solved."
             }
           ]
         },
@@ -249,12 +350,16 @@
           "label": "Move it between key domains",
           "hints": [
             {
-              "id": "extract-hint-1",
-              "content": "The rotation was by `-phase`, so exactly one coefficient now holds the value you want. And the sample that comes out has the ring secret read as a vector for its key, at a different dimension. Leave the input's keyId on it and the next stage applies a key built for another secret."
+              "id": "relabel-hint-1",
+              "content": "Extraction changes ciphertext format and key length. Switching returns to the input key, so preserve and update key labels along with the numbers."
             },
             {
-              "id": "switch-hint-1",
-              "content": "`key_switch` is supplied. This stage's job is refusing a key that does not match -- dimension, parameters, or the sample's keyId -- and stamping which domain the result belongs to. The target being the input's key is what makes the output feedable back in."
+              "id": "relabel-hint-2",
+              "content": "At N=4 an extracted mask has4 entries; switching to an input key of length n=2 gives2. A keyA source cannot accept a keyB sample: raise ValueError before calculating."
+            },
+            {
+              "id": "relabel-hint-3",
+              "content": "In extract, call extract_sample at index0 and preserve rotated key/error labels. In switch compare sourceDimension with mask length, targetDimension with params.dimension, modulus/base/levels, and a non-None keyId with sourceKeyId. Reject mismatches with ValueError; allow absent/None keyId. Call key_switch, attach target labels and added error, then submit relabel and check Solved."
             }
           ]
         },
@@ -264,7 +369,15 @@
           "hints": [
             {
               "id": "evaluate-hint-1",
-              "content": "Four of your stages in one order. The accumulator's keyId is the switching key's **source**, because that is the domain the rotation happens in. The output is under the same key at the same dimension as the input, so it is already a valid input to the next bootstrap."
+              "content": "Connect the public table builder to the encrypted table reader. The message may change, while the output key returns to the input key for later use."
+            },
+            {
+              "id": "evaluate-hint-2",
+              "content": "With table={0:1,1:0}, an encryption of0 becomes an encryption of1. Coefficients and encrypted rotation implement this, not an if statement on a revealed bit."
+            },
+            {
+              "id": "evaluate-hint-3",
+              "content": "In bootstrap build the accumulator using sourceKeyId → feed to_rotation_domain into blind_rotate → pass extract’s result to switch and return it → submit evaluate. Repair earlier incomplete stages if their checks fail."
             }
           ]
         },
@@ -274,7 +387,15 @@
           "hints": [
             {
               "id": "refresh-hint-1",
-              "content": "Six rows in pipeline order. The `input` row's bound is `correctness_bound` -- the most it is allowed to carry, not what it does carry, because measuring that takes a key. Read the noise column down to find where the dependency on the input ends. Digests come from `lwe_digest` / `rlwe_digest`."
+              "content": "Error bounds tell whether the next operation has enough budget. Removing input error from the output-bound formula does not remove the requirement to select the correct table position."
+            },
+            {
+              "id": "refresh-hint-2",
+              "content": "If C=5 and R+K=2, input error−4 satisfies abs(−4)=4<=5. The next NAND combines two outputs, so2*2=4<=5. An output bound alone does not prove unlimited reuse."
+            },
+            {
+              "id": "refresh-hint-3",
+              "content": "Implement the two free bound formulas → return all five refresh_report fields → execute the six pipeline_trace stages and record their labels and actual digests → submit refresh; use feedback to identify the incorrect bound or label."
             }
           ]
         },
@@ -283,18 +404,36 @@
           "label": "Build the gate and complete the truth table",
           "hints": [
             {
-              "id": "combine-hint-1",
-              "content": "Write out the four phases you want in units of `q/8` and find the combination that is positive exactly when NAND is 1. One constant term and two subtractions. Leave the constant out and `(0,1)` and `(1,0)` sit at exactly zero, where the noise decides."
+              "id": "nand-hint-1",
+              "content": "Express NAND as a phase sign, then PBS re-encodes that bit. The two-input combination implements the logic; the lookup table preserves the resulting bit."
             },
             {
-              "id": "nand-hint-1",
-              "content": "Think about what the pre-processing has already done and what is left for the bootstrap to decide. The table is the same for all four input pairs and is shorter than it looks. The gate is not in the lookup."
+              "id": "nand-hint-2",
+              "content": "In q/8 units, use1−left−right. Bits0,1 give1−(−1)−1=1; bits1,1 give1−1−1=−1. Without the first1, bits0,1 land at0 where error can change the result."
+            },
+            {
+              "id": "nand-hint-3",
+              "content": "Check matching keyId values in nand_combine → negate/add corresponding masks, subtract both bodies from delta, reduce → add input noise bounds → bootstrap with identity table{0:0,1:1} in homomorphic_nand → submit nand and check Solved."
             }
           ]
         },
         {
           "id": "transfer",
-          "label": "Hold up in a setting you have not seen"
+          "label": "Check unseen settings and construct rounding evidence",
+          "hints": [
+            {
+              "id": "transfer-hint-1",
+              "content": "Construct numbers that break an incorrect error bound, alongside handling unseen settings. Accumulated phase-rounding errors show why flooring is unsafe."
+            },
+            {
+              "id": "transfer-hint-2",
+              "content": "Three roundings allow3*0.5=1.5. The example combines+0.5 and two subtractions of−0.375 to give1.25, above the floor1. With an even count of roundings the maximum is already integer."
+            },
+            {
+              "id": "transfer-hint-3",
+              "content": "In rounding_counterexample check dimension parity → odd returns None → for even n seek a body rounding upward and key1 mask entries rounding downward → compare using the free r/E formulas → submit the updated pipeline.py to transfer and check Solved."
+            }
+          ]
         }
       ]
     }

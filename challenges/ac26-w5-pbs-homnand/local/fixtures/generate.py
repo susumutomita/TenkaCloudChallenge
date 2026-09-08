@@ -235,7 +235,7 @@ def pipeline_trace(par: dict, key, switch: dict, sample: dict, table: dict) -> t
         _row(par, "input", "lwe", target, par["dimension"], par["modulus"],
              correctness_bound(par), MESSAGE_SEMANTICS["input"], lwe_digest(sample)),
         _row(par, "rotation-domain", "lwe", target, par["dimension"], rotated_sample["modulus"],
-             (par["dimension"] + 1) // 2, MESSAGE_SEMANTICS["rotation-domain"],
+             (par["dimension"] + 2) // 2, MESSAGE_SEMANTICS["rotation-domain"],
              lwe_digest(rotated_sample)),
         _row(par, "accumulator", "rlwe", source, par["degree"], par["modulus"],
              0, MESSAGE_SEMANTICS["accumulator"], rlwe_digest(par, accumulator)),

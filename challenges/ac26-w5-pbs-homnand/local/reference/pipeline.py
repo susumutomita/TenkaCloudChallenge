@@ -121,7 +121,7 @@ def to_rotation_domain(params: dict, sample: dict) -> dict:
         "dimension": params["dimension"],
         "modulus": modulus,
         "parameterSetId": params["parameterSetId"],
-        "noiseBound": (params["dimension"] + 1) // 2,
+        "noiseBound": (params["dimension"] + 2) // 2,
     }
 
 
@@ -180,8 +180,7 @@ def extract(params: dict, rotated: dict) -> dict:
     coefficient. What this stage owns is the relabelling, and it is not cosmetic: the sample
     that comes out is a ciphertext under the **ring** secret read as a vector, at dimension
     `degree`. Leave the input's `keyId` on it and the next stage will apply a switching key
-    built for a different secret, which produces a well-formed ciphertext that decrypts to
-    noise under both keys.
+    built for a different secret, which does not guarantee correct decryption under the intended key.
     """
     sample = extract_sample(params, rotated, 0)
     return {
@@ -229,6 +228,8 @@ def switch(params: dict, switching_key: dict, sample: dict) -> dict:
 def _require_compatible(params: dict, switching_key: dict, sample: dict) -> None:
     if switching_key["sourceDimension"] != len(sample["mask"]):
         raise ValueError("the switching key does not match the sample's dimension")
+    if switching_key["targetDimension"] != params["dimension"]:
+        raise ValueError("the switching key does not match the target dimension")
     if (
         switching_key["modulus"] != params["modulus"]
         or switching_key["base"] != params["base"]
@@ -346,9 +347,8 @@ def correctness_bound(params: dict) -> int:
     rotation-domain units away from where it sits. The domain switch spends up to
     `(n + 1) / 2` of those on rounding, and what is left converts back at `q / 2N` per unit.
 
-    Above this the bootstrap does not degrade -- it returns the *other* bit, confidently and
-    with a fresh small noise. That is the failure mode worth remembering: a correct-looking
-    ciphertext of the wrong answer.
+    Outside this input contract correctness is not guaranteed. It does not imply that
+    every such input returns the other bit.
     """
     spare = params["degree"] // 4 - (params["dimension"] + 1) / 2
     return int(spare * params["modulus"] / (2 * params["degree"]))
@@ -436,3 +436,11 @@ def homomorphic_nand(
     return bootstrap(
         params, bootstrap_key, switching_key, nand_combine(params, left, right), {0: 0, 1: 1}
     )
+
+
+def rounding_counterexample(params: dict):
+    n, q, N = params["dimension"], params["modulus"], params["degree"]
+    if n % 2:
+        return None
+    threshold = (q + 4 * N - 1) // (4 * N)
+    return {"body": threshold, "mask": [threshold - 1] * n, "secret": [1] * n}

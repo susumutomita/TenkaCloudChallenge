@@ -123,7 +123,7 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         "reports the domain switch as free of rounding error",
         [
             (
-                '        "noiseBound": (params["dimension"] + 1) // 2,',
+                '        "noiseBound": (params["dimension"] + 2) // 2,',
                 '        "noiseBound": 0,',
             )
         ],
@@ -501,6 +501,72 @@ def main() -> int:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")
         return 1
     print("PASS reference implementation passes the hidden tests")
+
+    # Fraction arithmetic demonstrates why flooring 2.5 is not an upper bound.
+    from fractions import Fraction
+    par = {"degree": 16, "dimension": 4, "modulus": 262144, "parameterSetId": "rounding-regression"}
+    unit = par["modulus"] // (2 * par["degree"])
+    sample = {"mask": (unit // 2 + 1,) * 4, "body": unit // 2 - 1, "keyId": "known-key"}
+    got = _load(REFERENCE).to_rotation_domain(par, sample)
+    exact_phase = Fraction((sample["body"] - sum(sample["mask"])) * 2 * par["degree"], par["modulus"])
+    rounded_phase = got["body"] - sum(got["mask"])
+    error = abs(rounded_phase - exact_phase)
+    if not 2 < error <= got["noiseBound"]:
+        print("FAIL rounding bound is smaller than an attainable phase rounding error")
+        return 1
+    floored = REFERENCE.replace('(params["dimension"] + 2) // 2', '(params["dimension"] + 1) // 2')
+    if not check_pipeline.check_domain(_load(floored), SEED):
+        print("FAIL checker accepted a rounded-down error bound")
+        return 1
+    print("PASS fractional rounding bound regression and rejected floor-bound implementation")
+
+    target_guard = ('    if switching_key["targetDimension"] != params["dimension"]:\n'
+                    '        raise ValueError("the switching key does not match the target dimension")')
+    assert target_guard in REFERENCE
+    if not check_pipeline.check_switch(_load(REFERENCE.replace(target_guard, '    pass')), SEED):
+        print("FAIL accepted a missing target-dimension guard")
+        return 1
+    print("PASS wrong target dimension rejected independently")
+
+    optional_guard = 'sample.get("keyId") is not None and sample["keyId"] != switching_key["sourceKeyId"]'
+    assert optional_guard in REFERENCE
+    strict_label = _load(REFERENCE.replace(optional_guard, 'sample["keyId"] != switching_key["sourceKeyId"]'))
+    if not check_pipeline.check_switch(strict_label, "review-optional-key-id"):
+        print("FAIL accepted an implementation that rejects optional input key labels")
+        return 1
+    print("PASS missing and None input key labels remain valid")
+
+    constructor_faults = (
+        ('    if n % 2:', '    if True:'),
+        ('[threshold - 1] * n', '[0] * n'),
+        ('[1] * n', '[0] * n'),
+    )
+    for before, after in constructor_faults:
+        assert before in REFERENCE
+        mutant = _load(REFERENCE.replace(before, after))
+        if not check_pipeline.check_rounding_counterexample(mutant, SEED):
+            print("FAIL accepted a missing or ineffective constructed rounding witness")
+            return 1
+    print("PASS three invalid constructed rounding witnesses rejected independently")
+
+    # This seed previously produced only odd dimensions, skipping construction entirely.
+    coverage_seed = "coverage-probe-26"
+    for tested_seed in (SEED, coverage_seed):
+        parities = {par["dimension"] % 2 for par in check_pipeline._sets(tested_seed)}
+        if parities != {0, 1}:
+            print("FAIL dimension parity coverage depends on the deployment seed")
+            return 1
+        none_only = _load(REFERENCE.replace('    if n % 2:', '    if True:'))
+        if not check_pipeline.check_rounding_counterexample(none_only, tested_seed):
+            print("FAIL all-None construction escaped on the odd-only seed")
+            return 1
+        if not check_pipeline.check_domain(_load(floored), tested_seed):
+            print("FAIL the floor-bound implementation escaped on the odd-only seed")
+            return 1
+    print("PASS both dimension parities and their invalid submissions checked independently of seed")
+
+
+
 
     survivors = 0
     blind = 0
