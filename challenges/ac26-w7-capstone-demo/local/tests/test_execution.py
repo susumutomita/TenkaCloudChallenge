@@ -15,6 +15,9 @@ def main():
     for checkpoint in ('transcript', 'privacy', 'detect', 'evidence'):
         assert evaluate_with_message(checkpoint, diagnostics)[0], checkpoint
     print('PASS legal generator diagnostic extras across value boundary', flush=True)
+    serializable = source + "\n_original_run = run\n_original_view = view\ndef run(setting, randomness):\n    t = _original_run(setting, randomness)\n    t['diagnostic'] = 'present'\n    for row in [*t['messages'], *t['public']]: row['diagnostic'] = (1, 2)\n    return t\ndef view(transcript, coalition):\n    assert transcript['diagnostic'] == 'present'\n    assert all(row['diagnostic'] == (1, 2) for row in [*transcript['messages'], *transcript['public']])\n    return _original_view(transcript, coalition)\n"
+    assert evaluate_with_message('privacy', serializable)[0]
+    print('PASS serializable diagnostics available to view', flush=True)
     checkpoint = next(iter(CODE_CHECKPOINTS))
     assert not evaluate_with_message(checkpoint, 'pass')[0]
     assert not evaluate_with_message(checkpoint, 'def broken(:')[0]

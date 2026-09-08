@@ -67,3 +67,6 @@ import-compatibility-test:
 	docker build --target author -t $(IMAGE)-author local
 	docker run --rm --init $(IMAGE)-author python -m unittest discover -s tests/hidden -p test_supported_imports.py -v
 	docker run --rm --init $(IMAGE)-author python -m unittest discover -s tests/hidden -p test_callback_contract.py -v
+
+	echo "Checking normal transcript evaluation"
+	docker run --rm --init $(IMAGE)-author python tests/test_execution.py

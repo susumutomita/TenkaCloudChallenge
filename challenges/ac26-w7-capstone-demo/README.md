@@ -173,3 +173,6 @@ Supported computation imports / 計算用に使える標準ライブラリ:
 array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
 This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
 この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
+
+Serializable diagnostic extras are preserved when a transcript returns to `view`; opaque extras such as generators are omitted from the value channel. The evaluator still checks only the required transcript fields.
+`view` に渡し直すときも、文字列・数・tupleなど転送可能な補足データを保ちます。generatorなど転送できない補足データは省き、採点では必須欄を検査します。
