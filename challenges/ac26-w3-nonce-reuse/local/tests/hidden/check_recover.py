@@ -239,17 +239,21 @@ def check_confirm(module, seed: str) -> list[str]:
         group = toy_group(seed, label)
         secret, first, _second = _reuse_pair(seed, label, group)
         public = group.generator.scalar_mul(secret)
-        for form in [(public.x, public.y), {"public_key": public}]:
-            if not module.confirms(secret, form, group):
-                failures.append("a supported public-key input form was rejected")
-            if module.confirms((secret + 1) % group.n, form, group):
-                failures.append("a wrong secret was confirmed through a converted input")
-        if not module.confirms(secret, public, group):
-            failures.append("the correct secret was not confirmed against its public key")
-        if module.confirms((secret + 1) % group.n, public, group):
-            failures.append("a wrong secret was confirmed against a public key")
-        if module.confirms(secret, group.generator, group) and public != group.generator:
-            failures.append("a secret was confirmed against somebody else's public key")
+        cases = [
+            (candidate, form, expected)
+            for form in [(public.x, public.y), {"public_key": public}, public]
+            for candidate, expected in ((secret, True), ((secret + 1) % group.n, False))
+        ] + [(secret, group.generator, public == group.generator)]
+        for candidate, form, expected in cases:
+            try:
+                result = module.confirms(candidate, form, group)
+            except Exception as error:
+                failures.append(f"confirms raised {type(error).__name__}")
+                continue
+            if type(result) is not bool:
+                failures.append("confirms must return a boolean")
+            elif result is not expected:
+                failures.append("the confirmation does not match the supplied public key")
     return failures
 
 
@@ -416,11 +420,33 @@ def check_collision(module, seed: str) -> list[str]:
     for label in LABELS:
         group = toy_group(seed, label)
         for samples in (0, 1, 2, 7, 40, 65):
+            calls = []
+            generator_code = truncated_nonce.__code__
+            previous_profile = sys.getprofile()
+            def observe(frame, event, arg):
+                if event == "call" and frame.f_code is generator_code:
+                    args = frame.f_locals
+                    calls.append((args["seed"], args["secret"], args["message"], args["group"]))
+                if previous_profile is not None:
+                    previous_profile(frame, event, arg)
             try:
+                sys.setprofile(observe)
                 result = module.collision_experiment(f"{seed}:{label}", group, samples)
-            except Exception as error:  # noqa: BLE001
-                failures.append(f"the experiment raised {type(error).__name__}")
+            except Exception as error:
+                failures.append(f"the collision experiment raised {type(error).__name__}")
                 continue
+            finally:
+                sys.setprofile(previous_profile)
+            expected_calls = [(f"{seed}:{label}", 1, f"trial-{i}".encode(), group)
+                              for i in range(samples)]
+            if len(calls) != samples or any(
+                type(actual[0]) is not str or actual[0] != want[0]
+                or type(actual[1]) is not int or actual[1] != 1
+                or type(actual[2]) is not bytes or actual[2] != want[2]
+                or actual[3] is not group
+                for actual, want in zip(calls, expected_calls)
+            ):
+                failures.append("the experiment must call the supplied generator for each documented trial in order")
             if not isinstance(result, dict):
                 failures.append("the experiment reported nothing")
                 continue

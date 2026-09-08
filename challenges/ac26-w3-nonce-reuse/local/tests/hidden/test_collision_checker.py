@@ -14,16 +14,35 @@ class CollisionCheckerTest(unittest.TestCase):
         def distinct(seed, secret, message, group):
             self.assertEqual(secret, 1)
             return int(message.decode().split('-')[1])
-        submission = SimpleNamespace(collision_experiment=lambda seed, group, n: {
-            'distinct': n, 'collisions': 0, 'space': checker.NONCE_SPACE})
+        def experiment(seed, group, n):
+            values = {checker.truncated_nonce(seed, 1, f"trial-{i}".encode(), group) for i in range(n)}
+            return {'distinct': len(values), 'collisions': n-len(values), 'space': checker.NONCE_SPACE}
+        submission = SimpleNamespace(collision_experiment=experiment)
         with patch.object(checker, 'truncated_nonce', distinct):
             self.assertEqual(checker.check_collision(submission, 'zero-collision-test'), [])
 
     def test_plausible_but_fabricated_counts_are_rejected(self):
         submission = SimpleNamespace(collision_experiment=lambda seed, group, n: {
             'distinct': n-1, 'collisions': 1, 'space': checker.NONCE_SPACE})
-        with patch.object(checker, 'truncated_nonce', return_value=1):
+        with patch.object(checker, 'truncated_nonce', lambda seed, secret, message, group: 1):
             self.assertTrue(checker.check_collision(submission, 'fabricated-test'))
+
+    def test_copied_hash_counts_without_generator_call_are_rejected(self):
+        import hashlib
+        def copied(seed, group, n):
+            values = {1 + int.from_bytes(hashlib.sha256(f"{seed}:1:{f'trial-{i}'.encode()!r}".encode()).digest(), 'big') % checker.NONCE_SPACE for i in range(n)}
+            return {'distinct':len(values), 'collisions':n-len(values), 'space':checker.NONCE_SPACE}
+        failures = checker.check_collision(SimpleNamespace(collision_experiment=copied), 'copied')
+        self.assertTrue(any('call the supplied generator' in f for f in failures))
+        self.assertFalse(any('counts do not match' in f for f in failures))
+
+    def test_alias_bound_before_measurement_and_set_implementation_are_valid(self):
+        generator = checker.truncated_nonce
+        def alternate(seed, group, n, draw=generator):
+            values = [draw(seed, 1, f"trial-{i}".encode(), group) for i in range(n)]
+            distinct = len(set(values))
+            return {'distinct':distinct, 'collisions':n-distinct, 'space':checker.NONCE_SPACE}
+        self.assertEqual(checker.check_collision(SimpleNamespace(collision_experiment=alternate), 'alias'), [])
 
     def test_reference_uses_the_documented_measurement(self):
         reference_path = Path(__file__).resolve().parents[2] / 'reference' / 'recover.py'

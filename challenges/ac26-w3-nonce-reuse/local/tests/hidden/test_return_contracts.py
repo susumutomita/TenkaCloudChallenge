@@ -18,6 +18,15 @@ reference = load('contract_reference', ROOT / 'reference' / 'recover.py')
 
 
 class ReturnContractsTest(unittest.TestCase):
+    def test_confirm_requires_bool_on_acceptance_and_rejection(self):
+        for value_to_change in (True, False):
+            def wrong(*args):
+                result = reference.confirms(*args)
+                return int(result) if result is value_to_change else result
+            failures = checker.check_confirm(SimpleNamespace(confirms=wrong), 'confirm-bool')
+            self.assertTrue(any('must return a boolean' in f for f in failures))
+        self.assertEqual(checker.check_confirm(reference, 'confirm-bool'), [])
+
     def test_parse_accepts_all_supported_coordinate_forms(self):
         self.assertEqual(checker.check_parse(reference, 'parse-forms'), [])
 

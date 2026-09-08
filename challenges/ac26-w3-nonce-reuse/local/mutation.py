@@ -213,6 +213,18 @@ CHECKPOINT_MUTATIONS = (
 )
 
 
+CHECKPOINT_MUTATIONS += (
+    ("confirms returns an integer instead of bool", "confirm", [(
+        'return group.generator.scalar_mul(secret % group.n) == public',
+        'return int(group.generator.scalar_mul(secret % group.n) == public)',
+    )]),
+    ("collision copies SHA instead of calling supplied generator", "collision", [(
+        '        k = truncated_nonce(seed, secret, message, group)',
+        '        import hashlib\n        k = 1 + int.from_bytes(hashlib.sha256(f"{seed}:{secret}:{message!r}".encode()).digest(), "big") % NONCE_SPACE',
+    )]),
+)
+
+
 def _load(source: str):
     import types
 
