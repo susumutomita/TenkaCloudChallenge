@@ -221,6 +221,16 @@ def check_reject(module, seed: str) -> list[str]:
         group = toy_group(seed, label)
         secret, first, second = _reuse_pair(seed, label, group)
         parsed_first = module.parse_record(dict(first), group)
+        # This independent checkpoint must distinguish, not simply reject everything.
+        try:
+            recovered = module.recover_secret(first, second, group)
+            pairs = module.find_reuse([first, second], group)
+            if type(recovered) is not int or recovered % group.n != secret % group.n:
+                failures.append("a valid reused pair must remain recoverable")
+            if not isinstance(pairs, list) or not any(pair in [(0, 1), (1, 0), [0, 1], [1, 0]] for pair in pairs):
+                failures.append("a valid reused pair must remain discoverable")
+        except Exception:
+            failures.append("the rejection guards rejected a valid reused pair")
 
         malformed = [None, {}, [], {**first, "response": "bad"}]
         malformed.extend({k:v for k,v in first.items() if k != missing}
@@ -307,6 +317,14 @@ def check_hunt(module, seed: str) -> list[str]:
     for label in LABELS:
         group = toy_group(seed, label)
         log = audit_log(seed, label, group)
+        known_secret, valid, _ = _reuse_pair(seed, label, group)
+        clean = [sign_with(1 + i, known_secret, f"clean-{i}".encode(), group) for i in range(4)]
+        for unattackable in ([], clean, [valid, dict(valid)], [{}]):
+            try:
+                if module.attack_log(unattackable, group) != {}:
+                    failures.append("an unattackable log must return an empty result")
+            except Exception:
+                failures.append("an unattackable log must not raise")
         try:
             result = module.attack_log(list(log["records"]), group)
         except Exception as error:  # noqa: BLE001

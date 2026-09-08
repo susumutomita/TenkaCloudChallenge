@@ -1,4 +1,4 @@
-# The same R twice is the key
+# Recover a signing key from nonce reuse
 
 > This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
 > It is not affiliated with or endorsed by the course or its operators. All problem statements,
@@ -21,7 +21,7 @@ z1 = k + e1*x
 z2 = k + e2*x
 ```
 
-Two equations, two unknowns, and you already have one of them.
+Both x and k are unknown. Subtract the equations to eliminate k, then solve for x when the challenges differ.
 
 ## This is not a story about random numbers
 
@@ -29,9 +29,8 @@ Nonce reuse is usually told as "weak random number generators are dangerous". Th
 symptom, not the reason.
 
 The reason is **special soundness**: two accepting transcripts sharing a commitment and differing
-in the challenge yield the witness. That *is* the definition of the Sigma protocol being a proof
-of knowledge — the property that guarantees the prover really knows `x`. The extractor exists, so
-the protocol is sound. The extractor exists, so reuse is fatal. One fact, two consequences.
+in the challenge yield the witness. This extraction property explains how a reused nonce can reveal `x`. It is a component
+of a proof-of-knowledge argument, not by itself a security proof for the signature scheme.
 
 ## Sharing R is necessary, not sufficient
 
@@ -140,7 +139,7 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: 30 broken implementations. Three of them found
+`make reference-test` runs the mutation suite: 33 broken implementations. Three of them found
 real holes in the hidden tests while this problem was being written — the log had no
 non-accepting duplicate, no cross-signer duplicate, and the nonce-space check was distinctness
 rather than range. A fourth, "reports a recovery without confirming it", turned out to be an
@@ -150,4 +149,4 @@ equivalent mutant on its own and is now mutated together with the validation it 
 
 All eight checkpoints have three bilingual hints: mechanism, small example, named action. Required formulas and APIs are free. Repair grades the documented HMAC-SHA256 encoding and repair_witness(seed, group), which constructs two distinct trial-message indices colliding under the supplied weak generator. The function is called with different seeds; each returned pair is checked with that call’s seed. This is a finite regression test, not proof of collision freedom.
 
-Author validation rejected all 30 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.
+Author validation rejected all 33 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.

@@ -128,6 +128,10 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 
 
 MUTATIONS += (
+    ("unconditionally rejects recoverable pairs", [('def recover_secret(first, second, group) -> int:', 'def recover_secret(first, second, group) -> int:\n    raise MalformedRecord("always")')]),
+    ("returns a claim for a clean log", [('    return {}\n\n\ndef collision_experiment', '    return {"secret": 0}\n\n\ndef collision_experiment')]),
+    ("raises when no attack exists", [('    return {}\n\n\ndef collision_experiment', '    raise MalformedRecord("none")\n\n\ndef collision_experiment')]),
+
     ("omits hunt evidence", [('"records": (left, right),', '')]),
     ("cites one record twice", [('"records": (left, right),', '"records": (left, left),')]),
     ("cites indices outside the log", [('"records": (left, right),', '"records": (-1, len(records)),')]),

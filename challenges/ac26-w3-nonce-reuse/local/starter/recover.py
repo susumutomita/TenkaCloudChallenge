@@ -9,7 +9,7 @@ Somewhere in the log, one signer used the same commitment twice.
     z1 = k + e1*x
     z2 = k + e2*x
 
-Two equations. Two unknowns. You already have one of them.
+Neither x nor k is given. Subtract the equations to eliminate k.
 
 This is not a story about weak random number generators, although it is usually told
 that way. A Sigma protocol is a three-message proof conversation: a commitment (the first
@@ -30,7 +30,9 @@ Inspect evidence in Participant Portal displays this deployment's log.
 from __future__ import annotations
 
 
-from participant.schnorr import truncated_nonce, NONCE_SPACE
+import hashlib
+import hmac
+from participant.schnorr import Point, DOMAINS, challenge, truncated_nonce, NONCE_SPACE
 
 
 class MalformedRecord(Exception):
