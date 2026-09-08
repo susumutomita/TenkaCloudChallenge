@@ -82,7 +82,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `measure` | 25 | Counts taken off a real transcript, with units and environment |
 | `evidence` | 25 | Every claim tied to an experiment that ran; no non-goal omitted |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints each, within the hint-penalty cap.
 
 ## `detect` grades your test suite, not your protocol
 

@@ -27,6 +27,23 @@ MAX_LOG_BYTES = 64 * 1024
 RUN_TIMEOUT_SECONDS = 12
 
 
+def valid_callback_arguments(arguments):
+    """Only bounded, well-formed toy runs may enter a supplied protocol."""
+    from participant.lab import Setting
+    if type(arguments) not in (tuple, list) or len(arguments) != 2:
+        return False
+    setting, randomness = arguments
+    if not isinstance(setting, Setting):
+        return False
+    n, p = setting.parties, setting.modulus
+    if type(n) is not int or not 2 <= n <= 8 or type(p) is not int or not 2 <= p <= 257:
+        return False
+    return (type(setting.inputs) is tuple and len(setting.inputs) == n
+            and all(type(x) is int and 0 <= x < p for x in setting.inputs)
+            and type(randomness) in (tuple, list) and len(randomness) == n * (n - 1)
+            and all(type(x) is int and 0 <= x < p for x in randomness))
+
+
 class LearnerError(Exception):
     pass
 
@@ -157,7 +174,7 @@ class LearnerSession:
                     if type(index) is not int or index not in callbacks:
                         raise LearnerError('Unknown supplied function.')
                     arguments = decode(value.get('args'))
-                    if not isinstance(arguments, (tuple, list)):
+                    if not valid_callback_arguments(arguments):
                         raise LearnerError('Malformed supplied function arguments.')
                     reply = {'callId': sequence, 'callbackId': value.get('callbackId')}
                     try:

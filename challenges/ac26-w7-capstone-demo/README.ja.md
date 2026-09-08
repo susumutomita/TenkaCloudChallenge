@@ -75,7 +75,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `measure` | 25 | 実 transcript から数え、単位と環境をつける |
 | `evidence` | 25 | 各主張に実行済み実験を対応づけ、非目標も省略しない |
 
-ヒントは 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限に収まっています。
+8 つすべての checkpoint に各 3 段のヒントがあり、ヒント減点の上限内です。
 
 ## `detect` が採点するのは protocol ではなく test suite
 

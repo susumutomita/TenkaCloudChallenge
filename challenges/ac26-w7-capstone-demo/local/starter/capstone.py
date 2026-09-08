@@ -1,4 +1,8 @@
 """
+Supplied protocol callbacks accept 2–8 parties, modulus 2–257, one input per party,
+and exactly parties*(parties-1) randomness values; all values are integers in 0..modulus-1.
+支給protocolの呼び出しは2〜8人、割る数2〜257、人数分の入力と人数×(人数−1)個の乱数で行います。値はすべて0〜割る数−1の整数です。
+
 Supported computation imports / 計算用に使える標準ライブラリ:
 array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
 This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
