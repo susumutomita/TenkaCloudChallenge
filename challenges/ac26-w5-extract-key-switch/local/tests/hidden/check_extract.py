@@ -273,7 +273,7 @@ def check_trace(module, seed: str) -> list[str]:
     for par in _sets(seed):
         scene = _scene(seed, par, "trace")
         accumulator = scene["accumulator"]
-        for index in (0, par["degree"] // 2, par["degree"] - 1):
+        for index in range(par["degree"]):
             try:
                 got = module.extract_trace(par, accumulator, index)
             except Exception as error:  # noqa: BLE001

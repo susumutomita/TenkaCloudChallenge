@@ -191,3 +191,7 @@ Counterexamples are independently checked at degrees 2–5 and moduli 3/4/5/7/8/
 
 
 PR #827 follow-up: the final counterexample is checked at every index0..degree−2. Compatibility is tested on both sides of numeric equality; absent/None keyId remains valid. Docker make reference-test passed3 author regressions (including8 directional comparisons at both switch/domain checkpoints) and44 mutations. Starter and screen terms are defined; the end-to-end example specifies delta=4, phase5→3, decoded1→1. Catalog116 and diff checks pass.
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.

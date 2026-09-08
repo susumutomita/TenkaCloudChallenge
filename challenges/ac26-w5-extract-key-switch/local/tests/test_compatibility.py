@@ -18,6 +18,13 @@ class CompatibilityTests(unittest.TestCase):
     def test_interior_index_fault_rejected_at_counterexample(self):
         obj=load(SOURCE.replace('secret[index + 1] = 1','secret[0 if degree >= 4 and index == 1 else index + 1] = 1'))
         self.assertTrue(checker.check_counterexample(obj,'contract'))
+    def test_every_trace_index_is_checked(self):
+        obj=load(); original=obj.extract_trace
+        def incomplete(params, ciphertext, index):
+            return [] if params['degree'] >= 4 and index == 1 else original(params, ciphertext, index)
+        obj.extract_trace=incomplete
+        self.assertTrue(checker.check_trace(obj,'contract'))
+        self.assertTrue(checker.check_transfer(obj,'contract'))
     def test_directional_comparisons_rejected_at_both_checkpoints(self):
         for field,other in [('sourceDimension','len(sample["mask"])'),('modulus','params["modulus"]'),('base','params["base"]'),('levels','params["levels"]')]:
             for op in ('<','>'):

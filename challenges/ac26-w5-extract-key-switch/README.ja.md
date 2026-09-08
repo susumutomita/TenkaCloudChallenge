@@ -178,7 +178,7 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 参加者可視情報のみの独立読解で不足を洗い出し、改訂後も読解確認しました。問題文のAPIだけを使う最初のphase実装を、作者側のphase検査で確認（失敗0）。make agent-gateは116件成功。実ブラウザのこの問題の提出と本番デプロイは未実施です。
 
-作者側の追加確認：reference が通り、35種類の誤実装をすべて検出しました。これはブラウザ実プレーの証拠とは区別します。
+作者側の追加確認：reference が通り、44種類の誤実装をすべて検出しました。これはブラウザ実プレーの証拠とは区別します。
 
 transferには指定位置で符号省略を検出する反例の構成も必要です。未提出・ゼロ鍵・位置固定の証拠を独立計算で拒否します。必要な式は無料のまま、抽出手順の転記だけでは完了しません。
 
@@ -189,4 +189,8 @@ transferには指定位置で符号省略を検出する反例の構成も必要
 反例はdegree 2〜5・modulus 3/4/5/7/8/9も独立検査し、4を法とすると符号の差が消える誤構成を拒否します。phase/extractの範囲外indexは、その範囲の性質を示すValueErrorの案内となることを回帰確認しました。
 
 
-PR #827 追加確認：最終反例は全index=0..degree−2で検査します。互換性の数値条件は大小両側の不一致を調べ、keyId省略/Noneは引き続き有効です。作者回帰3件（8方向の比較をswitch/domain各項目で確認）と44変異をDocker make reference-testで確認。starterと画面の用語を定義し、endtoendの小例はdelta=4・位相5→3・復号1→1まで完結させました。カタログ116件と差分検査も成功。
+PR #827 追加確認：最終反例は全index=0..degree−2で検査します。互換性の数値条件は大小両側の不一致を調べ、keyId省略/Noneは引き続き有効です。作者回帰4件（8方向の比較をswitch/domain各項目で確認）と44変異をDocker make reference-testで確認。starterと画面の用語を定義し、endtoendの小例はdelta=4・位相5→3・復号1→1まで完結させました。カタログ116件と差分検査も成功。
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.

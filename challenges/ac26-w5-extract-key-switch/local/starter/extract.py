@@ -1,6 +1,8 @@
-"""Edit this file to extract one encrypted value and move it to another key.
+"""A ciphertext is data transformed to hide a message. A key is the secret number
+or numbers used to recover that message. Edit this file to extract one value
+from a ciphertext and move it to another key.
 
-A ciphertext is transformed message data. A polynomial such as 1+2X is stored
+A polynomial such as 1+2X is stored
 as coefficients [1,2]. The ring replaces X**N with -1 and reduces numbers by q.
 LWE has a mask array and a body; RLWE has two coefficient arrays a,b. A phase
 subtracts the key contribution. Extraction preserves a phase exactly; switching
