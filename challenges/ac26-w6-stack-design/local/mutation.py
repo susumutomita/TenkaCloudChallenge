@@ -16,6 +16,7 @@ has drifted out of the reference would otherwise be reported as killed while tes
 from __future__ import annotations
 
 import sys
+import unittest
 import types
 from pathlib import Path
 
@@ -245,6 +246,12 @@ _SELECT_COST = """        "dominantCost": max((COST_OF[name] for name in primiti
 
 def _mutations() -> list[tuple[str, str]]:
     return [
+        ("counterexample changes its input policy", REFERENCE.replace(
+            'def counterexample(built: dict, prop: str) -> dict:',
+            'def counterexample(built: dict, prop: str) -> dict:\n    built["policy"]["maxCrossings"] += 1')),
+        ("repair changes its input policy", REFERENCE.replace(
+            'def repair(built: dict) -> dict:',
+            'def repair(built: dict) -> dict:\n    built["policy"]["maxCrossings"] += 1')),
         # -- what everything that arrived adds up to ---------------------------
         (
             "a secret merged with a public value comes out public",
@@ -656,6 +663,9 @@ SPOOF = "\n".join(
 
 
 def main() -> int:
+    suite = unittest.defaultTestLoader.discover(str(Path(__file__).parent / "tests" / "hidden"), pattern="test_*.py")
+    if not unittest.TextTestRunner().run(suite).wasSuccessful():
+        return 1
     reference = _load(REFERENCE)
     reference_failures = run(reference, SEED)
     if reference_failures:

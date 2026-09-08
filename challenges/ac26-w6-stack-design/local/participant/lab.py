@@ -1,31 +1,11 @@
-"""The supplied half: the vocabulary a boundary contract is written in, and how to read a graph.
+"""Completed vocabulary tables and four graph-reading helpers for stack.py.
 
-Nothing in this file is graded. It is what `starter/stack.py` tells you that you are handed --
-the closed vocabularies a value can be described with, the three levels of contract, what each
-transformation may change and what it is able to consume, the eleven boundary classes and what
-breaking one costs, and four one-line accessors for walking a typed graph.
-
-## Why this is a separate module (Issue 537/538, Issue 543 option B2)
-
-It used to live in `fixtures/generate.py`, which shipped in the image `make build` produced. That
-file also holds this problem's entire ground truth under different names: `constrained` is
-`carried`, `underwritten` is `underwrites`, `load_bearing` is `property_map`, `violations` is
-`contract_violations`, `first_broken` is `first_failure`, `selection_truth` is `select`, and
-`_one_change_neighbours` with `local_checks_pass`, `properties_at_risk` and `_whole` is the whole
-search `counterexample` and `repair` are graded on. A submission transcribed from that one file,
-with no reasoning past copying, scored 8 of 8 checkpoints (300 of 300 points).
-
-It also held `BREAKS`, which names -- per variant, and identically for **every** seed, the hidden
-labels included -- which node or edge was broken and which attribute was changed. That table is
-the `contracts` and `diagnosis` answers for every deployment this problem can draw, not only for
-the one a learner is looking at.
-
-So the derivation moved behind the verifier and the vocabulary stayed here. This deployment's own
-architectures, its broken variants and its briefs are **data** now: they arrive over
-`GET /public` (see `show.py`), which is the same participant surface `make inspect` has always
-printed. The carve line is code versus data, not supplied versus graded -- three of the names the
-starter's import list used to name (`graph`, `broken`, `use_cases`) were never helpers, they were
-this deployment's own objects.
+This exercise checks labels on a system diagram. It does not run cryptography.
+A node is a processing box; an edge is a data arrow. LICENCE describes operations,
+AUTHORISED describes approval by node, and obligations describe promised outputs.
+CONSUMES deliberately inspects representation only in THIS model. Real MPC, ZK and
+FHE systems can enforce more conditions than this simplified component check.
+Read the free statement or starter for the merge rules, type definitions and APIs.
 """
 
 from __future__ import annotations
@@ -148,7 +128,7 @@ AUTHORISED = {
 }
 
 #: What each transformation is able to consume. This is the whole of a node's **local** check:
-#: a primitive validates the shape of what arrived and nothing else about it. Classification, key
+#: this model checks only the shape of what arrived. Classification, key
 #: domain, identity and dialect are invisible here, which is why every composition failure in
 #: this problem can happen with every local check passing.
 CONSUMES = {
@@ -227,9 +207,8 @@ PROPERTY_OF = {
 
 
 #: Which case is asked for a counterexample against which property. `availability` is not on the
-#: list, and cannot be: no change to a value in flight costs it. That is a fact about these
-#: architectures rather than a gap in the fixtures, and it is the answer to the property map's
-#: fifth key.
+#: list. The attribute dependency map excludes placement and crossing counts,
+#: although those policy checks can put availability at risk.
 COUNTEREXAMPLE_TARGETS = (
     ("mpc-prover", "privacy"),
     ("mpc-prover", "soundness"),
@@ -268,8 +247,8 @@ COST_OF = {
     "none": "plain-computation",
 }
 
-#: Cheapest first. A combination costs whatever its most expensive member costs, because the
-#: expensive one does not get cheaper for being next to something else.
+#: Exercise-only resource ordering, not measured performance or a universal ranking.
+#: Selection reports the last-ranked resource among the chosen components.
 COST_ORDER = ("plain-computation", "communication-rounds", "proving-time", "ciphertext-expansion")
 
 

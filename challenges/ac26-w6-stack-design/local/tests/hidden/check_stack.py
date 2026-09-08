@@ -33,6 +33,7 @@ problem is about.
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -352,7 +353,9 @@ def _counterexample_failures(module, drawn: str) -> list[str]:
     failures: list[str] = []
     for case, prop in COUNTEREXAMPLE_TARGETS:
         built = graph(drawn, case)
-        got = _attempt(lambda b=built, p=prop: module.counterexample(b, p), "counterexample")
+        # A returned construction is compared with the original design, even when
+        # the participant edits its argument in place.
+        got = _attempt(lambda b=deepcopy(built), p=prop: module.counterexample(b, p), "counterexample")
         if isinstance(got, _Raised):
             failures.append(got)
             continue
@@ -401,7 +404,7 @@ def check_counterexample(module, seed: str) -> list[str]:
 def _repair_failures(module, drawn: str) -> list[str]:
     failures: list[str] = []
     for name, built in _every_graph(drawn):
-        got = _attempt(lambda b=built: module.repair(b), "repair")
+        got = _attempt(lambda b=deepcopy(built): module.repair(b), "repair")
         if isinstance(got, _Raised):
             failures.append(got)
             continue

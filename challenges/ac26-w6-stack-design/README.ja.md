@@ -1,242 +1,133 @@
-# 部品はどれも正しい。 つないだものが正しくない
+# 暗号部品のつなぎ方を点検する
 
-> このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。
-> コースおよびその運営とは無関係で、 推奨も受けていません。 ここにある問題文・コード・
-> fixtures・図はすべて独立に書かれています。 このトラックへの質問はコース運営ではなく
-> TenkaCloud リポジトリへお願いします。
+> Advanced Cryptography Program 2026 の独立した非公式補助教材です。
+> 講座・運営者の公認ではありません。図の模型・例・実装は独自に作成しています。
+> この教材への問い合わせは講座運営者ではなく TenkaCloud へお願いします。
 
-**Track:** `advanced-cryptography-2026` · **Order:** 660 · **Chapter:** Week 6 / Programmable
-Cryptography Stack Design · **Role:** `synthesis` · **想定時間:** 90〜120 分 · **Points:** 300 ·
-**前提:** `ac26-w6-zkvm-witness-binding`, `ac26-w6-cosnark-privacy` · **Status:** draft
+**トラック:** advanced-cryptography-2026 · **順序:** 660 · **役割:** synthesis ·
+**所要時間:** 90–120分 · **得点:** 300 · **状態:** draft
 
-## 話
+## 参加者が作るもの
 
-Week 6 のこれまでの 5 問は、 それぞれ **動く部品** を 1 つ作りました。 secret share の上の
-prover、 何を証明したかを言い切る guest、 入力を一度も見ない評価。 この問題はそのあいだの
-配線を扱います。 出発点は 1 行です。
-
-```text
-primitive が検証できるのは、 渡されたものの「形」だけである
-```
-
-これは primitive の欠陥ではありません。 primitive とはそういうものです。 MPC engine は届いた
-ものが share であることを検証します。 それが secret のはずだったか、 相手が同じ field だと
-思っているか、 復元してよいと open policy が言ったかは知りようがありません。 zkVM は guest が
-走ったことを検証し、 その journal が読み手の持っている program についてのものかは検証しません。
-FHE の評価は渡された鍵の下で正しく、 その鍵が間違っていたことは教えられません。
-
-だから部品の test は全部通り、 architecture は壊れています。 それが **composition failure** で、
-この問題はそれを 9 通りの角度から見ます。
-
-## 暗号は 1 行も走りません
-
-share も proof も ciphertext も出てきません。 走るのは typed graph です。
+暗号部品をつないだ図を点検する `local/starter/stack.py` を実装します。
+線には6つの項目があります。データの種類、秘密か公開か、計算する数の世界、鍵、
+主張・プログラムの名前、データの書式です。日英の無料本文に用語、表・API、入出力の
+条件と、2本の線だけの例を載せています。
 
 ```text
-node  1 つの計算と、 それがどこで走るか
-edge  1 つの値が次の計算へ渡るところと、 その瞬間それが何であるか
+入力元 --e1:秘密--> そのまま渡す部品 --e2:公開--> 受取先
+                                    ↑ 秘密のまま渡す約束に違反
 ```
 
-edge は同時に 5 つのものであり、 それが framing された dialect を持ちます。
+この教材はラベル付きの図の模型です。部品内の検査はデータの種類だけを見ると仮定
+しています。現実の暗号部品一般が種類しか検査しないという定義ではありません。
+部品が入力を受け付けることと、つないだ設計が約束を守ることを分けて点検します。
+実際の MPC・ZK・zkVM・FHE の計算、安全性証明、性能測定は行いません。
 
-```text
-representation  plaintext, secret-share, ciphertext, commitment, proof, journal
-classification  public か secret か
-algebra         どの field / modulus にいるか (該当する場合)
-keyDomain       どの鍵の下にいるか (該当する場合)
-identity        どの program / statement についてのものか (該当する場合)
-serialization   どの framing で符号化されたか
-```
+## 最初の操作と結果
 
-architecture の絵は、 どの box がどの box と話すかを示します。 それは問いではありません。
-問いは、 その値が flight 中に**何であるか**です。
+1. Participant Portal で問題を開始し、**証拠を確認**を開きます。
+2. 本文の短い図を読み、`carried` を編集して**公開テストを実行**します。
+   `PASS test_carried_matches_the_two_wire_example` が最初の進捗です。
+3. 共通で使う5種類の約束検査を作り、それを使う `underwrites` を実装します。
+   **dataflow** を提出し、正しい checkpoint の成功応答が Portal の**解答済み**になります。
+4. 残りの関数を実装し、各 checkpoint を個別に提出します。未実装部分のテストが失敗
+   していても、完成した checkpoint は個別に合格できます。
 
-## 3 段の contract
+必要な語・式や規則・API・候補の範囲は無料本文にあります。8項目それぞれの任意ヒントは
+仕組み→小さい例→画面とファイルの名前を使った操作、の3段です。各2点、24個で計48点を
+消費します。誤答は1回15点減点です。直接数値を答える欄はなく、Portal が編集中の
+`stack.py` を提出します。
 
-```text
-LICENCE      その transformation が何を変えてよいか。 key-switch は keyDomain を変えてよい。
-             carry は何も変えてよくない
-policy       その node がその transformation を持つことをこの architecture が承認したか。
-             secret を開いてよい operation であることと、 それを実行してよい node であることは
-             別の事実です
-obligations  この architecture が「どの wire に何を届ける」と約束したか
-```
-
-3 つのうち 2 つは、 残り 1 つでは見えない失敗のために存在します。
-
-**licensed な変更が correct な変更とは限りません。** key switch は key domain を変えてよく、
-それは**何に変えるべきかを間違えない**こととは別です。 FHE service は途中で 2 回鍵を切り替え
-ます。 bootstrap は bootstrap に使った鍵の下に ciphertext を残し、 その次の switch が結果を
-家に連れて帰ります。 どちらも licensed です。 client の鍵に着地しなければならないのは片方だけ
-で、 licence 表はどちらかについて何も言いません。
-
-**規則を破った box を承認し直せば、 contract は 1 手で満たされます。** それは repair では
-ありません。 deployment に合わせて要求を下げたということで、 deployment が自分で合格基準を
-書いたのと同じです。 policy が独立した段であり、 repair checkpoint の探索空間の外にあるのは
-そのためです。
-
-## 13 の deployment
-
-毎 seed、 3 つの健全な architecture — MPC-backed prover、 zkVM proof of exploit、 FHE 評価
-サービス — と、 そのどれかから**ちょうど 1 箇所だけ**変えた 13 の deployment が引かれます。
-
-11 個は 11 の boundary class をちょうど 1 つずつ踏みます。 12 個目は licensed な operation を、
-承認されていない node に置きます。 13 個目は **contract を 1 つも破りません**。 すべての境界が
-成立し、 破られた約束もなく、 primitive が消費できない形を握らされています。 contract が
-design review の代わりにならないことを 1 つの deployment で言い切るためにあり、 repair
-checkpoint が「すべての contract が成立する」ことと「すべての部品が渡されたものを実行できる」
-ことを別々に要求する理由でもあります。
-
-## Participant Portal での進め方
-
-1. Participant Portal で問題を起動する。同じ画面に問題エディタが表示される。
-2. **証拠を調べる**で、この deploy 固有の fixture と公開された証拠を読む。
-3. Portal のエディタで starter のソースを編集する。
-4. **公開テストを実行**を押し、直接回答欄があれば証拠から埋める。
-5. 各 checkpoint をそのまま提出する。Portal が現在のファイルと回答を準備して送る。
-
-checkout、ターミナル、ローカルエディタ、別画面、コピペは不要です。code checkpoint は現在の
-エディタ内容を使います。直接回答は現在の deploy seed へ結び付くため、別 deploy からコピーした
-値は拒否されます。
-
-## 採点
-
-8 checkpoint、 独立採点。 誤答は 1 回 15 点。
-
-| Checkpoint | Points | 見るもの |
+| checkpoint | 点 | 何を点検するか |
 |---|---:|---|
-| `dataflow` | 45 | 各 wire が運ぶよう pin されているものと、 primitive の保証が終わる場所 |
-| `properties` | 30 | 各 end-to-end property と、 それを担う wire の対応 |
-| `contracts` | 50 | licence・obligation・authorisation・trust・cost の違反を正しい class で |
-| `diagnosis` | 30 | 値が届く順で最初に破れた boundary |
-| `counterexample` | 45 | どの部品も満足したまま 1 つの property を落とす 1 箇所の変更 |
-| `repair` | 45 | 要求を書き換えずに戻す、 最小の変更 |
-| `selection` | 30 | brief に対する primitive・公開範囲・trust・主要 cost |
-| `transfer` | 25 | 見たことのない field・statement・program・brief で全部 |
+| `dataflow` | 45 | 全線に必要なラベルと、条件を満たした部品の性質 |
+| `properties` | 30 | 5つの性質に関係する線 |
+| `contracts` | 50 | 持ち越す値、出力の約束、操作の承認、配置の分離、通信予算 |
+| `diagnosis` | 30 | 入力が届いた順に見つかる最初の違反 |
+| `counterexample` | 45 | 部品の入力検査を保ち、指定した性質を失う1変更を構成 |
+| `repair` | 45 | 要求を弱めず、健全なら0変更、壊れていれば1変更で修復 |
+| `selection` | 30 | 技術の組合せ・公開情報・秘密・信頼条件・模型のコスト |
+| `transfer` | 25 | 新しい名前・条件・依頼にも同じ実装を適用 |
 
-8 個中 7 個にヒント (14〜24)。 全部開いても 300 中 174 が残ります。
+後半は、例の転記では終わりません。policy と obligations を保持しながら、条件に合う
+反例や最小の修復を自分で選びます。技術の選択は3条件を独立に判定します。信頼条件と
+コスト表は明示した教材用の仮定であり、実運用の一般的な推奨や性能順位ではありません。
 
-## checkpoint が 9 でなく 8 である理由
+## 実行環境と境界
 
-Issue #244 は 9 つ要求しています。 multi-verify の上限は 8 で、 catalog 側の `SCHEMA.json` と
-platform 側の `packages/problem-sdk` の両方で強制され、 **9 個目は truncate されず scoring
-object ごと破棄されます**。 つまり 9 つ宣言すると残りの 8 つも一緒に落ち、 問題が採点不能に
-なります。 そこで 9 つのうち 2 つを 1 つの checkpoint に束ねました。
+Docker Compose で2サービスを動かします。Workbench は `127.0.0.1:18118` のみで待ち受け、
+採点器は内部ネットワークに置き、ホストには公開しません。Workbench は既存の Portal 用
+設定・starter・公開資料・公開テスト・提出準備・採点の API を提供します。
+`participant/lab.py` の語彙と図の参照関数は完成済みで、参加者から使えます。
+fixture、非公開テスト、参考実装は Workbench のイメージに入りません。
 
-隣り合っていたからではありません。 「どの wire が何を運んでいるか」 と 「primitive の保証が
-どこで終わるか」 は、 同じ typed graph を読む 1 つの行為です。 hidden phase は 8 checkpoint の
-裏に 9 つあり、 2 つ動くのは `dataflow` だけです。
+採点器は公開の図のデータを別に提供し、提出コードを時間・プロセス数・メモリ・出力の
+制限下で採点します。この分離と制限は運用上の境界であり、任意コードの完全な隔離を
+証明するものではありません。ローカル環境の所有者は作者用・採点器用イメージも
+読めるため、自習の採点は本人の誠実な利用を前提とします。競技の順位付けには参加者が
+管理しない採点器が必要です。今回 platform の境界・採点プロトコル・他問題は変更しません。
 
-## 簡単なほうの半分
+反例・修復は、受け取った辞書を直接編集しても、新しい辞書を返しても構いません。
+採点器は関数を呼ぶ前の入力を保持します。正しい直接編集は受け付け、policy や
+obligations を緩める変更は元の要求と比較して拒否します。
 
-この問題は 53 個の壊れた stack を同梱していて、 そのうち **47 個は architecture checker の
-test を書く人が最初に書く 2 問に正しく答えます** — 健全な architecture には何も出さず、
-壊れた architecture には何か出すか。 `make reference-test` が毎回この数を測り直します。
+## ローカル検証
 
-どちらも問題文にそのまま書いてあるので誰も発見する必要がなく、 その 2 つしか訊かない suite は
-47 個の間違ったモデルと意見が一致します。 書いていないほう —「最初」が id 順ではなく値が届く順
-であること、 assumption が満たされなくなった瞬間に primitive は何も vouch しなくなること、
-どの wire も担っていない property が 1 つあること、 違反した node を承認するのは repair では
-ないこと — が、 test 1 本ではなく checkpoint がある理由です。
+Docker を用意し、この問題のディレクトリで実行します。
 
-## primitive の保証が終わる場所
+```sh
+make inspect
+make test
+make test-one ID=carried_matches
+make reference-test
+make verifier-down
+```
 
-primitive は、 自分の**内側**で走らせた計算について correctness と privacy を保証します。 強い
-保証で、 かつ狭い保証です。 primitive の上に載った application コードは、 銀行の金庫が建物から
-持ち出したものを守るのと同じ程度にしか守られていません。 host orchestration は何にも守られて
-いません。 そして assumption が満たされなかった保証は保証ではありません — primitive は
-受け取った値と produce した値について vouch するので、 そのどちらかで contract が破れていれば
-何も vouch していません。
+`make test` は15個の公開テストを未完成の starter に実行するため、実装前の失敗は正常です。
+3件は本文の小さい図で要求ラベル・条件付きの性質・公開違反を実際に検査し、その他は
+返却形や健全な図の一部を確認します。全公開テストの合格だけでは実装完成とはいえません。
 
-primitive の box を緑に塗った architecture 図は、 この問題が計算させるものを主張しています。
+リポジトリのルートでは次を実行します。
 
-## 残さずに消した規則が 1 つあります
+```sh
+make install
+make agent-gate
+```
 
-初期のモデルには、 wire の両側で値が無い attribute を飛ばす規則がありました。 値が持っていない
-attribute についての contract は contract ではない、 という理屈です。 読み物としては通ります。
-そして答えを 1 つも変えません — key domain が無い edge は、 その class の 2 つの property を
-必ず別の class 経由ですでに持っているからです。 つまり、 守っているところも破っているところも
-誰にも観測できない規則でした。
+ローカルの操作は Docker イメージ・コンテナ・ネットワークを作り、AWS 資源は作りません。
+ホストの CPU・メモリ・ディスクは使います。ホスティング用 VM があればその料金は別です。
+`make verifier-down` で Compose のコンテナ・ネットワークを削除します。イメージは
+Docker のキャッシュに残ります。
 
-消しました。 モデルは何かを決める規則だけを持ちます。 何も決めない規則は、 読み手の時間を使う
-コメントです。
+## 今回記録した検証
 
-## 監査が証明できることと、 できないこと
+- ホストと Docker の `make reference-test`: 参考実装が9検査段（8 checkpoint）に合格。
+  誤った実装55個と採点結果偽装1個、計 **56 mutant を拒否**。
+  弱い2分類の検査だけなら **55個中49個**の誤実装が通ることも再測定。
+- 作者回帰4件: 直接編集する正しい反例・修復を受け付け、両方で policy の緩和を拒否。
+- 起動した Workbench: 日英設定、証拠・starter の取得、未完成の最初の例の失敗、無料本文の
+  規則に基づく `carried` 編集で公開テストの進捗を確認。`underwrites` が未完成なら
+  dataflow は未合格のまま。`selection` だけの実装は他が未完成でも個別に採点成功。
+- 同じ Workbench 経路で参考実装の **公開テスト15件と8項目の採点が成功**。
+  policy を緩める修復は、元の要求を保持する条件に違反して拒否。
+- カタログ **116 bundle** の gate と `git diff --check` が成功。
+- この `/private/tmp` checkout からの通常の `make test` は `ModuleNotFoundError`。
+  読み取り専用の確認で、Colima 内の starter マウントが空であることを確認しました。
+  同じ公開テストは Workbench のファイル送信経路で成功しています。ホストの bind mount
+  を使う経路は、この環境では動作確認できていません。
+- 別担当が参加者向け資料だけを読み、identity の候補、obligations の省略、`none` の返却形、
+  最初の checkpoint の依存関係を指摘。日英本文と starter で明示。
 
-証明できるのは、 同梱された 53 個の欠陥をこの 8 checkpoint が捕まえること、 reference が 8 つ
-すべてを通ること、 出荷される starter が 1 つも通らないことです。 証明できないのは 「このモデル
-に他の穴が無い」 ことです。 誰も書き下さなかった欠陥は、 誰も測っていない欠陥です。
+最初の編集の API 検証は無料契約に基づきますが、実施者は作者であり、独立したプレーテスト
+ではありません。参考実装の試験は回帰検証で、初心者の理解の証拠にはしていません。
+記録したのは Workbench の HTTP 動作です。ブラウザ描画、Portal の得点永続化、実 AWS への
+デプロイはここでは未実施です。有限の mutant 検査で、模型や採点器に他の不良がないとは
+保証できません。
 
-## この先
+## 講座との対応
 
-Week 6 はここで終わり、 Week 7 の capstone は actor と asset と trust を名指して primitive を
-1 つも名指さない brief から始まります。 引き継がれるのはこの問題が仕込む習慣です。 部品が動く
-ことは議論の始まりであって、 終わりではありません。
-
-## 対象外
-
-実際の MPC / zkVM / FHE の実行、 特定 protocol の security proof、 proof system の soundness、
-実運用の鍵管理、 network レベルの可用性。
-
-## これは安全ではありません
-
-node は 8〜9 個、 edge は 7〜9 本、 attribute は 5 つ、 boundary class は 11 個です。 実際の
-stack では node は数百あり、 attribute はその中の proof system と ciphertext scheme の
-パラメータすべてで、 boundary class はその deployment が書き下した数だけあります。 主張して
-いるのは 「境界の contract は exact な規則として書ける」 ことであって、 「ここに書いたものが
-完全である」 ことではありません。
-
-## Source alignment
-
-Week 6 の資料は公開されているので、 `courseAlignment` は `week6/README.md` を commit
-`a3aa4b56fa88fbe803b57d320fbc87c1a203b480` で pin しています。 公式資料からは何も再現していま
-せん。 graph モデル、 attribute の集合、 licence と policy の表、 3 つの architecture、 13 の
-deployment、 brief、 解答はすべて独立に書かれています。 主題 — primitive の内側で走る計算と
-その上で走る計算、 そしてそれらが出会うところで何が壊れるか — はコース自身の README が名指して
-いるものなので、 ここに課題の近道はありません。
-
-## 保証範囲
-
-ローカルモードは **自習向けの honor-system 検証** です。 マシンも Docker daemon も image も
-あなたのものなので、 あなたがビルドする image の中身は秘匿されていません。
-
-Issue 537/538 で変わったのは、 **どの image が何を持つか** です。 採点は publish されない 2 つめの
-container で走ります。 `fixtures/`、 `tests/hidden/`、 `verifier/` はそちらにしか存在せず、
-Workbench からは internal network 越しにしか届かず、 Workbench の filesystem にはありません。
-そのため `make test` と `make inspect` はその container も起動します (`make verifier-up` で単独
-起動、 `make verifier-down` で停止)。 `show.py` と公開テストは、 この deployment の 3 つの健全な
-architecture、 診断対象の 13 個の deployment、 8 つの brief を、 fixtures の import ではなく
-`GET /public` から読みます。 hidden checker が突き合わせる ground truth 関数はすべてその境界の
-向こうに残ります。 どの variant がどの node / edge を壊したかを書いた表も同じです — その表は
-どの seed でも同じなので、 目の前の deployment だけでなく hidden の deployment についても
-`contracts` と `diagnosis` に答えていました。 `reference/` と mutation suite はもともと入って
-いません。
-
-意図的にあなたの image に残しているのは `participant/lab.py` — 閉じた語彙、 3 段階の contract、
-11 個の boundary class と 1 つ壊したときの代償、 そして typed graph を歩くための 4 つの
-accessor です。 これはこの問題が意図的に渡す側の半分で、 採点対象は 1 つもありません。 採点中の
-あなたの提出コード自身がこれを import します。
-
-これは誤配防止の境界であって、 機密性の境界ではありません。 `verifier` stage や `author` stage を
-自分でビルドすれば、 すべて読めます。
-
-verifier が保証するのはもっと狭く、 そして本物です。 提出物は verifier を hang させたり
-crash させたりできません。 checkpoint は echo した id しか credit できません。 結果は期待値を
-漏らしません。 そして各 case が働く field、 proof が主張する statement、 journal が名指す
-program、 6 つの brief はこの deployment の seed から引かれるので、 暗記した答えは持ち越せません。
-
-これは自習と誠実な練習を支えます。 競技順位・試験・修了判定は**支えません** — それには参加者が
-運用しない verifier が要り、 [#271](https://github.com/susumutomita/TenkaCloudChallenge/issues/271)
-で追跡しています。
-
-## コスト
-
-ゼロ。 クラウドアカウントも AWS リソースも不要です。
-
-## 作問者向け
-
-`make reference-test` は image の中で mutation suite を回します。 53 個の壊れた stack と、
-verifier 自身を狙った 1 個です。 まず reference が 9 つの hidden phase をすべて通ることを確認し、
-次に reference を 53 通りに壊して、 そのうち何個が簡単なほうの 2 問に正しく答えるかを表示します。
-その数がこの README が引用している数字です。 あとの編集で checkpoint が安くなればその数字が動き、
-主張のほうも一緒に動かさなければなりません。
+既存の courseAlignment は Week 6 README の
+`a3aa4b56fa88fbe803b57d320fbc87c1a203b480` を参照しています。
+部品の内部の計算、部品を使うアプリの計算、それらを結ぶ条件という題材を独自の図で
+扱います。講座の演習の転載や解答の提供は行っていません。
