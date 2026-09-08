@@ -155,3 +155,7 @@ Point subclasses remain supported; parsing compares primitive coordinates and cu
 
 
 PR #815 follow-up: confirms requires bool on both accepting and rejecting calls. Collision observes execution of the supplied generator and checks seed, secret, trial order and count. A copied SHA expression is rejected even when counts agree. Pre-bound aliases, alternative aggregation and zero samples remain valid. This observes the supplied API; it is not a sandbox guarantee for arbitrary Python.
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.

@@ -7,6 +7,7 @@ just not the key. That is why every extraction path ends at `confirms`.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -234,6 +235,9 @@ def _load(source: str):
 
 
 def main() -> int:
+    boundary = subprocess.run([sys.executable, str(ROOT / 'tests/test_execution.py')], check=False)
+    if boundary.returncode:
+        return 1
     suite = unittest.defaultTestLoader.discover(str(ROOT / "tests" / "hidden"), pattern="test_*.py")
     if not unittest.TextTestRunner().run(suite).wasSuccessful():
         return 1

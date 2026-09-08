@@ -164,6 +164,18 @@ def _really_accepts(record, group) -> bool:
     return left == commitment + public.scalar_mul(e)
 
 
+def _equal_challenge_pair(group):
+    """Two valid, distinct messages with one challenge; no inverse exists."""
+    by_challenge = {}
+    for i in range(group.n + 1):
+        record = sign_with(1, 1, f'equal-challenge-{i}'.encode(), group)
+        e = challenge(DOMAINS[0], group.generator, group.generator, record['message'], group)
+        if e in by_challenge:
+            return by_challenge[e], record
+        by_challenge[e] = record
+    raise AssertionError('Finite challenge range must repeat.')
+
+
 def check_detect(module, seed: str) -> list[str]:
     failures: list[str] = []
     for label in LABELS:
@@ -174,7 +186,8 @@ def check_detect(module, seed: str) -> list[str]:
         records.extend([first, dict(first)])
         clean = [sign_with(1 + i, secret, f"clean-{i}".encode(), group) for i in range(4)]
         invalid = {**second, "response": (second["response"] + 1) % group.n}
-        cases = [(records, True), ([first, second], True), ([{}, first, None, second], True)]
+        equal_first, equal_second = _equal_challenge_pair(group)
+        cases = [([equal_first, equal_second], False), (records, True), ([first, second], True), ([{}, first, None, second], True)]
         cases.extend((rows, False) for rows in
                      ([], [{}], [first], [first, dict(first)], [first, invalid], clean))
         for rows, has_reuse in cases:
@@ -274,6 +287,18 @@ def check_reject(module, seed: str) -> list[str]:
                 failures.append("a valid reused pair must remain discoverable")
         except Exception:
             failures.append("the rejection guards rejected a valid reused pair")
+
+        equal_first, equal_second = _equal_challenge_pair(group)
+        for left, right in ((equal_first, equal_second), (equal_second, equal_first)):
+            if module.find_reuse([left, right], group):
+                failures.append('equal challenges do not provide a recoverable pair')
+            try:
+                module.recover_secret(left, right, group)
+                failures.append('equal challenges must be refused even for different messages')
+            except module.MalformedRecord:
+                pass
+            except Exception:
+                failures.append('equal-challenge recovery must raise MalformedRecord')
 
         malformed = [None, {}, [], {**first, "response": "bad"}]
         malformed.extend({k:v for k,v in first.items() if k != missing}

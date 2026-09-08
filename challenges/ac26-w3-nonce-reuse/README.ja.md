@@ -146,3 +146,7 @@ Pointの派生型も受理します。parseの照合は提出側の等値比較�
 
 
 PR #815 追加確認：confirmsの正誤両方向でboolを要求。collisionは配布関数の実呼出しを計測し、指定seed・secret・trial順と回数を照合します。SHA式のコピーは同じ集計結果でも拒否します。事前に束縛した別名・別の集計方法・0回の合法実装は維持します。これは提供APIの観測であり、任意Pythonの隔離保証ではありません。
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.
