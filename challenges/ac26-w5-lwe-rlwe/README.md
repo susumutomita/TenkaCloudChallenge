@@ -163,3 +163,10 @@ The evaluator has a 12-second total deadline, below the existing 15-second forwa
 Author verification: `make reference-test` accepts the reference and rejects all 22 existing arithmetic mutants. `make boundary-test` adds 7 Linux test methods, including all 8 reference checkpoint routes, missing functions/early termination, typed values, timeout, filesystem/process isolation and non-root execution. The actual Workbench HTTP path (`config` → `inspect` → `starter` → `test` → `prepare` → `verify`) passed 3 reference public examples and all 8 checkpoint submissions; early termination was rejected at every checkpoint. These are author regression checks, not an independent participant playtest or a live Portal scoring-persistence test.
 
 `make test` was attempted on this host but could not allocate Docker's exhausted default address pool. A temporary, task-owned Compose override supplied non-overlapping private subnets for the Workbench checks; no repository network settings or unrelated networks were changed. Real AWS, live Portal score history and cross-team behavior were not exercised. No deployment was performed.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

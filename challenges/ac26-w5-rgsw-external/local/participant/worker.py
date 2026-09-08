@@ -1,6 +1,22 @@
 """Execute only submitted functions on supplied inputs; there is no checker or seed here."""
 from __future__ import annotations
 
+# time.strptime loads these helpers lazily; cache them before restricting files.
+import _strptime
+
+# Supported computational helpers are loaded before evaluation restrictions.
+import array
+import base64
+import binascii
+import bisect
+import contextlib
+import dataclasses
+import enum
+import heapq
+import re
+import string
+import struct
+
 import copy
 import collections
 import decimal

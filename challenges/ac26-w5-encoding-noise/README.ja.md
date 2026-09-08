@@ -237,3 +237,10 @@ exact な encoding point をすべて正しく復号します。学習者が最�
 このホストでは `make test` を実行しましたが、Docker の既定アドレスプール枯渇でネットワークを作成できませんでした。Workbench 確認には重複しない専用サブネットの一時 Compose override を使い、リポジトリのネットワーク設定や他作業のネットワークは変更していません。実 AWS、実 Portal の得点履歴、チーム間の動作は未確認です。デプロイは行っていません。
 
 無料本文の式から `encode` だけを実装し、後の関数は未実装のまま最初の1項目が得点できることも別に確認しました。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

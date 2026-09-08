@@ -125,3 +125,10 @@ worktree の starter をマウント内に公開せず、`design` の import で
 Workbench へソースをアップロードする経路で、採点境界の変更前後とも成功しています。このホスト固有の失敗を隠すための platform
 や runtime の契約変更はしていません。本実行ではブラウザ描画、Portal の得点永続化、AWS デプロイ、
 第三者のプレーは未確認です。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
