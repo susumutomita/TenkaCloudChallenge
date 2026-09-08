@@ -310,7 +310,7 @@ def check_domain(module, seed: str) -> list[str]:
                         "dimension": par["dimension"],
                         "modulus": 2 * par["degree"],
                         "parameterSetId": par["parameterSetId"],
-                        "noiseBound": (par["dimension"] + 1) // 2,
+                        "noiseBound": (par["dimension"] + 2) // 2,
                     },
                     "rotation-domain",
                 )
@@ -611,19 +611,29 @@ def check_switch(module, seed: str) -> list[str]:
             failures.append("the switched sample does not land on the key the input came under")
             continue
 
-        # A key that does not match is refused, not applied: applying it produces a
-        # well-formed ciphertext that decrypts to noise under both keys.
+        # A mismatched key must be refused before output construction.
         other_ring = ring_secret(seed, par, "switch:other")
         mismatched = switching_key(
             seed, par, other_ring, scene["lweKey"], key_id(seed, "switch:other"),
             scene["targetId"], "switch:other",
         )
         extracted = _extracted(seed, par, scene, 1, "switch:bad")
-        for bad in (mismatched, {**key, "sourceDimension": key["sourceDimension"] - 1}):
+        for bad in (
+            mismatched,
+            {**key, "sourceDimension": key["sourceDimension"] - 1},
+            {**key, "targetDimension": par["dimension"] + 1},
+            {**key, "targetDimension": 0},
+            {**key, "modulus": key["modulus"] + 1},
+            {**key, "base": key["base"] + 1},
+            {**key, "levels": key["levels"] + 1},
+        ):
             try:
                 module.switch(par, bad, extracted)
-            except Exception:  # noqa: BLE001 - any refusal counts
+            except ValueError:
                 continue
+            except Exception:
+                failures.append("an incompatible switching key must raise ValueError")
+                break
             failures.append("a switching key that does not match the sample was applied")
             break
         if _leaks(scene, module.switch(par, key, extracted)):
@@ -1003,6 +1013,38 @@ def check_nand(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def check_rounding_counterexample(module, seed: str) -> list[str]:
+    """Use integer rounding residuals, independently of participant stage functions."""
+    for par in _sets(seed):
+        n, q, N = par["dimension"], par["modulus"], par["degree"]
+        try:
+            witness = module.rounding_counterexample(dict(par))
+        except Exception as error:
+            return [f"constructing rounding evidence raised {type(error).__name__}"]
+        if n % 2:
+            if witness is not None:
+                return ["an odd dimension has no counterexample exceeding the exact rounding bound"]
+            continue
+        if not isinstance(witness, dict):
+            return ["an even dimension requires constructed rounding evidence"]
+        mask, body, secret = (witness.get(k) for k in ("mask", "body", "secret"))
+        if any(not isinstance(v, (list, tuple)) or len(v) != n for v in (mask, secret)):
+            return ["rounding evidence must match the input dimension"]
+        if type(body) is not int or not 0 <= body < q or any(type(x) is not int or not 0 <= x < q for x in mask):
+            return ["rounding evidence components must be canonical integer remainders"]
+        if any(type(x) is not int or x not in (0, 1) for x in secret):
+            return ["rounding evidence test-key entries must be integer bits"]
+        def residual(x):
+            # Before the final 2N wrap; E is q times the phase rounding error.
+            return q * ((x * 2 * N + q // 2) // q) - x * 2 * N
+        error = residual(body) - sum(bit * residual(x) for bit, x in zip(secret, mask))
+        if abs(error) <= q * ((n + 1) // 2):
+            return ["the evidence does not exceed the incorrectly floored rounding bound"]
+        if 2 * abs(error) > q * (n + 1):
+            return ["the evidence exceeds the mathematical rounding-error maximum"]
+    return []
+
+
 def check_transfer(module, seed: str) -> list[str]:
     """All of it, under parameters, keys, tables and inputs no other checkpoint used."""
     failures: list[str] = []
@@ -1044,6 +1086,7 @@ PHASES = tuple(
         check_refresh,
         check_combine,
         check_nand,
+        check_rounding_counterexample,
     )
 )
 (
@@ -1056,6 +1099,7 @@ PHASES = tuple(
     check_refresh,
     check_combine,
     check_nand,
+    check_rounding_counterexample,
 ) = PHASES
 
 

@@ -1,4 +1,4 @@
-# Look up a function on a ciphertext, and hand back a fresh key
+# Look up a function on a ciphertext, and return to the input key
 
 > This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
 > It is not affiliated with or endorsed by the course or its operators. All problem statements,
@@ -59,7 +59,7 @@ noiseBound       what the stage can have added, as a bound
 Two of those change mid-pipeline. Extraction moves the ciphertext to the **ring** secret at
 dimension `degree`; the key switch moves it back. A stage that returns the right numbers
 under the wrong label has produced something the next stage will silently combine with a
-ciphertext it does not match — and the result decrypts to noise under both keys.
+ciphertext it does not match — so correct decryption under the intended key is not guaranteed.
 
 ## A correct truth table proves less than it looks
 
@@ -120,7 +120,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `nand` | 60 | The offset present, the sign positive exactly when NAND is 1, mixed keys refused, all four truth-table rows at every parameter set, and over two already-bootstrapped bits |
 | `transfer` | 25 | All of it under parameters, keys, tables and inputs you have not seen |
 
-Hints on seven of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints, each costing2 points (48 total).
 The pipeline has **ten** stages and the hidden tests grade all ten separately, each with its
 own failure messages. The multi-verify contract caps a problem at eight scored checkpoints —
 in `SCHEMA.json` and again in the platform's `problem-sdk`, which drops the whole scoring
@@ -128,15 +128,9 @@ object rather than truncating a ninth — so the two most closely coupled pairs 
 checkpoint. `relabel` is extraction and the key switch, `nand` is the combination and the
 gate; each pair is one idea, and grading them apart would have suggested otherwise.
 
-## The refresh is not "the noise gets smaller"
+## Refresh has an input contract
 
-The output's noise bound is blind rotation's contribution plus the key switch's. The input's
-noise is not a term in it. It does not shrink — it stops being **depended on**. That is why
-the output can be bootstrapped again, and why circuits are possible at all.
-
-Read the trace's noise column down and you can see the row where the dependency ends.
-`refresh_report` says the same thing as an equation: read `outputNoiseBound` twice with
-different inputs and the number does not move.
+The output bound is R+K, with no input-noise term. Input noise still affects the selected position. Reuse requires matching domains and a sufficient input budget; it is not unconditional.
 
 ## The gate is not in the lookup table
 
@@ -150,12 +144,9 @@ those two rows came out wrong — and `(0,0)` and `(1,1)` never did. A missing c
 fails one row in seven reads as flakiness rather than as a bug, which is worse than failing
 outright.
 
-## What happens past the correctness bound
+## Outside the correctness contract
 
-An input noisier than the bound does not degrade the bootstrap. It returns the **other** bit,
-confidently, with a fresh small noise — a correct-looking ciphertext of the wrong answer
-rather than a broken one. That is the FHE failure mode worth remembering, and
-`refresh_report` is where you say whether a given input is inside the contract at all.
+Correctness is no longer guaranteed outside the bound. This does not imply that every such input returns the other bit.
 
 ## A shortcut that is structurally absent
 
@@ -182,7 +173,7 @@ optimization, an arbitrary multi-gate circuit compiler.
 
 ## This is not secure
 
-The parameters are small enough to enumerate and both secrets fall to linear algebra. A toy
+These teaching parameters do not establish practical security. A toy
 of the mechanism, not of the hardness.
 
 ## Source alignment
@@ -231,3 +222,11 @@ Twenty-one of them produce a perfect truth table, which is the number this probl
 justify — a stage-by-stage checkpoint layout is expensive, and that figure is what pays for
 it. The suite measures it on every run and fails if it moves, so the READMEs and the
 metadata cannot drift away from the reference.
+
+## Issue #716 revision
+
+Free instructions and the editor include definitions, formulas, API signatures, a stage-label table, a LUT-position diagram and error-budget reasoning. An independent participant-only reader identified and rechecked missing mathematical connections. Required formulas are not paid hints. Integer rounding bounds now use the ceiling; a Fraction-based author regression demonstrates an attainable error greater than the former bound. Browser submission and deployed score reflection have not been exercised.
+
+Transfer also requires a constructed counterexample to a floored rounding bound, or None when odd dimension makes that impossible. Separate regression checks reject omitted evidence, an ineffective mask and a zero test key.
+
+Validation passed: all 37 historical mutants, three invalid constructed witnesses, the fractional rounding regression and missing target-dimension guard; catalog 116 valid. Compatibility checks also reject mismatched modulus, base and levels with ValueError. Transfer now includes the independent construction check in addition to the ten pipeline-stage checks.
