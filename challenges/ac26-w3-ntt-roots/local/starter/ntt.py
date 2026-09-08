@@ -1,4 +1,9 @@
-"""A deliberately incomplete number-theoretic transform.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+A deliberately incomplete number-theoretic transform.
 
 The public contract is ``transform(coefficients, prime, order)`` and
 ``inverse_transform(values, prime, order, omega)``.

@@ -1,4 +1,9 @@
-"""Complete the relying party's passkey assertion checks.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+Complete the relying party's passkey assertion checks.
 
 Prerequisites: ordinary Python, bytes, dictionaries, and booleans.
 Not prerequisites: public-key cryptography or WebAuthn.  The elliptic-curve

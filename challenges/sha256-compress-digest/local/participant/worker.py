@@ -1,6 +1,16 @@
 """Execute only submitted functions on supplied inputs; there is no checker or seed here."""
 from __future__ import annotations
 
+# Supported computational helpers are loaded before the restricted evaluation.
+import array
+import bisect
+import contextlib
+import dataclasses
+import enum
+import heapq
+import re
+import string
+
 import struct
 import base64
 import binascii

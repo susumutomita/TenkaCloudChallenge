@@ -1,4 +1,9 @@
-"""The only file you edit in this problem.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+The only file you edit in this problem.
 
 `authorize` decides whether one request may proceed. It is given the token the caller
 presented, what the caller is trying to do, which document they are trying to do it to,
