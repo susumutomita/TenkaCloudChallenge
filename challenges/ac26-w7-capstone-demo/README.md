@@ -154,3 +154,11 @@ including one that hands every input to the last party in the clear.
 
 This problem also carries the base-image and verifier-bind fixes described in
 `ac26-w7-capstone-design`'s README. The other AC26 problems still need them.
+
+## Issue #716 verification and teaching boundary
+
+The free GUIDE.md (also metadata instructions) defines the first scope submission, a share table and general formulas, supplied imports/APIs and all ten return contracts. All eight checkpoints have three bilingual hints at2 points each. detects remains the existing unseen-defect test-design task, without completed solution code. Privacy measures two worlds and729 random tuples for received/public records only; it does not prove full-view or general secrecy.
+
+Grading checks view contents/order/multiplicity, duplicate address pairs, bool/float versus integers, rounds, partials and claim flags. Eleven author regressions run from mutation.py and do not ship in the participant image. Docker make reference-test passed those eleven and21 mutations; catalog validation passed116 entries and diff checks passed.
+
+The actual Workbench handlers supplied the starter, prepared a scope-only answer written from the free statement, and passed its envelope through the verifier with scope=True. Author-reference public tests passed10 cases. This is handler-path evidence, not browser play, deployment or persistent score verification.

@@ -269,26 +269,46 @@ def _well_formed(transcript: object, setting: Setting) -> bool:
     if not isinstance(transcript["messages"], list) or not isinstance(transcript["public"], list):
         return False
 
+    if type(transcript["output"]) is not int or not 0 <= transcript["output"] < setting.modulus:
+        return False
+    if type(transcript["rounds"]) is not int or transcript["rounds"] != 2:
+        return False
+    addresses = set()
     received: list[int] = [0] * setting.parties
     sent: list[int] = [0] * setting.parties
+    sent_values = [0] * setting.parties
     for message in transcript["messages"]:
         if not isinstance(message, dict) or not {"from", "to", "value"} <= set(message):
+            return False
+        if any(type(message[k]) is not int for k in ("from", "to", "value")):
             return False
         if not 0 <= message["from"] < setting.parties or not 0 <= message["to"] < setting.parties:
             return False
         if not 0 <= message["value"] < setting.modulus:
             return False
+        pair = (message["from"], message["to"])
+        if pair in addresses:
+            return False
+        addresses.add(pair)
         received[message["to"]] = (received[message["to"]] + message["value"]) % setting.modulus
         sent[message["from"]] += 1
+        sent_values[message["from"]] = (sent_values[message["from"]] + message["value"]) % setting.modulus
 
     if len(transcript["public"]) != setting.parties:
         return False
     if any(count != setting.parties for count in sent):
         return False
 
+    if sent_values != list(setting.inputs):
+        return False
+
     opened = 0
     for party, entry in enumerate(transcript["public"]):
         if not isinstance(entry, dict) or "value" not in entry:
+            return False
+        if type(entry["value"]) is not int or not 0 <= entry["value"] < setting.modulus or entry.get("kind") != "partial":
+            return False
+        if "from" in entry and (type(entry["from"]) is not int or entry["from"] != party):
             return False
         if entry["value"] != received[party]:
             return False

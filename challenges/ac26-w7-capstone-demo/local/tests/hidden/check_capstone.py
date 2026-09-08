@@ -11,6 +11,7 @@ Failure messages name the property that broke, never the expected value.
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from itertools import combinations
 from pathlib import Path
 from typing import Any, Callable
@@ -55,6 +56,17 @@ def _coalitions(parties: int, size: int) -> list[tuple[int, ...]]:
 # ---------------------------------------------------------------------------
 
 
+def _same_data(left, right):
+    """Compare the documented primitive shapes without bool/int equality coercion."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(right, dict):
+        return left.keys() == right.keys() and all(_same_data(left[k], v) for k, v in right.items())
+    if isinstance(right, (tuple, list)):
+        return len(left) == len(right) and all(_same_data(a, b) for a, b in zip(left, right))
+    return left == right
+
+
 def _spec_well_formed(transcript: Any, setting: Setting) -> str:
     """Empty string when the transcript is a run that could actually have happened."""
     if not isinstance(transcript, dict):
@@ -67,28 +79,46 @@ def _spec_well_formed(transcript: Any, setting: Setting) -> str:
     if len(public) != setting.parties:
         return "the number of opened values does not match the number of parties"
 
+    if type(transcript["output"]) is not int or not 0 <= transcript["output"] < setting.modulus:
+        return "the output must be an integer division remainder"
+    if type(transcript["rounds"]) is not int or transcript["rounds"] != 2:
+        return "the transcript must record two rounds"
     received = [0] * setting.parties
     sent = [0] * setting.parties
+    sent_values = [0] * setting.parties
+    addresses = set()
     for message in messages:
         if not isinstance(message, dict) or not {"from", "to", "value"} <= set(message):
             return "a message is missing a sender, a recipient, or a value"
         sender, recipient, value = message["from"], message["to"], message["value"]
-        if not isinstance(sender, int) or not 0 <= sender < setting.parties:
+        if type(sender) is not int or not 0 <= sender < setting.parties:
             return "a message comes from a party that is not playing"
-        if not isinstance(recipient, int) or not 0 <= recipient < setting.parties:
+        if type(recipient) is not int or not 0 <= recipient < setting.parties:
             return "a message is addressed to a party that is not playing"
-        if not isinstance(value, int) or isinstance(value, bool) or not 0 <= value < setting.modulus:
+        if type(value) is not int or not 0 <= value < setting.modulus:
             return "a message carries a value outside the field"
+        if (sender, recipient) in addresses:
+            return "a sender-recipient pair occurs more than once"
+        addresses.add((sender, recipient))
         received[recipient] = (received[recipient] + value) % setting.modulus
         sent[sender] += 1
+        sent_values[sender] = (sent_values[sender] + value) % setting.modulus
 
     if any(count != setting.parties for count in sent):
         return "a party did not send one share to every party"
+
+    if sent_values != list(setting.inputs):
+        return "a sender's shares do not reconstruct its input"
 
     total = 0
     for party, entry in enumerate(public):
         if not isinstance(entry, dict) or "value" not in entry:
             return "an opened value has no value"
+        if (type(entry["value"]) is not int or not 0 <= entry["value"] < setting.modulus
+                or entry.get("kind") != "partial"):
+            return "an opened partial must contain an integer division remainder"
+        if "from" in entry and (type(entry["from"]) is not int or entry["from"] != party):
+            return "an opened partial identifies the wrong recipient"
         if entry["value"] != received[party]:
             return "an opened value is not the sum of what that party received"
         total = (total + entry["value"]) % setting.modulus
@@ -167,9 +197,9 @@ def check_scope(module: Any, seed: str) -> list[str]:
             failures.append("the claims do not match what this construction actually provides")
         if set(non_goals) != set(NOT_PROVIDED):
             failures.append("the non-goals do not match what this construction cannot do")
-        if manifest["threshold"] != setting.parties - 1:
+        if type(manifest["threshold"]) is not int or manifest["threshold"] != setting.parties - 1:
             failures.append("the stated coalition threshold is wrong for this many parties")
-        if manifest["parameters"] != setting.as_dict():
+        if not _same_data(manifest["parameters"], setting.as_dict()):
             failures.append("the manifest records parameters other than the ones it ran on")
     return failures
 
@@ -191,7 +221,7 @@ def check_correctness(module: Any, seed: str) -> list[str]:
             if not isinstance(transcript, dict) or "output" not in transcript:
                 failures.append("the run produced no output")
                 break
-            if transcript["output"] != honest_sum(setting):
+            if type(transcript["output"]) is not int or transcript["output"] != honest_sum(setting):
                 failures.append("the protocol did not compute the sum of the inputs")
                 break
     return failures
@@ -236,22 +266,17 @@ def check_privacy(module: Any, seed: str) -> list[str]:
         return ["the transcript is not well formed, so the view cannot be checked"]
 
     for members in (*_coalitions(setting.parties, 1), *_coalitions(setting.parties, 2)):
-        observed, error = _call(module, "view", transcript, members)
+        expected = _spec_view(transcript, members)
+        observed, error = _call(module, "view", deepcopy(transcript), members)
         if error:
             failures.append(error)
             break
         if not isinstance(observed, dict):
             failures.append("the view is not a record of what the coalition observed")
             break
-        expected = _spec_view(transcript, members)
-        received = observed.get("received", ())
-        public = observed.get("public", ())
-        if observed.get("output") != expected["output"]:
-            failures.append("the view does not include the output, which everybody sees")
-        if set(public) != set(expected["public"]):
-            failures.append("the view does not include everything that was opened")
-        if len(tuple(received)) != len(expected["received"]):
-            failures.append("the view does not carry exactly the messages addressed to the coalition")
+        if not _same_data(observed, expected):
+            failures.append("the view must preserve the addressed messages and public values in order")
+            break
     if failures:
         return failures
 
@@ -261,14 +286,14 @@ def check_privacy(module: Any, seed: str) -> list[str]:
     report, error = _call(module, "experiment_privacy")
     if error:
         failures.append(error)
-    elif not isinstance(report, dict) or not report.get("ran") or not report.get("passed"):
+    elif not isinstance(report, dict) or report.get("ran") is not True or report.get("passed") is not True:
         failures.append("the privacy experiment did not run, or did not pass")
     else:
         # The claim is that the view is a function of the output, for *every* randomness.
         # A sample supports a weaker claim, so the space actually covered has to be the
         # whole one — which for a toy field is small enough to enumerate.
         whole = setting.modulus**setting.randomness_length
-        if report.get("space") != whole:
+        if type(report.get("space")) is not int or report.get("space") != whole:
             failures.append("the privacy experiment covered a sample rather than the whole space")
     return failures
 
@@ -285,7 +310,7 @@ def check_threshold(module: Any, seed: str) -> list[str]:
         if error:
             failures.append(error)
             continue
-        if size != setting.parties - 1:
+        if type(size) is not int or size != setting.parties - 1:
             failures.append("the stated coalition threshold is not where this function stops hiding")
             continue
 
@@ -301,7 +326,7 @@ def check_threshold(module: Any, seed: str) -> list[str]:
         if error:
             failures.append(error)
             continue
-        if recovered != setting.inputs[victim]:
+        if type(recovered) is not int or recovered != setting.inputs[victim]:
             failures.append("a coalition at the threshold did not recover the remaining input")
         if size >= 2:
             below = at[:-1]
@@ -451,15 +476,15 @@ def check_measure(module: Any, seed: str) -> list[str]:
             continue
         # A number written by hand is a claim about the design. Only a number counted off a
         # real transcript is a claim about the build.
-        if report["rounds"] != transcript.get("rounds"):
+        if type(report["rounds"]) is not int or report["rounds"] != transcript.get("rounds"):
             failures.append("the reported round count is not the one the run took")
-        if report["messages"] != len(transcript.get("messages", [])):
+        if type(report["messages"]) is not int or report["messages"] != len(transcript.get("messages", [])):
             failures.append("the reported message count is not the one the run sent")
-        if report["opened"] != len(transcript.get("public", [])):
+        if type(report["opened"]) is not int or report["opened"] != len(transcript.get("public", [])):
             failures.append("the reported opened-value count is not the one the run opened")
-        if not str(report["unit"]).strip():
+        if not isinstance(report["unit"], str) or not report["unit"].strip():
             failures.append("the measurement states no unit")
-        if not str(report["environment"]).strip():
+        if not isinstance(report["environment"], str) or not report["environment"].strip():
             failures.append("the measurement states no environment")
     return failures
 
@@ -493,7 +518,11 @@ def check_evidence(module: Any, seed: str) -> list[str]:
                 "an entry is missing whether it is claimed, its experiment, its verdict, or its limitation"
             )
             continue
-        if not str(row["limitation"]).strip():
+        if row["claimed"] is not (name in PROVIDED):
+            failures.append("the claim flag must match the documented property")
+        if not isinstance(row["experiment"], str):
+            failures.append("the experiment identifier must be a string")
+        if not isinstance(row["limitation"], str) or not row["limitation"].strip():
             failures.append("an entry records no limitation")
         if row["claimed"]:
             if name not in PROVIDED:
@@ -502,7 +531,7 @@ def check_evidence(module: Any, seed: str) -> list[str]:
                 failures.append("a claimed property cites no experiment")
             if row["verdict"] is not True:
                 failures.append("a claimed property has no passing experiment behind it")
-        elif row["verdict"] is True:
+        elif row["verdict"] is not None:
             failures.append("a property that is not claimed reports a passing verdict")
     return failures
 

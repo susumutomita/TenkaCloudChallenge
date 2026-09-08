@@ -11,6 +11,7 @@ Exit code 0 means every mutation was killed.
 from __future__ import annotations
 
 import sys
+import subprocess
 import types
 from pathlib import Path
 
@@ -173,6 +174,9 @@ def _load(source: str) -> types.ModuleType:
 
 
 def main() -> int:
+    result = subprocess.run([sys.executable, str(ROOT / "tests/test_contract.py")], check=False)
+    if result.returncode:
+        return result.returncode
     baseline = check_capstone.run(_load(REFERENCE), SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline[:3]}")

@@ -1,45 +1,29 @@
-"""The only file you edit in this problem.
+"""Edit capstone.py in the Portal. First implement scope and submit scope.
 
-Week 7's design problem ended with a selection. This is the build.
+You build a private sum: people keep their inputs separate, send additive shares
+(parts summing to the input after division remainder), and publish only partial sums.
+The free statement gives every formula, API and return shape with a worked table.
 
-Several parties each hold one number and want the sum. Nobody will hand their number to
-anybody. You implement the protocol, and then — this is the part that makes it a capstone —
-you produce the evidence that it does what you say it does, and only that.
+A transcript is the run's message record. A coalition is a group pooling observations.
+The view here contains received mail and public values only, not a complete adversary
+state. Enumerating the tiny random space measures two specified worlds; it does not
+prove privacy for arbitrary inputs or a production protocol.
 
-## The randomness contract
-
-`run` receives its randomness as an explicit tuple, never by calling `random`. That is not
-style: it is what makes privacy *measurable*. With the randomness fixed and finite, the
-hidden tests enumerate the entire probability space of a toy field and compare what a
-coalition sees across two different inputs with the same sum. You cannot enumerate a call to
-`random`, and a privacy claim you cannot enumerate is a privacy claim you asserted.
-
-The contract, which every correct implementation follows so the space lines up:
-
-    randomness has setting.randomness_length entries, each in [0, modulus)
-    party i draws randomness[setting.slice_for(i)] -- exactly parties - 1 values
-    those are its first parties - 1 shares; the last is whatever makes them add to its input
-
-## The transcript
-
-`run` returns everything anybody observed:
-
-    {"output": int,
-     "messages": [{"from": i, "to": j, "value": v}, ...],   # only `to` sees one
-     "public":   [{"kind": "partial", "value": v}, ...],    # everybody sees these
-     "rounds":   int}
-
-Keeping point-to-point mail apart from what was opened is what lets a coalition's view be
-computed at all. `public[j]` is party j's opened value.
-
-Run `make inspect` for a worked run, `make test` to check yourself.
+Use start,end=setting.slice_for(i), then randomness[start:end]. The pair itself is
+not a Python slice. Public entries include kind="partial" and value; optional from
+is their recipient index. Self-addressed messages are recorded too.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable
 
-from participant.lab import Setting
+from itertools import combinations
+
+from participant.lab import (
+    CLAIMABLE, PROVIDED, NOT_PROVIDED, Setting, honest_sum,
+    randomness_space, sample_randomness, tiny_settings,
+)
 
 Protocol = Callable[[Setting, tuple[int, ...]], Any]
 
@@ -59,7 +43,7 @@ def scope(setting: Setting) -> dict[str, Any]:
 
 
 def share(value: int, parties: int, modulus: int, draws: tuple[int, ...]) -> list[int]:
-    """Split `value` into `parties` additive shares over F_modulus.
+    """Split `value` into `parties` additive shares using division remainder by modulus.
 
     Exactly one of the shares is not drawn from `draws`. Drawing all of them would be one
     value too many, and the shares would no longer add back up to anything in particular.
@@ -74,8 +58,8 @@ def run(setting: Setting, randomness: tuple[int, ...]) -> dict[str, Any]:
     everybody opens the sum of what it is holding.
 
     The second round is where the construction earns its keep: a partial sum is a sum of
-    shares of *different* secrets, so opening it reveals none of them. Opening anything else
-    does reveal something, and the privacy checkpoint will find it.
+    shares of *different* secrets, so the tiny experiment can test the observed distribution. This is not a
+    general guarantee that no observer learns any individual input.
     """
     return {}
 
@@ -117,7 +101,8 @@ def experiment_privacy() -> dict[str, Any]:
     every randomness either one admits.
 
     For each coalition below the threshold, collect what it sees across the whole space in
-    both settings. If the two collections agree, the view is a function of the output alone.
+    both settings. Compare sorted lists, preserving frequency. Agreement concerns these two worlds
+    and this restricted received/public view only, not all possible inputs.
 
     Sweep every coalition, not one. A protocol can be perfectly private against party 0 and
     hand party 2 the lot.

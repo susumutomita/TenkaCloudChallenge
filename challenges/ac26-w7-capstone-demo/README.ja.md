@@ -146,3 +146,11 @@ mutation を 2 つ、baseline に足さずに削除しました。どちらも�
 
 base image と verifier bind の修正は `ac26-w7-capstone-design` の README に書いたとおりで、この問題
 にも入っています。他の AC26 問題にはまだ入っていません。
+
+## Issue #716 検証と教材の境界
+
+無料の GUIDE.ja.md（metadata本文と同一）に初手 scope、共有の表と一般式、全支給API/import、10関数の返却形を整理しました。日英8項目を各3段・2点のヒントへ同期。detects は未見の欠陥を検査する既存の設計課題で、完成コードは提示しません。privacy は二世界・729乱数・受信/公開記録のみの比較で、完全な攻撃者観測や一般の秘密性を証明しません。
+
+採点は view の中身/順序/重複、送受信対の重複、整数とbool/floatの区別、rounds、小計、報告のclaimを確認します。作者回帰11件を既存 mutation.py の先頭へ組み込み、participant imageにはコピーしません。Docker make reference-testで11回帰と21変異を確認。make agent-gateは116件、diff検査も成功。
+
+Workbenchの実ハンドラで支給starter取得、無料説明から作ったscopeだけの回答を提出用包みへ変換、verifierでscope=Trueを確認しました。作者正答による公開テスト10件も成功。これはハンドラ経路の確認であり、ブラウザ実操作・本番デプロイ・得点の永続化を確認したものではありません。
