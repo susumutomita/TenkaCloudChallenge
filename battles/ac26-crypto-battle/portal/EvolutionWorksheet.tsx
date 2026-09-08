@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { ECDSA_MULTIPLES, ENIGMA_WHEEL, type EvolutionTask } from "../game/src/evolution.ts";
+import { ECDSA_MULTIPLES, ENIGMA_WHEEL, type EvolutionTask } from "../game/src/evolution-model.ts";
 export default function EvolutionWorksheet({task,locale,busy,wrongCost,onSubmit}: {task:EvolutionTask;locale:"ja"|"en";busy:boolean;wrongCost:number;onSubmit:(answer:string)=>void}) {
  const ja=locale==="ja"; const [values,setValues]=useState(["",""]);
  const signature=task.kind==="ecdsa-sign";
  return <section className="tc-input-panel">
-  <p>{ja?"暗号の進化：固定の置換 → 位置で変わる置換 → 公開鍵／秘密鍵 → 公開鍵で署名を確認":"Evolution: fixed substitution → changing substitution → public/private keys → public signature verification"}</p>
   {task.kind==="enigma-encrypt" && <>
    <h3>{ja?"エニグマ：反射板で折り返す（一桁模型）":"Enigma: reflect and return (one-digit model)"}</h3>
    <p>{ja?"同じ位置なら、同じ操作で暗号を元に戻せます。まず車輪を1進め、下の配線を往復してください。":"At the same position, the same operation decrypts. Advance the wheel once, then follow the path out and back."}</p>

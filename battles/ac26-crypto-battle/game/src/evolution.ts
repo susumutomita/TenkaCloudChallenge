@@ -1,10 +1,6 @@
 /** Small arithmetic models. No production encryption or signing keys. */
-export type EvolutionTask =
-  | { readonly kind: "rsa-decrypt"; readonly ciphertext: number; readonly d: number; readonly n: number }
-  | { readonly kind: "enigma-encrypt"; readonly plaintext: readonly number[]; readonly initial: number }
-  | { readonly kind: "ecdsa-sign"; readonly d: number; readonly k: number; readonly hash: number };
-export const ENIGMA_WHEEL = [1, 3, 0, 2] as const;
-export const ENIGMA_REFLECTOR = [1, 0, 3, 2] as const;
+import {ECDSA_MULTIPLES, ENIGMA_WHEEL, ENIGMA_REFLECTOR, isEvolutionTaskShape, type EvolutionTask} from "./evolution-model.ts";
+export {ECDSA_MULTIPLES, ENIGMA_WHEEL, ENIGMA_REFLECTOR, type EvolutionTask} from "./evolution-model.ts";
 const mod = (x: number, n: number) => ((x % n) + n) % n;
 /** Advance before encoding. Reflect, then traverse the inverse wiring. */
 export function enigmaEncrypt(input: readonly number[], initial: number): number[] {
@@ -15,8 +11,6 @@ export function enigmaEncrypt(input: readonly number[], initial: number): number
     return mod(ENIGMA_WHEEL.indexOf(mod(reflected + pos, 4) as 0|1|2|3) - pos, 4);
   });
 }
-/** y²=x³+2x+1 over F5; G=(0,1), prime order n=7. */
-export const ECDSA_MULTIPLES = [null, [0,1], [1,3], [3,3], [3,2], [1,2], [0,4]] as const;
 export function inverse7(x: number): number {
   for (let i=1;i<7;i++) if (mod(x*i,7)===1) return i;
   throw new Error("No inverse modulo7");
@@ -40,8 +34,5 @@ export function parseEvolutionAnswer(answer: unknown): readonly number[] | undef
   return typeof answer === "string" && /^[0-9]( [0-9])?$/.test(answer) ? answer.split(" ").map(Number) : undefined;
 }
 export function isEvolutionTask(task: EvolutionTask): boolean {
-  const integer=(v:number,n:number)=>Number.isInteger(v)&&v>=0&&v<n;
-  if (task.kind === "rsa-decrypt") return task.n===15&&task.d===3&&integer(task.ciphertext,15);
-  return task.kind === "enigma-encrypt" ? integer(task.initial,4)&&Array.isArray(task.plaintext)&&task.plaintext.length===1&&task.plaintext.every(n=>integer(n,4))
-    : integer(task.d,7)&&task.d>0&&integer(task.k,6)&&task.k>=2&&integer(task.hash,7)&&evolutionAnswer(task)[1]!==0;
+  return isEvolutionTaskShape(task) && (task.kind !== "ecdsa-sign" || evolutionAnswer(task)[1] !== 0);
 }

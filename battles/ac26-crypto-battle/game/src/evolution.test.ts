@@ -133,3 +133,11 @@ for(const kind of ["enigma-encrypt","rsa-decrypt","ecdsa-sign"] as const)test(`$
  }
  throw Error(`No ${kind} task issued`);
 });
+
+test("participant bundle has shape checks but no evolution answer routines",async()=>{
+ const result=await Bun.build({entrypoints:[new URL("../../portal/StatusPanel.tsx",import.meta.url).pathname],target:"browser",external:["react","react-dom"]});
+ expect(result.success).toBe(true);
+ const bundle=(await Promise.all(result.outputs.map(o=>o.text()))).join("\n");
+ expect(bundle).toContain("isEvolutionTaskShape");
+ for(const name of ["function evolutionAnswer", "function evolutionTask", "function enigmaEncrypt", "function inverse7"])expect(bundle).not.toContain(name);
+});

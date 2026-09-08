@@ -1,3 +1,4 @@
+import EvolutionConceptGuide from "../../portal/ConceptExplanation.tsx";
 import RawStatusPanel from "../../portal/StatusPanelCore.tsx";
 import { artifactFields } from "./ledger-codec.ts";
 /**
@@ -2145,5 +2146,12 @@ describe("raw status missing connection recovery",()=>{
   expect(markup).toContain(locale==="ja"?"ページを再読み込み":"Reload the page");
   expect(markup).toContain(locale==="ja"?"運営に連絡":"contact the event organizer");
   expect(markup).not.toContain("接続できませんのため");
+ });
+});
+
+describe("the global guide exposes the evolution lessons",()=>{
+ for(const locale of ["ja","en"] as const)it(locale,()=>{
+  const html=renderToStaticMarkup(createElement(EvolutionConceptGuide,{locale}));
+  for(const text of locale==="ja"?["エニグマはなぜ同じ操作で戻せる？","秘密鍵でどう元に戻す？","署名は何を確かめる？"]:["Why does Enigma invert itself?","How does a private key decrypt?","What does a signature verify?"])expect(html).toContain(text);
  });
 });
