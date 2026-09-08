@@ -34,3 +34,12 @@ for (const locale of ["ja", "en"] as const) {
     expect(orderDetail({ privacyConstraint: "none", task: { kind: "zk-sudoku" } }, locale)).toContain("4");
   });
 }
+
+for (const locale of ["ja", "en"] as const) {
+  test(`${locale}: failed single-use Schnorr response leaves only disclosure`, () => {
+    const order = { task: { kind: "reveal-share", shareIndices: [1] }, privacyConstraint: "none", allowedMethods: ["leak", "prove"], schnorr: { y: 8, pending: { y: 8, a: 3, e: 6, used: true, outcome: "miss" } } } as const;
+    expect(orderLabel(order, locale)).toContain(locale === "ja" ? "公開" : "publish");
+    expect(orderLabel(order, locale)).not.toContain("Schnorr");
+    expect(orderDetail(order, locale)).not.toContain(locale === "ja" ? "証明" : "Proof");
+  });
+}
