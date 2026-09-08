@@ -48,6 +48,7 @@ class LearnerSession:
         self.log = ''
         self.sequence = None
         self.initialization_diagnostic = ''
+        self.timed_out = False
 
     def __enter__(self):
         if sys.platform != 'linux':
@@ -97,16 +98,20 @@ class LearnerSession:
         if len(self.log.encode()) > MAX_LOG_BYTES:
             raise LearnerError('Function output exceeded the limit.')
 
+    def _timeout_error(self):
+        self.timed_out = True
+        return LearnerError('Function evaluation timed out.')
+
     def _send(self, payload):
         data = (json.dumps(payload)+'\n').encode()
         fd = self.process.stdin.fileno()
         while data:
             remaining = self.deadline-time.monotonic()
             if remaining <= 0:
-                raise LearnerError('Function evaluation timed out.')
+                raise self._timeout_error()
             _, ready, _ = select.select([], [fd], [], remaining)
             if not ready:
-                raise LearnerError('Function evaluation timed out.')
+                raise self._timeout_error()
             try:
                 sent = os.write(fd, data)
             except BlockingIOError:
@@ -119,11 +124,11 @@ class LearnerSession:
         while b'\n' not in self.pending:
             remaining = self.deadline - time.monotonic()
             if remaining <= 0:
-                raise LearnerError('Function evaluation timed out.')
+                raise self._timeout_error()
             fd = self.process.stdout.fileno()
             ready, _, _ = select.select([fd], [], [], remaining)
             if not ready:
-                raise LearnerError('Function evaluation timed out.')
+                raise self._timeout_error()
             chunk = os.read(fd, 4096)
             if not chunk:
                 raise LearnerError('The functions did not return the required values.')
@@ -135,7 +140,7 @@ class LearnerSession:
 
     def call(self, module, function, args):
         if time.monotonic() >= self.deadline:
-            raise LearnerError('Function evaluation timed out.')
+            raise self._timeout_error()
         self.sequence = secrets.token_hex(16)
         request = {'callId': self.sequence, 'module': module, 'function': function,
                    'args': encode(args)}
