@@ -3,6 +3,7 @@
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
 RUN useradd --create-home --uid 10001 lab
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
 
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
@@ -48,6 +49,7 @@ CMD ["python", "participant/server.py"]
 # implementation a learner reads and the one they are graded against cannot drift apart.
 # The Portal server and its adapter are deliberately absent from this stage.
 FROM base AS verifier
+COPY --chown=lab:lab participant/execution.py participant/isolation.py participant/worker.py participant/protocol.py ./participant/
 COPY --chown=lab:lab participant/wrong_ring.py ./participant/wrong_ring.py
 COPY --chown=lab:lab fixtures/ ./fixtures/
 COPY --chown=lab:lab tests/hidden/ ./tests/hidden/

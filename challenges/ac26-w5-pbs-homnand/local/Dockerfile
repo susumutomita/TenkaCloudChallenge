@@ -7,6 +7,8 @@
 # do not copy a digest forward from a sibling without checking it still resolves.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN useradd --create-home --uid 10001 lab
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -33,10 +35,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # where those are the exercise. `starter/pipeline.py` imports from it on its first line, and
 # so do the public tests.
 FROM base AS participant
-COPY tests/public/ ./tests/public/
-COPY participant/ ./participant/
-COPY starter/ ./starter/
-COPY show.py ./show.py
+COPY --chown=lab:lab tests/public/ ./tests/public/
+COPY --chown=lab:lab participant/ ./participant/
+COPY --chown=lab:lab starter/ ./starter/
+COPY --chown=lab:lab show.py ./show.py
+
+USER lab
 
 CMD ["python", "participant/server.py"]
 
@@ -50,10 +54,13 @@ CMD ["python", "participant/server.py"]
 # a learner builds on and the one they are graded against cannot drift apart. The Portal
 # server and its adapter are deliberately absent from this stage.
 FROM base AS verifier
-COPY participant/fhe.py ./participant/fhe.py
-COPY fixtures/ ./fixtures/
-COPY tests/hidden/ ./tests/hidden/
-COPY verifier/ ./verifier/
+COPY --chown=lab:lab participant/execution.py participant/isolation.py participant/worker.py participant/protocol.py ./participant/
+COPY --chown=lab:lab participant/fhe.py ./participant/fhe.py
+COPY --chown=lab:lab fixtures/ ./fixtures/
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
+COPY --chown=lab:lab verifier/ ./verifier/
+
+USER lab
 
 CMD ["python", "verifier/server.py"]
 
@@ -67,8 +74,8 @@ CMD ["python", "verifier/server.py"]
 # seed sweep all need it.
 FROM participant AS author
 
-COPY fixtures/ ./fixtures/
-COPY tests/hidden/ ./tests/hidden/
-COPY verifier/ ./verifier/
-COPY reference/ ./reference/
-COPY mutation.py ./mutation.py
+COPY --chown=lab:lab fixtures/ ./fixtures/
+COPY --chown=lab:lab tests/hidden/ ./tests/hidden/
+COPY --chown=lab:lab verifier/ ./verifier/
+COPY --chown=lab:lab reference/ ./reference/
+COPY --chown=lab:lab mutation.py ./mutation.py
