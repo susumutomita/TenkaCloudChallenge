@@ -1,5 +1,9 @@
 """The only file you edit.
 
+You implement the shared multiplication stage of a joint proof computation: compute C=A*B
+without publishing A or B. Begin by planning its communication cost; the later stages
+implement and audit that plan.
+
 The previous problem built the half of a co-SNARK prover's row that costs nothing:
 
 ```text
@@ -30,9 +34,13 @@ d, e opened                                   one round, two values
 Substituting `A = d + x` and `B = e + y` into `A * B` and expanding is worth doing on paper
 once; the four terms above are what comes out.
 
-`d` and `e` are `A` and `B` masked by uniform values nobody chose, so opening them reveals
-nothing about either — **provided the mask is used once**. Uniform independent masks unknown to the adversary are also required; this is the security assumption
-of the step, which is why `reserve_triple` refuses to hand the same triple out twice.
+The trusted dealer (the party we assume prepares correct triples) chooses masks.
+Uniform means every value 0..p-1 has probability 1/p. Independent means learning an
+input or the other mask does not change that probability. An adversary is someone
+trying to learn A or B. The masks must remain unknown to that observer and be used
+once. These are security assumptions: conditions needed for the secrecy argument,
+not facts proved by this runtime. Under them, d and e have the same distribution
+for every A and B. The free statement illustrates this with a table.
 
 ## What you are handed
 

@@ -744,11 +744,6 @@ def check_audit(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-class _WitnessRuntime(ParticipantRuntime):
-    def value_of(self, share):
-        raise ValueError("construct with local arithmetic, not value reads")
-
-
 def check_mask_cancellation(module, seed: str) -> list[str]:
     failures = []
     for label in LABELS:
@@ -757,16 +752,24 @@ def check_mask_cancellation(module, seed: str) -> list[str]:
         runtime.reserve_triple(scenario.triple)
         before = len(runtime.events)
         issued_objects = []
+        reads_before = runtime.reads
+        arithmetic_reads = 0
         original_emit = runtime._emit
         def track_emit(*args, **kwargs):
+            nonlocal arithmetic_reads
             share = original_emit(*args, **kwargs)
+            # Each successful built-in local operation consumes this many reads.
+            # Count the actual Runtime, so unbound facade calls cannot evade it.
+            arithmetic_reads += {"add": 2, "sub": 2, "mul-public": 1, "add-public": 1, "zero": 0}[args[0]]
             issued_objects.append(share)
             return share
         runtime._emit = track_emit
         try:
             result = module.mask_cancellation_witness(
-                _WitnessRuntime(runtime), scenario.halves, scenario.triple
+                ParticipantRuntime(runtime), scenario.halves, scenario.triple
             )
+            if runtime.reads - reads_before != arithmetic_reads:
+                failures.append("cancellation witness must not read values directly")
             if not isinstance(result, tuple) or len(result) != scenario.cfg["parties"]:
                 failures.append("cancellation witness must return a tuple with one share per party")
                 continue

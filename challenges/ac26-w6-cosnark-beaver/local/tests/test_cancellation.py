@@ -29,6 +29,28 @@ class CancellationTest(unittest.TestCase):
     def test_reference_constructs(self):
         self.assertEqual(self.check(reference.mask_cancellation_witness), [])
 
+    def test_direct_and_unbound_facade_reads_are_rejected(self):
+        from participant.mpc import ParticipantRuntime
+        for unbound in (False, True):
+            def broken(runtime, halves, triple):
+                with runtime.party_scope(0):
+                    if unbound:
+                        ParticipantRuntime.value_of(runtime, halves["A"][0])
+                    else:
+                        runtime.value_of(halves["A"][0])
+                return reference.mask_cancellation_witness(runtime, halves, triple)
+            self.assertIn("cancellation witness must not read values directly", self.check(broken))
+
+    def test_alternative_local_construction_is_allowed(self):
+        def valid(runtime, halves, triple):
+            result = []
+            for i in range(runtime.setting["parties"]):
+                with runtime.party_scope(i):
+                    zero = runtime.mul_public(triple.x[i], 0)
+                    result.append(runtime.add_public(runtime.add(halves["A"][i], zero), 0))
+            return tuple(result)
+        self.assertEqual(self.check(valid), [])
+
     def test_returning_input_has_no_mask_ancestry(self):
         self.assertTrue(self.check(lambda runtime, halves, triple: halves["A"]))
 

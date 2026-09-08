@@ -190,3 +190,6 @@ claim has to move with it.
 The final transfer also requires mask_cancellation_witness: construct local issued shares that preserve A while retaining triple.x ancestry. This distinguishes the runtime log from a secrecy proof. All eight checkpoints have three hints at two points each (48 total). Required formulas and APIs are free in metadata; the new public test demonstrates cancellation.
 
 `make reference-test` runs the six construction regressions through `mutation.py` and then the existing 32-mutation suite; all passed in the host author run. Participant-only independent reading caught four instruction inconsistencies, now corrected. The actual Workbench handler methods fetched the starter, prepared a submission and ran nine public tests successfully. HTTP binding was unavailable in the sandbox; browser play, remote scoring and deployment were not tested. Catalog validation passed for 116 entries.
+
+
+PR #831 follow-up: final construction counts actual Runtime reads against successful local-operation reads, including unbound ParticipantRuntime calls. Eight author regressions cover direct/unbound reads and an alternative valid arithmetic construction. This observes the supplied API; it is not a Python security sandbox. Free formulas and API contracts remain available; the final example now rejects a candidate rather than supplies the construction.
