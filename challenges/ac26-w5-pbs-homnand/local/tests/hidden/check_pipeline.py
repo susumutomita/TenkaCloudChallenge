@@ -72,19 +72,23 @@ ENVELOPE = ("kind", "keyId", "dimension", "modulus", "parameterSetId", "noiseBou
 
 
 def _sets(seed: str) -> list[dict]:
-    """Parameter sets covering both bases and more than one ring degree."""
+    """Parameter sets covering both bases, ring sizes and dimension parities."""
     drawn = [parameters(seed, label) for label in LABELS]
     for base in (2, 4):
         if not any(par["base"] == base for par in drawn):
             drawn.append(_forced(base))
     if not any(par["degree"] >= 32 for par in drawn):
         drawn.append(_forced(2, minimum_degree=32))
+    for parity in (0, 1):
+        if not any(par["dimension"] % 2 == parity for par in drawn):
+            drawn.append(_forced(2, dimension_parity=parity))
     return drawn
 
 
-def _forced(base: int, minimum_degree: int = 0) -> dict:
+def _forced(base: int, minimum_degree: int = 0, dimension_parity: int | None = None) -> dict:
     levels, degree, dimension = next(
-        (l, d, n) for b, l, d, n in VIABLE if b == base and d >= minimum_degree
+        (l, d, n) for b, l, d, n in VIABLE
+        if b == base and d >= minimum_degree and (dimension_parity is None or n % 2 == dimension_parity)
     )
     modulus = base**levels
     return {
@@ -610,6 +614,19 @@ def check_switch(module, seed: str) -> list[str]:
         ):
             failures.append("the switched sample does not land on the key the input came under")
             continue
+
+        # keyId is optional: omission and explicit None carry no contradictory label.
+        labelled = _extracted(seed, par, scene, 1, "switch:optional-id")
+        unlabelled = {name: value for name, value in labelled.items() if name != "keyId"}
+        for valid in (unlabelled, {**unlabelled, "keyId": None}):
+            try:
+                optional = module.switch(par, key, valid)
+                if optional.get("keyId") != scene["targetId"] or len(optional["mask"]) != par["dimension"]:
+                    failures.append("an unlabelled input must still name the output key and dimension")
+                if lwe_decrypt(par, scene["lweKey"], _lwe(optional)) != 1:
+                    failures.append("switching an unlabelled input must preserve its message")
+            except Exception:
+                failures.append("a missing or None input keyId must be accepted")
 
         # A mismatched key must be refused before output construction.
         other_ring = ring_secret(seed, par, "switch:other")

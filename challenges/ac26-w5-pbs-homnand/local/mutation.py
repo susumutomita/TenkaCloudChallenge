@@ -528,6 +528,14 @@ def main() -> int:
         return 1
     print("PASS wrong target dimension rejected independently")
 
+    optional_guard = 'sample.get("keyId") is not None and sample["keyId"] != switching_key["sourceKeyId"]'
+    assert optional_guard in REFERENCE
+    strict_label = _load(REFERENCE.replace(optional_guard, 'sample["keyId"] != switching_key["sourceKeyId"]'))
+    if not check_pipeline.check_switch(strict_label, "review-optional-key-id"):
+        print("FAIL accepted an implementation that rejects optional input key labels")
+        return 1
+    print("PASS missing and None input key labels remain valid")
+
     constructor_faults = (
         ('    if n % 2:', '    if True:'),
         ('[threshold - 1] * n', '[0] * n'),
@@ -540,6 +548,23 @@ def main() -> int:
             print("FAIL accepted a missing or ineffective constructed rounding witness")
             return 1
     print("PASS three invalid constructed rounding witnesses rejected independently")
+
+    # This seed previously produced only odd dimensions, skipping construction entirely.
+    coverage_seed = "coverage-probe-26"
+    for tested_seed in (SEED, coverage_seed):
+        parities = {par["dimension"] % 2 for par in check_pipeline._sets(tested_seed)}
+        if parities != {0, 1}:
+            print("FAIL dimension parity coverage depends on the deployment seed")
+            return 1
+        none_only = _load(REFERENCE.replace('    if n % 2:', '    if True:'))
+        if not check_pipeline.check_rounding_counterexample(none_only, tested_seed):
+            print("FAIL all-None construction escaped on the odd-only seed")
+            return 1
+        if not check_pipeline.check_domain(_load(floored), tested_seed):
+            print("FAIL the floor-bound implementation escaped on the odd-only seed")
+            return 1
+    print("PASS both dimension parities and their invalid submissions checked independently of seed")
+
 
 
 
