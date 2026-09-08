@@ -227,8 +227,8 @@ Additional compatibility check: the restricted runtime retains the advertised Pa
 
 `array`, `base64`, `binascii`, `bisect`, `collections`, `contextlib`, `copy`, `dataclasses`, `decimal`, `enum`, `fractions`, `functools`, `hashlib`, `heapq`, `hmac`, `itertools`, `json`, `math`, `operator`, `random`, `re`, `statistics`, `string`, `struct`, `time`, `typing`.
 
-The starter lists the same supported imports. Other imports and file/network operations are not supported by the evaluator.
-スターターにも同じ一覧を表示します。一覧以外のimportとファイル・通信操作は採点環境では対応しません。
+The starter lists the same optional standard-library helpers. Its original imports (including __future__ and supplied problem APIs) remain supported. Other optional imports and file/network operations are not supported by the evaluator.
+スターターにも同じ追加用の一覧を表示します。最初からあるimport（__future__や教材のAPIなど）は引き続き使えます。それ以外の追加importとファイル・通信操作は採点環境では対応しません。
 
 The execution-boundary suite now contains 13 test methods, including the added facade-type and supported-import compatibility checks. The new checks are recorded separately from the earlier full-suite run.
 実行境界のテストは現在13件です。追加した公開型と標準ライブラリの互換性確認は、以前の全体実行と分けて記録しています。
