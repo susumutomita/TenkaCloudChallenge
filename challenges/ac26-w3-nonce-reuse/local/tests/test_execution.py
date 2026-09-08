@@ -6,6 +6,15 @@ from verifier.server import evaluate_with_message, CODE_CHECKPOINTS
 
 
 def main():
+    from participant.protocol import encode, decode
+    from participant.schnorr import Point
+    class PublicPointSubclass(Point):
+        pass
+    original = PublicPointSubclass((17, 2, 2), 5, 1)
+    restored = decode(encode(original))
+    assert isinstance(restored, Point) and type(restored) is not Point
+    assert (restored.params, restored.x, restored.y) == (original.params, original.x, original.y)
+    print('PASS Point subclass value roundtrip', flush=True)
     source = (Path(__file__).resolve().parents[1] / 'reference/recover.py').read_text()
     for checkpoint in CODE_CHECKPOINTS:
         correct, message = evaluate_with_message(checkpoint, source)

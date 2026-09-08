@@ -10,6 +10,11 @@ import math
 from participant.schnorr import Point, Group
 
 
+class PointSubtypeValue(Point):
+    """Preserve Point-versus-subclass semantics using a fixed local value type."""
+    pass
+
+
 def encode(value, depth=0):
     if depth > 60:
         raise ValueError('nested value exceeded the limit')
@@ -17,7 +22,7 @@ def encode(value, depth=0):
     if kind is bytes:
         return ['bytes', value.hex()]
     if isinstance(value, Point):
-        return ['point', encode((value.params, value.x, value.y), depth+1)]
+        return ['point' if kind is Point else 'point-subtype', encode((value.params, value.x, value.y), depth+1)]
     if isinstance(value, Group):
         return ['group', encode((value.p, value.a, value.b, value.generator.x, value.generator.y, value.n), depth+1)]
     if value is None:
@@ -45,9 +50,9 @@ def decode(frame, depth=0):
     kind, value = frame
     if kind == 'bytes' and type(value) is str:
         return bytes.fromhex(value)
-    if kind == 'point':
+    if kind in ('point', 'point-subtype'):
         params, x, y = decode(value, depth+1)
-        return Point(params, x, y)
+        return (Point if kind == 'point' else PointSubtypeValue)(params, x, y)
     if kind == 'group':
         fields = decode(value, depth+1)
         if type(fields) is not tuple or len(fields) != 6 or any(type(x) is not int for x in fields):
