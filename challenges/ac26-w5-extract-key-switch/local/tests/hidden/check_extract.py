@@ -175,8 +175,11 @@ def check_phase(module, seed: str) -> list[str]:
         for bad in (-1, par["degree"], par["degree"] + 1):
             try:
                 module.phase_coefficient(par, scene["ringKey"], accumulator, bad)
-            except Exception:  # noqa: BLE001 - any refusal counts
+            except ValueError:
                 continue
+            except Exception:
+                failures.append("an incompatible key must raise ValueError")
+                break
             failures.append("a coefficient index outside the ring was accepted")
             break
     return failures
@@ -237,8 +240,11 @@ def check_extract(module, seed: str) -> list[str]:
         for bad in (-1, par["degree"]):
             try:
                 module.extract_sample(par, accumulator, bad)
-            except Exception:  # noqa: BLE001 - any refusal counts
+            except ValueError:
                 continue
+            except Exception:
+                failures.append("an incompatible key must raise ValueError")
+                break
             failures.append("a coefficient index outside the ring was accepted")
             break
     return failures
@@ -377,11 +383,14 @@ def check_switch(module, seed: str) -> list[str]:
         )
         sample = dict(reference_extract(par, scene["accumulator"], 0))
         sample["keyId"] = scene["sourceId"]
-        for bad in (mismatched, _shrunk(key)):
+        for bad in (mismatched, *_parameter_mismatches(key)):
             try:
                 module.key_switch(par, bad, sample)
-            except Exception:  # noqa: BLE001 - any refusal counts
+            except ValueError:
                 continue
+            except Exception:
+                failures.append("an incompatible key must raise ValueError")
+                break
             failures.append("a switching key that does not match the sample was applied")
             break
 
@@ -399,9 +408,16 @@ def check_switch(module, seed: str) -> list[str]:
     return failures
 
 
-def _shrunk(key: dict) -> dict:
-    """The same key claiming a source dimension it does not have."""
-    return {**key, "sourceDimension": key["sourceDimension"] - 1}
+def _parameter_mismatches(key: dict) -> list[dict]:
+    """Individually violate each declared compatibility parameter."""
+    return [
+        {**key, "sourceDimension": key["sourceDimension"] - 1},
+        {**key, "targetDimension": key["targetDimension"] + 1},
+        {**key, "targetDimension": 0},
+        {**key, "modulus": key["modulus"] + 1},
+        {**key, "base": key["base"] + 1},
+        {**key, "levels": key["levels"] + 1},
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +438,7 @@ def check_domains(module, seed: str) -> list[str]:
             seed, par, other_ring, scene["target"], key_id(seed, "domains:other"),
             scene["targetId"], "domains:other",
         )
-        cases = [(sample, key), (sample, mismatched), (sample, _shrunk(key))]
+        cases = [(sample, key), (sample, mismatched), *[(sample, bad) for bad in _parameter_mismatches(key)]]
         try:
             got = [module.domain_report(par, s, k) for s, k in cases]
         except Exception as error:  # noqa: BLE001
@@ -438,8 +454,8 @@ def check_domains(module, seed: str) -> list[str]:
                     failures.append(f"the domain report's {field} is wrong")
                     return failures
 
-        # The three cases have to actually separate, or the report proves nothing.
-        if [report["compatible"] for report in got] != [True, False, False]:
+        # Valid and independently mismatched cases must actually separate.
+        if [report["compatible"] for report in got] != [True] + [False] * (len(cases) - 1):
             failures.append("the report does not distinguish a matching key from a mismatched one")
             continue
 

@@ -181,3 +181,5 @@ All eight checkpoints have three hints: mechanism, small arithmetic example, and
 An independent participant-only read found missing contracts and rechecked the revision. A first phase implementation using only the documented API passed the author-side phase check with no failures. The author-side reference passed and all 32 mutation variants were rejected. make agent-gate validated 116 entries. Browser submission for this problem and production deployment were not performed.
 
 Transfer also requires constructed counterexamples at supplied indices. Independent arithmetic rejects missing, zero-key and fixed-index evidence. Free formulas remain available; copying the extraction recipe alone no longer completes the problem.
+
+Target-dimension mismatches and each modulus/base/levels mismatch are rejected with ValueError; domain reports mark them incompatible.

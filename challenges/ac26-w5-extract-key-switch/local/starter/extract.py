@@ -135,7 +135,8 @@ def domain_report(params: dict, sample: dict, switching_key: dict) -> dict:
 
     Entry noise is in -1..1 here. noiseAdded=len(sample["mask"])*levels*(base-1).
     This is an absolute additional-error bound, not the measured error.
-    Compatibility compares sourceDimension with len(mask), key modulus/base/levels
+    Compatibility compares sourceDimension with len(mask), targetDimension with
+    params["target_dimension"], and key modulus/base/levels
     with params, and non-None sample keyId with sourceKeyId. Missing/None keyId
     is allowed. An incompatible key makes key_switch raise ValueError.
     """

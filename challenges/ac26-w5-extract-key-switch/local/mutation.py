@@ -236,6 +236,14 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         ],
     ),
     (
+        "accepts the wrong target dimension",
+        [(
+            '    if switching_key["targetDimension"] != params["target_dimension"]:\n'
+            '        raise ValueError("the switching key does not match the target dimension")',
+            '    pass',
+        )],
+    ),
+    (
         "hardcodes the source dimension instead of reading the sample",
         [
             (

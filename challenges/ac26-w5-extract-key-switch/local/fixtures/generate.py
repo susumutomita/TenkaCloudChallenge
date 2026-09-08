@@ -173,6 +173,8 @@ def key_switch(par: dict, key: dict, sample: dict) -> dict:
     """
     if key["sourceDimension"] != len(sample["mask"]):
         raise ValueError("the switching key does not match the sample's dimension")
+    if key["targetDimension"] != par["target_dimension"]:
+        raise ValueError("the switching key does not match the target dimension")
     if key["modulus"] != par["modulus"] or key["base"] != par["base"] or key["levels"] != par["levels"]:
         raise ValueError("the switching key was built for different parameters")
     if sample.get("keyId") is not None and sample["keyId"] != key["sourceKeyId"]:
@@ -205,6 +207,7 @@ def domain_report(par: dict, sample: dict, key: dict) -> dict:
     """
     compatible = (
         key["sourceDimension"] == len(sample["mask"])
+        and key["targetDimension"] == par["target_dimension"]
         and key["modulus"] == par["modulus"]
         and key["base"] == par["base"]
         and key["levels"] == par["levels"]
