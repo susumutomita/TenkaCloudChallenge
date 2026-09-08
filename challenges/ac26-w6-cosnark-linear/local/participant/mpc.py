@@ -1,5 +1,9 @@
 """The supplied sharing layer: shares, the instrumented runtime, and the participant facade.
 
+This module also supports local public exercises. During grading, Runtime and share
+values remain in the parent, and the learner receives per-call public API handles.
+Private attributes shown in this local implementation are not the submitted API.
+
 Week 2's two problems are **supplied** here: additive secret sharing
 (`ac26-w2-secret-sharing`) and the local linear operations on shares
 (`ac26-w2-linear-shares`). This problem is the prover's linear layer built on top of them,

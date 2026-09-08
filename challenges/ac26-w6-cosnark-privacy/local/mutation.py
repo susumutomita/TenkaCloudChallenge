@@ -452,7 +452,7 @@ def main() -> int:
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(mutations) + 1} mutations killed.")
+    print(f"All {len(mutations)} logic mutations killed; one separate verdict probe rejected.")
     return 0
 
 

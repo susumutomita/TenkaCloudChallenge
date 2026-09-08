@@ -1,5 +1,9 @@
 """The supplied layer: the sharing runtime, the disclosure sink, and the policy vocabulary.
 
+This module also supports local public exercises. During grading, Runtime and share
+values remain in the parent, and the learner receives per-call public API handles.
+Private attributes shown in this local implementation are not the submitted API.
+
 This module is the half this problem **hands over**. `ac26-w6-cosnark-linear` built the
 linear part and `ac26-w6-cosnark-beaver` built the one multiplication that has to
 communicate, and both answers are below as `linear_halves` and `beaver_product`. Nothing

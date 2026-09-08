@@ -134,8 +134,7 @@ starter、public test、orientation printer だけで、fixtures、hidden test�
 honest run / faulted run を、ローカルで計算せずに compose network ごしに読みます。
 停止は `make verifier-down` です。
 
-verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
-ハングさせたりクラッシュさせたりできません。 checkpoint は echo した id しか加点できません。
+verifier が実際に保証するのはもっと狭く、そして本物です。提出コードの実行時間とリソース使用量に上限を設けます。 checkpoint は echo した id しか加点できません。
 結果は期待値を漏らしません。 fixture はこのデプロイの seed 由来なので、暗記した答えは持ち越せません。
 提出コードには時間・memory・process・output の上限をかけ、両 container は non-root、read-only、
 privilege 無しで動き、公開されるのは Workbench の loopback だけです。
@@ -161,3 +160,29 @@ mutation の候補のうち 2 つは、生き残らせるのではなく**外し
 `SURVIVED` の行を無視してよいと教えることになります。
 
 参加者資料だけの独立読解で工程表のキー・包含条件・修復規則の不足を確認し、無料の日英本文と3段ヒントへ反映しました。作者はreferenceの契約と照合しましたが、参加者プレーの証拠とは扱いません。ランタイムと採点は変更せず、実Portalプレーは未実施です。
+
+## 採点を親プロセスに置く実行境界（Issue 837）
+
+既存の checkpoint 判定は信頼する親が実行します。提出 Python は制限された別の Linux worker で動き、
+境界を渡るのは型付きの値です。出力した採点結果や早期終了では得点になりません。使用する箇所で
+tuple/list・整数/真偽値・bytes・辞書キーの区別を維持します。worker にはファイル・ネットワーク・signal・
+memory・出力・process の制限を設け、提出全体の上限 12 秒を Workbench proxy の 15 秒より短くします。
+image は non-root、Compose と作者 runner は init ありです。これは検査した対策の範囲で、あらゆる
+隔離の欠陥や副経路を排除したという保証ではありません。
+
+変更後の Linux Docker で、論理変異 19 件を検出し、実行境界回帰 8 件も成功しました。
+境界回帰は参考解の全 8 項目、正しい別解、出力・終了による偽装、非公開ファイル・親 signal の拒否、
+型保持、入れ子の上限、non-root、待ち時間の整合を確認します。ネイティブの変異検査は採点の論理、
+別の境界回帰は実行隔離の確認であり、区別しています。
+
+non-root の実 Workbench HTTP で config・Inspect・starter を取得しました。未完成の starter の初回提出は
+失敗し、作者の参考解は公開 3 テストと prepare・verifier proxy 経由の全 8 項目に合格しました。
+同じ提出経路で出力・終了による偽装も拒否しました。カタログは 116 件有効です。これは作者検査と提出経路の
+証拠で、初見参加者の自力成功を示すものではありません。ブラウザ操作・配備先での得点反映・デプロイは未実施です。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

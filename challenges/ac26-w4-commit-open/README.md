@@ -133,7 +133,7 @@ no reference solution, no verifier. Those live only in a second, unpublished con
 Workbench reaches over the compose network, and in the author-only image `make reference-test`
 builds.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+What the verifier does guarantee is narrower and real: submitted code has bounded execution time and resource limits,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the
 fixtures come from this deployment's seed so a memorized answer does not carry.
 
@@ -158,4 +158,34 @@ A, B and E, C, D and E reject every relabelling, and a flipped side flag is reje
 and ignored by D and E.
 
 
-All eight checkpoints now have three two-point hints. Participant-only review caught incorrect hash-collision, position-binding and publication-order claims, plus missing path-length and scheme-E byte conversion steps. The bilingual statement corrects these and gives the required procedures for free. Catalog validation passed. Runtime and grader are unchanged; live Portal play was not run.
+All eight checkpoints now have three two-point hints. Participant-only review caught incorrect hash-collision, position-binding and publication-order claims, plus missing path-length and scheme-E byte conversion steps. The bilingual statement corrects these and gives the required procedures for free. Catalog validation passed. Live Portal play was not run during the instruction review; execution-boundary validation follows below.
+
+## Parent-owned grading boundary (Issue 837)
+
+The trusted parent runs the existing checkpoint checker. Submitted Python runs in a separate,
+restricted Linux worker; typed values cross the boundary, not a grading verdict. Output text
+or early process exit cannot award points. Tuple/list, integer/boolean, byte and dictionary-key
+contracts are preserved where used. The worker has file, network, signal, memory, output and
+process limits. A 12-second submission budget is below the Workbench proxy's 15-second timeout.
+The images run non-root, and Compose and the author runner use init. These are tested controls,
+not a claim that every possible isolation defect or side channel has been eliminated.
+
+The revised Linux Docker run passed 20 logical mutations, plus 8
+execution-boundary regression tests. The boundary tests exercise all eight reference checkpoints,
+a legal alternative, forged output/exit, private-file and parent-signal refusal, preserved types,
+nesting bounds, non-root execution and timeout alignment. The native mutation tests examine
+logical grading; the separate boundary tests examine execution isolation.
+
+Actual non-root Workbench HTTP requests fetched config, live Inspect and starter; the unfinished
+starter failed its first submission, while the author reference passed the 3 public tests
+and all eight checkpoints through prepare and the verifier proxy. Output/exit spoofing failed
+through that same route. Catalog validation passed for 116 entries. These are author and route
+checks, not evidence of unaided first-time participant comprehension. Browser interaction,
+deployed platform score reflection and deployment were not run for this change.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

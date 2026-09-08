@@ -59,4 +59,12 @@ reset:
 
 reference-test: build
 	docker build --target author -t $(IMAGE)-author local
-	docker run --rm -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python mutation.py
+	docker run --rm --init -e FLAG_SEED=$(FLAG_SEED) $(IMAGE)-author python tests/hidden/test_execution_boundary.py
+
+.PHONY: import-compatibility-test
+reference-test: import-compatibility-test
+
+import-compatibility-test:
+	docker build --target author -t $(IMAGE)-author local
+	docker run --rm --init $(IMAGE)-author python -m unittest discover -s tests/hidden -p test_supported_imports.py -v

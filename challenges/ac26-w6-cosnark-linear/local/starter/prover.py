@@ -1,4 +1,12 @@
-"""Edit only this file. Start with parse_relation, then submit relation.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
+Edit only this file. Start with parse_relation, then submit relation.
+
+Use supplied objects only within the current call, through the documented public API.
+Do not retain them for another call or access private share/runtime state.
 
 A witness is a list of secret values w[j]. A party is one holder, numbered from 0.
 Secret sharing splits each value into shares whose sum, after division by prime p,
