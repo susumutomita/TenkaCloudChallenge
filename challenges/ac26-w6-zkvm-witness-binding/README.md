@@ -180,7 +180,7 @@ Example: public spent 1, stdout.values={"spent":3} → (("stdout","spent"),). An
 
 Wrong submissions cost 15 points. The 24 hints cost 2 each, 48 in total. Grading checks behavior and values, not a particular implementation style. Failure messages identify documented properties without disclosing hidden expected values.
 
-The runtime is local Docker Compose. The Participant Workbench holds public materials, starter and public tests, forwarding `/verify` to an internal verifier. Its image does not contain fixtures, hidden tests, reference answers or mutation tests (deliberately broken implementations). Public data is read from the verifier's `/public`. A local learner controlling Docker can inspect their own containers; this is a self-study boundary, not secrecy from that owner.
+The runtime is local Docker Compose. The Participant Workbench holds public materials, starter and public tests, forwarding `/verify` to an internal verifier. Its image does not contain fixtures, hidden tests, reference answers or mutation tests (deliberately broken implementations). Public data is read from the verifier's `/public`. The verifier keeps its checker in the parent process. A restricted Linux worker returns function values and requests Env operations; the parent records the actual input observations and computes the verdict. A worker printing a success record is not grading evidence. A local learner controlling Docker can inspect their own containers; this is a self-study boundary, not secrecy from that owner.
 
 The toy receipt has no cryptographic seal. Real zkVM proof generation/verification, arbitrary output confidentiality, and side channels including timing are out of scope. The changed journal policy tests that private stopping positions do not disclose quantity through this field; it does not prove general program privacy.
 
@@ -195,7 +195,7 @@ make reference-test               # correct answer and deliberately broken imple
 make verifier-down
 ```
 
-Run `make install && make agent-gate` from the catalog root. [ACCEPTANCE.md](ACCEPTANCE.md) records the actual boundary: real Workbench HTTP routes, native Python, Docker author tests and catalog validation. Rendered browser, Compose deployment and AWS redeployment checks were not run. An API smoke test is not a complete visual playtest.
+Run `make install && make agent-gate` from the catalog root. [ACCEPTANCE.md](ACCEPTANCE.md) records the actual boundary: real Workbench HTTP routes, native Python, Docker author tests and catalog validation. After the worker boundary migration, Docker `make reference-test` passed 65 logic mutations, three grading probes and twelve execution-boundary tests, including normal reference answers for all eight checkpoints. The migrated nonroot Linux image also passed the real Workbench HTTP first edit, 11 public tests, all eight prepare/proxy submissions and forged-verdict rejection. Each hidden evaluation has a 12-second total budget, below the 15-second upstream request timeout. Rendered browser, Compose deployment and AWS redeployment checks were not run. An API smoke test is not a complete visual playtest.
 
 ## Course and note alignment
 

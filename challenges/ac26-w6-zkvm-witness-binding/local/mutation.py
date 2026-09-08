@@ -661,11 +661,17 @@ def main() -> int:
 
     from verifier.server import evaluate  # noqa: PLC0415 - imported after sys.path
 
-    if evaluate("encoding", SPOOF):
-        survivors.append("verifier credits a submission that prints its own verdict")
-        print("SURVIVED verifier credits a submission that prints its own verdict")
-    else:
-        print("KILLED verifier credits a submission that prints its own verdict")
+    boundary_sources = (
+        SPOOF,
+        'import os\nprint(\'{"failures": []}\', flush=True)\nos._exit(0)',
+        'import os\nos._exit(0)',
+    )
+    for index, source in enumerate(boundary_sources):
+        if evaluate("encoding", source):
+            survivors.append(f"verifier accepts forged or absent verdict {index}")
+            print(f"SURVIVED verifier accepts forged or absent verdict {index}")
+        else:
+            print(f"REJECTED grader boundary probe {index}")
 
     print()
     print(f"{len(invisible)} of {len(mutations)} broken guests still get the easy two right:")
@@ -678,7 +684,7 @@ def main() -> int:
         for name in survivors:
             print(f"  - {name}")
         return 1
-    print(f"All {len(mutations) + 1} mutations killed.")
+    print(f"All {len(mutations)} logic mutations killed; {len(boundary_sources)} grader boundary probes rejected.")
     return 0
 
 

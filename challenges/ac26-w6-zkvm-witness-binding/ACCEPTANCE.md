@@ -65,3 +65,24 @@ The public guide cites the primary [RISC Zero Receipt documentation](https://doc
 Root additionally ran Docker `make reference-test`: participant and author images build, and all 66 mutations are rejected. Log: `/private/tmp/binding66-docker.log`.
 
 Not run for this revision: rendered Portal/browser layout, Compose deployment, AWS deployment, live platform score-event persistence, or an independent third-party playtest. Native HTTP execution does not establish those claims. No real zkVM proof/seal is implemented; the one-level disclosure policy and removal of this progress field do not establish general zero knowledge or timing-channel safety.
+
+
+## PR #836 independent scoring-boundary follow-up
+
+A bounded review found that the old verifier trusted the child process's last JSON line as its verdict. A submission that printed a success-shaped record and exited early was accepted by both encoding and transfer. This was a pre-existing verifier defect. The prior single spoof mutation tested only an exit callback; “66 mutations rejected” did not establish rejection of an early process exit.
+
+The problem now reuses the existing ac26-w2-private-aggregate bounded execution channel and Linux isolation policy. Hidden checks, fixture generation and the final verdict remain in the supervisor; learner code executes in a fresh restricted worker with only supplied public helpers and per-call inputs. Replies are untrusted typed function values, not verdicts. Fresh call IDs correlate replies; they do not attest execution. Env methods are callbacks on the actual parent Env so a child cannot replace writes, reads or transcript counters. The typed codec preserves bytes/bytearray, bool/int, list/tuple and Disclosure data without pickle or arbitrary-object deserialization. A ValueError subclass remains a valid refusal.
+
+No platform code, shared runtime or other problem was modified. `runtimes/` has no existing Python execution family for this adapter. The existing transport/isolation source is reused locally; the Env and disclosure adapters are specific to this problem's contract. Broader sibling migration is tracked separately in Issue #837.
+
+Executed after migration:
+
+- Docker `make reference-test`: **65/65 logic mutations killed**, separately **3/3 grading boundary probes rejected**, and **12/12 execution-boundary tests passed**. Log: `/private/tmp/binding-boundary-reference-test.log`.
+- The twelve boundary tests include the complete reference through all eight real verifier checkpoint paths, valid sequence and exception-subclass alternatives, forged/absent/preprinted verdicts across all checkpoints, early exit during a function, fake child-side Env counters, hidden-import and parent-vocabulary tampering, timeout recovery, the 1900-character failure-message limit, the typed-codec depth cap and the nonroot/time-budget deployment contract.
+- `make agent-gate`: **116 metadata files valid**. Log: `/private/tmp/binding-boundary-catalog.log`.
+- `python3 -m compileall -q local` and `git diff --check` passed.
+
+- The migrated nonroot Linux author image ran real Workbench/verifier HTTP handlers with no host-published ports. Config/Inspect/starter/test/prepare/proxy preserve the first encoding-only success, 11 public test successes and all eight correct reference submissions; private-progress publication and forged verdicts are rejected. Script: `/private/tmp/binding-boundary-http.py`; log: `/private/tmp/binding-boundary-http.log`. Servers were terminated after the run. This is runtime-route evidence, not an independently derived solution or rendered browser playtest.
+- Peer review confirmed the parent-observed Env boundary and found the previous 60-second evaluator budget exceeded the 15-second upstream timeout, and the container still used root without an init process. The evaluator now has a total 12-second budget, the image runs as UID 10001, both Compose services enable init, and author Docker runs use --init. Both issues were corrected before the final twelve-test/Docker HTTP runs.
+
+The Linux-restricted verifier deliberately fails closed outside Linux. The earlier native Workbench smoke belongs to the pre-migration revision; current scoring-boundary evidence is the Docker and Linux HTTP routes above. No current browser, full Compose HTTP, AWS deployment or live score-event persistence claim is added by these tests. Isolation is defense in depth for the deployed container, not secrecy from a person controlling Docker or a claim that the toy receipt is a real cryptographic proof.
