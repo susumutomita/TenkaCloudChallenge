@@ -28,7 +28,7 @@
   "estimatedDuration": "180-360 分",
   "shortDescription": "複数の人がそれぞれ数を 1 つ持っていて、合計だけを知りたい。誰も自分の数は渡したくない。難しいのは実装ではなく、privacy を主張ではなく確率空間の全数え上げとして測ること、そして見たことのない壊れ方を捕まえる検査を書くこと。",
   "description": "Week 7 の 2 問目、 role は synthesis。 #246 で選定した primitive を、 実際に走る toy 実装と、 主張ごとに対応する実験の束へ落とす。\n\n**randomness を明示的な tuple で受け取らせる**のが設計の芯。 `random` を呼ばせないので確率空間が有限かつ列挙可能になり、 privacy を 「同じ和・異なる honest 入力の 2 世界で coalition の view 分布が一致するか」 として **測定** できる。 標本ではなく全数え上げ (toy field で 3^6 = 729/世界/coalition) を要求する。 場は小さいが、 全空間は全空間であり、 実験の厳密さは変わらない。\n\n**最大の落とし穴は coalition を 1 つしか調べないこと**。 randomness を一切引かない protocol は party 0 に対して完全に private でありながら party 2 に全入力を平文で渡す。 全 party に同じ randomness を配る変種も同じ形で抜ける。 hidden test は閾値未満の全 coalition を掃くので両方落ちる。\n\n**mutation 21 件のうち 9 件は正しい和を返す**。 出力が合っていて transcript が漏らすもの、 両方まともに見えて transcript が実際の run と食い違うもの (公開値が受信の和でない / 総和が出力と一致しない) を含む。 `transcript` checkpoint はこの内部整合性を見る。\n\n**閾値 (parties-1) は protocol の欠陥ではなく関数の限界**。 和から自分たちの入力を引けば残り 1 人分が出る。 scope に書かせ、 defect として扱わせない。\n\n**`detect` は学習者の test suite 自体を採点する**。 hidden test は学習者自身の `run` を包んだ 9 種の broken protocol を渡す。 既知の悪い例を並べた関数では通らない。",
-  "instructions": "## Week 7 — 「動きます」は証拠ではない\n\n前問(`ac26-w7-capstone-design`)で、依頼書から道具を選びました。Week 7 の 2 問目のここは、選んだものを**実際に動かして、その主張を実験で裏づけます**。\n\n## デモが 1 回通っても、性質は言えない\n\n「動きます」は主張であって、証拠ではありません。デモが 1 回通ったことは、性質が守られていることを意味しません — とくに privacy は、うまくいく実行を何度見せても「漏れていない」の証拠になりません。\n\nだからここでは、**反証できる実験を先に設計します**。何人かがそれぞれ数を 1 つ持っていて、合計だけを知りたい。誰も自分の数は渡したくない。この protocol を作ること自体は短い — 難しいのはその先、作ったものについて「これはできる / これはできない」と言い切り、**言い切った内容を、外れうる実験で裏づける**ことです。\n\n## 分解と移項、それだけ\n\n同じ数はいろんな組で表せます(5 = 2 + 3 = 1 + 4 = 0 + 5)。そして `a + b + c = s` なら `c = s − a − b`。この 2 つが全部です。**分け方はいくらでもある**ことが privacy を作り、**足し算は引き算で戻せる**ことがその限界を作ります。\n\n1 桁で見ます(3 人、3 で割ったあまり、持っている数は 1・2・1、合計 1 + 2 + 1 = 4 であまりは 1)。各自が自分の数を 3 つの取り分に分けて 1 つずつ配りますが、人数が 3 なので**乱数として引くのは 2 つだけ**、**残り 1 つは「足すと自分の数になる値」に決まります**。次に、各自が届いた取り分を足して和だけを公開する。公開された 3 つを足すと合計に戻り、**誰の数も表に出ていません**。公開された 1 つ 1 つは「別々の秘密の取り分どうしの和」なので、そこから誰か 1 人の数を取り出せません。\n\n## 前提（知っていれば飛ばしてください）\n\n数は「ある数で割ったあまり」(本番の値は「証拠を確認」に出ます)。**shares(取り分)** = 元の数を分けた欠片で、全部足すと元に戻る。**randomness(乱数の並び)** = この run で使う乱数を**あらかじめ並べた組**で、長さは 人数 ×(人数 − 1)。**`random` を呼ばずに乱数を引数で受け取る**ので、あり得る乱数の組を**全部数え上げられます** — これが privacy を「主張」ではなく「測定」にします。**transcript(記録)** = 1 回の実行で誰が何を見たかの全部。**coalition(結託)** = 情報を突き合わせる人の組。**view** = ある結託が実際に見えるものだけ。**threshold(境目)** = それ以上の人数で結託されると隠しきれなくなる人数。secret sharing が初めてなら、先に `ac26-w2-secret-sharing` を解いてください。\n\n## 反証できる実験を、先に設計する\n\n**反証できる実験を、先に設計する。** privacy を「安全です」と書くのは主張です。ここでは乱数を引数で受け取るので、起こり得る乱数の組は有限個。**合計は同じで、正直な人たちの持ち数だけが違う 2 つの世界**を用意し、結託する組から見えるものを両方の世界で**全部数え上げて**、まったく同じかどうかを比べます。同じなら、その組に見えているものは出力だけで決まっている — 出力以上のことは何も学んでいません。最後にもう 1 つ、**自分では見たことのない壊れた実装を捕まえる検査**を書きます。既知の悪い例を並べたリストでは通りません。\n\n## 最初の一手\n\nParticipant Portal(この問題文が表示されているサイト)で **「起動」** を押すと、あなた専用の実行環境(コンテナ)が立ち上がり、問題文と同じ画面に **問題エディタ** が出ます。\n\n書くファイルは **`capstone.py` 1 つだけ**、言語は **Python** です。**提出するのは文章の報告書ではなく、コードです** — 10 個の関数の枠が最初から入っていて、引数・返り値の形は各関数の先頭の説明文(docstring)に書いてあります。\n\n**「証拠を確認」** を押すと、この起動のためだけに作られた値が表示されます。出るのは次の 3 つです。\n\n1. **あなたの設定** — 人数、割る数、各自が持っている数、求めたい合計。続けて**乱数の約束**: 並びの長さ(人数 ×(人数 − 1))、誰がどの区間から引くか、そして乱数の並びの実例が 1 つ。\n2. **語彙** — 主張できる性質の名前 4 つ、そのうち**この作りが実際に与える 2 つ**と、**与えない 2 つ**。どちらがどちらかはここに出ます。**なぜその 2 つが欠けるのかは、自分で考えてから `scope` を書いてください。**\n3. **privacy の測り方** — 合計が同じで持ち数が違う 2 つの世界 A と B、そのそれぞれで数え上げる乱数の組の**個数**、そして「結託の組は 1 つだけでなく全部調べること」という注意。ある 1 人に対しては完璧なのに別の 1 人には全部渡してしまう実装が書けるからです。\n\n**まず 1 番の「乱数の約束」を見てください。** 長さが 人数 ×(人数 − 1)であること — つまり 1 人あたり (人数 − 1) 個しか引かないこと — が、上の 1 桁の例の「最後の取り分は決まってしまう」に対応します。ここを 1 個多く引くと、取り分は元の数に戻らなくなります。\n\n数はどれも起動するたびに変わるので、他の人の値を写しても合いません。**「公開テストを実行」** を押すと形だけの検査ができ、`print()` を仕込んだときの出力もここに返ります。エディタを最初の状態に戻したくなったら **「初期状態に戻す」** を押します。\n\n## 答えるもの — checkpoint は 8 つ、この順で\n\n8 つとも**コードの checkpoint**で、答えを直接書き込む欄はありません。手順は「エディタに書く → その checkpoint の **「提出 (+点数)」** を押す」だけで、押した時点の `capstone.py` 全体がそのまま採点へ送られます — **同じ 1 ファイルを 8 通りの角度から採点します**。不正解でも出し直せます(1 回まちがえるごとに 15 点引かれますが、合計が 0 点未満になることはありません)。checkpoint は独立なので、1 つ詰まっても他は取れます。\n\n1. **scope** — `scope(setting) -> dict`。`{\"claims\", \"non_goals\", \"threshold\", \"parameters\"}` を返します。主張する性質と、**しないと明記する性質**を、語彙の 4 つから選んで並べます。`parameters` は設定をそのまま。**与えないものを主張することが、ここで測られている失敗です。**\n2. **correctness** — `share(value, parties, modulus, draws) -> list` と `run(setting, randomness) -> dict`。`share` は 1 つの数を人数ぶんの取り分に分けます — **`draws` から取るのは 1 つ手前まで**で、最後の 1 つは足して元に戻る値です(全部引くと 1 個多く、もう元に戻りません)。`run` は 2 回のやりとりを行い、記録を返します。採点では**画面に出ていない設定**でも合計が出ることを見ます。\n3. **transcript** — 同じ `run` の**記録の側**を見ます。返す記録は `{\"output\", \"messages\", \"public\", \"rounds\"}` で、`messages` の 1 通は `{\"from\", \"to\", \"value\"}`、`public` の 1 件は `{\"kind\": \"partial\", \"value\"}` です。**出力が正しいことと、記録が正しいことは別の話です。**\n4. **privacy** — `view(transcript, coalition) -> dict` と `experiment_privacy() -> dict`。`view` は `{\"received\", \"public\", \"output\"}` を返します — **結託の外の人あての手紙は view に入れません**(入れると、もう勝っている相手を相手にしていることになり、結果が無意味になります)。`experiment_privacy` は `{\"id\", \"ran\", \"passed\", \"space\"}` を返し、用意された 2 つの世界と乱数の全数え上げを使って、**境目より小さいすべての結託の組**について見え方が一致するかを測ります。\n5. **threshold** — `threshold(parties) -> int` と `recover(observed, coalition, setting) -> int | None`。**protocol の弱点を探す問題ではありません** — これは実装の欠陥ではなく、**「合計を出す」という計算そのもの**から出てくる境目です。`recover` は、結託がその境目に達しているときだけ残り 1 人の数を返し、**達していなければ `None`** を返します。知りようのない値を名指すのは、「分からない」と答えるより悪い失敗です。\n6. **detect** — `detects(protocol) -> bool`。**あなた自身のテスト一式を 1 つの関数にしたもの**です。自分の実装を渡されたら `False`、**見たことのない壊れた実装**を渡されたら全部 `True` を返さなければなりません。だから既知の悪い例のリストでは通りません。壊れ方は 1 種類ではなく、性質の違う 3 つが `detects` の説明文に挙げてあります — **1 つの検査で 3 つとも捕まえることはできません。**\n7. **measure** — `measure(setting, seed) -> dict`。`{\"rounds\", \"messages\", \"opened\", \"unit\", \"environment\"}` を返します。数は**実際の記録から数えます** — 紙の上で計算した数は、実装が本当にそうなっていない限り一致しません。単位と環境の書かれていない測定は測定ではありません。\n8. **evidence** — `evidence(setting, seed) -> dict`。性質 1 つにつき 1 件、`{\"claimed\", \"experiment\", \"verdict\", \"limitation\"}` を返します。主張する性質には、**名前の付いた実験**と `True` の判定が要ります。**主張しない性質も必ず載せ**、なぜできないのかを `limitation` に書きます — できないことを黙って省いた束は、隠すことが何も無い束と見分けがつきません。\n\n## ここが、コースの締めくくり\n\n作ったものが何を保証しないかを書き、見せていない設定でも合計が出て、記録が自分の出力とつじつまの合うものになり、見えるものが出力だけで決まることを全数え上げで測り、どこから隠せなくなるかを言え、見たことのない壊れ方を捕まえる検査を書き、実際の run から数を数え、主張と実験を 1 対 1 で結べたら終わりです。\n\nこれがコースの締めくくりです。ここで身についた作法 — 主張を先に反証できる形にしてから、実験で裏づける — は、暗号に限らず、これから作る何にでも効きます。\n",
+  "instructions": "## 前提\n\n正負の数の足し算・引き算・割り算と、Pythonの関数・リスト・dictを使います。余りの書き方と必要なAPIはここで説明します。\n\n## あなたの役割と最初の提出\n\nあなたは、各人の持ち数を相手に渡さず、合計だけを計算するプログラムの担当です。最後には、そのプログラムの欠陥を見つける検査も自作します。これは秘密計算（複数人が入力を隠して共同で計算する方法）の小さな実験です。\n\nここでthreshold（しきい値）は、協力して自分たちの入力を持ち寄ると、合計から残り一人の入力が分かる人数の境目です。人数nに対してn−1人が合計から自分たちの入力を引くと、残り一人の値になります。\n\n「起動」→「問題エディタ」→「証拠を確認」で、setting（人数・割る数・入力）と vocabulary（性質の名前）を見ます。まず capstone.py の scope だけ編集してください。PROVIDED をリストにしたものを claims、NOT_PROVIDED をリストにしたものを non_goals にし、threshold は setting.parties−1、parameters は setting.as_dict() を返します。「scope の提出」で解答済みになれば最初の到達点です。なぜ二つを保証しないのか、下の表と対応させます。\n\n|名前|この教材での意味|この構成|\n|---|---|---|\n|correctness|約束どおり動けば合計が正しい|確認する|\n|privacy|指定した観測記録で二つの入力例を区別できない|小さい実験で確認する|\n|soundness|参加者の入力の嘘を発見する|入力を照合しないので与えない|\n|availability|一人が応答しなくても完了する|全員を待つので与えない|\n\n同じファイルを8項目で採点します。公開テストの test_the_scope_uses_the_known_vocabulary は最初の形の確認です。未実装の後続テストの FAIL はこの段階では構いません。「公開テストを実行」は検算、各項目の「提出」は採点で、不正解の提出は15点減点です。全8項目の解答済みが完了です。\n\n## 持ち数 → 分ける → 受信した数を足す → 合計\n\n割った余りを `%` と書きます。例：−1 を7で割った余りは6、Pythonで `(-1)%7 == 6`。以降の数は0〜p−1に直します。pを割る数、nを人数とします。番号は0からn−1です。シェアは、足して余りを取ると元の数になる取り分です。\n\n各人iが入力vを分ける一般式は、最初のn−1個を与えられた乱数rから取り、最後を `(v-sum(r))%p` とします。乱数はどの値も同じ確率で選ぶ数です。この実験では選ばれた数の並びを引数で渡します。勝手に random を呼びません。\n\n```text\np=7、3人、入力が 3,4,2\n送信者 ＼ 受信者     0    1    2\n0（入力3、乱数1,2）  1    2    0   ← (3−1−2)%7=0\n1（入力4、乱数2,3）  2    3    6   ← (4−2−3)%7=6\n2（入力2、乱数4,1）  4    1    4   ← (2−4−1)%7=4\n受信者ごとの合計     0    6    3   ← 各列を足し7の余り\n最後の出力 (0+6+3)%7 = 2 = (3+4+2)%7\n```\n\n行iの列jを s[i][j] と書くと、公開する小計は t[j]=(s[0][j]+…+s[n−1][j])%p、output=(t[0]+…+t[n−1])%p。入力の和と一致するのは、同じ取り分を行ごとに足しても列ごとに足しても総和が変わらないからです。表は頭の整理用で、行列の予備知識は不要です。\n\n1回目の通信で取り分を送信、2回目で小計を全員に公開します。rounds はこの待ち合わせ回数で2です。自分宛ても記録するので messages はn*n件、小計はn件。ただし measure ではこの公式を固定して返すのでなく、実際の記録を数えます。\n\n## 支給APIと入力の約束\n\nstarterのimportは用意済みです。自作の補助関数も同じ capstone.py に書けます。Setting は設定をまとめたオブジェクトで、`setting.parties` のように値を読みます。入力は正しい設定（n≥2、pは素数、inputsは長さnの整数tuple、各値は0〜p−1）です。bool は整数として扱いません。型名 tuple は `(1,2)` のような並び、dict は名前付きの値です。\n\n|API|返すもの・使い方|\n|---|---|\n|Setting(parties,modulus,inputs)|設定を作る。例 Setting(3,7,(3,4,2))|\n|setting.randomness_length|n*(n−1)|\n|setting.slice_for(i)|開始startと終了endの2整数。`start,end=...; randomness[start:end]`。終了位置は含まない。n=3,i=1なら(2,4)で3番目と4番目|\n|setting.as_dict()|{\"parties\":n,\"modulus\":p,\"inputs\":[…]}|\n|sample_randomness(seed,setting)|再現可能な長さn*(n−1)の整数tuple。seedは渡された文字列をそのまま使う|\n|honest_sum(setting)|sum(setting.inputs)%p|\n|tiny_settings()|n=3,p=3、inputs=(1,2,1)と(1,0,0)の2設定。合計は両方1|\n|randomness_space(setting)|可能な乱数tupleを全て順に渡す。tinyだけで使う。3の6乗=729通り|\n|combinations(range(n),size)|その人数の全組合せ。例n=3,size=1で(0,),(1,),(2,)|\n|CLAIMABLE / PROVIDED / NOT_PROVIDED|上の4性質／確認する2性質／与えない2性質。`sorted(...)`で名前のリストにできる|\n\nshareにはちょうどn−1個のdrawsが渡ります。runには正しい長さと範囲のrandomnessが渡ります。runでは各iのsliceをshareへ渡します。例えばiの小さい順、その中でjの小さい順に送信記録を作れます。自分宛ても含め、(i,j)を一度ずつ記録してください。\n\n## 各関数の返す形と、次に調べる理由\n\n**correctness / transcript**：shareは長さnの整数list。runは下のdictです。outputと全valueは0〜p−1の整数（bool不可）、roundsは整数2。publicは受信者順です。公開記録の from は任意ですが、付けるならその受信者番号です。runとそのmessages/publicの記録には余分なキーを許します。\n\n```python\n{\"output\": 2,\n \"messages\": [{\"from\": 0, \"to\": 0, \"value\": 1}, ...],\n \"public\": [{\"kind\": \"partial\", \"value\": 0}, ...],\n \"rounds\": 2}\n```\n\n`...` は省略で、コードには実際の全件を入れます。出力が合っていても、宛先が重複する・受信した和と公開小計が違う記録は正しい実行ではありません。transcript はこの整合性と、各送信者の取り分を足した余りがその送信者の入力へ戻ることを確認します。\n\n**privacy**：coalition は観測を持ち寄る人の番号tuple（重複なし・範囲内）。view は下の3キーだけを持つ形。received は元のmessagesの順序を保ち、toがcoalition内のものだけを `(from,to,value)` にしたtuple。public は元のpublicのvalueを順にしたtuple。outputはそのままです。順序・重複・値を省きません。\n\n```python\n{\"received\": ((0,1,2),(1,1,3),(2,1,1)), \"public\": (0,6,3), \"output\": 2}\n```\n\nこれは上の例のcoalition=(1,)です。この教材の view は受信記録と公開記録だけです。本人の入力や送信乱数を含む完全な攻撃者の観測ではありません。\n\nexperiment_privacy は `{\"id\":\"exp-privacy\",\"ran\":True,\"passed\":判定bool,\"space\":729}`。全員数未満の任意の組ではなく、tiny_settingsの人数nを使い、size=1からthreshold(n)−1までの全組を調べます。各組についてtinyの両設定の全乱数を使い、`repr(view(run(setting,r),coalition))` をリストに集め、sortedで並べ替えて比べます。reprはdict等を文字列表現にするPython機能。set（重複を消す集合）にすると頻度を失うので使いません。例[0,0,1]と[0,1,1]は可能な値が同じでも確率が違います。全組でリストが同じならpassed=True、一組でも違えばFalse。spaceは片方一設定の乱数個数です。\n\nこの確認は729通り・指定した二世界・限定した観測での正確な比較です。任意の入力や実システムの秘密性の証明ではありません。一部の組は両世界で自分の入力も変わるため、完全な攻撃者の観測が同じだとは主張しません。\n\n**threshold**：threshold(n)はn−1。合計から自分たちの入力を引くと、残り一人の入力が出ます。上の例で0,1が組むと `(2−3−4)%7=2`。recoverは人数がn−1未満ならNone、n−1なら `(observed[\"output\"]-sum(setting.inputs[i] for i in coalition))%p`。渡る組は最大n−1です。setting.inputsの組の外の値を読んで答える課題ではありません。隠せない境目は計算する機能自体の限界です。\n\n**detect**：detects(protocol)は検査を作る最終的な応用です。protocolは `protocol(setting,randomness)` と呼べる関数。正しい実装ならFalse、欠陥を見つければTrueを返します。相手の関数名やコードを調べず、返した記録を実験してください。必要な規則はここまでの出力・記録・観測比較です。例：出力が2でも小計の和が3なら、合計の検査だけでは見落とします。どの入力や乱数を試し、どの矛盾を組み合わせて検査するかは自分で設計します。呼出しが例外で止まる場合も欠陥です。採点は未見の壊れ方を使います。全てのPythonプログラムの正しさを判定できるとは主張しません。\n\n**measure**：sample_randomness(seed,setting)でrunを実行し、`{\"rounds\":記録のrounds,\"messages\":len(記録のmessages),\"opened\":len(記録のpublic),\"unit\":非空文字列,\"environment\":非空文字列}`。単位は取り分の送信件数（自分宛ても含む）と公開小計件数、環境はn人・割る数p・単一プロセスの模型であることを書きます。秒数や本物のネットワーク帯域ではありません。\n\n**evidence**：4性質だけをキーにしたdict（余分な性質キーは不可）。各行は `{\"claimed\":bool,\"experiment\":文字列,\"verdict\":boolかNone,\"limitation\":非空文字列}`。correctness/privacyはclaimed=True、対応する実験の判定をverdictへ（成功時True）。残り2つはFalse/Noneで、experimentは空文字列でも可。correctnessは実際のrunの出力とhonest_sumを比較、privacyはexperiment_privacyを実行して結果を使います。実験のidは自分で付けた非空名、limitationには調べた範囲や保証しないことを書きます。報告の形だけで実験実行の証拠になるわけではありません。採点の個別検査と併せて成果を説明してください。\n",
   "writeup": "## 正しい答えは、正しい protocol の証拠ではない\n\n出力が合っている実装はいくらでも壊れていられます。この問題の mutation のうち半分近くは、 和を正しく返します。\n\n`transcript` checkpoint が見ているのはそこです。公開された値が、 その party が実際に受け取ったものの和になっているか。公開値の総和が、 報告された出力と一致するか。この 2 つを見ないと、 「出力だけ正しく返して transcript は別の run を記述している」実装が通ります。実装が結果を捏造する形として、 これはいちばんありふれています。\n\n## privacy は測れる\n\nprivacy を「設計上そうなっている」と書くのは主張です。ここでは測ります。\n\n同じ和を持ち、 honest な入力が違う 2 つの setting を用意する。randomness を全部数え上げて、 coalition の view を両方で集める。2 つの多重集合が一致すれば、 view は出力だけの関数です。これは近似ではなく定義そのものです。\n\n数え上げが成立するのは randomness が明示的だからで、 だから契約が `random` を禁じています。標本では「全部の randomness について」を主張できません。\n\n## 1 つの coalition は全部の coalition ではない\n\nいちばん大事な失敗はここです。\n\nrandomness を一切引かない protocol を考えます。各 party の share は `[0, ..., 0, x]` になり、 最後の 1 人が全員の入力をそのまま受け取ります。party 0 から見ると受信は全部 0 で、 公開値も 2 つの世界で同じ。**party 0 に対しては完全に private です。** party 2 は全部知っています。\n\ncoalition を 1 つだけ調べる実験は、 この protocol を private だと報告します。全部の party に randomness を使い回す protocol も同じ形で抜けます。掃かないと捕まりません。\n\n## 閾値は欠陥ではない\n\n`parties - 1` 人が結託すると、 残り 1 人の入力が出ます。これは protocol の穴ではありません。**出力そのものが決めている限界** です。和から自分たちの入力を引けば、 残るのは 1 人分だけです。和を計算するどんな protocol もこれより良くはできません。\n\nだから閾値は defect list ではなく scope に書きます。直せないものを直せるかのように書くほうが、 書かないより悪いです。\n\n## 自分の suite が採点される\n\n`detect` は、 見たことのない壊れた protocol を渡します。既知の悪い例を並べた関数は通りません。\n\n壊れ方は 3 系統あって、 1 つの検査では 3 つとも捕まりません。出力が違う。出力は合っていて transcript が漏らす。両方まともに見えて transcript が実際の run と食い違う。3 番目を落とすのがいちばん多い。\n\n## 次につながるところ\n\nこれが 7 週間の終点です。Week 1 の constraint から Week 6 の stack composition まで、 通して効いているのは 1 つ: **主張は、 それを反証できる実験と対にして初めて主張になる**。\n",
   "tags": [
     "advanced-cryptography-2026",
@@ -69,98 +69,194 @@
       {
         "id": "scope",
         "input": "multiline",
-        "label": "作ったものが何を保証しないかを書く",
+        "label": "保証する性質と、しない性質を区別する",
         "points": 30,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "scope-hint-1",
-            "content": "足りない 2 つのうち片方は、 参加者が自分の入力について嘘をついても誰も照合しないから。 もう片方は、 1 人黙ると run が終わらないから。",
-            "penalty": 12
+            "content": "最初に、この計算が何を約束できるかを決めます。入力の嘘を調べる仕組みや、欠席者の代わりはありません。",
+            "penalty": 2
+          },
+          {
+            "id": "scope-hint-2",
+            "content": "3人ならthresholdは2。parametersは人数・割る数・入力をそのまま記録します。二つの非保証を省かず載せます。",
+            "penalty": 2
+          },
+          {
+            "id": "scope-hint-3",
+            "content": "証拠を確認でvocabularyとsettingを読む→capstone.pyのscopeに4キーのdictを返す→scopeの提出で解答済みを確認。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "correctness",
         "input": "multiline",
-        "label": "見せていないパラメータで和が出る",
+        "label": "共有した数の合計を出す",
         "points": 30,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "correctness-hint-1",
+            "content": "各人が元の数に戻る取り分を配り、受信者ごとに足します。同じ取り分の足す順番を変えるだけなので合計が一致します。",
+            "penalty": 2
+          },
+          {
+            "id": "correctness-hint-2",
+            "content": "7で割る余りで、入力3・乱数1,2なら最後は(3−1−2)%7=0。取り分1,2,0は足すと3に戻ります。",
+            "penalty": 2
+          },
+          {
+            "id": "correctness-hint-3",
+            "content": "capstone.pyのshareとrunを編集。setting.slice_for(i)のstart:endをshareへ渡し、送信記録から受信者別に小計を作る。公開テストのsumを確認→correctnessへ提出。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "transcript",
         "input": "multiline",
-        "label": "transcript が自分の出力を再構成する",
+        "label": "送受信の記録と出力を一致させる",
         "points": 40,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "transcript-hint-1",
-            "content": "出力が正しいことと、 transcript が正しいことは別。 公開された値は、 その party が実際に 受け取ったものの和になっているか。",
-            "penalty": 15
+            "content": "正しい答えを表示しても、記録がその答えを生んだとは限りません。宛先と公開小計を照合します。",
+            "penalty": 2
+          },
+          {
+            "id": "transcript-hint-2",
+            "content": "3人では自分宛ても含め9通。ある受信者が1,2,4を受け取ったら公開値は7で割った余り0です。",
+            "penalty": 2
+          },
+          {
+            "id": "transcript-hint-3",
+            "content": "runのmessagesに各(from,to)が1回あるか確認。public[j]はto=jのvalueの和の余り、outputは全publicの和の余りにする→transcriptへ提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "privacy",
         "input": "multiline",
-        "label": "見えるものが出力だけで決まると測る",
+        "label": "小さい二世界の観測分布を比べる",
         "points": 55,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "privacy-hint-1",
-            "content": "randomness を 1 つずつ試すのではなく、 全部数え上げる。 toy field なら空間は有限で、 標本ではなく全体を見られる。",
-            "penalty": 12
+            "content": "同じ値が見えるかだけでなく、何回見えるかを比べます。教材の観測は受信記録と公開値に限定します。",
+            "penalty": 2
           },
           {
             "id": "privacy-hint-2",
-            "content": "party 0 に対して完全に安全で、 party 2 に全部渡す protocol が書ける。 coalition を 1 つ だけ調べる実験は、 それを private だと報告する。",
-            "penalty": 15
+            "content": "[0,0,1]と[0,1,1]はどちらも0と1があるのに頻度が違います。sortedしたリストは違いを残し、setは消してしまいます。",
+            "penalty": 2
+          },
+          {
+            "id": "privacy-hint-3",
+            "content": "viewに宛先がcoalition内の全メッセージと全公開値を順序どおり入れる。experiment_privacyでtiny_settingsとrandomness_spaceを全組合せで比較し4キーの結果を返す→privacyへ提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "threshold",
         "input": "multiline",
-        "label": "どこから隠せなくなるかを言う",
+        "label": "合計だけでも分かる限界を確認する",
         "points": 40,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "threshold-hint-1",
-            "content": "protocol の弱点を探さない。 出力そのものから、 自分たちの入力を引くと何が残るかを考える。",
-            "penalty": 18
+            "content": "残り一人なら、合計と自分たちの入力だけでその人の入力が決まります。残り二人以上なら個別の値は決まりません。",
+            "penalty": 2
+          },
+          {
+            "id": "threshold-hint-2",
+            "content": "7で割る余りの合計2、自分たちが3と4なら残りは(2−3−4)%7=2。3人中2人が境目です。",
+            "penalty": 2
+          },
+          {
+            "id": "threshold-hint-3",
+            "content": "thresholdに人数−1、recoverに人数不足ならNone、それ以外はoutputから組の入力和を引いた余りを書く。組の外のinputsは読まない→thresholdへ提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "detect",
         "input": "multiline",
-        "label": "見たことのない壊れ方を捕まえる",
+        "label": "見ていない欠陥を自作の検査で見つける",
         "points": 55,
         "wrongAnswerPenalty": 15,
         "hints": [
           {
             "id": "detect-hint-1",
-            "content": "3 つ別のことが壊れる。 出力が違う、 出力は合っていて transcript が漏らす、 両方まともに 見えて transcript が実際の run と食い違う。 1 つの検査では 3 つとも捕まらない。",
-            "penalty": 20
+            "content": "出力、記録の整合、観測の分布は別の性質です。これらを試す検査を組み合わせて未見の欠陥を探します。",
+            "penalty": 2
+          },
+          {
+            "id": "detect-hint-2",
+            "content": "出力2でも公開小計が1,1,1なら和は3で食い違います。出力だけを見る検査で十分か、反例として考えます。",
+            "penalty": 2
+          },
+          {
+            "id": "detect-hint-3",
+            "content": "detectsで引数protocolを設定と乱数で呼ぶ。本文の性質を自分で選んだ実験で検査し、欠陥ならTrue、なければFalse。公開テストで自分のrunを誤検出しないことを確認→detectへ提出。",
+            "penalty": 2
           }
         ]
       },
       {
         "id": "measure",
         "input": "multiline",
-        "label": "実際の run から数える",
+        "label": "動いた記録から通信量を数える",
         "points": 25,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "measure-hint-1",
+            "content": "設計の予想と実装の測定は別です。実際に残った記録を数え、何を数えたかを添えます。",
+            "penalty": 2
+          },
+          {
+            "id": "measure-hint-2",
+            "content": "3人の正常な記録なら2回の待ち合わせ、9通、3公開。人数をコードに固定すると別の設定で一致しません。",
+            "penalty": 2
+          },
+          {
+            "id": "measure-hint-3",
+            "content": "measureでsample_randomness(seed,setting)→run→roundsとmessages/publicのlenを取る。単位と環境を文字列にして5キーを返す→measureへ提出。",
+            "penalty": 2
+          }
+        ]
       },
       {
         "id": "evidence",
         "input": "multiline",
-        "label": "主張と実験を 1 対 1 で結ぶ",
+        "label": "実験結果と限界をまとめる",
         "points": 25,
-        "wrongAnswerPenalty": 15
+        "wrongAnswerPenalty": 15,
+        "hints": [
+          {
+            "id": "evidence-hint-1",
+            "content": "性質の名前と実験結果を結び付け、調べていないことも残します。報告の形だけで数学的な保証にはなりません。",
+            "penalty": 2
+          },
+          {
+            "id": "evidence-hint-2",
+            "content": "privacy実験が729通りで成功しても、任意の大きさで安全とは書けません。limitationにはその範囲を残します。",
+            "penalty": 2
+          },
+          {
+            "id": "evidence-hint-3",
+            "content": "evidenceで合計の検算とexperiment_privacyを実行。4性質それぞれにclaimed/experiment/verdict/limitationを書く。非保証も省かずevidenceへ提出し8項目の解答済みを確認。",
+            "penalty": 2
+          }
+        ]
       }
     ]
   },
@@ -169,7 +265,7 @@
       "name": "A claim, and the experiment that could refute it",
       "shortDescription": "Several people each hold one number and want only the sum, and nobody will hand over their number. The hard part is not the protocol: it is measuring privacy by enumerating the whole probability space, and writing a suite that catches breakage it has never seen.",
       "description": "Second problem of Week 7; its role is synthesis. Take the primitive selected in #246 down to a toy implementation that actually runs, and a bundle of experiments matching claim for claim.\n\nThe design's core is **taking randomness as an explicit tuple**. With no calls to `random`, the probability space is finite and enumerable, so privacy can be **measured**: do the coalition's view distributions coincide across two worlds with the same sum and different honest inputs? Full enumeration is required, not sampling (3^6 = 729 per world per coalition on the toy field). The field is small, but the whole space is the whole space, and the rigour of the experiment is unchanged.\n\n**The biggest trap is examining only one coalition.** A protocol that draws no randomness at all is perfectly private against party 0 while handing party 2 every input in the clear. The variant that gives every party the same randomness escapes the same way. The hidden tests sweep every coalition below the threshold, so both fall.\n\n**Nine of the 21 mutants return the correct sum.** They include ones whose output is right while the transcript leaks, and ones where both look sound but the transcript disagrees with the actual run (a public value that is not the sum of what was received / a total that does not match the output). The `transcript` checkpoint checks this internal consistency.\n\n**The threshold (parties-1) is a limit of the function, not a defect of the protocol**: subtract your own inputs from the sum and the one remaining input falls out. It belongs in scope, written down, and must not be treated as a defect.\n\n**`detect` grades the learner's own test suite.** The hidden tests hand it nine broken protocols wrapped around the learner's own `run`. A function that enumerates known bad examples does not pass.",
-      "instructions": "## Week 7 — \"it works\" is not evidence\n\nThe previous problem (`ac26-w7-capstone-design`) chose a tool from a brief. This second Week 7 problem **runs what was chosen and backs its claims with experiments**.\n\n## A demo passing once says nothing about a property\n\n\"It works\" is a claim, not evidence. A demo passing once does not mean a property holds — privacy especially: however many successful runs you show, none of them is evidence that nothing leaked.\n\nSo here you **design a falsifiable experiment first**. Several parties each hold one number and want only the sum; nobody will hand their number to anybody. Building this protocol is short — the hard part comes after: stating what your build does and does not do, and **backing every statement with an experiment that could have failed**.\n\n## Just splitting and rearranging\n\nThe same number can be written as many different sums (5 = 2 + 3 = 1 + 4 = 0 + 5). And from `a + b + c = s` you get `c = s − a − b`. Those two are the whole thing. **That there are many splittings** creates privacy; **that addition can be undone by subtraction** limits it.\n\nOne digit (three parties, remainders mod 3, holding 1, 2 and 1; the sum is 1 + 2 + 1 = 4, remainder 1). Each party splits its own number into three pieces and sends one to each. With three parties, **only two pieces are drawn at random**, and **the last is forced** — whatever makes them add up to that party's own number. Then each party adds up the pieces it received and publishes only the sum. Add the three published values and you get the total back, and **nobody's number ever appeared**. Each published value is a sum of pieces of *different* secrets, so no single party's number can be pulled out of it.\n\n## Before you start (skip if you know this)\n\nNumbers are \"remainders after dividing by some number\" (your real values come from **Inspect evidence**). **shares** = the pieces one number is split into, which add back up to it. **randomness** = the random values for one run, **supplied in advance as one tuple** of length parties × (parties − 1). **Because the run takes its randomness as an argument instead of calling `random`, every possible randomness can be enumerated** — which turns privacy from a claim into a measurement. **transcript** = everything anybody observed in one run. **coalition** = a group that pools what it sees. **view** = only what a given coalition actually observes. **threshold** = the coalition size at which hiding stops being possible. If secret sharing is new, solve `ac26-w2-secret-sharing` first.\n\n## Design the falsifiable experiment first\n\n**Design the falsifiable experiment first.** Writing \"it is private\" is a claim. Here the randomness arrives as an argument, so the set of possible randomness is finite. Set up **two worlds with the same sum and different honest inputs**, enumerate **the entire** set of randomness in both, and compare what a coalition sees. If the two agree, what that coalition sees is determined by the output alone — it has learned nothing beyond it. And one more: you write **a test suite that catches broken implementations you have never seen**. A list of known-bad cases will not pass.\n\n## First move\n\nIn Participant Portal (the site showing this statement), select **起動 (Start)**. Your own container starts and the **problem editor** appears on the same page.\n\nThe one file you edit is **`capstone.py`** and the language is **Python**. **What you submit is code, not a prose report** — ten function stubs are already there, with arguments and return shapes documented in each docstring.\n\nSelect **Inspect evidence** to see the values built for this start only. It prints three blocks:\n\n1. **Your setting** — the party count, the divisor, what each party holds, and the sum they want. Then the **randomness contract**: the length of the tuple (parties × (parties − 1)), which slice each party draws from, and one sample tuple.\n2. **The vocabulary** — the four claimable property names, **which two this build actually provides**, and **which two it does not**. Which is which is printed here. **Why those two are missing is for you to work out before writing `scope`.**\n3. **How privacy is measured** — the two worlds A and B with the same sum and different inputs, **how many** randomness tuples are enumerated in each, and the warning to sweep **every** coalition rather than one: a protocol can be perfectly private against one party while handing another the lot.\n\n**Look at the randomness contract in block 1 first.** The length being parties × (parties − 1) — that is, (parties − 1) draws per party — is exactly the \"the last piece is forced\" step in the one-digit example. Draw one more and the pieces stop adding back up to anything in particular.\n\nEvery number changes per start, so copying someone else's values will not match. **Run public tests** checks shapes, and is also where `print()` output comes back. To put the editor back the way it started, select **Restore starter**.\n\n## What you answer — eight checkpoints, in this order\n\nAll eight are **code checkpoints**; there is no answer field to type into. The whole flow is: write in the editor, then press that checkpoint's **Submit (+points)**. Whatever is in `capstone.py` at that moment is sent for grading — **one file graded from eight angles**. A wrong answer can be resubmitted; each wrong attempt costs 15 points and the total never falls below zero. The checkpoints are independent, so being stuck on one does not block the rest.\n\n1. **scope** — `scope(setting) -> dict`, returning `{\"claims\", \"non_goals\", \"threshold\", \"parameters\"}`. Choose from the four vocabulary names what this build claims and what it **explicitly does not**; `parameters` is the setting as given. **Claiming something it does not provide is the failure being assessed.**\n2. **correctness** — `share(value, parties, modulus, draws) -> list` and `run(setting, randomness) -> dict`. `share` splits one number into one piece per party — **take all but the last from `draws`**, and let the last be whatever makes them add back up (drawing all of them is one value too many). `run` performs the two rounds and returns the transcript. Grading checks that the sum comes out **on settings that were never printed**.\n3. **transcript** — the **record side** of the same `run`. It returns `{\"output\", \"messages\", \"public\", \"rounds\"}`, where a message is `{\"from\", \"to\", \"value\"}` and a public entry is `{\"kind\": \"partial\", \"value\"}`. **The output being right and the record being right are two different things.**\n4. **privacy** — `view(transcript, coalition) -> dict` and `experiment_privacy() -> dict`. `view` returns `{\"received\", \"public\", \"output\"}` — **mail addressed outside the coalition is not in it** (putting it there models an adversary that has already won, which makes the result meaningless the other way). `experiment_privacy` returns `{\"id\", \"ran\", \"passed\", \"space\"}`, using the supplied two worlds and the full enumeration to compare what **every** coalition below the threshold sees.\n5. **threshold** — `threshold(parties) -> int` and `recover(observed, coalition, setting) -> int | None`. **This is not a hunt for a weakness in the protocol** — it is not an implementation defect at all, but a limit that follows from **the function being computed**. `recover` returns the remaining input only when the coalition is large enough, and **`None` when it is not**. Naming a value you cannot know is a worse failure than admitting you cannot.\n6. **detect** — `detects(protocol) -> bool`: **your whole test suite as one function**. Handed your own protocol it must return `False`; handed **broken ones you have not seen** it must return `True` on all of them, so a list of known-bad cases will not do. Failures are not all of one kind — `detects`'s own docstring names three of different character, and **no single check catches all three**.\n7. **measure** — `measure(setting, seed) -> dict`, returning `{\"rounds\", \"messages\", \"opened\", \"unit\", \"environment\"}`. The counts are taken **off a real transcript** — a number worked out on paper will not match unless the build actually agrees with it. A measurement with no unit and no environment is not a measurement.\n8. **evidence** — `evidence(setting, seed) -> dict`. One entry per property: `{\"claimed\", \"experiment\", \"verdict\", \"limitation\"}`. A claimed property needs a **named experiment** and a verdict of `True`. **A property you do not claim still appears**, with the limitation explaining why — a bundle that quietly omits what a build cannot do reads exactly like one with nothing to hide.\n\n## This is where the course closes\n\nDone means: what the build does not guarantee is written down, the sum comes out on settings you were never shown, the transcript is consistent with your own output, the view is measured by full enumeration to depend on the output alone, the point where hiding stops is stated, a suite catches breakages you have not seen, the counts come off a real run, and every claim is tied one-to-one to an experiment.\n\nThis is where the course closes. The habit you built here — put a claim in a falsifiable form first, then back it with an experiment — carries far past cryptography, to anything you build next.\n",
+      "instructions": "## Before you start\n\nUse signed addition, subtraction, division and basic Python functions, lists and dictionaries. The remainder notation and required APIs are explained here.\n\n## Your role and first submission\n\nYou build a program that adds people's private numbers without sending those numbers to the others. You will also build tests that find defects in it. This is a small secure-computation experiment: several people compute together while keeping their inputs private.\n\nHere threshold means the group-size boundary where participants pooling their own inputs can recover the last person’s input from the total. With n people, n−1 people subtract their inputs from that total to obtain the remaining input.\n\nSelect Start → problem editor → Inspect evidence. Read setting (people, divisor, inputs) and vocabulary (property names). First edit only scope in capstone.py. Return PROVIDED as a list under claims, NOT_PROVIDED as a list under non_goals, setting.parties−1 under threshold, and setting.as_dict() under parameters. Submit scope; Solved is your first milestone. Use the table to explain why two properties are absent.\n\n|Name|Meaning in this exercise|This construction|\n|---|---|---|\n|correctness|Following the rules produces the right sum|checked|\n|privacy|The specified observed records do not distinguish two input examples|checked in a tiny experiment|\n|soundness|Detect a participant lying about its input|not provided: inputs are not authenticated|\n|availability|Finish when someone stops responding|not provided: everybody is awaited|\n\nThe same file is graded at eight checkpoints. test_the_scope_uses_the_known_vocabulary is the first public shape check. FAIL for later unimplemented functions is expected at this point. Run public tests checks your work; Submit grades it and a wrong submission costs 15 points. Finish with all eight Solved states.\n\n## Inputs → shares → received sums → output\n\nWrite division remainder as `%`. For example, the remainder of −1 divided by7 is6: `(-1)%7 == 6`. All values below are reduced to0..p−1. Let p be the divisor and n the number of people, numbered0..n−1. A share is a part whose sum, reduced by p, recovers the original value.\n\nTo split input v, take the first n−1 parts from supplied random draws r; the last is `(v-sum(r))%p`. A uniform random value gives each allowed number equal probability. Here the selected numbers arrive as an argument; do not call random yourself.\n\n```text\np=7, three people, inputs3,4,2\nsender / recipient       0   1   2\n0 (input3, draws1,2)      1   2   0   (3−1−2)%7=0\n1 (input4, draws2,3)      2   3   6   (4−2−3)%7=6\n2 (input2, draws4,1)      4   1   4   (2−4−1)%7=4\nsum at each recipient    0   6   3   reduce each column sum\noutput=(0+6+3)%7=2=(3+4+2)%7\n```\n\nCall row i, column j s[i][j]. The published partial sum is t[j]=(s[0][j]+…+s[n−1][j])%p; output=(t[0]+…+t[n−1])%p. Adding the same parts by rows or by columns gives the same total. No matrix knowledge is needed.\n\nRound1 sends shares; round2 publishes partial sums to everybody. rounds counts these waiting stages and is2. Record self-addressed messages too: n*n messages and n partial sums. measure must count the actual records, not simply return these formulas.\n\n## Supplied API and input promises\n\nThe starter already imports the APIs below. You may add helper functions in capstone.py. Setting groups the parameters; read fields as setting.parties. Settings are valid: n≥2, p prime, inputs an integer tuple of length n with values0..p−1. Booleans are not integer values in this contract. A tuple is an ordered sequence such as `(1,2)`; a dict stores named values.\n\n|API|Result or use|\n|---|---|\n|Setting(parties,modulus,inputs)|Build a setting, e.g. Setting(3,7,(3,4,2))|\n|setting.randomness_length|n*(n−1)|\n|setting.slice_for(i)|Pair start,end. Use `start,end=...; randomness[start:end]`; end is excluded. n=3,i=1 gives(2,4), the third and fourth entries|\n|setting.as_dict()|{\"parties\":n,\"modulus\":p,\"inputs\":[…]}|\n|sample_randomness(seed,setting)|Reproducible integer tuple of length n*(n−1). Use the supplied string seed unchanged|\n|honest_sum(setting)|sum(setting.inputs)%p|\n|tiny_settings()|Two n=3,p=3 settings with inputs(1,2,1) and(1,0,0); both sums are1|\n|randomness_space(setting)|Every possible random tuple in order; use only for tiny settings. 3 to the sixth power=729 tuples|\n|combinations(range(n),size)|All groups of that size; n=3,size=1 gives(0,),(1,),(2,)|\n|CLAIMABLE / PROVIDED / NOT_PROVIDED|The four names / two checked properties / two absent properties. sorted(...) produces a list of names|\n\nshare receives exactly n−1 draws. run receives randomness with the proper length and range. For each i pass its slice to share. For example, record messages by increasing i, then increasing j, including self-messages; each(i,j) occurs exactly once.\n\n## Return contracts and why each checkpoint follows\n\n**correctness / transcript:** share returns an integer list of length n. run returns the dict below. output and every value are integers0..p−1, never bool; rounds is integer2. public is in recipient order. The optional from field on a public entry must equal its recipient index. Extra keys are allowed on run and its message/public records.\n\n```python\n{\"output\": 2,\n \"messages\": [{\"from\": 0, \"to\": 0, \"value\": 1}, ...],\n \"public\": [{\"kind\": \"partial\", \"value\": 0}, ...],\n \"rounds\": 2}\n```\n\nHere `...` abbreviates the remaining records; include every actual record in code. A right output can accompany duplicate addresses or partial sums inconsistent with received mail. transcript checks that the records describe a consistent run, including that each sender’s share sum recovers that sender’s input.\n\n**privacy:** coalition is a tuple of distinct valid person indices who pool observations. view returns exactly the three keys below. received is a tuple of(from,to,value) triples, retaining only messages whose to is in the coalition and preserving their original order. public is the tuple of published values in original order; output is unchanged. Preserve values, duplicates and order.\n\n```python\n{\"received\": ((0,1,2),(1,1,3),(2,1,1)), \"public\": (0,6,3), \"output\": 2}\n```\n\nThis is coalition=(1,) in the example. This exercise's view includes only received and public records, not the full adversary observation that also includes its inputs and sent randomness. An adversary means someone attempting to learn private inputs.\n\nexperiment_privacy returns `{\"id\":\"exp-privacy\",\"ran\":True,\"passed\":a_bool,\"space\":729}`. Use n from tiny_settings, and for every group of size1..threshold(n)−1, and each of the two tiny settings, collect `repr(view(run(setting,r),coalition))` for every random tuple r into a list. repr turns Python data into a textual representation. Sort both lists and compare them. Do not use set, which discards multiplicity: [0,0,1] and[0,1,1] allow the same values but have different frequencies. passed is True only if every group's lists match. space counts the random tuples for one setting, not the combined count.\n\nThis is an exact comparison over729 tuples, two specified worlds and a restricted observation. It is not a proof for arbitrary inputs or a real system. Some groups have different own inputs between these worlds; no claim is made that their complete observations are identical.\n\n**threshold:** threshold(n) returns n−1. Subtract the group's inputs from the output to find the last input. In the example, people0,1 compute `(2−3−4)%7=2`. recover returns None below n−1 members, otherwise `(observed[\"output\"]-sum(setting.inputs[i] for i in coalition))%p`. Groups have at most n−1 members. Do not read outsiders' setting.inputs to supply the answer. This limit comes from the function being computed, not a protocol defect.\n\n**detect:** detects(protocol) is the final application: build a test suite. protocol is called as protocol(setting,randomness). Return False for a correct implementation, True when you find a defect. Experiment with its records; do not inspect its name or code. The required rules are the output, record and observation rules above. For example, output2 and partial sums totalling3 can escape a check of only the reported output. You decide which inputs and random tuples to try and how to combine checks. A call raising an exception also indicates a defect. Grading uses previously unseen faults. This is not a decision procedure for every Python program.\n\n**measure:** Execute run with sample_randomness(seed,setting). Return `{\"rounds\":transcript[\"rounds\"],\"messages\":len(transcript[\"messages\"]),\"opened\":len(transcript[\"public\"]),\"unit\":nonempty_string,\"environment\":nonempty_string}`. Explain units as share deliveries including self-deliveries, and public partial sums. Name n,p and the single-process model in environment. These are not measured seconds or real network bandwidth.\n\n**evidence:** Return a dict keyed by exactly the four properties; extra property keys are not allowed. Each row is `{\"claimed\":bool,\"experiment\":string,\"verdict\":bool_or_None,\"limitation\":nonempty_string}`. correctness/privacy are claimed=True and verdict is the result of the corresponding experiment (True on success). The other two use False/None and may have an empty experiment string. For correctness compare an actual run output with honest_sum; for privacy run experiment_privacy. Name each experiment with a nonempty id; state its tested range or absent guarantee in limitation. A report's shape is not itself evidence that the experiment ran. Explain the result alongside the individual grading checks.\n",
       "writeup": "## A right answer is not evidence of a right protocol\n\nAn implementation that returns the correct output can be broken in any number of ways. Close\nto half the mutations in this problem compute the sum perfectly.\n\nThat is what the `transcript` checkpoint is for. Is each opened value the sum of what that\nparty actually received? Do the opened values add up to the reported output? Without both, an\nimplementation that returns the right number while its transcript describes an entirely\ndifferent run passes — and that is the most ordinary shape a faked result takes.\n\n## Privacy can be measured\n\nWriting that privacy \"holds by design\" is an assertion. Here it is measured.\n\nTake two settings with the same sum and different honest inputs. Enumerate every randomness\nand collect what the coalition sees in both. If the two multisets agree, the view is a\nfunction of the output alone. That is not an approximation of the definition; it is the\ndefinition.\n\nThe enumeration is only possible because the randomness is explicit, which is why the contract\nforbids `random`. A sample cannot support a claim about *every* randomness.\n\n## One coalition is not every coalition\n\nThis is the failure worth the most.\n\nConsider a protocol that draws no randomness at all. Every party's shares become\n`[0, ..., 0, x]`, and the last party receives everybody's input in the clear. From party 0's\nseat, every received value is zero and the opened values match across both worlds: **against\nparty 0 it is perfectly private.** Party 2 knows everything.\n\nAn experiment that only asks one coalition reports that protocol as private. So does a\nprotocol that reuses one party's randomness for everybody. Neither is caught without the\nsweep.\n\n## The threshold is not a defect\n\nWith `parties - 1` colluding, the remaining input falls out. That is not a hole in the\nprotocol — it is a limit **the output itself imposes**. Subtract your own inputs from the sum\nand one party's worth is left. No protocol computing this function does better.\n\nSo the threshold belongs in the scope statement, not in a defect list. Writing an unfixable\nlimit as though it were fixable is worse than not writing it at all.\n\n## Your suite is what gets graded\n\n`detect` hands you broken protocols you have never seen. A function listing known-bad cases\ndoes not pass.\n\nBreakage comes in three families and no single check finds all three: the output is wrong; the\noutput is right and the transcript leaks; both look right and the transcript disagrees with\nthe run that happened. The third is the one most often missed.\n\n## Where this ends\n\nThis is the end of seven weeks. From Week 1's constraints to Week 6's stack composition, one\nthing has been running underneath: **a claim becomes a claim only when it is paired with an\nexperiment that could have refuted it.**\n",
       "learningGoals": [
         "Turn the tool a design selected into a small working implementation",
@@ -183,69 +279,147 @@
       "checks": [
         {
           "id": "scope",
-          "label": "Say what the build does not guarantee",
+          "label": "Define claims and non-goals",
           "hints": [
             {
               "id": "scope-hint-1",
-              "content": "One of the two missing properties is missing because nothing ever checks a party's input against anything. The other because one party going quiet ends the run."
+              "content": "Decide what the build can promise. It has no input authentication or replacement for an absent participant."
+            },
+            {
+              "id": "scope-hint-2",
+              "content": "With3 people threshold is2. parameters records the unchanged setting. Include both absent properties."
+            },
+            {
+              "id": "scope-hint-3",
+              "content": "Read vocabulary and setting in Inspect evidence. Return the four-key dict from scope in capstone.py; submit scope and check Solved."
             }
           ]
         },
         {
           "id": "correctness",
-          "label": "Produce the sum on parameters you were not shown"
+          "label": "Compute the shared sum",
+          "hints": [
+            {
+              "id": "correctness-hint-1",
+              "content": "Each sender splits its input into parts that add back to it. Regrouping those parts by recipient preserves the total."
+            },
+            {
+              "id": "correctness-hint-2",
+              "content": "With divisor7, input3 and draws1,2, the last part is(3−1−2)%7=0. The parts1,2,0 sum to3."
+            },
+            {
+              "id": "correctness-hint-3",
+              "content": "Implement share/run in capstone.py. Pass each start:end from slice_for(i) to share, sum deliveries by recipient, run the public sum test, then submit correctness."
+            }
+          ]
         },
         {
           "id": "transcript",
-          "label": "Make the transcript reconstruct its own output",
+          "label": "Make the records agree with the output",
           "hints": [
             {
               "id": "transcript-hint-1",
-              "content": "The output being right and the transcript being right are different claims. Is each opened value the sum of what that party actually received?"
+              "content": "A correct displayed answer need not match its claimed execution. Check addresses and published partial sums."
+            },
+            {
+              "id": "transcript-hint-2",
+              "content": "Three people record9 deliveries including self-deliveries. Received1,2,4 yields public partial0 after division remainder by7."
+            },
+            {
+              "id": "transcript-hint-3",
+              "content": "Check each(from,to) occurs once in run. public[j] is the received sum for j, reduced; output is the reduced public sum. Submit transcript."
             }
           ]
         },
         {
           "id": "privacy",
-          "label": "Measure that what is seen is fixed by the output alone",
+          "label": "Compare two tiny observation distributions",
           "hints": [
             {
               "id": "privacy-hint-1",
-              "content": "Do not sample the randomness; enumerate it. On a toy field the space is finite, so the whole of it is available rather than a sample."
+              "content": "Compare frequencies, not just possible values. This model observes received mail and public values only."
             },
             {
               "id": "privacy-hint-2",
-              "content": "A protocol can be perfectly private against party 0 and hand party 2 everything. An experiment that only ever asks one coalition reports that protocol as private."
+              "content": "[0,0,1] and[0,1,1] contain the same values at different frequencies. Sorted lists preserve the difference; sets erase it."
+            },
+            {
+              "id": "privacy-hint-3",
+              "content": "Implement view preserving all addressed mail and public values in order. Use tiny_settings/randomness_space for every group in experiment_privacy, return four result keys and submit privacy."
             }
           ]
         },
         {
           "id": "threshold",
-          "label": "Say where it stops being able to hide",
+          "label": "Identify what the sum itself reveals",
           "hints": [
             {
               "id": "threshold-hint-1",
-              "content": "Do not look for a weakness in the protocol. Take the output itself and subtract what the coalition already knows; ask what is left."
+              "content": "With one outsider left, the total and the group inputs determine that input. With two outsiders they do not determine each individual value."
+            },
+            {
+              "id": "threshold-hint-2",
+              "content": "Total2 minus inputs3 and4, reduced by7, gives2. For3 people the threshold is2."
+            },
+            {
+              "id": "threshold-hint-3",
+              "content": "Return parties−1 in threshold. recover returns None below that size, otherwise the remainder of output minus group inputs. Do not read outsider inputs. Submit threshold."
             }
           ]
         },
         {
           "id": "detect",
-          "label": "Catch breakage you have not seen",
+          "label": "Find unseen defects with your own tests",
           "hints": [
             {
               "id": "detect-hint-1",
-              "content": "Three separate things go wrong: the output is wrong; the output is right and the transcript leaks; both look right and the transcript disagrees with the run that happened. No single check finds all three."
+              "content": "Output, transcript consistency and observation distribution are separate properties. Combine experiments to find faults you have not seen."
+            },
+            {
+              "id": "detect-hint-2",
+              "content": "Output2 with partial values1,1,1 is inconsistent. Consider it a counterexample to checking only output."
+            },
+            {
+              "id": "detect-hint-3",
+              "content": "Call the supplied protocol on settings and randomness in detects. Design experiments for the documented properties. Return True for a defect, otherwise False. Check your own run is accepted in public tests, then submit detect."
             }
           ]
         },
         {
           "id": "measure",
-          "label": "Count it off a run that happened"
+          "label": "Count communication from an execution",
+          "hints": [
+            {
+              "id": "measure-hint-1",
+              "content": "A design prediction and an implementation measurement are different. Count actual records and state their units."
+            },
+            {
+              "id": "measure-hint-2",
+              "content": "For3 people a normal record has2 rounds,9 messages,3 public values. Fixed counts fail at other sizes."
+            },
+            {
+              "id": "measure-hint-3",
+              "content": "In measure call sample_randomness(seed,setting), then run. Count messages/public with len, read rounds, add unit/environment strings and submit measure."
+            }
+          ]
         },
         {
           "id": "evidence",
-          "label": "Tie every claim to an experiment that ran"
+          "label": "Connect results to experiments and limits",
+          "hints": [
+            {
+              "id": "evidence-hint-1",
+              "content": "Link each named property to a result and retain limitations. A report format is not a mathematical guarantee."
+            },
+            {
+              "id": "evidence-hint-2",
+              "content": "Passing privacy over729 tuples does not prove safety at every size. Keep that tested range in limitation."
+            },
+            {
+              "id": "evidence-hint-3",
+              "content": "In evidence execute a sum check and experiment_privacy. Fill claimed/experiment/verdict/limitation for all four properties, including non-goals. Submit evidence and check all eight Solved states."
+            }
+          ]
         }
       ]
     }

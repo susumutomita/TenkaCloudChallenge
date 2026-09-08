@@ -94,7 +94,7 @@ def _stream(seed: str, label: str) -> int:
 
 
 #: Small enough that every randomness can be enumerated: 3 parties over F_3 is 3^6 = 729
-#: runs, which is the whole probability space, not a sample. Privacy is checked exactly.
+#: runs, which is the whole probability space, not a sample. The two supplied worlds are compared exactly for the restricted received/public view.
 #:
 #: The field is this small for a reason that is not cryptographic. `detects` runs the whole
 #: enumeration once per candidate protocol, and the hidden suite hands it ten of them across
@@ -117,8 +117,9 @@ def tiny_settings() -> list[Setting]:
     across them. If it is not, the view depends on more than the output, and something the
     coalition should not learn is reaching it.
 
-    Party 0 holds the same input in both, so it is the coalition whose view is compared; what
-    moves is what the *honest* parties hold, with the sum held fixed.
+    Party 0 holds the same input in both. The exercise sweeps all singleton groups,
+    but observes only received/public records, not their own inputs or random tapes.
+    For groups whose own input changes this is not a full-view privacy claim.
     """
     return [TINY, Setting(parties=3, modulus=3, inputs=(1, 0, 0))]
 

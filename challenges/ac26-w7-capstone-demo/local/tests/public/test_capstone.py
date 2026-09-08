@@ -77,7 +77,7 @@ def _transcript():
 
 def test_shares_add_back_to_the_value() -> None:
     setting = _setting()
-    parts = share(4 % setting.modulus, setting.parties, setting.modulus, (1, 2))
+    parts = share(4 % setting.modulus, setting.parties, setting.modulus, tuple((i + 1) % setting.modulus for i in range(setting.parties - 1)))
     assert len(parts) == setting.parties
     assert sum(parts) % setting.modulus == 4 % setting.modulus
 

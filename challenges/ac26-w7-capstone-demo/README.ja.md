@@ -75,7 +75,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `measure` | 25 | 実 transcript から数え、単位と環境をつける |
 | `evidence` | 25 | 各主張に実行済み実験を対応づけ、非目標も省略しない |
 
-ヒントは 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限に収まっています。
+8 つすべての checkpoint に各 3 段のヒントがあり、ヒント減点の上限内です。
 
 ## `detect` が採点するのは protocol ではなく test suite
 
@@ -146,3 +146,22 @@ mutation を 2 つ、baseline に足さずに削除しました。どちらも�
 
 base image と verifier bind の修正は `ac26-w7-capstone-design` の README に書いたとおりで、この問題
 にも入っています。他の AC26 問題にはまだ入っていません。
+
+## Issue #716 検証と教材の境界
+
+無料の GUIDE.ja.md（metadata本文と同一）に初手 scope、共有の表と一般式、全支給API/import、10関数の返却形を整理しました。日英8項目を各3段・2点のヒントへ同期。detects は未見の欠陥を検査する既存の設計課題で、完成コードは提示しません。privacy は二世界・729乱数・受信/公開記録のみの比較で、完全な攻撃者観測や一般の秘密性を証明しません。
+
+採点は view の中身/順序/重複、送受信対の重複、整数とbool/floatの区別、rounds、小計、報告のclaimを確認します。作者回帰12件を既存 mutation.py の先頭へ組み込み、participant imageにはコピーしません。Docker make reference-testで12回帰と21変異を確認。make agent-gateは116件、diff検査も成功。
+
+Workbenchの実ハンドラで支給starter取得、無料説明から作ったscopeだけの回答を提出用包みへ変換、verifierでscope=Trueを確認しました。作者正答による公開テスト10件も成功。これはハンドラ経路の確認であり、ブラウザ実操作・本番デプロイ・得点の永続化を確認したものではありません。
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

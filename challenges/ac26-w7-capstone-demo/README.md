@@ -82,7 +82,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `measure` | 25 | Counts taken off a real transcript, with units and environment |
 | `evidence` | 25 | Every claim tied to an experiment that ran; no non-goal omitted |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints each, within the hint-penalty cap.
 
 ## `detect` grades your test suite, not your protocol
 
@@ -154,3 +154,22 @@ including one that hands every input to the last party in the clear.
 
 This problem also carries the base-image and verifier-bind fixes described in
 `ac26-w7-capstone-design`'s README. The other AC26 problems still need them.
+
+## Issue #716 verification and teaching boundary
+
+The free GUIDE.md (also metadata instructions) defines the first scope submission, a share table and general formulas, supplied imports/APIs and all ten return contracts. All eight checkpoints have three bilingual hints at2 points each. detects remains the existing unseen-defect test-design task, without completed solution code. Privacy measures two worlds and729 random tuples for received/public records only; it does not prove full-view or general secrecy.
+
+Grading checks view contents/order/multiplicity, duplicate address pairs, bool/float versus integers, rounds, partials and claim flags. Twelve author regressions run from mutation.py and do not ship in the participant image. Docker make reference-test passed those twelve and 21 mutations; catalog validation passed116 entries and diff checks passed.
+
+The actual Workbench handlers supplied the starter, prepared a scope-only answer written from the free statement, and passed its envelope through the verifier with scope=True. Author-reference public tests passed10 cases. This is handler-path evidence, not browser play, deployment or persistent score verification.
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
