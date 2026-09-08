@@ -1,3 +1,4 @@
+import MathText from "./MathText.tsx";
 import {AnamorphicWorksheet} from "./AnamorphicWorksheet.tsx";
 import {StarkWorksheet} from "./StarkWorksheet.tsx";
 import {IoWorksheet} from "./IoWorksheet.tsx";
@@ -1480,7 +1481,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             {locale === "ja"
               ? `暗号にした数字を、左から順に ${selectedOrder.task.plaintext.length} 個、半角スペースで区切って入力してください。`
               : `Enter all ${selectedOrder.task.plaintext.length} encrypted numbers in left-to-right order, separated by spaces.`}
-            <br />{locale === "ja" ? "区切り方の例：" : "Spacing example: "}<code>1 2 3</code>
+            <br />{locale === "ja" ? "区切り方の例：" : "Spacing example: "}<code>1 2 3 4 5</code>
           </p>}
           <input
             ref={cipherInputRef}
@@ -1675,7 +1676,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 {/* [Issue #740] The sudoku guide is the PROVE procedure; a disclosure Order (LEAK only) keeps its own rung-3 text. */}
                 {hint.level === 2 && !selectedOrder.schnorr && (selectedOrder.task.kind === "reveal-share" || selectedOrder.task.kind === "zk-sudoku") && selectedOrder.allowedMethods.includes("prove") ?
                   <SudokuGuide order={selectedOrder} projection={projection} table={proveTable} locale={locale} onOpenProof={() => { setProveOpen(true); requestAnimationFrame(() => document.querySelector(".tc-proof-inputs")?.scrollIntoView({ block: "start" })); }} /> :
-                  <p className="tc-hint-text">{hint.text?.[locale]}</p>}
+                  <p className="tc-hint-text"><MathText>{hint.text?.[locale] ?? ""}</MathText></p>}
               </details>
             ))}
             {nextHint ? (

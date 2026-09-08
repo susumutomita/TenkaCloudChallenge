@@ -1,3 +1,4 @@
+import MathText from "./MathText.tsx";
 import { useState } from "react";
 import type { ContractProjection, CryptoBattleOp, CryptoBattleProjection, RpsHuntTarget } from "../game/src/types.ts";
 import { HANDS, isHand } from "../game/src/commitment.ts";
@@ -29,7 +30,7 @@ export function RpsHuntCandidate({ target, projection, locale, submitting, onSub
       <tbody>{target.evidence.map((a, i) => <tr key={a.id}><td>{ja ? `過去 ${i + 1}（ORDER #${a.contractId.split("-c").pop()}）` : `Past ${i + 1} (ORDER #${a.contractId.split("-c").pop()})`}</td><td>{a.commitment}</td><td>{handName(a.hand, locale)}</td><td>{a.randomness}</td></tr>)}</tbody>
     </table>
     <p>{ja ? `今回、相手が封じた数字は c=${target.commitment}。まだ手は公開されていません。` : `The target has now sealed c=${target.commitment}. Their hand is still unpublished.`}</p>
-    <p className="tc-card-hint">{ja ? `今回も過去の r=${pastR} を使ったと仮定します。c = 4^m × 9^r を 23 で割った余り。下の積を計算して23で割り、今回の c と照合します（m は手の番号）。` : `Assume the past r=${pastR} was used again. c is the remainder of 4^m × 9^r after division by 23. Calculate each product, take its remainder, and compare it with the current c; m is the hand number.`}</p>
+    <p className="tc-card-hint"><MathText>{ja ? `今回も過去の r=${pastR} を使ったと仮定します。c = 4^m × 9^r を 23 で割った余り。下の積を計算して23で割り、今回の c と照合します（m は手の番号）。` : `Assume the past r=${pastR} was used again. c is the remainder of 4^m × 9^r after division by 23. Calculate each product, take its remainder, and compare it with the current c; m is the hand number.`}</MathText></p>
     <table style={{ width: "100%", textAlign: "left", fontSize: 13 }}>
       <thead><tr><th>{ja ? "予測する手" : "Possible hand"}</th><th>{ja ? "計算する積" : "Product to calculate"}</th></tr></thead>
       <tbody>{POWER_FOURS.map(a => <tr key={a.m}><td>{handName(a.m, locale)}</td><td>{a.value} × {hidingFactor}</td></tr>)}</tbody>
@@ -38,9 +39,9 @@ export function RpsHuntCandidate({ target, projection, locale, submitting, onSub
     <details>
       <summary style={{ cursor: "pointer", fontWeight: 600 }}>{ja ? "手を予測する計算のしかた" : "How to calculate the predicted hand"}</summary>
     <strong>{ja ? "② 今回も同じ r を使ったと仮定し、3 つの手を試す" : "2. Assume r was reused again and try all three hands"}</strong>
-    <p className="tc-card-hint">{ja ? "同じ r なら、9^r を 23 で割った余りも同じです。表の 2 つの値を掛けて 23 で割った余りを求め、今回の c と一致する手を予測します。4^m は 4 を m 回掛ける意味、9^r も同様です。0 回掛ける値は 1 とします。途中で 23 の倍数を引いてから掛けても、最後の余りは変わりません。" : "If r is unchanged, so is the remainder of 9^r after division by 23. Multiply the two table values, take the remainder after division by 23, and find the hand matching the current c. 4^m means m factors of 4; similarly for 9^r. Zero factors give 1. Subtracting multiples of 23 before multiplication does not change the final remainder."}</p>
-    <p style={{ fontSize: 13 }}>{ja ? "手 m → 4^m の余り：" : "Hand m → remainder of 4^m: "}{POWER_FOURS.map(a => `${a.m} → ${a.value}`).join(" / ")}</p>
-    <p style={{ fontSize: 13 }}>{ja ? "r → 9^r の余り：" : "r → remainder of 9^r: "}{POWER_NINES.map(a => `${a.r} → ${a.value}`).join(" / ")}</p>
+    <p className="tc-card-hint"><MathText>{ja ? "同じ r なら、9^r を 23 で割った余りも同じです。表の 2 つの値を掛けて 23 で割った余りを求め、今回の c と一致する手を予測します。4^m は 4 を m 回掛ける意味、9^r も同様です。0 回掛ける値は 1 とします。途中で 23 の倍数を引いてから掛けても、最後の余りは変わりません。" : "If r is unchanged, so is the remainder of 9^r after division by 23. Multiply the two table values, take the remainder after division by 23, and find the hand matching the current c. 4^m means m factors of 4; similarly for 9^r. Zero factors give 1. Subtracting multiples of 23 before multiplication does not change the final remainder."}</MathText></p>
+    <p style={{ fontSize: 13 }}><MathText>{ja ? "手 m → 4^m の余り：" : "Hand m → remainder of 4^m: "}</MathText>{POWER_FOURS.map(a => `${a.m} → ${a.value}`).join(" / ")}</p>
+    <p style={{ fontSize: 13 }}><MathText>{ja ? "r → 9^r の余り：" : "r → remainder of 9^r: "}</MathText>{POWER_NINES.map(a => `${a.r} → ${a.value}`).join(" / ")}</p>
     <p className="tc-card-hint">{ja ? "見本：r=1 なら表の値は 9。グーでは 4×9=36、36−23=13。チョキでは 16×9=144、144−23×6=6。パーでは 18×9=162、162−23×7=1。c=6 ならチョキと予測できます。ただし今回 r を引き直していれば、この推測は外れます。過去の使い回しは、今回も同じだという保証ではありません。" : "Example r=1 gives table value 9. Rock: 4×9=36→13. Scissors: 16×9=144−23×6=6. Paper: 18×9=162−23×7=1. Predict scissors for c=6. A fresh r can invalidate this assumption: past reuse does not guarantee reuse now."}</p>
     </details>
     <p className="tc-card-hint">{ja ? "今回も同じ隠す数を使った、と仮定して予測します。" : "Your prediction assumes the same hiding number was used again."}</p>

@@ -46,7 +46,7 @@ export default function SudokuGuide({ order, projection, table, locale, onOpenPr
     {order.allowedMethods.includes("prove") && <section>
       <strong>{ja ? "PROVE · 4マスを埋めて証明" : "PROVE · fill four holes"}</strong>
       <ol className="tc-visual-steps">
-        <li>{ja ? "未使用の表を1つ選ぶ" : "Choose one unused table"}</li>
+        <li>{ja ? "自動で用意された置き換えを確認" : "Check the automatically assigned replacements"}</li>
         <li>{ja ? "同じ位置の数字を読み替える" : "Rename the digit at the same position"}</li>
         <li>{ja ? "4マスを埋めて「答えを送る」" : "Fill four holes and Submit answer"}</li>
       </ol>
@@ -57,7 +57,7 @@ export default function SudokuGuide({ order, projection, table, locale, onOpenPr
         <div><small>{ja ? "同じ表で付け替える" : "Rename with the same table"}</small><SudokuBoard cells={givens!.map(cell => cell === "" ? 0 : Number(cell))} size={28} lit={[workedCell]} /></div>
       </div>}
       <button type="button" className="tc-submit-small" onClick={onOpenProof}>{ja ? "証明の入力欄へ" : "Go to proof inputs"}</button>
-      <p>{ja ? "次回も未使用の表を選びます。同じ表の再利用は解が漏れる原因になります。" : "Choose an unused table next time too. Reuse can expose your solution."}</p>
+      <p>{ja ? "次回も未使用の表が自動で用意されます。同じ表の再利用は解が漏れる原因になります。" : "An unused table is assigned next time too. Reuse can expose your solution."}</p>
     </section>}
     {order.allowedMethods.includes("leak") && <details className="tc-why"><summary>{ja ? "LEAK · 計算せずに公開する場合" : "LEAK · publish without calculating"}</summary>
       <div className="tc-relabel-flow"><div><small>{ja ? "自分のかけら" : "Your shares"}</small><b>{indices.map(i => `#${i} = ${projection.vault.shares.find(s => s.index === i)?.value}`).join(", ")}</b></div><span aria-hidden="true">→</span><div><small>{ja ? "LEAK を押す" : "Press LEAK"}</small><b>{ja ? "公開記録" : "Public ledger"}</b></div></div>

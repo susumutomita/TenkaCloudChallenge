@@ -1,3 +1,4 @@
+import MathText from "./MathText.tsx";
 /** Optional local practice. Fixed examples only; no match client or real secrets. */
 import { useState } from "react";
 import ConceptExplanation from "./ConceptExplanation.tsx";
@@ -306,7 +307,7 @@ export default function TutorialWalkthrough({ locale, embedded = false, onDone }
     <details key={index} style={{ fontSize: 13, lineHeight: 1.7 }}>
       <summary style={{ cursor: "pointer" }}>{locale === "ja" ? "計算の手順と、そうなる理由" : "Calculation steps and why this works"}</summary>
       <p>{copy.purpose}</p>
-      <ol style={{ paddingLeft: 22 }}>{copy.steps.map(line => <li key={line}>{line}</li>)}</ol>
+      <ol style={{ paddingLeft: 22 }}>{copy.steps.map(line => <li key={line}><MathText>{line}</MathText></li>)}</ol>
       <p style={{ whiteSpace: "pre-line" }}>{copy.result}</p>
       <ConceptExplanation key={step.topic} topic={step.topic} locale={locale} />
     </details>

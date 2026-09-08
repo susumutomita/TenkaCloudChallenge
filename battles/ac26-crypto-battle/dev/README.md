@@ -101,6 +101,10 @@ worksheet never fills a recovered answer. ROTATE is a separate defence card.
 pre-event checks to the real scenario names, visible controls, and expected
 feedback. It separates local UI evidence from optional live Portal checks.
 
+[Issue #780 acceptance](ISSUE-780-ACCEPTANCE.md) records the Sudoku, MPC and
+Caesar browser submissions, polling retention, bilingual explanations and
+problem-information-first checks, including screenshots and verification limits.
+
 ## Checks
 
 ```bash
