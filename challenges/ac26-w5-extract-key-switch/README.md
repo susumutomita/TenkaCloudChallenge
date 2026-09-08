@@ -92,7 +92,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `endtoend` | 40 | The RLWE coefficient, the extracted sample and the switched sample all agree, and the switch moved something |
 | `transfer` | 30 | All of it under a degree, dimension, base and modulus you have not seen |
 
-Hints on seven of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at2 points each:24 hints cost48 points in total, leaving252 of the300 base points before wrong-answer penalties.
 
 ## Why the switch checks are crossed
 
@@ -152,8 +152,9 @@ network with no gateway. `show.py` reads this deployment's parameters, extractio
 switched sample from that verifier's `GET /public`, which serves the demonstration and never
 a checkpoint's expected value — `fixtures/generate.py` has to implement `phase_coefficient`,
 `extract_sample`, `extract_trace`, `decompose_mask`, `key_switch` and `domain_report` in
-order to derive them, and those are every one of the names `starter/extract.py` asks you to
-write, so it is not in the image you run
+order to derive them. These are six of the seven graded functions, so fixtures are not
+in the participant image. The seventh answer, `extraction_counterexample`, is in
+`reference/extract.py`, copied only into the author stage, not the participant or verifier
 ([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)).
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
@@ -170,6 +171,34 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: twenty-nine broken implementations. One is
+`make reference-test` runs the mutation suite: 44 broken implementations. One is
 correct at the last coefficient and nowhere else, which is the shape this problem is built
 to catch.
+
+## Issue #716 — Entry and three-rung hints
+
+All eight checkpoints have three hints: mechanism, small arithmetic example, and named screen actions. Each costs2 points,48 total. Required extraction formulas, key compatibility conditions and the additional-noise bound are in the statement. Exact phase preservation during extraction is distinguished from noise changes during switching.
+
+An independent participant-only read found missing contracts and rechecked the revision. A first phase implementation using only the documented API passed the author-side phase check with no failures. The author-side reference passed and all 44 mutation variants were rejected. make agent-gate validated 116 entries. Browser submission for this problem and production deployment were not performed.
+
+Transfer also requires constructed counterexamples at supplied indices. Independent arithmetic rejects missing, zero-key and fixed-index evidence. Free formulas remain available; copying the extraction recipe alone no longer completes the problem.
+
+Target-dimension mismatches and each modulus/base/levels mismatch are rejected with ValueError; domain reports mark them incompatible.
+
+Missing and None input key labels are accepted when all other compatibility conditions hold; both the switch and domain report exercise these positive cases.
+
+Counterexamples are independently checked at degrees 2–5 and moduli 3/4/5/7/8/9, rejecting constructions whose sign difference disappears modulo 4. Regression checks ensure that invalid phase/extract indices report the documented index-range ValueError property.
+
+
+PR #827 follow-up: the final counterexample is checked at every index0..degree−2. Compatibility is tested on both sides of numeric equality; absent/None keyId remains valid. Docker make reference-test passed3 author regressions (including8 directional comparisons at both switch/domain checkpoints) and44 mutations. Starter and screen terms are defined; the end-to-end example specifies delta=4, phase5→3, decoded1→1. Catalog116 and diff checks pass.
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

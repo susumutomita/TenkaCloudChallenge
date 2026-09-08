@@ -175,8 +175,11 @@ def check_phase(module, seed: str) -> list[str]:
         for bad in (-1, par["degree"], par["degree"] + 1):
             try:
                 module.phase_coefficient(par, scene["ringKey"], accumulator, bad)
-            except Exception:  # noqa: BLE001 - any refusal counts
+            except ValueError:
                 continue
+            except Exception:
+                failures.append("an out-of-range coefficient index must raise ValueError")
+                break
             failures.append("a coefficient index outside the ring was accepted")
             break
     return failures
@@ -237,8 +240,11 @@ def check_extract(module, seed: str) -> list[str]:
         for bad in (-1, par["degree"]):
             try:
                 module.extract_sample(par, accumulator, bad)
-            except Exception:  # noqa: BLE001 - any refusal counts
+            except ValueError:
                 continue
+            except Exception:
+                failures.append("an out-of-range coefficient index must raise ValueError")
+                break
             failures.append("a coefficient index outside the ring was accepted")
             break
     return failures
@@ -267,7 +273,7 @@ def check_trace(module, seed: str) -> list[str]:
     for par in _sets(seed):
         scene = _scene(seed, par, "trace")
         accumulator = scene["accumulator"]
-        for index in (0, par["degree"] // 2, par["degree"] - 1):
+        for index in range(par["degree"]):
             try:
                 got = module.extract_trace(par, accumulator, index)
             except Exception as error:  # noqa: BLE001
@@ -377,13 +383,27 @@ def check_switch(module, seed: str) -> list[str]:
         )
         sample = dict(reference_extract(par, scene["accumulator"], 0))
         sample["keyId"] = scene["sourceId"]
-        for bad in (mismatched, _shrunk(key)):
+        for bad in (mismatched, *_parameter_mismatches(key)):
             try:
                 module.key_switch(par, bad, sample)
-            except Exception:  # noqa: BLE001 - any refusal counts
+            except ValueError:
                 continue
+            except Exception:
+                failures.append("an incompatible key must raise ValueError")
+                break
             failures.append("a switching key that does not match the sample was applied")
             break
+
+        unlabelled = {name: value for name, value in sample.items() if name != "keyId"}
+        for valid in (unlabelled, {**unlabelled, "keyId": None}):
+            try:
+                optional = module.key_switch(par, key, valid)
+                if optional.get("keyId") != scene["targetId"] or len(optional["mask"]) != par["target_dimension"]:
+                    failures.append("an unlabelled input must still name the output key and dimension")
+                if lwe_decrypt(par, target, _as_sample(optional)) != lwe_decrypt(par, ring_key, sample):
+                    failures.append("switching an unlabelled input must preserve its message")
+            except Exception:
+                failures.append("a missing or None input keyId must be accepted")
 
         # The result names the key it now belongs to, and carries no secret out with it.
         # The next step in the pipeline reads that id to decide what it may be combined
@@ -399,9 +419,14 @@ def check_switch(module, seed: str) -> list[str]:
     return failures
 
 
-def _shrunk(key: dict) -> dict:
-    """The same key claiming a source dimension it does not have."""
-    return {**key, "sourceDimension": key["sourceDimension"] - 1}
+def _parameter_mismatches(key: dict) -> list[dict]:
+    """Individually violate each declared compatibility parameter."""
+    return [
+        {**key, field: key[field] + offset}
+        for field in ("sourceDimension", "targetDimension", "modulus", "base", "levels")
+        for offset in (-1, 1)
+    ] + [{**key, "targetDimension": 0}]
+
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +447,9 @@ def check_domains(module, seed: str) -> list[str]:
             seed, par, other_ring, scene["target"], key_id(seed, "domains:other"),
             scene["targetId"], "domains:other",
         )
-        cases = [(sample, key), (sample, mismatched), (sample, _shrunk(key))]
+        unlabelled = {name: value for name, value in sample.items() if name != "keyId"}
+        cases = [(sample, key), (unlabelled, key), ({**unlabelled, "keyId": None}, key),
+                 (sample, mismatched), *[(sample, bad) for bad in _parameter_mismatches(key)]]
         try:
             got = [module.domain_report(par, s, k) for s, k in cases]
         except Exception as error:  # noqa: BLE001
@@ -438,8 +465,8 @@ def check_domains(module, seed: str) -> list[str]:
                     failures.append(f"the domain report's {field} is wrong")
                     return failures
 
-        # The three cases have to actually separate, or the report proves nothing.
-        if [report["compatible"] for report in got] != [True, False, False]:
+        # Valid and independently mismatched cases must actually separate.
+        if [report["compatible"] for report in got] != [True] * 3 + [False] * (len(cases) - 3):
             failures.append("the report does not distinguish a matching key from a mismatched one")
             continue
 
@@ -500,6 +527,47 @@ def check_endtoend(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def check_counterexample(module, seed: str) -> list[str]:
+    """Verify constructed evidence without calling participant arithmetic."""
+    # This construction needs no encryption/noise budget. Its public contract
+    # includes tiny moduli, even when those cannot encrypt a four-value message.
+    cases = _sets(seed) + [
+        {"degree": n, "modulus": q, "base": q, "levels": 1,
+         "dimension": 2, "target_dimension": 2,
+         "plaintext_modulus": 4, "delta": q // 4}
+        for n in (2, 3, 4, 5) for q in (3, 4, 5, 7, 8, 9)
+    ]
+    for par in cases:
+        n, q = par["degree"], par["modulus"]
+        for index in range(n - 1):
+            try:
+                witness = module.extraction_counterexample(dict(par), index)
+            except Exception as error:
+                return [f"constructing the extraction counterexample raised {type(error).__name__}"]
+            if not isinstance(witness, dict):
+                return ["the counterexample must return coefficient arrays and a test key"]
+            a, b, secret = (witness.get(k) for k in ("a", "b", "secret"))
+            if any(not isinstance(v, (list, tuple)) or len(v) != n for v in (a, b, secret)):
+                return ["each counterexample array must match degree"]
+            if any(type(x) is not int or not 0 <= x < q for v in (a, b) for x in v):
+                return ["counterexample coefficients must be canonical integer remainders"]
+            if any(type(x) is not int or x not in (0, 1) for x in secret):
+                return ["the counterexample test key must contain integer bits"]
+            def phases(at):
+                correct = b[at]
+                unsigned = b[at]
+                for j in range(n):
+                    term = a[(at-j) % n] * secret[j]
+                    unsigned -= term
+                    correct -= term if j <= at else -term
+                return correct % q, unsigned % q
+            if phases(index)[0] == phases(index)[1]:
+                return ["the witness does not expose the omitted wrap sign at the supplied index"]
+            if phases(n-1)[0] != phases(n-1)[1]:
+                return ["the witness must retain last-index agreement"]
+    return []
+
+
 def check_transfer(module, seed: str) -> list[str]:
     """All of it, under a degree, dimension, base and modulus not seen elsewhere."""
     failures: list[str] = []
@@ -511,6 +579,7 @@ def check_transfer(module, seed: str) -> list[str]:
         check_switch,
         check_domains,
         check_endtoend,
+        check_counterexample,
     ):
         failures.extend(phase(module, seed))
     return failures
@@ -524,6 +593,7 @@ PHASES = (
     check_switch,
     check_domains,
     check_endtoend,
+    check_counterexample,
 )
 
 

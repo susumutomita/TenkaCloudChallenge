@@ -11,11 +11,13 @@ single Docker stage a learner's own `make build` produced -- the same image that
 graded by running that suite against the submitted file, so the person being graded could
 read the assertions. Option B2 took `fixtures/` out of this stage as well: it implements
 `phase_coefficient`, `extract_sample`, `extract_trace`, `decompose_mask`, `key_switch` and
-`domain_report` -- every one of the six names `starter/extract.py` asks the learner to
-write -- because it cannot derive a deployment's trace, switched sample or domain report
+`domain_report` -- six of the seven graded functions -- because it cannot derive a deployment's trace, switched sample or domain report
 without them. `show.py` reads this deployment's public half from the verifier's
 `GET /public` instead (see show.py and the VERIFIER_PUBLIC_URL wiring in
 ../docker-compose.yml).
+
+The seventh answer, `extraction_counterexample`, lives in `reference/extract.py`.
+Only the author Docker stage copies it, not this participant image or the verifier.
 
 The supplied half stayed: `participant/fhe.py` is the ring, the encoding, RLWE, RGSW, the
 external product, CMUX and the rotation loop, plus the switching key the problem hands the
@@ -88,8 +90,8 @@ _WORKBENCH = PortalEditorSupport(
     problem_id='ac26-w5-extract-key-switch',
     problem_name='同じ数を、別の鍵の言葉で言う',
     problem_name_en="Say the same number in another key's words",
-    description='blind rotation が残した多項式から 1 係数を LWE sample として取り出し、 別の鍵・別の次元へ移す。 どちらの段階でも復号は 1 回も起きない。',
-    description_en='Take one coefficient out of what blind rotation left behind as an LWE sample, then move it to a different key and dimension. Nothing is decrypted at either step.',
+    description='暗号文（中身を隠すため変換したデータ）から1個を取り出し、別の鍵（復元に使う秘密の値）へ移します。まずextract.pyのphase_coefficientを実装し、phaseを提出してください。',
+    description_en='Extract one ciphertext value (data transformed to hide a message) and move it to another key (a secret value used to recover the message). First implement phase_coefficient in extract.py and submit phase.',
     checkpoint_labels={'phase': '保つべき数を書き下す', 'extract': '1 係数を取り出す', 'trace': '対応を見せる', 'decompose': 'mask を桁へ分解する', 'switch': '別の鍵へ移す', 'domains': 'どの鍵の話かを分類する', 'endtoend': '3 通りが同じ答えになる', 'transfer': '見たことのない設定で成立させる'},
     checkpoint_labels_en={'phase': 'Write down the number to preserve', 'extract': 'Take one coefficient out', 'trace': 'Show the mapping', 'decompose': 'Break the mask into digits', 'switch': 'Move it to another key', 'domains': 'Classify which key it is about', 'endtoend': 'Three routes, one answer', 'transfer': 'Hold up in a setting you have not seen'},
     submitted_files=('extract.py',),

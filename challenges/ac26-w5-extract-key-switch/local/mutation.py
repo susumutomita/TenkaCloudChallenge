@@ -30,6 +30,7 @@ An unkillable entry in this list would teach that a SURVIVED line can be ignored
 from __future__ import annotations
 
 import sys
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -41,6 +42,11 @@ REFERENCE = (ROOT / "reference" / "extract.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+    ("returns no transfer counterexample", [('return {"a": a, "b": b, "secret": secret}', 'return {}')]),
+    ("uses an all-zero test key", [('secret[index + 1] = 1', 'secret[index + 1] = 0')]),
+    ("always targets index zero", [('secret[index + 1] = 1', 'secret[1] = 1')]),
+    ("counterexample fails at the small modulus boundary", [('a[degree - 1] = 1', 'a[degree - 1] = 2')]),
+
     (
         "reads the phase polynomial backwards",
         [
@@ -232,6 +238,21 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         ],
     ),
     (
+        "rejects an optional input key label",
+        [(
+            'sample.get("keyId") is not None and sample["keyId"] != switching_key["sourceKeyId"]',
+            'sample["keyId"] != switching_key["sourceKeyId"]',
+        )],
+    ),
+    (
+        "accepts the wrong target dimension",
+        [(
+            '    if switching_key["targetDimension"] != params["target_dimension"]:\n'
+            '        raise ValueError("the switching key does not match the target dimension")',
+            '    pass',
+        )],
+    ),
+    (
         "hardcodes the source dimension instead of reading the sample",
         [
             (
@@ -302,6 +323,24 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 )
 
 
+# Directional comparisons cannot implement equality, on either side of the boundary.
+MUTATIONS += (("counterexample fails only at interior index one", [
+    ("secret[index + 1] = 1", "secret[0 if degree >= 4 and index == 1 else index + 1] = 1")
+]),)
+MUTATIONS += tuple(
+    (f"{field} compatibility rejects only one direction {op}", [
+        (f'switching_key["{field}"] != {other}', f'switching_key["{field}"] {op} {other}')
+    ])
+    for field, other in (
+        ("sourceDimension", 'len(sample["mask"])'),
+        ("modulus", 'params["modulus"]'),
+        ("base", 'params["base"]'),
+        ("levels", 'params["levels"]'),
+    )
+    for op in ("<", ">")
+)
+
+
 def _load(source: str):
     import types
 
@@ -312,11 +351,35 @@ def _load(source: str):
 
 
 def main() -> int:
+    boundary = subprocess.run([sys.executable, str(ROOT / 'tests/test_execution.py')], check=False)
+    if boundary.returncode:
+        return 1
+    result = subprocess.run([sys.executable, str(ROOT / "tests/test_compatibility.py")], check=False)
+    if result.returncode:
+        return result.returncode
     baseline = check_extract.run(_load(REFERENCE), SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")
         return 1
     print("PASS reference implementation passes the hidden tests")
+
+    # The two index checks must direct a learner to the index rule, not to
+    # switching-key code. Keep ordinary valid calls correct in this regression.
+    for name, checkpoint in (("phase_coefficient", check_extract.check_phase),
+                             ("extract_sample", check_extract.check_extract)):
+        module = _load(REFERENCE)
+        original = getattr(module, name)
+        def wrong_exception(params, *args, _original=original):
+            if not 0 <= args[-1] < params["degree"]:
+                raise IndexError("out of range")
+            return _original(params, *args)
+        setattr(module, name, wrong_exception)
+        failures = checkpoint(module, SEED)
+        if ("an out-of-range coefficient index must raise ValueError" not in failures
+                or any("incompatible key" in failure for failure in failures)):
+            print(f"FAIL {name}: index feedback names the wrong property")
+            return 1
+    print("PASS both index checkpoints name the documented range property")
 
     survivors = 0
     for name, substitutions in MUTATIONS:

@@ -7,8 +7,8 @@ learner's own image alongside it, and all eight checkpoints are graded by runnin
 suite. Option B2 moved `fixtures/` to this side of the boundary as well: it has to
 implement `phase_coefficient`, `extract_sample`, `extract_trace`, `decompose_mask`,
 `key_switch` and `domain_report` to derive a deployment's trace, switched sample and domain
-report, and those are every one of the six names `starter/extract.py` asks the learner to
-write. The Portal-facing surface now lives in `participant/server.py`, in a separate image
+report: six of the seven graded functions. The seventh, `extraction_counterexample`,
+is implemented in author-only `reference/extract.py`, absent from both runtime images. The Portal-facing surface now lives in `participant/server.py`, in a separate image
 (see ../Dockerfile) that this process's own container never builds; this file, `fixtures/`
 and `tests/hidden/` are reachable only over the Compose-internal network (see
 ../docker-compose.yml), never from the participant container's filesystem.
@@ -54,6 +54,9 @@ from urllib.parse import parse_qs, urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import public_payload
+
+from participant.execution import LearnerSession, LearnerError
+from tests.hidden import check_extract
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -158,42 +161,6 @@ def _limits() -> None:
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_BYTES, MAX_OUTPUT_BYTES))
 
 
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_extract
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import extract
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-phases = {phases!r}
-if phases:
-    failures = []
-    for name in phases:
-        failures.extend(getattr(check_extract, name)(extract, {seed!r}))
-else:
-    failures = check_extract.run(extract, {seed!r})
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
 
@@ -205,58 +172,20 @@ def _failure_message(failures: list[object]) -> str | None:
     return text[:MAX_MESSAGE_CHARS] if text else None
 
 
-def _run_submission(
-    submission: object, phases: tuple[str, ...], seed: str
-) -> tuple[bool, str | None]:
-    """Run the named hidden phases against the learner's file in a throwaway workspace."""
-    source = submission
-    if isinstance(source, dict):
-        source = source.get("extract.py")
-    if not isinstance(source, str) or not source.strip():
+def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> tuple[bool, str | None]:
+    """Only the trusted parent computes checkpoint verdicts."""
+    source = submission.get('extract.py') if isinstance(submission, dict) else submission
+    if not isinstance(source, str) or not source.strip() or len(source.encode()) > MAX_BODY_BYTES:
         return False, None
-    if len(source) > MAX_BODY_BYTES:
-        return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "extract.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    try:
+        with LearnerSession({'extract.py': source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            module = learner.module()
+            failures = []
+            for phase in phases:
+                failures.extend(getattr(check_extract, phase)(module, seed))
+        return (False, _failure_message(failures)) if failures else (True, None)
+    except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        return False, 'The submitted functions did not return the required values within the execution limits.'
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:

@@ -126,9 +126,8 @@ def key_switch(params: dict, switching_key: dict, sample: dict) -> dict:
     ciphertexts and the target secret does not appear at all, which is what makes this
     usable and what makes "decrypt and re-encrypt" the wrong picture of it.
 
-    A key that does not match is rejected rather than applied. It would produce a
-    well-formed ciphertext that decrypts to noise under both keys, which is worse than an
-    error.
+    A key that does not match is rejected rather than applied: it does not guarantee
+    correct decryption at the required target dimension.
     """
     _require_compatible(params, switching_key, sample)
 
@@ -153,6 +152,8 @@ def key_switch(params: dict, switching_key: dict, sample: dict) -> dict:
 def _require_compatible(params: dict, switching_key: dict, sample: dict) -> None:
     if switching_key["sourceDimension"] != len(sample["mask"]):
         raise ValueError("the switching key does not match the sample's dimension")
+    if switching_key["targetDimension"] != params["target_dimension"]:
+        raise ValueError("the switching key does not match the target dimension")
     if (
         switching_key["modulus"] != params["modulus"]
         or switching_key["base"] != params["base"]
@@ -192,3 +193,11 @@ def _compatible(params: dict, sample: dict, switching_key: dict) -> bool:
     except ValueError:
         return False
     return True
+
+
+def extraction_counterexample(params: dict, index: int) -> dict:
+    degree = params["degree"]
+    a, b, secret = [0] * degree, [0] * degree, [0] * degree
+    a[degree - 1] = 1
+    secret[index + 1] = 1
+    return {"a": a, "b": b, "secret": secret}

@@ -90,7 +90,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `endtoend` | 40 | RLWE 係数・extracted・switched の 3 つが一致し、switch が実際に動かしている |
 | `transfer` | 30 | 見たことのない degree・次元・base・modulus で上記すべて |
 
-8 つのうち 7 つに hint があり、いずれもその checkpoint の 50% 上限の内側です。
+8 項目すべてに3段ずつの hint があり、いずれもその checkpoint の 50% 上限の内側です。
 
 ## switch の検査を交差させる理由
 
@@ -150,8 +150,9 @@ Week 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.
 verifier の `GET /public` から読みます。 そこが返すのは実演であって checkpoint の期待値では
 ありません。 `fixtures/generate.py` はそれらを導出するために `phase_coefficient`、
 `extract_sample`、 `extract_trace`、 `decompose_mask`、 `key_switch`、 `domain_report` を
-実装する必要があります。 これは `starter/extract.py` が書かせる名前のすべてなので、
-あなたが実行する image には入りません
+実装する必要があります。 採点対象7関数のうち6関数なので、参加者 image には入りません。
+7番目の `extraction_counterexample` の参考解は `reference/extract.py` にあり、
+author stage だけがコピーします。参加者・verifier のどちらにも参考解は含まれません
 （[#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)）。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
@@ -168,5 +169,35 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を走らせます。29 個の壊れた実装のうち 1 つは
+`make reference-test` が mutation suite を走らせます。44 個の壊れた実装のうち 1 つは
 最後の係数でだけ正しく、それ以外で間違っています。この問題が捕まえるために作られている形です。
+
+## Issue #716 — 入口と3段ヒント
+
+8項目に各3段（仕組み・小さい計算例・画面の手順）、各2点のヒントを設けました。合計48点です。必要な抽出式・鍵の適合条件・追加ノイズ上限は問題文にあります。抽出の位相保存と、鍵切り替えのノイズ変化を区別します。
+
+参加者可視情報のみの独立読解で不足を洗い出し、改訂後も読解確認しました。問題文のAPIだけを使う最初のphase実装を、作者側のphase検査で確認（失敗0）。make agent-gateは116件成功。実ブラウザのこの問題の提出と本番デプロイは未実施です。
+
+作者側の追加確認：reference が通り、44種類の誤実装をすべて検出しました。これはブラウザ実プレーの証拠とは区別します。
+
+transferには指定位置で符号省略を検出する反例の構成も必要です。未提出・ゼロ鍵・位置固定の証拠を独立計算で拒否します。必要な式は無料のまま、抽出手順の転記だけでは完了しません。
+
+移し先の次元、modulus/base/levelsを個別に変えた不適合鍵はValueErrorで拒否し、domain_reportも不適合を返すことを確認します。
+
+入力keyIdの欠落・Noneは他の適合条件が揃えば受理し、key_switchとdomain_reportの両方でこの正例を検査します。
+
+反例はdegree 2〜5・modulus 3/4/5/7/8/9も独立検査し、4を法とすると符号の差が消える誤構成を拒否します。phase/extractの範囲外indexは、その範囲の性質を示すValueErrorの案内となることを回帰確認しました。
+
+
+PR #827 追加確認：最終反例は全index=0..degree−2で検査します。互換性の数値条件は大小両側の不一致を調べ、keyId省略/Noneは引き続き有効です。作者回帰4件（8方向の比較をswitch/domain各項目で確認）と44変異をDocker make reference-testで確認。starterと画面の用語を定義し、endtoendの小例はdelta=4・位相5→3・復号1→1まで完結させました。カタログ116件と差分検査も成功。
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

@@ -7,6 +7,11 @@
 # sibling without checking that `docker manifest inspect` still finds it.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+
+RUN useradd --uid 10001 --create-home lab
+USER lab
+
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -21,11 +26,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # Issue 543's option B2 is why `fixtures/` is gone too. `fixtures/generate.py` has to
 # implement working `phase_coefficient`, `extract_sample`, `extract_trace`,
 # `decompose_mask`, `key_switch` and `domain_report` to derive this deployment's trace, its
-# switched sample and its domain report -- every one of the six names `starter/extract.py`
-# asks the learner to write. While it shipped here all six were a single import away, with
+# switched sample and its domain report -- six of the seven functions graded here.
+# While it shipped here those six were a single import away, with
 # no comparison anywhere near them. `show.py` now fetches this deployment's public half
 # from the verifier's `GET /public` over the Compose-internal network (see show.py and the
 # VERIFIER_PUBLIC_URL wiring in docker-compose.yml).
+#
+# The seventh function, `extraction_counterexample`, is implemented only in
+# `reference/extract.py`. Only the author stage copies `reference/`; neither the
+# participant nor the verifier stage contains that reference answer.
 #
 # `participant/fhe.py` stays -- it is the supplied TFHE layer (the ring and the encoding,
 # RLWE, the gadget and RGSW, the external product, CMUX and blind rotation, plus the
@@ -51,6 +60,7 @@ CMD ["python", "participant/server.py"]
 # a learner builds on and the one they are graded against cannot drift apart. The Portal
 # server and its adapter are deliberately absent from this stage.
 FROM base AS verifier
+COPY participant/execution.py participant/protocol.py participant/worker.py participant/isolation.py ./participant/
 COPY participant/fhe.py ./participant/fhe.py
 COPY fixtures/ ./fixtures/
 COPY tests/hidden/ ./tests/hidden/
@@ -67,9 +77,11 @@ CMD ["python", "verifier/server.py"]
 # author image too unless it is copied back -- and mutation.py, the hidden suite and the
 # seed sweep all need it.
 FROM participant AS author
+COPY tests/test_execution.py ./tests/test_execution.py
 
 COPY fixtures/ ./fixtures/
 COPY tests/hidden/ ./tests/hidden/
+COPY tests/test_compatibility.py ./tests/test_compatibility.py
 COPY verifier/ ./verifier/
 COPY reference/ ./reference/
 COPY mutation.py ./mutation.py
