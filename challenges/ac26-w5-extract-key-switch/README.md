@@ -92,7 +92,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `endtoend` | 40 | The RLWE coefficient, the extracted sample and the switched sample all agree, and the switch moved something |
 | `transfer` | 30 | All of it under a degree, dimension, base and modulus you have not seen |
 
-Hints on seven of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints at2 points each:24 hints cost48 points in total, leaving252 of the300 base points before wrong-answer penalties.
 
 ## Why the switch checks are crossed
 
@@ -171,7 +171,7 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: 35 broken implementations. One is
+`make reference-test` runs the mutation suite: 44 broken implementations. One is
 correct at the last coefficient and nowhere else, which is the shape this problem is built
 to catch.
 
@@ -179,7 +179,7 @@ to catch.
 
 All eight checkpoints have three hints: mechanism, small arithmetic example, and named screen actions. Each costs2 points,48 total. Required extraction formulas, key compatibility conditions and the additional-noise bound are in the statement. Exact phase preservation during extraction is distinguished from noise changes during switching.
 
-An independent participant-only read found missing contracts and rechecked the revision. A first phase implementation using only the documented API passed the author-side phase check with no failures. The author-side reference passed and all 35 mutation variants were rejected. make agent-gate validated 116 entries. Browser submission for this problem and production deployment were not performed.
+An independent participant-only read found missing contracts and rechecked the revision. A first phase implementation using only the documented API passed the author-side phase check with no failures. The author-side reference passed and all 44 mutation variants were rejected. make agent-gate validated 116 entries. Browser submission for this problem and production deployment were not performed.
 
 Transfer also requires constructed counterexamples at supplied indices. Independent arithmetic rejects missing, zero-key and fixed-index evidence. Free formulas remain available; copying the extraction recipe alone no longer completes the problem.
 
@@ -188,3 +188,6 @@ Target-dimension mismatches and each modulus/base/levels mismatch are rejected w
 Missing and None input key labels are accepted when all other compatibility conditions hold; both the switch and domain report exercise these positive cases.
 
 Counterexamples are independently checked at degrees 2–5 and moduli 3/4/5/7/8/9, rejecting constructions whose sign difference disappears modulo 4. Regression checks ensure that invalid phase/extract indices report the documented index-range ValueError property.
+
+
+PR #827 follow-up: the final counterexample is checked at every index0..degree−2. Compatibility is tested on both sides of numeric equality; absent/None keyId remains valid. Docker make reference-test passed3 author regressions (including8 directional comparisons at both switch/domain checkpoints) and44 mutations. Starter and screen terms are defined; the end-to-end example specifies delta=4, phase5→3, decoded1→1. Catalog116 and diff checks pass.

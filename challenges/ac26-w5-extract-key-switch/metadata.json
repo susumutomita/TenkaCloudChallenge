@@ -232,7 +232,7 @@
           },
           {
             "id": "endtoend-hint-2",
-            "content": "入力位相が5で、桁2倍のentryノイズ1を引けば出力位相は3です。位相が変わっても同じメッセージへ丸まるかは、間隔deltaと許容範囲によります。",
+            "content": "q=8、メッセージは0/1、delta=4。符号化した1は4です。位相5→3なら誤差は+1→−1で、両方とも許容幅|誤差|<2内。復号は((位相+2)//4)%2なので5も3も1になり、保持に成功します。",
             "penalty": 2
           },
           {
@@ -404,7 +404,7 @@
             },
             {
               "id": "endtoend-hint-2",
-              "content": "Input phase5 minus digit2 times entry noise1 gives output phase3. Whether both round to one message depends on delta and the decoding budget."
+              "content": "q=8, messages0/1, delta=4: message1 encodes as4. Phase5→3 has errors+1→−1, both within the budget |error|<2. Decoding is((phase+2)//4)%2; both phases decode to1, so the message is preserved."
             },
             {
               "id": "endtoend-hint-3",

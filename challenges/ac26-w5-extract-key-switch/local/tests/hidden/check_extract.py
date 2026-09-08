@@ -422,13 +422,11 @@ def check_switch(module, seed: str) -> list[str]:
 def _parameter_mismatches(key: dict) -> list[dict]:
     """Individually violate each declared compatibility parameter."""
     return [
-        {**key, "sourceDimension": key["sourceDimension"] - 1},
-        {**key, "targetDimension": key["targetDimension"] + 1},
-        {**key, "targetDimension": 0},
-        {**key, "modulus": key["modulus"] + 1},
-        {**key, "base": key["base"] + 1},
-        {**key, "levels": key["levels"] + 1},
-    ]
+        {**key, field: key[field] + offset}
+        for field in ("sourceDimension", "targetDimension", "modulus", "base", "levels")
+        for offset in (-1, 1)
+    ] + [{**key, "targetDimension": 0}]
+
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +539,7 @@ def check_counterexample(module, seed: str) -> list[str]:
     ]
     for par in cases:
         n, q = par["degree"], par["modulus"]
-        for index in sorted({0, min(n // 2, n - 2), n - 2}):
+        for index in range(n - 1):
             try:
                 witness = module.extraction_counterexample(dict(par), index)
             except Exception as error:

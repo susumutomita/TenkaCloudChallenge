@@ -74,6 +74,7 @@ FROM participant AS author
 
 COPY fixtures/ ./fixtures/
 COPY tests/hidden/ ./tests/hidden/
+COPY tests/test_compatibility.py ./tests/test_compatibility.py
 COPY verifier/ ./verifier/
 COPY reference/ ./reference/
 COPY mutation.py ./mutation.py

@@ -169,7 +169,7 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を走らせます。35 個の壊れた実装のうち 1 つは
+`make reference-test` が mutation suite を走らせます。44 個の壊れた実装のうち 1 つは
 最後の係数でだけ正しく、それ以外で間違っています。この問題が捕まえるために作られている形です。
 
 ## Issue #716 — 入口と3段ヒント
@@ -187,3 +187,6 @@ transferには指定位置で符号省略を検出する反例の構成も必要
 入力keyIdの欠落・Noneは他の適合条件が揃えば受理し、key_switchとdomain_reportの両方でこの正例を検査します。
 
 反例はdegree 2〜5・modulus 3/4/5/7/8/9も独立検査し、4を法とすると符号の差が消える誤構成を拒否します。phase/extractの範囲外indexは、その範囲の性質を示すValueErrorの案内となることを回帰確認しました。
+
+
+PR #827 追加確認：最終反例は全index=0..degree−2で検査します。互換性の数値条件は大小両側の不一致を調べ、keyId省略/Noneは引き続き有効です。作者回帰3件（8方向の比較をswitch/domain各項目で確認）と44変異をDocker make reference-testで確認。starterと画面の用語を定義し、endtoendの小例はdelta=4・位相5→3・復号1→1まで完結させました。カタログ116件と差分検査も成功。

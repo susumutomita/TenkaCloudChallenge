@@ -30,6 +30,7 @@ An unkillable entry in this list would teach that a SURVIVED line can be ignored
 from __future__ import annotations
 
 import sys
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -322,6 +323,24 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 )
 
 
+# Directional comparisons cannot implement equality, on either side of the boundary.
+MUTATIONS += (("counterexample fails only at interior index one", [
+    ("secret[index + 1] = 1", "secret[0 if degree >= 4 and index == 1 else index + 1] = 1")
+]),)
+MUTATIONS += tuple(
+    (f"{field} compatibility rejects only one direction {op}", [
+        (f'switching_key["{field}"] != {other}', f'switching_key["{field}"] {op} {other}')
+    ])
+    for field, other in (
+        ("sourceDimension", 'len(sample["mask"])'),
+        ("modulus", 'params["modulus"]'),
+        ("base", 'params["base"]'),
+        ("levels", 'params["levels"]'),
+    )
+    for op in ("<", ">")
+)
+
+
 def _load(source: str):
     import types
 
@@ -332,6 +351,9 @@ def _load(source: str):
 
 
 def main() -> int:
+    result = subprocess.run([sys.executable, str(ROOT / "tests/test_compatibility.py")], check=False)
+    if result.returncode:
+        return result.returncode
     baseline = check_extract.run(_load(REFERENCE), SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")

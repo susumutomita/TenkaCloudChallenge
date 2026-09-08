@@ -4,7 +4,10 @@ A ciphertext is transformed message data. A polynomial such as 1+2X is stored
 as coefficients [1,2]. The ring replaces X**N with -1 and reduces numbers by q.
 LWE has a mask array and a body; RLWE has two coefficient arrays a,b. A phase
 subtracts the key contribution. Extraction preserves a phase exactly; switching
-changes its noise but preserves the message within the decoding budget.
+changes its noise (the small error added to the encoded message). The decoding
+budget is the allowed error range in which rounding still returns the same message.
+For spacing delta, errors strictly smaller than delta/2 in magnitude are inside
+that budget; check both the initial and the final error.
 
 Start with phase_coefficient and submit phase. Public tests also need later
 functions, so their unfinished failures do not block this first checkpoint.
