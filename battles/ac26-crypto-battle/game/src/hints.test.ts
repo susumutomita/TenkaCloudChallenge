@@ -65,10 +65,10 @@ function oneOrderPerKind(): { projection: CryptoBattleProjection; order: Contrac
     state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
   }
   let streaming = applyOp(initialState({...CTX,matchSecret:"ec-hints"},STREAMING_ORDER_CONFIG),"teamA",{kind:"start"});
-  for(let t=0;t<=1_200_000&&(!seen.has("anamorphic-rejection")||!seen.has("stark-trace")||!seen.has("ec-add")||!seen.has("io-equivalence")||!seen.has("snark-constraints"));t+=30000){
+  for(let t=0;t<=1_200_000 && seen.size<Object.keys(HINT_LADDER).length;t+=30000){
     streaming=tick(streaming,t);
     const projection=projectForTeam(streaming,"teamA");
-    for(const order of projection.myContracts)if(order.task.kind==="anamorphic-rejection"||order.task.kind==="stark-trace"||order.task.kind==="ec-add"||order.task.kind==="io-equivalence"||order.task.kind==="snark-constraints")seen.set(order.task.kind,{projection,order});
+    for(const order of projection.myContracts)seen.set(order.task.kind,{projection,order});
   }
   return [...seen.values()];
 }
@@ -409,4 +409,16 @@ describe("the disclosure Order's hints walk the only method it accepts", () => {
     }
     throw new Error("test setup: expected a free share Order on the belt");
   });
+});
+
+test("new English paid hints include a worked example and the current operands",()=>{
+ const p=projectForTeam(startedMatch(),"teamA"), base=ctxFor(p,firstOpenOrder(startedMatch(),"teamA"));
+ const rsa=HINT_LADDER["rsa-decrypt"][2]!.text({...base,task:{kind:"rsa-decrypt",ciphertext:8,d:3,n:15}}).en;
+ expect(rsa).toContain("c=8");expect(rsa).toContain("dividing by15");
+ const enigma=HINT_LADDER["enigma-encrypt"][2]!.text({...base,task:{kind:"enigma-encrypt",plaintext:[2],initial:1}}).en;
+ expect(enigma).toContain("Input is 2");expect(enigma).toContain("initial position 1");expect(enigma).toContain("position 2");
+ const sig={...base,task:{kind:"ecdsa-sign" as const,hash:3,d:5,k:3}};
+ expect(HINT_LADDER["ecdsa-sign"][1]!.text(sig).en).toContain("signature is(1,5)");
+ const last=HINT_LADDER["ecdsa-sign"][2]!.text(sig).en;
+ expect(last).toContain("h=3, d=5, k=3");expect(last).toContain("3+5×r");
 });

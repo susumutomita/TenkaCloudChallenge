@@ -41,7 +41,7 @@ import type { OrderTaskKind } from "./types.ts";
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec" | "anamorphic" | "stark" | "io" | "snark";
+export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec" | "anamorphic" | "stark" | "io" | "snark" | "evolution";
 
 /**
  * What an Order forbids being made public.
@@ -91,6 +91,7 @@ export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMet
   anamorphic: {method:"anamorphic",publishesRawSecretMaterial:false},
   stark: {method:"stark",publishesRawSecretMaterial:false},
   io: {method:"io",publishesRawSecretMaterial:false},
+  evolution: {method:"evolution",publishesRawSecretMaterial:false},
   snark: {method:"snark",publishesRawSecretMaterial:false},
   ec: {method:"ec",publishesRawSecretMaterial:false},
   duel: { method: "duel", publishesRawSecretMaterial: true },
@@ -122,6 +123,7 @@ export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
   "stark",
   "io",
   "snark",
+  "evolution",
 ];
 
 /**
@@ -142,6 +144,9 @@ const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[
   "stark-trace": ["stark"],
   "io-equivalence": ["io"],
   "snark-constraints": ["snark"],
+  "rsa-decrypt": ["evolution"],
+  "enigma-encrypt": ["evolution"],
+  "ecdsa-sign": ["evolution"],
   "rotor-encrypt": ["leak", "cipher"],
   "rsa-encrypt": ["leak", "cipher"],
   "rps-duel": ["duel"],

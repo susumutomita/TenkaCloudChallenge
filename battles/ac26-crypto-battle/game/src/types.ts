@@ -1,3 +1,4 @@
+import type { EvolutionTask } from "./evolution.ts";
 import type {AnamorphicTask} from "./anamorphic.ts";
 import type {StarkTask} from "./stark.ts";
 import type {IoTask} from "./io.ts";
@@ -200,6 +201,7 @@ export interface CryptoBattleConfig {
   readonly starkOrders?: boolean;
   readonly anamorphicOrders?: boolean;
   readonly snarkOrders?: boolean;
+  readonly evolutionOrders?: boolean;
   readonly proofProtocol?: "schnorr-v1";
   /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
   readonly prime: string;
@@ -389,6 +391,7 @@ export type OrderTask =
   | AnamorphicTask
   | StarkTask
   | IoTask
+  | EvolutionTask
   | ConstraintTask
   | { readonly kind: "ec-add"; readonly left:Point; readonly right:Point }
   | { readonly kind: "zk-sudoku" }
@@ -1013,6 +1016,7 @@ export type StoredHuntLogEntry = HuntLogEntry | {
 
 export type CryptoBattleOp =
   | { readonly kind: "schnorr-commit"; readonly contractId: string; readonly y: number; readonly a: number }
+  | { readonly kind: "evolution"; readonly contractId: string; readonly answer: string }
   | { readonly kind: "snark"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "ec"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "anamorphic"; readonly contractId:string; readonly answer:string }
@@ -1276,6 +1280,7 @@ export type OrderTaskProjection =
   | AnamorphicTask
   | StarkTask
   | IoTask
+  | EvolutionTask
   | ConstraintTask
   | { readonly kind: "ec-add"; readonly left:Point; readonly right:Point }
   | { readonly kind: "zk-sudoku" }

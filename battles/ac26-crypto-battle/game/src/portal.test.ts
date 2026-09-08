@@ -1,3 +1,4 @@
+import EvolutionConceptGuide from "../../portal/ConceptExplanation.tsx";
 import RawStatusPanel from "../../portal/StatusPanelCore.tsx";
 import { artifactFields } from "./ledger-codec.ts";
 /**
@@ -568,7 +569,8 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
     it(`documents every submission method the game accepts (${locale})`, () => {
       const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
       for (const method of ALL_SUBMISSION_METHODS) {
-        expect(html).toContain(method.toUpperCase());
+        if (method === "evolution") { for (const name of ["ENIGMA", "RSA", "ECDSA"]) expect(html).toContain(name); }
+        else expect(html).toContain(method.toUpperCase());
       }
       // And no longer claims a fixed count that the method set can outgrow.
       expect(html).not.toContain("The 4 moves");
@@ -2144,5 +2146,12 @@ describe("raw status missing connection recovery",()=>{
   expect(markup).toContain(locale==="ja"?"ページを再読み込み":"Reload the page");
   expect(markup).toContain(locale==="ja"?"運営に連絡":"contact the event organizer");
   expect(markup).not.toContain("接続できませんのため");
+ });
+});
+
+describe("the global guide exposes the evolution lessons",()=>{
+ for(const locale of ["ja","en"] as const)it(locale,()=>{
+  const html=renderToStaticMarkup(createElement(EvolutionConceptGuide,{locale}));
+  for(const text of locale==="ja"?["エニグマはなぜ同じ操作で戻せる？","秘密鍵でどう元に戻す？","署名は何を確かめる？"]:["Why does Enigma invert itself?","How does a private key decrypt?","What does a signature verify?"])expect(html).toContain(text);
  });
 });

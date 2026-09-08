@@ -45,7 +45,7 @@ function cardFor(state: CryptoBattleState, teamId: string): LightningCard | unde
 export function lightningEligible(state: CryptoBattleState, contract: Contract): boolean {
   return state.phase === "endgame" && cardFor(state, contract.teamId)?.status === "available"
     && contract.status === "open" && contract.expiresAtMs > (state.nowMs ?? 0)
-    && contract.allowedMethods.some(method => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark", "stark", "anamorphic"].includes(method))
+    && contract.allowedMethods.some(method => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark", "stark", "anamorphic", "evolution"].includes(method))
     && contract.answerAttempted === false && contract.cipherFailed !== true;
 }
 

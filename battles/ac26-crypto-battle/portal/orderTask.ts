@@ -31,6 +31,9 @@ export function describeTaskShort(task: OrderTaskProjection): string {
     case "anamorphic-rejection": return "Anamorphic ciphertext selection";
     case "stark-trace": return "STARK trace and fold";
     case "io-equivalence": return "Outputs and their probabilities";
+    case "rsa-decrypt": return "RSA decryption";
+    case "enigma-encrypt": return "Enigma reflector model";
+    case "ecdsa-sign": return "ECDSA signature";
     case "snark-constraints": return "SNARK gate/copy constraints";
     case "ec-add": return "EC P + Q";
     case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
@@ -58,10 +61,13 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "anamorphic-rejection":"アナモルフィック暗号：隠れたビットを送る",
     "stark-trace":"STARK：実行表と折り畳みを検査",
     "io-equivalence":"答えと、その出る確率を比べる",
+    "rsa-decrypt":"RSA：秘密鍵で元の数に戻す",
+    "enigma-encrypt":"エニグマ：往復する配線で暗号化",
+    "ecdsa-sign":"ECDSA：署名を手計算する",
     "snark-constraints":"短い証明（SNARK）の準備：計算を検査",
     "ec-add":"楕円曲線：2点を足す",
     "rotor-encrypt": "進む車輪で4文字を暗号にする",
-    "rsa-encrypt": "公開鍵で1個の数を暗号にする",
+    "rsa-encrypt": "RSA：公開鍵で1個の数を暗号にする",
     "rps-duel": "手を隠して、相手とじゃんけん",
     "reveal-share": "かけらを公開するか、秘密を守って証明する",
     "homomorphic-sum": "暗号文のまま足す",
@@ -79,6 +85,9 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "anamorphic-rejection":"Anamorphic encryption: send a hidden bit",
     "stark-trace":"STARK: check the trace and fold",
     "io-equivalence":"Compare answers and their probabilities",
+    "rsa-decrypt":"RSA: recover the original with a private key",
+    "enigma-encrypt":"Enigma: encrypt through returning wires",
+    "ecdsa-sign":"ECDSA: calculate a signature",
     "snark-constraints":"Prepare a short proof (SNARK): check computation",
     "ec-add":"Elliptic curve: add two points",
     "rotor-encrypt": "Encrypt four digits with advancing wheels",
@@ -138,6 +147,9 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
     case "anamorphic-rejection": return locale === "ja" ? "候補を選び、通常と秘密の復号を計算" : "Choose a trial and decode both messages";
     case "stark-trace": return locale === "ja" ? "実行表のずれと折り畳みの4欄を計算" : "Calculate four trace and fold fields";
     case "io-equivalence": return locale === "ja" ? "全4入力の答えと公開データを比較" : "Compare all four inputs and published data";
+    case "rsa-decrypt": return `RSA · c=${task.ciphertext}`;
+    case "enigma-encrypt": return `Enigma · ${task.plaintext.join(" ")}`;
+    case "ecdsa-sign": return `ECDSA · h=${task.hash}`;
     case "snark-constraints": return locale === "ja" ? "3つの計算と2本の配線" : "Three gates and two wires";
     case "ec-add": return `${task.left?.join(",")??"O"} + ${task.right?.join(",")??"O"}`;
     case "rotor-encrypt": return `Rotor · ${task.plaintext.join(" ")}`;
