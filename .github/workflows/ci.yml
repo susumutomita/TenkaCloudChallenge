@@ -8,13 +8,56 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_battle_capacity:
+        description: Run the 99-team battle capacity tests
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      battle: ${{ steps.paths.outputs.battle }}
+      capacity: ${{ steps.paths.outputs.capacity }}
+    steps:
+      - name: Checkout history for changed paths
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Test CI routing
+        run: bash .github/scripts/classify-ci-changes.test.sh
+      - name: Select affected tests
+        id: paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_CAPACITY: ${{ inputs.run_battle_capacity }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            echo 'battle=true' >> "$GITHUB_OUTPUT"
+            echo "capacity=${RUN_CAPACITY:-false}" >> "$GITHUB_OUTPUT"
+          else
+            if [[ "$EVENT_NAME" == pull_request ]]; then
+              git diff --name-only "$BASE_SHA...$HEAD_SHA" > changed-paths.txt
+            elif [[ "$BASE_SHA" =~ ^0+$ ]]; then
+              git ls-tree -r --name-only "$HEAD_SHA" > changed-paths.txt
+            else
+              git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-paths.txt
+            fi
+            bash .github/scripts/classify-ci-changes.sh < changed-paths.txt >> "$GITHUB_OUTPUT"
+          fi
+
   validate:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -35,10 +78,12 @@ jobs:
         run: make agent-gate
 
       - name: Install ac26 crypto battle test dependencies
+        if: needs.changes.outputs.battle == 'true'
         working-directory: battles/ac26-crypto-battle/game
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Test and typecheck ac26 crypto battle
+        if: needs.changes.outputs.battle == 'true'
         working-directory: battles/ac26-crypto-battle/game
         run: bun test $(find src -name "*.test.ts" ! -name "state-size.test.ts") && bun run typecheck
 
@@ -47,16 +92,20 @@ jobs:
       # time the reducer's or the portal's shapes moved -- which is exactly the
       # failure mode #643 found in the problem-local tests before PR #648.
       - name: Install ac26 crypto battle dev harness dependencies
+        if: needs.changes.outputs.battle == 'true'
         working-directory: battles/ac26-crypto-battle/dev
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Test and typecheck ac26 crypto battle dev harness
+        if: needs.changes.outputs.battle == 'true'
         working-directory: battles/ac26-crypto-battle/dev
         run: bun test && bun run typecheck
 
   # Complete legal-transition traces exceed the five-minute metadata/unit budget.
   # Keep every case, splitting the three large rosters into independent jobs.
   battle-capacity:
+    needs: changes
+    if: needs.changes.outputs.capacity == 'true'
     name: battle-capacity (${{ matrix.profile }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
