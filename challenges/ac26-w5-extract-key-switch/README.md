@@ -173,3 +173,9 @@ Zero. No cloud account, no AWS resources.
 `make reference-test` runs the mutation suite: twenty-nine broken implementations. One is
 correct at the last coefficient and nowhere else, which is the shape this problem is built
 to catch.
+
+## Issue #716 — Entry and three-rung hints
+
+All eight checkpoints have three hints: mechanism, small arithmetic example, and named screen actions. Each costs2 points,48 total. Required extraction formulas, key compatibility conditions and the additional-noise bound are in the statement. Exact phase preservation during extraction is distinguished from noise changes during switching.
+
+An independent participant-only read found missing contracts and rechecked the revision. A first phase implementation using only the documented API passed the author-side phase check with no failures. The author-side reference passed and all 29 mutation variants were rejected. make agent-gate validated 116 entries. Browser submission for this problem and production deployment were not performed.

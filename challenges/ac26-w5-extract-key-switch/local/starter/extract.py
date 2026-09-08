@@ -1,57 +1,21 @@
-"""The only file you edit.
+"""Edit this file to extract one encrypted value and move it to another key.
 
-Blind rotation leaves an RLWE ciphertext. Two things still have to happen before it is
-useful: one coefficient of it has to come out as an LWE sample, and that sample has to move
-to a different key and a different dimension — **without changing what it says**.
+A ciphertext is transformed message data. A polynomial such as 1+2X is stored
+as coefficients [1,2]. The ring replaces X**N with -1 and reduces numbers by q.
+LWE has a mask array and a body; RLWE has two coefficient arrays a,b. A phase
+subtracts the key contribution. Extraction preserves a phase exactly; switching
+changes its noise but preserves the message within the decoding budget.
 
-You are not rebuilding anything before that. `participant.fhe` supplies the ring, RLWE,
-RGSW, the external product, CMUX and the rotation loop, all correct. This problem is the two
-steps after.
+Start with phase_coefficient and submit phase. Public tests also need later
+functions, so their unfinished failures do not block this first checkpoint.
+The statement supplies every required formula and compatibility condition.
+Only phase_coefficient receives a key for checking. extract_sample and
+key_switch do not decrypt or receive either secret key.
 
-## Extraction
-
-The phase polynomial is `b - a*s`. Coefficient `k` of it can be written as an LWE phase over
-the ring secret's own coefficients:
-
-```text
-phase_k = b_k - sum_j c_j * s_j
-```
-
-Work out what `c_j` has to be. `(a*s)_k` collects the products `a_i * s_j` whose indices
-meet at `k` **in the ring**, and the ring is negacyclic — some of those terms arrive with
-their sign flipped. Which ones, and why, is the whole checkpoint.
-
-Note what the extracted sample's secret is: `(s_0, ..., s_(N-1))`, the ring secret read as a
-vector. That is not the key the rest of the system uses, which is why the second half of this
-problem exists.
-
-## Key switching
-
-Move a sample from `s_old` (dimension `n_old`) to `s_new` (dimension `n_new`). The switching
-key holds, for every old index `j` and level `l`:
-
-```text
-ksk[j][l] = LWE_(s_new)( B^(L-1-l) * s_old[j] )
-```
-
-Decompose the old mask, subtract the matching entries, and read what happens to the phase.
-The convention is `ac26-w5-rgsw-external`'s, unchanged: `q = base ** levels`, unsigned,
-most-significant weight first, exactly `levels` digits, gadget `(B^(L-1), ..., B, 1)`
-descending. That is lecture slide 30's order: with `B = 4`, `L = 3`, `q = 64`,
-`decompose(47) == (2, 3, 3)` — `47 = 2*16 + 3*4 + 3*1`. `decompose` is supplied.
-
-You are given **no secret at either end**. Not the ring secret, not the source key, not the
-target key. If you find yourself wanting one, the design is telling you something: key
-switching is not a decrypt followed by a re-encrypt.
-
-`params` carries `base`, `levels`, `degree`, `dimension`, `target_dimension`, `modulus`,
-`plaintext_modulus`, `delta`. They all change between checkpoints. Anything hardcoded is
-wrong somewhere — including coefficient index 0, which is the one you will test first.
-
-Run `make inspect` first.
-
-None of this is secure — the parameters are small enough to enumerate and both secrets fall
-to linear algebra. It is a toy of the mechanism.
+params is a dict: degree=N, modulus=q, base=B, levels=L, q=B**L.
+Python ** is a power, // integer division and % the division remainder.
+These tiny keys can be enumerated. Unknown noise is not an exact linear equation;
+this is an arithmetic teaching model, not practical security.
 """
 
 from __future__ import annotations
@@ -87,8 +51,8 @@ def extract_sample(params: dict, ciphertext: dict, index: int) -> dict:
     phase has to come out equal to `phase_coefficient` for the same index — exactly, not to
     within a rounding step. Extraction adds no noise and decrypts nothing.
 
-    For each secret index `j` there is exactly one mask coefficient of `a` that pairs with
-    it. Find which, and find when the pairing crosses the degree.
+    For j=0..N-1: source=(index-j)%N, wrapped=(j>index), sign=-1 if
+    wrapped else 1, mask[j]=(sign*a[source])%q and body=b[index]%q.
 
     Reject an index outside the ring. Do not special-case index 0.
     """
@@ -108,8 +72,8 @@ def extract_trace(params: dict, ciphertext: dict, index: int) -> tuple[dict, ...
     value     the mask coefficient itself, reduced
     ```
 
-    Reading down `wrapped` should show exactly one boundary, and where it sits is not a
-    coincidence.
+    At index=N-1 every wrapped value is False. At other indices the later
+    positions become True.
     """
     return ()
 
@@ -145,8 +109,8 @@ def key_switch(params: dict, switching_key: dict, sample: dict) -> dict:
     phase and the shape of the answer follows.
 
     Reject a key that does not match the sample — dimension, parameters, or a `keyId` on the
-    sample that names a different source key. Applying it anyway produces a well-formed
-    ciphertext that decrypts to noise under both keys, which is worse than an error.
+    sample that names a different source key. Applying it anyway does not establish that the ciphertext is valid under
+    the intended target key; it may produce an incorrect result.
 
     The result carries the target key's id. It must not carry a secret.
     """
@@ -169,8 +133,10 @@ def domain_report(params: dict, sample: dict, switching_key: dict) -> dict:
     decrypts — and a system that settled it that way would need the secrets in the one place
     they must not be.
 
-    `noiseAdded` is the bound, for the same reason: measuring it would take a phase, and a
-    phase takes a key. One digit times one entry's noise, over every source index and every
-    level, with the digit at most `base - 1`.
+    Entry noise is in -1..1 here. noiseAdded=len(sample["mask"])*levels*(base-1).
+    This is an absolute additional-error bound, not the measured error.
+    Compatibility compares sourceDimension with len(mask), key modulus/base/levels
+    with params, and non-None sample keyId with sourceKeyId. Missing/None keyId
+    is allowed. An incompatible key makes key_switch raise ValueError.
     """
     return {}
