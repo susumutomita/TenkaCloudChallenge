@@ -1,3 +1,5 @@
+import { MATCH_PACING, pacingConfig } from "./pacing.ts";
+import { deriveBigInt } from "./prng.ts";
 import {anamorphicTask,anamorphicAnswer,parseAnamorphicAnswer} from "./anamorphic.ts";
 import {starkTask,starkAnswer,parseStarkAnswer} from "./stark.ts";
 import {ioTask,ioAnswer,parseIoAnswer} from "./io.ts";
@@ -268,11 +270,8 @@ export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   starkOrders:true,
   anamorphicOrders:true,
   snarkOrders:true,
-  contractIntervalMs: 30_000,
+  ...pacingConfig(MATCH_PACING),
   contractsPerIssue: 1,
-  onboardingFollowUpMs: 30_000,
-  contractTtlMs: 60_000,
-  rushContractTtlMs: 60_000,
 };
 
 export function initialState(
@@ -1001,9 +1000,12 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
     // no-prefetch rule the LEAK/PROVE economy rests on is untouched for the
     // rest of the match. See `onboardingFollowUpMs` in types.ts for the one
     // bounded overlap this accepts.
-    nextContractAtMs += isOpeningBatch
-      ? state.config.onboardingFollowUpMs
-      : state.config.contractIntervalMs;
+    const baseInterval = isOpeningBatch ? state.config.onboardingFollowUpMs : state.config.contractIntervalMs;
+    const jitter = Math.min(baseInterval - 1, Math.max(0, Math.floor(state.config.orderArrivalJitterMs ?? 0)));
+    // One shared schedule for all teams; deriving from the scheduled time keeps
+    // delayed ticks and replays identical. Old persisted configs have no jitter.
+    const offset = jitter === 0 ? 0 : Number(deriveBigInt(state.seed, "order-arrival", nextContractAtMs - startedAtMs, BigInt(2 * jitter + 1))) - jitter;
+    nextContractAtMs += baseInterval + offset;
   }
 
   // [Issue #659] Charge the expiry penalty to whoever let the Order lapse.
@@ -1836,7 +1838,8 @@ function expectedCipherAnswer(
   const generation = state.teams[teamId]?.generation ?? 1;
   const key = deriveCipherKey(state.seed, teamId, generation, rung);
   const task = state.contracts.find(c => c.id === contractId)?.task;
-  return encryptWithRung(derivePlaintext(state.seed, contractId, rung), key, rung, task?.kind === "caesar-shift" ? task.keyPosition ?? 0 : 0);
+  if (task?.kind !== "caesar-shift") throw new Error("missing stored cipher task");
+  return encryptWithRung(task.plaintext, key, rung, task.keyPosition ?? 0);
 }
 
 /**

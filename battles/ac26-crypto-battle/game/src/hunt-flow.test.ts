@@ -161,7 +161,7 @@ test("#739: projection and actual RPS component distinguish opponent waiting fro
   expect(order("alpha").task).not.toHaveProperty("opponentOpening");
 });
 
-test("100 opponents are bounded, searchable and ordered by available evidence", () => {
+test("100 opponents are selectable without typing and ordered by available evidence", () => {
   const base = view(buildScenario("hunt-reachable").host.state);
   const teams = { ...base.teams };
   for (let i = 0; i < 99; i++) {
@@ -180,7 +180,9 @@ test("100 opponents are bounded, searchable and ordered by available evidence", 
   expect(huntOpponentPage(p, options, "TEAM-098", false, 0).items.map(t => t.teamId)).toEqual(["team-098"]);
   expect(huntOpponentPage(p, options, "no such team", false, 0).total).toBe(0);
   const html = render(p);
-  expect(html).toContain('type="search"');
-  expect(html).not.toContain("Team 98");
+  expect(html).not.toContain('type="search"');
+  expect(html).toContain("相手チーム");
+  expect(html).toContain('<option value="team-098"');
+  expect(html).toContain("Team 98");
   expect((html.match(/tc-hunt-card/g) ?? []).length).toBe(1);
 });

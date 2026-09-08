@@ -88,8 +88,8 @@
  *
  * ## Config
  *
- * New matches use STREAMING_ORDER_CONFIG (one Order every 30 seconds,
- * 60-second deadlines). Existing states retain their stored config.
+ * New matches use STREAMING_ORDER_CONFIG (one Order at a 30 ± 10 second interval,
+ * with 180-second deadlines). Existing states retain their stored config.
  * tickOnRequest asks the host to advance its own clock before reads/moves;
  * the reducer ignores stale clocks from concurrent requests.
  *

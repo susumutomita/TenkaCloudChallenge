@@ -1,17 +1,23 @@
 # Cryptography Battle
 
-For hint-assisted play, finish one selected Order before opening the next Order's hints. The Caesar ladder and share procedure are kept to that route; new matches allow 60 seconds per Order, with hint costs shown on the buttons. See [the reading check](dev/HINT-READING.md) for its measured scope and limitations.
+A timed team game of small, hand-calculated cryptography problems. Orders keep arriving at varying intervals; each new-match Order allows **3 minutes**. Decide what to solve, when to disclose information for an instant answer, and when to use an opponent's public evidence. The highest final score wins.
+
+**Correct answers earn points; missing an Order deadline deducts points (normally −15, with a zero floor).** The remaining time on each card is the submission deadline. Reading explanations does not pause it.
+
+![Game flow](diagram.svg)
 
 Four optional entries appear above the game: “How to play”, “Cryptography in diagrams and formulas”, “One-digit practice”, and “Rules reference”. They open on a separate scroll surface. Closing returns to the original Order, unfinished answer and page position. An ongoing match keeps running. Practice connects remainders, sharing, reconstruction, publication risk, MPC, ZK, FHE, Caesar and commit-reveal with small numbers. Reading without answering is allowed.
 Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
 
-The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers. Results appear above the answer area. Hints, exposure details, records and the vault expand on demand.
+The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers. Results appear above the answer area. Hints and exposure details expand on demand. “View records” opens the public history and private vault in a separate dialog; close it to return to the mounted answer form. Detailed match data lives inside “Rules reference”, outside the timed workspace.
 
 The Order list stays visible while answering, with the pending count, task, deadline and selection. Cards appear in deadline order and can be selected directly by click or Tab and Enter / Space. New Orders receive a short arrival notice and a New badge without changing the selected Order or unfinished input. Due soon, Expired and Completed also appear as text. Recent results remain below the list, including earned points for answers confirmed in this screen. Narrow screens and larger queues scroll within the list.
 
 “Cryptography in diagrams and formulas” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
-HUNT starts with one card per opponent, showing waiting, ready, completed, or exhausted status for each method. A ready method opens public evidence, formulas and diagrams, answer input, and the attack confirmation. Shares use distinct current-generation indices; sudoku opens a worksheet for reused public tags, leaving the solution to the participant; Caesar uses the rung's pair threshold; Vigenère needs three distinct key positions; RSA uses the current public n/e without waiting for LEAK; RPS needs reuse across two past duels and a current sealed target. ROTATE appears separately as a defence, with the affected open-Order count beside its control. RPS explicitly distinguishes waiting for the opponent to seal from ready to open, disabling the opening button while waiting.
+HUNT starts with an **opponent dropdown**, showing team name, ID, score and whether evidence is available. Available opponents come first; the optional evidence filter narrows the list. Choose a method for that opponent, inspect its public evidence, then hand-calculate and submit. Original and encrypted Caesar rows align vertically so the same positions can be compared. New evidence keeps the selected opponent stable while that opponent still matches the filter. ROTATE remains a separate defence control.
+
+A share attack uses distinct indices from one generation. Vigenère needs all three key positions, RSA uses public n/e, and RPS predicts a hand from past openings. The reused-sudoku worksheet belongs only to saved legacy matches; new matches use Schnorr.
 
 ## What is going on
 
@@ -39,21 +45,15 @@ An ordinary correct calculation earns +30, LEAK earns +10, and expiry costs −1
 | masked subtotal | **Secure computation (MPC)** | Adding masks to private inputs and cancelling them in the total |
 | PROVE | **Zero-knowledge proofs (ZK)** | Schnorr public verification, simulation and knowledge extraction |
 
-ZK demonstrates correctness while hiding a secret answer. Sudoku is a teaching example; this game's trusted judge knows the original solution. FHE supports computations built from addition and multiplication. This Order explores addition using small numbers. The diagram-and-formula explanations describe the difference from practical systems.
+New-match ZK uses Schnorr: the browser keeps x and r private and submits y and the conversation (a,e,z). Saved legacy matches retain the sudoku teaching model, whose trusted judge knows the original solution. FHE supports computations built from addition and multiplication. This Order explores addition using small numbers. The diagram-and-formula explanations describe the difference from practical systems.
 
 ## Goal
 
-Each team's secret is split into five shares. Three distinct shares from the same generation reconstruct it.
+Score by solving the incoming Orders while managing what you reveal. **Shares are one kind of evidence, not the rule for every cryptographic task.** A leaked cipher pair, a public RSA key and a secret-sharing share support different calculations. The selected HUNT method explains what it needs. ROTATE changes the generation but also costs points; inspect its effect before using it.
 
-- When another team exposes three distinct shares, compute a **HUNT**.
-- When your own exposure becomes risky, **ROTATE** into a new generation.
-- Score while preventing reconstruction of your current generation.
+## Orders keep arriving
 
-Repeating one share index still counts as one distinct share. Shares from different generations cannot be mixed.
-
-## One Order arrives every 30 seconds
-
-New matches start with one Order and receive one more every 30 seconds. Both ordinary and rush Orders expire after 60 seconds. Existing matches retain their stored settings. Choose which calculations, disclosures and attacks to attempt before their deadlines.
+New matches start with one Order and then receive more at varying intervals. The participant instructions do not disclose the arrival interval. Both ordinary and rush Orders expire after 180 seconds. Existing matches retain their stored settings. Choose which calculations, disclosures and attacks to attempt before their deadlines.
 
 ## ORDER types
 
@@ -90,7 +90,7 @@ calculation is still yours to do.
 Each one costs points, and they get more expensive as you climb (**-2 / -4 /
 -8**). The price is printed on the button, so you compare before you press.
 
-**Buying all three and then computing the Order still beats passing on it.** But
+For a +30 calculation with −2/−4/−8 hints, solving after all three leaves +16 before other score changes, compared with a +10 LEAK. Actual rewards and support vary by Order. But
 the charge does not come back if you never answer — the worst hint to buy is one
 on an Order you were going to abandon.
 
@@ -98,12 +98,14 @@ Hints never reach the public record. Nobody can see that you bought one.
 
 ## The cipher ladder
 
-"Encrypt with your key" Orders sit on a **rung**. Exactly one thing changes from
-rung to rung: **how many published pairs give your key away.**
+Normal cipher Orders progress from Caesar to alternating Vigenère/Rotor and then RSA. These are different calculations, not a ranking of security.
 
-| Rung | Pairs that recover the key | The break |
-| --- | --- | --- |
-| Caesar | 1 | ciphertext − plaintext. One subtraction |
+| Method | Evidence used in the game |
+| --- | --- |
+| Caesar | One original/encrypted pair |
+| Vigenère | All three key positions |
+| Rotor | Public rows that constrain the initial wheel positions |
+| RSA | The public modulus n; no LEAK required |
 
 The method is printed on the Order. That is deliberate, and it is how real
 cryptography works: the algorithm is public. Classical rungs keep their shift
@@ -128,10 +130,11 @@ Press “I'M READY”. The match starts and Orders arrive when every team is rea
 1. **Current Order** — the request and its remaining time
 2. **Answer methods and inputs** — compare score and disclosure cost, then answer in the same card
 3. **Result** — score and outcome above the answer area
-4. **Exposure, records and vault** — read the summary and expand what you need
-5. **Play, diagrams and formulas, practice, rules** — choose one purpose above the board
+4. **HUNT** — select an opponent from the dropdown, then a method
+5. **View records** — optional public history and private vault in a dialog
+6. **Play, diagrams and formulas, practice, rules** — choose one purpose above the board
 
-HUNT always shows each opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer. ROTATE is a separate defence control.
+HUNT shows the selected opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer. ROTATE is a separate defence control.
 
 ## Data boundary
 
@@ -142,6 +145,10 @@ HUNT always shows each opponent’s public evidence and attack status. A ready m
 - The Public Ledger contains only artifacts participants chose to publish.
 
 Production hidden values derive from the server-only `matchSecret`, never the public `eventId`. Local-only runs use the explicit non-secret marker `local-play-not-secret:<eventId>`.
+
+## Operator pacing configuration
+
+`STREAMING_ORDER_CONFIG` uses a 30-second base interval with up to 10 seconds of variation in either direction, and a 180-second deadline for ordinary and rush Orders. All teams share the same seeded schedule. Reloads and delayed ticks do not reroll it. There is no two-Order queue cap. Saved matches keep their stored configuration; deploying this change does not reset their clock or extend existing deadlines.
 
 ## Local UI check
 
@@ -311,8 +318,8 @@ catalog gate. See [the local walkthrough](dev/LIGHTNING-PLAYTHROUGH.md).
 At the existing endgame boundary (default minute 60), newly scheduled **normal**
 cipher slots become `rsa-encrypt`: original integer m=2…9, public n≤77 and
 exponent e=3, 5 or 7. Existing Orders keep their task and deadline; delayed ticks
-use the scheduled issue time. In new matches, normal RSA Orders allow 60 seconds and award 30
-points. Rush Vigenère Orders allow 60 seconds and award 45 points.
+use the scheduled issue time. In new matches, normal RSA Orders allow 180 seconds and award 30
+points. Rush Vigenère Orders allow 180 seconds and award 45 points.
 
 Calculate `c=m^e mod n` (multiply e copies of m and take the remainder after
 division by n). Intermediate remainders preserve the result. **CIPHER** submits
@@ -373,7 +380,7 @@ second LEAK or a client-side uniqueness claim. A miss costs8 and an attempt from
 the existing shared Shamir/RPS budget (3); Sudoku's separate budget is unchanged.
 Success gives25, costs the victim12 (floor0), and is recorded once in replay.
 Wrong CIPHER uses the existing6-point penalty and forfeits that Order's subsequent
-reward, including lightning. New matches use the 60-second deadline and one Order every 30 seconds;
+reward, including lightning. New matches use the 180-second deadline and varying Order arrivals;
 endgame RSA and rush Vigenère remain. ROTATE voids old Orders and attack
 eligibility; the tiny16-state key space can repeat numeric initial positions.
 
@@ -386,11 +393,11 @@ No new resources, services, IAM, timers, score prices or cleanup steps are added
 
 ### Answer workspace (#780)
 
-New Caesar orders contain five symbols. The answer field explicitly requests space-separated numbers. Legacy-match Sudoku PROVE prepares a private random unused relabeling and immediately shows four marked inputs; clock updates and identical poll responses retain the relabeling. This remains the trusted-judge teaching model, not a full ZK protocol. MPC includes a three-party mask-cancellation diagram and its general equation; duel powers use superscripts and expanded products.
+New Caesar orders contain three symbols. The answer field explicitly requests space-separated numbers. Legacy-match Sudoku PROVE prepares a private random unused relabeling and immediately shows four marked inputs; clock updates and identical poll responses retain the relabeling. This remains the trusted-judge teaching model, not a full ZK protocol. MPC includes a three-party mask-cancellation diagram and its general equation; duel powers use superscripts and expanded products.
 
 ### HUNT opponent selection (#782)
 
-The HUNT panel prioritizes opponents with public evidence, lists five teams per page, and supports name/ID search and an evidence-only filter. Select a team and method to see one worksheet. New evidence does not replace the selected worksheet. Successful attacks disable that method for the current generation; ROTATE remains a separate defense action.
+The HUNT dropdown lists every opponent, prioritizes those with public evidence, and supports an evidence-only filter. All opponents remain selectable in a 100-team match. Select a team and method to see one worksheet. New evidence does not replace the selected worksheet. Successful attacks disable that method for the current generation; ROTATE remains a separate defense action.
 
 ## When an opponent recovers your secret
 
@@ -427,7 +434,7 @@ PR #790 follow-up: accepting a Schnorr commitment starts the answer attempt, so 
 
 `streaming-orders.test.ts` isolates expiry penalties over 30 minutes and verifies that pruning completed Orders does not remove earned points. `disclosure-score-regression.test.ts` uses normal penalties to verify a missed deadline deducts once while completed history survives. Scores are cumulative team state, not a sum over visible Orders.
 
-The latter also runs 90 minutes with the current 30-second arrival / 60-second deadline, Schnorr and EC configuration. Both teams LEAK only mandatory-disclosure Orders and successfully HUNT using only participant-projected public shares. No voluntary disclosure is required. The originally reported deployed revision is unidentified; this evidence exercises the local production reducer/projection. Verify the deployed environment after the owner deploys.
+The earlier run covered 90 minutes with the then-current 30-second arrival / 60-second deadline, Schnorr and EC configuration. Both teams LEAK only mandatory-disclosure Orders and successfully HUNT using only participant-projected public shares. No voluntary disclosure is required. The originally reported deployed revision is unidentified; this evidence exercises the local production reducer/projection. Verify the deployed environment after the owner deploys.
 
 ### Finite iO definition worksheet (#793)
 
@@ -464,3 +471,9 @@ The arithmetic uses ElGamal-shaped pairs modulo7. A balanced six-entry table sub
 New matches add a candidate every29 slots subject to existing special-slot priorities. Existing matches retain their configuration. Schema19, owned-order validation, actual scoring, Lightning and score reason `anamorphic` stay in the problem runtime. Ordinary regression771 tests, dev85 tests, types and116-entry catalog validation pass. Deployment is not performed.
 
 Real local Portal `anamorphic-order`: key x=4, first accepted pair(4,4); accepted trials1,3,4 have2,1,1 tickets. Submitted1 1 4; success banner and current score30 were observed on the updated transfer worksheet.
+
+### Tuning deadlines (operator)
+
+Edit `MATCH_PACING.answerSeconds` in `game/src/pacing.ts`: default180 seconds, supported30–900 (240 means4 minutes). This sets both regular and rush deadlines. `arrivalSeconds` sets the base arrival interval; `arrivalJitterSeconds` sets its symmetric variation. Participants do not see the arrival interval.
+
+Rebuild and deploy the problem, then start a new match. Persisted matches and issued deadlines keep their settings. This is a problem-owned build-time parameter, not an in-match admin control; no problem-specific platform settings were added.

@@ -45,7 +45,7 @@ import { taskDetail } from "./orderTask.ts";
 import OrderQueue, { type OrderReceipt } from "./OrderQueue.tsx";
 import { disclosurePreview, orderHeading } from "./OrderFocus.tsx";
 import { DIE_CSS, DieFace, DieRow } from "./DieFace.tsx";
-import { BOARD_CSS, Ledger, Vault } from "./GameBoard.tsx";
+import { BOARD_CSS, MatchRecords } from "./GameBoard.tsx";
 import {
   describeRevealGroup,
   emptyCells,
@@ -1172,8 +1172,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
     }
   };
 
-  if (!client) return null;
-  if (!projection) return <section className="tc-move-shell"><style>{CSS}</style><div>{copy.unavailable}</div></section>;
+  if (!client) return <p role="status">{locale === "ja" ? "試合に接続できません（coordination が未配線）。" : "Coordination is not wired up."}</p>;
+  if (!projection) return <section className="tc-move-shell"><style>{CSS}</style><div role="status">{polled.status === null ? (locale === "ja" ? "最初の更新を待っています" : "Waiting for the first match update") : copy.unavailable}</div></section>;
   {/*
     [Issue #677] Two dead ends used to look identical: a match that had not
     started and a match that was over both rendered the words MATCH ENDED
@@ -1787,13 +1787,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           >{projection.vault.rotateCooldownRemainingMs > 0 ? `${Math.ceil(projection.vault.rotateCooldownRemainingMs / 1000)}s` : copy.rotate}</button>
         </div>}
 
-      <details className="tc-records">
-        <summary>{locale === "ja" ? `公開記録と自分の保管庫を見る（記録 ${projection.publicLedger.length} 件）` : `Public Ledger and My Vault (${projection.publicLedger.length} records)`}</summary>
-        <div className="tc-board-grid">
-          <Ledger projection={projection} locale={locale} />
-          <Vault projection={projection} locale={locale} />
-        </div>
-      </details>
+      <MatchRecords projection={projection} locale={locale} />
     </section>
   );
 }

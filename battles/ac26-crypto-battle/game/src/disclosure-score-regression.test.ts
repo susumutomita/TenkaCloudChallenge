@@ -39,12 +39,14 @@ test('streaming orders force disclosure and enable both teams to hunt using only
 test('a missed deadline deducts once and preserves completed order history',()=>{
  let state=create();state=applyOp(state,'a',{kind:'leak',contractId:'a-c0'});
  const earned=state.teams.a!.score;expect(earned).toBeGreaterThan(0);
- state=tick(state,30_000);const before=state;
- // c0 is complete. c1 is still open at its exact deadline.
- state=tick(state,90_000);
+ state=tick(state,state.nextContractAtMs!);
+ const deadline=state.contracts.find(c=>c.teamId==='a'&&c.status==='open')!.expiresAtMs;
+ state=tick(state,deadline-1);const before=state;
+ // c0 is complete. Only the first unfinished order expires at this boundary.
+ state=tick(state,deadline);
  expect(state.teams.a!.score).toBe(Math.max(0,earned+state.config.scores.expiredOrder));
  expect(scoreReasons(before,state,{kind:'tick'}).a).toBe('deadline');
- expect(tick(state,90_000)).toEqual(state);
+ expect(tick(state,deadline)).toEqual(state);
  // The existing pruning test covers zero-penalty isolation over 30 minutes.
  expect(state.teams.a!.completedContractIds).toContain(0);
 });

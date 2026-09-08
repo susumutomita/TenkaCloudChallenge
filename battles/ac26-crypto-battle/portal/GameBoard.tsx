@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { power, verifySchnorr } from "../game/src/schnorr.ts";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import { orderDetail, orderLabel } from "./orderTask.ts";
@@ -433,7 +434,7 @@ export function Ledger({ projection, locale }: { readonly projection: CryptoBatt
   return (
     <section className="tc-game-card">
       <div className="tc-section-label">{copy.ledger}</div>
-      <p className="tc-terms-note">{locale === "ja" ? "ここは回答欄ではありません。「あなた」は相手にも見えている自分の情報です。攻撃するときは、上の「相手を攻撃する」で相手と材料を選びます。" : "This is a record, not an answer form. Your entries are visible to opponents too. To attack, select an opponent and evidence in the attack panel above."}</p>
+      <p className="tc-terms-note">{locale === "ja" ? "全チームに公開された情報の履歴です。攻撃に使う材料は、お題画面のHUNTで確認できます。" : "History visible to every team. Inspect attack evidence in HUNT on the game screen."}</p>
       {groups.length === 0 ? (
         <div className="tc-empty">{copy.emptyLedger}</div>
       ) : (
@@ -685,4 +686,17 @@ export default function GameBoard(props: PortalSlotProps) {
     return <div className="tc-game-card">{status ? COPY[locale].unavailable : COPY[locale].loading}</div>;
   }
   return <GameBoardBody projection={projection} locale={locale} />;
+}
+
+/** Keep optional records away from the timed answer workspace. */
+export function MatchRecords({projection, locale}: {projection: CryptoBattleProjection; locale: Locale}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const ja = locale === "ja";
+  return <div className="tc-records">
+    <button type="button" aria-haspopup="dialog" onClick={() => dialog.current?.showModal()}>{ja ? "記録を見る" : "View records"}</button>
+    <dialog ref={dialog} className="tc-help-dialog" aria-label={ja ? "公開記録と自分の保管庫" : "Public records and private vault"}>
+      <header><h2>{ja ? "記録と保管庫" : "Records and vault"}</h2><button type="button" className="tc-help-control" onClick={() => dialog.current?.close()}>{ja ? "閉じてお題へ戻る" : "Close and return to the Order"}</button></header>
+      <div className="tc-help-content"><p>{ja ? "確認中も試合の時間は進みます。" : "The match clock continues while viewing records."}</p><div className="tc-board-grid"><Ledger projection={projection} locale={locale} /><Vault projection={projection} locale={locale} /></div></div>
+    </dialog>
+  </div>;
 }
