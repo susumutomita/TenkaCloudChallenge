@@ -7,7 +7,9 @@ just not the key. That is why every extraction path ends at `confirms`.
 
 from __future__ import annotations
 
+import subprocess
 import sys
+import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -19,6 +21,14 @@ REFERENCE = (ROOT / "reference" / "recover.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+    ("witness reuses one index", [("return (seen[value], i)", "return (i, i)")]),
+    ("witness ignores seed", [("value = truncated_nonce(seed, 1,", "value = truncated_nonce('fixed', 1,")]),
+    ("witness returns noncolliding pair", [("return (seen[value], i)", "return (0, 1)")]),
+    ("accepts mismatched commitments", [('    if first["commitment"] != second["commitment"]:', '    if False:')]),
+    ("recovers from a rejected transcript", [("    if not accepts(first, group) or not accepts(second, group):", "    if False:")]),
+    ("confirms only Point input", [('    if isinstance(public, dict):', '    if isinstance(public, (dict, tuple, list)):\n        return False\n    if isinstance(public, dict):')]),
+    ("includes equal-challenge pairs", [("                if e1 != e2:", "                if True:")]),
+    ("rejects normalized Point input", [("    if isinstance(value, Point):", "    if False and isinstance(value, Point):")]),
     (
         "divides instead of inverting",
         [
@@ -91,8 +101,8 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         "derives the nonce from the message alone, binding no key",
         [
             (
-                '        b"nonce/v1" + secret.to_bytes(32, "big") + len(message).to_bytes(4, "big") + message',
-                '        b"nonce/v1" + len(message).to_bytes(4, "big") + message',
+                '    digest = hmac.new(key, data, hashlib.sha256).digest()',
+                '    digest = hmac.new(b"", data, hashlib.sha256).digest()',
             )
         ],
     ),
@@ -118,6 +128,104 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 )
 
 
+MUTATIONS += (
+    ("unconditionally rejects recoverable pairs", [('def recover_secret(first, second, group) -> int:', 'def recover_secret(first, second, group) -> int:\n    raise MalformedRecord("always")')]),
+    ("returns a claim for a clean log", [('    return {}\n\n\ndef collision_experiment', '    return {"secret": 0}\n\n\ndef collision_experiment')]),
+    ("raises when no attack exists", [('    return {}\n\n\ndef collision_experiment', '    raise MalformedRecord("none")\n\n\ndef collision_experiment')]),
+
+    ("omits hunt evidence", [('"records": (left, right),', '')]),
+    ("cites one record twice", [('"records": (left, right),', '"records": (left, left),')]),
+    ("cites indices outside the log", [('"records": (left, right),', '"records": (-1, len(records)),')]),
+    ("cites arbitrary records", [('"records": (left, right),', '"records": (0, 1),')]),
+
+    ("accepts boolean coordinate pairs", [("if type(x) is not int or type(y) is not int:", "if not isinstance(x, int) or not isinstance(y, int):")]),
+    ("returns zero for a different signer", [('        raise MalformedRecord("the two transcripts are not from the same signer")', '        return 0')]),
+    ("skips recovery input parsing", [("    first = parse_record(first, group)\n    second = parse_record(second, group)", "")]),
+    ("does not require a message field", [('("message", "public_key", "commitment", "response")', '("public_key", "commitment", "response")')]),
+    ("accepts non-integer responses", [("not isinstance(response, int) or isinstance(response, bool) or not 0 <= response < group.n", "not 0 <= response < group.n")]),
+
+    ("checks membership before coordinate types", [('        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:\n            raise MalformedRecord("a coordinate is not canonical")\n        if value.is_infinity or not group.contains(value):\n            raise MalformedRecord("the point is not a usable group element")\n', '        if value.is_infinity or not group.contains(value):\n            raise MalformedRecord("the point is not a usable group element")\n        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:\n            raise MalformedRecord("a coordinate is not canonical")\n')]),
+    ("uses plain SHA256 instead of HMAC", [(
+        "digest = hmac.new(key, data, hashlib.sha256).digest()",
+        "digest = hashlib.sha256(key + data).digest()",
+    )]),
+
+    ("trusts every normalized Point", [(
+        "    if isinstance(value, Point):",
+        "    if isinstance(value, Point):\n        return value",
+    )]),
+    ("returns first pair without comparing challenges", [(
+        "                if e1 != e2:\n                    pairs.append((left, right))",
+        "                return [(left, right)]",
+    )]),
+)
+
+# Each additional review regression must fail its own checkpoint. A failure in
+# extract/hunt/repair cannot stand in for validating parse/detect/collision.
+CHECKPOINT_MUTATIONS = (
+    ("parse rejects valid Point subclasses", "parse", [("if isinstance(value, Point):", "if type(value) is Point:")]),
+    ("recovery validates only the second transcript", "reject", [("if not accepts(first, group) or not accepts(second, group):", "if not accepts(second, group):")]),
+    ("reject scanner ignores equal challenges", "reject", [("if e1 != e2:", "if True:")]),
+    ("reject scanner ignores signer identity", "reject", [("if first[\"public_key\"] != second[\"public_key\"]:", "if False:")]),
+    ("parsed Point subclass lies about equality", "parse", [(
+        '    return {\n        "message": message,',
+        '    from participant.schnorr import Point\n    class WrongPoint(Point):\n        def __eq__(self, other):\n            return True\n    public = WrongPoint(group.params, 0, 0)\n    commitment = WrongPoint(group.params, 0, 0)\n    return {\n        "message": message,',
+    )]),
+    ("raw records retain response alone", "parse", [(
+        '    return {\n        "message": message,',
+        '    if not isinstance(record["public_key"], type(public)):\n        return {"response": response}\n    return {\n        "message": message,',
+    )]),
+    ("raw coordinates remain unnormalized", "parse", [(
+        '    return {\n        "message": message,',
+        '    return dict(record)\n    return {\n        "message": message,',
+    )]),
+    ("parsed message is discarded", "parse", [('"message": message,', '"message": b"",')]),
+    ("parsed response is float", "parse", [('"response": response,', '"response": float(response),')]),
+    ("parsed zero response is boolean", "parse", [('"response": response,', '"response": response if response else False,')]),
+    ("valid list coordinates rejected", "parse", [('isinstance(value, (tuple, list))', 'isinstance(value, tuple)')]),
+    ("raw coordinates silently wrap", "parse", [(
+        '    if not 0 <= x < group.p or not 0 <= y < group.p:', '    if False:',
+    )]),
+    ("raw fractional coordinates accepted", "parse", [(
+        '    if type(x) is not int or type(y) is not int:',
+        '    if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):',
+    )]),
+    ("parse swaps public key and commitment", "parse", [('"public_key": public,', '"public_key": commitment,')]),
+    ("parse rejects empty bytes messages", "parse", [('if not isinstance(message, bytes):', 'if not isinstance(message, bytes) or not message:')]),
+    ("detect cites negative aliases", "detect", [('    return pairs', '    return [(a-len(records), b-len(records)) for a, b in pairs]')]),
+    ("detect cites boolean indices", "detect", [('    return pairs', '    return [(bool(a), bool(b)) for a, b in pairs]')]),
+    ("detect cites fractional indices", "detect", [('    return pairs', '    return [(float(a), float(b)) for a, b in pairs]')]),
+    ("detect cites an out-of-range index", "detect", [('    return pairs', '    return [(a, len(records)) for a, b in pairs]')]),
+    ("detect repeats the same index", "detect", [('    return pairs', '    return [(a, a) for a, b in pairs]')]),
+    ("detect returns short pairs", "detect", [('    return pairs', '    return [(a,) for a, b in pairs]')]),
+    ("detect returns oversized pairs", "detect", [('    return pairs', '    return [(a, b, a) for a, b in pairs]')]),
+    ("detect returns scalar pairs", "detect", [('    return pairs', '    return [a for a, b in pairs]')]),
+    ("detect renumbers after dropping records", "detect", [('    return pairs', '    return [(indices.index(a), indices.index(b)) for a, b in pairs]')]),
+    ("detect renumbers by changing its input log", "detect", [('    return pairs', '    records[:] = [records[i] for i in indices]\n    return [(indices.index(a), indices.index(b)) for a, b in pairs]')]),
+    ("detect returns a tuple instead of list", "detect", [('    return pairs', '    return tuple(pairs)')]),
+    ("detect returns None without reuse", "detect", [('    return pairs', '    return pairs or None')]),
+    ("detect fabricates a pair without reuse", "detect", [('    return pairs', '    return pairs or [(0, 1)]')]),
+    ("collision ignores samples and always draws forty", "collision", [('    for index in range(samples):', '    for index in range(40):')]),
+    ("collision runs one extra draw", "collision", [('    for index in range(samples):', '    for index in range(samples + 1):')]),
+    ("collision truncates runs at forty", "collision", [('    for index in range(samples):', '    for index in range(min(40, samples)):')]),
+    ("collision returns boolean zero counts", "collision", [('"collisions": collisions, "distinct": len(seen)', '"collisions": collisions if collisions else False, "distinct": len(seen)')]),
+    ("collision returns a fractional space", "collision", [('"space": NONCE_SPACE}', '"space": float(NONCE_SPACE)}')]),
+    ("collision returns fractional counts", "collision", [('"collisions": collisions, "distinct": len(seen)', '"collisions": float(collisions), "distinct": float(len(seen))')]),
+)
+
+
+CHECKPOINT_MUTATIONS += (
+    ("confirms returns an integer instead of bool", "confirm", [(
+        'return group.generator.scalar_mul(secret % group.n) == public',
+        'return int(group.generator.scalar_mul(secret % group.n) == public)',
+    )]),
+    ("collision copies SHA instead of calling supplied generator", "collision", [(
+        '        k = truncated_nonce(seed, secret, message, group)',
+        '        import hashlib\n        k = 1 + int.from_bytes(hashlib.sha256(f"{seed}:{secret}:{message!r}".encode()).digest(), "big") % NONCE_SPACE',
+    )]),
+)
+
+
 def _load(source: str):
     import types
 
@@ -127,14 +235,32 @@ def _load(source: str):
 
 
 def main() -> int:
-    baseline = check_recover.run(_load(REFERENCE), SEED)
+    boundary = subprocess.run([sys.executable, str(ROOT / 'tests/test_execution.py')], check=False)
+    if boundary.returncode:
+        return 1
+    suite = unittest.defaultTestLoader.discover(str(ROOT / "tests" / "hidden"), pattern="test_*.py")
+    if not unittest.TextTestRunner().run(suite).wasSuccessful():
+        return 1
+    from fixtures.generate import deterministic_nonce, secp_group, toy_group
+    reference = _load(REFERENCE)
+    for group in (secp_group(), toy_group(SEED, "fixture-contract")):
+        for secret in (1, group.n - 1):
+            for message in (b"", b"nonce-contract", bytes(range(256))):
+                if deterministic_nonce(secret, message, group) != reference.safe_nonce(secret, message, group):
+                    print("FAIL fixture nonce differs from the repair reference")
+                    return 1
+    print("PASS fixture and repair reference use the same HMAC contract")
+    baseline = check_recover.run(reference, SEED)
     if baseline:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")
         return 1
     print("PASS reference implementation passes the hidden tests")
 
     survivors = 0
-    for name, substitutions in MUTATIONS:
+    cases = [(name, check_recover.run, changes) for name, changes in MUTATIONS]
+    cases.extend((name, getattr(check_recover, "check_" + checkpoint), changes)
+                 for name, checkpoint, changes in CHECKPOINT_MUTATIONS)
+    for name, checker, substitutions in cases:
         missing = [needle for needle, _ in substitutions if needle not in REFERENCE]
         if missing:
             print(f"SURVIVED {name} (the mutation no longer applies to the reference)")
@@ -144,7 +270,7 @@ def main() -> int:
         for needle, replacement in substitutions:
             mutated = mutated.replace(needle, replacement)
         try:
-            failures = check_recover.run(_load(mutated), SEED)
+            failures = checker(_load(mutated), SEED)
         except Exception as error:  # noqa: BLE001 - a mutation that crashes is caught
             failures = [f"raised {type(error).__name__}"]
         if failures:
@@ -156,7 +282,7 @@ def main() -> int:
     if survivors:
         print(f"\n{survivors} mutation(s) survived. The hidden tests have a hole.")
         return 1
-    print(f"\nAll {len(MUTATIONS)} mutations killed.")
+    print(f"\nAll {len(cases)} mutations killed.")
     return 0
 
 

@@ -19,8 +19,8 @@ image any more (see ../Dockerfile). What it holds that a learner must not be han
     participant container has `FLAG_SEED` in its environment. With this function a
     learner could compute the hidden labels' keys in their own container and hard-code
     them into a submission rather than attacking anything.
-  * `deterministic_nonce` is the `repair` checkpoint's answer, with a docstring saying
-    why it works and what has to go into the hash.
+  * `deterministic_nonce` implements the repair checkpoint's HMAC contract, with a docstring saying
+    its key/data encoding and finite-range collision limitation.
 
 Three nonce generators exist, and the difference between them is the whole of the last
 two checkpoints:
@@ -30,8 +30,8 @@ two checkpoints:
                           random in a log and collides by the birthday bound. This is the
                           one the `collision` checkpoint measures, so it is the one that
                           lives in `participant/schnorr.py`.
-  * `deterministic_nonce` -- a hash of the secret key AND the message. Deterministic,
-                          which sounds alarming, and is the one that does not collide.
+  * `deterministic_nonce` -- HMAC keyed by the secret over the framed message.
+                          The finite scalar range still permits collisions.
 
 Toy parameters are for observability. Nothing here is constant-time, and none of it is a
 model for signing anything real.
@@ -40,6 +40,7 @@ model for signing anything real.
 from __future__ import annotations
 
 import hashlib
+import hmac
 
 # The supplied half. Re-exported rather than redefined so there is exactly one
 # definition of the protocol the log records, and the participant image and the grading
@@ -145,20 +146,17 @@ def fixed_nonce(secret: int, message: bytes, group: Group) -> int:
 
 
 def deterministic_nonce(secret: int, message: bytes, group: Group) -> int:
-    """A hash of the secret AND the message.
+    """Author-side HMAC generator matching the documented repair contract.
 
-    Deterministic, which sounds like the opposite of what a nonce should be, and is
-    nonetheless the safe one: the same message under the same key gives the same nonce
-    and the same signature, and two DIFFERENT messages cannot collide without a hash
-    collision. Binding the key matters too -- hashing the message alone would give two
-    signers the same nonce for the same message.
-
-    This is the `repair` checkpoint's answer. It stays out of the participant image.
+    Mapping the digest into a finite scalar range can still collide. This is
+    a teaching construction, not a complete production signature standard.
     """
-    digest = hashlib.sha256(
-        b"nonce/v1" + secret.to_bytes(32, "big") + len(message).to_bytes(4, "big") + message
-    ).digest()
+    width = (group.n.bit_length() + 7) // 8
+    key = secret.to_bytes(width, "big")
+    data = b"nonce-drill-v1" + len(message).to_bytes(8, "big") + message
+    digest = hmac.new(key, data, hashlib.sha256).digest()
     return 1 + (int.from_bytes(digest, "big") % (group.n - 1))
+
 
 
 def audit_log(seed: str, label: str, group: Group) -> dict:

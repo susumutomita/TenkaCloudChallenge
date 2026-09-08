@@ -1,4 +1,4 @@
-# The same R twice is the key
+# Recover a signing key from nonce reuse
 
 > This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
 > It is not affiliated with or endorsed by the course or its operators. All problem statements,
@@ -21,7 +21,7 @@ z1 = k + e1*x
 z2 = k + e2*x
 ```
 
-Two equations, two unknowns, and you already have one of them.
+Both x and k are unknown. Subtract the equations to eliminate k, then solve for x when the challenges differ.
 
 ## This is not a story about random numbers
 
@@ -29,9 +29,8 @@ Nonce reuse is usually told as "weak random number generators are dangerous". Th
 symptom, not the reason.
 
 The reason is **special soundness**: two accepting transcripts sharing a commitment and differing
-in the challenge yield the witness. That *is* the definition of the Sigma protocol being a proof
-of knowledge — the property that guarantees the prover really knows `x`. The extractor exists, so
-the protocol is sound. The extractor exists, so reuse is fatal. One fact, two consequences.
+in the challenge yield the witness. This extraction property explains how a reused nonce can reveal `x`. It is a component
+of a proof-of-knowledge argument, not by itself a security proof for the signature scheme.
 
 ## Sharing R is necessary, not sufficient
 
@@ -75,9 +74,9 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `reject` | 40 | `e1 = e2`, a cross-signer pair, and a log with no reuse |
 | `hunt` | 40 | The victim's key out of the noisy log, and whose it is |
 | `collision` | 40 | The truncated generator measured, against its actual space |
-| `repair` | 35 | A generator that collides on nothing it must not |
+| `repair` | 35 | Documented HMAC generator plus a weak-generator collision witness |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight checkpoints have three hints, two points per hint (48 points in total).
 
 ## Three nonce generators
 
@@ -91,8 +90,7 @@ Hints on five of the eight, each inside that checkpoint's 50% cap.
 is visibly wrong. Looking random is not having entropy.
 
 `deterministic_nonce` has the most worrying name and is correct. The same key and message give the
-same nonce — which gives the same signature, leaking nothing new — while two different messages
-cannot collide without a hash collision. The key goes into the hash too, or two signers of the
+same nonce — which gives the same signature, leaking nothing new — but different messages can share a nonce even when their hashes differ, because reduction modulo n−1 can merge digest values. A large output range makes this rare; it does not make it impossible. The key goes into the hash too, or two signers of the
 same message would share a nonce.
 
 ## Group order, and a test that cannot be written
@@ -141,8 +139,30 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: nine broken implementations. Three of them found
+`make reference-test` runs the mutation suite: 69 broken implementations. Three of them found
 real holes in the hidden tests while this problem was being written — the log had no
 non-accepting duplicate, no cross-signer duplicate, and the nonce-space check was distinctness
 rather than range. A fourth, "reports a recovery without confirming it", turned out to be an
 equivalent mutant on its own and is now mutated together with the validation it depends on.
+
+## Three-rung hints and verification (Issue #716)
+
+All eight checkpoints have three bilingual hints: mechanism, small example, named action. Required formulas and APIs are free. Repair grades the documented HMAC-SHA256 encoding and repair_witness(seed, group), which constructs two distinct trial-message indices colliding under the supplied weak generator. The function is called with different seeds; each returned pair is checked with that call’s seed. This is a finite regression test, not proof of collision freedom.
+
+Author validation rejected all 69 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. The 36 added return-contract mutants are checked against their own parse, detect, confirm, reject, or collision checkpoint, without relying on a different checkpoint to fail. Parse compares all four fields across tuple/list/Point inputs and scalar/message boundaries. Detect checks distinct original integer indices before reading records and preserves original evidence when a submission mutates its input; valid reversed pairs and subsets remain accepted. Collision measures several sample sizes, including zero, one, and more draws than the nonce space, and requires integer counts. Twelve author checker regressions and Docker `make reference-test` passed. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.
+
+Point subclasses remain supported; parsing compares primitive coordinates and curve parameters rather than trusting a submission-defined equality method. The new equality-spoof mutant is rejected by parse alone.
+
+
+PR #815 follow-up: confirms requires bool on both accepting and rejecting calls. Collision observes execution of the supplied generator and checks seed, secret, trial order and count. A copied SHA expression is rejected even when counts agree. Pre-bound aliases, alternative aggregation and zero samples remain valid. This observes the supplied API; it is not a sandbox guarantee for arbitrary Python.
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。

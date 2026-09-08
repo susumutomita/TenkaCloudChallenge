@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 
 
 class MalformedRecord(Exception):
@@ -37,10 +38,18 @@ def parse_record(record, group):
 
 
 def _point(value, group):
+    from participant.schnorr import Point
+
+    if isinstance(value, Point):
+        if type(value.x) is not int or type(value.y) is not int or not 0 <= value.x < group.p or not 0 <= value.y < group.p:
+            raise MalformedRecord("a coordinate is not canonical")
+        if value.is_infinity or not group.contains(value):
+            raise MalformedRecord("the point is not a usable group element")
+        return value
     if not isinstance(value, (tuple, list)) or len(value) != 2:
         raise MalformedRecord("a point is a pair of coordinates")
     x, y = value
-    if not isinstance(x, int) or not isinstance(y, int):
+    if type(x) is not int or type(y) is not int:
         raise MalformedRecord("a coordinate is not an integer")
     if not 0 <= x < group.p or not 0 <= y < group.p:
         raise MalformedRecord("a coordinate is not reduced")
@@ -66,6 +75,8 @@ def find_reuse(records, group) -> list[tuple[int, int]]:
 
     Same commitment under two different keys is a coincidence, not a reuse: there is no
     single x to solve for. Malformed rows are skipped rather than fatal.
+    This implementation returns all pairs in ascending original-index order; the
+    contract also allows a valid subset, reversed pairs, and a different pair order.
     """
     parsed: dict[int, dict] = {}
     for index, record in enumerate(records):
@@ -82,7 +93,11 @@ def find_reuse(records, group) -> list[tuple[int, int]]:
         for right in indices[position + 1 :]:
             a, b = parsed[left], parsed[right]
             if a["commitment"] == b["commitment"] and a["public_key"] == b["public_key"]:
-                pairs.append((left, right))
+                from participant.schnorr import DOMAINS, challenge
+                e1 = challenge(DOMAINS[0], a["commitment"], a["public_key"], a["message"], group)
+                e2 = challenge(DOMAINS[0], b["commitment"], b["public_key"], b["message"], group)
+                if e1 != e2:
+                    pairs.append((left, right))
     return pairs
 
 
@@ -97,6 +112,10 @@ def recover_secret(first, second, group) -> int:
     """
     from participant.schnorr import DOMAINS, challenge
 
+    first = parse_record(first, group)
+    second = parse_record(second, group)
+    if not accepts(first, group) or not accepts(second, group):
+        raise MalformedRecord("a transcript does not verify")
     if first["commitment"] != second["commitment"]:
         raise MalformedRecord("the two transcripts do not share a commitment")
     if first["public_key"] != second["public_key"]:
@@ -111,6 +130,12 @@ def recover_secret(first, second, group) -> int:
 def confirms(secret: int, public, group) -> bool:
     """Whether the recovered scalar really is the key. Never claim a recovery you have
     not checked -- the arithmetic succeeds on the wrong pair too."""
+    if isinstance(public, dict):
+        public = public.get("public_key")
+    try:
+        public = _point(public, group)
+    except MalformedRecord:
+        return False
     return group.generator.scalar_mul(secret % group.n) == public
 
 
@@ -140,12 +165,12 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
     """
     from participant.schnorr import NONCE_SPACE, truncated_nonce
 
-    secret = 12345 % (group.n - 1) + 1
+    secret = 1
     seen: dict[int, int] = {}
     collisions = 0
     for index in range(samples):
-        message = f"payment {index}".encode()
-        k = truncated_nonce(f"{seed}:{index % 1}", secret, message, group)
+        message = f"trial-{index}".encode()
+        k = truncated_nonce(seed, secret, message, group)
         if k in seen:
             collisions += 1
         seen[k] = index
@@ -153,14 +178,26 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
 
 
 def safe_nonce(secret: int, message: bytes, group) -> int:
-    """A nonce that does not repeat across different messages.
+    """A nonce derived from both the secret key and message.
 
     Deterministic on purpose. The same key and message give the same nonce -- and
-    therefore the same signature, which leaks nothing new -- while two different
-    messages cannot share one without a hash collision. The key is in the hash too:
+    therefore the same signature, which leaks nothing new -- while different messages can still share one after reduction modulo n-1,
+    even without a hash collision. The key is in the hash too:
     without it, two signers of the same message would use the same nonce.
     """
-    digest = hashlib.sha256(
-        b"nonce/v1" + secret.to_bytes(32, "big") + len(message).to_bytes(4, "big") + message
-    ).digest()
+    width = (group.n.bit_length() + 7) // 8
+    key = secret.to_bytes(width, "big")
+    data = b"nonce-drill-v1" + len(message).to_bytes(8, "big") + message
+    digest = hmac.new(key, data, hashlib.sha256).digest()
     return 1 + int.from_bytes(digest, "big") % (group.n - 1)
+
+
+def repair_witness(seed: str, group) -> tuple[int, int]:
+    from participant.schnorr import truncated_nonce
+    seen = {}
+    for i in range(65):
+        value = truncated_nonce(seed, 1, f"trial-{i}".encode(), group)
+        if value in seen:
+            return (seen[value], i)
+        seen[value] = i
+    raise AssertionError("65 draws from 64 outputs must collide")

@@ -2,6 +2,11 @@
 # because a base image moved underneath them.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+
+RUN useradd --uid 10001 --create-home lab
+USER lab
+
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -20,7 +25,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 #     the participant container has `FLAG_SEED` in its environment. The hidden phases are
 #     three fixed labels, so a learner could compute their keys here and hard-code them
 #     into a submission instead of attacking a log.
-#   * `deterministic_nonce` is the `repair` checkpoint's answer, with a docstring saying
+#   * `deterministic_nonce` implements the repair checkpoint's HMAC contract, with a docstring saying
 #     what has to go into the hash and why the message alone is not enough.
 #
 # `tests/hidden/check_recover.py` left too: its `_really_accepts` is the acceptance rule
@@ -51,6 +56,7 @@ CMD ["python", "participant/server.py"]
 # measures `truncated_nonce`), and `fixtures/generate.py` re-exports the protocol from
 # it, but the Workbench's own server and Portal support have no business running here.
 FROM base AS verifier
+COPY participant/execution.py participant/protocol.py participant/worker.py participant/isolation.py ./participant/
 COPY participant/schnorr.py ./participant/schnorr.py
 COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/
@@ -67,6 +73,7 @@ CMD ["python", "verifier/server.py"]
 # author image too unless it is copied back -- and mutation.py, the hidden suite and the
 # reference all need it.
 FROM participant AS author
+COPY tests/test_execution.py ./tests/test_execution.py
 
 COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/

@@ -1,4 +1,9 @@
-"""The only file you edit.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
+The only file you edit.
 
 A signing service kept an audit log. It holds, per signature: the message, the public
 key, the commitment R, and the response z. It does not hold the secret key — that was
@@ -9,20 +14,30 @@ Somewhere in the log, one signer used the same commitment twice.
     z1 = k + e1*x
     z2 = k + e2*x
 
-Two equations. Two unknowns. You already have one of them.
+Neither x nor k is given. Subtract the equations to eliminate k.
 
 This is not a story about weak random number generators, although it is usually told
-that way. It is the Sigma protocol's *special soundness*: two accepting transcripts that
-share a commitment and differ in the challenge yield the witness. That property is what
-makes the protocol a proof of knowledge — the same fact that makes it sound is the fact
-that makes nonce reuse fatal.
+that way. A Sigma protocol is a three-message proof conversation: a commitment (the first
+value R), a challenge (the verifier's question number e), and a response z.
+A transcript is the recorded conversation; accepting means its verification equation
+holds. Special soundness means that two such valid records with the same public key
+and R but different e reveal the witness — the secret answer x.
+This extraction explains the nonce-reuse attack. The equation alone is not a security
+proof for the entire signature scheme.
 
 `participant.schnorr` gives you the group, the challenge function, and the signing
 routine the log records. The log itself is handed to you as an argument, and
-`make inspect` prints this deployment's.
+Inspect evidence in Participant Portal displays this deployment's log.
 """
 
+# Point coordinates must be integers (not bool), in 0..group.p-1.
+# Reject infinity before accepting curve membership; otherwise raise MalformedRecord.
 from __future__ import annotations
+
+
+import hashlib
+import hmac
+from participant.schnorr import Point, DOMAINS, challenge, truncated_nonce, NONCE_SPACE
 
 
 class MalformedRecord(Exception):
@@ -33,6 +48,9 @@ def parse_record(record, group):
     """Normalize one audit-log record, or raise MalformedRecord.
 
     The log is data from outside your program. Some rows are broken.
+    Retain all four fields: the original bytes message, original integer response,
+    and public_key/commitment as Point objects. Each point can arrive as a Point,
+    a two-coordinate tuple, or a two-coordinate list. Validate every form.
     """
     return {}
 
@@ -51,6 +69,10 @@ def find_reuse(records, group) -> list[tuple[int, int]]:
 
     Sharing a commitment is necessary. Ask yourself what else has to match before two
     transcripts are two equations in the same unknown.
+    Each pair contains two distinct integer indices into the original records list,
+    starting at 0. Reject bool indices; do not renumber after skipping broken rows.
+    Either order within a pair and any order of pairs are allowed. One or more valid
+    pairs suffice when reuse exists; otherwise return []. A pair may be a tuple or list.
     """
     return []
 
@@ -80,17 +102,31 @@ def attack_log(records, group) -> dict:
 def collision_experiment(seed: str, group, samples: int) -> dict:
     """Measure `participant.schnorr.truncated_nonce`.
 
-    Return {"collisions", "distinct", "space"}. Predict the number before you run it —
+    Use secret=1 and message=f"trial-{i}".encode() for i in range(samples).
+    Pass seed unchanged to truncated_nonce(seed, 1, message, group).
+    samples is supplied as an integer >= 0 (not bool). Return integer counts (not bool)
+    in {"collisions", "distinct", "space"}. Zero draws give 0,0,NONCE_SPACE; one draw
+    gives 0,1,NONCE_SPACE. Predict the number before you run it —
     the generator's output looks like hash output, because it is.
     """
     return {}
 
 
 def safe_nonce(secret: int, message: bytes, group) -> int:
-    """Your repair. A nonce that does not repeat across different messages.
+    """Your repair. Use the exact HMAC-SHA256 encoding in the free statement.
 
     Deterministic is allowed, and is probably what you want. Think about what has to go
-    into it so that two different messages cannot collide — and about what has to go in
-    so that two different *signers* of the same message do not collide either.
+    into it to make collisions unlikely for different messages and signers. A finite
+    output range cannot guarantee zero collisions for all inputs.
     """
     return 1
+
+
+def repair_witness(seed: str, group) -> tuple[int, int]:
+    """Return distinct i,j in 0..64 whose trial messages collide in truncated_nonce.
+
+    Use secret=1 and messages f"trial-{i}".encode(); the supplied weak generator
+    takes (seed, secret, message, group). Different seeds may need different pairs.
+    A constant pair is not a general regression witness.
+    """
+    return (0, 0)

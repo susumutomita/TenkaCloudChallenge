@@ -1,4 +1,4 @@
-# 同じ R が二度出たら、それは鍵である
+# 乱数再利用から署名の秘密鍵を復元する
 
 > このトラックは Advanced Cryptography Program 2026 の非公式・独立した companion です。講座および
 > その運営者とは提携しておらず、承認も受けていません。問題文、コード、fixture、図はすべて独自に
@@ -20,7 +20,7 @@ z1 = k + e1*x
 z2 = k + e2*x
 ```
 
-方程式が 2 本、未知数が 2 つ。片方はもう手元にあります。
+x と k はどちらも未知です。2 本を引くと k が消え、異なる challenge なら x を求められます。
 
 ## これは乱数の話ではありません
 
@@ -28,9 +28,8 @@ nonce 再利用は「弱い乱数生成器は危険」として語られるこ�
 ありません。
 
 理由は **special soundness** です。commitment を共有し challenge が異なる 2 本の受理 transcript
-から witness が抽出できる。これは Sigma protocol が proof of knowledge であることの定義そのもの
-であり、「証明者は本当に `x` を知っている」を保証している当の性質です。抽出器が存在するから健全で
-あり、抽出器が存在するから再利用が致命的になります。1 つの事実の 2 つの帰結です。
+から witness が抽出できる。この抽出の性質が、乱数の再利用から `x` を復元できる理由です。
+知識の証明を論じるための性質の一つであり、これだけで署名方式全体の安全性を証明するわけではありません。
 
 ## R の共有は必要条件であって十分条件ではありません
 
@@ -70,9 +69,9 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `reject` | 40 | `e1 = e2`、別 signer、再利用の無い log |
 | `hunt` | 40 | noise を含む log からの復元と、誰の鍵かの特定 |
 | `collision` | 40 | 切り詰めた生成器の実測と、値域との突き合わせ |
-| `repair` | 35 | 衝突してはいけないものが衝突しない生成器 |
+| `repair` | 35 | 指定HMAC生成器と、弱い生成器の衝突を示す入力の組 |
 
-hint は 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限内です。
+8項目すべてに3段のヒントがあり、各2点、合計48点です。
 
 ## 3 つの nonce generator
 
@@ -86,8 +85,7 @@ hint は 8 つ中 5 つにあり、いずれもその checkpoint の 50% 上限�
 おかしいところがありません。**ランダムに見えることは entropy があることではありません。**
 
 `deterministic_nonce` は名前が最も不安に見えて、正しいものです。同じ鍵と同じ message は同じ nonce
-を生みますが、それは同じ署名を生むだけで新しい情報は漏れません。異なる message はハッシュ衝突なしに
-衝突しません。鍵もハッシュに入れるのは、入れないと 2 人の signer が同じ message で同じ nonce を使う
+を生みますが、それは同じ署名を生むだけで新しい情報は漏れません。異なるmessageは、ハッシュが違ってもn−1で割った余りが一致すれば同じnonceになります。大きい値域で起きにくくしますが、衝突ゼロの保証ではありません。鍵もハッシュに入れるのは、入れないと 2 人の signer が同じ message で同じ nonce を使う
 からです。
 
 ## 群位数と、書けないテスト
@@ -133,7 +131,29 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を実行します。壊した実装 9 種類があります。うち 3 つは、この
+`make reference-test` が mutation suite を実行します。壊した実装69種類があります。うち 3 つは、この
 問題を書いている最中に hidden test の本物の穴を見つけました。log に非受理の重複が無かったこと、
 別 signer の重複が無かったこと、nonce space の検査が値域ではなく相異性だったことです。4 つ目
 「確認せずに復元を報告する」は単独では等価変異と分かり、依存する検証と組にして変異させています。
+
+## 3段ヒントと検証（Issue #716）
+
+8項目すべてに仕組み・小さい例・操作先の3段ヒントを日英で用意。必要な式とAPIは無料本文へ記載。repairは指定HMAC-SHA256とrepair_witness(seed, group)の両方を採点します。後者は配布された弱い生成器で衝突する異なるtrialメッセージ番号の組を構成し、別seedで関数を呼び直して各呼出しのseedと戻り値を独立に確かめます。有限の回帰検査であり、衝突が絶対にない証明ではありません。
+
+作者検証で69種類の誤実装を拒否。異なるコミットメントの受理、不正記録、HMAC入力の誤り、同じ番号・衝突しない番号・固定seedで作った反例も対象。追加36変異はparse・detect・confirm・reject・collisionそれぞれ単独の採点で拒否し、他項目の失敗に依存しません。parseはtuple/list/Pointの4フィールドと整数・メッセージの境界を検査。detectは参照前に元ログの異なる整数番号を確認し、提出コードが入力を変更しても元の証拠で照合します。正しい逆順・一部のペアも受理。collisionは0回・1回・値域を超える回数など複数サイズの実測と整数型を検査します。作者側checker回帰12件とDockerの `make reference-test` が成功。カタログ116件有効。参加者資料だけの独立読解で説明と契約の不足を発見して修正。ブラウザ実プレーとデプロイ先採点は未実施です。
+
+Pointの派生型も受理します。parseの照合は提出側の等値比較メソッドを信用せず、座標と曲線パラメータを比較します。等値比較を偽る追加変異もparse単独で拒否します。
+
+
+PR #815 追加確認：confirmsの正誤両方向でboolを要求。collisionは配布関数の実呼出しを計測し、指定seed・secret・trial順と回数を照合します。SHA式のコピーは同じ集計結果でも拒否します。事前に束縛した別名・別の集計方法・0回の合法実装は維持します。これは提供APIの観測であり、任意Pythonの隔離保証ではありません。
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+This list covers optional standard-library helpers. Imports already supplied by the starter (including __future__ and problem APIs) are also supported. Other optional imports and file/network access are not supported in grading.
+この一覧は追加できる標準ライブラリです。スターターに最初からあるimport（__future__や教材のAPIなど）も、そのまま使えます。それ以外の追加importとファイル・通信操作には採点時は対応しません。
