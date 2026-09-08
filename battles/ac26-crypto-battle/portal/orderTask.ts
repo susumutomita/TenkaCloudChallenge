@@ -101,7 +101,7 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
 
 /** Participant labels follow the protocol supplied on this specific Order. */
 export function orderLabel(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint" | "allowedMethods">, locale: Locale): string {
-  if (order.task.kind === "reveal-share" && (order.privacyConstraint === "must-disclose" || (order.schnorr?.pending?.used && order.schnorr.pending.outcome === "miss"))) {
+  if (order.task.kind === "reveal-share" && (order.privacyConstraint === "must-disclose" || (order.allowedMethods.includes("leak") && order.schnorr?.pending?.used && order.schnorr.pending.outcome === "miss"))) {
     return locale === "ja" ? "秘密分散：シェアを公開して答える" : "Secret sharing: publish a share";
   }
   if (order.schnorr && (order.task.kind === "reveal-share" || order.task.kind === "zk-sudoku")) {
@@ -117,10 +117,13 @@ export function orderLabel(order: Pick<ContractProjection, "task" | "schnorr" | 
 }
 
 /** Do not append legacy Sudoku instructions to a Schnorr-labelled Order. */
-export function orderDetail(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint">, locale: Locale): string {
-  if (order.privacyConstraint === "must-disclose" || (order.task.kind === "reveal-share" && order.schnorr?.pending?.used && order.schnorr.pending.outcome === "miss")) return taskDetail(order.task, locale);
+export function orderDetail(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint" | "allowedMethods">, locale: Locale): string {
+  if (order.privacyConstraint === "must-disclose" || (order.task.kind === "reveal-share" && order.allowedMethods.includes("leak") && order.schnorr?.pending?.used && order.schnorr.pending.outcome === "miss")) return taskDetail(order.task, locale);
   if (order.schnorr && (order.task.kind === "reveal-share" || order.task.kind === "zk-sudoku")) {
-    return locale === "ja" ? "証明：aを送る → eを受け取る → zを返す" : "Proof: send a → receive e → return z";
+    const proof = locale === "ja" ? "証明：aを送る → eを受け取る → zを返す" : "Proof: send a → receive e → return z";
+    return order.task.kind === "reveal-share" && order.allowedMethods.includes("leak")
+      ? `${taskDetail(order.task, locale)} · ${proof}`
+      : proof;
   }
   return taskDetail(order.task, locale);
 }

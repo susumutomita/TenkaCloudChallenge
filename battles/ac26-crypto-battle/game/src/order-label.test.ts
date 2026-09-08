@@ -24,14 +24,15 @@ for (const locale of ["ja", "en"] as const) {
   test(`${locale}: mixed routes stay visible and Schnorr details exclude Sudoku`, () => {
     const order = { task: { kind: "reveal-share", shareIndices: [1] }, schnorr: { y: 8 }, privacyConstraint: "none", allowedMethods: ["leak", "prove"] } as const;
     const label = orderLabel(order, locale);
+    expect(orderDetail(order, locale)).toContain("[1]");
     expect(label).toContain("Schnorr");
     expect(label).toContain(locale === "ja" ? "公開" : "Publish");
-    const detail = orderDetail({ privacyConstraint: "none", task: { kind: "zk-sudoku" }, schnorr: { y: 8 } }, locale);
+    const detail = orderDetail({ allowedMethods: ["prove"], privacyConstraint: "none", task: { kind: "zk-sudoku" }, schnorr: { y: 8 } }, locale);
     expect(orderDetail({ ...order, privacyConstraint: "must-disclose" }, locale)).not.toContain(locale === "ja" ? "証明" : "Proof");
     expect(detail).toContain("a");
     expect(detail).toContain("z");
     expect(detail).not.toContain("4");
-    expect(orderDetail({ privacyConstraint: "none", task: { kind: "zk-sudoku" } }, locale)).toContain("4");
+    expect(orderDetail({ allowedMethods: ["prove"], privacyConstraint: "none", task: { kind: "zk-sudoku" } }, locale)).toContain("4");
   });
 }
 
