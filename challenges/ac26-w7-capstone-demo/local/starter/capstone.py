@@ -1,4 +1,9 @@
-"""Edit capstone.py in the Portal. First implement scope and submit scope.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+Edit capstone.py in the Portal. First implement scope and submit scope.
 
 You build a private sum: people keep their inputs separate, send additive shares
 (parts summing to the input after division remainder), and publish only partial sums.
