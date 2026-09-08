@@ -22,6 +22,7 @@ value R), a challenge (the verifier's question number e), and a response z.
 A transcript is the recorded conversation; accepting means its verification equation
 holds. Special soundness means that two such valid records with the same public key
 and R but different e reveal the witness — the secret answer x.
+A nonce is the fresh, one-use number k chosen for a signature.
 This extraction explains the nonce-reuse attack. The equation alone is not a security
 proof for the entire signature scheme.
 
@@ -31,6 +32,10 @@ Inspect evidence in Participant Portal displays this deployment's log.
 """
 
 # Point coordinates must be integers (not bool), in 0..group.p-1.
+# Infinity (O) is the identity point: adding it leaves a point unchanged.
+# It is not a finite coordinate pair and is not accepted in these log fields.
+# Curve membership means y*y % p == (x*x*x + a*x + b) % p,
+# using group.p, group.a and group.b.
 # Reject infinity before accepting curve membership; otherwise raise MalformedRecord.
 from __future__ import annotations
 
