@@ -140,3 +140,8 @@ def domain_report(params: dict, sample: dict, switching_key: dict) -> dict:
     is allowed. An incompatible key makes key_switch raise ValueError.
     """
     return {}
+
+
+def extraction_counterexample(params: dict, index: int) -> dict:
+    """Construct synthetic coefficient arrays a,b and a binary test key secret, each of degree entries. a/b contain integer remainders0..q-1. Inputs guarantee degree>=2, modulus>=3 and index in0..degree-2. Correct extraction and extraction omitting every wrap sign must have different phases there, but agree at degree-1. The checker calculates independently of your functions. See the free statement for formulas and an arithmetic example."""
+    return {}

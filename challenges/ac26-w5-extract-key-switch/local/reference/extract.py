@@ -192,3 +192,11 @@ def _compatible(params: dict, sample: dict, switching_key: dict) -> bool:
     except ValueError:
         return False
     return True
+
+
+def extraction_counterexample(params: dict, index: int) -> dict:
+    degree = params["degree"]
+    a, b, secret = [0] * degree, [0] * degree, [0] * degree
+    a[degree - 1] = 1
+    secret[index + 1] = 1
+    return {"a": a, "b": b, "secret": secret}

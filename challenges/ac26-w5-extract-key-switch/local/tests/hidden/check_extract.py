@@ -500,6 +500,39 @@ def check_endtoend(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def check_counterexample(module, seed: str) -> list[str]:
+    """Verify constructed evidence without calling participant arithmetic."""
+    for par in _sets(seed):
+        n, q = par["degree"], par["modulus"]
+        for index in sorted({0, n // 2, n - 2}):
+            try:
+                witness = module.extraction_counterexample(dict(par), index)
+            except Exception as error:
+                return [f"constructing the extraction counterexample raised {type(error).__name__}"]
+            if not isinstance(witness, dict):
+                return ["the counterexample must return coefficient arrays and a test key"]
+            a, b, secret = (witness.get(k) for k in ("a", "b", "secret"))
+            if any(not isinstance(v, (list, tuple)) or len(v) != n for v in (a, b, secret)):
+                return ["each counterexample array must match degree"]
+            if any(type(x) is not int or not 0 <= x < q for v in (a, b) for x in v):
+                return ["counterexample coefficients must be canonical integer remainders"]
+            if any(type(x) is not int or x not in (0, 1) for x in secret):
+                return ["the counterexample test key must contain integer bits"]
+            def phases(at):
+                correct = b[at]
+                unsigned = b[at]
+                for j in range(n):
+                    term = a[(at-j) % n] * secret[j]
+                    unsigned -= term
+                    correct -= term if j <= at else -term
+                return correct % q, unsigned % q
+            if phases(index)[0] == phases(index)[1]:
+                return ["the witness does not expose the omitted wrap sign at the supplied index"]
+            if phases(n-1)[0] != phases(n-1)[1]:
+                return ["the witness must retain last-index agreement"]
+    return []
+
+
 def check_transfer(module, seed: str) -> list[str]:
     """All of it, under a degree, dimension, base and modulus not seen elsewhere."""
     failures: list[str] = []
@@ -511,6 +544,7 @@ def check_transfer(module, seed: str) -> list[str]:
         check_switch,
         check_domains,
         check_endtoend,
+        check_counterexample,
     ):
         failures.extend(phase(module, seed))
     return failures
@@ -524,6 +558,7 @@ PHASES = (
     check_switch,
     check_domains,
     check_endtoend,
+    check_counterexample,
 )
 
 

@@ -41,6 +41,10 @@ REFERENCE = (ROOT / "reference" / "extract.py").read_text(encoding="utf-8")
 SEED = "mutation-suite-seed"
 
 MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
+    ("returns no transfer counterexample", [('return {"a": a, "b": b, "secret": secret}', 'return {}')]),
+    ("uses an all-zero test key", [('secret[index + 1] = 1', 'secret[index + 1] = 0')]),
+    ("always targets index zero", [('secret[index + 1] = 1', 'secret[1] = 1')]),
+
     (
         "reads the phase polynomial backwards",
         [
