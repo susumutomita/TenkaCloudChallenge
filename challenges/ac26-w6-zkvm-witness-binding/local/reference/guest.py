@@ -86,6 +86,8 @@ def _is_statement(record: object) -> bool:
     """
     if not isinstance(record, dict) or set(record) != set(STATEMENT_FIELDS):
         return False
+    if any(not isinstance(record[field], str) for field in STATEMENT_FIELDS if field != "params"):
+        return False
     if record["domain"] not in DOMAINS or record["guestVersion"] not in GUEST_VERSIONS:
         return False
     if record["semantics"] not in SEMANTICS or record["claim"] not in CLAIMS:
@@ -244,6 +246,7 @@ def run_guest(image: dict, env) -> dict:
     return {
         "imageDigest": digest,
         "steps": steps,
+        "programSteps": len(decode_program(image["body"])),
         "accepted": accepted,
         # Over plain integers, on every profile. The security property is a statement about
         # value; which register the machine kept the value in is no part of it, and the machine
@@ -268,6 +271,16 @@ def seal_journal(statement: dict, run: dict) -> dict:
     _require_statement(statement)
     if not isinstance(run, dict) or set(run) != set(RUN_FIELDS):
         raise ValueError("a journal is sealed over a run this guest produced")
+    if any(type(run[field]) is not bool for field in ("accepted", "violated", "trapped", "claimResult")):
+        raise ValueError("run decisions must be booleans")
+    if (type(run["steps"]) is not int or type(run["programSteps"]) is not int
+            or not 0 <= run["steps"] <= run["programSteps"] or run["programSteps"] < 1):
+        raise ValueError("run counts must be nonnegative integers bounded by the program length")
+    wrapped = run["wrapped"]
+    if (not isinstance(wrapped, (list, tuple))
+            or any(site not in WRAP_SITE_OF.values() for site in wrapped)
+            or list(wrapped) != sorted(set(wrapped))):
+        raise ValueError("wrapped sites must be sorted distinct names")
     if run["imageDigest"] != statement["imageDigest"]:
         # The run and the statement disagree about which program this is. Sealing anyway
         # produces a journal that is internally consistent and about two different things.
@@ -281,7 +294,7 @@ def seal_journal(statement: dict, run: dict) -> dict:
         "guestVersion": statement["guestVersion"],
         # The only measurement, and it is one the reader could already compute from the public
         # image. That is the test a measurement has to pass, not "is it small".
-        "measurements": {"steps": run["steps"]},
+        "measurements": {"steps": run["programSteps"]},
     }
 
 
@@ -300,7 +313,9 @@ def accept_receipt(receipt: object, statement: object) -> bool:
     if not isinstance(journal, dict) or set(journal) != set(JOURNAL_FIELDS):
         return False
     measurements = journal["measurements"]
-    if not isinstance(measurements, dict) or not set(measurements) <= set(MEASUREMENT_NAMES):
+    if not isinstance(measurements, dict) or set(measurements) != set(MEASUREMENT_NAMES):
+        return False
+    if type(measurements["steps"]) is not int or measurements["steps"] < 1:
         return False
     if not _is_statement(statement):
         return False
@@ -356,12 +371,12 @@ def leak_report(disclosure, statement: dict, image: dict) -> tuple[tuple[str, st
     for channel, name, value in _disclosed(disclosure):
         if name not in PUBLIC_NAMES:
             out.add((channel, name))
-        elif name in PARAM_NAMES and value != statement["params"][name]:
+        elif name in PARAM_NAMES and (type(value) is not int or value != statement["params"][name]):
             # An approved label is not an approval. `spent` may be published; the machine's own
             # total wearing the name `spent` is a different disclosure, and the price is public
             # and invertible, so it is the quantity with one step of arithmetic left to do.
             out.add((channel, name))
-        elif name in MEASUREMENT_NAMES and value != steps:
+        elif name in MEASUREMENT_NAMES and (type(value) is not int or value != steps):
             # A measurement is safe when a reader could already compute it. One that varies with
             # the witness is not a measurement, it is the witness at lower resolution.
             out.add((channel, name))

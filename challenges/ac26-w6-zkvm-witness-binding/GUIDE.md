@@ -1,9 +1,3 @@
-# The proof was valid. It was a proof about a different account
-
-> An independent, unofficial companion to the Advanced Cryptography Program 2026, not affiliated with or endorsed by its operators. Statements, code and data are independently written.
-
-**Week 6 · 60–90 minutes · 300 points · Prerequisite: ac26-w6-zkvm-exploit-predicate**
-
 ## Before you start
 
 Use addition, multiplication, division remainders and beginner Python: variables, if, for, functions, lists and dictionaries. The cryptographic vocabulary and required APIs are introduced below.
@@ -164,41 +158,3 @@ Check journal and each values dictionary. If a value is itself a dictionary, als
 Example: public spent 1, stdout.values={"spent":3} → (("stdout","spent"),). An approved name cannot carry a private computed result. This does not certify arbitrarily deep nesting, heading prose or timing as safe.
 
 **8. transfer.** No new function. Check the same seven functions under changed widths, accounts, claims, programs and versions, then connect input→execution→journal→acceptance. Passing individually is insufficient if the handoff shapes or targets differ. Accept the same target, reject another target and keep secrets out of output on failure without fixing IDs or numbers to examples.
-
-## Scoring and operation
-
-| Checkpoint | Points |
-|---|---:|
-| encoding | 45 |
-| identity | 30 |
-| ingestion | 35 |
-| reexec | 45 |
-| journal | 35 |
-| replay | 50 |
-| privacy | 35 |
-| transfer | 25 |
-
-Wrong submissions cost 15 points. The 24 hints cost 2 each, 48 in total. Grading checks behavior and values, not a particular implementation style. Failure messages identify documented properties without disclosing hidden expected values.
-
-The runtime is local Docker Compose. The Participant Workbench holds public materials, starter and public tests, forwarding `/verify` to an internal verifier. Its image does not contain fixtures, hidden tests, reference answers or mutation tests (deliberately broken implementations). Public data is read from the verifier's `/public`. A local learner controlling Docker can inspect their own containers; this is a self-study boundary, not secrecy from that owner.
-
-The toy receipt has no cryptographic seal. Real zkVM proof generation/verification, arbitrary output confidentiality, and side channels including timing are out of scope. The changed journal policy tests that private stopping positions do not disclose quantity through this field; it does not prove general program privacy.
-
-No cloud account, AWS resources or Region are used. Local Docker CPU and disk are the resources. `make verifier-down` stops and removes Compose services; locally built images remain.
-
-## Author verification
-
-```sh
-make inspect
-make test                         # an unfinished starter is expected to fail
-make reference-test               # correct answer and deliberately broken implementations
-make verifier-down
-```
-
-Run `make install && make agent-gate` from the catalog root. [ACCEPTANCE.md](ACCEPTANCE.md) records the actual boundary: real Workbench HTTP routes, native Python and catalog validation. This revision has not been verified in a rendered browser, a Docker build or an AWS redeployment. An API smoke test is not a complete visual playtest.
-
-## Course and note alignment
-
-`courseAlignment` pins `week6/README.md` and `week6/problems/zkvm-exploit/README.md` in `zk-tokyo/advanced-cryptography-2026` to `a3aa4b56fa88fbe803b57d320fbc87c1a203b480`. The borrowed theme is binding initial conditions, the target program and the public claim around execution verification. Numbers, image format, Python APIs and grading are independent work, not copied assignment solutions.
-
-The user's `advanced-cryptography-note/week6/index.html` was also checked for its guest/public-claim and initial-state/output boundaries. Its distinction that a real proof is not implemented is preserved here. As a real-system example, [RISC Zero Receipt::verify](https://docs.rs/risc0-zkvm/latest/risc0_zkvm/struct.Receipt.html) checks the expected image ID and proven journal. It would be incorrect to generalize that a zkVM does not prove which program ran.

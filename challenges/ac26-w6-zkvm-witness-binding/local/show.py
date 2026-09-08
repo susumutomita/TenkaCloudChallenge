@@ -120,6 +120,12 @@ def main() -> None:
     program = decode_program(built["body"])
     left, right = evidence["collisionPair"]
 
+    print("最初の編集 / First edit: guest.py の encode_statement を実装します。")
+    print("無料本文の frame・固定順・固定幅を使い、公開テストの encode_statement を確認します。")
+    print("Use the free framing/order/width contract and check the encode_statement public tests.")
+    print("programSteps は公開bodyの命令数。steps は秘密入力による完了数で、公開しません。")
+    print("programSteps = public body length; steps = private completed instructions, not for publication.")
+    print()
     print("== the public statement ==")
     for field in STATEMENT_FIELDS:
         value = record[field]
@@ -177,11 +183,12 @@ def main() -> None:
     print(f"  imageId     {built['imageId']}")
     print(f"  sourcePath  {built['sourcePath']}")
     print(f"  buildId     {built['buildId']}")
-    print(f"  steps       {len(program)}   {' -> '.join(program)}")
+    print(f"  programSteps {len(program)}   {' -> '.join(program)}")
     print("  the four siblings, each differing in exactly one way:")
     for name, sibling in evidence["siblings"].items():
         print(f"    {name:11s} sourcePath={sibling['sourcePath']!r} buildId={sibling['buildId']}")
-    print("  Which of them are the same program is the checkpoint, so it is not printed here.")
+    print("  この模型では body 全体（内側の stamp を含む）を結び付けます。")
+    print("  This model commits the complete body, including its embedded stamp; external labels are not committed.")
     print(f"  commitment domains: image={IMAGE_COMMITMENT_DOMAIN}")
     print(f"                      statement={STATEMENT_COMMITMENT_DOMAIN}")
     print(f"  the protocol namespaces a claim can be made in: {', '.join(DOMAINS)}")

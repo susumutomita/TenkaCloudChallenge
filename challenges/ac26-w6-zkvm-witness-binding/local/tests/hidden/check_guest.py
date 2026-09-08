@@ -2,8 +2,10 @@
 
 Eight phases, graded separately, because a guest can be right about the arithmetic and wrong
 about what the arithmetic is a proof of. The cryptography is out of scope here on purpose:
-every phase below is about the two halves a proof system does **not** prove anything about --
-the statement a receipt is offered against, and the journal it publishes.
+every phase below is about the application inputs and outputs that must be chosen explicitly --
+the application statement a receipt is offered against, and the public journal the guest chooses.
+Real proof systems bind their supported program and journal; this toy checker models the
+application checks around that binding and does not implement a cryptographic seal.
 
 Four of the phases exist because of a guest that would otherwise pass:
 
@@ -61,6 +63,7 @@ from fixtures.generate import (  # noqa: E402
     STATEMENT_FIELDS,
     WRAP_SITE_OF,
     Env,
+    Disclosure,
     claim_site,
     collision_pair,
     commit,
@@ -146,6 +149,7 @@ def _run(built: dict, record: dict, private: dict) -> dict:
     return {
         "imageDigest": commit(bytes(built["body"]), IMAGE_COMMITMENT_DOMAIN),
         "steps": steps,
+        "programSteps": len(decode_program(built["body"])),
         "accepted": accepted,
         "violated": violated,
         "wrapped": tuple(sorted(set(wrapped))),
@@ -172,7 +176,7 @@ def _journal(module, record: dict, run: dict) -> dict:
         "imageDigest": record["imageDigest"],
         "claimResult": bool(run["claimResult"]),
         "guestVersion": record["guestVersion"],
-        "measurements": {"steps": run["steps"]},
+        "measurements": {"steps": run["programSteps"]},
     }
 
 
@@ -182,9 +186,9 @@ def _leaks(named, statement_record: dict, steps: int) -> set:
     for channel, name, value in named:
         if name not in PUBLIC_NAMES:
             out.add((channel, name))
-        elif name in PARAM_NAMES and value != statement_record["params"][name]:
+        elif name in PARAM_NAMES and (type(value) is not int or value != statement_record["params"][name]):
             out.add((channel, name))
-        elif name in MEASUREMENT_NAMES and value != steps:
+        elif name in MEASUREMENT_NAMES and (type(value) is not int or value != steps):
             out.add((channel, name))
     return out
 
@@ -231,7 +235,10 @@ def _refuses(call, what: str) -> list[str]:
 def _decides(call, what: str):
     """Call a verifier that is not allowed to raise. Returns a bool, or a failure string."""
     try:
-        return bool(call())
+        result = call()
+        if type(result) is not bool:
+            return _Raised("accept_receipt must return a boolean, not a truthy value")
+        return result
     except Exception as error:  # noqa: BLE001
         return _Raised(
             f"accept_receipt raised {type(error).__name__} on {what}; a receipt it cannot use "
@@ -255,6 +262,7 @@ def _misleading(run: dict) -> dict:
     return {
         "imageDigest": "0" * DIGEST_HEX_LENGTH,
         "steps": run["steps"] + 7,
+        "programSteps": run["programSteps"] + 3,
         "accepted": not run["accepted"],
         "violated": not run["violated"],
         "wrapped": tuple(site for site in WRAP_SITE_OF.values() if site not in run["wrapped"]),
@@ -293,6 +301,8 @@ def _not_statements(record: dict) -> tuple[tuple[object, str], ...]:
 
     return (
         (7, "a statement that is not a record"),
+        ({**record, "semantics": []}, "a non-text semantics value"),
+        ({**record, "domain": {}}, "a non-text protocol domain"),
         ({field: record[field] for field in STATEMENT_FIELDS[1:]}, "a statement with no domain"),
         ({**record, "note": "for the logs"}, "a statement carrying a field nobody agreed to"),
         (
@@ -431,8 +441,7 @@ def _identity_failures(module, seed: str, label: str) -> list[str]:
     explained = {
         "rebuilt": "a rebuild with one comparison changed is a different program, and the two "
         "disagree about every order whose total lands exactly on the budget",
-        "restamped": "a rebuild is a different image even when nothing observable changed; "
-        "'nothing observable changed' is the claim under audit rather than an input to it",
+        "restamped": "this model commits the complete body, including its embedded build stamp",
         "renamed": "the same bytes under another path are the same program",
         "relabelled": "the same bytes under another image's id are the same program",
     }
@@ -448,6 +457,12 @@ def _identity_failures(module, seed: str, label: str) -> list[str]:
     again = _attempt(lambda: module.image_digest(dict(base)), "image_digest")
     if isinstance(again, _Raised) or again != got:
         failures.append("image_digest is not deterministic")
+    mutable = _attempt(
+        lambda: module.image_digest({**base, "body": bytearray(base["body"])}),
+        "image_digest on bytearray",
+    )
+    if isinstance(mutable, _Raised) or mutable != want:
+        failures.append("image_digest must accept bytes and bytearray with the same contents")
 
     for name, sibling in siblings.items():
         answered = _attempt(lambda s=sibling: module.image_digest(dict(s)), "image_digest")
@@ -550,14 +565,15 @@ def _ingestion_failures(module, seed: str, label: str) -> list[str]:
             "the whole reason for"
         )
 
-    for malformed, what in _not_statements(record):
-        failures.extend(
-            _refuses(lambda m=malformed: module.guest_input(Env(), m, dict(private)), what)
-        )
-    for malformed, what in _not_witnesses(profile):
-        failures.extend(
-            _refuses(lambda w=malformed: module.guest_input(Env(), dict(record), w), what)
-        )
+    invalid = [(bad, dict(private), what) for bad, what in _not_statements(record)]
+    invalid += [(dict(record), bad, what) for bad, what in _not_witnesses(profile)]
+    for offered, secret, what in invalid:
+        rejected_env = Env()
+        failures.extend(_refuses(
+            lambda e=rejected_env, s=offered, w=secret: module.guest_input(e, s, w), what
+        ))
+        if rejected_env.writes() or any(rejected_env.transcript().values()):
+            failures.append("guest_input wrote input before refusing malformed data")
     return failures
 
 
@@ -588,8 +604,12 @@ def _one_run(module, built: dict, record: dict, private: dict, what: str) -> lis
     hinted = _misleading(want)
     for field in RUN_FIELDS:
         mine, theirs = want[field], got[field]
-        if field in ("accepted", "violated", "trapped", "claimResult"):
-            theirs = bool(theirs)
+        if field in ("accepted", "violated", "trapped", "claimResult") and type(theirs) is not bool:
+            failures.append(f"run_guest's {field} must be a boolean")
+            continue
+        if field in ("steps", "programSteps") and type(theirs) is not int:
+            failures.append(f"run_guest's {field} must be an integer")
+            continue
         if field == "wrapped":
             theirs = tuple(theirs) if isinstance(theirs, (list, tuple)) else theirs
         if theirs == mine:
@@ -785,7 +805,7 @@ def _journal_failures(module, seed: str, label: str) -> list[str]:
             failures.append("seal_journal's imageDigest is not the one the statement names")
         if got["guestVersion"] != want["guestVersion"]:
             failures.append("seal_journal's guestVersion is not the one the statement names")
-        if bool(got["claimResult"]) is not want["claimResult"]:
+        if type(got["claimResult"]) is not bool or got["claimResult"] is not want["claimResult"]:
             failures.append(f"seal_journal's claimResult is wrong for {what}")
         measurements = got["measurements"]
         if not isinstance(measurements, dict) or set(measurements) != set(MEASUREMENT_NAMES):
@@ -794,8 +814,8 @@ def _journal_failures(module, seed: str, label: str) -> list[str]:
                 "is safe when a reader could already compute it, and everything else is the "
                 "witness at lower resolution"
             )
-        elif measurements != want["measurements"]:
-            failures.append("seal_journal's step count is not the one this run took")
+        elif type(measurements["steps"]) is not int or measurements != want["measurements"]:
+            failures.append("seal_journal's public step count must be the program length, not private execution progress")
 
     # Every member of the family is a statement somebody could legitimately make, and no two of
     # them are the same statement. Two journals sharing a digest have said a proof about one is
@@ -808,6 +828,7 @@ def _journal_failures(module, seed: str, label: str) -> list[str]:
         run = {
             "imageDigest": member["imageDigest"],
             "steps": steps,
+            "programSteps": steps,
             "accepted": True,
             "violated": True,
             "wrapped": (claim_site(member["claim"]),),
@@ -840,6 +861,12 @@ def _journal_failures(module, seed: str, label: str) -> list[str]:
             "a run that executed a program this statement does not name",
         ),
         (7, "a run that is not a run"),
+        ({**run, "claimResult": "False"}, "a text run decision"),
+        ({**run, "accepted": 1}, "an integer run decision"),
+        ({**run, "steps": True}, "a boolean step count"),
+        ({**run, "programSteps": -1}, "a negative program length"),
+        ({**run, "steps": run["programSteps"] + 1}, "execution longer than its program"),
+        ({**run, "wrapped": ["unknown"]}, "an unknown wrapped site"),
     )
     for malformed, what in broken:
         failures.extend(
@@ -848,8 +875,24 @@ def _journal_failures(module, seed: str, label: str) -> list[str]:
     return failures
 
 
+def _journal_progress_privacy(module, seed: str) -> list[str]:
+    """Same public statement and result; different private checked-stop positions."""
+    built, record, private = _profiled(seed, "progress", "checked")
+    ordinary = {"quantity": 1, "aux": {"machineCost": 0, "machineTotal": 0}, "search": ()}
+    runs = [_run(built, record, witness) for witness in (ordinary, private)]
+    assert runs[0]["steps"] != runs[1]["steps"]
+    assert all(run["claimResult"] is False for run in runs)
+    journals = [
+        _attempt(lambda result=run: module.seal_journal(dict(record), result), "seal_journal")
+        for run in runs
+    ]
+    if any(isinstance(journal, _Raised) for journal in journals) or journals[0] != journals[1]:
+        return ["the same public statement and claim must not reveal different private execution progress"]
+    return []
+
+
 def check_journal(module, seed: str) -> list[str]:
-    failures: list[str] = []
+    failures = _journal_progress_privacy(module, seed)
     for label in LABELS:
         failures.extend(_journal_failures(module, seed, label))
     return failures
@@ -869,7 +912,7 @@ def _offered(module, case: dict, steps: int) -> dict:
     at and refuses, and a guest that does not is holding a receipt that really is evidence for
     an account nobody has touched.
     """
-    journal = _journal(module, case["sealed"], {"claimResult": True, "steps": steps})
+    journal = _journal(module, case["sealed"], {"claimResult": True, "programSteps": steps})
     journal.update(case["edit"])
     for field in case["drop"]:
         journal.pop(field, None)
@@ -906,7 +949,7 @@ def _replay_failures(module, seed: str, label: str) -> list[str]:
 
     record = statement(seed, label)
     honest = _attempt(
-        lambda: _journal(module, record, {"claimResult": True, "steps": steps}),
+        lambda: _journal(module, record, {"claimResult": True, "programSteps": steps}),
         "encode_statement",
     )
     if isinstance(honest, _Raised):
@@ -928,6 +971,11 @@ def _replay_failures(module, seed: str, label: str) -> list[str]:
         ({"journal": honest}, 7, "a statement that is not a statement"),
         ({"journal": honest}, {**record, "params": 3}, "a statement with no account in it"),
     )
+    junk += tuple(
+        ({"journal": {**honest, "measurements": measurement}}, dict(record), "malformed public measurements")
+        for measurement in ({}, {"steps": True}, {"steps": "4"}, {"steps": -1}, {"steps": 0})
+    )
+    junk += tuple(({"journal": honest}, malformed, what) for malformed, what in _not_statements(record))
     for receipt, offered, what in junk:
         got = _decides(lambda r=receipt, s=offered: module.accept_receipt(r, s), what)
         if isinstance(got, _Raised):
@@ -999,8 +1047,21 @@ def _privacy_failures(module, seed: str, label: str) -> list[str]:
     return failures
 
 
+def _numeric_policy_failures(module, seed: str) -> list[str]:
+    built = scenario(seed, "type-contract")
+    record, target = built["statement"], built["image"]
+    length = len(decode_program(target["body"]))
+    failures = []
+    for name, numeric in (("spent", record["params"]["spent"]), ("steps", length)):
+        disclosed = Disclosure({}, stdout=({"label": "measurement", "values": {name: float(numeric)}},))
+        got = _attempt(lambda d=disclosed: module.leak_report(d, record, target), "leak_report")
+        if got != (("stdout", name),):
+            failures.append("leak_report did not enforce integer types for an approved numeric name")
+    return failures
+
+
 def check_privacy(module, seed: str) -> list[str]:
-    failures: list[str] = []
+    failures: list[str] = _numeric_policy_failures(module, seed)
     for label in LABELS:
         failures.extend(_privacy_failures(module, seed, label))
     return failures
@@ -1009,6 +1070,38 @@ def check_privacy(module, seed: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # 8. a target, a claim and a protocol version nothing above has seen
 # ---------------------------------------------------------------------------
+
+
+def _pipeline_failures(module, seed: str) -> list[str]:
+    """Compose the submission's stages rather than inserting oracle outputs between them."""
+    failures = []
+    for overflow in ("wrapping", "saturating", "checked"):
+        built, record, private = _profiled(seed, "pipeline", overflow)
+        expected = _run(built, record, private)
+        env = Env()
+        for key, value in _misleading(expected).items():
+            env.hint(key, value)
+        try:
+            module.guest_input(env, dict(record), dict(private))
+            actual = module.run_guest(dict(built), env)
+            journal = module.seal_journal(dict(record), actual)
+            receipt = {"journal": journal}
+            accepted = module.accept_receipt(receipt, dict(record))
+            if accepted is not expected["claimResult"]:
+                failures.append("composed receipt does not report the recomputed claim")
+            changed = {**record, "claim": (
+                "budget-exceeded@add" if claim_site(record["claim"]) == "mul"
+                else "budget-exceeded@mul"
+            )}
+            if module.accept_receipt(receipt, changed) is not False:
+                failures.append("composed receipt was accepted for a different claim")
+            if journal.get("measurements") != {"steps": len(decode_program(built["body"]))}:
+                failures.append("composed journal published execution progress instead of public program length")
+            if module.leak_report(Disclosure(journal), dict(record), dict(built)) != ():
+                failures.append("the submission's own journal violates its disclosure contract")
+        except Exception as error:
+            failures.append(f"composed stages raised {type(error).__name__} instead of completing the contract")
+    return failures
 
 
 def check_transfer(module, seed: str) -> list[str]:
@@ -1025,6 +1118,7 @@ def check_transfer(module, seed: str) -> list[str]:
         *check_journal(module, transferred),
         *check_replay(module, transferred),
         *check_privacy(module, transferred),
+        *_pipeline_failures(module, transferred),
     ]
 
 
