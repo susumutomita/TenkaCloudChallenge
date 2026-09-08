@@ -34,7 +34,9 @@ Inspect evidence in Participant Portal displays this deployment's log.
 # Point coordinates must be integers (not bool), in 0..group.p-1.
 # Infinity (O) is the identity point: adding it leaves a point unchanged.
 # It is not a finite coordinate pair and is not accepted in these log fields.
-# Curve membership means y*y % p == (x*x*x + a*x + b) % p,
+# Curve membership means the two sides leave the same remainder after division by p.
+# Python writes that remainder as value % p; for example, 8 % 3 is 2.
+# The condition is y*y % p == (x*x*x + a*x + b) % p,
 # using group.p, group.a and group.b.
 # Reject infinity before accepting curve membership; otherwise raise MalformedRecord.
 from __future__ import annotations

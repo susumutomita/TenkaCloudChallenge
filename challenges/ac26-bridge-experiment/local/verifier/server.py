@@ -165,11 +165,15 @@ def _check_code(submission: object, phase: str = "advance"):
     learner = LearnerSession({'counter.py': source}, timeout=RUN_TIMEOUT_SECONDS)
     timeout_message = ('Counting exceeded the time limit. The graded ranges cannot be walked one number at a time.'
                        if phase == 'count' else 'The submitted functions exceeded the time limit.')
+    initialized = False
     try:
         with learner:
+            initialized = True
             target = learner.module()
             failures = check_counter.run_count(target.count_no_walkback, SEED) if phase == "count" else check_counter.run(target.advance, SEED)
     except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        if learner.timed_out and not initialized:
+            return False, 'The submitted module exceeded the time limit during initialization.'
         return False, timeout_message if learner.timed_out else 'The submitted functions could not be evaluated.'
     if learner.timed_out:
         return False, timeout_message
