@@ -7,8 +7,8 @@ learner's own image alongside it, and all eight checkpoints are graded by runnin
 suite. Option B2 moved `fixtures/` to this side of the boundary as well: it has to
 implement `phase_coefficient`, `extract_sample`, `extract_trace`, `decompose_mask`,
 `key_switch` and `domain_report` to derive a deployment's trace, switched sample and domain
-report, and those are every one of the six names `starter/extract.py` asks the learner to
-write. The Portal-facing surface now lives in `participant/server.py`, in a separate image
+report: six of the seven graded functions. The seventh, `extraction_counterexample`,
+is implemented in author-only `reference/extract.py`, absent from both runtime images. The Portal-facing surface now lives in `participant/server.py`, in a separate image
 (see ../Dockerfile) that this process's own container never builds; this file, `fixtures/`
 and `tests/hidden/` are reachable only over the Compose-internal network (see
 ../docker-compose.yml), never from the participant container's filesystem.

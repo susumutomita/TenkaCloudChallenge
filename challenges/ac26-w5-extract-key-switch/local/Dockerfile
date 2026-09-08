@@ -21,11 +21,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # Issue 543's option B2 is why `fixtures/` is gone too. `fixtures/generate.py` has to
 # implement working `phase_coefficient`, `extract_sample`, `extract_trace`,
 # `decompose_mask`, `key_switch` and `domain_report` to derive this deployment's trace, its
-# switched sample and its domain report -- every one of the six names `starter/extract.py`
-# asks the learner to write. While it shipped here all six were a single import away, with
+# switched sample and its domain report -- six of the seven functions graded here.
+# While it shipped here those six were a single import away, with
 # no comparison anywhere near them. `show.py` now fetches this deployment's public half
 # from the verifier's `GET /public` over the Compose-internal network (see show.py and the
 # VERIFIER_PUBLIC_URL wiring in docker-compose.yml).
+#
+# The seventh function, `extraction_counterexample`, is implemented only in
+# `reference/extract.py`. Only the author stage copies `reference/`; neither the
+# participant nor the verifier stage contains that reference answer.
 #
 # `participant/fhe.py` stays -- it is the supplied TFHE layer (the ring and the encoding,
 # RLWE, the gadget and RGSW, the external product, CMUX and blind rotation, plus the

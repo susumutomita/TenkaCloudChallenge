@@ -11,11 +11,13 @@ single Docker stage a learner's own `make build` produced -- the same image that
 graded by running that suite against the submitted file, so the person being graded could
 read the assertions. Option B2 took `fixtures/` out of this stage as well: it implements
 `phase_coefficient`, `extract_sample`, `extract_trace`, `decompose_mask`, `key_switch` and
-`domain_report` -- every one of the six names `starter/extract.py` asks the learner to
-write -- because it cannot derive a deployment's trace, switched sample or domain report
+`domain_report` -- six of the seven graded functions -- because it cannot derive a deployment's trace, switched sample or domain report
 without them. `show.py` reads this deployment's public half from the verifier's
 `GET /public` instead (see show.py and the VERIFIER_PUBLIC_URL wiring in
 ../docker-compose.yml).
+
+The seventh answer, `extraction_counterexample`, lives in `reference/extract.py`.
+Only the author Docker stage copies it, not this participant image or the verifier.
 
 The supplied half stayed: `participant/fhe.py` is the ring, the encoding, RLWE, RGSW, the
 external product, CMUX and the rotation loop, plus the switching key the problem hands the

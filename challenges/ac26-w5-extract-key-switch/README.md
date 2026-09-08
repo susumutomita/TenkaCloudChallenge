@@ -152,8 +152,9 @@ network with no gateway. `show.py` reads this deployment's parameters, extractio
 switched sample from that verifier's `GET /public`, which serves the demonstration and never
 a checkpoint's expected value — `fixtures/generate.py` has to implement `phase_coefficient`,
 `extract_sample`, `extract_trace`, `decompose_mask`, `key_switch` and `domain_report` in
-order to derive them, and those are every one of the names `starter/extract.py` asks you to
-write, so it is not in the image you run
+order to derive them. These are six of the seven graded functions, so fixtures are not
+in the participant image. The seventh answer, `extraction_counterexample`, is in
+`reference/extract.py`, copied only into the author stage, not the participant or verifier
 ([#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)).
 
 What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
@@ -170,7 +171,7 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: thirty-two broken implementations. One is
+`make reference-test` runs the mutation suite: 35 broken implementations. One is
 correct at the last coefficient and nowhere else, which is the shape this problem is built
 to catch.
 

@@ -90,7 +90,7 @@ checkout、ターミナル、ローカルエディタ、別画面、コピペは
 | `endtoend` | 40 | RLWE 係数・extracted・switched の 3 つが一致し、switch が実際に動かしている |
 | `transfer` | 30 | 見たことのない degree・次元・base・modulus で上記すべて |
 
-8 つのうち 7 つに hint があり、いずれもその checkpoint の 50% 上限の内側です。
+8 項目すべてに3段ずつの hint があり、いずれもその checkpoint の 50% 上限の内側です。
 
 ## switch の検査を交差させる理由
 
@@ -150,8 +150,9 @@ Week 5 の教材は公開済みなので、 `courseAlignment` は `week5/README.
 verifier の `GET /public` から読みます。 そこが返すのは実演であって checkpoint の期待値では
 ありません。 `fixtures/generate.py` はそれらを導出するために `phase_coefficient`、
 `extract_sample`、 `extract_trace`、 `decompose_mask`、 `key_switch`、 `domain_report` を
-実装する必要があります。 これは `starter/extract.py` が書かせる名前のすべてなので、
-あなたが実行する image には入りません
+実装する必要があります。 採点対象7関数のうち6関数なので、参加者 image には入りません。
+7番目の `extraction_counterexample` の参考解は `reference/extract.py` にあり、
+author stage だけがコピーします。参加者・verifier のどちらにも参考解は含まれません
 （[#543](https://github.com/susumutomita/TenkaCloudChallenge/issues/543)）。
 
 verifier が実際に保証するのはもっと狭く、そして本物です。提出コードは verifier を
@@ -168,7 +169,7 @@ verifier が実際に保証するのはもっと狭く、そして本物です�
 
 ## 作問者向け
 
-`make reference-test` が mutation suite を走らせます。29 個の壊れた実装のうち 1 つは
+`make reference-test` が mutation suite を走らせます。35 個の壊れた実装のうち 1 つは
 最後の係数でだけ正しく、それ以外で間違っています。この問題が捕まえるために作られている形です。
 
 ## Issue #716 — 入口と3段ヒント
