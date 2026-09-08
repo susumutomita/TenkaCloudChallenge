@@ -568,7 +568,8 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
     it(`documents every submission method the game accepts (${locale})`, () => {
       const html = renderToStaticMarkup(createElement(HelpDrawer, baseProps({ locale })));
       for (const method of ALL_SUBMISSION_METHODS) {
-        expect(html).toContain(method.toUpperCase());
+        if (method === "evolution") { for (const name of ["ENIGMA", "RSA", "ECDSA"]) expect(html).toContain(name); }
+        else expect(html).toContain(method.toUpperCase());
       }
       // And no longer claims a fixed count that the method set can outgrow.
       expect(html).not.toContain("The 4 moves");

@@ -123,6 +123,18 @@ export const HINT_LEVELS = 3;
  * these rungs alone (three seeds x four kinds) before this landed.
  */
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
+  "enigma-encrypt": [
+    {id:"enigma-encrypt/1",text:()=>({ja:"車輪を1進めてから、配線を往復します。反射板で折り返し、帰りは表を逆に引きます。",en:"Advance the wheel first, reflect, then use the inverse wiring on return."})},
+    {id:"enigma-encrypt/2",text:()=>({ja:"Wは車輪の表、Rは反射板、W⁻¹は表の逆引き。元の数mの答えはW⁻¹(R(W(m)))。位置0の表0→1、1→3、2→0、3→2なら、0→1→0→2で答え2です。",en:"At position a, Wₐ(x)=P[(x+a) mod4]−a mod4. Encrypt with Wₐ⁻¹(R(Wₐ(m))); R swaps0↔1 and2↔3."})},
+    {id:"enigma-encrypt/3",text:()=>({ja:"表示の初期位置に1を足して4の余りへ。往路の表で入力→出力、反射板で交換、同じ表の出力側から入力側へ戻ります。",en:"Add1 to the initial position modulo4. Read input→output, swap with the reflector, then read output→input in the same row."})}],
+  "rsa-decrypt": [
+    {id:"rsa-decrypt/1",text:()=>({ja:"公開鍵で作った暗号を、秘密鍵dで元に戻します。この練習用の鍵はHUNT対象ではありません。",en:"Use private exponent d to recover the original. This exercise key is outside HUNT."})},
+    {id:"rsa-decrypt/2",text:()=>({ja:"m=cᵈ mod n。毎回掛けたあと余りを取っても答えは同じです。例えば2³ mod5=(2×2×2) mod5=3。",en:"m=cᵈ mod n. Reduce after each multiplication. For example2³ mod5=3."})},
+    {id:"rsa-decrypt/3",text:ctx=>({ja:`c=${ctx.task.kind==="rsa-decrypt"?ctx.task.ciphertext:"?"}。c²を15で割った余りにします。d=3なので、c³=c²×c。最後の余り1個を提出します。`,en:"Compute c² modulo15. Since d=3, c³=c²×c. Submit the final remainder."})}],
+  "ecdsa-sign": [
+    {id:"ecdsa-sign/1",text:()=>({ja:"署名は暗号文ではありません。公開鍵で、メッセージと署名が対応するかを確認できます。",en:"A signature is not ciphertext. A public key checks that the signature matches the message."})},
+    {id:"ecdsa-sign/2",text:()=>({ja:"kGは出発点Gをk回足した点。その左の数がr。逆元k⁻¹はkと掛けて7の余りが1になる数。s=k⁻¹(h+dr)の7で割った余りです。h=1,d=2,k=2ならr=1、s=4×3の余り5です。",en:"r is the x coordinate of kG. s=k⁻¹(h+dr) mod7; k⁻¹ multiplied by k leaves remainder1."})},
+    {id:"ecdsa-sign/3",text:ctx=>({ja:`${ctx.task.kind==="ecdsa-sign"?`h=${ctx.task.hash},d=${ctx.task.d},k=${ctx.task.k}。`:""}kの列でrを読み、h+d×rを計算。逆元表のk⁻¹を掛けて7の余りにします。rとsを別々の欄へ入力します。`,en:"Read r from the k column. Multiply h+d×r by the inverse-table value, reduce modulo7, then enter r and s."})}],
   "anamorphic-rejection": [
     {id:"anamorphic-rejection/1",text:()=>({ja:"同じ通常メッセージを暗号化した候補から、秘密の表で目的のビットになるものを選びます。監視者は通常鍵で普通の数を読み、受信者だけが追加の表でビットを読みます。",en:"Select an ordinary ciphertext whose secret lookup matches the intended bit. The monitor decodes an ordinary message; the receiver additionally decodes the bit using the lookup."})},
     {id:"anamorphic-rejection/2",text:()=>({ja:"通常復号はs=aをx回掛けた数の7で割った余り。s×mの余りがbとなるmを探します。a=2,x=2,b=5ならs=4、4×3=12の余り5なのでm=3です。",en:"For ordinary decryption, s is a to power x, remainder7. Find m with s×m remainder7 equal to b. For a=2,x=2,b=5, s=4 and4×3=12 has remainder5, hence m=3."})},

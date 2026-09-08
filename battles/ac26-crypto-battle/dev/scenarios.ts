@@ -73,6 +73,9 @@ export const DEV_CONFIG: Partial<CryptoBattleConfig> = {
 export const SCENARIO_IDS = [
   "waiting",
   "streaming",
+  "enigma-order",
+  "rsa-decrypt-order",
+  "ecdsa-order",
   "ec-order",
   "anamorphic-order",
   "stark-order",
@@ -104,6 +107,9 @@ export interface ScenarioCopy {
 }
 
 export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
+  "enigma-order": {ja:"エニグマ — 一桁の往復配線",en:"Enigma — one-digit return path"},
+  "rsa-decrypt-order": {ja:"RSA復号 — 秘密鍵で一桁に戻す",en:"RSA decryption — recover one digit"},
+  "ecdsa-order": {ja:"ECDSA — 署名の2個を計算",en:"ECDSA — compute a signature pair"},
   waiting: {
     ja: "デプロイ直後 — まだ誰も始めていない",
     en: "Just deployed — nobody has started it",
@@ -346,7 +352,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver((id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
+  const driver = makeDriver((id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -356,6 +362,17 @@ export function buildScenario(id: ScenarioId): Scenario {
       driver.host.state = initialState({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS }, DEV_CONFIG);
       break;
 
+    case "enigma-order":
+    case "rsa-decrypt-order":
+    case "ecdsa-order": {
+      const kind=id==="enigma-order"?"enigma-encrypt":id==="rsa-decrypt-order"?"rsa-decrypt":"ecdsa-sign";
+      for(let i=0;i<100;i++){
+        if(driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind===kind))break;
+        driver.advance(30000);
+        if(i===99)throw new Error(`no ${kind} worksheet reached`);
+      }
+      break;
+    }
     case "snark-order": {
       for(let t=0;t<=1_200_000;t+=30_000){driver.advance(30_000);if(driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="snark-constraints"))break;}
       if(!driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="snark-constraints"))throw new Error("no SNARK worksheet reached");

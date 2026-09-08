@@ -417,12 +417,12 @@ The statement is knowledge of the discrete logarithm x for y, not knowledge of a
 The server assigns y per Order; a caller cannot replace it. In this tiny-group teaching model the browser finds x from a power table. This is not practical secret-key provisioning. The verification function accepts public values only; responses contain neither x nor r.
 
 ## Elliptic-curve point addition (#784)
-New matches offer EC addition at every thirteenth sequence slot, with duels taking priority. Calculate addition, doubling and the identity O on y²=x³+2x+3 modulo7. This is foundational arithmetic used by ECDSA, not a complete signature scheme. Submit `x y` separated by one space, or `O`. The worksheet contains equations, an inverse table and a coordinate plot. Wrong answers use the existing wrongProve penalty; correct answers receive the Order reward. Existing expiry, ownership and replay gates apply. Legacy matches do not enable these Orders. No platform changes.
+Legacy settings offer EC addition at every thirteenth sequence slot, with duels taking priority. Calculate addition, doubling and the identity O on y²=x³+2x+3 modulo7. This is foundational arithmetic used by ECDSA, not a complete signature scheme. Submit `x y` separated by one space, or `O`. The worksheet contains equations, an inverse table and a coordinate plot. Wrong answers use the existing wrongProve penalty; correct answers receive the Order reward. Existing expiry, ownership and replay gates apply. Legacy matches do not enable these Orders. No platform changes.
 Verify with `cd game && bun test src/ec.test.ts && bun run typecheck`, then the dev `ec-order` scenario.
 
 ### Hand-calculated SNARK arithmetization (#791)
 
-New matches insert a gate/copy worksheet on every seventeenth candidate slot while retaining duel slots. It presents addition, multiplication and addition gates plus two required wires. Players enter five residuals modulo7, detecting a valid table, a corrupt output, or locally valid gates with incorrect wiring. Correct detection of nonzero residuals earns points. Existing ownership, deadline and replay gates apply; the score reason is `snark`.
+Legacy settings insert a gate/copy worksheet on every seventeenth candidate slot while retaining duel slots. It presents addition, multiplication and addition gates plus two required wires. Players enter five residuals modulo7, detecting a valid table, a corrupt output, or locally valid gates with incorrect wiring. Correct detection of nonzero residuals earns points. Existing ownership, deadline and replay gates apply; the score reason is `snark`.
 
 Inputs: lecture repository revision `bdbc913fa7fd4ed87ce7f0de6b1d73fb41e49732`, Week3 zkSNARK and Week4 slides25–29; study-note revision `58344a29ea39c25839475ba9a594c115ed89989b`, `week4/index.html`, PLONK gate table and grand product. This extracts the gate equation and copy constraints. Polynomial interpolation, KZG commitments, evaluation proofs, the copy grand product, succinct noninteractive proofs and zero-knowledge masking are not implemented. It is a visible arithmetization worksheet, not a complete SNARK.
 
@@ -438,7 +438,7 @@ The earlier run covered 90 minutes with the then-current 30-second arrival / 60-
 
 ### Finite iO definition worksheet (#793)
 
-New matches offer an iO worksheet on every nineteenth candidate slot, subject to existing EC and duel slot priorities. Two straight-line programs each contain three arithmetic operations modulo 5. The entire input domain is 0,1,2,3. Participants fill two outputs, test equivalence on all inputs, and count shared full encodings in two displayed distributions. Correct answers use the existing problem-owned submission gate, expiry, replay prevention and Lightning; the score reason is `io`.
+Legacy settings offer an iO worksheet on every nineteenth candidate slot, subject to existing EC and duel slot priorities. Two straight-line programs each contain three arithmetic operations modulo 5. The entire input domain is 0,1,2,3. Participants fill two outputs, test equivalence on all inputs, and count shared full encodings in two displayed distributions. Correct answers use the existing problem-owned submission gate, expiry, replay prevention and Lightning; the score reason is `io`.
 
 Source basis: Barak et al., *On the (Im)possibility of Obfuscating Programs* (CRYPTO 2001), https://www.boazbarak.org/papers/obfuscate ; Jain, Lin and Sahai, *Indistinguishability Obfuscation from Well-Founded Assumptions*, https://doi.org/10.1145/3785007 . The definition compares equal-size, functionally equivalent circuits, requires correctness and computational indistinguishability, and includes efficiency. Here size means three operations in a tiny arithmetic language, not the bit-gate size of general Boolean circuits.
 
@@ -450,7 +450,7 @@ The additional distribution regression enumerates all 225 nonempty rotation-supp
 
 ### STARK trace, AIR and one fold (#792)
 
-New matches add a STARK candidate every 23 slots, subject to the other explicit special-slot priorities. The participant checks two transitions of repeated squaring over F7, computes the constant of the remainder polynomial, then the constant of one FRI fold. Each of the four fields has its formula and worked example beside it; explanations and scoring feedback are available in Japanese and English. Existing match settings do not acquire the new task. Schema 18 protects readers which cannot understand STARK Orders.
+Legacy settings add a STARK candidate every 23 slots, subject to the other explicit special-slot priorities. The participant checks two transitions of repeated squaring over F7, computes the constant of the remainder polynomial, then the constant of one FRI fold. Each of the four fields has its formula and worked example beside it; explanations and scoring feedback are available in Japanese and English. Existing match settings do not acquire the new task. Schema 18 protects readers which cannot understand STARK Orders.
 
 The three trace values are interpolated at 1,2,4. C(X)=T(2X)-T(X)^2 is divided by (X-1)(X-2), excluding the last-to-first transition. Both transition checks vanish exactly when the polynomial remainder vanishes. A quotient of degree at most two folds into a polynomial of degree at most one. A correct fold does not establish a correct trace; the exercise explicitly separates these checks.
 
@@ -468,7 +468,7 @@ Based on Persiano–Phan–Yung, EUROCRYPT2022, section5.1: https://iacr.org/arc
 
 The arithmetic uses ElGamal-shaped pairs modulo7. A balanced six-entry table substitutes for a pseudorandom function (PRF); it is scoped to one ordinary message. Neither the tiny group nor the lookup is practically secure. For each hidden bit, averaging uniform accepted-candidate selection across all20 balanced secret tables gives the ordinary1/6 distribution for a single packet. No multi-message security claim follows. Repeated trials in the paper are independent; the worksheet displays a shuffled, non-repeating practice sequence rather than an implementation of its secure sampler. No supplementary encrypted payload is appended.
 
-New matches add a candidate every29 slots subject to existing special-slot priorities. Existing matches retain their configuration. Schema19, owned-order validation, actual scoring, Lightning and score reason `anamorphic` stay in the problem runtime. Ordinary regression771 tests, dev85 tests, types and116-entry catalog validation pass. Deployment is not performed.
+Legacy settings add a candidate every29 slots subject to existing special-slot priorities. Existing matches retain their configuration. Schema19, owned-order validation, actual scoring, Lightning and score reason `anamorphic` stay in the problem runtime. Ordinary regression771 tests, dev85 tests, types and116-entry catalog validation pass. Deployment is not performed.
 
 Real local Portal `anamorphic-order`: key x=4, first accepted pair(4,4); accepted trials1,3,4 have2,1,1 tickets. Submitted1 1 4; success banner and current score30 were observed on the updated transfer worksheet.
 
@@ -479,3 +479,14 @@ Edit `MATCH_PACING.answerSeconds` in `game/src/pacing.ts`: default180 seconds, s
 Rebuild and deploy the problem, then start a new match. Persisted matches and issued deadlines keep their settings. This is a problem-owned build-time parameter, not an in-match admin control; no problem-specific platform settings were added.
 
 Schema20 rejects incompatible rollback readers. Migrating schema19 preserves stored Orders and pacing.
+### Shuffled topics and cryptographic evolution (#850)
+
+New matches use schema21. The opening two tasks stay familiar; subsequent non-duel tasks draw from a shuffled bag of16 topics, including early RSA encryption, Vigenère and rotors. Existing duel slots remain; a bye on an odd roster lets that team advance its non-duel bag sooner. The every13/17/19/23/29-slot descriptions above document legacy settings. Persisted matches do not acquire this feature.
+
+- Enigma: one input0–3, one stepping wheel, reflector and inverse return path. This does not reproduce the26-letter, multi-rotor machine and plugboard.
+- RSA decryption: task-only key(n=15,d=3) and ciphertext recover a plaintext1–9. This key is outside HUNT; this is textbook RSA without secure encoding.
+- ECDSA: sign a supplied hash value on y²=x³+2x+1 modulo5, G=(0,1), order7. The order counts additions of G before reaching the additive identity. The task supplies d,k and an inverse table. These tiny, task-only keys are outside HUNT and provide no practical security.
+
+Worksheets include formulas, a worked example, answer inputs and mathematical explanation. Correct submissions earn the displayed reward and applicable Lightning; wrong submissions incur wrongProve and may be retried. Ownership, deadlines and replay guards stay in the problem runtime. One mandatory disclosure per bag cycles through share indices to retain the secret-sharing HUNT route.
+
+References: [RSA decryption primitive, RFC8017 §5.1.2](https://www.rfc-editor.org/rfc/rfc8017#section-5.1.2), [ECDSA, FIPS186-5](https://csrc.nist.gov/pubs/fips/186-5/final). These tiny parameters do not meet the standards' security requirements.

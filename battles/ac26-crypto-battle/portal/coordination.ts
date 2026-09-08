@@ -1,3 +1,4 @@
+import { isEvolutionTask } from "../game/src/evolution.ts";
 import { rotorRow, rotorPositions } from "../game/src/rotor.ts";
 import { isRsaPublicKey } from "../game/src/rsa.ts";
 /**
@@ -137,6 +138,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (!Array.isArray(v.publicLedger)) return false;
 
   if (typeof v.teams !== "object" || v.teams === null) return false;
+  if (v.myContracts.some(c => (c.task?.kind === "rsa-decrypt" || c.task?.kind === "enigma-encrypt" || c.task?.kind === "ecdsa-sign") && !isEvolutionTask(c.task))) return false;
   if (v.myContracts.some(c => c.task?.kind === "rotor-encrypt" && (!rotorRow(c.task.plaintext) || !rotorPositions(c.task.myInitial)))) return false;
   if (v.publicLedger.some((a: Record<string, unknown>) => a?.kind === "rotor-pair" && (a.method !== "leak" || !rotorRow(a.plaintext) || !rotorRow(a.ciphertext) || "myInitial" in a))) return false;
   const rsaValue = (n: unknown, max: number) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0 && n < max;

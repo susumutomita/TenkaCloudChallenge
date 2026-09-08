@@ -1,3 +1,4 @@
+import { evolutionAnswer } from "./evolution.ts";
 import {anamorphicAnswer} from "./anamorphic.ts";
 import {starkAnswer} from "./stark.ts";
 import {ioAnswer} from "./io.ts";
@@ -487,6 +488,9 @@ export function buildClearingOp(
     case "anamorphic-rejection": return {kind:"anamorphic",contractId:contract.id,answer:anamorphicAnswer(contract.task).join(" ")};
     case "stark-trace": return {kind:"stark",contractId:contract.id,answer:starkAnswer(contract.task).join(" ")};
     case "io-equivalence": return {kind:"io",contractId:contract.id,answer:ioAnswer(contract.task).join(" ")};
+    case "rsa-decrypt":
+    case "enigma-encrypt":
+    case "ecdsa-sign": return {kind:"evolution",contractId:contract.id,answer:evolutionAnswer(contract.task).join(" ")};
     case "snark-constraints": return {kind:"snark",contractId:contract.id,answer:constraintResiduals(contract.task).join(" ")};
     case "ec-add": return {kind:"ec",contractId:contract.id,answer:addPoints(contract.task.left,contract.task.right)?.join(" ")??"O"};
     case "masked-total":

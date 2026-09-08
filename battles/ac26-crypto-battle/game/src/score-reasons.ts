@@ -36,6 +36,7 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
     case "stark": return "stark";
     case "io": return "io";
     case "ec": return "ec";
+    case "evolution": return "evolution";
     case "snark": return "snark";
     case "cipher": return "cipher";
     case "leak": return "leak";

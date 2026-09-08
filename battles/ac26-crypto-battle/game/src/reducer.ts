@@ -1,3 +1,5 @@
+import { curriculumPlan } from "./curriculum.ts";
+import { evolutionTask, evolutionAnswer, parseEvolutionAnswer } from "./evolution.ts";
 import { MATCH_PACING, pacingConfig } from "./pacing.ts";
 import { deriveBigInt } from "./prng.ts";
 import {anamorphicTask,anamorphicAnswer,parseAnamorphicAnswer} from "./anamorphic.ts";
@@ -270,6 +272,7 @@ export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   starkOrders:true,
   anamorphicOrders:true,
   snarkOrders:true,
+  evolutionOrders:true,
   ...pacingConfig(MATCH_PACING),
   contractsPerIssue: 1,
 };
@@ -374,6 +377,9 @@ function buildOrderTask(
     }
     case "stark-trace": return starkTask([...createHmac("sha256",seed).update(`stark:${contractId}`).digest()]);
     case "io-equivalence": return ioTask([...createHmac("sha256",seed).update(`io:${contractId}`).digest()]);
+    case "rsa-decrypt":
+    case "enigma-encrypt":
+    case "ecdsa-sign": return evolutionTask(plan.taskKind, [...createHmac("sha256",seed).update(`evolution:${contractId}`).digest()]);
     case "snark-constraints": return constraintTask([...createHmac("sha256",seed).update(`snark:${contractId}`).digest()]);
     case "ec-add": {
       const bytes=createHmac("sha256",seed).update(`ec:${contractId}`).digest();
@@ -668,8 +674,8 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-// v20 blocks pre-three-symbol readers on rollback; v19 tasks/config remain intact.
-export const STATE_SCHEMA_VERSION = 20;
+// v21 introduces evolution task kinds; older persisted tasks/config remain intact.
+export const STATE_SCHEMA_VERSION = 21;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -712,9 +718,9 @@ export const STATE_SCHEMA_VERSION = 20;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19 && fromVersion !== 20) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18 and v19 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19 and v20 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -944,6 +950,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
       if(state.config.ioOrders && sequenceIndex%19===18)plan={...plan,taskKind:"io-equivalence",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if(state.config.ecOrders && sequenceIndex%13===12)plan={...plan,taskKind:"ec-add",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if(state.config.snarkOrders && sequenceIndex%17===16)plan={...plan,taskKind:"snark-constraints",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
+      if (state.config.evolutionOrders) plan = curriculumPlan(state.seed, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), plan, fieldConfig.shareCount);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
       // [Issue #659] Never issue an Order whose deadline has already passed.
       //
@@ -1356,7 +1363,7 @@ export function validateOp(
   switch (op.kind) {
     case "declare-lightning": {
       const contract = state.contracts.find(c => c.id === op.contractId && c.teamId === teamId);
-      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark", "stark", "anamorphic"].includes(m));
+      const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark", "evolution", "stark", "anamorphic"].includes(m));
       if (!contract || !method) return { ok: false, error: "lightning requires your own calculation Order; duel outcomes do not qualify" };
       const gate = validateOrderSubmission(state, teamId, op.contractId, method);
       if (!gate.ok) return gate;
@@ -1665,6 +1672,14 @@ export function validateOp(
       const gate=validateOrderSubmission(state,teamId,op.contractId,"io");
       if(!gate.ok)return gate;
       return parseIoAnswer(op.answer)?{ok:true}:{ok:false,error:"Enter two outputs (0–4), equivalence (0/1), and shared outcome count (0–4), separated by spaces."};
+    }
+    case "evolution": {
+      const gate = validateOrderSubmission(state, teamId, op.contractId, "evolution");
+      if (!gate.ok) return gate;
+      const order = state.contracts.find(c=>c.id===op.contractId)!;
+      const expectedLength = order.task.kind === "ecdsa-sign" ? 2 : 1;
+      const answer = parseEvolutionAnswer(op.answer);
+      return answer?.length === expectedLength ? {ok:true} : {ok:false,error:`Enter ${expectedLength} space-separated digits.`};
     }
     case "snark": {
       const gate=validateOrderSubmission(state,teamId,op.contractId,"snark");
@@ -2298,6 +2313,9 @@ function projectTask(
     case "anamorphic-rejection": return task;
     case "stark-trace": return task;
     case "io-equivalence": return task;
+    case "rsa-decrypt":
+    case "enigma-encrypt":
+    case "ecdsa-sign":
     case "snark-constraints": return task;
     case "ec-add": return task;
     case "rotor-encrypt": {
@@ -2775,6 +2793,7 @@ function applyMethodOp(
     case "anamorphic": return applyAnamorphic(state,teamId,op);
     case "stark": return applyStark(state,teamId,op);
     case "io": return applyIo(state,teamId,op);
+    case "evolution": return applyEvolution(state,teamId,op);
     case "snark": return applySnark(state,teamId,op);
     case "ec": return applyEc(state,teamId,op);
     case "mpc":
@@ -3084,4 +3103,16 @@ function applyAnamorphic(state:CryptoBattleState,teamId:string,op:Extract<Crypto
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
  return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"anamorphic" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};
+}
+
+function applyEvolution(state: CryptoBattleState, teamId: string, op: Extract<CryptoBattleOp,{kind:"evolution"}>): CryptoBattleState {
+  const order = state.contracts.find(c => c.id === op.contractId)!;
+  if (order.task.kind !== "enigma-encrypt" && order.task.kind !== "ecdsa-sign" && order.task.kind !== "rsa-decrypt") throw new Error("wrong task");
+  const hit = JSON.stringify(parseEvolutionAnswer(op.answer)) === JSON.stringify(evolutionAnswer(order.task));
+  const team = state.teams[teamId]!;
+  const points = hit ? order.points + lightningBonus(state,order) : -Math.min(team.score,Math.abs(state.config.scores.wrongProve));
+  return {...state,
+    contracts: state.contracts.map(c => c.id === order.id ? {...c,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"evolution" as const}:{})} : c),
+    teams: {...state.teams,[teamId]: {...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,order.id)]}:{})}},
+  };
 }

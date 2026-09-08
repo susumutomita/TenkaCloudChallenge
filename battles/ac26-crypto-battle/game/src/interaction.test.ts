@@ -111,6 +111,9 @@ class Bot {
       case "anamorphic-rejection":
       case "stark-trace":
       case "io-equivalence":
+      case "enigma-encrypt":
+      case "ecdsa-sign":
+      case "rsa-decrypt":
       case "snark-constraints":
       case "ec-add":
       case "rotor-encrypt":

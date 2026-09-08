@@ -1,3 +1,4 @@
+import EvolutionWorksheet from "./EvolutionWorksheet.tsx";
 import MathText from "./MathText.tsx";
 import {AnamorphicWorksheet} from "./AnamorphicWorksheet.tsx";
 import {StarkWorksheet} from "./StarkWorksheet.tsx";
@@ -1550,6 +1551,14 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"計算と分布の比較に成功！":"Function and distribution check complete!",body:locale==="ja"?"同じ機能かどうかと、公開データの分布を別々に確認できました。":"You checked functional equivalence and the published distributions separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。空欄の余りと、rを含む公開データの組を確認してください。`:`${delta} pt. Check the missing remainders and complete outcomes including r.`};
         }
        )}/> }
+      {(selectedOrder?.task.kind === "enigma-encrypt" || selectedOrder?.task.kind === "ecdsa-sign" || selectedOrder?.task.kind === "rsa-decrypt") && <EvolutionWorksheet wrongCost={projection.wrongProveCost} key={`evolution:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+        ()=>client.submitOp({kind:"evolution",contractId:selectedOrder.id,answer}), next=>{
+          if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          const result=next.myContracts.find(c=>c.id===selectedOrder.id);
+          if(result?.lastSubmissionPoints===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          return result.status==="completed"?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"正解！":"Correct!",body:locale==="ja"?"式を使って変換できました。":"You completed the transformation."}:{kind:"error",title:locale==="ja"?"表と余りを確認してください":"Check the table and remainders",body:`${result.lastSubmissionPoints} pt`};
+        }
+      )}/>}
       {selectedOrder?.task.kind === "snark-constraints" && <SnarkWorksheet wrongCost={projection.wrongProveCost} key={`snark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
         ()=>client.submitOp({kind:"snark",contractId:selectedOrder.id,answer}), next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
