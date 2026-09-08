@@ -752,8 +752,17 @@ def check_mask_cancellation(module, seed: str) -> list[str]:
         runtime.reserve_triple(scenario.triple)
         before = len(runtime.events)
         issued_objects = []
-        reads_before = runtime.reads
+        observed_reads = 0
         arithmetic_reads = 0
+        original_value_of = runtime.value_of
+        def track_value_of(share):
+            nonlocal observed_reads
+            value = original_value_of(share)
+            observed_reads += 1
+            return value
+        # Keep the observation in the checker: Runtime.reads is mutable by the
+        # submitted code and cannot be the authority for this contract.
+        runtime.value_of = track_value_of
         original_emit = runtime._emit
         def track_emit(*args, **kwargs):
             nonlocal arithmetic_reads
@@ -768,7 +777,7 @@ def check_mask_cancellation(module, seed: str) -> list[str]:
             result = module.mask_cancellation_witness(
                 ParticipantRuntime(runtime), scenario.halves, scenario.triple
             )
-            if runtime.reads - reads_before != arithmetic_reads:
+            if observed_reads != arithmetic_reads:
                 failures.append("cancellation witness must not read values directly")
             if not isinstance(result, tuple) or len(result) != scenario.cfg["parties"]:
                 failures.append("cancellation witness must return a tuple with one share per party")

@@ -41,6 +41,20 @@ class CancellationTest(unittest.TestCase):
                 return reference.mask_cancellation_witness(runtime, halves, triple)
             self.assertIn("cancellation witness must not read values directly", self.check(broken))
 
+    def test_restoring_mutable_read_counter_cannot_hide_reads(self):
+        from participant.mpc import ParticipantRuntime
+        for unbound in (False, True):
+            def broken(runtime, halves, triple):
+                before = runtime._runtime.reads
+                with runtime.party_scope(0):
+                    if unbound:
+                        ParticipantRuntime.value_of(runtime, halves["A"][0])
+                    else:
+                        runtime.value_of(halves["A"][0])
+                runtime._runtime.reads = before
+                return reference.mask_cancellation_witness(runtime, halves, triple)
+            self.assertIn("cancellation witness must not read values directly", self.check(broken))
+
     def test_alternative_local_construction_is_allowed(self):
         def valid(runtime, halves, triple):
             result = []

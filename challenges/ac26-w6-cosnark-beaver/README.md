@@ -80,7 +80,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `audit` | 50 | Every published value under a reserved mask, measured from the opening records |
 | `transfer` | 25 | All of it at a field, party count and witness length you have not seen |
 
-Hints on seven of the eight (12–20 each). Opening every one still leaves 190 of 300.
+Each of the eight checkpoints has three hints at two points each. Opening all 24 costs 48 points and leaves 252 of 300.
 
 ## A correct C proves less than it looks
 
@@ -189,7 +189,7 @@ claim has to move with it.
 
 The final transfer also requires mask_cancellation_witness: construct local issued shares that preserve A while retaining triple.x ancestry. This distinguishes the runtime log from a secrecy proof. All eight checkpoints have three hints at two points each (48 total). Required formulas and APIs are free in metadata; the new public test demonstrates cancellation.
 
-`make reference-test` runs the six construction regressions through `mutation.py` and then the existing 32-mutation suite; all passed in the host author run. Participant-only independent reading caught four instruction inconsistencies, now corrected. The actual Workbench handler methods fetched the starter, prepared a submission and ran nine public tests successfully. HTTP binding was unavailable in the sandbox; browser play, remote scoring and deployment were not tested. Catalog validation passed for 116 entries.
+`make reference-test` runs nine construction regressions through `mutation.py` and then the 32-mutation suite; both the host and Docker author runs passed. Participant-only independent reading caught four instruction inconsistencies, now corrected. The actual Workbench handler methods fetched the starter, prepared a submission and ran nine public tests successfully. HTTP binding was unavailable in the sandbox; browser play, remote scoring and deployment were not tested. Catalog validation passed for 116 entries.
 
 
-PR #831 follow-up: final construction counts actual Runtime reads against successful local-operation reads, including unbound ParticipantRuntime calls. Eight author regressions cover direct/unbound reads and an alternative valid arithmetic construction. This observes the supplied API; it is not a Python security sandbox. Free formulas and API contracts remain available; the final example now rejects a candidate rather than supplies the construction.
+PR #831 follow-up: final construction records value reads in a checker-owned closure and compares them with successful local-operation reads, including unbound ParticipantRuntime calls. Restoring the public Runtime.reads counter cannot erase these observations. Nine author regressions cover direct/unbound reads and an alternative valid arithmetic construction. This observes the supplied API; it is not a Python security sandbox. Free formulas and API contracts remain available; the final example now rejects a candidate rather than supplies the construction.
