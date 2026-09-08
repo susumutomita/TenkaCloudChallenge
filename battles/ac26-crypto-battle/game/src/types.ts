@@ -1473,6 +1473,8 @@ export interface CryptoBattleProjection {
   readonly wrongHuntCost: number;
   /** [Issue #709] What a wrong PROVE costs -- `config.scores.wrongProve`. */
   readonly wrongProveCost: number;
+  /** Signed per-Order deadline adjustment. Absent in older projections. */
+  readonly expiryPenalty?: number;
   /**
    * [Issue #696] The reader's most recent Shamir HUNT, if any -- see
    * `TeamState.lastHunt`. This is the field that lets the Portal tell a hit

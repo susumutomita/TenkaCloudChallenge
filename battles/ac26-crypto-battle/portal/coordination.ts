@@ -182,6 +182,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (typeof v.sudokuHuntAttempts !== "object" || v.sudokuHuntAttempts === null) return false;
   if (typeof v.wrongHuntCost !== "number" || !Number.isFinite(v.wrongHuntCost)) return false;
   if (typeof v.wrongProveCost !== "number" || !Number.isFinite(v.wrongProveCost)) return false;
+  if (v.expiryPenalty !== undefined && (typeof v.expiryPenalty !== "number" || !Number.isFinite(v.expiryPenalty))) return false;
   if (v.huntWinPoints !== undefined && (typeof v.huntWinPoints !== "number" || !Number.isFinite(v.huntWinPoints))) return false;
   // Optional for an older dispatcher, but malformed present data must never
   // reach the HUNT cards' array methods or turn into a fabricated completion.
