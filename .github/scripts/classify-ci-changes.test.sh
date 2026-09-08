@@ -12,7 +12,9 @@ check() {
   fi
 }
 check $'battle=false\ncapacity=false' challenges/ac26-w3-nonce-reuse/local/participant/worker.py
-check $'battle=false\ncapacity=false' README.md .github/workflows/ci.yml
+check $'battle=false\ncapacity=false' README.md
+check $'battle=true\ncapacity=true' .github/workflows/ci.yml
+check $'battle=true\ncapacity=true' .github/scripts/classify-ci-changes.sh
 check $'battle=false\ncapacity=false'
 check $'battle=true\ncapacity=false' battles/ac26-crypto-battle/dev/src/App.tsx
 check $'battle=true\ncapacity=true' battles/ac26-crypto-battle/game/src/reducer.ts
@@ -22,7 +24,7 @@ check $'battle=true\ncapacity=true' challenges/example/metadata.json battles/ac2
 check $'battle=true\ncapacity=false' battles/ac26-crypto-battle/portal/StatusPanel.tsx
 check $'battle=true\ncapacity=false' battles/ac26-crypto-battle/coordination/crypto-battle.ts
 check $'battle=true\ncapacity=true' battles/ac26-crypto-battle/metadata.json
-printf 'CI path routing: 11 cases passed\n'
+printf 'CI path routing: 13 cases passed\n'
 
 # A move out of the Battle tree must retain the deleted source in both diff modes.
 fixture=$(mktemp -d)
