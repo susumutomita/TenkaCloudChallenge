@@ -1,3 +1,4 @@
+import type {AnamorphicTask} from "./anamorphic.ts";
 import type {StarkTask} from "./stark.ts";
 import type {IoTask} from "./io.ts";
 import type {ConstraintTask} from "./snark.ts";
@@ -197,6 +198,7 @@ export interface CryptoBattleConfig {
   readonly ecOrders?: boolean;
   readonly ioOrders?: boolean;
   readonly starkOrders?: boolean;
+  readonly anamorphicOrders?: boolean;
   readonly snarkOrders?: boolean;
   readonly proofProtocol?: "schnorr-v1";
   /** Stringified bigint -- see this file's header "JSON-SAFETY INVARIANT". */
@@ -382,6 +384,7 @@ export type OrderTask =
    * stated here, so a team relabels the whole grid rather than the four cells
    * it knows will be read.
    */
+  | AnamorphicTask
   | StarkTask
   | IoTask
   | ConstraintTask
@@ -1010,6 +1013,7 @@ export type CryptoBattleOp =
   | { readonly kind: "schnorr-commit"; readonly contractId: string; readonly y: number; readonly a: number }
   | { readonly kind: "snark"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "ec"; readonly contractId:string; readonly answer:string }
+  | { readonly kind: "anamorphic"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "stark"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "io"; readonly contractId:string; readonly answer:string }
   | { readonly kind: "schnorr-response"; readonly contractId: string; readonly z: number }
@@ -1267,6 +1271,7 @@ export type OrderTaskProjection =
    * [Issue #709] Nothing to add: the solution is on the vault and the puzzle
    * is public. Kept as its own arm so a card can name the job.
    */
+  | AnamorphicTask
   | StarkTask
   | IoTask
   | ConstraintTask

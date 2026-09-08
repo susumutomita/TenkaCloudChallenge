@@ -151,6 +151,10 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (v.myContracts.some(c => c.task?.kind === "stark-trace" &&
     (!rsaValue(c.task.beta,7) || c.task.beta < 1 || !Array.isArray(c.task.trace) ||
       c.task.trace.length !== 3 || c.task.trace.some((n:unknown)=>!rsaValue(n,7))))) return false;
+  if (v.myContracts.some(c => c.task?.kind === "anamorphic-rejection" &&
+    (!rsaValue(c.task.ordinaryKey,6) || c.task.ordinaryKey < 1 || !rsaValue(c.task.targetBit,2) || !Array.isArray(c.task.tickets) || c.task.tickets.length!==6 || !c.task.tickets.every((v:unknown)=>rsaValue(v,4)&&Number(v)>=1) ||
+      !Array.isArray(c.task.candidates) || c.task.candidates.length !== 6 || c.task.candidates.some((row:unknown)=>!Array.isArray(row) || row.length!==2 || row.some(n=>!rsaValue(n,7)||Number(n)<1)) ||
+      !Array.isArray(c.task.secretBits) || c.task.secretBits.length !== 6 || c.task.secretBits.some((n:unknown)=>!rsaValue(n,2))))) return false;
   if (v.publicRsaKeys !== undefined) {
     if (!Array.isArray(v.publicRsaKeys)) return false;
     const seen = new Set<string>(), teams = v.teams as Record<string, { generation?: unknown }>;

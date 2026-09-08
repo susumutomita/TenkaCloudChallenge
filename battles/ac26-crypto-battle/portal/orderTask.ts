@@ -28,6 +28,7 @@ export type Locale = "ja" | "en";
  */
 export function describeTaskShort(task: OrderTaskProjection): string {
   switch (task.kind) {
+    case "anamorphic-rejection": return "Anamorphic ciphertext selection";
     case "stark-trace": return "STARK trace and fold";
     case "io-equivalence": return "Outputs and their probabilities";
     case "snark-constraints": return "SNARK gate/copy constraints";
@@ -54,6 +55,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
 
 const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["kind"], string>>>> = {
   ja: {
+    "anamorphic-rejection":"アナモルフィック暗号：隠れたビットを送る",
     "stark-trace":"STARK：実行表と折り畳みを検査",
     "io-equivalence":"答えと、その出る確率を比べる",
     "snark-constraints":"短い証明（SNARK）の準備：計算を検査",
@@ -74,6 +76,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "zk-sudoku": "解を見せずに示す",
   },
   en: {
+    "anamorphic-rejection":"Anamorphic encryption: send a hidden bit",
     "stark-trace":"STARK: check the trace and fold",
     "io-equivalence":"Compare answers and their probabilities",
     "snark-constraints":"Prepare a short proof (SNARK): check computation",
@@ -97,17 +100,29 @@ export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
 }
 
 /** Participant labels follow the protocol supplied on this specific Order. */
-export function orderLabel(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint">, locale: Locale): string {
+export function orderLabel(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint" | "allowedMethods">, locale: Locale): string {
   if (order.task.kind === "reveal-share" && order.privacyConstraint === "must-disclose") {
     return locale === "ja" ? "秘密分散：シェアを公開して答える" : "Secret sharing: publish a share";
   }
   if (order.schnorr && (order.task.kind === "reveal-share" || order.task.kind === "zk-sudoku")) {
+    if (order.allowedMethods.includes("leak") && order.allowedMethods.includes("prove")) {
+      return locale === "ja" ? "シェアを公開、またはSchnorrで証明" : "Publish a share or prove with Schnorr";
+    }
     return locale === "ja" ? "ゼロ知識証明（Schnorr）：応答を計算する" : "Zero-knowledge proof (Schnorr): calculate a response";
   }
   if (order.task.kind === "zk-sudoku") {
     return locale === "ja" ? "ゼロ知識証明の数独模型：4マスを埋める" : "Sudoku model of zero knowledge: fill four cells";
   }
   return taskLabel(order.task, locale);
+}
+
+/** Do not append legacy Sudoku instructions to a Schnorr-labelled Order. */
+export function orderDetail(order: Pick<ContractProjection, "task" | "schnorr" | "privacyConstraint">, locale: Locale): string {
+  if (order.privacyConstraint === "must-disclose") return taskDetail(order.task, locale);
+  if (order.schnorr && (order.task.kind === "reveal-share" || order.task.kind === "zk-sudoku")) {
+    return locale === "ja" ? "証明：aを送る → eを受け取る → zを返す" : "Proof: send a → receive e → return z";
+  }
+  return taskDetail(order.task, locale);
 }
 
 /**
@@ -117,6 +132,7 @@ export function orderLabel(order: Pick<ContractProjection, "task" | "schnorr" | 
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
+    case "anamorphic-rejection": return locale === "ja" ? "候補を選び、通常と秘密の復号を計算" : "Choose a trial and decode both messages";
     case "stark-trace": return locale === "ja" ? "実行表のずれと折り畳みの4欄を計算" : "Calculate four trace and fold fields";
     case "io-equivalence": return locale === "ja" ? "全4入力の答えと公開データを比較" : "Compare all four inputs and published data";
     case "snark-constraints": return locale === "ja" ? "3つの計算と2本の配線" : "Three gates and two wires";

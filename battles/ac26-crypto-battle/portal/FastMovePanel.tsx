@@ -1,3 +1,4 @@
+import {AnamorphicWorksheet} from "./AnamorphicWorksheet.tsx";
 import {StarkWorksheet} from "./StarkWorksheet.tsx";
 import {IoWorksheet} from "./IoWorksheet.tsx";
 import {orderReward} from "./orderReward.ts";
@@ -1513,6 +1514,16 @@ export default function FastMovePanel(props: PortalSlotProps) {
           onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
         onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
+      {selectedOrder?.task.kind === "anamorphic-rejection" && <AnamorphicWorksheet wrongCost={projection.wrongProveCost} key={`anamorphic:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+        ()=>client.submitOp({kind:"anamorphic",contractId:selectedOrder.id,answer}),
+        next=>{
+          if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
+          const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
+          if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
+          return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"暗号文の選択・復号・確率計算に成功！":"Ciphertext selection, decryption and probability complete!",body:locale==="ja"?"通常鍵の復号と、乱数くじを変えたときの送信確率を確認できました。":"You checked ordinary decryption and sending probability under changed randomness."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。上から順に、候補の選択・復号・受理くじの合計を確認してください。`:`${delta} pt. Check candidate selection, decryption and total accepted tickets.`};
+        }
+       )}/> }
       {selectedOrder?.task.kind === "stark-trace" && <StarkWorksheet wrongCost={projection.wrongProveCost} key={`stark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
         ()=>client.submitOp({kind:"stark",contractId:selectedOrder.id,answer}),
         next=>{

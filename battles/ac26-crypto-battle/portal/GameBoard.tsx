@@ -1,6 +1,6 @@
 import { power, verifySchnorr } from "../game/src/schnorr.ts";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
-import { taskDetail, orderLabel } from "./orderTask.ts";
+import { orderDetail, orderLabel } from "./orderTask.ts";
 import { usePolledProjection } from "./coordination.ts";
 import { DIE_CSS, DieRow } from "./DieFace.tsx";
 import { describeRevealGroup, SudokuBoard, SUDOKU_CSS } from "./SudokuGrid.tsx";
@@ -32,6 +32,7 @@ const COPY = {
     fhe: "FHE",
     cipher: "CIPHER",
     fheShort: "add without decrypting",
+    anamorphic: "ANAMORPHIC",
     stark: "STARK",
     io: "iO",
     ec: "EC",
@@ -73,6 +74,7 @@ const COPY = {
     fhe: "FHE",
     cipher: "CIPHER",
     fheShort: "復号せずに足す",
+    anamorphic: "ANAMORPHIC",
     stark: "STARK",
     io: "iO",
     ec: "EC",
@@ -344,7 +346,7 @@ export function OrderBelt({
                     {newIds.includes(order.id) && <b className="tc-order-arrived">{locale === "ja" ? "到着" : "New"}</b>}
                     </span>}
                   </span>
-                  <span>{order.privacyConstraint === "must-disclose" ? (locale === "ja" ? "シェアを公開して答える（LEAKのみ）" : "Publish a share (LEAK only)") : orderLabel(order, locale)}{!compact && ` · ${taskDetail(order.task, locale)}`}</span>
+                  <span>{order.privacyConstraint === "must-disclose" ? (locale === "ja" ? "シェアを公開して答える（LEAKのみ）" : "Publish a share (LEAK only)") : orderLabel(order, locale)}{!compact && ` · ${orderDetail(order, locale)}`}</span>
                 </div>
                 {/*
                   [Issue #645] Which methods THIS Order accepts, on the card

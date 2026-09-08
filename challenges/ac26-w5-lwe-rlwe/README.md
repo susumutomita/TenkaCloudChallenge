@@ -83,7 +83,7 @@ Eight checkpoints, scored independently. Wrong answers cost 15 points each.
 | `transfer` | 30 | All of it under a degree, modulus, dimension and secret you have not seen |
 | `defense` | 45 | Eight malformed ciphertexts rejected, four well-formed ones kept |
 
-Hints on five of the eight, each inside that checkpoint's 50% cap.
+All eight have three hints at 2 points each (48 total), within each checkpoint's 50% cap.
 
 ## Not in scope
 
@@ -146,3 +146,9 @@ all-zero secret makes the mask term vanish, so `b = encode(m) + e` no matter wha
 implementation did with the secret. **Three separate mutations survived on exactly this**
 before it was forced — the seed drew `(0, 0, 0, 0, 0)` and the whole scheme degenerated
 into "encode the message and add noise", which every wrong sign convention also does.
+
+
+Bilingual hints now follow mechanism → small example → named Portal action for all eight checkpoints (24 hints, 2 points each, 48 total). Free instructions define every required calculation, validation shape, and the residual-noise interpretation. Runtime Portal copy and starter terminology match the public model. This does not change grading or platform behavior.
+
+
+Independent participant-only reading caught three inconsistencies: continuous budget versus periodic decoding, cross-implementation versus cross-scheme checking, and an unsupported noise-free linear-algebra claim. These were corrected. Portal run_public_tests with only normalize implemented reports that check successful and later unfinished checks failed. Catalog validation passed for all 116 problems. Browser play and deployed scoring were not exercised.

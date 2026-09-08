@@ -454,3 +454,13 @@ Validation: all343 traces satisfy interpolation and quotient/remainder identitie
 ### Issue #780 — Labels follow the actual proof protocol
 
 The Order belt, recent receipts, and status labels use the projected protocol: Schnorr responses, the legacy Sudoku model, or required share publication. A local real-component walkthrough calculated a=3 and z=4 from the displayed inputs and observed proof success, +30 points, and verification 16=16. This verifies local UI behavior, not production score persistence.
+
+### Anamorphic rejection sampling (#794)
+
+Based on Persiano–Phan–Yung, EUROCRYPT2022, section5.1: https://iacr.org/archive/eurocrypt2022/132760134/132760134.pdf . This is the rejection-sampling route, not the appended-payload approach the paper rejects. A participant selects a normal ciphertext whose secret lookup bit matches the intended bit, performs ordinary decryption with the monitor’s key, and transfers rejection sampling to a biased random-ticket distribution. The role diagram distinguishes sender, monitor and receiver. The final field sums accepted tickets, rather than transcribing a lookup bit. A biased-draw counterexample shows1/4 differs from the ordinary2/7 probability. Three fields, formulas, a small worked example and pre-submit deduction are bilingual.
+
+The arithmetic uses ElGamal-shaped pairs modulo7. A balanced six-entry table substitutes for a pseudorandom function (PRF); it is scoped to one ordinary message. Neither the tiny group nor the lookup is practically secure. For each hidden bit, averaging uniform accepted-candidate selection across all20 balanced secret tables gives the ordinary1/6 distribution for a single packet. No multi-message security claim follows. Repeated trials in the paper are independent; the worksheet displays a shuffled, non-repeating practice sequence rather than an implementation of its secure sampler. No supplementary encrypted payload is appended.
+
+New matches add a candidate every29 slots subject to existing special-slot priorities. Existing matches retain their configuration. Schema19, owned-order validation, actual scoring, Lightning and score reason `anamorphic` stay in the problem runtime. Ordinary regression771 tests, dev85 tests, types and116-entry catalog validation pass. Deployment is not performed.
+
+Real local Portal `anamorphic-order`: key x=4, first accepted pair(4,4); accepted trials1,3,4 have2,1,1 tickets. Submitted1 1 4; success banner and current score30 were observed on the updated transfer worksheet.

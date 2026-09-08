@@ -37,7 +37,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { ledgerKindLabel, ledgerPayload, taskDetail, orderLabel } from "./orderTask.ts";
+import { ledgerKindLabel, ledgerPayload, orderDetail, orderLabel } from "./orderTask.ts";
 import { PermutationChips } from "./SudokuGrid.tsx";
 import type { CSSProperties } from "react";
 import type { PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
@@ -402,7 +402,7 @@ function ContractQueueLane({
                     `fhe-sum×2` under a column headed "Requested shares".
                   */}
                   <td style={tdStyle}>
-                    {orderLabel(c, locale)} · {taskDetail(c.task, locale)}
+                    {orderLabel(c, locale)} · {orderDetail(c, locale)}
                   </td>
                   <td style={{ ...tdStyle, color: soon ? "#8a6d3b" : undefined }}>{formatDuration(remainingMs)}</td>
                 </tr>

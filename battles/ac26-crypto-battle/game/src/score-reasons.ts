@@ -32,6 +32,7 @@ function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): stri
     case "schnorr-commit":
     case "schnorr-response":
     case "prove-sudoku": return "prove";
+    case "anamorphic": return "anamorphic";
     case "stark": return "stark";
     case "io": return "io";
     case "ec": return "ec";

@@ -1,3 +1,4 @@
+import {anamorphicAnswer} from "./anamorphic.ts";
 import {starkAnswer} from "./stark.ts";
 import {ioAnswer} from "./io.ts";
 import {addPoints} from "./ec.ts";
@@ -483,6 +484,7 @@ export function buildClearingOp(
       return buildCipherOp(contract);
     case "homomorphic-sum":
       return buildFheOp(contract, prime);
+    case "anamorphic-rejection": return {kind:"anamorphic",contractId:contract.id,answer:anamorphicAnswer(contract.task).join(" ")};
     case "stark-trace": return {kind:"stark",contractId:contract.id,answer:starkAnswer(contract.task).join(" ")};
     case "io-equivalence": return {kind:"io",contractId:contract.id,answer:ioAnswer(contract.task).join(" ")};
     case "snark-constraints": return {kind:"snark",contractId:contract.id,answer:constraintResiduals(contract.task).join(" ")};

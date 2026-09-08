@@ -19,7 +19,7 @@ A coefficient that wraps past degree N comes back **negated**. That single sign 
 difference between a negacyclic product and a cyclic one, and a cyclic ring is perfectly
 self-consistent — it will round-trip your own tests happily. `participant.wrong_ring.cyclic_mul`
 is the wrong one, written out, so you can compare against a stated weakness rather than
-against code you deliberately broke. `make inspect` prints both products of the same
+against code you deliberately broke. Inspect evidence prints both products of the same
 input, side by side.
 
 `encode`, `decode`, and `centered` are the same as in `ac26-w5-encoding-noise`, ties
@@ -34,10 +34,10 @@ break, not a shortcut.
 `params` carries `degree`, `dimension`, `plaintext_modulus`, `delta`, and `modulus`, and
 they all change between checkpoints. Anything you hardcode is wrong somewhere.
 
-Run `make inspect` first.
+Use Inspect evidence in Participant Portal first.
 
-None of this is secure. n, N and q are small enough to enumerate, and the secret is
-recoverable from a handful of samples by linear algebra. It is a toy of the mechanism.
+This is a small-number model, not practical security. The key candidates can be
+enumerated. Unknown noise prevents treating these samples as exact linear equations.
 """
 
 from __future__ import annotations
@@ -108,8 +108,8 @@ def lwe_decrypt(params: dict, secret, ciphertext: dict) -> dict:
     backwards still decrypts correctly whenever the product is its own negative, which for
     a small dimension and a binary secret happens more often than you would like.
 
-    `noise` is what remains after the encoded message is taken back out, centered. A real
-    decryptor never sees it; it is here so the budget is watchable.
+    `noise` is the centered residual relative to the decoded message. It need not
+    recover the original noise when decoding crosses the allowed boundary.
     """
     return {}
 
@@ -157,7 +157,7 @@ def correspondence(params: dict, lwe, rlwe) -> dict:
 
 
 def survives(params: dict, noise: int) -> bool:
-    """Whether a phase carrying this much noise still decodes to its own message."""
+    """Whether this noise is inside the specified consecutive budget containing zero."""
     return False
 
 
