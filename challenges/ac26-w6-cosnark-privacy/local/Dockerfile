@@ -7,6 +7,11 @@
 # this problem's -- do not copy a digest forward from a sibling without checking it resolves.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN useradd --uid 10001 --create-home lab
+USER lab
+
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -49,6 +54,7 @@ CMD ["python", "participant/server.py"]
 # scenarios on `participant/lab.py`. One implementation, graded and inspected, rather than two
 # that can drift.
 FROM base AS verifier
+COPY participant/execution.py participant/protocol.py participant/worker.py participant/isolation.py ./participant/
 COPY participant/mpc.py ./participant/mpc.py
 COPY participant/specimens.py ./participant/specimens.py
 COPY participant/lab.py ./participant/lab.py

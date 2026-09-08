@@ -1,4 +1,7 @@
 """JA: 秘密を扱うプログラムの記録を監査します。編集するのはこのファイルです。
+
+Use supplied objects only within the current call, through the documented public API.
+Do not retain them for another call or access private share/runtime state.
 EN: Audit the records of programs using secret inputs. Edit this file only.
 
 最初: 「証拠を確認」→ classify に print(entry) →「公開テストを実行」。

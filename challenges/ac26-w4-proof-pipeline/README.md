@@ -140,7 +140,7 @@ Because of that, `make test`, `make test-one` and `make inspect` bring the verif
 definitions, its honest run and its faulted run from it over the compose network instead of
 computing them locally. `make verifier-down` stops it.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
+What the verifier does guarantee is narrower and real: submitted code has bounded execution time and resource limits,
 a checkpoint can only credit the id it echoes, results do not leak expected values, and the
 fixtures come from this deployment's seed so a memorized answer does not carry. Submissions run
 with time, memory, process and output caps; both containers run non-root, read-only, without
@@ -166,4 +166,27 @@ from the prover-only set (nothing ever publishes it, so no verdict changes) and 
 cannot change an outcome does not demonstrate coverage, and leaving an unkillable one in
 the list teaches that a `SURVIVED` line can be ignored.
 
-Reader review found missing definition keys, inclusion rules and repair contracts. These are now free bilingual instructions, with three hint rungs per checkpoint. The author compared the contract with the reference, not as participant-play evidence. Runtime and grading remain unchanged; live Portal play was not run.
+Reader review found missing definition keys, inclusion rules and repair contracts. These are now free bilingual instructions, with three hint rungs per checkpoint. The author compared the contract with the reference, not as participant-play evidence. Live Portal play was not run during the instruction review; execution-boundary validation follows below.
+
+## Parent-owned grading boundary (Issue 837)
+
+The trusted parent runs the existing checkpoint checker. Submitted Python runs in a separate,
+restricted Linux worker; typed values cross the boundary, not a grading verdict. Output text
+or early process exit cannot award points. Tuple/list, integer/boolean, byte and dictionary-key
+contracts are preserved where used. The worker has file, network, signal, memory, output and
+process limits. A 12-second submission budget is below the Workbench proxy's 15-second timeout.
+The images run non-root, and Compose and the author runner use init. These are tested controls,
+not a claim that every possible isolation defect or side channel has been eliminated.
+
+The revised Linux Docker run passed 19 logical mutations, plus 8
+execution-boundary regression tests. The boundary tests exercise all eight reference checkpoints,
+a legal alternative, forged output/exit, private-file and parent-signal refusal, preserved types,
+nesting bounds, non-root execution and timeout alignment. The native mutation tests examine
+logical grading; the separate boundary tests examine execution isolation.
+
+Actual non-root Workbench HTTP requests fetched config, live Inspect and starter; the unfinished
+starter failed its first submission, while the author reference passed the 3 public tests
+and all eight checkpoints through prepare and the verifier proxy. Output/exit spoofing failed
+through that same route. Catalog validation passed for 116 entries. These are author and route
+checks, not evidence of unaided first-time participant comprehension. Browser interaction,
+deployed platform score reflection and deployment were not run for this change.

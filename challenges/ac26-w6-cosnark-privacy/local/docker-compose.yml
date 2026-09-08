@@ -37,6 +37,7 @@ services:
     depends_on:
       verifier:
         condition: service_healthy
+    init: true
     read_only: true
     tmpfs:
       - /tmp
@@ -74,6 +75,7 @@ services:
     environment:
       FLAG_SEED: ${FLAG_SEED:?FLAG_SEED must be provided by the platform}
       VERIFY_PORT: "18159"
+    init: true
     read_only: true
     tmpfs:
       - /tmp

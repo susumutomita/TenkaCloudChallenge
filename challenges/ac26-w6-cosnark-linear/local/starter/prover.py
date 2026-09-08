@@ -1,5 +1,8 @@
 """Edit only this file. Start with parse_relation, then submit relation.
 
+Use supplied objects only within the current call, through the documented public API.
+Do not retain them for another call or access private share/runtime state.
+
 A witness is a list of secret values w[j]. A party is one holder, numbered from 0.
 Secret sharing splits each value into shares whose sum, after division by prime p,
 has remainder w[j]. Python writes that remainder as %. A field is the collection
