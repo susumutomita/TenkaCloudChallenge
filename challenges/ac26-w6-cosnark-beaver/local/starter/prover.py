@@ -9,6 +9,10 @@ You implement the shared multiplication stage of a joint proof computation: comp
 without publishing A or B. Begin by planning its communication cost; the later stages
 implement and audit that plan.
 
+A co-SNARK is a short proof produced jointly by parties that hold shares of secrets.
+ZK (zero knowledge) shows a claim is true without revealing its secret. This exercise
+builds the multiplication component, not a complete ZK prover or verifier.
+
 The previous problem built the half of a co-SNARK prover's row that costs nothing:
 
 ```text

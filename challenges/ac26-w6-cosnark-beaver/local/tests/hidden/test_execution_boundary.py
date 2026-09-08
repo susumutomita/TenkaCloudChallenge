@@ -13,7 +13,7 @@ REFERENCE = (ROOT/'reference/prover.py').read_text()
 
 class ExecutionBoundaryTests(unittest.TestCase):
     def test_supported_computation_imports(self):
-        source = REFERENCE + '\nimport array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing\nassert array.array("i", [1, 2]).tolist() == [1, 2]\nassert string.ascii_lowercase[:3] == "abc"\n'
+        source = REFERENCE + '\nimport array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing\nassert array.array("i", [1, 2]).tolist() == [1, 2]\nassert string.ascii_lowercase[:3] == "abc"\nassert time.strptime("2000-01-02", "%Y-%m-%d").tm_mday == 2\n'
         for checkpoint in CHECKPOINTS:
             self.assertEqual(evaluate_with_message(checkpoint, source), (True, None))
 
