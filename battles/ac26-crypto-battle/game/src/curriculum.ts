@@ -11,6 +11,6 @@ export function curriculumPlan(seed: string, index: number, base: ContractPlan, 
     [bag[i],bag[j]]=[bag[j]!,bag[i]!];
   }
   const topic=bag[offset%bag.length]!;
-  if(topic==="caesar" || topic==="vigenere")return {...base,taskKind:"caesar-shift",rung:topic,privacyConstraint:"none",requestedShareIndices:[]};
+  if(topic==="caesar" || topic==="vigenere")return {...base,taskKind:"caesar-shift",rung:topic,keyPosition:topic==="vigenere"?cycle%3:undefined,privacyConstraint:"none",requestedShareIndices:[]};
   return {...base,rung:undefined,taskKind:topic,privacyConstraint:topic==="reveal-share"?"must-disclose":topic==="rotor-encrypt"||topic==="rsa-encrypt"?"none":"no-raw-disclosure",requestedShareIndices:topic==="reveal-share"?[cycle%shareCount+1]:[]};
 }

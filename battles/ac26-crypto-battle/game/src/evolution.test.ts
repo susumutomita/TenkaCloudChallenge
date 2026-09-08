@@ -104,3 +104,32 @@ test("evolution mistakes charge the displayed penalty, permit retry, and deadlin
  }
  throw Error("No evolution task issued");
 });
+
+test("each shuffled Vigenere bag advances the public key position independently of the legacy plan",()=>{
+ const base={kind:"standard" as const,taskKind:"reveal-share" as const,privacyConstraint:"none" as const,requestedShareIndices:[1],keyPosition:2};
+ for(const seed of ["a","b","c"]){
+  const positions=Array.from({length:48},(_,i)=>curriculumPlan(seed,i+2,base)).filter(p=>p.rung==="vigenere").map(p=>p.keyPosition);
+  expect(positions).toEqual([0,1,2]);
+ }
+});
+
+for(const kind of ["enigma-encrypt","rsa-decrypt","ecdsa-sign"] as const)test(`${kind}: endgame projection allows arming Lightning and doubles exactly one answer`,()=>{
+ let state=applyOp(initialState({eventId:"light-evo",teamIds:["a","b"],matchSecret:"light-evo"},{...STREAMING_ORDER_CONFIG,orderArrivalJitterMs:0,phaseBoundaries:{buildToPressureMs:1000,pressureToEndgameMs:2000}}),"a",{kind:"start"});
+ for(let t=30000;t<900000;t+=30000){
+  state=tick(state,t);
+  const c=projectForTeam(state,"a").myContracts.find(c=>c.status==="open"&&c.task.kind===kind);
+  if(!c||(c.task.kind!=="enigma-encrypt"&&c.task.kind!=="rsa-decrypt"&&c.task.kind!=="ecdsa-sign"))continue;
+  expect(c.lightningEligible).toBe(true);
+  const arm={kind:"declare-lightning" as const,contractId:c.id};
+  expect(validateOp(state,"a",arm).ok).toBe(true);
+  state=applyOp(state,"a",arm);
+  const op={kind:"evolution" as const,contractId:c.id,answer:evolutionAnswer(c.task).join(" ")};
+  const before=state.teams.a!.score;
+  state=applyOp(state,"a",op);
+  expect(state.teams.a!.score-before).toBe(c.points*2);
+  expect(projectForTeam(state,"a").lightning?.status).toBe("spent");
+  expect(validateOp(state,"a",op).ok).toBe(false);
+  return;
+ }
+ throw Error(`No ${kind} task issued`);
+});

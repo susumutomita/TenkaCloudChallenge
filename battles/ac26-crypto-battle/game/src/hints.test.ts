@@ -410,3 +410,15 @@ describe("the disclosure Order's hints walk the only method it accepts", () => {
     throw new Error("test setup: expected a free share Order on the belt");
   });
 });
+
+test("new English paid hints include a worked example and the current operands",()=>{
+ const p=projectForTeam(startedMatch(),"teamA"), base=ctxFor(p,firstOpenOrder(startedMatch(),"teamA"));
+ const rsa=HINT_LADDER["rsa-decrypt"][2]!.text({...base,task:{kind:"rsa-decrypt",ciphertext:8,d:3,n:15}}).en;
+ expect(rsa).toContain("c=8");expect(rsa).toContain("dividing by15");
+ const enigma=HINT_LADDER["enigma-encrypt"][2]!.text({...base,task:{kind:"enigma-encrypt",plaintext:[2],initial:1}}).en;
+ expect(enigma).toContain("Input is 2");expect(enigma).toContain("initial position 1");expect(enigma).toContain("position 2");
+ const sig={...base,task:{kind:"ecdsa-sign" as const,hash:3,d:5,k:3}};
+ expect(HINT_LADDER["ecdsa-sign"][1]!.text(sig).en).toContain("signature is(1,5)");
+ const last=HINT_LADDER["ecdsa-sign"][2]!.text(sig).en;
+ expect(last).toContain("h=3, d=5, k=3");expect(last).toContain("3+5×r");
+});
