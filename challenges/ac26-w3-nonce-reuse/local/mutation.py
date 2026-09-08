@@ -159,6 +159,55 @@ MUTATIONS += (
     )]),
 )
 
+# Each additional review regression must fail its own checkpoint. A failure in
+# extract/hunt/repair cannot stand in for validating parse/detect/collision.
+CHECKPOINT_MUTATIONS = (
+    ("parsed Point subclass lies about equality", "parse", [(
+        '    return {\n        "message": message,',
+        '    from participant.schnorr import Point\n    class WrongPoint(Point):\n        def __eq__(self, other):\n            return True\n    public = WrongPoint(group.params, 0, 0)\n    commitment = WrongPoint(group.params, 0, 0)\n    return {\n        "message": message,',
+    )]),
+    ("raw records retain response alone", "parse", [(
+        '    return {\n        "message": message,',
+        '    if not isinstance(record["public_key"], type(public)):\n        return {"response": response}\n    return {\n        "message": message,',
+    )]),
+    ("raw coordinates remain unnormalized", "parse", [(
+        '    return {\n        "message": message,',
+        '    return dict(record)\n    return {\n        "message": message,',
+    )]),
+    ("parsed message is discarded", "parse", [('"message": message,', '"message": b"",')]),
+    ("parsed response is float", "parse", [('"response": response,', '"response": float(response),')]),
+    ("parsed zero response is boolean", "parse", [('"response": response,', '"response": response if response else False,')]),
+    ("valid list coordinates rejected", "parse", [('isinstance(value, (tuple, list))', 'isinstance(value, tuple)')]),
+    ("raw coordinates silently wrap", "parse", [(
+        '    if not 0 <= x < group.p or not 0 <= y < group.p:', '    if False:',
+    )]),
+    ("raw fractional coordinates accepted", "parse", [(
+        '    if type(x) is not int or type(y) is not int:',
+        '    if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):',
+    )]),
+    ("parse swaps public key and commitment", "parse", [('"public_key": public,', '"public_key": commitment,')]),
+    ("parse rejects empty bytes messages", "parse", [('if not isinstance(message, bytes):', 'if not isinstance(message, bytes) or not message:')]),
+    ("detect cites negative aliases", "detect", [('    return pairs', '    return [(a-len(records), b-len(records)) for a, b in pairs]')]),
+    ("detect cites boolean indices", "detect", [('    return pairs', '    return [(bool(a), bool(b)) for a, b in pairs]')]),
+    ("detect cites fractional indices", "detect", [('    return pairs', '    return [(float(a), float(b)) for a, b in pairs]')]),
+    ("detect cites an out-of-range index", "detect", [('    return pairs', '    return [(a, len(records)) for a, b in pairs]')]),
+    ("detect repeats the same index", "detect", [('    return pairs', '    return [(a, a) for a, b in pairs]')]),
+    ("detect returns short pairs", "detect", [('    return pairs', '    return [(a,) for a, b in pairs]')]),
+    ("detect returns oversized pairs", "detect", [('    return pairs', '    return [(a, b, a) for a, b in pairs]')]),
+    ("detect returns scalar pairs", "detect", [('    return pairs', '    return [a for a, b in pairs]')]),
+    ("detect renumbers after dropping records", "detect", [('    return pairs', '    return [(indices.index(a), indices.index(b)) for a, b in pairs]')]),
+    ("detect renumbers by changing its input log", "detect", [('    return pairs', '    records[:] = [records[i] for i in indices]\n    return [(indices.index(a), indices.index(b)) for a, b in pairs]')]),
+    ("detect returns a tuple instead of list", "detect", [('    return pairs', '    return tuple(pairs)')]),
+    ("detect returns None without reuse", "detect", [('    return pairs', '    return pairs or None')]),
+    ("detect fabricates a pair without reuse", "detect", [('    return pairs', '    return pairs or [(0, 1)]')]),
+    ("collision ignores samples and always draws forty", "collision", [('    for index in range(samples):', '    for index in range(40):')]),
+    ("collision runs one extra draw", "collision", [('    for index in range(samples):', '    for index in range(samples + 1):')]),
+    ("collision truncates runs at forty", "collision", [('    for index in range(samples):', '    for index in range(min(40, samples)):')]),
+    ("collision returns boolean zero counts", "collision", [('"collisions": collisions, "distinct": len(seen)', '"collisions": collisions if collisions else False, "distinct": len(seen)')]),
+    ("collision returns a fractional space", "collision", [('"space": NONCE_SPACE}', '"space": float(NONCE_SPACE)}')]),
+    ("collision returns fractional counts", "collision", [('"collisions": collisions, "distinct": len(seen)', '"collisions": float(collisions), "distinct": float(len(seen))')]),
+)
+
 
 def _load(source: str):
     import types
@@ -188,7 +237,10 @@ def main() -> int:
     print("PASS reference implementation passes the hidden tests")
 
     survivors = 0
-    for name, substitutions in MUTATIONS:
+    cases = [(name, check_recover.run, changes) for name, changes in MUTATIONS]
+    cases.extend((name, getattr(check_recover, "check_" + checkpoint), changes)
+                 for name, checkpoint, changes in CHECKPOINT_MUTATIONS)
+    for name, checker, substitutions in cases:
         missing = [needle for needle, _ in substitutions if needle not in REFERENCE]
         if missing:
             print(f"SURVIVED {name} (the mutation no longer applies to the reference)")
@@ -198,7 +250,7 @@ def main() -> int:
         for needle, replacement in substitutions:
             mutated = mutated.replace(needle, replacement)
         try:
-            failures = check_recover.run(_load(mutated), SEED)
+            failures = checker(_load(mutated), SEED)
         except Exception as error:  # noqa: BLE001 - a mutation that crashes is caught
             failures = [f"raised {type(error).__name__}"]
         if failures:
@@ -210,7 +262,7 @@ def main() -> int:
     if survivors:
         print(f"\n{survivors} mutation(s) survived. The hidden tests have a hole.")
         return 1
-    print(f"\nAll {len(MUTATIONS)} mutations killed.")
+    print(f"\nAll {len(cases)} mutations killed.")
     return 0
 
 

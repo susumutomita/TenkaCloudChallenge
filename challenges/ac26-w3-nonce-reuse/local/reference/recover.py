@@ -75,6 +75,8 @@ def find_reuse(records, group) -> list[tuple[int, int]]:
 
     Same commitment under two different keys is a coincidence, not a reuse: there is no
     single x to solve for. Malformed rows are skipped rather than fatal.
+    This implementation returns all pairs in ascending original-index order; the
+    contract also allows a valid subset, reversed pairs, and a different pair order.
     """
     parsed: dict[int, dict] = {}
     for index, record in enumerate(records):

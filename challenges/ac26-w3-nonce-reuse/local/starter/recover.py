@@ -43,6 +43,9 @@ def parse_record(record, group):
     """Normalize one audit-log record, or raise MalformedRecord.
 
     The log is data from outside your program. Some rows are broken.
+    Retain all four fields: the original bytes message, original integer response,
+    and public_key/commitment as Point objects. Each point can arrive as a Point,
+    a two-coordinate tuple, or a two-coordinate list. Validate every form.
     """
     return {}
 
@@ -61,6 +64,10 @@ def find_reuse(records, group) -> list[tuple[int, int]]:
 
     Sharing a commitment is necessary. Ask yourself what else has to match before two
     transcripts are two equations in the same unknown.
+    Each pair contains two distinct integer indices into the original records list,
+    starting at 0. Reject bool indices; do not renumber after skipping broken rows.
+    Either order within a pair and any order of pairs are allowed. One or more valid
+    pairs suffice when reuse exists; otherwise return []. A pair may be a tuple or list.
     """
     return []
 
@@ -92,7 +99,9 @@ def collision_experiment(seed: str, group, samples: int) -> dict:
 
     Use secret=1 and message=f"trial-{i}".encode() for i in range(samples).
     Pass seed unchanged to truncated_nonce(seed, 1, message, group).
-    Return {"collisions", "distinct", "space"}. Predict the number before you run it —
+    samples is supplied as an integer >= 0 (not bool). Return integer counts (not bool)
+    in {"collisions", "distinct", "space"}. Zero draws give 0,0,NONCE_SPACE; one draw
+    gives 0,1,NONCE_SPACE. Predict the number before you run it —
     the generator's output looks like hash output, because it is.
     """
     return {}

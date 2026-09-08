@@ -11,6 +11,7 @@ from __future__ import annotations
 import sys
 import hashlib
 import hmac
+from copy import deepcopy
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -27,6 +28,7 @@ from fixtures.generate import (  # noqa: E402
     toy_group,
     truncated_nonce,
 )
+from participant.schnorr import Point  # noqa: E402
 
 LABELS = ("h0", "h1", "h2")
 
@@ -56,22 +58,41 @@ def check_parse(module, seed: str) -> list[str]:
     for label in LABELS:
         group = toy_group(seed, label)
         _secret, record, _other = _reuse_pair(seed, label, group)
-        try:
-            parsed = module.parse_record(dict(record), group)
-        except Exception as error:  # noqa: BLE001
-            return [f"parsing a valid record raised {type(error).__name__}"]
-        if not isinstance(parsed, dict) or "response" not in parsed:
-            failures.append("a valid record did not parse")
-            continue
-        if parsed["response"] != record["response"]:
-            failures.append("the parsed response is not the record's response")
         normalized = {**record, "public_key": group.point(*record["public_key"]), "commitment": group.point(*record["commitment"])}
-        try:
-            reparsed = module.parse_record(normalized, group)
-            if reparsed != normalized:
-                failures.append("normalized Point input changed during parsing")
-        except Exception as error:
-            failures.append(f"normalized Point input raised {type(error).__name__}")
+        # Parsing does not verify a signature: even scalar boundaries must be
+        # retained. Exercise each point's raw and normalized form independently.
+        for public_form in (tuple, list, lambda xy: group.point(*xy)):
+            for commitment_form in (tuple, list, lambda xy: group.point(*xy)):
+                for response, message in ((0, b""), (record["response"], record["message"]),
+                                          (group.n - 1, b"\x00\xff")):
+                    candidate = {
+                        **record,
+                        "message": message,
+                        "public_key": public_form(record["public_key"]),
+                        "commitment": commitment_form(record["commitment"]),
+                        "response": response,
+                    }
+                    try:
+                        parsed = module.parse_record(candidate, group)
+                    except Exception as error:  # noqa: BLE001
+                        failures.append(f"parsing a valid record raised {type(error).__name__}")
+                        continue
+                    if not isinstance(parsed, dict) or not all(key in parsed for key in normalized):
+                        failures.append("a parsed record must retain all four fields")
+                        continue
+                    if not isinstance(parsed["message"], bytes) or parsed["message"] != message:
+                        failures.append("parsing must preserve the bytes message")
+                    if type(parsed["response"]) is not int or parsed["response"] != response:
+                        failures.append("parsing must preserve the integer response")
+                    for key in ("public_key", "commitment"):
+                        point = parsed[key]
+                        if (not isinstance(point, Point) or type(point.x) is not int
+                                or type(point.y) is not int
+                                or point.x != normalized[key].x or point.y != normalized[key].y
+                                or not isinstance(point.params, tuple)
+                                or any(type(value) is not int for value in point.params)
+                                or tuple(point.params) != tuple(normalized[key].params)):
+                            failures.append("parsing must normalize both coordinates to the original Points")
         broken = [
             {},
             {"message": b"x", "public_key": (0, 0), "commitment": (0, 0)},
@@ -85,7 +106,6 @@ def check_parse(module, seed: str) -> list[str]:
                       for missing in ("message", "public_key", "commitment", "response"))
         broken.extend({**record, "response": value} for value in (True, False, 1.0, "1", None))
         broken.extend((None, [], "record"))
-        from participant.schnorr import Point
         good_point = normalized["public_key"]
         invalid_points = (
             group.infinity(),
@@ -100,6 +120,13 @@ def check_parse(module, seed: str) -> list[str]:
         )
         for key in ("public_key", "commitment"):
             broken.extend({**normalized, key: point} for point in invalid_points)
+            x, y = record[key]
+            for value in (None, 1, "point", {}, (), (x,), (x, y, 0)):
+                broken.append({**record, key: value})
+            for pair_type in (tuple, list):
+                for coordinates in ((-1, y), (x, -1), (x + group.p, y), (x, y + group.p),
+                                    (float(x), y), (x, float(y)), (str(x), y), (x, None)):
+                    broken.append({**record, key: pair_type(coordinates)})
             # Exercise the raw tuple/list branch too, including coordinates whose
             # integer equivalents are on the curve. Python bool is an int subclass.
             for pair_type in (tuple, list):
@@ -139,39 +166,47 @@ def check_detect(module, seed: str) -> list[str]:
         group = toy_group(seed, label)
         log = audit_log(seed, label, group)
         records = list(log["records"])
-        _secret, duplicate, _other = _reuse_pair(seed, label, group)
-        try:
-            if module.find_reuse([duplicate, dict(duplicate)], group) != []:
-                failures.append("an equal-challenge-only log produced a reuse pair")
-        except Exception as error:
-            failures.append(f"equal-challenge log raised {type(error).__name__}")
-        records.extend([duplicate, dict(duplicate)])
-        try:
-            pairs = module.find_reuse(records, group)
-        except Exception as error:  # noqa: BLE001
-            return [f"scanning the log raised {type(error).__name__}"]
-        if not isinstance(pairs, list) or not pairs:
-            failures.append("the reused commitment was not found")
-            continue
-        for left, right in pairs:
-            a, b = records[left], records[right]
-            if a["commitment"] != b["commitment"]:
-                failures.append("a reported pair does not share a commitment")
-                break
-            if a["public_key"] != b["public_key"]:
-                failures.append("a reported pair is not from the same signer")
-                break
-            ea = challenge(DOMAINS[0], group.point(*a["commitment"]), group.point(*a["public_key"]), a["message"], group)
-            eb = challenge(DOMAINS[0], group.point(*b["commitment"]), group.point(*b["public_key"]), b["message"], group)
-            if ea == eb:
-                failures.append("a reported pair has equal challenges")
-                break
-            # The log contains a record that parses cleanly, shares the reused
-            # commitment and key, and does not verify. Reuse inside a rejected
-            # transcript proves nothing, so pairing it is a finding that is not one.
-            if not _really_accepts(a, group) or not _really_accepts(b, group):
-                failures.append("a reported pair includes a transcript that does not verify")
-                break
+        secret, first, second = _reuse_pair(seed, label, group)
+        records.extend([first, dict(first)])
+        clean = [sign_with(1 + i, secret, f"clean-{i}".encode(), group) for i in range(4)]
+        invalid = {**second, "response": (second["response"] + 1) % group.n}
+        cases = [(records, True), ([first, second], True), ([{}, first, None, second], True)]
+        cases.extend((rows, False) for rows in
+                     ([], [{}], [first], [first, dict(first)], [first, invalid], clean))
+        for rows, has_reuse in cases:
+            try:
+                # Keep the original evidence even if a learner filters their
+                # argument in place and accidentally renumbers the result.
+                pairs = module.find_reuse(deepcopy(rows), group)
+            except Exception as error:  # noqa: BLE001
+                failures.append(f"scanning the log raised {type(error).__name__}")
+                continue
+            if not isinstance(pairs, list):
+                failures.append("reuse detection must return a list, empty when no pair exists")
+                continue
+            if bool(pairs) != has_reuse:
+                failures.append("reuse detection must find an attackable pair and return [] when none exists")
+            for pair in pairs:
+                # Validate evidence before indexing: Python accepts negative and
+                # boolean indices, but neither is an original log row number.
+                if (not isinstance(pair, (tuple, list)) or len(pair) != 2
+                        or any(type(i) is not int or not 0 <= i < len(rows) for i in pair)
+                        or pair[0] == pair[1]):
+                    failures.append("a reuse pair must contain two distinct original record indices")
+                    break
+                a, b = (rows[i] for i in pair)
+                try:
+                    valid = (a["commitment"] == b["commitment"]
+                             and a["public_key"] == b["public_key"]
+                             and _really_accepts(a, group) and _really_accepts(b, group))
+                    if valid:
+                        public, commitment = group.point(*a["public_key"]), group.point(*a["commitment"])
+                        valid = challenge(DOMAINS[0], commitment, public, a["message"], group) != challenge(DOMAINS[0], commitment, public, b["message"], group)
+                except (KeyError, TypeError, ValueError, AttributeError):
+                    valid = False
+                if not valid:
+                    failures.append("cited records must be accepting transcripts with the same key and commitment and different challenges")
+                    break
     return failures
 
 
@@ -366,31 +401,31 @@ def check_collision(module, seed: str) -> list[str]:
     failures: list[str] = []
     for label in LABELS:
         group = toy_group(seed, label)
-        samples = 40
-        try:
-            result = module.collision_experiment(f"{seed}:{label}", group, samples)
-        except Exception as error:  # noqa: BLE001
-            return [f"the experiment raised {type(error).__name__}"]
-        if not isinstance(result, dict):
-            failures.append("the experiment reported nothing")
-            continue
-        if result.get("space") != NONCE_SPACE:
-            failures.append("the reported nonce space is not the generator's")
-            continue
-        distinct = result.get("distinct")
-        collisions = result.get("collisions")
-        if not isinstance(distinct, int) or not isinstance(collisions, int):
-            failures.append("the experiment did not report counts")
-            continue
-        if distinct + collisions != samples:
-            failures.append("the counts do not add up to the number of samples drawn")
-            continue
-        expected_values = {
-            truncated_nonce(f"{seed}:{label}", 1, f"trial-{i}".encode(), group)
-            for i in range(samples)
-        }
-        if distinct != len(expected_values) or collisions != samples - len(expected_values):
-            failures.append("the counts do not match the documented experiment")
+        for samples in (0, 1, 2, 7, 40, 65):
+            try:
+                result = module.collision_experiment(f"{seed}:{label}", group, samples)
+            except Exception as error:  # noqa: BLE001
+                failures.append(f"the experiment raised {type(error).__name__}")
+                continue
+            if not isinstance(result, dict):
+                failures.append("the experiment reported nothing")
+                continue
+            if any(type(result.get(key)) is not int for key in ("space", "distinct", "collisions")):
+                failures.append("the experiment must report three integer counts, not booleans")
+                continue
+            if result["space"] != NONCE_SPACE:
+                failures.append("the reported nonce space is not the generator's")
+                continue
+            distinct, collisions = result["distinct"], result["collisions"]
+            if distinct + collisions != samples:
+                failures.append("the counts do not add up to the number of samples drawn")
+                continue
+            expected_values = {
+                truncated_nonce(f"{seed}:{label}", 1, f"trial-{i}".encode(), group)
+                for i in range(samples)
+            }
+            if distinct != len(expected_values) or collisions != samples - len(expected_values):
+                failures.append("the counts do not match the documented experiment")
     return failures
 
 
