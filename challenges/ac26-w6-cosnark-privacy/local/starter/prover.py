@@ -1,279 +1,122 @@
-"""The only file you edit.
+"""JA: 秘密を扱うプログラムの記録を監査します。編集するのはこのファイルです。
+EN: Audit the records of programs using secret inputs. Edit this file only.
 
-Eight co-SNARK provers are handed to you as `S1`..`S8`. Every one of them computes the same
-relation, and every one of them reconstructs `C` to `A * B` on every seed and every shape.
-Line them up against a correctness test and it cannot tell them apart. That is the premise of
-this problem, not a spoiler.
+最初: 「証拠を確認」→ classify に print(entry) →「公開テストを実行」。
+First: Inspect evidence → add print(entry) in classify → Run public tests.
 
-```text
-A = sum_j a_j w_j        B = sum_j b_j w_j        C = A * B        (mod p)
-```
+無料の問題文に全分類規則・API・復元式があります。各提出は同じファイルを採点します。
+All classification rules, APIs and recovery formulas are free in the statement.
+Each checkpoint grades this same file. Public tests check shapes, not secret answers.
 
-The two problems before this one are **supplied**. `ac26-w6-cosnark-linear` built `[A]` and
-`[B]`; `ac26-w6-cosnark-beaver` built the one multiplication that has to communicate, and
-`participant.mpc.beaver_product` is that answer, handed over. You are not computing `C`
-again. You are asking what a prover built on top of it is allowed to say out loud.
+Sharing = one secret's shares, one per party. Share ids are not their numeric values.
+MPC = joint computation with private inputs. This co-SNARK exercise models records,
+not an actual SNARK proof or cryptographic security. Never read specimen source or _value.
 
-## What you may not do
-
-Read a specimen's source. Two of them reach a capability through a name that does not spell
-it, and `grep` is exactly the audit this problem exists to be better than. Everything you
-need is in the record a run leaves behind.
-
-## The bench
-
-```python
-from participant.lab import malformed_row, probe_factory, serialized
-```
-
-```text
-probe(specimen_id, row=None)   run one specimen in a fresh scenario, return its Evidence
-malformed_row(row)             a row whose declared width disagrees with its coefficients
-serialized(disclosure)         the disclosure as a next stage receives it
-```
-
-An `Evidence` carries:
-
-```text
-runtime      the AuditRuntime it ran on
-             .reached()    every capability reached: {"capability", "party", "operands"}
-             .openings()   every opening:            {"roundId", "shareIds", "maskedBy"}
-             .events()     the full operation trace
-             .violations() what the runtime refused or recorded
-disclosure   what it put in front of you: .artifact, .log, .metrics, .error
-row          the relation it was handed
-setting      p, parties, width, fieldId, settingId
-raised       the exception type name if it let one out, else None
-```
-
-The runtime **does** offer `reconstruct` and `peek`, unlike the previous problem's. That is
-deliberate: a real MPC library exposes reconstruction and debugging hooks because real
-operators need them, and withholding them here would make the whole class of defect
-unwritable and therefore unauditable. Reaching a capability is not a violation. Reaching one
-is recorded, and what a prover does next with what it read is the question you are asking.
-
-## The policy
-
-```python
-from participant.mpc import ALLOWED_NAMES, SHARING_ONLY_NAMES, CHANNELS, is_sharing
-```
-
-`ALLOWED_NAMES` is every field name a prover may put in front of a participant, whichever
-channel it comes out of. `SHARING_ONLY_NAMES` is the subset that may only ever carry a
-sharing. Those are two rules, and one of the specimens is the reason.
-
-Run `make inspect` first.
+probe(id) returns evidence; probe(id, malformed_row(evidence.row)) tests a failure path.
+Evidence: runtime, row, setting, disclosure, raised.
+runtime.reached(): sequence of {capability, party, operands}; party is share owner.
+runtime.openings(): sequence of {roundId, shareIds, maskedBy}; ids, never values.
+Disclosure: artifact/metrics dictionaries, log records, error record or None.
+log record: {event, values}; error: {message, values}. Audit values, not heading prose.
 """
-
 from __future__ import annotations
 
-
-# ---------------------------------------------------------------------------
-# 1. The policy, written down
-# ---------------------------------------------------------------------------
+from participant.lab import malformed_row, serialized
+from participant.mpc import (
+    ALLOWED_NAMES, AUDIENCES, FORMS, ORIGINS, PROTOCOL_CAPABILITIES,
+    SHARING_ONLY_NAMES, beaver_product, clean_artifact, is_sharing, round_id_for,
+)
 
 
 def classify(entry: dict, row: dict) -> str:
-    """Put one value from `participant.lab.value_catalog` into exactly one of six classes.
+    """JA: 値を6分類へ。語彙外と不正なopenedの形はValueError。
+    EN: Return one class; reject unknown vocabulary or malformed opened shape.
 
-    ```text
-    public-input            known to everyone before the run
-    secret-share            one party's piece of something shared
-    allowed-open            a value the protocol authorized publishing
-    secret-intermediate     witness-derived, in the clear, and nobody authorized it
-    participant-artifact    what the next stage receives
-    verifier-only           only the checker holds it
-    ```
-
-    An entry describes a value without naming it, so `w` and `x` will not help you:
-
-    ```text
-    origin    relation / witness / triple / runtime
-    form      metadata / element / share / sharing
-    opened    None, or {"roundId", "maskedBy"} -- the same shape `openings()` records use
-    audience  everyone / participant / party / verifier
-    ```
-
-    The catalog contains two entries that are the whole reason this is a policy rather than a
-    lookup table. Both of them were opened. One went out in a round the relation never
-    declared, and one went out in the right round with nothing hiding it. "It was published,
-    so publishing it was allowed" is the belief this checkpoint exists to break — an opening
-    is the multiplication's own only if a reserved mask is behind it **and** the round is the
-    one `round_id_for(row)` names.
-
-    Order matters, and working out which rule has to be asked first is most of the work.
-
-    Raise `ValueError` for an entry whose `origin`, `form` or `audience` is outside the
-    vocabulary — an auditor that silently classifies a value it did not understand is worse
-    than one that stops.
+    Check origin/form/audience against ORIGINS/FORMS/AUDIENCES first.
+    opened must be None or a dict. An authorized opened dict has nonempty
+    maskedBy AND roundId == round_id_for(row).
+    Priority: verifier audience → verifier-only; authorized opening → allowed-open;
+    relation origin OR metadata form → public-input; share form → secret-share;
+    sharing form AND participant audience → participant-artifact;
+    otherwise → secret-intermediate.
+    Example: witness/element, opened=None, audience=party → secret-intermediate.
     """
     return ""
 
 
-# ---------------------------------------------------------------------------
-# 2. What a run was able to do
-# ---------------------------------------------------------------------------
-
-
 def capability_audit(probe, specimen_id: str) -> tuple[str, ...]:
-    """Every capability this specimen reaches, beyond the ones the protocol reaches anyway.
-
-    Sorted, no duplicates. `participant.mpc.PROTOCOL_CAPABILITIES` is the baseline: one
-    authorized multiplication opens `d` and `e` and does nothing else, so anything else in
-    `reached()` is something the prover on top decided to do.
-
-    This is the one checkpoint where **you** decide how many times to run the specimen. The
-    others hand you a run and ask what it says. Here you are handed `probe`, and one probe is
-    one input: a specimen whose only defect sits on an exception path is spotless right up
-    until something makes it take that path. `malformed_row` builds one such input, and at
-    least one specimen needs it.
-
-    A capability record is `{"capability", "party", "operands"}` — the name and the operand
-    ids, never a value. That is deliberate: it is evidence rather than a transcript.
+    """JA: 正常行・壊れた行の両実行で、支給計算以外の操作を全件報告。
+    EN: Probe a normal row and malformed_row(normal.row), union all reached names,
+    remove PROTOCOL_CAPABILITIES, deduplicate, sort and return a tuple.
+    Example reached open,peek,peek → ("peek",). Inspect record["capability"].
     """
     return ()
-
-
-# ---------------------------------------------------------------------------
-# 3. What a run published to the other parties
-# ---------------------------------------------------------------------------
 
 
 def open_set_audit(evidence) -> tuple[dict, ...]:
-    """Every opening this run made that the multiplication did not authorize, in order.
-
-    One per record, in the order `evidence.runtime.openings()` holds them:
-
-    ```text
-    roundId    the round it went out in
-    shareIds   the share ids that were opened
-    masked     whether a reserved triple mask was behind it at all
-    ```
-
-    Two different mistakes are both unauthorized and only one of them is the obvious one.
-    Publishing a value with nothing hiding it is visible the moment you look at `maskedBy`.
-    Publishing a *masked* value in a round the relation never declared is not: it looks
-    exactly like the protocol's own openings, and what it did was spend a mask on a value the
-    mask was not drawn for. An audit that only checks `maskedBy` passes it, and an audit that
-    only checks the round id passes the other one.
-
-    `round_id_for(row)` names the one round a single multiplication may open in.
+    """JA: 許可されない開示を元の順番で全部返します。
+    EN: Return every unauthorized opening in original order.
+    Authorized = nonempty maskedBy AND roundId == round_id_for(evidence.row).
+    Output each record as {roundId, shareIds: tuple, masked: bool}.
+    Example allowed round r:mul with maskedBy=[] is unauthorized, masked=False.
+    No violations → (). A mask alone or the correct round alone is insufficient.
     """
     return ()
 
 
-# ---------------------------------------------------------------------------
-# 4. Whose shares a run read
-# ---------------------------------------------------------------------------
-
-
 def cross_party_audit(evidence) -> dict:
-    """Report the peeks in this run and whether any of them crossed a party boundary.
-
-    ```text
-    peeks     how many peek records the run left
-    parties   the party ids whose shares were peeked, sorted, no duplicates
-    crossed   whether party-local computation read outside its own party
-    ```
-
-    `peek` is the runtime's debugging hook: it reads any share from anywhere and is not
-    refused, because an operator debugging a stuck party needs it. It is recorded, with the
-    id of the party that **owns** the share rather than the one that read it — which is
-    enough, and working out why is the checkpoint.
-
-    One of the specimens discloses nothing at all through any channel and still fails here.
-    Its disclosure is identical to a clean prover's, and one operator now holds a witness
-    half. An audit of what was *said* cannot see it. An audit of what was *reached* can.
+    """JA: peek回数、持ち主番号の種類、2種類以上かを報告します。
+    EN: Count peek records, then sort distinct owner party IDs.
+    Return {peeks: count, parties: tuple, crossed: len(parties)>1}.
+    Owners 1,0,0 → {peeks:3, parties:(0,1), crossed:True}.
+    False only means this owner-count check did not establish a crossing.
     """
     return {}
 
 
-# ---------------------------------------------------------------------------
-# 5. What a run published to us
-# ---------------------------------------------------------------------------
-
-
 def leakage_audit(evidence) -> tuple[tuple[str, str], ...]:
-    """Every `(channel, field name)` pair this run put in front of us outside the policy.
-
-    Sorted, no duplicates. The channels are `CHANNELS`: `artifact`, `log`, `metrics`,
-    `error`. A correctness test reads the first field of the first one, which is why three of
-    the specimens use only the other three.
-
-    The log is structured — a record is `{"event", "values"}` — so the *field names* are the
-    policy surface. The event name is a label and is not policed; the names inside `values`
-    are. The error record works the same way.
-
-    `ALLOWED_NAMES` alone is not the policy. `SHARING_ONLY_NAMES` is the second half of it,
-    and one specimen exists entirely to make the difference matter: it publishes a name that
-    is squarely on the allowlist, carrying an integer where a sharing belongs. A scan that
-    only looks at names finds nothing. `is_sharing(value, parties)` is supplied so you can
-    ask the other question without reaching into `Share._value`.
+    """JA: 4出口の名前と形を調べ、違反(出口,項目名)を全件返します。
+    EN: Check artifact, log.values, metrics and error.values when error exists.
+    Violation: name outside ALLOWED_NAMES OR a SHARING_ONLY_NAMES value that
+    fails is_sharing(value,evidence.setting["parties"]). Deduplicate and sort pairs.
+    Example integer artifact C → (("artifact","C"),). No violations → ().
     """
     return ()
 
 
-# ---------------------------------------------------------------------------
-# 6. What we can recover from it
-# ---------------------------------------------------------------------------
-
-
 def leakage_evidence(disclosure, setting) -> dict | None:
-    """Recover a secret from the disclosure alone, or return `None` if it does not yield one.
+    """JA: 外へ出た内容だけから最初に復元できる秘密と取得元を返します。
+    EN: Input remains a Disclosure object with .artifact/.log/.metrics/.error.
+    Only sharing entries are serialized into opaque string-id sequences.
+    Visit artifact, log records' values, metrics, error.values in that order,
+    keeping dictionary field order. Only consider policy violations.
+    Serialized A/B/C are allowed only as nonempty lists/tuples of string ids.
 
-    ```text
-    value   the secret, as a field element mod p
-    from    the (channel, field name) pair you got it out of
-    ```
-
-    You are handed a `serialized` disclosure: every sharing has already become a list of
-    opaque share ids, exactly as it would arrive at a next stage across a process boundary.
-    So `Share._value` is not on the table here, and neither is `reconstruct` — the checker
-    watches the runtime and an audit that reaches a capability to answer this has answered a
-    different question.
-
-    A leak is not "a number you recognize". It is a number you can **derive** something
-    secret from, using only what is in front of you, and the disclosures here need three
-    different derivations. One hands you the secret directly under a name nobody would flag
-    as sensitive. One hands you a whole sharing in the clear. And one hands you a value that
-    is not secret-looking at all, published in the same record as a value the policy
-    explicitly **allows** — the previous problem's `d = A - x` is the whole of it, and
-    finding the leak and deriving the secret are two different skills.
-
-    Some of the runs yield nothing at all, and reporting a leak for one of those is wrong.
+    Check these derivations in order, using p=setting["p"]:
+    nonempty integer list/tuple → sum(value) % p;
+    integer with integer d in the SAME record → (value+d) % p;
+    same record means artifact/metrics dict, or each log/error values dict;
+    integer without d → value % p. Booleans are not integers for this policy.
+    p=7: [2,4,3] → 2; mask 5 with d=5 → 3; integer 3 alone → 3.
+    Ignore strings and id sequences. Return {value: recovered, from:(channel,name)}
+    for the first recoverable violation; otherwise None. Do not call the runtime.
     """
     return None
 
 
-# ---------------------------------------------------------------------------
-# 7. The repair
-# ---------------------------------------------------------------------------
-
-
 def private_prover(runtime, row: dict, halves: dict, triple, sink) -> dict:
-    """A prover on top of the supplied `beaver_product` that gives none of it away.
+    """JA: 支給計算のproofと、それと一致するartifactを公開して返します。
+    EN: Compute once with beaver_product(runtime,row,halves,triple).
+    Build clean_artifact(row,proof), publish it with sink.publish, and return proof.
+    proof keys: A,B,C,d,e,tripleId,roundId. Artifact keys:
+    relationId,fieldId,parties,A,B,C,tripleId,roundId.
+    Return and artifact must describe the same current inputs/product and IDs.
+    A/B/C remain sharings. C recovers to A*B. Only the two authorized d/e openings,
+    in one round; no reconstruct or peek. Optional logs must satisfy the policy.
+    A spent triple must propagate TripleMisuse with all four channels still empty.
 
-    Return what `beaver_product` returns — `{"A", "B", "C", "d", "e", "tripleId", "roundId"}`
-    — and publish an artifact of the shape `clean_artifact` produces, through `sink.publish`.
-
-    Everything the previous seven checkpoints measured has to come out empty, at once:
-
-    ```text
-    C reconstructs to A * B          correctness is still the floor, not the ceiling
-    exactly two openings, one round  both of them the multiplication's own
-    no capability beyond `open`      no reconstruct, no peek, not through an alias either
-    nothing outside the policy       in any of the four channels
-    ```
-
-    Publishing nothing at all satisfies four of those and fails the first, which is the point:
-    a prover that says nothing is not private, it is useless. The artifact is what the next
-    stage consumes and it has to be there.
-
-    One more thing is graded, and it is the one that is easy to get wrong precisely because it
-    only happens when something else has already gone wrong. This will be called on a runtime
-    whose triple has already been spent, so `reserve_triple` refuses and the call fails. Let
-    it fail. A handler that puts the failing state in front of someone so the failure can be
-    debugged is the single most common way a prover that is private on Tuesday stops being
-    private on Wednesday.
+    transfer adds no function: these audits face multiple combined defects on
+    normal AND malformed inputs, under changed IDs, field, party count and rows.
+    Return every promised finding, not just the first (except leakage_evidence).
     """
     return {}

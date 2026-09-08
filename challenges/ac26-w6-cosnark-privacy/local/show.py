@@ -68,7 +68,13 @@ def main() -> None:
     scenario = Scenario(SEED, "public", shape)
     cfg, row = scenario.cfg, scenario.row
 
-    print("== your setting ==")
+    print("証拠を確認 / Inspect evidence")
+    print("最初: 下の entry を本文の分類表に当てはめ、prover.py の classify を編集します。")
+    print("First: classify an entry below using the free rule table, then edit prover.py/classify.")
+    print("party = 参加者 / participant; row = 公開条件 / public relation; p = 割る数 / modulus")
+    print("record は id と操作名。秘密の数は含みません / Records contain identifiers, not secret values.")
+    print()
+    print("== your setting / 設定 ==")
     print(f"  field      p = {cfg['p']}   ({cfg['fieldId']})")
     print(f"  parties        {cfg['parties']}")
     print(f"  witness length {cfg['width']}")

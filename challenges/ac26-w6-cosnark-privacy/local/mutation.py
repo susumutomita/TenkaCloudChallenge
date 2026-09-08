@@ -4,8 +4,8 @@ It also measures the thing this problem is about. Every mutation is run twice: o
 the hidden checker, and once through a **verdict probe** that asks each specimen the only
 question a natural test of an auditor asks -- *did you spot that this one is not clean?* No
 channel, no pair, no value, no opening record. The count of mutations the verdict probe
-cannot see is printed on every run and both READMEs quote it. If a later edit makes the
-checkpoints cheaper, that number moves and the claim moves with it.
+cannot see is printed on every run. The READMEs describe this measurement without
+freezing a count that could become stale after a checker change.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ _REPAIR_BODY = """    proof = beaver_product(runtime, row, halves, triple)
 
 
 def _mutations() -> list[tuple[str, str]]:
-    return [
+    mutations = [
         # -- the policy ----------------------------------------------------
         (
             "classify calls every opening an allowed one",
@@ -302,6 +302,42 @@ def _mutations() -> list[tuple[str, str]]:
             ),
         ),
     ]
+
+    # A valid-looking artifact must still carry this run's exact result and identifiers.
+    for field, replacement in (("C", 'proof["A"]'), ("relationId", '"another-relation"'),
+                               ("fieldId", '"another-field"'), ("parties", '0'),
+                               ("tripleId", '"another-triple"'), ("roundId", '"another-round"')):
+        mutations.append((
+            f"the repair publishes a different artifact {field}",
+            REFERENCE.replace("    sink.publish(clean_artifact(row, proof))",
+                "    artifact = clean_artifact(row, proof)\n"
+                f'    artifact[{field!r}] = {replacement}\n'
+                "    sink.publish(artifact)"),
+        ))
+    for field, replacement in (("A", 'proof["B"]'), ("B", 'proof["A"]'),
+                               ("d", '(proof["d"] + 1) % row["p"]'),
+                               ("e", '(proof["e"] + 1) % row["p"]'),
+                               ("tripleId", '"another-triple"'), ("roundId", '"another-round"')):
+        mutations.append((
+            f"the repair returns a different proof {field}",
+            REFERENCE.replace("    return proof\n", f'    proof[{field!r}] = {replacement}\n    return proof\n'),
+        ))
+    mutations.extend([
+        ("the repair swallows the spent-triple refusal",
+         REFERENCE.replace(_REPAIR_BODY,
+             "    try:\n        proof = beaver_product(runtime, row, halves, triple)\n"
+             "    except Exception:\n        return {}")),
+        ("the repair publishes allowed metadata before a spent-triple refusal",
+         REFERENCE.replace(_REPAIR_BODY,
+             '    sink.metric("operations", 0)\n' + _REPAIR_BODY)),
+        ("the leakage audit stops at the first violating field",
+         REFERENCE.replace("    return tuple(sorted(out))", "    return tuple(sorted(out))[:1]")),
+        ("the open-set audit stops at the first unauthorized opening",
+         REFERENCE.replace("        if not _authorized(record, evidence.row)\n    )",
+                           "        if not _authorized(record, evidence.row)\n    )[:1]")),
+    ])
+    return mutations
+
 
 
 def _load(source: str) -> types.ModuleType:

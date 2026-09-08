@@ -29,6 +29,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from participant.mpc import TripleMisuse  # noqa: E402
+
 from fixtures.generate import (  # noqa: E402
     ALLOWED_NAMES,
     AUDIENCES,
@@ -162,7 +164,30 @@ def _h4(runtime, row, halves, triple, sink) -> dict:
     return proof
 
 
-_HIDDEN = {"H1": _h1, "H2": _h2, "H3": _h3, "H4": _h4}
+def _combined_honest(runtime, row, halves, triple, sink) -> dict:
+    """Correct output, but both authorization errors and two disclosure exits."""
+    proof = beaver_product(runtime, row, halves, triple)
+    runtime.open(round_id_for(row), halves["A"])
+    runtime.open(f"{row['relationId']}:another", triple.y)
+    sink.emit("diagnostic", d=proof["d"], offset=runtime.reconstruct(triple.x))
+    sink.metric("right", runtime.reconstruct(proof["B"]))
+    sink.publish(clean_artifact(row, proof))
+    return proof
+
+
+def _combined_failure(runtime, row, halves, triple, sink) -> dict:
+    """Normal path clean; failure combines two capabilities and two channels."""
+    if len(row["a"]) != row["width"]:
+        sink.emit("diagnostic", pieces=tuple(runtime.peek(share) for share in halves["B"]))
+        sink.metric("left", runtime.reconstruct(halves["A"]))
+        return {}
+    return _h3(runtime, row, halves, triple, sink)
+
+
+_HIDDEN = {
+    "H1": _h1, "H2": _h2, "H3": _h3, "H4": _h4,
+    "H5": _combined_honest, "H6": _combined_failure,
+}
 
 _HIDDEN_TRUTH = {
     "H1": {
@@ -174,9 +199,14 @@ _HIDDEN_TRUTH = {
     "H2": {"capabilities": (), "unauthorized": 0, "disclosed": (), "recoverable": None},
     "H3": {"capabilities": (), "unauthorized": 0, "disclosed": (), "recoverable": None},
     "H4": {"capabilities": (), "unauthorized": 1, "disclosed": (), "recoverable": None},
+    "H5": {"capabilities": ("reconstruct",), "unauthorized": 2,
+           "disclosed": (("log", "offset"), ("metrics", "right")), "recoverable": "A"},
+    "H6": {"capabilities": (), "unauthorized": 0, "disclosed": (), "recoverable": None},
 }
 
 _HIDDEN_MALFORMED = {
+    "H6": {"capabilities": ("peek", "reconstruct"), "unauthorized": 0,
+           "disclosed": (("log", "pieces"), ("metrics", "left")), "recoverable": "B"},
     "H2": {
         "capabilities": ("peek",),
         "unauthorized": 0,
@@ -691,6 +721,12 @@ def check_evidence(module, seed: str) -> list[str]:
 def _repair_failures(module, seed: str, label: str, shape: str) -> list[str]:
     scenario = Scenario(seed, label, shape)
     truth = _truth_values(scenario)
+    expected_scalars = {
+        "d": (truth["A"] - scenario.runtime.reconstruct(scenario.triple.x)) % scenario.cfg["p"],
+        "e": (truth["B"] - scenario.runtime.reconstruct(scenario.triple.y)) % scenario.cfg["p"],
+        "tripleId": scenario.triple.id,
+        "roundId": round_id_for(scenario.row),
+    }
     proof = _attempt(
         lambda: module.private_prover(
             scenario.audit, dict(scenario.row), scenario.halves, scenario.triple, scenario.sink
@@ -706,10 +742,14 @@ def _repair_failures(module, seed: str, label: str, shape: str) -> list[str]:
         return [f"private_prover did not report {sorted(missing)}"]
 
     failures: list[str] = []
-    if not is_sharing(proof["C"], scenario.cfg["parties"]):
-        failures.append("private_prover's C is not one share per party")
-    elif scenario.runtime.reconstruct(proof["C"]) != truth["C"]:
-        failures.append("private_prover's C does not reconstruct to A * B")
+    for name in ("A", "B", "C"):
+        if not is_sharing(proof[name], scenario.cfg["parties"]):
+            failures.append(f"private_prover's {name} is not one share per party")
+        elif scenario.runtime.reconstruct(proof[name]) != truth[name]:
+            failures.append(f"private_prover's {name} does not describe the current calculation")
+    for name, expected in expected_scalars.items():
+        if type(proof[name]) is not type(expected) or proof[name] != expected:
+            failures.append(f"private_prover's {name} does not belong to the current calculation")
 
     openings = scenario.audit.openings()
     if len(openings) != 2:
@@ -741,6 +781,22 @@ def _repair_failures(module, seed: str, label: str, shape: str) -> list[str]:
         for name in ("A", "B", "C"):
             if not is_sharing(disclosure.artifact[name], scenario.cfg["parties"]):
                 failures.append(f"the artifact holds {name} as something other than a sharing")
+            elif (
+                not is_sharing(proof[name], scenario.cfg["parties"])
+                or tuple(disclosure.artifact[name]) != tuple(proof[name])
+            ):
+                failures.append(f"the artifact's {name} differs from the returned proof")
+        expected_artifact = {
+            "relationId": scenario.row["relationId"], "fieldId": scenario.row["fieldId"],
+            "parties": scenario.cfg["parties"], "tripleId": expected_scalars["tripleId"],
+            "roundId": expected_scalars["roundId"],
+        }
+        for name, expected in expected_artifact.items():
+            if (
+                type(disclosure.artifact[name]) is not type(expected)
+                or disclosure.artifact[name] != expected
+            ):
+                failures.append(f"the artifact's {name} differs from the current calculation")
     return failures
 
 
@@ -758,9 +814,19 @@ def check_repair(module, seed: str) -> list[str]:
         module.private_prover(
             scenario.audit, dict(scenario.row), scenario.halves, scenario.triple, scenario.sink
         )
-    except Exception:  # noqa: BLE001 - letting the runtime's refusal through is correct
+    except TripleMisuse:
         pass
-    leaks = _expected_leakage(scenario.sink.disclosure(), scenario.cfg["parties"])
+    except Exception:  # noqa: BLE001 - the public contract names the refusal being preserved
+        failures.append("private_prover replaced the spent-triple refusal with another exception")
+    else:
+        failures.append("private_prover swallowed the spent-triple refusal")
+    failed_disclosure = scenario.sink.disclosure()
+    if (failed_disclosure.artifact or failed_disclosure.log or failed_disclosure.metrics
+            or failed_disclosure.error is not None):
+        failures.append("private_prover published output while failing")
+    if scenario.audit.openings():
+        failures.append("private_prover opened a value after a spent-triple refusal")
+    leaks = _expected_leakage(failed_disclosure, scenario.cfg["parties"])
     if leaks:
         failures.append(f"private_prover disclosed {list(leaks)} while failing")
     beyond = sorted(
@@ -780,18 +846,9 @@ def check_repair(module, seed: str) -> list[str]:
 
 def check_transfer(module, seed: str) -> list[str]:
     transferred = f"{seed}:transfer"
-    failures = [
-        *check_classify(module, transferred),
-        *check_capability(module, transferred),
-        *check_openset(module, transferred),
-        *check_crossparty(module, transferred),
-        *check_leakage(module, transferred),
-        *check_evidence(module, transferred),
-        *check_repair(module, transferred),
-    ]
-    # Four provers the visible eight do not contain: reconstruct reached through a table
-    # entry, a debug branch that only fires on a malformed row, a clean one, and a masked
-    # value opened in an undeclared round.
+    # This closing checkpoint applies the same contracts to combinations of defects,
+    # rather than awarding another checkpoint for rerunning the prior seven suites.
+    failures: list[str] = []
     for label in (LABELS[0], LABELS[2]):
         failures.extend(_capability_failures(module, HIDDEN, transferred, label, "dense"))
         failures.extend(_openset_failures(module, HIDDEN, transferred, label, "dense"))
