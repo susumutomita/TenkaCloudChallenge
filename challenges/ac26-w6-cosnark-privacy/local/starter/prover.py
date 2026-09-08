@@ -1,4 +1,9 @@
-"""JA: 秘密を扱うプログラムの記録を監査します。編集するのはこのファイルです。
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+JA: 秘密を扱うプログラムの記録を監査します。編集するのはこのファイルです。
 
 Use supplied objects only within the current call, through the documented public API.
 Do not retain them for another call or access private share/runtime state.

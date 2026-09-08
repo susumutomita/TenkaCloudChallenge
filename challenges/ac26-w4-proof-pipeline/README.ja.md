@@ -179,3 +179,10 @@ non-root の実 Workbench HTTP で config・Inspect・starter を取得しまし
 失敗し、作者の参考解は公開 3 テストと prepare・verifier proxy 経由の全 8 項目に合格しました。
 同じ提出経路で出力・終了による偽装も拒否しました。カタログは 116 件有効です。これは作者検査と提出経路の
 証拠で、初見参加者の自力成功を示すものではありません。ブラウザ操作・配備先での得点反映・デプロイは未実施です。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

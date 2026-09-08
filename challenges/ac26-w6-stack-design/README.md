@@ -162,3 +162,10 @@ and all eight checkpoints through prepare and the verifier proxy. Output/exit sp
 through that same route. Catalog validation passed for 116 entries. These are author and route
 checks, not evidence of unaided first-time participant comprehension. Browser interaction,
 deployed platform score reflection and deployment were not run for this change.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

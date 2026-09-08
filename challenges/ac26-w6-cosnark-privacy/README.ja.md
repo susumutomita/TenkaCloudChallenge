@@ -161,3 +161,10 @@ non-root の実 Workbench HTTP で config・Inspect・starter を取得しまし
 Runtime と Share の値は親に保持します。参照権限を呼び出しごとに区切り、提供 API の操作を実際の runtime に送ります。前の呼び出しの権限は再利用できません。監査 probe は親で対象を動かして記録のコピーを返し、修復時の公開は親の Sink に記録します。
 
 採点時も公開APIのPython型の関係を維持します。isinstanceで型を確認する正しい実装と、全8項目の参考解が評価経路を通過しています。
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。

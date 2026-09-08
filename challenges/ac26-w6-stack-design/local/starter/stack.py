@@ -1,4 +1,9 @@
-"""Edit this file in the Portal problem editor.
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+Edit this file in the Portal problem editor.
 
 You review a system diagram stored in dictionaries. Start -> Inspect evidence shows
 its inputs. Implement carried first; its public PASS is the first progress marker. Add

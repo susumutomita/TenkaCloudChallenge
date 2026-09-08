@@ -165,3 +165,10 @@ deployed platform score reflection and deployment were not run for this change.
 Runtime and share values stay in the parent. Per-call opaque handles route the supplied API to actual runtime operations; handles from earlier calls cannot be reused. Audit probes run the supplied specimens in the parent and return copied evidence; repair publications go to the parent-owned Sink.
 
 The remote API also preserves its documented Python type relationship. A valid reference with explicit isinstance checks passes the evaluator, alongside all eight reference checkpoints.
+
+### Supported computation imports / 計算用の標準ライブラリ
+
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
