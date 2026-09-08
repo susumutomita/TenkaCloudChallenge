@@ -1,4 +1,9 @@
-"""A ciphertext is data transformed to hide a message. A key is the secret number
+"""
+Supported computation imports / 計算用に使える標準ライブラリ:
+array, base64, binascii, bisect, collections, contextlib, copy, dataclasses, decimal, enum, fractions, functools, hashlib, heapq, hmac, itertools, json, math, operator, random, re, statistics, string, struct, time, typing.
+Other imports and file/network access are not supported in grading.
+採点時は、この一覧以外のimportとファイル・通信操作には対応しません。
+A ciphertext is data transformed to hide a message. A key is the secret number
 or numbers used to recover that message. Edit this file to extract one value
 from a ciphertext and move it to another key.
 
