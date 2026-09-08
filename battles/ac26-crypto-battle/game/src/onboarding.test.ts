@@ -150,7 +150,7 @@ describe("optional arithmetic practice", () => {
       expect(status).not.toContain('aria-label="crypto-battle-tutorial"');
       expect(status).not.toContain('aria-label="crypto-battle-quick-rules"');
       const raw = locale === "ja" ? "生の試合データ" : "Raw match data";
-      expect(status.indexOf(tutorialTitle)).toBeLessThan(status.indexOf(raw));
+      expect(status).not.toContain(raw);
       // The reference remains a separately readable entry, never pre-expanded into play.
       const help = renderToStaticMarkup(createElement(HelpDrawer, slotProps(locale)));
       expect(help).toContain("table = {1: 3, 2: 1, 3: 4, 4: 2}");

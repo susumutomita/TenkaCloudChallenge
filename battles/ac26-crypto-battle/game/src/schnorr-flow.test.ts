@@ -52,7 +52,7 @@ test("wrong response consumes the proof; no response brute force or old Sudoku b
 });
 test("expiry and old matches retain their contracts",()=>{
   let state=create();state=applyOp(state,"a",{kind:"schnorr-commit",contractId:"a-c0",y:projectForTeam(state,"a").myContracts[0]!.schnorr!.y,a:8});
-  state=tick(state,60_000);
+  state=tick(state,state.contracts.find(c=>c.id==="a-c0")!.expiresAtMs);
   expect(validateOp(state,"a",{kind:"schnorr-response",contractId:"a-c0",z:1}).ok).toBe(false);
   const old=initialState({eventId:"legacy",teamIds:["a"],matchSecret:"old"});
   expect(migrateState(old,12).config.proofProtocol).toBeUndefined();
