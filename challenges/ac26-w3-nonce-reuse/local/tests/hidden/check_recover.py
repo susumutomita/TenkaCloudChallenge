@@ -61,8 +61,12 @@ def check_parse(module, seed: str) -> list[str]:
         normalized = {**record, "public_key": group.point(*record["public_key"]), "commitment": group.point(*record["commitment"])}
         # Parsing does not verify a signature: even scalar boundaries must be
         # retained. Exercise each point's raw and normalized form independently.
-        for public_form in (tuple, list, lambda xy: group.point(*xy)):
-            for commitment_form in (tuple, list, lambda xy: group.point(*xy)):
+        class ValidPoint(Point):
+            pass
+
+        forms = (tuple, list, lambda xy: group.point(*xy), lambda xy: ValidPoint(group.params, *xy))
+        for public_form in forms:
+            for commitment_form in forms:
                 for response, message in ((0, b""), (record["response"], record["message"]),
                                           (group.n - 1, b"\x00\xff")):
                     candidate = {
@@ -282,13 +286,14 @@ def check_reject(module, seed: str) -> list[str]:
 
         invalid = module.parse_record(dict(second), group)
         invalid["response"] = (invalid["response"] + 1) % group.n
-        try:
-            module.recover_secret(parsed_first, invalid, group)
-            failures.append("a rejected transcript was used for recovery")
-        except module.MalformedRecord:
-            pass
-        except Exception as error:
-            failures.append(f"invalid transcript recovery raised {type(error).__name__}")
+        for left, right in ((parsed_first, invalid), (invalid, parsed_first)):
+            try:
+                module.recover_secret(left, right, group)
+                failures.append("a rejected transcript was used for recovery")
+            except module.MalformedRecord:
+                pass
+            except Exception as error:
+                failures.append(f"invalid transcript recovery raised {type(error).__name__}")
         # Valid signatures by one signer with different nonces cannot cancel k.
         for nonce in range(1, group.n):
             different = sign_with(nonce, secret, b"different commitment", group)
@@ -338,6 +343,15 @@ def check_reject(module, seed: str) -> list[str]:
                 pass
             except Exception as error:  # noqa: BLE001
                 failures.append(f"a cross-signer pair raised {type(error).__name__}")
+
+        # Independently scored rejection must also enforce the detector's guards.
+        for rows in ([first, dict(first)], [first, sign_with(k, other_secret, b"elsewhere", group)]):
+            try:
+                result = module.find_reuse(deepcopy(rows), group)
+                if not isinstance(result, list) or result:
+                    failures.append("equal-challenge and cross-signer logs must return an empty list")
+            except Exception:
+                failures.append("an unsolvable log must be skipped without raising")
 
         # A log full of honest signatures must yield nothing at all.
         clean = [sign_with(1 + i, secret, f"m{i}".encode(), group) for i in range(1, 5)]

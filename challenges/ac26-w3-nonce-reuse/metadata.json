@@ -254,12 +254,12 @@
         "hints": [
           {
             "id": "repair-hint-1",
-            "content": "短い値域をやめ、秘密鍵とメッセージの両方からnonceを作ります。同じ入力は同じ値に、違う入力は大きい値域へ散らします。有限の値域なので衝突ゼロの保証ではなく、教材では検査対象の重複を調べます。",
+            "content": "短い値域をやめ、秘密鍵とメッセージの両方からnonceを作ります。同じ入力は同じ値に、違う入力は大きい値域へ散らします。有限の値域なので衝突ゼロの保証ではなく、教材では検査対象の重複を調べます。 もう一つのrepair_witnessでは、弱い生成器が別の入力に同じ数を返す実例を自分で探します。64種類の値へ65個の異なる入力を割り当てれば、少なくとも2個は重なります。",
             "penalty": 2
           },
           {
             "id": "repair-hint-2",
-            "content": "HMAC-SHA256は秘密鍵とデータから32バイトの値を作る関数です。バイトは0〜255の数1個、bytesはその列。結果を整数hへ読み替え、1+h%(n−1)なら0を避けて1〜n−1へ入ります。例：h=8,n=7なら1+2=3。",
+            "content": "HMAC-SHA256は秘密鍵とデータから32バイトの値を作る関数です。バイトは0〜255の数1個、bytesはその列。結果を整数hへ読み替え、1+h%(n−1)なら0を避けて1〜n−1へ入ります。例：h=8,n=7なら1+2=3。 証拠の小例：入力番号0,1,2に対する出力が2,5,2なら、返す番号の組は(0,2)。値の2を返すのではありません。実際のseedで同じ出力になった異なる番号を探してください。",
             "penalty": 2
           },
           {
@@ -420,11 +420,11 @@
           "hints": [
             {
               "id": "repair-hint-1",
-              "content": "Replace the tiny output space with a value derived from both the secret and message. Identical inputs may repeat; different inputs spread over a large range. A finite range cannot guarantee no collisions; this exercise checks its tested inputs."
+              "content": "Replace the tiny output space with a value derived from both the secret and message. Identical inputs may repeat; different inputs spread over a large range. A finite range cannot guarantee no collisions; this exercise checks its tested inputs. In repair_witness, construct evidence that the weak generator maps different inputs to the same value. Assigning 65 different inputs to only 64 possible values forces at least one repeated value."
             },
             {
               "id": "repair-hint-2",
-              "content": "HMAC-SHA256 takes a secret key and data and produces32 bytes. A byte is an integer0–255; bytes is a sequence of them. Read the output as integer h and use1+h%(n−1), in1..n−1. For h=8,n=7, this gives3."
+              "content": "HMAC-SHA256 takes a secret key and data and produces32 bytes. A byte is an integer0–255; bytes is a sequence of them. Read the output as integer h and use1+h%(n−1), in1..n−1. For h=8,n=7, this gives3. Small witness example: outputs for indices 0,1,2 are 2,5,2, so return indices (0,2), not the output value 2. Find distinct indices with equal outputs under the supplied seed."
             },
             {
               "id": "repair-hint-3",

@@ -139,7 +139,7 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: 63 broken implementations. Three of them found
+`make reference-test` runs the mutation suite: 67 broken implementations. Three of them found
 real holes in the hidden tests while this problem was being written — the log had no
 non-accepting duplicate, no cross-signer duplicate, and the nonce-space check was distinctness
 rather than range. A fourth, "reports a recovery without confirming it", turned out to be an
@@ -149,6 +149,6 @@ equivalent mutant on its own and is now mutated together with the validation it 
 
 All eight checkpoints have three bilingual hints: mechanism, small example, named action. Required formulas and APIs are free. Repair grades the documented HMAC-SHA256 encoding and repair_witness(seed, group), which constructs two distinct trial-message indices colliding under the supplied weak generator. The function is called with different seeds; each returned pair is checked with that call’s seed. This is a finite regression test, not proof of collision freedom.
 
-Author validation rejected all 63 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. The 30 added return-contract mutants are checked against their own parse, detect, or collision checkpoint, without relying on a different checkpoint to fail. Parse compares all four fields across tuple/list/Point inputs and scalar/message boundaries. Detect checks distinct original integer indices before reading records and preserves original evidence when a submission mutates its input; valid reversed pairs and subsets remain accepted. Collision measures several sample sizes, including zero, one, and more draws than the nonce space, and requires integer counts. Nine author checker regressions and Docker `make reference-test` passed. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.
+Author validation rejected all 67 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. The 30 added return-contract mutants are checked against their own parse, detect, or collision checkpoint, without relying on a different checkpoint to fail. Parse compares all four fields across tuple/list/Point inputs and scalar/message boundaries. Detect checks distinct original integer indices before reading records and preserves original evidence when a submission mutates its input; valid reversed pairs and subsets remain accepted. Collision measures several sample sizes, including zero, one, and more draws than the nonce space, and requires integer counts. Nine author checker regressions and Docker `make reference-test` passed. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.
 
 Point subclasses remain supported; parsing compares primitive coordinates and curve parameters rather than trusting a submission-defined equality method. The new equality-spoof mutant is rejected by parse alone.

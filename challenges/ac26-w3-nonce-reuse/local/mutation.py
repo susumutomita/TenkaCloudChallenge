@@ -162,6 +162,10 @@ MUTATIONS += (
 # Each additional review regression must fail its own checkpoint. A failure in
 # extract/hunt/repair cannot stand in for validating parse/detect/collision.
 CHECKPOINT_MUTATIONS = (
+    ("parse rejects valid Point subclasses", "parse", [("if isinstance(value, Point):", "if type(value) is Point:")]),
+    ("recovery validates only the second transcript", "reject", [("if not accepts(first, group) or not accepts(second, group):", "if not accepts(second, group):")]),
+    ("reject scanner ignores equal challenges", "reject", [("if e1 != e2:", "if True:")]),
+    ("reject scanner ignores signer identity", "reject", [("if first[\"public_key\"] != second[\"public_key\"]:", "if False:")]),
     ("parsed Point subclass lies about equality", "parse", [(
         '    return {\n        "message": message,',
         '    from participant.schnorr import Point\n    class WrongPoint(Point):\n        def __eq__(self, other):\n            return True\n    public = WrongPoint(group.params, 0, 0)\n    commitment = WrongPoint(group.params, 0, 0)\n    return {\n        "message": message,',
