@@ -754,15 +754,14 @@ def check_mask_cancellation(module, seed: str) -> list[str]:
         issued_objects = []
         observed_reads = 0
         arithmetic_reads = 0
-        original_value_of = runtime.value_of
-        def track_value_of(share):
+        previous_profile = sys.getprofile()
+        read_code = Runtime.value_of.__code__
+        def observe(frame, event, arg):
             nonlocal observed_reads
-            value = original_value_of(share)
-            observed_reads += 1
-            return value
-        # Keep the observation in the checker: Runtime.reads is mutable by the
-        # submitted code and cannot be the authority for this contract.
-        runtime.value_of = track_value_of
+            if event == "call" and frame.f_code is read_code and frame.f_locals.get("self") is runtime:
+                observed_reads += 1
+            if previous_profile is not None:
+                previous_profile(frame, event, arg)
         original_emit = runtime._emit
         def track_emit(*args, **kwargs):
             nonlocal arithmetic_reads
@@ -774,6 +773,7 @@ def check_mask_cancellation(module, seed: str) -> list[str]:
             return share
         runtime._emit = track_emit
         try:
+            sys.setprofile(observe)
             result = module.mask_cancellation_witness(
                 ParticipantRuntime(runtime), scenario.halves, scenario.triple
             )
@@ -797,6 +797,8 @@ def check_mask_cancellation(module, seed: str) -> list[str]:
                 failures.append("cancellation witness must use own-party arithmetic")
         except Exception as error:
             failures.append(f"cancellation witness raised {type(error).__name__}")
+        finally:
+            sys.setprofile(previous_profile)
     return failures
 
 

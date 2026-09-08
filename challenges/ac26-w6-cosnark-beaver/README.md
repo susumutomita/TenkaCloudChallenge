@@ -164,11 +164,16 @@ Because of that, `make test`, `make test-one` and `make inspect` bring the verif
 witness from it over the compose network instead of deriving them locally. `make verifier-down`
 stops it.
 
-What the verifier does guarantee is narrower and real: a submission cannot hang or crash it,
-a checkpoint can only credit the id it echoes, results do not leak expected values, and the
-fixtures come from this deployment's seed so a memorized answer does not carry. Submissions run
-with time, memory, process and output caps; both containers run non-root, read-only, without
-privileges, and only the Workbench is published, on loopback.
+The trusted parent evaluates checkpoints; submitted Python runs in a separate worker and
+returns typed values and requests for the supplied runtime API. Runtime, Share and Triple
+objects remain in the parent. Their opaque handles are scoped to one function call. Printed
+JSON and process exit status do not decide correctness. Linux workers have file/network/signal
+restrictions, a 12-second submission deadline, and memory, process and output caps. The deadline
+is below the Workbench proxy's 15-second timeout. Both Compose services use non-root users and
+an init process, read-only filesystems and no added privileges; only the Workbench is published
+on loopback. These are the controls tested below, not a guarantee against every isolation flaw.
+Checkpoint ids and bounded failure feedback retain their existing contract; expected answers
+are not returned. Fixtures are derived from this deployment's seed.
 
 That supports self-study and honest practice. It does **not** support competition ranking,
 examination, or completion certification — those need a verifier the participant does not
@@ -187,9 +192,31 @@ claim has to move with it.
 
 ## Hint staircase and final construction
 
-The final transfer also requires mask_cancellation_witness: construct local issued shares that preserve A while retaining triple.x ancestry. This distinguishes the runtime log from a secrecy proof. All eight checkpoints have three hints at two points each (48 total). Required formulas and APIs are free in metadata; the new public test demonstrates cancellation.
+The final transfer requires `mask_cancellation_witness`: construct local issued shares that
+preserve A while retaining `triple.x` ancestry. This distinguishes the runtime log from a
+secrecy proof. All eight checkpoints have three hints at two points each (48 total). Required
+formulas, APIs and a candidate to check are free in metadata; the final construction itself
+is left to the participant. Participant-only independent reading found four instruction
+inconsistencies, which were corrected.
 
-`make reference-test` runs nine construction regressions through `mutation.py` and then the 32-mutation suite; both the host and Docker author runs passed. Participant-only independent reading caught four instruction inconsistencies, now corrected. The actual Workbench handler methods fetched the starter, prepared a submission and ran nine public tests successfully. HTTP binding was unavailable in the sandbox; browser play, remote scoring and deployment were not tested. Catalog validation passed for 116 entries.
+The parent owns the runtime operation records. It also profiles the native `Runtime.value_of`
+code, including unbound calls, and compares observed reads with successful local operations.
+Changing worker counters cannot erase those observations. A saved capability from an earlier
+function call cannot inspect the current call's shares. This execution boundary preserves the
+exercise's supplied API; the mathematical secrecy assumptions remain separate.
 
+Validation on the revised Linux Docker author image: 10 construction regressions and 11
+execution-boundary regressions passed; 31 logic mutations were killed and a separate legacy
+verdict-spoofing probe was rejected. The boundary suite includes reference solutions for all
+eight checkpoints, an alternative valid cancellation construction, fabricated output/early
+exit, private-file and parent-signal access, handle lifetime, typed values, nesting limits,
+non-root execution and the HTTP deadline relationship. As before, 24 of the 31 logic mutations
+still compute the right product, showing why a value-only test is insufficient.
 
-PR #831 follow-up: final construction records value reads in a checker-owned closure and compares them with successful local-operation reads, including unbound ParticipantRuntime calls. Restoring the public Runtime.reads counter cannot erase these observations. Nine author regressions cover direct/unbound reads and an alternative valid arithmetic construction. This observes the supplied API; it is not a Python security sandbox. Free formulas and API contracts remain available; the final example now rejects a candidate rather than supplies the construction.
+The actual non-root Workbench HTTP path fetched config, live public evidence and starter;
+an author-derived plan-only edit passed its first checkpoint while later functions remained
+unfinished. The author reference passed nine public tests and all eight checkpoints through
+prepare and the verifier proxy; saved-handle misuse and fabricated verdicts were rejected.
+This is route and author-regression evidence, not independent first-time participant success.
+Catalog validation passed for 116 entries. Browser interaction, deployed scoring and deployment
+were not tested.

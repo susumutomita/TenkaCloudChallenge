@@ -60,6 +60,9 @@ runtime.setting / party_scope / value_of / add / sub / mul_public / add_public /
 runtime.events() / violations() / ancestry(share) / issued(share)
 ```
 
+Use the runtime, Share and Triple objects supplied to the current function call;
+do not save and reuse objects from another call.
+
 There is still no `reconstruct`.
 
 A `Triple` carries `id`, `fieldId`, `parties`, and the three sharings `x`, `y`, `z`.
