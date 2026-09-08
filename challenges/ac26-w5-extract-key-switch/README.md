@@ -178,10 +178,12 @@ to catch.
 
 All eight checkpoints have three hints: mechanism, small arithmetic example, and named screen actions. Each costs2 points,48 total. Required extraction formulas, key compatibility conditions and the additional-noise bound are in the statement. Exact phase preservation during extraction is distinguished from noise changes during switching.
 
-An independent participant-only read found missing contracts and rechecked the revision. A first phase implementation using only the documented API passed the author-side phase check with no failures. The author-side reference passed and all 34 mutation variants were rejected. make agent-gate validated 116 entries. Browser submission for this problem and production deployment were not performed.
+An independent participant-only read found missing contracts and rechecked the revision. A first phase implementation using only the documented API passed the author-side phase check with no failures. The author-side reference passed and all 35 mutation variants were rejected. make agent-gate validated 116 entries. Browser submission for this problem and production deployment were not performed.
 
 Transfer also requires constructed counterexamples at supplied indices. Independent arithmetic rejects missing, zero-key and fixed-index evidence. Free formulas remain available; copying the extraction recipe alone no longer completes the problem.
 
 Target-dimension mismatches and each modulus/base/levels mismatch are rejected with ValueError; domain reports mark them incompatible.
 
 Missing and None input key labels are accepted when all other compatibility conditions hold; both the switch and domain report exercise these positive cases.
+
+Counterexamples are independently checked at degrees 2–5 and moduli 3/4/5/7/8/9, rejecting constructions whose sign difference disappears modulo 4. Regression checks ensure that invalid phase/extract indices report the documented index-range ValueError property.

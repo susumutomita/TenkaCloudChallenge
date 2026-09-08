@@ -44,6 +44,7 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
     ("returns no transfer counterexample", [('return {"a": a, "b": b, "secret": secret}', 'return {}')]),
     ("uses an all-zero test key", [('secret[index + 1] = 1', 'secret[index + 1] = 0')]),
     ("always targets index zero", [('secret[index + 1] = 1', 'secret[1] = 1')]),
+    ("counterexample fails at the small modulus boundary", [('a[degree - 1] = 1', 'a[degree - 1] = 2')]),
 
     (
         "reads the phase polynomial backwards",
@@ -336,6 +337,24 @@ def main() -> int:
         print(f"FAIL reference implementation does not pass the hidden tests: {baseline}")
         return 1
     print("PASS reference implementation passes the hidden tests")
+
+    # The two index checks must direct a learner to the index rule, not to
+    # switching-key code. Keep ordinary valid calls correct in this regression.
+    for name, checkpoint in (("phase_coefficient", check_extract.check_phase),
+                             ("extract_sample", check_extract.check_extract)):
+        module = _load(REFERENCE)
+        original = getattr(module, name)
+        def wrong_exception(params, *args, _original=original):
+            if not 0 <= args[-1] < params["degree"]:
+                raise IndexError("out of range")
+            return _original(params, *args)
+        setattr(module, name, wrong_exception)
+        failures = checkpoint(module, SEED)
+        if ("an out-of-range coefficient index must raise ValueError" not in failures
+                or any("incompatible key" in failure for failure in failures)):
+            print(f"FAIL {name}: index feedback names the wrong property")
+            return 1
+    print("PASS both index checkpoints name the documented range property")
 
     survivors = 0
     for name, substitutions in MUTATIONS:

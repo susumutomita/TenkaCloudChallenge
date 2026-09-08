@@ -178,7 +178,7 @@ def check_phase(module, seed: str) -> list[str]:
             except ValueError:
                 continue
             except Exception:
-                failures.append("an incompatible key must raise ValueError")
+                failures.append("an out-of-range coefficient index must raise ValueError")
                 break
             failures.append("a coefficient index outside the ring was accepted")
             break
@@ -243,7 +243,7 @@ def check_extract(module, seed: str) -> list[str]:
             except ValueError:
                 continue
             except Exception:
-                failures.append("an incompatible key must raise ValueError")
+                failures.append("an out-of-range coefficient index must raise ValueError")
                 break
             failures.append("a coefficient index outside the ring was accepted")
             break
@@ -531,9 +531,17 @@ def check_endtoend(module, seed: str) -> list[str]:
 
 def check_counterexample(module, seed: str) -> list[str]:
     """Verify constructed evidence without calling participant arithmetic."""
-    for par in _sets(seed):
+    # This construction needs no encryption/noise budget. Its public contract
+    # includes tiny moduli, even when those cannot encrypt a four-value message.
+    cases = _sets(seed) + [
+        {"degree": n, "modulus": q, "base": q, "levels": 1,
+         "dimension": 2, "target_dimension": 2,
+         "plaintext_modulus": 4, "delta": q // 4}
+        for n in (2, 3, 4, 5) for q in (3, 4, 5, 7, 8, 9)
+    ]
+    for par in cases:
         n, q = par["degree"], par["modulus"]
-        for index in sorted({0, n // 2, n - 2}):
+        for index in sorted({0, min(n // 2, n - 2), n - 2}):
             try:
                 witness = module.extraction_counterexample(dict(par), index)
             except Exception as error:
