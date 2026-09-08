@@ -236,6 +236,13 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
         ],
     ),
     (
+        "rejects an optional input key label",
+        [(
+            'sample.get("keyId") is not None and sample["keyId"] != switching_key["sourceKeyId"]',
+            'sample["keyId"] != switching_key["sourceKeyId"]',
+        )],
+    ),
+    (
         "accepts the wrong target dimension",
         [(
             '    if switching_key["targetDimension"] != params["target_dimension"]:\n'

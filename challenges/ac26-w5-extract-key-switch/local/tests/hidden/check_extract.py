@@ -394,6 +394,17 @@ def check_switch(module, seed: str) -> list[str]:
             failures.append("a switching key that does not match the sample was applied")
             break
 
+        unlabelled = {name: value for name, value in sample.items() if name != "keyId"}
+        for valid in (unlabelled, {**unlabelled, "keyId": None}):
+            try:
+                optional = module.key_switch(par, key, valid)
+                if optional.get("keyId") != scene["targetId"] or len(optional["mask"]) != par["target_dimension"]:
+                    failures.append("an unlabelled input must still name the output key and dimension")
+                if lwe_decrypt(par, target, _as_sample(optional)) != lwe_decrypt(par, ring_key, sample):
+                    failures.append("switching an unlabelled input must preserve its message")
+            except Exception:
+                failures.append("a missing or None input keyId must be accepted")
+
         # The result names the key it now belongs to, and carries no secret out with it.
         # The next step in the pipeline reads that id to decide what it may be combined
         # with; a sample that names nothing is a sample nothing can check.
@@ -438,7 +449,9 @@ def check_domains(module, seed: str) -> list[str]:
             seed, par, other_ring, scene["target"], key_id(seed, "domains:other"),
             scene["targetId"], "domains:other",
         )
-        cases = [(sample, key), (sample, mismatched), *[(sample, bad) for bad in _parameter_mismatches(key)]]
+        unlabelled = {name: value for name, value in sample.items() if name != "keyId"}
+        cases = [(sample, key), (unlabelled, key), ({**unlabelled, "keyId": None}, key),
+                 (sample, mismatched), *[(sample, bad) for bad in _parameter_mismatches(key)]]
         try:
             got = [module.domain_report(par, s, k) for s, k in cases]
         except Exception as error:  # noqa: BLE001
@@ -455,7 +468,7 @@ def check_domains(module, seed: str) -> list[str]:
                     return failures
 
         # Valid and independently mismatched cases must actually separate.
-        if [report["compatible"] for report in got] != [True] + [False] * (len(cases) - 1):
+        if [report["compatible"] for report in got] != [True] * 3 + [False] * (len(cases) - 3):
             failures.append("the report does not distinguish a matching key from a mismatched one")
             continue
 
