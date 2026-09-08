@@ -264,14 +264,19 @@ def check_privacy(module: Any, seed: str) -> list[str]:
     if _spec_well_formed(transcript, setting):
         return ["the transcript is not well formed, so the view cannot be checked"]
 
-    for members in (*_coalitions(setting.parties, 1), *_coalitions(setting.parties, 2)):
-        expected = _spec_view(transcript, members)
+    # Snapshot every required observation before any participant call. Extras may
+    # alias the original lists; mutating such diagnostics must not rewrite a grade.
+    snapshots = [(members, _spec_view(transcript, members))
+                 for members in (*_coalitions(setting.parties, 1), *_coalitions(setting.parties, 2))]
+    messages = [dict(message) for message in transcript["messages"]]
+    public = [dict(entry) for entry in transcript["public"]]
+    for members, expected in snapshots:
         # Required values are immutable integers/strings. Isolate the lists and
         # records that view inspects without copying unrestricted diagnostic extras.
         view_input = {
             **transcript,
-            "messages": [dict(message) for message in transcript["messages"]],
-            "public": [dict(entry) for entry in transcript["public"]],
+            "messages": [dict(message) for message in messages],
+            "public": [dict(entry) for entry in public],
         }
         observed, error = _call(module, "view", view_input, members)
         if error:

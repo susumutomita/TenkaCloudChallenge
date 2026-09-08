@@ -55,6 +55,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fixtures.generate import public_payload  # noqa: E402 - after the sys.path insert
 
+from participant.execution import LearnerSession, LearnerError
+from tests.hidden import check_capstone
+
 ROOT = Path(__file__).resolve().parents[1]
 PROBLEM_ID = "ac26-w7-capstone-demo"
 SEED = os.environ.get("FLAG_SEED", "local-dev-seed")
@@ -109,48 +112,6 @@ def _limits() -> None:
 # and calling os._exit(0) immediately after the trusted line ends the process before
 # anything the import left behind gets another turn. os._exit skips atexit by design;
 # SystemExit does not, which is why the import-failure path needs it too.
-RUNNER = """
-import json, os, sys
-sys.path.insert(0, {root!r})
-sys.path.insert(0, {workspace!r})
-from tests.hidden import check_capstone
-# Issue 543 option B2: the supplied half lives outside `fixtures/` now, in
-# `participant/lab.py`, and `starter/capstone.py` tells the learner to build against it --
-# `Setting`, `tiny_settings` and `randomness_space` are named in the stubs' own docstrings, so
-# a submission's natural top-level `from participant.lab import ...` has to keep resolving.
-# The guard below takes the problem root off `sys.path`, so without preloading it here that
-# import would fail and every checkpoint would fail with it. It stays in `sys.modules` across
-# the guard on purpose; `fixtures` and `tests` do not.
-import participant.lab  # noqa: F401
-# Issue 591: fixtures/ and tests/hidden/ stay on disk in this image for grading (Issue 543
-# option B2 only stopped shipping them to the participant image), so without this the
-# submission's own import statement could reach them directly -- and `fixtures.generate`
-# re-exports the supplied layer, so an unguarded `from fixtures.generate import *` would also
-# pull in `hidden_settings`, which is what every checkpoint is graded on.
-_hidden_modules = {{
-    name: sys.modules.pop(name)
-    for name in tuple(sys.modules)
-    if name in ("tests", "fixtures") or name.startswith(("tests.", "fixtures."))
-}}
-while {root!r} in sys.path:
-    sys.path.remove({root!r})
-try:
-    import capstone
-except Exception as error:
-    print(json.dumps({{"failures": ["submission could not be imported: " + type(error).__name__]}}))
-    sys.stdout.flush()
-    os._exit(0)
-sys.path.insert(0, {root!r})
-sys.modules.update(_hidden_modules)
-failures = []
-for name in {phases!r}:
-    failures.extend(getattr(check_capstone, name)(capstone, {seed!r}))
-print(json.dumps({{"failures": failures}}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
 def _failure_message(failures: list[object]) -> str | None:
     """Join the hidden checker's failure list into one participant-facing message.
 
@@ -162,58 +123,20 @@ def _failure_message(failures: list[object]) -> str | None:
     return text[:MAX_MESSAGE_CHARS] if text else None
 
 
-def _run_submission(
-    submission: object, phases: tuple[str, ...], seed: str
-) -> tuple[bool, str | None]:
-    """Run the named hidden phases against the learner's file in a throwaway workspace."""
-    source = submission
-    if isinstance(source, dict):
-        source = source.get("capstone.py")
-    if not isinstance(source, str) or not source.strip():
+def _run_submission(submission: object, phases: tuple[str, ...], seed: str) -> tuple[bool, str | None]:
+    """Only the trusted parent computes checkpoint verdicts."""
+    source = submission.get('capstone.py') if isinstance(submission, dict) else submission
+    if not isinstance(source, str) or not source.strip() or len(source.encode()) > MAX_BODY_BYTES:
         return False, None
-    if len(source) > MAX_BODY_BYTES:
-        return False, None
-    with tempfile.TemporaryDirectory() as workspace:
-        (Path(workspace) / "capstone.py").write_text(source, encoding="utf-8")
-        script = RUNNER.format(
-            root=str(ROOT), workspace=workspace, phases=list(phases), seed=seed
-        )
-        try:
-            # stdout goes to a real file, not a pipe. RLIMIT_FSIZE only bounds writes to
-            # files, so with `capture_output=True` a submission that printed gigabytes
-            # would have them buffered in THIS process before the tail slice threw them
-            # away. Writing to a file inside the workspace makes the cap actually bind:
-            # the child is killed by SIGXFSZ at the limit instead.
-            transcript = Path(workspace) / "stdout"
-            with transcript.open("w", encoding="utf-8") as sink:
-                completed = subprocess.run(  # noqa: S603 - argument list, shell=False
-                    [sys.executable, "-I", "-c", script],
-                    stdout=sink,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    timeout=RUN_TIMEOUT_SECONDS,
-                    preexec_fn=_limits,
-                    cwd=workspace,
-                    env={"PATH": "/usr/local/bin:/usr/bin:/bin"},
-                    check=False,
-                )
-            captured = transcript.read_text(encoding="utf-8", errors="replace")
-        except (subprocess.TimeoutExpired, OSError, ValueError):
-            return False, None
-    if completed.returncode != 0:
-        return False, None
-    for line in reversed(captured[-MAX_OUTPUT_BYTES:].splitlines()):
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        failures = payload.get("failures")
-        if not isinstance(failures, list):
-            return False, None
-        if failures:
-            return False, _failure_message(failures)
-        return True, None
-    return False, None
+    try:
+        with LearnerSession({'capstone.py': source}, timeout=RUN_TIMEOUT_SECONDS) as learner:
+            module = learner.module()
+            failures = []
+            for phase in phases:
+                failures.extend(getattr(check_capstone, phase)(module, seed))
+        return (False, _failure_message(failures)) if failures else (True, None)
+    except (LearnerError, OSError, ValueError, TypeError, RecursionError):
+        return False, 'The submitted functions did not return the required values within the execution limits.'
 
 
 def evaluate(checkpoint_id: str, submission: object) -> bool:

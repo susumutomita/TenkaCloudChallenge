@@ -154,3 +154,7 @@ base image と verifier bind の修正は `ac26-w7-capstone-design` の README �
 採点は view の中身/順序/重複、送受信対の重複、整数とbool/floatの区別、rounds、小計、報告のclaimを確認します。作者回帰12件を既存 mutation.py の先頭へ組み込み、participant imageにはコピーしません。Docker make reference-testで12回帰と21変異を確認。make agent-gateは116件、diff検査も成功。
 
 Workbenchの実ハンドラで支給starter取得、無料説明から作ったscopeだけの回答を提出用包みへ変換、verifierでscope=Trueを確認しました。作者正答による公開テスト10件も成功。これはハンドラ経路の確認であり、ブラウザ実操作・本番デプロイ・得点の永続化を確認したものではありません。
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.

@@ -174,6 +174,9 @@ def _load(source: str) -> types.ModuleType:
 
 
 def main() -> int:
+    boundary = subprocess.run([sys.executable, str(ROOT / 'tests/test_execution.py')], check=False)
+    if boundary.returncode:
+        return 1
     result = subprocess.run([sys.executable, str(ROOT / "tests/test_contract.py")], check=False)
     if result.returncode:
         return result.returncode

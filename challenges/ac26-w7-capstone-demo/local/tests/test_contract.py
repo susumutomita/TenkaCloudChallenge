@@ -72,6 +72,22 @@ class ContractTests(unittest.TestCase):
         obj.run = valid
         self.assertEqual(check.check_privacy(obj, 'contract'), [])
 
+    def test_diagnostic_alias_cannot_erase_later_expected_observations(self):
+        obj = module()
+        original_run, original_view = obj.run, obj.view
+        def run(setting, randomness):
+            transcript = original_run(setting, randomness)
+            transcript['diagnostic'] = transcript['messages']
+            return transcript
+        def view(transcript, coalition):
+            observed = original_view(transcript, coalition)
+            if not transcript['diagnostic']:
+                observed['received'] = ()
+            transcript['diagnostic'].clear()
+            return observed
+        obj.run, obj.view = run, view
+        self.assertTrue(check.check_privacy(obj, 'contract'))
+
     def test_sender_inputs_cannot_be_swapped_with_same_total(self):
         obj = module()
         original = obj.run

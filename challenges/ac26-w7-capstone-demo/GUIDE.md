@@ -6,6 +6,8 @@ Use signed addition, subtraction, division and basic Python functions, lists and
 
 You build a program that adds people's private numbers without sending those numbers to the others. You will also build tests that find defects in it. This is a small secure-computation experiment: several people compute together while keeping their inputs private.
 
+Here threshold means the group-size boundary where participants pooling their own inputs can recover the last person’s input from the total. With n people, n−1 people subtract their inputs from that total to obtain the remaining input.
+
 Select Start → problem editor → Inspect evidence. Read setting (people, divisor, inputs) and vocabulary (property names). First edit only scope in capstone.py. Return PROVIDED as a list under claims, NOT_PROVIDED as a list under non_goals, setting.parties−1 under threshold, and setting.as_dict() under parameters. Submit scope; Solved is your first milestone. Use the table to explain why two properties are absent.
 
 |Name|Meaning in this exercise|This construction|

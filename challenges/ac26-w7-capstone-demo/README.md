@@ -162,3 +162,7 @@ The free GUIDE.md (also metadata instructions) defines the first scope submissio
 Grading checks view contents/order/multiplicity, duplicate address pairs, bool/float versus integers, rounds, partials and claim flags. Twelve author regressions run from mutation.py and do not ship in the participant image. Docker make reference-test passed those twelve and 21 mutations; catalog validation passed116 entries and diff checks passed.
 
 The actual Workbench handlers supplied the starter, prepared a scope-only answer written from the free statement, and passed its envelope through the verifier with scope=True. Author-reference public tests passed10 cases. This is handler-path evidence, not browser play, deployment or persistent score verification.
+
+### Trusted-parent evaluation
+
+The verifier now keeps the mathematical checker in the parent process. A restricted Linux worker returns typed function values only; its output is never a checkpoint verdict. Public object types and supplied callbacks retain their APIs. The normal `make reference-test` path first checks the deployed verifier with all eight reference submissions and harmless missing-function/syntax-error inputs, then runs the existing author tests. This is additional process isolation within the container, not a claim of general Python sandbox security.

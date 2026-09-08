@@ -7,6 +7,11 @@
 # through Docker, so a dead pin passes every check.
 FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5e925c2d0e1a91 AS base
 
+RUN python -c "import ctypes; ctypes.CDLL('libseccomp.so.2')"
+
+RUN useradd --uid 10001 --create-home lab
+USER lab
+
 WORKDIR /problem
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 
@@ -48,6 +53,7 @@ CMD ["python", "participant/server.py"]
 # the hidden checker builds its settings on it -- one implementation of the supplied layer,
 # graded and inspected, rather than two that can drift.
 FROM base AS verifier
+COPY participant/execution.py participant/protocol.py participant/worker.py participant/isolation.py ./participant/
 COPY participant/lab.py ./participant/lab.py
 COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/
@@ -64,6 +70,7 @@ CMD ["python", "verifier/server.py"]
 # above takes them out of the author image too unless they are copied back -- and mutation.py,
 # the hidden suite and the reference all need them.
 FROM participant AS author
+COPY tests/test_execution.py ./tests/test_execution.py
 
 COPY fixtures/ ./fixtures/
 COPY tests/ ./tests/
