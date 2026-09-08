@@ -108,7 +108,7 @@ export const COPY: Record<Locale, Copy> = {
   en: {
     title: "PROVE / LEAK / HUNT -- Submit a move",
     intro: "Every move below goes straight to the match. There is no undo.",
-    notConfigured: "Coordination is not wired up for this session -- moves cannot be submitted here.",
+    notConfigured: "Cannot connect to the match. Reload the page; if the problem persists, contact the event organizer.",
     loadingContracts: "Loading your open contracts…",
     submitting: "Submitting…",
     submitted: "Submitted -- the match applied your move.",
@@ -142,7 +142,7 @@ export const COPY: Record<Locale, Copy> = {
   ja: {
     title: "PROVE / LEAK / HUNT — 操作を送信",
     intro: "以下の操作はすべて即座に試合へ反映されます。取り消しはできません。",
-    notConfigured: "この session では coordination が未配線のため、操作を送信できません。",
+    notConfigured: "試合に接続できません。ページを再読み込みし、直らなければ運営に連絡してください。",
     loadingContracts: "open な contract を読み込み中…",
     submitting: "送信中…",
     submitted: "送信しました — 試合に反映されました。",

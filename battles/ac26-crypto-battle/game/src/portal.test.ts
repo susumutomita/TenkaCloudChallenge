@@ -356,7 +356,7 @@ describe("StatusPanel.tsx -- ja/en smoke render + fail-closed", () => {
       expect(html).not.toContain("My Vault");
       expect(html).not.toContain("Public Ledger");
       expect(html).toContain(
-        locale === "ja" ? "coordination が未配線" : "Coordination is not wired up",
+        locale === "ja" ? "試合に接続できません" : "Cannot connect to the match",
       );
     });
 
@@ -366,7 +366,7 @@ describe("StatusPanel.tsx -- ja/en smoke render + fail-closed", () => {
       // With a client, the intro (not the fail-closed notice) renders --
       // renderToStaticMarkup never runs the polling effect, so the lanes
       // themselves have not loaded yet.
-      expect(html).not.toContain(locale === "ja" ? "coordination が未配線" : "Coordination is not wired up");
+      expect(html).not.toContain(locale === "ja" ? "試合に接続できません" : "Cannot connect to the match");
       expect(html).toContain(locale === "ja" ? "最初の更新を待っています" : "Waiting for the first match update");
     });
   }
@@ -657,7 +657,7 @@ describe("RegistrationPanel.tsx -- ja/en smoke render + fail-closed", () => {
       const html = renderToStaticMarkup(createElement(RegistrationPanel, baseProps({ locale })));
       expect(html.length).toBeGreaterThan(0);
       expect(html).not.toContain("ROTATE する");
-      expect(html).toContain(locale === "ja" ? "coordination が未配線" : "Coordination is not wired up");
+      expect(html).toContain(locale === "ja" ? "試合に接続できません" : "Cannot connect to the match");
     });
 
     it(`renders the 4 move forms without crashing when a coordinationClient IS present (${locale})`, () => {

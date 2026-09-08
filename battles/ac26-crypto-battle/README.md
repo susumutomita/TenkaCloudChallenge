@@ -477,3 +477,5 @@ Real local Portal `anamorphic-order`: key x=4, first accepted pair(4,4); accepte
 Edit `MATCH_PACING.answerSeconds` in `game/src/pacing.ts`: default180 seconds, supported30–900 (240 means4 minutes). This sets both regular and rush deadlines. `arrivalSeconds` sets the base arrival interval; `arrivalJitterSeconds` sets its symmetric variation. Participants do not see the arrival interval.
 
 Rebuild and deploy the problem, then start a new match. Persisted matches and issued deadlines keep their settings. This is a problem-owned build-time parameter, not an in-match admin control; no problem-specific platform settings were added.
+
+Schema20 rejects incompatible rollback readers. Migrating schema19 preserves stored Orders and pacing.

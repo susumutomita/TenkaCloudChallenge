@@ -668,7 +668,8 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-export const STATE_SCHEMA_VERSION = 19;
+// v20 blocks pre-three-symbol readers on rollback; v19 tasks/config remain intact.
+export const STATE_SCHEMA_VERSION = 20;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -711,9 +712,9 @@ export const STATE_SCHEMA_VERSION = 19;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17 and v18 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18 and v19 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;

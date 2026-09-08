@@ -115,7 +115,7 @@ const COPY: Record<Locale, Copy> = {
     title: "PROVE / LEAK / HUNT -- Status",
     intro:
       "Your Contract Queue, your Vault, and the full Public Ledger, refreshed from the match every 30s.",
-    notConfigured: "Coordination is not wired up for this session -- match status is unavailable here.",
+    notConfigured: "Cannot connect to the match for this session -- match status is unavailable here.",
     loading: "Waiting for the first match update…",
     badProjection: "The match sent back data in an unrecognized shape -- showing nothing rather than guessing.",
     coordinationStatus: (kind: string) => `Coordination status: ${kind} -- retrying.`,
@@ -169,7 +169,7 @@ const COPY: Record<Locale, Copy> = {
   ja: {
     title: "PROVE / LEAK / HUNT — 状態",
     intro: "自チームの Contract Queue、Vault、全チーム共通の Public Ledger を 30 秒ごとに更新表示します。",
-    notConfigured: "この session では coordination が未配線のため、試合状態を表示できません。",
+    notConfigured: "この session では 試合に接続できませんのため、試合状態を表示できません。",
     loading: "最初の更新を待っています…",
     badProjection: "試合データの形式を認識できませんでした — 推測表示はせず、何も表示しません。",
     coordinationStatus: (kind: string) => `coordination status: ${kind} — 再試行しています。`,

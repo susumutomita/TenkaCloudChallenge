@@ -1172,7 +1172,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
     }
   };
 
-  if (!client) return <p role="status">{locale === "ja" ? "試合に接続できません（coordination が未配線）。" : "Coordination is not wired up."}</p>;
+  if (!client) return <p role="status">{locale === "ja" ? "試合に接続できません。ページを再読み込みし、直らなければ運営に連絡してください。" : "Cannot connect to the match. Reload the page; if the problem persists, contact the event organizer."}</p>;
   if (!projection) return <section className="tc-move-shell"><style>{CSS}</style><div role="status">{polled.status === null ? (locale === "ja" ? "最初の更新を待っています" : "Waiting for the first match update") : copy.unavailable}</div></section>;
   {/*
     [Issue #677] Two dead ends used to look identical: a match that had not
