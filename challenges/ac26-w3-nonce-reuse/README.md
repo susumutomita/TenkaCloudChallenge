@@ -140,7 +140,7 @@ Zero. No cloud account, no AWS resources.
 
 ## For authors
 
-`make reference-test` runs the mutation suite: 26 broken implementations. Three of them found
+`make reference-test` runs the mutation suite: 30 broken implementations. Three of them found
 real holes in the hidden tests while this problem was being written — the log had no
 non-accepting duplicate, no cross-signer duplicate, and the nonce-space check was distinctness
 rather than range. A fourth, "reports a recovery without confirming it", turned out to be an
@@ -150,4 +150,4 @@ equivalent mutant on its own and is now mutated together with the validation it 
 
 All eight checkpoints have three bilingual hints: mechanism, small example, named action. Required formulas and APIs are free. Repair grades the documented HMAC-SHA256 encoding and repair_witness(seed, group), which constructs two distinct trial-message indices colliding under the supplied weak generator. The function is called with different seeds; each returned pair is checked with that call’s seed. This is a finite regression test, not proof of collision freedom.
 
-Author validation rejected all 26 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.
+Author validation rejected all 30 mutants, including accepted mismatched commitments, malformed records, wrong HMAC encoding, and duplicate/noncolliding/fixed-seed witness pairs. Catalog validation passed for 116 metadata files. Participant-only independent reading found wording and contract gaps that were corrected. Browser play and deployed scoring were not exercised.

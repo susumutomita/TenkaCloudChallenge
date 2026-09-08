@@ -128,6 +128,11 @@ MUTATIONS: tuple[tuple[str, list[tuple[str, str]]], ...] = (
 
 
 MUTATIONS += (
+    ("omits hunt evidence", [('"records": (left, right),', '')]),
+    ("cites one record twice", [('"records": (left, right),', '"records": (left, left),')]),
+    ("cites indices outside the log", [('"records": (left, right),', '"records": (-1, len(records)),')]),
+    ("cites arbitrary records", [('"records": (left, right),', '"records": (0, 1),')]),
+
     ("accepts boolean coordinate pairs", [("if type(x) is not int or type(y) is not int:", "if not isinstance(x, int) or not isinstance(y, int):")]),
     ("returns zero for a different signer", [('        raise MalformedRecord("the two transcripts are not from the same signer")', '        return 0')]),
     ("skips recovery input parsing", [("    first = parse_record(first, group)\n    second = parse_record(second, group)", "")]),

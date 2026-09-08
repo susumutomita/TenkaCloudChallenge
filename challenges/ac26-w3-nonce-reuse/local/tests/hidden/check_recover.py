@@ -320,6 +320,26 @@ def check_hunt(module, seed: str) -> list[str]:
         expected = (log["victim_public"].x, log["victim_public"].y)
         if tuple(result.get("public_key", ())) != expected:
             failures.append("the attack did not name whose key it recovered")
+        indices = result.get("records")
+        records = log["records"]
+        if (not isinstance(indices, (list, tuple)) or len(indices) != 2
+                or any(type(i) is not int or not 0 <= i < len(records) for i in indices)
+                or indices[0] == indices[1]):
+            failures.append("the attack must cite two distinct original record indices")
+            continue
+        a, b = (records[i] for i in indices)
+        try:
+            valid = (tuple(a["public_key"]) == expected == tuple(b["public_key"])
+                     and a["commitment"] == b["commitment"]
+                     and _really_accepts(a, group) and _really_accepts(b, group))
+            if valid:
+                public, commitment = group.point(*a["public_key"]), group.point(*a["commitment"])
+                valid = challenge(DOMAINS[0], commitment, public, a["message"], group) != challenge(DOMAINS[0], commitment, public, b["message"], group)
+        except (KeyError, TypeError, ValueError):
+            valid = False
+        if not valid:
+            failures.append("the cited records must be an accepted reuse pair for the recovered key")
+
     return failures
 
 

@@ -30,6 +30,9 @@ Inspect evidence in Participant Portal displays this deployment's log.
 from __future__ import annotations
 
 
+from participant.schnorr import truncated_nonce, NONCE_SPACE
+
+
 class MalformedRecord(Exception):
     """Raised for a log record that is not a well-formed transcript."""
 
