@@ -239,7 +239,7 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
       title: "手を先に数字へ隠し、あとで開く",
       purpose: "じゃんけんの手を先に見せると、相手が勝つ手を選べます。そこで、グーを表す m=1 に隠す数 r=2 を混ぜ、先に数字だけを出します。この数字がコミットメントです。",
       steps: ["式は 4^m × 9^r を 23 で割った余り。4^1 は 4、9^2 は 9×9=81。81−23−23−23=12。", "4×12=48。23 を 2 回引くと、48−23−23=□。", "この余りが、手より先に相手へ見せる数字です。"],
-      question: "先に封じる数字", result: "先に 2 を出します。両者の数字がそろったあとで、手 m=1 と隠す数 r=2 を審判へ渡すと、同じ計算で 2 になるか確かめてもらえます。審判は両者の開封をそろえて同時公開します。この順番を commit-reveal と呼びます。この小さな数では別の手への開け方も探せるので、後出しを防ぐには審判の同時公開が必要です。r は次回 0〜10 のくじから引き直します。", retry: "48−23=25。もう一度 23 を引いてください。",
+      question: "先に封じる数字", result: "先に 2 を出します。相手を待たず、手 m=1 と隠す数 r=2 を審判へ渡すと、同じ計算で 2 になるか確かめてもらえます。審判は両者の開封をそろえて同時公開します。この順番を commit-reveal と呼びます。この小さな数では別の手への開け方も探せるので、後出しを防ぐには審判の同時公開が必要です。r は次回 0〜10 のくじから引き直します。", retry: "48−23=25。もう一度 23 を引いてください。",
     },
     en: {
       prompt: "Example: rock is 1, hiding number is 2. Take the remainder of 4×(9×9) after division by 23. 81 has remainder 12.",
@@ -249,7 +249,7 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
       title: "Seal a hand in a number, then open it",
       purpose: "Showing your hand first lets an opponent counter it. Combine rock m=1 with hiding number r=2 and first send only a number: a commitment.",
       steps: ["Take the remainder of 4^m × 9^r after division by 23. 4^1=4; 9^2=81; 81−23−23−23=12.", "4×12=48. Subtract 23 twice: 48−23−23=□.", "This remainder is the number you show before your hand."],
-      question: "The number to seal first", result: "Send 2 first. After both commitments arrive, give the judge m=1 and r=2. The same calculation must reproduce 2. The judge publishes both openings together. This order is commit-reveal. Tiny numbers permit alternative openings, so the judge's simultaneous publication is needed to prevent adapting after seeing the other hand. Next time, draw r again from 0–10.", retry: "48−23=25. Subtract 23 once more.",
+      question: "The number to seal first", result: "Send 2 first. Without waiting for the opponent, give the judge m=1 and r=2 privately. The same calculation must reproduce 2. The judge publishes both openings together. This order is commit-reveal. Tiny numbers permit alternative openings, so the judge's simultaneous publication is needed to prevent adapting after seeing the other hand. Next time, draw r again from 0–10.", retry: "48−23=25. Subtract 23 once more.",
     },
   },
   {

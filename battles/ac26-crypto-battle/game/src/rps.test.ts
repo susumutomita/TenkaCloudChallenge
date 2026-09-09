@@ -78,10 +78,10 @@ describe("commit/open authority and privacy", () => {
     expect(validateOp(s,"b",{kind:"rps-commit",contractId:id,commitment:13}).ok).toBe(false);
     expect(validateOp(s,"a",{kind:"leak",contractId:id}).ok).toBe(false);
   });
-  test("neither commitment nor accepted opening can be replaced, and opening waits for both commitments", () => {
+  test("neither commitment nor accepted opening can be replaced; the judge accepts an early private opening", () => {
     let s=seal(running(),"a",1,1); const id=duel(s,"a").id;
     expect(validateOp(s,"a",{kind:"rps-commit",contractId:id,commitment:2}).ok).toBe(false);
-    expect(validateOp(s,"a",{kind:"rps-open",contractId:id,hand:1,randomness:1}).ok).toBe(false);
+    expect(validateOp(s,"a",{kind:"rps-open",contractId:id,hand:1,randomness:1}).ok).toBe(true);
     s=seal(s,"b",2,2);
     const before=JSON.stringify(s);
     expect(validateOp(s,"a",{kind:"rps-open",contractId:id,hand:2,randomness:1}).ok).toBe(false);
@@ -211,4 +211,33 @@ test("a delayed tick still classifies a forfeit after pruning the completed DUEL
   expect(scoreReasons(s, next, {kind:"tick"})).toEqual({a:"duel"});
   const again = tick(next, next.nowMs!);
   expect(scoreReasons(next, again, {kind:"tick"})).toEqual({});
+});
+
+for (const lateOpponent of [false, true]) test(`early private opening protects a completed player from absent or late opponents (${lateOpponent})`, () => {
+  let s=running();
+  s={...s,contracts:s.contracts.filter(c=>c.task.kind==="rps-duel"),teams:Object.fromEntries(Object.entries(s.teams).map(([id,t])=>[id,{...t,score:100}]))};
+  const a=duel(s,"a"), b=duel(s,"b");
+  expect(validateOp(s,"a",{kind:"rps-open",contractId:a.id,hand:1,randomness:2}).ok).toBe(false);
+  s=open(seal(s,"a",1,2),"a",1,2);
+  const other=projectForTeam(s,"b");
+  expect(other.publicLedger.some(a=>a.kind==="rps-open")).toBe(false);
+  const task=other.myContracts.find(c=>c.id===b.id)!.task;
+  expect(task.kind==="rps-duel" && task.myOpening).toBeUndefined();
+  expect(validateOp(s,"a",{kind:"rps-open",contractId:a.id,hand:2,randomness:2}).ok).toBe(false);
+  if(lateOpponent) s=seal(tick(s,a.expiresAtMs-1),"b",2,3);
+  const next=tick(s,a.expiresAtMs);
+  expect(next.teams.a!.score).toBe(130);
+  expect(next.teams.b!.score).toBe(85);
+  expect(next.contracts.find(c=>c.id===a.id)?.status).toBe("completed");
+  expect(projectForTeam(next,"b").publicLedger.some(a=>a.kind==="rps-open")).toBe(false);
+  expect(tick(next,a.expiresAtMs).teams).toEqual(next.teams);
+});
+test("early private opening settles normally when the opponent later seals and opens", () => {
+  let s=open(seal(running(),"a",1,2),"a",1,2);
+  s=open(seal(s,"b",2,3),"b",2,3);
+  expect(s.teams.a!.score).toBe(30);
+  expect(s.teams.b!.score).toBe(0);
+  const openings=projectForTeam(s,"b").publicLedger.filter(a=>a.kind==="rps-open");
+  expect(openings).toHaveLength(2);
+  expect(new Set(openings.map(a=>a.postedAtMs)).size).toBe(1);
 });

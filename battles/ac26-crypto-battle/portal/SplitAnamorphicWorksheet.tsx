@@ -8,10 +8,21 @@ export function SplitAnamorphicWorksheet({task,locale,busy,wrongCost,onSubmit}:{
  return <section className="tc-input-panel">
   <h3>{title}</h3><p>{ja?'アナモルフィック暗号の一桁模型です。このお題は数字1個を提出すれば完了・得点です。':'A small anamorphic-encryption model. Submit one number to complete and score this Order.'}</p>
   {mode==='encrypt'&&<>
-   <p>{ja?'通常のメッセージを暗号化した候補から、追加の秘密の表で送りたいビット（0か1）になるものを選びます。暗号文の計算は済んでいます。':'These ciphertext candidates already encrypt an ordinary message. Use the additional secret lookup to select one encoding your intended bit (0 or 1).'}</p>
-   <div className="tc-schnorr-progress">{ja?'送りたいビット':'Intended bit'} {task.targetBit} → {ja?'秘密の表で上から探す':'scan the secret lookup'} → {ja?'最初に一致する候補番号を提出':'submit the first matching candidate number'}</div>
-   <table><thead><tr><th>{ja?'候補番号':'Candidate'}</th><th>{ja?'暗号文 (a,b)':'Ciphertext (a,b)'}</th><th>{ja?'秘密の表のビット':'Secret lookup bit'}</th></tr></thead><tbody>{task.candidates.map((c,i)=><tr key={i}><td>{i+1}</td><td>({c.join(', ')})</td><td>{task.secretBits[i]}</td></tr>)}</tbody></table>
-   <p>{ja?'例：送りたいビットが1、表が0, 1, 1なら、最初に一致する2番を送ります。復号は別のお題です。':'Example: for bit1 and lookup0,1,1, send candidate2, the first match. Decryption is a separate Order.'}</p>
+   <h4>{ja?'① 送りたい値を確認':'1. Find the value to send'}</h4>
+   <div className="tc-schnorr-progress" style={{fontSize:22}}>{ja?'送りたいビット（0か1）':'Intended bit (0 or 1)'}：h = <strong>{task.targetBit}</strong></div>
+   <h4>{ja?'② 表の右の列を、上から比べる':'2. Compare the right column, starting at the top'}</h4>
+   <p>{ja?'F は、暗号文を秘密の表で0か1に読み替える操作。cᵢ は候補番号 i の暗号文です。':'F looks up a ciphertext in the secret table to obtain 0 or 1. cᵢ is the ciphertext at candidate number i.'}</p>
+   <p style={{fontSize:22}}><strong>F(c<sub>i</sub>) = h</strong> → <strong>F(c<sub>i</sub>) = {task.targetBit}</strong></p>
+   <p>{ja?'右の値が h と一致する最初の行を選んでください。提出するのは左の候補番号です。':'Choose the first row whose right-hand value equals h. Submit its candidate number on the left.'}</p>
+   <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%',maxWidth:680,textAlign:'center'}}>
+    <thead><tr><th>{ja?'提出する番号':'Number to submit'}</th><th>{ja?'暗号文 cᵢ（計算済み）':'Ciphertext cᵢ (already calculated)'}</th><th>{ja?'比べる値 F(cᵢ)':'Compare F(cᵢ)'}</th></tr></thead>
+    <tbody>{task.candidates.map((c,i)=><tr key={i} style={{borderTop:'1px solid #c6d4e3',background:answer===String(i+1)?'#eaf3ff':undefined}}>
+     <td style={{padding:8}}><button type="button" className="tc-method-chip" aria-pressed={answer===String(i+1)} disabled={busy} onClick={()=>setAnswer(String(i+1))}>{ja?`候補 ${i+1} を選ぶ`:`Select candidate ${i+1}`}</button></td>
+     <td>({c.join(', ')})</td><td style={{fontSize:24,fontWeight:700}}>{task.secretBits[i]}</td>
+    </tr>)}</tbody>
+   </table></div>
+   <h4>{ja?'③ 選んだ番号を提出':'3. Submit your selected number'}</h4>
+   <p>{ja?'行のボタンを押すと、下の回答欄に番号が入ります。':'Selecting a row fills the answer field below.'}</p>
   </>}
   {mode==='decrypt'&&<>
    <div className="tc-schnorr-progress">{ja?'与えられた暗号文':'Given ciphertext'} ({a}, {b}) → {ja?'通常鍵':'Ordinary key'} x={task.ordinaryKey} → {ja?'元の数':'Original'} m=□</div>

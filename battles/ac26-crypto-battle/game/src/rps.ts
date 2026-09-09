@@ -34,7 +34,9 @@ export function validateRps(state: CryptoBattleState, teamId: string, op: DuelOp
     if (order.rps?.commitment !== undefined) return { ok: false, error: "Your sealed number was already submitted; it cannot be replaced." };
     return isCommitment(op.commitment) ? { ok: true } : { ok: false, error: "The sealed number must be a power of 4 after division by 23 (1–22). Check your calculation." };
   }
-  if (order.rps?.commitment === undefined || opponent.rps?.commitment === undefined) return { ok: false, error: "Wait until both sealed numbers have been submitted." };
+  // The trusted judge can hold an opening before the opponent commits.
+  // It is published only by the atomic two-opening settlement below.
+  if (order.rps?.commitment === undefined) return { ok: false, error: "Submit your sealed number before giving the judge your opening." };
   if (order.rps.opening) return { ok: false, error: "Your opening was already accepted; it cannot be replaced." };
   return isHand(op.hand) && isRandomness(op.randomness) && verifyOpening(order.rps.commitment, op.hand, op.randomness)
     ? { ok: true } : { ok: false, error: "The hand and hiding number do not reproduce your sealed number. Check your notes; no points were deducted." };

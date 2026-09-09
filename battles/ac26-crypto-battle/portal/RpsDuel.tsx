@@ -26,8 +26,8 @@ export default function RpsDuel({ order, opponentName, locale, submitting, onSub
   const bothSealed = sealed && (task.opponentCommitted ?? task.opponentCommitment !== undefined);
   const opened = task.myOpening !== undefined;
   return <section className="tc-input-panel" aria-label={ja ? "じゃんけんの回答" : "Rock-paper-scissors answer"}>
-    <p className="tc-card-hint">{ja ? `対戦相手：${opponentName}。勝ち +${order.points}、引き分け +${task.drawPoints}、負け 0。必要な操作が残ったまま期限切れ：${task.expiryPenalty} 点。先に手を見せると相手に勝つ手を選ばれるので、数字に隠してから同時に開きます。` : `Opponent: ${opponentName}. Win +${order.points}, draw +${task.drawPoints}, loss 0; expiry with an action outstanding: ${task.expiryPenalty}. Hide your hand in a number first, then open together so nobody can counter a hand they have already seen.`}</p>
-    <strong>{opened ? (ja ? "手を預けました。相手の開封待ちです" : "Opening accepted. Waiting for your opponent") : bothSealed ? (ja ? "開封できます。② 控えた手と隠す数を、審判へ渡す" : "2. Give the judge the hand and hiding number from your notes") : sealed ? (ja ? "相手が封じるのを待っています" : "Number sealed. Waiting for your opponent's number") : (ja ? "① 手を選び、隠した数字を 1 つ出す" : "1. Choose a hand and send one sealed number")}</strong>
+    <p className="tc-card-hint">{ja ? `対戦相手：${opponentName}。勝ち +${order.points}、引き分け +${task.drawPoints}、負け 0。自分の提出が未完了で期限切れ：${task.expiryPenalty} 点。先に手を見せると相手に勝つ手を選ばれるので、数字に隠してから同時に開きます。` : `Opponent: ${opponentName}. Win +${order.points}, draw +${task.drawPoints}, loss 0; expiry with an action outstanding: ${task.expiryPenalty}. Hide your hand in a number first, then open together so nobody can counter a hand they have already seen.`}</p>
+    <strong>{opened ? (ja ? "手を預けました。相手の開封待ちです" : "Opening accepted. Waiting for your opponent") : sealed ? (ja ? "あと1操作：② 控えた手と隠す数を、審判へ渡す" : "One action left: 2. Give the judge your hand and hiding number") : (ja ? "① 手を選び、隠した数字を 1 つ出す" : "1. Choose a hand and send one sealed number")}</strong>
     {!opened && <>
       <p className="tc-card-hint">{ja ? "手の番号 m は 1〜3。隠す数 r は 0〜10 のくじで毎回引き直してください（0〜10 の紙を 1 枚ずつ用意し、毎回戻して引きます）。同じ r を使い続けると予測されますが、くじで偶然同じ数が出ただけでは、次の手は分かりません。手と r は開くときに必要なので、紙にも控えてください。" : "Hand m is 1–3. Draw r from eleven slips marked 0–10, returning the slip each time. Continuing to use one r permits predictions; a chance repeat does not reveal the next hand. Write both down: you need them to open."}</p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 18, margin: "12px 0" }}>
@@ -69,10 +69,10 @@ export default function RpsDuel({ order, opponentName, locale, submitting, onSub
     {prediction}
     {sealed && !opened && <>
       <p className="tc-card-hint">{ja ? "上の 2 つの欄を紙の控えと照らしてから押してください。審判は同じ計算で c を確かめ、両者の手がそろってから公開します。不一致なら減点なしで修正できます。開封した手と r が受理された後は、その開封内容を変更できません。" : "Check the two fields against your notes. The judge recomputes c and publishes only after both hands arrive. A mismatch can be corrected without a penalty. Once the hand and r are accepted, that opening cannot be replaced."}</p>
-      <button type="button" className="tc-submit-small" disabled={submitting || !validChoice || !bothSealed} onClick={() => void onSubmit({ kind: "rps-open", contractId: order.id, hand, randomness })}>{ja ? "手を審判へ渡す" : "Give my opening to the judge"}</button>
+      <button type="button" className="tc-submit-small" disabled={submitting || !validChoice} onClick={() => void onSubmit({ kind: "rps-open", contractId: order.id, hand, randomness })}>{ja ? "手を審判へ渡す" : "Give my opening to the judge"}</button>
     </>}
-    {sealed && !bothSealed && <p className="tc-card-hint" role="status">{ja ? "状態は約30秒ごとに更新されます。待つ間は別のお題を進められます。" : "Status refreshes about every 30 seconds. Work on another Order while waiting."}</p>}
-    {opened && <p className="tc-card-hint">{ja ? "あなたの手は相手へまだ公開されていません。待つ間は『ほかのお題を選ぶ』から別のお題を進められます。" : "Your hand is still private from the opponent. You can work on another Order while waiting."}</p>}
+    {sealed && !opened && !bothSealed && <p className="tc-card-hint" role="status">{ja ? "相手はまだ封じていませんが、上のボタンで自分の手を審判へ預けられます。預けると自分の操作は完了です。" : "Your opponent has not sealed yet. Use the button above to give the judge your opening privately and finish your actions."}</p>}
+    {opened && <p className="tc-card-hint">{ja ? "自分の操作は完了です。相手待ちでは減点されません。相手が期限内に提出しなければ不戦勝です。手はまだ相手に公開されていません。別のお題へ進めます。" : "Your actions are complete. Waiting cannot cost you points; an absent opponent forfeits at the deadline. Your hand is still private. Continue with another Order."}</p>}
     <details className="tc-why"><summary>{ja ? "待ち時間と、この教材の安全性" : "Waiting and this teaching model"}</summary><p className="tc-card-hint">{ja ? "相手が数字を出さない、または開かないまま期限を迎えた場合、自分が現在の段階を終えていれば不戦勝。自分の必要な操作が残っていれば通常の期限切れ減点です。秘密を作り直す操作（ROTATE）をしても、この対戦は続きます。23 という小さい数では別の手への開け方を探せるため、実用的な暗号の安全性はありません。審判の同時公開で後出しを防ぐ体験版です。" : "If the opponent never seals or opens, finishing your current stage earns a forfeit win at the deadline. An unfinished required action gets the ordinary expiry penalty. Rotating your long-lived secrets (ROTATE) does not cancel this duel. With modulus 23 you can find alternative openings: this is an insecure teaching model whose judge prevents adapting after seeing the other opening."}</p></details>
     <ConceptExplanation locale={locale} topic="commit" />
   </section>;
@@ -109,6 +109,7 @@ export function rpsRejection(error: string, locale: Locale): string {
     "This duel has ended.": "この対戦は終了しています。ほかのお題を選んでください。",
     "Your sealed number was already submitted; it cannot be replaced.": "数字はすでに封じてあります。提出後の数字は変更できません。",
     "The sealed number must be a power of 4 after division by 23 (1–22). Check your calculation.": "封じる数字が計算の範囲に合いません。表の 2 つの値を掛け、23 で割った余りを確かめてください。",
+    "Submit your sealed number before giving the judge your opening.": "先に①で数字を封じてから、手と隠す数を審判へ渡してください。",
     "Wait until both sealed numbers have been submitted.": "両者の数字がそろうまで待ってください。待つ間はほかのお題を進められます。",
     "Your opening was already accepted; it cannot be replaced.": "手はすでに審判へ預けてあります。開封した手と r が受理された後は、その開封内容を変更できません。",
     "The hand and hiding number do not reproduce your sealed number. Check your notes; no points were deducted.": "手と隠す数から計算した値が、先に封じた数字と一致しません。紙に控えた手と隠す数を確認してください。減点はありません。",
