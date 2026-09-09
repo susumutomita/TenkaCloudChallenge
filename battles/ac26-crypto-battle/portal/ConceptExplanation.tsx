@@ -120,6 +120,7 @@ export const EXPLANATIONS: Record<Locale, Record<Concept, Explanation>> = {
 
 export function conceptForTask(task: OrderTaskProjection): Concept {
   switch (task.kind) {
+    case "ssm-decrypt": return "caesar";
     case "anamorphic-rejection": return "anamorphic";
     case "stark-trace": return "stark";
     case "io-equivalence": return "io";

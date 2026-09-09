@@ -1,3 +1,4 @@
+import { ScoreItemOrder, ScoreItemInventory } from "./ScoreSteal.tsx";
 import EvolutionWorksheet from "./EvolutionWorksheet.tsx";
 import MathText from "./MathText.tsx";
 import {AnamorphicWorksheet} from "./AnamorphicWorksheet.tsx";
@@ -950,6 +951,7 @@ ${SUCCESS_CSS}
 .tc-chosen-method button{border:1px solid #b9cbe0;border-radius:6px;color:#42536a;background:#fff;font-size:12px;padding:6px 10px;cursor:pointer}
 .tc-why{font-size:12px;color:#42536a}.tc-why>summary{cursor:pointer}.tc-why[open]>summary{margin-bottom:8px}
 .tc-move-shell{width:100%;min-width:0;margin:0;padding:0;gap:12px;border:0;background:transparent}
+.tc-score-item{padding:16px;border:2px solid #9874bf;border-radius:12px;background:#f7f1ff}.tc-score-item select{min-height:44px;max-width:100%}.tc-move-shell textarea{max-width:100%;box-sizing:border-box}
 .tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
 .tc-scoreline{justify-content:space-between}.tc-scoreline .tc-rival-score{margin:0;display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
 .tc-records{font-size:13px;color:#42536a}
@@ -1253,6 +1255,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
         the public record. It used to be two host slots — the board in one, the
         controls in another — so the game read as two unrelated screens.
       */}
+      {projection.scoreSteal && <ScoreItemInventory view={projection.scoreSteal} busy={submitting} ended={projection.phase==="ended"} locale={locale} onSubmit={op=>void run(()=>client.submitOp(op),next=>{
+        const transfer = op.kind === "use-steal" ? next?.scoreSteal?.notices.find(n => n.to === projection.vault.teamId && n.from === op.targetTeamId) : undefined;
+        return transfer ? {kind:"hunt",reward:transfer.points,title:locale==="ja"?"得点を移しました":"Points transferred",body:locale==="ja"?`相手から${transfer.points}点を獲得。アイテムを1個使いました。`:`Transferred ${transfer.points} points. Your item was consumed.`}:{kind:"error",title:copy.unavailable,body:copy.unavailable};
+      })}/>}
       <div className="tc-scoreline">
         <div className="tc-scoreline-main">
           <span className="tc-scoreline-label">{copy.scoreLabel}</span>
@@ -1532,6 +1538,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
           onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
         onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
+
+      {selectedOrder?.task.kind === "ssm-decrypt" && <ScoreItemOrder key={`score-item:${selectedOrder.id}`} task={selectedOrder.task} contractId={selectedOrder.id} busy={submitting} locale={locale} onSubmit={op=>void run(()=>client.submitOp(op),next=>next?.scoreSteal?.held ? {kind:"prove",title:locale==="ja"?"横取りアイテム獲得！":"Score item acquired!",body:locale==="ja"?"相手を選び、好きなタイミングで1回使えます。":"Choose an opponent and use it once.",reward:0}:{kind:"error",title:locale==="ja"?"AWSの値と計算を確認してください":"Check the AWS value and calculation",body:next ? (locale==="ja"?`不正解。${projection.wrongProveCost}点の減点（最低0点）。`:`Incorrect; ${projection.wrongProveCost} point penalty, floored at0.`):copy.unavailable})}/>}
       {selectedOrder?.task.kind === "anamorphic-rejection" && <AnamorphicWorksheet wrongCost={projection.wrongProveCost} key={`anamorphic:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
         ()=>client.submitOp({kind:"anamorphic",contractId:selectedOrder.id,answer}),
         next=>{

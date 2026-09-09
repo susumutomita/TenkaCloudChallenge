@@ -1,3 +1,4 @@
+import { scoreItemInputs } from "./score-steal.fixture.ts";
 import { describe, expect, test } from "bun:test";
 import { type HintContext, HINT_LADDER, HINT_LEVELS, hintsFor } from "./hints.ts";
 import { SUBSTRING_SAFE_FIELD } from "./playtest.ts";
@@ -53,6 +54,23 @@ function ctxFor(projection: CryptoBattleProjection, order: ContractProjection): 
   };
 }
 
+test("the item walkthrough follows the current ciphertext without disclosing the AWS material", () => {
+  const sample = oneOrderPerKind().find(({ order }) => order.task.kind === "ssm-decrypt")!;
+  if (sample.order.task.kind !== "ssm-decrypt") throw new Error("missing item fixture");
+  const base = ctxFor(sample.projection, sample.order);
+  for (const ciphertext of [2, 8]) {
+    const text = HINT_LADDER["ssm-decrypt"][2]!.text({
+      ...base, task: { ...sample.order.task, ciphertext },
+    });
+    expect(text.ja).toContain(`今回の暗号文は${ciphertext}`);
+    expect(text.en).toContain(`This Order's ciphertext is ${ciphertext}`);
+    expect(text.ja).toContain("復号した数字（0〜9）");
+    for (const input of Object.values(scoreItemInputs(CTX.teamIds))) {
+      expect(JSON.stringify(text)).not.toContain(JSON.parse(input.CoordinationPrivateItem).receipt);
+    }
+  }
+});
+
 /** Every Order kind, each rendered against a real Order of that kind. */
 function oneOrderPerKind(): { projection: CryptoBattleProjection; order: ContractProjection }[] {
   let state = startedMatch();
@@ -64,7 +82,7 @@ function oneOrderPerKind(): { projection: CryptoBattleProjection; order: Contrac
     }
     state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
   }
-  let streaming = applyOp(initialState({...CTX,matchSecret:"ec-hints"},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined}),"teamA",{kind:"start"});
+  let streaming = applyOp(initialState({...CTX,matchSecret:"ec-hints",deploymentInputs:scoreItemInputs(CTX.teamIds)},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined}),"teamA",{kind:"start"});
   for(let t=0;t<=1_200_000 && seen.size<Object.keys(HINT_LADDER).length;t+=30000){
     streaming=tick(streaming,t);
     const projection=projectForTeam(streaming,"teamA");

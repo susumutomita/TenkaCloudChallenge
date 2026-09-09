@@ -125,6 +125,7 @@ class Bot {
         return buildFheOp(order, view.prime);
       case "masked-total":
         return buildMpcOp(order, view.prime);
+      case "ssm-decrypt": throw new Error("AWS material is required for the optional score item");
       default: {
         const exhaustive: never = order.task;
         throw new Error(`unknown task ${JSON.stringify(exhaustive)}`);

@@ -29,6 +29,8 @@ export function scoreReasons(
 
 function operationReason(kind: CryptoBattleOp["kind"], otherTeam: boolean): string {
   switch (kind) {
+    case "claim-steal": return "item-answer";
+    case "use-steal": return otherTeam ? "item-stolen" : "item-steal";
     case "schnorr-commit":
     case "schnorr-response":
     case "prove-sudoku": return "prove";

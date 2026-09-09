@@ -35,6 +35,7 @@ export function describeTaskShort(task: OrderTaskProjection): string {
     case "enigma-encrypt": return "Enigma reflector model";
     case "ecdsa-sign": return "ECDSA signature";
     case "snark-constraints": return "SNARK gate/copy constraints";
+    case "ssm-decrypt": return "AWS decryption · score item";
     case "ec-add": return "EC P + Q";
     case "rotor-encrypt": return `rotor ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `rsa m=${task.plaintext}/n=${task.n}/e=${task.e}`;
@@ -65,6 +66,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "enigma-encrypt":"エニグマ：往復する配線で暗号化",
     "ecdsa-sign":"ECDSA：署名を手計算する",
     "snark-constraints":"短い証明（SNARK）の準備：計算を検査",
+    "ssm-decrypt":"AWSの鍵で復号 → 横取りアイテム",
     "ec-add":"楕円曲線：2点を足す",
     "rotor-encrypt": "進む車輪で4文字を暗号にする",
     "rsa-encrypt": "RSA：公開鍵で1個の数を暗号にする",
@@ -89,6 +91,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
     "enigma-encrypt":"Enigma: encrypt through returning wires",
     "ecdsa-sign":"ECDSA: calculate a signature",
     "snark-constraints":"Prepare a short proof (SNARK): check computation",
+    "ssm-decrypt":"Decrypt with the AWS key → score item",
     "ec-add":"Elliptic curve: add two points",
     "rotor-encrypt": "Encrypt four digits with advancing wheels",
     "rsa-encrypt": "Encrypt one number with a public key",
@@ -152,6 +155,7 @@ export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
     case "enigma-encrypt": return `Enigma · ${task.plaintext.join(" ")}`;
     case "ecdsa-sign": return `ECDSA · h=${task.hash}`;
     case "snark-constraints": return locale === "ja" ? "3つの計算と2本の配線" : "Three gates and two wires";
+    case "ssm-decrypt": return locale === "ja" ? "AWSの鍵で復号してアイテムを獲得" : "Decrypt with the AWS key to earn an item";
     case "ec-add": return `${task.left?.join(",")??"O"} + ${task.right?.join(",")??"O"}`;
     case "rotor-encrypt": return `Rotor · ${task.plaintext.join(" ")}`;
     case "rsa-encrypt": return `RSA · m=${task.plaintext}, n=${task.n}, e=${task.e}`;

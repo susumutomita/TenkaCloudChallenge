@@ -123,6 +123,18 @@ export const HINT_LEVELS = 3;
  * these rungs alone (three seeds x four kinds) before this landed.
  */
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
+  "ssm-decrypt": [
+    {id:"ssm-decrypt/1",text:()=>({ja:"暗号化で足した鍵を引くと元の数字に戻ります。AWSには鍵と、実際に値を取得したことを照合するランダムな受付コードが置かれています。",en:"Subtract the key added during encryption. AWS holds the key and a random receipt used to check the retrieved value."})},
+    {id:"ssm-decrypt/2",text:()=>({ja:"平文=(暗号文−鍵)を10で割った余り。例：暗号文2、鍵5なら2−5=−3、10を足して7です。",en:"Plaintext is the remainder of ciphertext minus key divided by10. Example:2−5=−3; add10 to get7."})},
+    {id:"ssm-decrypt/3",text:ctx=>{
+      if(ctx.task.kind!=="ssm-decrypt") throw new Error("wrong task");
+      return {
+        ja:`「AWSで鍵の値を見る」で開いたValue全体を「Valueの全体をコピーして貼る」欄へ貼ります。keyの数字をkとします。今回の暗号文は${ctx.task.ciphertext}なので、${ctx.task.ciphertext}−kを計算し、負なら10を足します。その数字1個を「復号した数字（0〜9）」へ入れ、「答えを送ってアイテムを獲得」を押します。receiptは貼るだけで、計算には使いません。`,
+        en:`Open Read the key in AWS and paste the complete Value into Paste the complete Value. Let k be its key number. This Order's ciphertext is ${ctx.task.ciphertext}: calculate ${ctx.task.ciphertext}−k and add 10 if negative. Enter that one number into Decrypted digit (0–9), then press Submit to acquire the item. Copy receipt as part of Value; do not use it in the calculation.`,
+      };
+    }},
+
+  ],
   "enigma-encrypt": [
     {id:"enigma-encrypt/1",text:()=>({ja:"車輪を1進めてから、配線を往復します。反射板で折り返し、帰りは表を逆に引きます。",en:"Advance the wheel first, reflect, then use the inverse wiring on return."})},
     {id:"enigma-encrypt/2",text:()=>({ja:"Wは車輪の表、Rは反射板、W⁻¹は表の逆引き。元の数mの答えはW⁻¹(R(W(m)))。位置0の表0→1、1→3、2→0、3→2なら、0→1→0→2で答え2です。",en:"W is the wheel lookup, R the reflector, and W⁻¹ reads the lookup backward. The answer for input m is W⁻¹(R(W(m))). At position0, if W maps0→1,1→3,2→0,3→2, input0 travels0→1→0→2, giving2."})},

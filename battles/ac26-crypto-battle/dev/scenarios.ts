@@ -1,3 +1,4 @@
+import { scoreItemInputs } from "../game/src/score-steal.fixture.ts";
 import { STREAMING_ORDER_CONFIG } from "../game/src/reducer.ts";
 import { artifactFields } from "../game/src/ledger-codec.ts";
 import { storedTeamId } from "../game/src/ledger-codec.ts";
@@ -30,6 +31,7 @@ import { exposedKeyPositions } from "../game/src/ladder.ts";
  */
 
 import {
+  buildClearingOp,
   buildFheOp,
   buildHuntOp,
   buildLeakOp,
@@ -71,6 +73,7 @@ export const DEV_CONFIG: Partial<CryptoBattleConfig> = {
 };
 
 export const SCENARIO_IDS = [
+  "score-item",
   "waiting",
   "streaming",
   "enigma-order",
@@ -109,6 +112,7 @@ export interface ScenarioCopy {
 }
 
 export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
+  "score-item": {ja:"AWSの鍵で復号してアイテムを獲得",en:"Decrypt with an AWS key to acquire an item"},
   "enigma-order": {ja:"エニグマ — 一桁の往復配線",en:"Enigma — one-digit return path"},
   "rsa-decrypt-order": {ja:"RSA復号 — 秘密鍵で一桁に戻す",en:"RSA decryption — recover one digit"},
   "ecdsa-order": {ja:"ECDSA — 署名の2個を計算",en:"ECDSA — compute a signature pair"},
@@ -201,8 +205,8 @@ interface Driver {
   play(teamId: string, op: CryptoBattleOp): boolean;
 }
 
-function makeDriver(config: Partial<CryptoBattleConfig> = DEV_CONFIG, matchSecret?: string): Driver {
-  const host = createMatch({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS, ...(matchSecret === undefined ? {} : { matchSecret }) }, config);
+function makeDriver(config: Partial<CryptoBattleConfig> = DEV_CONFIG, matchSecret?: string, item = false): Driver {
+  const host = createMatch({ eventId: DEV_EVENT_ID, teamIds: DEV_TEAMS, ...(matchSecret === undefined ? {} : { matchSecret }), ...(item ? {deploymentInputs:scoreItemInputs(DEV_TEAMS)} : {}) }, config);
   const driver: Driver = {
     host,
     nowMs: 0,
@@ -356,9 +360,29 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver((id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "anamorphic-decrypt-order" || id === "anamorphic-probability-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : id === "anamorphic-probability-order" ? "anamorphic-probability-0" : undefined);
+  const driver = makeDriver((id === "score-item" || id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "anamorphic-decrypt-order" || id === "anamorphic-probability-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : id === "anamorphic-probability-order" ? "anamorphic-probability-0" : undefined, id === "score-item");
 
   switch (id) {
+    case "score-item": {
+      for(let i=0;i<90;i++) {
+        driver.advance(10_000);
+        // Real answers establish target points; this setup does not mint scores.
+        for(const team of DEV_TEAMS) {
+          const projection = projectForTeam(driver.host.state, team);
+          for (const candidate of projection.myContracts) {
+            if (candidate.status !== "open" || ["ssm-decrypt", "reveal-share", "zk-sudoku", "rps-duel"].includes(candidate.task.kind)) continue;
+            const answer = buildClearingOp(candidate, projection.vault, projection.prime);
+            if (answer) driver.play(team, answer);
+          }
+          const order=driver.host.state.contracts.find(c=>c.teamId===team && c.status==="open" && c.allowedMethods.includes("leak"));
+          if(order)driver.play(team,{kind:"leak",contractId:order.id});
+        }
+        if(DEV_TEAMS.every(team=>driver.host.state.contracts.some(c=>c.teamId===team&&c.status==="open"&&c.task.kind==="ssm-decrypt")))break;
+      }
+      if(!driver.host.state.contracts.some(c=>c.task.kind==="ssm-decrypt"&&c.status==="open"))throw new Error("Item scenario did not reach its Order");
+      break;
+    }
+
     // [Issue #677] The screen a deployed match shows before anyone plays: no
     // Orders, no clock, one button. `makeDriver` starts the match because every
     // other position here is a match in progress, so this one unwinds that.

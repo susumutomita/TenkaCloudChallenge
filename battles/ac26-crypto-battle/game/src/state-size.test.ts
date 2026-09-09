@@ -1,3 +1,4 @@
+import { scoreItemByteBound } from "./score-steal-capacity.fixture.ts";
 /** Default-config storage acceptance. Real operations exercise all mechanisms;
  * each route measures every transition, not only the final checkpoint. Routes
  * retain different legal choices: LEAK, reused Sudoku PROVE, and a generation
@@ -157,10 +158,10 @@ describe("declared deployment bounds and actual transition peaks", () => {
           const result = measured(n, route),
             pairs = n * (n - 1);
           expect(result.peak).toBeGreaterThanOrEqual(result.final);
-          expect(result.peak).toBeLessThan(
+          expect(result.peak + scoreItemByteBound(n)).toBeLessThan(
             (n === 12 ? DDB_LIMIT : SQL_LIMIT) * HEADROOM,
           );
-          expect(forecast(n)).toBeGreaterThanOrEqual(result.peak);
+          expect(forecast(n)).toBeGreaterThanOrEqual(result.peak + scoreItemByteBound(n));
           expect(result.pendingPeak).toBe((n - (n % 2)) * (n - 1));
           if (route !== "reuse") {
             expect(result.rotations).toBe(n * 30);
@@ -185,8 +186,8 @@ describe("declared deployment bounds and actual transition peaks", () => {
       for (const n of [2, 4, 8, 9, 10, 11, 13])
         for (const route of routes) {
           const result = measured(n, route);
-          expect(forecast(n)).toBeGreaterThanOrEqual(result.peak);
-          if (n <= 12) expect(result.peak).toBeLessThan(DDB_LIMIT * HEADROOM);
+          expect(forecast(n)).toBeGreaterThanOrEqual(result.peak + scoreItemByteBound(n));
+          if (n <= 12) expect(result.peak + scoreItemByteBound(n)).toBeLessThan(DDB_LIMIT * HEADROOM);
           for (const id of Object.keys(result.state.teams)) {
             const count = result.state.contracts.filter(
               (c) => c.teamId === id,

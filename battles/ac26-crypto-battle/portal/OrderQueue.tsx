@@ -104,7 +104,7 @@ export default function OrderQueue({ projection, locale, selectedId, onSelect, r
       {recent.map(order => <li key={order.id} data-order-result={orderDisplayState(order)}>
         <strong>{orderResultLabel(order, locale)}</strong>
         <span>{order.id.replace(/^.*-c/, "ORDER #")} · {orderLabel(order, locale)}</span>
-        {receipts[order.id] !== undefined && <b>+{receipts[order.id]} {locale === "ja" ? "点" : "pt"}</b>}
+        {order.task.kind === "ssm-decrypt" && order.status === "completed" ? <b>{locale === "ja" ? "アイテム獲得" : "Item acquired"}</b> : receipts[order.id] !== undefined && <b>+{receipts[order.id]} {locale === "ja" ? "点" : "pt"}</b>}
       </li>)}
     </ul>}
   </aside>;
