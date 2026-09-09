@@ -3,7 +3,7 @@ import type { ContractProjection, CryptoBattleProjection } from "../game/src/typ
 import { OrderBelt } from "./GameBoard.tsx";
 import { orderLabel } from "./orderTask.ts";
 
-export interface OrderReceipt { readonly id: string; readonly points: number }
+export interface OrderReceipt { readonly id: string; readonly points: number; readonly item?: boolean }
 type Locale = "ja" | "en";
 
 /** A deadline may end between server polls; do not leave it actionable at 0:00. */
