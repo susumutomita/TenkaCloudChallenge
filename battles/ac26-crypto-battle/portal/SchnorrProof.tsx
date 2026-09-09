@@ -1,3 +1,4 @@
+import { SchnorrModelNotice } from "./SchnorrModelNotice.tsx";
 import { SchnorrLesson } from "./SchnorrLesson.tsx";
 import { useEffect, useState } from "react";
 import type { ContractProjection, CryptoBattleOp } from "../game/src/types.ts";
@@ -41,7 +42,8 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
     onSubmit({kind:"schnorr-commit",contractId:order.id,y:proof.y,a:Number(a)});
   };
   return <section className="tc-input-panel" aria-label="Schnorr zero-knowledge proof">
-    <h3>{ja?"ゼロ知識証明（Schnorr）：秘密の数を知っていると示す":"Zero-knowledge proof (Schnorr): show knowledge of a secret"}</h3>
+    <h3>{ja?"ゼロ知識証明（Schnorr）の計算模型":"Zero-knowledge proof (Schnorr) calculation model"}</h3>
+    <SchnorrModelNotice locale={locale}/>
     <p className="tc-schnorr-progress">{ja ? `このお題は2回の送信で1つの証明を作ります。最後の応答が正しければ完了・+${order.points}点です。` : `Two submissions form one proof. A correct final response completes this Order for +${order.points} points.`}</p>
     <p>{ja?"あなたは x を知っています。検証者は y だけを使い、x を受け取らずに応答を検査します。":"You know x. The verifier checks your response using y, without receiving x."}</p>
     <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}} aria-label={ja?"証明の順番":"Proof sequence"}>

@@ -411,7 +411,7 @@ The browser keeps witness x and fresh randomness r. It sends public y = 2ˣ mod2
 
 A commitment cannot be replaced and each challenge accepts one response, including a wrong response. Foreign Orders, expired responses and duplicate rewards are rejected. Private values are retained in session storage: continue in the original tab.
 
-The four-stage mathematical guide covers a worked example, exponent laws, an identical-distribution simulator without x, and extraction from two responses to the same a. This is honest-verifier ZK (HVZK). Tiny parameters allow brute force and a guessed challenge succeeds with probability 1/11; this is not practical cryptographic security. Successful verification is not secret recovery and does not award HUNT points.
+The four-stage mathematical guide covers a worked example, exponent laws, an identical-distribution simulator without x, and extraction from two responses to the same a. This is honest-verifier ZK (HVZK). Only 11 secret candidates exist, so this model provides no practical authentication security. Successful verification is not secret recovery and does not award HUNT points.
 
 The statement is knowledge of the discrete logarithm x for y, not knowledge of a secret-sharing share or Sudoku solution. Persisted legacy matches retain the trusted-judge Sudoku model; new matches select Schnorr through the versioned configuration.
 
@@ -540,3 +540,9 @@ to acquire the item, transfer8 points earned through ordinary HUNT play, and
 check both notices. Replay refusal is covered by tests. AWS deployment and the
 live Console permissions remain an optional operator rehearsal, not locally
 verified behavior.
+
+### Hand-calculation boundary (#859)
+
+PROVE scores a response satisfying the equation in a Schnorr calculation model, not secure authentication or evidence of prior possession of a secret. The statement concerns x for public y, not a share value or Sudoku solution. Only 11 secret candidates exist; repeating rounds over this same tiny group does not restore practical security. Transcript simulation demonstrates disclosure relative to y, while resisting false claims also requires appropriate cryptographic parameters. No protocol, score, wire format, or saved-state migration is changed by this clarification.
+
+Reference: [RFC 8235, security considerations](https://www.rfc-editor.org/rfc/rfc8235.html#section-6).
