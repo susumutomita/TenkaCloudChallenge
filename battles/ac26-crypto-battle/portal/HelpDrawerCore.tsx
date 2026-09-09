@@ -38,7 +38,7 @@ const COPY = {
       "シェア（share）は、秘密分散で配る番号と数の組です。秘密分散のお題だけで使います。MPCでも使う方法はありますが、このゲームのMPCは隠す乱数を足し引きする別の方式です。",
       "『公開して答える（LEAK）』は、そのお題で求められたかけらを公開して、すぐ得点します。公開した数は『公開記録（PUBLIC LEDGER）』に残り、他のチームも読めます。",
       "新しい試合のPROVEはゼロ知識証明（Schnorr）の計算模型です。aを先に固定し、検証者から届くeを使ってzを手計算します。秘密xと乱数rは端末内に残ります。旧試合は数独模型のままです。",
-      "LEAKとPROVEを選べるお題では「シェアを公開する」か「別の秘密xについて証明する」かを選びます。Schnorrはシェアの正しさを証明するものではありません。暗号化・準同型の足し算・MPC・じゃんけんにはそれぞれ別の入力欄があります。",
+      "LEAKとPROVEを選べるお題では「シェアを公開する」か「別の数xを使った計算模型に答える」かを選びます。Schnorrはシェアの正しさを証明するものではありません。暗号化・準同型の足し算・MPC・じゃんけんにはそれぞれ別の入力欄があります。",
     ],
     evidenceTitle: "公開した情報は、どう使われる？",
     evidence: [
@@ -75,7 +75,7 @@ const COPY = {
       "A share is an indexed value distributed by secret sharing. It belongs to the secret-sharing task. Some MPC protocols use shares; this game instead uses cancelling random masks for MPC.",
       "Publish to answer (LEAK) reveals the requested share and scores immediately. Everyone can read the value in the PUBLIC LEDGER.",
       "New-match PROVE uses a Schnorr zero-knowledge proof calculation model: fix a, receive e, then hand-calculate z. Private x and r stay in your browser. Legacy matches retain the Sudoku model.",
-      "Where both are offered, choose between publishing a share and proving knowledge of a separate x. Schnorr does not certify the share. Encryption, homomorphic addition, MPC and duels have separate inputs.",
+      "Where both are offered, choose between publishing a share and completing a calculation model with a separate x. Schnorr does not certify the share. Encryption, homomorphic addition, MPC and duels have separate inputs.",
     ],
     evidenceTitle: "What can an opponent do with published information?",
     evidence: [

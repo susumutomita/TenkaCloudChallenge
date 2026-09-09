@@ -45,7 +45,7 @@ An ordinary correct calculation earns +30, LEAK earns +10, and expiry costs −1
 | masked subtotal | **Secure computation (MPC)** | Adding masks to private inputs and cancelling them in the total |
 | PROVE | **Zero-knowledge proofs (ZK)** | Schnorr public verification, simulation and knowledge extraction |
 
-New-match ZK uses Schnorr: the browser keeps x and r private and submits y and the conversation (a,e,z). Saved legacy matches retain the sudoku teaching model, whose trusted judge knows the original solution. FHE supports computations built from addition and multiplication. This Order explores addition using small numbers. The diagram-and-formula explanations describe the difference from practical systems.
+New matches use a tiny-parameter Schnorr calculation model, not secure authentication: the browser keeps x and r private and submits y and the conversation (a,e,z). Saved legacy matches retain the sudoku teaching model, whose trusted judge knows the original solution. FHE supports computations built from addition and multiplication. This Order explores addition using small numbers. The diagram-and-formula explanations describe the difference from practical systems.
 
 ## Goal
 
