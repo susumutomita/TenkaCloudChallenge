@@ -14,6 +14,7 @@ export function SplitAnamorphicWorksheet({task,locale,busy,wrongCost,onSubmit}:{
    <p>{ja?'F は、暗号文を秘密の表で0か1に読み替える操作。cᵢ は候補番号 i の暗号文です。':'F looks up a ciphertext in the secret table to obtain 0 or 1. cᵢ is the ciphertext at candidate number i.'}</p>
    <p style={{fontSize:22}}><strong>F(c<sub>i</sub>) = h</strong> → <strong>F(c<sub>i</sub>) = {task.targetBit}</strong></p>
    <p>{ja?'右の値が h と一致する最初の行を選んでください。提出するのは左の候補番号です。':'Choose the first row whose right-hand value equals h. Submit its candidate number on the left.'}</p>
+   <p>{ja?'別の例：送りたい値が1、表の値が上から0・1・1なら、1行目は0≠1で飛ばし、2行目は1=1なので候補2を選びます。':'Separate example: target1, lookup values0,1,1. Skip row1 because0≠1; row2 has1=1, so choose candidate2.'}</p>
    <div style={{overflowX:'auto'}}><table style={{borderCollapse:'collapse',width:'100%',maxWidth:680,textAlign:'center'}}>
     <thead><tr><th>{ja?'提出する番号':'Number to submit'}</th><th>{ja?'暗号文 cᵢ（計算済み）':'Ciphertext cᵢ (already calculated)'}</th><th>{ja?'比べる値 F(cᵢ)':'Compare F(cᵢ)'}</th></tr></thead>
     <tbody>{task.candidates.map((c,i)=><tr key={i} style={{borderTop:'1px solid #c6d4e3',background:answer===String(i+1)?'#eaf3ff':undefined}}>
@@ -32,7 +33,6 @@ export function SplitAnamorphicWorksheet({task,locale,busy,wrongCost,onSubmit}:{
   </>}
   {mode==='probability'&&<>
    <p>{ja?`秘密の表が${task.targetBit}になる行だけを選び、くじの枚数を足します。暗号化・復号の計算は不要です。`:`Select rows whose secret lookup equals${task.targetBit}, then add their ticket counts. No encryption or decryption is required.`}</p>
-   <p>{ja?'別の例：送りたい値が1、表の値が上から0・1・1なら、1行目は0≠1で飛ばし、2行目は1=1なので候補2を選びます。':'Separate example: target1, lookup values0,1,1. Skip row1 because0≠1; row2 has1=1, so choose candidate2.'}</p>
   <table><thead><tr><th>{ja?'候補番号':'Candidate'}</th><th>{ja?'秘密のビット':'Secret bit'}</th><th>{ja?'くじの枚数':'Tickets'}</th></tr></thead><tbody>{task.tickets.map((n,i)=><tr key={i}><td>{i+1}</td><td>{task.secretBits[i]}</td><td>{n}</td></tr>)}</tbody></table>
    <p>{ja?'受理後の確率＝その候補の枚数 ÷ 受理される枚数の合計。今回は分母だけを求めます。例：受理される枚数が1、2、3なら合計6枚。':'After rejection sampling, probability = this candidate’s tickets / total accepted tickets. Submit only the denominator. Example: accepted counts1,2,3 total6.'}</p>
   </>}

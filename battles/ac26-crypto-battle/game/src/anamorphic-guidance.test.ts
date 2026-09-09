@@ -36,3 +36,12 @@ for(const locale of ["ja","en"] as const)test(`selection controls expose every c
  expect(html.match(/<input /g)).toHaveLength(1);
  expect(html).not.toContain('aria-pressed="true"');
 });
+
+for(const locale of ["ja","en"] as const)test(`free worked example belongs to its exercise (${locale})`,()=>{
+ const render=(exercise:AnamorphicTask["exercise"])=>renderToStaticMarkup(createElement(SplitAnamorphicWorksheet,{task:{...task,exercise},locale,busy:false,wrongCost:6,onSubmit:()=>{}}));
+ const selectionExample=locale==="ja"?"候補2を選びます":"choose candidate2";
+ expect(render("encrypt")).toContain(selectionExample);
+ expect(render("decrypt")).not.toContain(selectionExample);
+ expect(render("probability")).not.toContain(selectionExample);
+ expect(render("probability")).toContain(locale==="ja"?"合計6枚":"total6");
+});
