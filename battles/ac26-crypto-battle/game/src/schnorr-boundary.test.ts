@@ -10,7 +10,7 @@ for(const locale of ["ja","en"] as const) test(`Schnorr limits appear before int
   expect(order).toBeDefined();
   for(const html of [renderToStaticMarkup(createElement(SchnorrProof,{order,teamId:"a",locale,busy:false,onSubmit:()=>{}})),renderToStaticMarkup(createElement(SchnorrLesson,{locale}))]) {
     expect(html).toContain(locale==="ja"?"この模型の採点と限界":"Model scoring and limits");
-    expect(html).toContain(locale==="ja"?"候補は11通り":"11 possible secret values");
+    expect(html).toContain(locale==="ja"?"候補は最大11通り":"11 possible secret values");
     expect(html).toContain(locale==="ja"?"シェアの値や数独の解":"share value or a Sudoku solution");
     expect(html).toContain(locale==="ja"?"保証できません":"cannot establish prior knowledge");
   }
