@@ -9,7 +9,7 @@ A timed team game of small, hand-calculated cryptography problems. Orders keep a
 Four optional entries appear above the game: “How to play”, “Cryptography in diagrams and formulas”, “One-digit practice”, and “Rules reference”. They open on a separate scroll surface. Closing returns to the original Order, unfinished answer and page position. An ongoing match keeps running. Practice connects remainders, sharing, reconstruction, publication risk, MPC, ZK, FHE, Caesar and commit-reveal with small numbers. Reading without answering is allowed.
 Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
 
-The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers. Results appear above the answer area. Hints and exposure details expand on demand. “View records” opens the public history and private vault in a separate dialog; close it to return to the mounted answer form. Detailed match data lives inside “Rules reference”, outside the timed workspace.
+The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers. Results appear above the answer area. Hints and exposure details expand on demand. “Open public records and my vault” opens the public history and private vault in a separate dialog; close it to return to the mounted answer form. Detailed match data lives inside “Rules reference”, outside the timed workspace.
 
 The Order list stays visible while answering, with the pending count, task, deadline and selection. Cards appear in deadline order and can be selected directly by click or Tab and Enter / Space. New Orders receive a short arrival notice and a New badge without changing the selected Order or unfinished input. Due soon, Expired and Completed also appear as text. Recent results remain below the list, including earned points for answers confirmed in this screen. Narrow screens and larger queues scroll within the list.
 
@@ -131,7 +131,7 @@ Press “I'M READY”. The match starts and Orders arrive when every team is rea
 2. **Answer methods and inputs** — compare score and disclosure cost, then answer in the same card
 3. **Result** — score and outcome above the answer area
 4. **HUNT** — select an opponent from the dropdown, then a method
-5. **View records** — optional public history and private vault in a dialog
+5. **Open public records and my vault** — optional public history and private vault in a dialog
 6. **Play, diagrams and formulas, practice, rules** — choose one purpose above the board
 
 HUNT shows the selected opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer. ROTATE is a separate defence control.
