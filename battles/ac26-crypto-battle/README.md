@@ -148,7 +148,7 @@ Production hidden values derive from the server-only `matchSecret`, never the pu
 
 ## Operator pacing configuration
 
-`STREAMING_ORDER_CONFIG` uses a 30-second base interval with up to 10 seconds of variation in either direction, and a 180-second deadline for ordinary and rush Orders. All teams share the same seeded schedule. Reloads and delayed ticks do not reroll it. There is no two-Order queue cap. Saved matches keep their stored configuration; deploying this change does not reset their clock or extend existing deadlines.
+`STREAMING_ORDER_CONFIG` uses a 30-second base interval with up to 10 seconds of variation in either direction, and a 180-second deadline for ordinary and rush Orders. All teams share the same seeded schedule. Reloads and delayed ticks do not reroll it. Each team has at most three unanswered Orders, including duels. A full queue skips new arrivals without an expiry penalty; after a slot opens, delivery resumes at the next scheduled arrival. Duel Orders are delivered only when both teams have room. Skipped arrivals do not build up into a later burst. Saved matches keep their stored configuration; deploying this change does not reset their clock or extend existing deadlines.
 
 ## Local UI check
 

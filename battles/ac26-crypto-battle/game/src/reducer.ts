@@ -275,6 +275,7 @@ export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   evolutionOrders:true,
   ...pacingConfig(MATCH_PACING),
   contractsPerIssue: 1,
+  maxOpenOrdersPerTeam: 3,
 };
 
 export function initialState(
@@ -902,6 +903,10 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
 
   const duelCountByTeam = new Map(Object.entries(state.teams).map(([id, team]) => [id, team.issuedDuelCount ?? 0]));
   const issued: Contract[] = [];
+  const openCountByTeam = new Map<string, number>();
+  for (const contract of contracts) {
+    if (contract.status === "open") openCountByTeam.set(contract.teamId, (openCountByTeam.get(contract.teamId) ?? 0) + 1);
+  }
   const fieldConfig = fieldConfigOf(state.config);
   let nextContractAtMs = state.nextContractAtMs ?? startedAtMs;
   while (nextContractAtMs <= eventNowMs && nextContractAtMs < matchEndAtMs) {
@@ -911,6 +916,11 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
     const teamIds = Object.keys(state.teams);
     const isOpeningBatch =
       teamIds.length > 0 && teamIds.every((id) => (issuedCountByTeam.get(id) ?? 0) === 0);
+    // Snapshot capacity before either member of a duel is issued an Order.
+    // A full queue skips this scheduled slot, rather than accumulating debt.
+    const hasRoom = (teamId: string) => state.config.maxOpenOrdersPerTeam === undefined ||
+      (openCountByTeam.get(teamId) ?? 0) < state.config.maxOpenOrdersPerTeam;
+    const roomAtArrival = new Map(teamIds.map(id => [id, hasRoom(id)]));
     for (const teamId of teamIds) {
       // [Issue #659] A whole batch lands at once. This is what makes the match
       // a contest rather than a queue: the batch is sized so a fast team clears
@@ -932,14 +942,25 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         ? pairTeams(teamIds, Math.floor(sequenceIndex / 6) - 1) : [];
       const pair = pairs.find(pair => pair.includes(teamId));
       const opponentTeamId = pair?.find(id => id !== teamId);
+      if (!roomAtArrival.get(teamId) || !hasRoom(teamId) ||
+          (opponentTeamId !== undefined && !roomAtArrival.get(opponentTeamId))) {
+        // Advance the shared curriculum slot even when not delivered. Both
+        // sides must have space for a duel; never create an orphan invitation.
+        issuedCountByTeam.set(teamId, sequenceIndex + 1);
+        if (opponentTeamId !== undefined) duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
+        continue;
+      }
       if (opponentTeamId !== undefined) {
         const duelId = `${nextContractAtMs}:${sequenceIndex}:${pairs.indexOf(pair!)}`;
         const expiresAtMs = Math.min(nextContractAtMs + state.config.contractTtlMs, matchEndAtMs);
-        if (expiresAtMs > eventNowMs) issued.push({
+        if (expiresAtMs > eventNowMs) {
+        issued.push({
           id: `${teamId}-c${sequenceIndex}`, teamId, kind: "standard", points: state.config.scores.duelWin, leakPoints: 0,
           task: { kind: "rps-duel", duelId, opponentTeamId }, issuedAtMs: nextContractAtMs, expiresAtMs,
           status: "open", privacyConstraint: "none", allowedMethods: ["duel"],
         });
+        openCountByTeam.set(teamId, (openCountByTeam.get(teamId) ?? 0) + 1);
+        }
         issuedCountByTeam.set(teamId, sequenceIndex + 1);
         duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
         continue;
@@ -1000,6 +1021,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         privacyConstraint: plan.privacyConstraint,
         allowedMethods: allowedMethodsFor(plan.taskKind, plan.privacyConstraint),
       });
+      openCountByTeam.set(teamId, (openCountByTeam.get(teamId) ?? 0) + 1);
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
       }
     }
