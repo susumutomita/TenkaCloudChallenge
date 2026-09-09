@@ -1029,6 +1029,11 @@ export function ageProjection(
 }
 
 /** Waiting is live projection state, never a success receipt to carry into play. */
+export function rpsOrderReward(order: ContractProjection | undefined): number | undefined {
+  if (!order || order.status !== "completed" || order.task.kind !== "rps-duel" || !order.task.outcome) return undefined;
+  return order.task.outcome === "draw" ? order.task.drawPoints : order.task.outcome === "loss" ? 0 : order.points;
+}
+
 /** Side actions must not claim an Order completed by the same server tick. */
 export function completionReceipt(submitted: ContractProjection | undefined, next: CryptoBattleProjection | undefined, points: number | undefined): OrderReceipt | undefined {
   if (!submitted || submitted.status !== "open" || points === undefined) return undefined;
@@ -1127,7 +1132,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // Pin the initial/fallback choice too: a newly arriving rush Order must not
   // replace the Order whose answer the participant is typing.
   useEffect(() => {
-    if (selectedOrder && selectedOrderId !== selectedOrder.id) setSelectedOrderId(selectedOrder.id);
+    if (selectedOrder && selectedOrderId !== selectedOrder.id) {
+      selectionRevision.current += 1;
+      setSelectedOrderId(selectedOrder.id);
+    }
   }, [selectedOrder?.id, selectedOrderId]);
   // [Issue #645] Read from the Order, never re-derived here: the game rules
   // decide which methods an Order accepts, and a portal that recomputed them
@@ -1492,7 +1500,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !fheR.trim() || !fheY.trim()}
             onClick={() => void runOrder(
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
-              (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.fheSuccess, body: copy.fheBody(points), reward: points, lesson: copy.fheLesson }; },
+              (next) => { const points = next ? orderReward(selectedOrder, next) : selectedOrder.points; return { kind: "prove", title: copy.fheSuccess, body: copy.fheBody(points), reward: points, lesson: copy.fheLesson }; },
             )}
           >{submitting ? copy.running : `${copy.fhe} · +${selectedOrder.points}`}</button>
         </div>
@@ -1576,7 +1584,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         opponentName={projection.teams[selectedOrder.task.opponentTeamId]?.teamName ?? selectedOrder.task.opponentTeamId}
         prediction={<RpsOrderPrediction order={selectedOrder} projection={projection} locale={locale} submitting={submitting}
           onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
-        onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
+        onSubmit={op => runOrder(() => client.submitOp(op), next => next ? ({ kind: "prove", reward: rpsOrderReward(next.myContracts.find(c => c.id === selectedOrder.id)), title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
 
       {selectedOrder?.task.kind === "ssm-decrypt" && <ScoreItemOrder key={`score-item:${selectedOrder.id}`} task={selectedOrder.task} contractId={selectedOrder.id} busy={submitting} locale={locale} onSubmit={op=>void runOrder(()=>client.submitOp(op),next=>next?.scoreSteal?.held ? {kind:"prove",title:locale==="ja"?"横取りアイテム獲得！":"Score item acquired!",body:locale==="ja"?"相手を選び、好きなタイミングで1回使えます。":"Choose an opponent and use it once.",reward:0}:{kind:"error",title:locale==="ja"?"AWSの値と計算を確認してください":"Check the AWS value and calculation",body:next ? (locale==="ja"?`不正解。${projection.wrongProveCost}点の減点（最低0点）。`:`Incorrect; ${projection.wrongProveCost} point penalty, floored at0.`):copy.unavailable})}/>}
@@ -1653,7 +1661,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || !mpcPartial.trim()}
             onClick={() => void runOrder(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
-              (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: points, lesson: copy.mpcLesson }; },
+              (next) => { const points = next ? orderReward(selectedOrder, next) : selectedOrder.points; return { kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: points, lesson: copy.mpcLesson }; },
             )}
           >{submitting ? copy.running : `${copy.mpc} · +${selectedOrder.points}`}</button>
           <ConceptExplanation key={selectedOrder.id} locale={locale} topic="mpc" task={selectedOrder.task} prime={projection.prime} />
@@ -1677,7 +1685,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder?.schnorr && proveAllowed && <SchnorrProof key={`schnorr:${selectedOrder.id}`} order={selectedOrder} teamId={projection.vault.teamId} locale={locale} busy={submitting} onSubmit={op=>void runOrder(()=>client.submitOp(op),next=>{
         if(op.kind === "schnorr-commit") return {kind:"hint",title:locale === "ja"?"検証者から e が届きました":"Verifier challenge received",body:locale === "ja"?"次は送信 2 / 2 です。届いた e を使って応答 z を計算してください。":"Next is submission 2 / 2. Calculate response z using the returned e."};
         const proof=next?.publicLedger.find(entry=>entry.kind === "proof" && entry.contractId === selectedOrder.id);
-        return proof?.kind === "proof" && proof.publicKey ? {kind:"prove",reward:selectedOrder.points,title:locale === "ja"?"証明成功！":"Proof verified!",body:`${locale === "ja" ? "検証式が一致" : "Verification matches"}: ${power(2,Number(proof.response))} = ${Number(proof.commitment)*power(Number(proof.publicKey),Number(proof.challenge))%23}。${locale === "ja"?"秘密 x を送らず検証できました。":"Verified without sending x."}`} : {kind:"error",title:locale === "ja"?"検証式が一致しません":"Verification failed",body:selectedOrder.allowedMethods.length === 1 ? (locale === "ja" ? "このお題は不合格で終了しました。追加の期限切れ減点はありません。次のお題へ進んでください。" : "This Order ended with a failed proof. No additional deadline penalty applies. Continue to the next Order.") : (locale === "ja" ? "応答は1回だけです。期限までにLEAKへ切り替えるか、次のお題へ進んでください。" : "Only one proof response is accepted. Switch to LEAK before the deadline or continue to the next Order.")};
+        return proof?.kind === "proof" && proof.publicKey ? {kind:"prove",reward:next ? orderReward(selectedOrder,next) : selectedOrder.points,title:locale === "ja"?"証明成功！":"Proof verified!",body:`${locale === "ja" ? "検証式が一致" : "Verification matches"}: ${power(2,Number(proof.response))} = ${Number(proof.commitment)*power(Number(proof.publicKey),Number(proof.challenge))%23}。${locale === "ja"?"秘密 x を送らず検証できました。":"Verified without sending x."}`} : {kind:"error",title:locale === "ja"?"検証式が一致しません":"Verification failed",body:selectedOrder.allowedMethods.length === 1 ? (locale === "ja" ? "このお題は不合格で終了しました。追加の期限切れ減点はありません。次のお題へ進んでください。" : "This Order ended with a failed proof. No additional deadline penalty applies. Continue to the next Order.") : (locale === "ja" ? "応答は1回だけです。期限までにLEAKへ切り替えるか、次のお題へ進んでください。" : "Only one proof response is accepted. Switch to LEAK before the deadline or continue to the next Order.")};
       })} />}
       {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder && !selectedOrder.schnorr && proveAllowed && (
         <div className="tc-input-panel tc-proof-inputs">
