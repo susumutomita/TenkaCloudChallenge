@@ -953,6 +953,11 @@ ${SUCCESS_CSS}
 .tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
 .tc-scoreline{justify-content:space-between}.tc-scoreline .tc-rival-score{margin:0;display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
 .tc-records{font-size:13px;color:#42536a}
+.tc-records>.tc-records-button{min-height:44px;padding:11px 18px;background:#fff;color:#315f91;border:1px solid #8ca9c7;border-radius:8px;font:inherit;font-weight:700;max-width:100%;white-space:normal}
+.tc-records>.tc-records-button:hover{background:#edf5ff}
+.tc-input-panel>.tc-submit-small{min-height:44px;max-width:100%;white-space:normal}
+.tc-input-panel>.tc-submit-small:disabled{opacity:1;background:#9fb5cd;color:#fff}
+.tc-schnorr-progress{padding:12px;border-left:4px solid #315f91;background:#edf5ff}
 .tc-records>summary{padding:8px 0;cursor:pointer}
 .tc-result-anchor:empty{display:none}.tc-result-anchor:focus{outline:2px solid #2563a6;outline-offset:3px;border-radius:10px}
 .tc-workspace{display:grid;gap:12px;background:#fff;border:1px solid #b9cbe0;border-top:4px solid #315f91;border-radius:12px;padding:16px;box-shadow:0 3px 10px #1e3a5f08}
