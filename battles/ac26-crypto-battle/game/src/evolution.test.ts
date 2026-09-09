@@ -46,7 +46,7 @@ test("configured deadlines persist and reject invalid operator inputs",()=>{
  const migrated=migrateState(JSON.parse(JSON.stringify(old)),20);expect(migrated.config.contractTtlMs).toBe(240000);expect(migrated.config.evolutionOrders).toBeUndefined();
 });
 test("new worksheets submit through real scoring without publishing hunt materials",()=>{
- let state=applyOp(initialState({eventId:"evo",teamIds:["a","b"],matchSecret:"evo-test"},{...STREAMING_ORDER_CONFIG,orderArrivalJitterMs:0}),"a",{kind:"start"});
+ let state=applyOp(initialState({eventId:"evo",teamIds:["a","b"],matchSecret:"evo-test"},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined,orderArrivalJitterMs:0}),"a",{kind:"start"});
  const seen=new Set<string>();
  for(let t=0;t<900000;t+=30000){
   state=tick(state,t);
@@ -84,7 +84,7 @@ test("issued five-symbol Caesar tasks still grade their persisted operands",()=>
 });
 
 test("evolution mistakes charge the displayed penalty, permit retry, and deadlines reject late answers",()=>{
- let state=applyOp(initialState({eventId:"penalty",teamIds:["a","b"],matchSecret:"penalty"},{...STREAMING_ORDER_CONFIG,orderArrivalJitterMs:0}),"a",{kind:"start"});
+ let state=applyOp(initialState({eventId:"penalty",teamIds:["a","b"],matchSecret:"penalty"},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined,orderArrivalJitterMs:0}),"a",{kind:"start"});
  for(let t=0;t<900000;t+=30000){
   state=tick(state,t);
   const c=state.contracts.find(c=>c.teamId==="a"&&c.status==="open"&&(c.task.kind==="enigma-encrypt"||c.task.kind==="rsa-decrypt"||c.task.kind==="ecdsa-sign"));
@@ -114,7 +114,7 @@ test("each shuffled Vigenere bag advances the public key position independently 
 });
 
 for(const kind of ["enigma-encrypt","rsa-decrypt","ecdsa-sign"] as const)test(`${kind}: endgame projection allows arming Lightning and doubles exactly one answer`,()=>{
- let state=applyOp(initialState({eventId:"light-evo",teamIds:["a","b"],matchSecret:"light-evo"},{...STREAMING_ORDER_CONFIG,orderArrivalJitterMs:0,phaseBoundaries:{buildToPressureMs:1000,pressureToEndgameMs:2000}}),"a",{kind:"start"});
+ let state=applyOp(initialState({eventId:"light-evo",teamIds:["a","b"],matchSecret:"light-evo"},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined,orderArrivalJitterMs:0,phaseBoundaries:{buildToPressureMs:1000,pressureToEndgameMs:2000}}),"a",{kind:"start"});
  for(let t=30000;t<900000;t+=30000){
   state=tick(state,t);
   const c=projectForTeam(state,"a").myContracts.find(c=>c.status==="open"&&c.task.kind===kind);

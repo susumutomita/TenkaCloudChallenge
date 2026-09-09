@@ -64,7 +64,7 @@ function oneOrderPerKind(): { projection: CryptoBattleProjection; order: Contrac
     }
     state = tick(state, (round + 1) * DEFAULT_CONFIG.contractIntervalMs);
   }
-  let streaming = applyOp(initialState({...CTX,matchSecret:"ec-hints"},STREAMING_ORDER_CONFIG),"teamA",{kind:"start"});
+  let streaming = applyOp(initialState({...CTX,matchSecret:"ec-hints"},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined}),"teamA",{kind:"start"});
   for(let t=0;t<=1_200_000 && seen.size<Object.keys(HINT_LADDER).length;t+=30000){
     streaming=tick(streaming,t);
     const projection=projectForTeam(streaming,"teamA");

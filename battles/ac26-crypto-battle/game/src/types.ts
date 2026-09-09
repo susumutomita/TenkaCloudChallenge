@@ -235,6 +235,8 @@ export interface CryptoBattleConfig {
    * `state-size.test.ts` measures both ceilings and OPERATOR.md records them.
    */
   readonly contractsPerIssue: number;
+  /** Maximum unanswered Orders per team. Undefined preserves older unlimited matches. */
+  readonly maxOpenOrdersPerTeam?: number;
   /**
    * [Issue #695] How long (ms) after the ONE-Order opening batch the first full
    * batch arrives.

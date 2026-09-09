@@ -148,7 +148,7 @@ Production hidden values derive from the server-only `matchSecret`, never the pu
 
 ## Operator pacing configuration
 
-`STREAMING_ORDER_CONFIG` uses a 30-second base interval with up to 10 seconds of variation in either direction, and a 180-second deadline for ordinary and rush Orders. All teams share the same seeded schedule. Reloads and delayed ticks do not reroll it. There is no two-Order queue cap. Saved matches keep their stored configuration; deploying this change does not reset their clock or extend existing deadlines.
+`STREAMING_ORDER_CONFIG` uses a 30-second base interval with up to 10 seconds of variation in either direction, and a 180-second deadline for ordinary and rush Orders. All teams share the same seeded schedule. Reloads and delayed ticks do not reroll it. Each team has at most three unanswered Orders, including duels. A full queue skips new arrivals without an expiry penalty; after a slot opens, delivery resumes at the next scheduled arrival. Duel Orders are delivered only when both teams have room. Skipped arrivals do not build up into a later burst. Saved matches keep their stored configuration; deploying this change does not reset their clock or extend existing deadlines.
 
 ## Local UI check
 
@@ -466,7 +466,7 @@ The Order belt, recent receipts, and status labels use the projected protocol: S
 
 ### Anamorphic rejection sampling (#794)
 
-Based on Persiano–Phan–Yung, EUROCRYPT2022, section5.1: https://iacr.org/archive/eurocrypt2022/132760134/132760134.pdf . This is the rejection-sampling route, not the appended-payload approach the paper rejects. A participant selects a normal ciphertext whose secret lookup bit matches the intended bit, performs ordinary decryption with the monitor’s key, and transfers rejection sampling to a biased random-ticket distribution. The role diagram distinguishes sender, monitor and receiver. The final field sums accepted tickets, rather than transcribing a lookup bit. A biased-draw counterexample shows1/4 differs from the ordinary2/7 probability. Three fields, formulas, a small worked example and pre-submit deduction are bilingual.
+Based on Persiano–Phan–Yung, EUROCRYPT2022, section5.1: https://iacr.org/archive/eurocrypt2022/132760134/132760134.pdf . This is the rejection-sampling route, not the appended-payload approach the paper rejects. Separate Orders ask the participant to select a normal ciphertext matching the intended secret bit, decrypt with the ordinary key, or count accepted tickets in a biased distribution. The role diagram distinguishes sender, monitor and receiver. The final field sums accepted tickets, rather than transcribing a lookup bit. A biased-draw counterexample shows1/4 differs from the ordinary2/7 probability. Each new Order has one answer field, with bilingual formulas, a small worked example and pre-submit deduction. Persisted combined worksheets keep their original three fields and explanatory examples.
 
 The arithmetic uses ElGamal-shaped pairs modulo7. A balanced six-entry table substitutes for a pseudorandom function (PRF); it is scoped to one ordinary message. Neither the tiny group nor the lookup is practically secure. For each hidden bit, averaging uniform accepted-candidate selection across all20 balanced secret tables gives the ordinary1/6 distribution for a single packet. No multi-message security claim follows. Repeated trials in the paper are independent; the worksheet displays a shuffled, non-repeating practice sequence rather than an implementation of its secure sampler. No supplementary encrypted payload is appended.
 
@@ -483,7 +483,7 @@ Rebuild and deploy the problem, then start a new match. Persisted matches and is
 Schema20 rejects incompatible rollback readers. Migrating schema19 preserves stored Orders and pacing.
 ### Shuffled topics and cryptographic evolution (#850)
 
-New matches use schema21. The opening two tasks stay familiar; subsequent non-duel tasks draw from a shuffled bag of16 topics, including early RSA encryption, Vigenère and rotors. Existing duel slots remain; a bye on an odd roster lets that team advance its non-duel bag sooner. The every13/17/19/23/29-slot descriptions above document legacy settings. Persisted matches do not acquire this feature.
+New matches use schema22. The opening two tasks stay familiar; subsequent non-duel tasks draw from a shuffled bag of16 topics, including early RSA encryption, Vigenère and rotors. Existing duel slots remain; a bye on an odd roster lets that team advance its non-duel bag sooner. The every13/17/19/23/29-slot descriptions above document legacy settings. Persisted matches do not acquire this feature.
 
 - Enigma: one input0–3, one stepping wheel, reflector and inverse return path. This does not reproduce the26-letter, multi-rotor machine and plugboard.
 - RSA decryption: task-only key(n=15,d=3) and ciphertext recover a plaintext1–9. This key is outside HUNT; this is textbook RSA without secure encoding.
@@ -492,3 +492,8 @@ New matches use schema21. The opening two tasks stay familiar; subsequent non-du
 Worksheets include formulas, a worked example, answer inputs and mathematical explanation. Correct submissions earn the displayed reward and applicable Lightning; wrong submissions incur wrongProve and may be retried. Ownership, deadlines and replay guards stay in the problem runtime. One mandatory disclosure per bag cycles through share indices to retain the secret-sharing HUNT route.
 
 References: [RSA decryption primitive, RFC8017 §5.1.2](https://www.rfc-editor.org/rfc/rfc8017#section-5.1.2), [ECDSA, FIPS186-5](https://csrc.nist.gov/pubs/fips/186-5/final). These tiny parameters do not meet the standards' security requirements.
+
+
+### One operation per Order
+
+New anamorphic Orders separately ask for ciphertext selection (encryption), ordinary decryption, or accepted-ticket probability. Each has its own Order ID, deadline and score, and accepts one digit. Decryption supplies its own ciphertext and key; it does not depend on finishing an encryption Order. Persisted combined worksheets retain their original three-field grading. RSA encryption and decryption are already separate Orders. Enigma’s forward/reflect/backward wiring is one encryption operation, not an additional decryption requirement. The three-Order cap and three-minute deadline remain; scoring penalties are unchanged.

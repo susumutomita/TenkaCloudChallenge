@@ -275,6 +275,7 @@ export const STREAMING_ORDER_CONFIG: Partial<CryptoBattleConfig> = {
   evolutionOrders:true,
   ...pacingConfig(MATCH_PACING),
   contractsPerIssue: 1,
+  maxOpenOrdersPerTeam: 3,
 };
 
 export function initialState(
@@ -368,12 +369,14 @@ function buildOrderTask(
   switch (plan.taskKind) {
     case "anamorphic-rejection": {
       let counter=0,index=0,bytes=Buffer.alloc(0);
-      return anamorphicTask(()=>{
+      const task = anamorphicTask(()=>{
         if(index===bytes.length){
           bytes=createHmac("sha256",seed).update(JSON.stringify(["anamorphic-v1",contractId,counter++])).digest();index=0;
         }
         return bytes[index++]!;
       });
+      const exercises = ["encrypt", "decrypt", "probability"] as const;
+      return {...task, exercise: exercises[createHmac("sha256",seed).update(`anamorphic-exercise:${contractId}`).digest()[0]! % 3]!};
     }
     case "stark-trace": return starkTask([...createHmac("sha256",seed).update(`stark:${contractId}`).digest()]);
     case "io-equivalence": return ioTask([...createHmac("sha256",seed).update(`io:${contractId}`).digest()]);
@@ -674,8 +677,9 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  * would take the match down the first time it decoded a `sudoku-reveal`.
  * With the version declared, the platform refuses the row instead.
  */
-// v21 introduces evolution task kinds; older persisted tasks/config remain intact.
-export const STATE_SCHEMA_VERSION = 21;
+// v22 adds a persisted queue cap and independent anamorphic worksheets.
+// Older rows keep their existing tasks and unlimited queue settings.
+export const STATE_SCHEMA_VERSION = 22;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -718,9 +722,9 @@ export const STATE_SCHEMA_VERSION = 21;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19 && fromVersion !== 20) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19 && fromVersion !== 20 && fromVersion !== 21) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19 and v20 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20 and v21 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -902,6 +906,10 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
 
   const duelCountByTeam = new Map(Object.entries(state.teams).map(([id, team]) => [id, team.issuedDuelCount ?? 0]));
   const issued: Contract[] = [];
+  const openCountByTeam = new Map<string, number>();
+  for (const contract of contracts) {
+    if (contract.status === "open") openCountByTeam.set(contract.teamId, (openCountByTeam.get(contract.teamId) ?? 0) + 1);
+  }
   const fieldConfig = fieldConfigOf(state.config);
   let nextContractAtMs = state.nextContractAtMs ?? startedAtMs;
   while (nextContractAtMs <= eventNowMs && nextContractAtMs < matchEndAtMs) {
@@ -911,20 +919,17 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
     const teamIds = Object.keys(state.teams);
     const isOpeningBatch =
       teamIds.length > 0 && teamIds.every((id) => (issuedCountByTeam.get(id) ?? 0) === 0);
-    for (const teamId of teamIds) {
-      // [Issue #659] A whole batch lands at once. This is what makes the match
-      // a contest rather than a queue: the batch is sized so a fast team clears
-      // it and a slow team cannot, and everything downstream -- LEAK being a
-      // real cost, HUNT being worth its five minutes, speed converting into
-      // attack -- follows from teams differing in how much of the batch they
-      // get through. See `contractsPerIssue` in types.ts.
-      // [Issue #689] The first batch a team ever gets is ONE Order, and
-      // `deriveContractPlan` pins slot 0 to a plain share reveal. Six at once
-      // with five different methods is not an opening; it is a menu with no
-      // first item.
-      const batchSize =
-        (issuedCountByTeam.get(teamId) ?? 0) === 0 ? 1 : state.config.contractsPerIssue;
-      for (let inBatch = 0; inBatch < batchSize; inBatch += 1) {
+    // Snapshot capacity before either member of a duel is issued an Order.
+    // A full queue skips this scheduled slot, rather than accumulating debt.
+    const hasRoom = (teamId: string) => state.config.maxOpenOrdersPerTeam === undefined ||
+      (openCountByTeam.get(teamId) ?? 0) < state.config.maxOpenOrdersPerTeam;
+    const batchSizes = new Map(teamIds.map(id => [id, (issuedCountByTeam.get(id) ?? 0) === 0 ? 1 : state.config.contractsPerIssue]));
+    // Issue one slot across all teams before the next slot. This makes both
+    // duel members see capacity after preceding ordinary Orders in this batch.
+    for (let inBatch = 0; inBatch < Math.max(0,...batchSizes.values()); inBatch += 1) {
+      const roomAtArrival = new Map(teamIds.map(id => [id, hasRoom(id)]));
+      for (const teamId of teamIds) {
+      if (inBatch >= batchSizes.get(teamId)!) continue;
       const sequenceIndex = issuedCountByTeam.get(teamId) ?? 0;
       // One of six slots, even with a smaller configured batch. A one-Order
       // batch must still progress through the other five mechanisms.
@@ -932,14 +937,25 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         ? pairTeams(teamIds, Math.floor(sequenceIndex / 6) - 1) : [];
       const pair = pairs.find(pair => pair.includes(teamId));
       const opponentTeamId = pair?.find(id => id !== teamId);
+      if (!roomAtArrival.get(teamId) || !hasRoom(teamId) ||
+          (opponentTeamId !== undefined && !roomAtArrival.get(opponentTeamId))) {
+        // Advance the shared curriculum slot even when not delivered. Both
+        // sides must have space for a duel; never create an orphan invitation.
+        issuedCountByTeam.set(teamId, sequenceIndex + 1);
+        if (opponentTeamId !== undefined) duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
+        continue;
+      }
       if (opponentTeamId !== undefined) {
         const duelId = `${nextContractAtMs}:${sequenceIndex}:${pairs.indexOf(pair!)}`;
         const expiresAtMs = Math.min(nextContractAtMs + state.config.contractTtlMs, matchEndAtMs);
-        if (expiresAtMs > eventNowMs) issued.push({
+        if (expiresAtMs > eventNowMs) {
+        issued.push({
           id: `${teamId}-c${sequenceIndex}`, teamId, kind: "standard", points: state.config.scores.duelWin, leakPoints: 0,
           task: { kind: "rps-duel", duelId, opponentTeamId }, issuedAtMs: nextContractAtMs, expiresAtMs,
           status: "open", privacyConstraint: "none", allowedMethods: ["duel"],
         });
+        openCountByTeam.set(teamId, (openCountByTeam.get(teamId) ?? 0) + 1);
+        }
         issuedCountByTeam.set(teamId, sequenceIndex + 1);
         duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
         continue;
@@ -1000,6 +1016,7 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         privacyConstraint: plan.privacyConstraint,
         allowedMethods: allowedMethodsFor(plan.taskKind, plan.privacyConstraint),
       });
+      openCountByTeam.set(teamId, (openCountByTeam.get(teamId) ?? 0) + 1);
       issuedCountByTeam.set(teamId, sequenceIndex + 1);
       }
     }
@@ -1661,6 +1678,9 @@ export function validateOp(
     case "anamorphic": {
       const gate=validateOrderSubmission(state,teamId,op.contractId,"anamorphic");
       if(!gate.ok)return gate;
+      const task=state.contracts.find(c=>c.id===op.contractId)!.task;
+      if(task.kind!=="anamorphic-rejection")return {ok:false,error:"Wrong Order kind"};
+      if(task.exercise)return parseAnamorphicAnswer(op.answer,task)?{ok:true}:{ok:false,error:task.exercise==="probability"?"Enter one ticket total (3–9).":"Enter one answer (1–6)."};
       return parseAnamorphicAnswer(op.answer)?{ok:true}:{ok:false,error:"Enter trial number (1–6), ordinary message (1–6) and accepted-ticket total (3–9), separated by spaces."};
     }
     case "stark": {
@@ -3100,7 +3120,7 @@ function applyStark(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattl
 
 function applyAnamorphic(state:CryptoBattleState,teamId:string,op:Extract<CryptoBattleOp,{kind:"anamorphic"}>):CryptoBattleState {
  const c=state.contracts.find(c=>c.id===op.contractId)!;if(c.task.kind!=="anamorphic-rejection")throw new Error("wrong task");
- const hit=JSON.stringify(parseAnamorphicAnswer(op.answer))===JSON.stringify(anamorphicAnswer(c.task));
+ const hit=JSON.stringify(parseAnamorphicAnswer(op.answer,c.task))===JSON.stringify(anamorphicAnswer(c.task));
  const team=state.teams[teamId]!;
  const points=hit?c.points+lightningBonus(state,c):-Math.min(team.score,Math.abs(state.config.scores.wrongProve));
  return {...state,contracts:state.contracts.map(o=>o.id===c.id?{...o,answerAttempted:true,lastSubmissionPoints:points+0,...(hit?{status:"completed" as const,resolution:"anamorphic" as const}:{})}:o),teams:{...state.teams,[teamId]:{...team,score:team.score+points,...(hit?{completedContractIds:[...team.completedContractIds,compactContractId(teamId,c.id)]}:{})}}};

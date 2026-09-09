@@ -18,6 +18,8 @@ export function anamorphicDecrypt(cipher:AnamorphicCipher,key:number):number{
 export const ANAMORPHIC_LOOKUPS:readonly (readonly number[])[]=Array.from({length:64},(_,n)=>Array.from({length:6},(_,i)=>(n>>i)&1)).filter(row=>row.reduce((a,b)=>a+b,0)===3);
 export interface AnamorphicTask{
  readonly kind:'anamorphic-rejection';
+ /** Missing only on persisted legacy combined worksheets. */
+ readonly exercise?: 'encrypt' | 'decrypt' | 'probability';
  readonly ordinaryKey:number;
  readonly candidates:readonly AnamorphicCipher[];
  /** The participant acts as sender/receiver; this additional table is NOT in the monitor's view. */
@@ -27,6 +29,9 @@ export interface AnamorphicTask{
  readonly tickets:readonly number[];
 }
 export function anamorphicAnswer(task:AnamorphicTask):readonly number[]{
+ if(task.exercise==='encrypt')return [task.secretBits.indexOf(task.targetBit)+1];
+ if(task.exercise==='decrypt')return [anamorphicDecrypt(task.candidates[0]!,task.ordinaryKey)];
+ if(task.exercise==='probability')return [task.tickets.reduce((sum,count,i)=>sum+(task.secretBits[i]===task.targetBit?count:0),0)];
  const selected=task.secretBits.indexOf(task.targetBit);
  if(selected<0)throw new Error('no matching candidate');
  return [selected+1,anamorphicDecrypt(task.candidates[selected]!,task.ordinaryKey),task.tickets.reduce((sum,count,i)=>sum+(task.secretBits[i]===task.targetBit?count:0),0)];
@@ -49,6 +54,7 @@ export function anamorphicTask(nextByte:()=>number):AnamorphicTask{
  for(let i=5;i>0;i--){const j=pick(i+1);[trials[i],trials[j]]=[trials[j]!,trials[i]!];}
  return {kind:'anamorphic-rejection',ordinaryKey,candidates:trials.map(r=>anamorphicEncrypt(message,ordinaryKey,r)),secretBits:trials.map(r=>lookup[r]!),targetBit,tickets:trials.map(()=>1+pick(3))};
 }
-export function parseAnamorphicAnswer(answer:unknown):readonly number[]|undefined{
+export function parseAnamorphicAnswer(answer:unknown,task?:AnamorphicTask):readonly number[]|undefined{
+ if(task?.exercise){const pattern=task.exercise==='probability'?/^[3-9]$/:/^[1-6]$/;return typeof answer==='string'&&pattern.test(answer)?[Number(answer)]:undefined;}
  return typeof answer==='string'&&/^[1-6] [1-6] [3-9]$/.test(answer)?answer.split(' ').map(Number):undefined;
 }

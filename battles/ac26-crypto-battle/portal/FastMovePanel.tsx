@@ -1539,7 +1539,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
           const delta=next.myContracts.find(c=>c.id===selectedOrder.id)?.lastSubmissionPoints;
           if(delta===undefined)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
-          return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"暗号文の選択・復号・確率計算に成功！":"Ciphertext selection, decryption and probability complete!",body:locale==="ja"?"通常鍵の復号と、乱数くじを変えたときの送信確率を確認できました。":"You checked ordinary decryption and sending probability under changed randomness."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。上から順に、候補の選択・復号・受理くじの合計を確認してください。`:`${delta} pt. Check candidate selection, decryption and total accepted tickets.`};
+          return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"このお題に正解！":"Order complete!",body:locale==="ja"?"答えを確認し、このお題の得点を加算しました。":"Your answer was verified and this Order scored."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。このお題の式と入力した答えを確認してください。`:`${delta} pt. Check this Order’s calculation and your answer.`};
         }
        )}/> }
       {selectedOrder?.task.kind === "stark-trace" && <StarkWorksheet wrongCost={projection.wrongProveCost} key={`stark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(

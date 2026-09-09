@@ -35,8 +35,10 @@ import {initialState,applyOp,tick,validateOp,STREAMING_ORDER_CONFIG,migrateState
 import {isCryptoBattleProjection} from '../../portal/coordination.ts';
 import {scoreReasons} from './score-reasons.ts';
 test('owned anamorphic orders grade arithmetic, reject replay and expiry, and record the score reason',()=>{
- let s=applyOp(initialState({eventId:'anamorphic',teamIds:['a','b'],matchSecret:'anamorphic-test'},STREAMING_ORDER_CONFIG),'a',{kind:'start'});
+ let s=applyOp(initialState({eventId:'anamorphic',teamIds:['a','b'],matchSecret:'anamorphic-test'},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined}),'a',{kind:'start'});
  for(let t=0;t<=1_200_000;t+=30_000){s=tick(s,t);if(s.contracts.some(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='anamorphic-rejection'))break;}
+ // Retain coverage of already-persisted combined worksheets.
+ s={...s,contracts:s.contracts.map(c=>c.task.kind==='anamorphic-rejection'?{...c,task:{...c.task,exercise:undefined}}:c)};
  const order=s.contracts.find(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='anamorphic-rejection')!;
  expect(order).toBeDefined();if(order.task.kind!=='anamorphic-rejection')throw new Error('wrong task');
  expect(order.allowedMethods).toEqual(['anamorphic']);

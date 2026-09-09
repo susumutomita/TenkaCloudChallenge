@@ -103,6 +103,7 @@ const TASK_LABELS: Readonly<Record<Locale, Readonly<Record<OrderTaskProjection["
 
 /** What this Order asks for, in one participant-readable phrase. */
 export function taskLabel(task: OrderTaskProjection, locale: Locale): string {
+  if(task.kind === "anamorphic-rejection" && task.exercise)return taskDetail(task,locale);
   return task.kind === "caesar-shift" && task.rung === "vigenere"
     ? locale === "ja" ? "3個の鍵を順に使って暗号にする" : "Encrypt with a repeating three-key cycle"
     : TASK_LABELS[locale][task.kind];
@@ -144,7 +145,7 @@ export function orderDetail(order: Pick<ContractProjection, "task" | "schnorr" |
  */
 export function taskDetail(task: OrderTaskProjection, locale: Locale): string {
   switch (task.kind) {
-    case "anamorphic-rejection": return locale === "ja" ? "候補を選び、通常と秘密の復号を計算" : "Choose a trial and decode both messages";
+    case "anamorphic-rejection": if(task.exercise)return locale==="ja"?({encrypt:"暗号化：送る暗号文を選ぶ",decrypt:"復号：暗号文から平文を求める",probability:"確率：受理されるくじを数える"}[task.exercise]):({encrypt:"Encrypt: select a ciphertext",decrypt:"Decrypt: recover the plaintext",probability:"Probability: count accepted tickets"}[task.exercise]); return locale === "ja" ? "候補を選び、通常と秘密の復号を計算" : "Choose a trial and decode both messages";
     case "stark-trace": return locale === "ja" ? "実行表のずれと折り畳みの4欄を計算" : "Calculate four trace and fold fields";
     case "io-equivalence": return locale === "ja" ? "全4入力の答えと公開データを比較" : "Compare all four inputs and published data";
     case "rsa-decrypt": return `RSA · c=${task.ciphertext}`;

@@ -17,7 +17,7 @@ test("finite curve is closed; addition, doubling, inverse and identity obey the 
  expect(parsePoint("O")).toBeNull();
 });
 test("new matches issue EC; real answer pays once, wrong and foreign answers cannot forge points",()=>{
- let s=applyOp(initialState({eventId:"ec",teamIds:["a","b"],matchSecret:"ec-test"},STREAMING_ORDER_CONFIG),"a",{kind:"start"});
+ let s=applyOp(initialState({eventId:"ec",teamIds:["a","b"],matchSecret:"ec-test"},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined}),"a",{kind:"start"});
  for(let t=0;t<=900000;t+=30000){s=tick(s,t);if(s.contracts.some(c=>c.task.kind==="ec-add"&&c.status==="open"))break;}
  s={...s,teams:{...s.teams,a:{...s.teams.a!,score:50}}};
  const c=s.contracts.find(c=>c.teamId==="a"&&c.task.kind==="ec-add"&&c.status==="open")!;
