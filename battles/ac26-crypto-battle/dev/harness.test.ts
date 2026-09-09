@@ -323,3 +323,12 @@ describe("Issue #645 scenarios reach the position they advertise", () => {
     expect(op).toBeDefined();
   });
 });
+
+it("split anamorphic previews expose their advertised exercise within the three-Order cap", () => {
+  for (const [id, exercise] of [["anamorphic-order", "encrypt"], ["anamorphic-decrypt-order", "decrypt"], ["anamorphic-probability-order", "probability"]] as const) {
+    const scenario = buildScenario(id);
+    const open = projectForTeam(scenario.host.state, "alpha").myContracts.filter(c => c.status === "open");
+    expect(open.length).toBeLessThanOrEqual(3);
+    expect(open.some(c => c.task.kind === "anamorphic-rejection" && c.task.exercise === exercise)).toBe(true);
+  }
+});

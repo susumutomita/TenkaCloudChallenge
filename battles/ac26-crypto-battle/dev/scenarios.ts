@@ -356,7 +356,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver((id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "anamorphic-decrypt-order" || id === "anamorphic-probability-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
+  const driver = makeDriver((id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "anamorphic-decrypt-order" || id === "anamorphic-probability-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : id === "anamorphic-probability-order" ? "anamorphic-probability-0" : undefined);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
