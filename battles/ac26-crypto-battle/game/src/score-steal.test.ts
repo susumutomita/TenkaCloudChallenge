@@ -73,6 +73,22 @@ describe("deployment-backed optional score item", () => {
       initialState({ eventId: "x", teamIds: ids, deploymentInputs: { a: inputs.a! } }),
     ).toThrow();
   });
+  test("accepts the longest template-valid parameter name and rejects names beyond it", () => {
+    const prefix = `tc-${"p".repeat(77)}`;
+    const parameterName = `/${prefix}/score-item`;
+    expect(prefix.length).toBe(80);
+    expect(parameterName.length).toBe(92);
+    const material = {
+      ...inputs.a!,
+      CoordinationParameterName: parameterName,
+      CoordinationParameterConsoleUrl: `https://ap-northeast-1.console.aws.amazon.com/systems-manager/parameters/${prefix}/score-item/description`,
+    };
+    const context = { eventId: "length", teamIds: ["a"], deploymentInputs: { a: material } };
+    expect(initialState(context).scoreSteal?.players.a?.parameterName).toBe(parameterName);
+    expect(() => initialState({ ...context, deploymentInputs: {
+      a: { ...material, CoordinationParameterName: `${parameterName}x` },
+    } })).toThrow("Invalid score item resource location");
+  });
   test("a real arrival replaces a normal slot, stays within cap, never exposes receipt or key", () => {
     const s = match();
     for (const id of ids) {

@@ -64,7 +64,7 @@ export function initialSteal(ctx: CoordinationContext): StealState | undefined {
     const consoleUrl = input.CoordinationParameterConsoleUrl;
     if (
       !parameterName?.startsWith("/tc-") ||
-      parameterName.length > 91 ||
+      parameterName.length > 92 ||
       !consoleUrl ||
       consoleUrl.length > 300 ||
       !/^https:\/\/[a-z0-9-]+\.console\.aws\.amazon\.com\/systems-manager\/parameters\//.test(

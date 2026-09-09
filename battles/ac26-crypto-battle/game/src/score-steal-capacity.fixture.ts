@@ -7,7 +7,7 @@ export function scoreItemByteBound(teamCount: number): number {
   const material = {
     key: 9,
     receipt: "r".repeat(32),
-    parameterName: "/tc-" + "p".repeat(87),
+    parameterName: "/tc-" + "p".repeat(88),
     consoleUrl: "u".repeat(300),
     status: "offered",
   };

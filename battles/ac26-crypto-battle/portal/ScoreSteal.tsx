@@ -25,12 +25,15 @@ export function ScoreItemOrder({
     /* The user is still pasting the AWS value. */
   }
   return (
-    <section aria-label={ja ? "AWSの鍵で復号" : "Decrypt with an AWS key"}>
+    <section aria-label={ja ? "AWSの鍵を使う特別問題" : "Special Order using an AWS key"}>
       <h3>
         {ja
-          ? "AWSの鍵で復号 → 横取りアイテムを1個獲得"
-          : "Decrypt with an AWS key → earn one score item"}
+          ? "AWSの鍵で元の数字に戻す → 横取りアイテムを1個獲得"
+          : "Use the AWS key to recover a digit → earn one score item"}
       </h3>
+      <p>{ja
+        ? "元の数字を隠したものが暗号文、元へ戻す操作が復号です。"
+        : "Ciphertext hides an original number. Recovering that number is called decryption."}</p>
       <p>
         {ja
           ? "正解すると、後で相手から最大10点を移せます。獲得・使用は1試合1回。まだ得点は動きません。"
@@ -53,6 +56,9 @@ export function ScoreItemOrder({
           <p>
             <code>{task.parameterName}</code>
           </p>
+          <p>{ja
+            ? "keyは計算に使う鍵の数字、receiptはAWSの値と照合する受付コードです。両方を含むValue全体を貼ります。"
+            : "key is the number used in the calculation. receipt is a code checked against the AWS value. Paste the complete Value containing both."}</p>
           <label>
             {ja
               ? "Valueの全体をコピーして貼る（keyとreceipt）"
@@ -106,8 +112,8 @@ export function ScoreItemOrder({
       </button>
       <p>
         {ja
-          ? "小さい数の足し引きで暗号化・復号の対応を学ぶ模型です。receiptはAWSの値と照合する受付コードで、計算には使いません。値は公開記録へ載りません。"
-          : "This tiny model teaches inverse encryption/decryption. The receipt authenticates the retrieved AWS value; it is not used in the arithmetic or published."}
+          ? "小さい数の足し引きで暗号化・復号の対応を学ぶ模型です。受付コードは計算には使いません。値は公開記録へ載りません。"
+          : "This tiny model teaches inverse encryption/decryption. The receipt is not used in the arithmetic. The value is not published."}
       </p>
     </section>
   );
