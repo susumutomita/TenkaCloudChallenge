@@ -49,6 +49,7 @@ const COPY = {
     ],
     movesTitle: "ほかのお題で、何を体験する？",
     moves: [
+      {name:"ITEM — AWSの鍵で復号して横取り",body:"運営が有効にした試合だけの追加ルールです。AWSの値を読み、1桁を復号するとアイテムを1個獲得。相手を選んで使うと、実際の残点から最大10点を自分へ移します。獲得・使用・同じ相手の被害は各1試合1回。通常の3問枠と締切減点を使い、ROTATEでは防げません。"},
       { name: "CIPHER — 数字を暗号にする", body: "最初はシーザー暗号です。元の数字に秘密の鍵を足し、記号の個数で割った余りを答えます。答えは公開されません。同じお題を LEAK すると元と答えの組が公開され、鍵を読む材料になります。先の段ではお題に書かれた別の方式へ進みます。" },
       { name: "IO — 識別不可能性難読化（iO）の条件を比べる", body: "全4入力で計算AとBが同じ答えを出すか、変換後の分布（どの公開結果が、それぞれ何割の確率で出るか）が同じかを比較します。空欄2個、同じ機能なら1・違えば0、共通する公開データの組の個数を提出します。全入力を列挙する模型なので、一般の効率的なiOではありません。" },
       {name:"ANAMORPHIC — 通常鍵と追加秘密",body:"暗号文の選択・通常鍵による復号・くじの確率は別々のお題です。表示された1つの作業を終え、数字1個を提出すると得点します。小さい数の選び直し模型であり、実用の安全性はありません。"},
@@ -85,6 +86,7 @@ const COPY = {
     ],
     movesTitle: "What do the other Orders teach?",
     moves: [
+      {name:"ITEM — Decrypt with an AWS key to transfer points",body:"Optional operator-enabled rule. Read the AWS value and decrypt one digit to acquire one item. Choose an opponent to transfer up to10 actual points. Acquire, use and victim eligibility are each once per match. It occupies one of the three Order slots and uses the normal deadline penalty. ROTATE does not defend against it."},
       { name: "CIPHER — Encrypt digits", body: "Start with Caesar: add your secret key to each digit and keep the remainder after division by the symbol count. Your answer is not published. LEAK instead publishes the original and answer together, giving others evidence to recover the key. Later rungs explain their own different methods." },
       { name: "IO — Compare indistinguishability obfuscation (iO) conditions", body: "Compare A and B on all four inputs, then compare the distributions of their transformed tables (which public results can occur and the probability of each). Submit two missing outputs, 1 for equivalent functions or 0 otherwise, and the shared outcome count. Enumerating every input is a finite model, not efficient general-purpose iO." },
       {name:"ANAMORPHIC — Ordinary key and additional secret",body:"Ciphertext selection, ordinary decryption and ticket probability are separate Orders. Finish the displayed task and submit one number to score. This tiny rejection-sampling model has no practical cryptographic security."},

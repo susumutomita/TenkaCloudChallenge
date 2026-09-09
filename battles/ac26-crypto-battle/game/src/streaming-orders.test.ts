@@ -116,5 +116,5 @@ test("v21 rows retain their unlimited queue during v22 migration",()=>{
  const upgraded=migrateState(JSON.parse(JSON.stringify(old)),21);
  expect(upgraded.config.maxOpenOrdersPerTeam).toBeUndefined();
  expect(upgraded.contracts).toEqual(old.contracts);
- expect(()=>migrateState(old,22)).toThrow();
+ expect(()=>migrateState(old,23)).toThrow();
 });

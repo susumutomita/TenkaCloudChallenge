@@ -123,6 +123,12 @@ export const HINT_LEVELS = 3;
  * these rungs alone (three seeds x four kinds) before this landed.
  */
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
+  "ssm-decrypt": [
+    {id:"ssm-decrypt/1",text:()=>({ja:"暗号化で足した鍵を引くと元の数字に戻ります。AWSには鍵と、実際に値を取得したことを照合するランダムな受付コードが置かれています。",en:"Subtract the key added during encryption. AWS holds the key and a random receipt used to check the retrieved value."})},
+    {id:"ssm-decrypt/2",text:()=>({ja:"平文=(暗号文−鍵)を10で割った余り。例：暗号文2、鍵5なら2−5=−3、10を足して7です。",en:"Plaintext is the remainder of ciphertext minus key divided by10. Example:2−5=−3; add10 to get7."})},
+    {id:"ssm-decrypt/3",text:()=>({ja:"AWSリンクで値全体をコピーして貼ります。keyの数字を暗号文から引き、負なら10を足します。0〜9の答えを送るとアイテム獲得。次に相手を選んで使用します。",en:"Copy the whole AWS value. Subtract its key from the ciphertext; add10 if negative. Submit0–9 to acquire the item, then choose an opponent to use it."})},
+
+  ],
   "enigma-encrypt": [
     {id:"enigma-encrypt/1",text:()=>({ja:"車輪を1進めてから、配線を往復します。反射板で折り返し、帰りは表を逆に引きます。",en:"Advance the wheel first, reflect, then use the inverse wiring on return."})},
     {id:"enigma-encrypt/2",text:()=>({ja:"Wは車輪の表、Rは反射板、W⁻¹は表の逆引き。元の数mの答えはW⁻¹(R(W(m)))。位置0の表0→1、1→3、2→0、3→2なら、0→1→0→2で答え2です。",en:"W is the wheel lookup, R the reflector, and W⁻¹ reads the lookup backward. The answer for input m is W⁻¹(R(W(m))). At position0, if W maps0→1,1→3,2→0,3→2, input0 travels0→1→0→2, giving2."})},

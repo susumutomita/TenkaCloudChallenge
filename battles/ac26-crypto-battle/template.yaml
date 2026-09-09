@@ -1,16 +1,29 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  TenkaCloud problem -- ac26-crypto-battle (PROVE / LEAK / HUNT). PR1 scope only:
-  this stack grants the standard participant access baseline (AssumeRole into
-  the team's own AWS account) and creates no other resource. The Battle's
-  actual match state -- secrets, shares, contracts, the Public Ledger -- is not
-  per-team AWS infrastructure: it lives in the platform's coordination-plugin
-  state (see battles/ac26-crypto-battle/game/ and OPERATOR.md), which a later
-  PR wires this event into. There is nothing here for a red team to target and
-  nothing here that participants deploy into or configure -- the Battle is
-  played entirely through the Participant Portal once PR3/PR4 land.
+  TenkaCloud cryptography Battle. Match state and scoring use the existing
+  coordination dispatcher. The default stack grants participant access only.
+  Enabling ScoreSteal adds one Standard String SSM parameter per team for an
+  optional hand-decryption exercise. No extra Lambda or KMS key is created.
 
 Parameters:
+  ScoreStealEnabled:
+    Type: String
+    Default: "false"
+    AllowedValues: ["false", "true"]
+    Description: Optional score-steal exercise; applies to a new match after deployment.
+  ScoreStealKey:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 9
+    Description: One-digit classroom decryption key. Not a production cryptographic key.
+  ScoreStealSeed:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    MaxLength: 32
+    AllowedPattern: "^[A-Za-z0-9]+$"
+    Description: Random per-deployment receipt injected by the existing deploy chain.
   NamePrefix:
     Type: String
     MinLength: 5
@@ -32,10 +45,20 @@ Parameters:
     MinLength: 16
     Description: ExternalId for ParticipantViewerRole trust (passed by deploy chain).
 
+Conditions:
+  ScoreStealOn: !Equals [!Ref ScoreStealEnabled, "true"]
+
 Resources:
-  # Participant access baseline only (same shape as every other problem in this
-  # catalog -- see e.g. challenges/hello-world/template.yaml). No game state,
-  # no billable resource: see the top-level Description for why.
+  ScoreItemParameter:
+    Type: AWS::SSM::Parameter
+    Condition: ScoreStealOn
+    Properties:
+      Name: !Sub "/${NamePrefix}/score-item"
+      Type: String
+      Tier: Standard
+      Value: !Sub '{"key":${ScoreStealKey},"receipt":"${ScoreStealSeed}"}'
+      Description: Classroom decryption material and per-team retrieval receipt.
+  # Reuse the hello-world participant baseline and scoped SSM value access.
   ParticipantViewerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -66,6 +89,24 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              - !If
+                - ScoreStealOn
+                - Sid: ReadScoreItem
+                  Effect: Allow
+                  Action: [ssm:GetParameter, ssm:GetParameters]
+                  Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${NamePrefix}/score-item"
+                - !Ref AWS::NoValue
+              # Like hello-world: the Console detail page needs metadata listing.
+              # DescribeParameters has no resource-level scope; values remain
+              # restricted to the exact team parameter above. Competitor accounts
+              # must be dedicated to one team when enabling this Console exercise.
+              - !If
+                - ScoreStealOn
+                - Sid: DescribeOwnParameters
+                  Effect: Allow
+                  Action: ssm:DescribeParameters
+                  Resource: "*"
+                - !Ref AWS::NoValue
               - Sid: OpenCloudShellSession
                 Effect: Allow
                 Action:
@@ -79,6 +120,18 @@ Resources:
                 Resource: "*"
 
 Outputs:
+  CoordinationItemEnabled:
+    Value: !Ref ScoreStealEnabled
+  CoordinationPrivateItem:
+    Condition: ScoreStealOn
+    Description: Server-only coordination input, excluded from participant outputs.
+    Value: !GetAtt ScoreItemParameter.Value
+  CoordinationParameterName:
+    Condition: ScoreStealOn
+    Value: !Ref ScoreItemParameter
+  CoordinationParameterConsoleUrl:
+    Condition: ScoreStealOn
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/systems-manager/parameters/${NamePrefix}/score-item/description?region=${AWS::Region}&tab=Table"
   NamePrefix:
     Description: Common resource prefix that this stack used.
     Value: !Ref NamePrefix

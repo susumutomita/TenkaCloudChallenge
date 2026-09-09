@@ -1,3 +1,4 @@
+import type { StealTask, StealState, StealOp, StealView } from "./score-steal.ts";
 import type { EvolutionTask } from "./evolution.ts";
 import type {AnamorphicTask} from "./anamorphic.ts";
 import type {StarkTask} from "./stark.ts";
@@ -58,6 +59,7 @@ export type { PrivacyConstraint, SubmissionMethod };
 
 /** What the platform dispatcher hands a CoordinationPlugin for one event. */
 export interface CoordinationContext {
+  readonly deploymentInputs?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly eventId: string;
   readonly teamIds: readonly string[];
   /**
@@ -328,6 +330,7 @@ export interface StoredCiphertext {
  * team's projection can carry it. See mpc.ts.
  */
 export type OrderTask =
+  | StealTask
   | RotorTask
   | RsaTask
   | {
@@ -919,6 +922,7 @@ export interface LightningProjection {
 }
 
 export interface CryptoBattleState {
+  readonly scoreSteal?: StealState;
   readonly endgameLightning?: EndgameLightning;
   /** #659 §9: immutable endgame distribution; omitted only by older rows. */
   readonly endgameBooster?: EndgameBooster;
@@ -1017,6 +1021,7 @@ export type StoredHuntLogEntry = HuntLogEntry | {
 | { readonly sudoku: readonly [target: number, generation: number, baseAtMs: number, width: number, times: string, orderWidth?: number, orders?: string] };
 
 export type CryptoBattleOp =
+  | StealOp
   | { readonly kind: "schnorr-commit"; readonly contractId: string; readonly y: number; readonly a: number }
   | { readonly kind: "evolution"; readonly contractId: string; readonly answer: string }
   | { readonly kind: "snark"; readonly contractId:string; readonly answer:string }
@@ -1226,6 +1231,7 @@ export interface VaultProjection {
  * by accident.
  */
 export type OrderTaskProjection =
+  | StealTask
   | RotorTaskProjection
   | RsaTask
   | { readonly kind: "reveal-share"; readonly shareIndices: readonly number[] }
@@ -1380,6 +1386,7 @@ export interface TeamSummaryProjection {
  * place that has to get the redaction right.
  */
 export interface CryptoBattleProjection {
+  readonly scoreSteal?: StealView;
   readonly lastBreach?: BreachNotice;
   readonly proofProtocol?: "schnorr-v1";
   /** Host-relative timestamp of this snapshot; never a browser clock. */

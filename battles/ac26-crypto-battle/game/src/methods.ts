@@ -41,7 +41,7 @@ import type { OrderTaskKind } from "./types.ts";
  * Phase 3 `"mpc"`. Every consumer switches exhaustively, so adding one fails to
  * compile until each site has decided what it means.
  */
-export type SubmissionMethod = "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec" | "anamorphic" | "stark" | "io" | "snark" | "evolution";
+export type SubmissionMethod = "item" | "leak" | "prove" | "fhe" | "mpc" | "cipher" | "duel" | "ec" | "anamorphic" | "stark" | "io" | "snark" | "evolution";
 
 /**
  * What an Order forbids being made public.
@@ -95,6 +95,7 @@ export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMet
   snark: {method:"snark",publishesRawSecretMaterial:false},
   ec: {method:"ec",publishesRawSecretMaterial:false},
   duel: { method: "duel", publishesRawSecretMaterial: true },
+  item: { method: "item", publishesRawSecretMaterial: false },
   leak: { method: "leak", publishesRawSecretMaterial: true },
   prove: { method: "prove", publishesRawSecretMaterial: false },
   // [Phase 2] An FHE submission publishes a ciphertext under a key only the
@@ -112,6 +113,7 @@ export const SUBMISSION_METHODS: Readonly<Record<SubmissionMethod, SubmissionMet
 
 /** Every method the platform knows, in a stable order. */
 export const ALL_SUBMISSION_METHODS: readonly SubmissionMethod[] = [
+  "item",
   "leak",
   "prove",
   "fhe",
@@ -161,6 +163,7 @@ const METHODS_BY_TASK: Readonly<Record<OrderTaskKind, readonly SubmissionMethod[
   // choice, and it is a sharper one than the share Order's. LEAK is instant and
   // publishes the pair that recovers your key; CIPHER is the hand calculation
   // and publishes nothing. On the bottom rung, one pair is the whole key.
+  "ssm-decrypt": ["item"],
   "caesar-shift": ["leak", "cipher"],
 };
 

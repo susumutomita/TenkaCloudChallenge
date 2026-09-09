@@ -495,6 +495,7 @@ export function buildClearingOp(
     case "ec-add": return {kind:"ec",contractId:contract.id,answer:addPoints(contract.task.left,contract.task.right)?.join(" ")??"O"};
     case "masked-total":
       return buildMpcOp(contract, prime);
+    case "ssm-decrypt": throw new Error("AWS material is required for the optional score item");
     default: {
       const exhaustive: never = contract.task;
       throw new Error(`buildClearingOp: unknown task ${JSON.stringify(exhaustive)}`);

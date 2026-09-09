@@ -1,3 +1,4 @@
+import { initialSteal, stealTask, validateSteal, applySteal, projectSteal } from "./score-steal.ts";
 import { curriculumPlan } from "./curriculum.ts";
 import { evolutionTask, evolutionAnswer, parseEvolutionAnswer } from "./evolution.ts";
 import { MATCH_PACING, pacingConfig } from "./pacing.ts";
@@ -290,6 +291,7 @@ export function initialState(
   // (and every later ROTATE, Order belt, FHE and MPC derivation, all of which
   // already read `state.seed`) hangs off this one value.
   const seed = resolveMatchSeed(ctx);
+  const scoreSteal = initialSteal(ctx);
   for (const teamId of ctx.teamIds) {
     const { secret, shares } = deriveTeamGeneration(seed, teamId, 1, fieldConfig);
     teams[teamId] = {
@@ -313,6 +315,7 @@ export function initialState(
     publicPuzzles[teamId] = deriveSudokuPuzzle(seed, teamId, 1);
   }
   return {
+    ...(scoreSteal ? { scoreSteal } : {}),
     config: mergedConfig,
     seed,
     // [Issue #677] A deployed match waits to be started -- see `Phase`.
@@ -367,6 +370,7 @@ function buildOrderTask(
   generation: number,
 ): OrderTask {
   switch (plan.taskKind) {
+    case "ssm-decrypt": throw new Error("Score item is issued through its deployment-bound path");
     case "anamorphic-rejection": {
       let counter=0,index=0,bytes=Buffer.alloc(0);
       const task = anamorphicTask(()=>{
@@ -679,7 +683,7 @@ function migratePublicPuzzles(state: CryptoBattleState): Readonly<Record<string,
  */
 // v22 adds a persisted queue cap and independent anamorphic worksheets.
 // Older rows keep their existing tasks and unlimited queue settings.
-export const STATE_SCHEMA_VERSION = 22;
+export const STATE_SCHEMA_VERSION = 23;
 
 /**
  * [Issue #709] The plugin's `migrateState`: lifts a row written under an
@@ -722,9 +726,9 @@ export const STATE_SCHEMA_VERSION = 22;
  * no disclosure retirement fee; only future mandatory LEAKs record that fee.
  */
 export function migrateState(state: unknown, fromVersion: number): CryptoBattleState {
-  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19 && fromVersion !== 20 && fromVersion !== 21) {
+  if (fromVersion !== 1 && fromVersion !== 2 && fromVersion !== 3 && fromVersion !== 4 && fromVersion !== 5 && fromVersion !== 6 && fromVersion !== 7 && fromVersion !== 8 && fromVersion !== 9 && fromVersion !== 10 && fromVersion !== 11 && fromVersion !== 12 && fromVersion !== 13 && fromVersion !== 14 && fromVersion !== 15 && fromVersion !== 16 && fromVersion !== 17 && fromVersion !== 18 && fromVersion !== 19 && fromVersion !== 20 && fromVersion !== 21 && fromVersion !== 22) {
     throw new Error(
-      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20 and v21 -> v${STATE_SCHEMA_VERSION} are defined)`,
+      `reducer: migrateState cannot migrate from schema version ${fromVersion} (only v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21 and v22 -> v${STATE_SCHEMA_VERSION} are defined)`,
     );
   }
   const v2 = fromVersion === 1 ? migrateStateV1(state, 1) : state;
@@ -863,7 +867,7 @@ export function tick(persistedState: CryptoBattleState, eventNowMs: number): Cry
 }
 
 function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
-  const state = expireRps(withMigratedContracts(persistedState), eventNowMs);
+  let state = expireRps(withMigratedContracts(persistedState), eventNowMs);
   // [Issue #677] An unstarted match is not a match in progress at minute zero.
   //
   // The belt used to begin the moment the platform first ticked, which is one
@@ -990,6 +994,17 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
         continue;
       }
       const contractId = `${teamId}-c${sequenceIndex}`;
+      if (state.scoreSteal?.players[teamId]?.status === "waiting" && nextContractAtMs - startedAtMs >= 5 * 60_000 &&
+          !issued.some(c => c.teamId === teamId && c.task.kind === "ssm-decrypt")) {
+        issued.push({ id: contractId, teamId, kind: "standard", points: 0, leakPoints: 0,
+          task: stealTask(state, teamId, contractId), issuedAtMs: nextContractAtMs,
+          expiresAtMs: Math.min(nextContractAtMs + state.config.contractTtlMs, matchEndAtMs),
+          status: "open", privacyConstraint: "no-raw-disclosure", allowedMethods: ["item"] });
+        openCountByTeam.set(teamId, (openCountByTeam.get(teamId) ?? 0) + 1);
+        issuedCountByTeam.set(teamId, sequenceIndex + 1);
+        continue;
+      }
+
       const points = plan.kind === "rush" ? state.config.scores.rushContract : state.config.scores.contract;
       issued.push({
         id: contractId,
@@ -1036,6 +1051,11 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
   // [Issue #659] Charge the expiry penalty to whoever let the Order lapse.
   // Floored at 0 like the HUNT penalty is: a negative running score reads as a
   // bug to a participant, and "you are at zero" already carries the message.
+  if (state.scoreSteal) {
+    const players = { ...state.scoreSteal.players };
+    for (const order of issued) if (order.task.kind === "ssm-decrypt") players[order.teamId] = { ...players[order.teamId]!, status: "offered" };
+    state = { ...state, scoreSteal: { ...state.scoreSteal, players } };
+  }
   const charged = applyExpiryPenalties(state.teams, newlyExpired, state.config.scores.expiredOrder);
   // Carry the advanced sequence counters back onto the teams.
   const teams: Record<string, TeamState> = {};
@@ -1378,6 +1398,8 @@ export function validateOp(
   }
 
   switch (op.kind) {
+    case "claim-steal":
+    case "use-steal": return validateSteal(state, teamId, op);
     case "declare-lightning": {
       const contract = state.contracts.find(c => c.id === op.contractId && c.teamId === teamId);
       const method = contract?.allowedMethods.find(m => ["prove", "cipher", "fhe", "mpc", "ec", "io", "snark", "evolution", "stark", "anamorphic"].includes(m));
@@ -2330,6 +2352,7 @@ function projectTask(
   contractId: string,
 ): OrderTaskProjection {
   switch (task.kind) {
+    case "ssm-decrypt": return task;
     case "anamorphic-rejection": return task;
     case "stark-trace": return task;
     case "io-equivalence": return task;
@@ -2567,7 +2590,7 @@ function applyRotate(state: CryptoBattleState, teamId: string): CryptoBattleStat
   // the decision, rather than whether to rotate instead of playing.
   const voided: string[] = [];
   const contracts = state.contracts.map((c) => {
-    if (c.teamId !== teamId || c.status !== "open" || c.task.kind === "rps-duel") return c;
+    if (c.teamId !== teamId || c.status !== "open" || (c.task.kind === "rps-duel" || c.task.kind === "ssm-decrypt")) return c;
     voided.push(c.teamId);
     return { ...c, status: "expired" as const, expiryCause: "rotate" as const };
   });
@@ -2795,6 +2818,8 @@ function applyMethodOp(
 ): CryptoBattleState {
   const state = withMigratedContracts(persistedState);
   switch (op.kind) {
+    case "claim-steal":
+    case "use-steal": return applySteal(state, teamId, op);
     case "schnorr-commit":
     case "schnorr-response": return applySchnorr(state, teamId, op);
     case "declare-lightning": return armLightning(state, teamId, op.contractId);
@@ -2877,7 +2902,7 @@ export function projectForTeam(
     lastRotateAtMs: team.lastRotateAtMs,
     rotateCooldownRemainingMs,
     rotateMinimumPenalty: disclosureRotateMinimum(state, teamId),
-    rotatePenalty: Math.min(team.score, rotationPenalty(state, teamId, state.contracts.filter(c => c.teamId === teamId && c.status === "open" && c.task.kind !== "rps-duel").length)),
+    rotatePenalty: Math.min(team.score, rotationPenalty(state, teamId, state.contracts.filter(c => c.teamId === teamId && c.status === "open" && c.task.kind !== "rps-duel" && c.task.kind !== "ssm-decrypt").length)),
     completedContractIds: team.completedContractIds.map(c => contractId({ tm: teamId, c })),
     huntedGenerations: team.huntedGenerations,
     sudokuSolution: deriveSudokuSolution(state.seed, teamId, team.generation),
@@ -2968,6 +2993,7 @@ export function projectForTeam(
         : Math.max(0, state.startedAtMs + state.config.matchDurationMs - state.nowMs);
 
   return {
+    ...(state.scoreSteal ? { scoreSteal: projectSteal(state, teamId) } : {}),
     clockMs: state.nowMs,
     ...(team.lastBreach ? { lastBreach: team.lastBreach } : {}),
     ...(state.config.proofProtocol ? {proofProtocol:state.config.proofProtocol} : {}),

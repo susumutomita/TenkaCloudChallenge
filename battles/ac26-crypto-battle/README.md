@@ -497,3 +497,45 @@ References: [RSA decryption primitive, RFC8017 §5.1.2](https://www.rfc-editor.o
 ### One operation per Order
 
 New anamorphic Orders separately ask for ciphertext selection (encryption), ordinary decryption, or accepted-ticket probability. Each has its own Order ID, deadline and score, and accepts one digit. Decryption supplies its own ciphertext and key; it does not depend on finishing an encryption Order. Persisted combined worksheets retain their original three-field grading. RSA encryption and decryption are already separate Orders. Enigma’s forward/reflect/backward wiring is one encryption operation, not an additional decryption requirement. The three-Order cap and three-minute deadline remain; scoring penalties are unchanged.
+
+## Optional score-steal item (disabled by default)
+
+Read your team's key in AWS → decrypt one digit on the Order → acquire one item.
+Then select an opponent above the work queue and press the use button. Transfer
+up to10 of their remaining points to your team. Acquisition and use are each
+limited to once per team per match; each victim can lose points this way once.
+A zero-score opponent cannot be selected. Acquisition gives no points; use
+updates both scores and both teams' notices.
+
+Operators enable `cfnParameters.ScoreStealEnabled: "true"` in this problem's
+`metadata.json`, set `ScoreStealKey` to1–9, and retain
+`ScoreStealSeed: "__RANDOM_PASSWORD__"`. There is no mid-match admin toggle.
+Finish every team deployment, then start a new match. Saved matches retain their
+settings. After five minutes, the exercise replaces one ordinary arrival when
+there is queue room. It counts toward the three-open-Order cap, uses the normal
+deadline, and preserves existing expiry penalties. It is offered once.
+
+The HelloWorld Sample's existing random-parameter injection creates one
+Standard/String Parameter Store value per team, containing `key` and a random
+retrieval `receipt`. Participants paste the complete AWS Value and calculate the
+digit; the receipt is not arithmetic. Trusted deployment outputs feed the
+server-side checker. Private inputs stay out of participant deployment outputs,
+projections and public records. Use follows the existing coordination API,
+Lambda and problem plugin. Consumption and both score changes are saved together,
+then delivered through the existing durable score/history path.
+
+No item-specific Lambda, KMS key or S3 bucket is added. Like HelloWorld, the
+optional Console flow grants metadata-only `ssm:DescribeParameters` listing;
+value reads are scoped to the single team parameter. Enabling it assumes one
+dedicated AWS account per team. Default region:ap-northeast-1; expected match:90
+minutes. Account and request usage determine costs; zero total billing is not
+guaranteed. Deleting the problem stack removes its parameter and role. Existing
+platform API, scoring and storage usage continues unchanged.
+
+Deploy SDK0.2 deployment-input support and private coordination-output filtering
+in the platform together with this problem. Do not deploy this template alone
+against the old platform. The local real-Portal route used an AWS-response fixture
+to acquire the item, transfer8 points earned through ordinary HUNT play, and
+check both notices. Replay refusal is covered by tests. AWS deployment and the
+live Console permissions remain an optional operator rehearsal, not locally
+verified behavior.

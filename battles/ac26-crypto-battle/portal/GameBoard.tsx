@@ -18,6 +18,7 @@ type Locale = "ja" | "en";
 
 const COPY = {
   en: {
+    item: "ITEM",
     duel: "DUEL",
     title: "LIVE MATCH",
     orderBelt: "ORDER BELT",
@@ -61,6 +62,7 @@ const COPY = {
     tag: "relabelling",
   },
   ja: {
+    item: "ITEM",
     duel: "じゃんけん",
     title: "LIVE MATCH",
     orderBelt: "ORDER BELT",
@@ -335,7 +337,7 @@ export function OrderBelt({
                     has no LEAK route, so quoting a pass price would be a lie.
                   */}
                   <span className="tc-points">
-                    {order.privacyConstraint === "must-disclose" ? `LEAK +${order.leakPoints}` : `+${order.points}`}
+                    {order.task.kind === "ssm-decrypt" ? (locale === "ja" ? "アイテム ×1" : "Item ×1") : order.privacyConstraint === "must-disclose" ? `LEAK +${order.leakPoints}` : `+${order.points}`}
                     {order.allowedMethods.includes("leak") && order.privacyConstraint !== "must-disclose" ? (
                       <span className="tc-points-pass"> / {copy.leakRate} +{order.leakPoints}</span>
                     ) : null}

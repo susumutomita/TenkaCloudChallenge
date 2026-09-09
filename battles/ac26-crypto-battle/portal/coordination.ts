@@ -90,6 +90,15 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
     if ((card.status === "armed" || card.status === "spent") && (typeof card.contractId !== "string" || card.contractId.length === 0 || !duration(card.points))) return false;
     if (card.status === "spent" && !["hit", "miss", "leak", "deadline", "rotate", "ended"].includes(String(card.outcome))) return false;
   }
+  if (v.scoreSteal !== undefined) {
+    const item = v.scoreSteal as Record<string, unknown>;
+    const text = (x: unknown) => typeof x === "string" && x.length > 0;
+    const points = (x: unknown) => typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 10;
+    if (!item || typeof item !== "object" || !text(item.nonce) || typeof item.held !== "boolean"
+      || !Array.isArray(item.targets) || !Array.isArray(item.notices)
+      || item.targets.some(t => !t || !text(t.teamId) || !text(t.name) || typeof t.score !== "number" || !Number.isFinite(t.score) || t.score < 0 || !points(t.points) || typeof t.protected !== "boolean")
+      || item.notices.some(n => !n || !text(n.from) || !text(n.to) || !points(n.points) || typeof n.atMs !== "number" || !Number.isFinite(n.atMs))) return false;
+  }
   // [Issue #645] The modulus is required, not optional. The FHE and MPC panels
   // cannot state a solvable problem without it, and a payload from a
   // pre-#645 dispatcher (a mixed-version rollout) would otherwise be accepted
@@ -142,6 +151,10 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   if (v.myContracts.some(c => c.task?.kind === "rotor-encrypt" && (!rotorRow(c.task.plaintext) || !rotorPositions(c.task.myInitial)))) return false;
   if (v.publicLedger.some((a: Record<string, unknown>) => a?.kind === "rotor-pair" && (a.method !== "leak" || !rotorRow(a.plaintext) || !rotorRow(a.ciphertext) || "myInitial" in a))) return false;
   const rsaValue = (n: unknown, max: number) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0 && n < max;
+  if (v.myContracts.some(c => c.task?.kind === "ssm-decrypt" &&
+    (!rsaValue(c.task.ciphertext, 10) || typeof c.task.nonce !== "string" || !/^[a-f0-9]{32}$/.test(c.task.nonce)
+      || typeof c.task.parameterName !== "string" || !c.task.parameterName.startsWith("/tc-")
+      || typeof c.task.consoleUrl !== "string" || !/^https:\/\/[a-z0-9-]+\.console\.aws\.amazon\.com\/systems-manager\/parameters\//.test(c.task.consoleUrl)))) return false;
   if (v.myContracts.some(c => c.task?.kind === "rsa-encrypt" && (!isRsaPublicKey(c.task) || !rsaValue(c.task.plaintext, c.task.n)))) return false;
   if (v.myContracts.some(c => c.task?.kind === "snark-constraints" &&
     (!Array.isArray(c.task.rows) || c.task.rows.length !== 3 || c.task.rows.some((row:unknown)=>

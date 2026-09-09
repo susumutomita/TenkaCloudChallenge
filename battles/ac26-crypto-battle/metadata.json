@@ -66,5 +66,10 @@
         "Distinguish gate and copy constraints by hand in SNARK arithmetization"
       ]
     }
+  },
+  "cfnParameters": {
+    "ScoreStealEnabled": "false",
+    "ScoreStealKey": "3",
+    "ScoreStealSeed": "__RANDOM_PASSWORD__"
   }
 }
