@@ -1027,6 +1027,13 @@ export function ageProjection(
   };
 }
 
+/** Waiting is live projection state, never a success receipt to carry into play. */
+export function readyFeedback(next: CryptoBattleProjection | undefined, locale: Locale): FeedbackDraft | null {
+  if (!next || isWaiting(next) || isClosed(next)) return null;
+  const copy = FAST_MOVE_COPY[locale];
+  return { kind: "prove", title: copy.startSuccess, body: copy.startBody };
+}
+
 export default function FastMovePanel(props: PortalSlotProps) {
   const locale: Locale = props.locale === "ja" ? "ja" : "en";
   const copy = FAST_MOVE_COPY[locale];
@@ -1149,7 +1156,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   // ok -- and the projection is the only thing that can say which it was.
   const run = async (
     task: () => Promise<PortalCoordinationOutcome>,
-    success: (next: CryptoBattleProjection | undefined) => FeedbackDraft,
+    success: (next: CryptoBattleProjection | undefined) => FeedbackDraft | null,
   ) => {
     if (submitting) return;
     setSubmitting(true);
@@ -1168,6 +1175,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
       } else {
         const draft = success(next);
+        if (!draft) return;
         if (draft.reward !== undefined && selectedOrder && next?.myContracts.some(order => order.id === selectedOrder.id && order.status === "completed")) {
           setOrderReceipt({ id: selectedOrder.id, points: draft.reward });
         }
@@ -1211,7 +1219,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             disabled={submitting || projection.ready.me}
             onClick={() => void run(
               () => submitReady(client),
-              () => ({ kind: "prove", title: copy.readyDone, body: copy.readyCount(projection.ready.count + 1, projection.ready.total) }),
+              (next) => readyFeedback(next, locale),
             )}
           >{submitting ? copy.starting : projection.ready.me ? copy.readyDone : copy.ready}</button>
           <p className="tc-gate-note">

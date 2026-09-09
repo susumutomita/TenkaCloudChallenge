@@ -191,7 +191,8 @@ uniformly from 0–10, including zero. Write both down. Read the remainders of 4
 free on-screen tables, multiply, and enter the **remainder after division by 23**
 in Sealed number. For m=1, r=1: 4×9=36; 36−23=13.
 
-Once both numbers arrive, submit m and r using Give my opening to the judge.
+After sealing your number, submit m and r privately using Give my opening to the judge,
+without waiting for the opponent. Acceptance completes your actions; opponent delay cannot penalize you.
 The judge verifies and publishes both openings together. Win +30, draw +10,
 loss 0. A mismatched opening can be corrected without a penalty; accepted
 commitments and openings cannot be replaced. Work on another Order while waiting.

@@ -1,3 +1,4 @@
+import { anamorphicPower } from "./anamorphic.ts";
 import { vigenereGuide } from "./vigenere-guide.ts";
 import { rotorGuide } from "./rotor-guide.ts";
 import { rsaGuide } from "./rsa-guide.ts";
@@ -202,16 +203,16 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
    */
   "rps-duel": [
     { id: "rps-duel/1", text: () => ({
-      ja: "相手とじゃんけんをします。先に手を言うと相手に勝つ手を選ばれるので、手に『隠す数』を混ぜた数字だけを先に出します。この数字をコミットメントと呼びます。両者が出したあとに、手と隠す数を審判へ渡します。審判は数字が一致するか確かめ、両方の開封がそろってから同時に公開します。隠す数は毎回くじで選び直します。",
-      en: "Play rock-paper-scissors. Announcing your hand first would let your opponent counter it. First send a number combining your hand with a hiding number: a commitment. Once both arrive, give the judge your hand and hiding number. The judge checks them, holds each opening privately, and publishes both together. Draw a fresh hiding number every round.",
+      ja: "相手とじゃんけんをします。先に手を言うと相手に勝つ手を選ばれるので、手に『隠す数』を混ぜた数字だけを先に出します。この数字をコミットメントと呼びます。自分の数字を出したら、相手を待たずに手と隠す数を審判へ非公開で渡せます。審判は数字が一致するか確かめ、両方の開封がそろってから同時に公開します。隠す数は毎回くじで選び直します。",
+      en: "Play rock-paper-scissors. Announcing your hand first would let your opponent counter it. First send a number combining your hand with a hiding number: a commitment. After sealing your number, give the judge your hand and hiding number privately without waiting for the opponent. The judge checks them, holds each opening privately, and publishes both together. Draw a fresh hiding number every round.",
     }) },
     { id: "rps-duel/2", text: () => ({
       ja: "手の番号 m はグー 1・チョキ 2・パー 3。隠す数 r は 0〜10 のくじから毎回選びます。封じる数字 c は『4 を m 回掛けた数 × 9 を r 回掛けた数』を 23 で割った余り。4^m × 9^r mod 23 と書き、0 回掛ける場合は 1 とします。例：m=1、r=1 なら 4×9=36、36−23=13。まず 13 だけ送り、あとで (1,1) を渡します。この小さな数では別の開け方も探せるため、審判が両開封を同時公開して後出しを防ぎます。commit-reveal は『先に封じて後で開く』手順で、それだけでゼロ知識証明になるわけではありません。",
       en: "m is rock 1, scissors 2, paper 3. Draw r uniformly from 0–10. Multiply m factors of 4 and r factors of 9, then multiply those results and keep the remainder after division by 23: c = 4^m × 9^r mod 23. A zeroth power is 1. For m=1, r=1: 4×9=36; 36−23=13. Send 13, then open with (1,1). Tiny numbers permit alternative openings, so the judge publishes both together to prevent adapting after seeing the other hand. Commit-reveal is not itself a zero-knowledge proof.",
     }) },
     { id: "rps-duel/3", text: () => ({
-      ja: `「手の番号」と「隠す数」を選び、紙に控えます。表から 4^m と 9^r をそれぞれ 23 で割った余りを読み、掛けて 23 で割った余りを「封じる数字」に入れます。審判はあなたの選択をまだ知らないため、見本 m=2・r=2 で行を追います。\n${handWorkSteps(2, 2).join('\n').replaceAll('mod 23', '23 で割った余り')}\n自分の値で計算して「数字を封じる」。両者の数字がそろったら、控えた手と隠す数を入れて「手を審判へ渡す」。待ち表示なら相手の操作待ちです。`,
-      en: `Choose and write down your hand and hiding number. Read the remainders of 4^m and 9^r after division by 23 from the table, multiply, and enter the remainder after division by 23 in Sealed number. The judge does not know your choice yet, so this is a sample m=2, r=2:\n${handWorkSteps(2, 2).join('\n')}\nCalculate with your choice and press Seal the number. When both arrive, use your notes and press Give my opening to the judge. A waiting message means the opponent must act.`,
+      ja: `「手の番号」と「隠す数」を選び、紙に控えます。表から 4^m と 9^r をそれぞれ 23 で割った余りを読み、掛けて 23 で割った余りを「封じる数字」に入れます。審判はあなたの選択をまだ知らないため、見本 m=2・r=2 で行を追います。\n${handWorkSteps(2, 2).join('\n').replaceAll('mod 23', '23 で割った余り')}\n自分の値で計算して「数字を封じる」。相手を待たず、控えた手と隠す数を入れて「手を審判へ渡す」。待ち表示なら相手の操作待ちです。`,
+      en: `Choose and write down your hand and hiding number. Read the remainders of 4^m and 9^r after division by 23 from the table, multiply, and enter the remainder after division by 23 in Sealed number. The judge does not know your choice yet, so this is a sample m=2, r=2:\n${handWorkSteps(2, 2).join('\n')}\nCalculate with your choice and press Seal the number. Without waiting for the opponent, use your notes and press Give my opening to the judge. A waiting message means the opponent must act.`,
     }) },
   ],
   "reveal-share": [
@@ -444,11 +445,31 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
   ],
 };
 
+/** The final purchased hint walks only this participant's on-screen numbers. */
+function anamorphicNumberSteps(t: Extract<OrderTaskProjection, {kind:"anamorphic-rejection"}>): HintText {
+  if(t.exercise==='encrypt') {
+    const index=t.secretBits.indexOf(t.targetBit);
+    const steps=t.secretBits.slice(0,index+1).map((bit,i)=>`F(c${i+1}) = ${bit} ${bit===t.targetBit?'=':'≠'} ${t.targetBit}`).join('\n');
+    return {ja:`① 送りたい値 h = ${t.targetBit}。F は秘密の表で候補を0か1に読み替える操作です。\n② 上から比べます。\n${steps}\n③ 最初に一致した候補 ${index+1} の暗号文は (${t.candidates[index]!.join(', ')})。回答欄には候補番号 ${index+1} を入れて提出します。`,en:`1. Intended value h = ${t.targetBit}. F reads a candidate's bit from the secret lookup.\n2. Compare from the top.\n${steps}\n3. The first matching candidate is ${index+1}, ciphertext (${t.candidates[index]!.join(', ')}). Submit candidate number ${index+1}.`};
+  }
+  if(t.exercise==='decrypt') {
+    const [a,b]=t.candidates[0]!,mask=anamorphicPower(a,t.ordinaryKey);
+    const m=[1,2,3,4,5,6].find(n=>mask*n%7===b)!;
+    const factors=Array.from({length:t.ordinaryKey},()=>a).join(' × ')||'1';
+    const steps=Array.from({length:m},(_,i)=>`${mask} × ${i+1} = ${mask*(i+1)} → ${mask*(i+1)%7}`).join('\n');
+    return {ja:`① 暗号文 (${a}, ${b})、鍵 x = ${t.ordinaryKey}。s = aをx回掛けた数を7で割った余り。\n${factors} = ${a**t.ordinaryKey} → 余り ${mask}。\n② (${mask} × m) を7で割った余りが ${b} になるmを探します。矢印の右が余りです。\n${steps}\n③ 一致した元の数 m = ${m} を提出します。`,en:`1. Ciphertext (${a}, ${b}), key x = ${t.ordinaryKey}. s is a to the power x, remainder after division by7.\n${factors} = ${a**t.ordinaryKey} → remainder ${mask}.\n2. Find m so (${mask} × m) leaves remainder ${b}. Values after arrows are remainders.\n${steps}\n3. Submit the original number m = ${m}.`};
+  }
+  const rows=t.secretBits.flatMap((bit,i)=>bit===t.targetBit?[i]:[]);
+  const counts=rows.map(i=>t.tickets[i]!),total=counts.reduce((a,b)=>a+b,0);
+  return {ja:`① 秘密の表が ${t.targetBit} の行は ${rows.map(i=>i+1).join('・')} 番。\n② その行のくじを足します。合計 = ${counts.join(' + ')} = ${total}。\n③ 候補が選ばれる確率 = その候補のくじ枚数 ÷ ${total}。今回は分母の ${total} だけを提出します。`,en:`1. Rows whose lookup equals ${t.targetBit}: ${rows.map(i=>i+1).join(', ')}.\n2. Add their tickets: ${counts.join(' + ')} = ${total}.\n3. Candidate probability = its ticket count / ${total}. Submit only the denominator ${total}.`};
+}
+
 /** The ladder for a task kind, in level order. */
 export function hintsFor(kind: OrderTaskKind): readonly HintSpec[] {
   if(kind === "anamorphic-rejection")return HINT_LADDER[kind].map((hint,level)=>({...hint,text:(ctx:HintContext)=>{
     if(ctx.task.kind!=="anamorphic-rejection" || !ctx.task.exercise)return hint.text(ctx);
     const t=ctx.task;
+    if(level===2) return anamorphicNumberSteps(t);
     if(t.exercise==='encrypt')return [
       {ja:"同じ通常メッセージを暗号化した候補から、秘密の表で送りたいビットになるものを選ぶお題です。復号はしません。",en:"Select a ciphertext candidate whose secret lookup matches the intended bit. This Order requires no decryption."},
       {ja:"選択の条件はF(c)=b。Fは秘密の表、cは候補、bは送りたいビットです。上から最初の一致を探します。b=1、表が0,1,1なら2番です。",en:"Select the first candidate c with F(c)=b, where F is the secret lookup and b the intended bit. For b=1 and lookup0,1,1, select2."},

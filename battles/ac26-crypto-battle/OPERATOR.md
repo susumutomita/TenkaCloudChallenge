@@ -271,9 +271,9 @@ Order instead. Small batches still receive the other five mechanisms. Late
 unseen slots are consumed but not issued or charged. All deadlines stop at match end.
 
 `rps-commit` accepts only the nonzero order-11 subgroup modulo 23. A second
-commitment is refused. `rps-open` requires both commitments and a matching hand
+commitment is refused. `rps-open` requires the submitting team’s own commitment and a matching hand
 and hiding number; a mismatch is rejected without a penalty. The first accepted
-opening stays judge-private; the second atomically settles both Orders and
+opening can be accepted before the opponent commits and stays judge-private; the second atomically settles both Orders and
 publishes both openings. Win 30, draw 10, loss 0, configurable through `scores`.
 ROTATE changes long-lived secrets and does not cancel a duel. At timeout, a team
 that finished its current stage gets `duelWin`; the team with a required action

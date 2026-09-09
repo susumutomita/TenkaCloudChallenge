@@ -146,18 +146,23 @@ describe("HUNT public evidence → target status → worksheet → verdict", () 
   });
 });
 
-test("#739: projection and actual RPS component distinguish opponent waiting from ready", () => {
+test("#739/#861: opponent state stays visible but never blocks a private opening", () => {
   let state = buildScenario("rps-order").host.state;
   const order = (team: string) => projectForTeam(state, team).myContracts.find(c => c.status === "open" && c.task.kind === "rps-duel")!;
   state = run(state, "alpha", { kind: "rps-commit", contractId: order("alpha").id, commitment: 13 });
   const renderDuel = () => renderToStaticMarkup(createElement(RpsDuel, { order: order("alpha"), opponentName: "bravo", locale: "ja", submitting: false, onSubmit: async () => {} }));
   expect(order("alpha").task).toMatchObject({ opponentCommitted: false });
-  expect(renderDuel()).toContain("相手が封じるのを待っています");
-  expect(renderDuel()).toContain("約30秒ごと");
+  expect(renderDuel()).toContain("あと1操作");
+  expect(renderDuel()).toContain("相手はまだ封じていませんが");
+  // With no local hand/nonce on this fresh render, malformed opening stays disabled.
   expect(renderDuel()).toMatch(/disabled="">手を審判へ渡す/);
   state = run(state, "bravo", { kind: "rps-commit", contractId: order("bravo").id, commitment: 13 });
   expect(order("alpha").task).toMatchObject({ opponentCommitted: true });
-  expect(renderDuel()).toContain("開封できます");
+  expect(renderDuel()).toContain("あと1操作");
+  expect(renderDuel()).not.toContain("相手はまだ封じていませんが");
+  state = run(state, "alpha", { kind: "rps-open", contractId: order("alpha").id, hand: 1, randomness: 1 });
+  expect(renderDuel()).toContain("自分の操作は完了です");
+  expect(renderDuel()).not.toContain("上のボタンで");
   expect(order("alpha").task).not.toHaveProperty("opponentOpening");
 });
 
