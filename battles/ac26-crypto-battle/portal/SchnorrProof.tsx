@@ -42,7 +42,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
   };
   return <section className="tc-input-panel" aria-label="Schnorr zero-knowledge proof">
     <h3>{ja?"ゼロ知識証明（Schnorr）：秘密の数を知っていると示す":"Zero-knowledge proof (Schnorr): show knowledge of a secret"}</h3>
-    <p className="tc-schnorr-progress">{ja ? `このお題は2回の送信で1つの証明を作ります。最後の応答が正しければ完了・+${order.points}点です。暗号文を元の文に戻す操作ではありません。` : `Two submissions form one proof. A correct final response completes this Order for +${order.points} points. Neither step restores an encrypted message to its original text.`}</p>
+    <p className="tc-schnorr-progress">{ja ? `このお題は2回の送信で1つの証明を作ります。最後の応答が正しければ完了・+${order.points}点です。` : `Two submissions form one proof. A correct final response completes this Order for +${order.points} points.`}</p>
     <p>{ja?"あなたは x を知っています。検証者は y だけを使い、x を受け取らずに応答を検査します。":"You know x. The verifier checks your response using y, without receiving x."}</p>
     <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}} aria-label={ja?"証明の順番":"Proof sequence"}>
       <strong>{ja?"あなた：a を送る":"You send a"}</strong><span>→</span><strong>{ja?"検証者：e を返す":"Verifier sends e"}</strong><span>→</span><strong>{ja?"あなた：z を計算して送る":"You calculate and send z"}</strong>
