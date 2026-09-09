@@ -1,9 +1,8 @@
-/** The hand-calculation model must not claim practical proof-of-knowledge security. */
 export function SchnorrModelNotice({locale}:{locale:"ja"|"en"}) {
   const ja=locale==="ja";
-  return <aside aria-label={ja?"この模型の採点と限界":"Model scoring and limits"} className="tc-card-hint">
-    <strong>{ja?"得点になるのは、検証式に合う応答の計算です。":"Points reward a response that satisfies the verification equation."}</strong>
-    <p>{ja?"秘密の候補は最大11通りしかないため、この模型の合格だけでは、秘密を知っていたことや安全な本人確認を保証できません。":"With at most 11 possible secret values, acceptance in this model cannot establish prior knowledge of the secret or provide secure authentication."}</p>
-    <p>{ja?"扱うのは公開値yに対応する数xです。シェアの値や数独の解を知っているかは検査しません。":"The calculation concerns the number x corresponding to public y. It does not check knowledge of a share value or a Sudoku solution."}</p>
+  return <aside className="tc-card-hint" aria-label={ja?"この模型の採点と限界":"Model scoring and limits"}>
+    <strong>{ja?"このお題は、式に合う答えを計算すると得点できます。":"In this exercise, calculate an answer that matches the equation to earn points."}</strong>
+    <p>{ja?"秘密の数の候補は最大11通りです。少ない候補から答えを探せるため、式が合うだけでは、もともと秘密を知っていたと確かめられません。":"There are at most 11 possible secret values. With so few candidates to try, a matching answer cannot establish that you already knew the secret."}</p>
+    <p>{ja?"ここで使うxは計算用の秘密の数です。シェア（秘密を分けて持つ番号と数の組）の値や、数独の解を知っているかは検査しません。":"Here x is the secret number used for the calculation. This does not check a share (a numbered value used to split a secret) or a Sudoku solution."}</p>
   </aside>;
 }

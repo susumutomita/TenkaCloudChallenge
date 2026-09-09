@@ -8,6 +8,7 @@ import {orderReward} from "./orderReward.ts";
 import {SnarkWorksheet} from "./SnarkWorksheet.tsx";
 import {EcWorksheet} from "./EcWorksheet.tsx";
 import { BreachNotice } from "./BreachNotice.tsx";
+import { SchnorrModelNotice } from "./SchnorrModelNotice.tsx";
 import { SchnorrProof } from "./SchnorrProof.tsx";
 import { power } from "../game/src/schnorr.ts";
 import { chooseProveTable } from "./prove-table.ts";
@@ -1370,6 +1371,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
             ? locale === "ja" ? `このお題の計算正解で +${next.lightning.points} 点。続けて解答してください。` : `A correct calculation on this Order earns +${next.lightning.points}. Continue to your answer.`
             : locale === "ja" ? "指定結果を読み取れませんでした。お題とカードの状態を確認してください。" : "Could not read the declaration result. Check the Order and card.",
         }))} />}
+
+      {selectedOrder?.schnorr && <SchnorrModelNotice locale={locale}/>}
 
       {primaryActionsVisible && selectedOrder?.task.kind !== "zk-sudoku" && (
       <div>
