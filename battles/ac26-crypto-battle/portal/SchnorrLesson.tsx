@@ -1,10 +1,12 @@
+import { SchnorrModelNotice } from "./SchnorrModelNotice.tsx";
 import { useState } from "react";
 /** Fixed seminar example; never reads a player's witness or submits a move. */
 export function SchnorrLesson({locale}:{locale:"ja"|"en"}) {
   const [step,setStep]=useState(0);const ja=locale==="ja";
-  const titles=ja?["誰が、何を知っている？","手計算と検証式","秘密なしでも同じ会話を作れる","それでも、なぜ証明になる？"]:["Who knows what?","Calculate and verify","Simulate without the secret","Why does this prove knowledge?"];
+  const titles=ja?["誰が、何を知っている？","手計算と検証式","秘密なしでも同じ会話を作れる","秘密を守ることと、不正を見分けること"]:["Who knows what?","Calculate and verify","Simulate without the secret","Privacy and detecting false claims"];
   const equation={fontSize:22,lineHeight:1.8,overflowWrap:"anywhere" as const};
   return <section aria-label="Schnorr lesson" style={{background:"#f4f8fd",color:"#172d46",padding:16,borderRadius:8}}>
+    <SchnorrModelNotice locale={locale}/>
     <h4>{step+1}/4 · {titles[step]}</h4>
     <p>{ja?"mod は割った余り、≡ は左右の余りが等しいという意味です。g は繰り返し掛ける数、p は余りを取る割る数です。":"mod means remainder; ≡ means equal remainders. g is the repeated base and p is the modulus (divisor)."}</p>
     {step===0&&<>
@@ -34,7 +36,7 @@ export function SchnorrLesson({locale}:{locale:"ja"|"en"}) {
       <p>{ja?"実際は a → e → z の順番。e を見てから a を作り直せません。同じ a に異なる e で答えられるなら、秘密を取り出せます。":"Real order is a → e → z: a cannot change after e. Two different challenges answered for the same a yield the witness."}</p>
       <p style={equation}>x = (z − z′)(e − e′)<sup>−1</sup> mod q</p>
       <p>{ja?"例：(e,z)=(5,5) と (2,6)。3の逆元は4なので x=(5−6)×4 mod11=7。rを使い回してはいけない理由でもあります。":"Example: (e,z)=(5,5) and (2,6). The inverse of 3 is 4; x=(5−6)×4 mod11=7. Never reuse r."}</p>
-      <p>{ja?"決められた手順で質問を均等に選ぶ検証者を「正直な検証者」と呼びます。この相手へのゼロ知識がHVZKです。小さい数では y から全探索でき、推測した e が当たる確率も1/11。実用には大きな群が必要です。Verify成功は秘密の復元ではなく、HUNTの得点にはしません。":"An honest verifier follows the protocol and draws the challenge uniformly. ZK for this verifier is called HVZK. Tiny parameters allow brute force; a guessed e succeeds with probability 1/11. Practical security requires a large group. Verification does not recover the secret or award HUNT points."}</p>
+      <p>{ja?"決められた手順で質問を均等に選ぶ検証者を「正直な検証者」と呼びます。この相手へのゼロ知識がHVZKです。公開値y以上を漏らさない性質と、秘密を知らずに通ることが難しい性質は別です。この模型では秘密の候補が最大11通りしかなく、後者の安全性はありません。同じ小さな数で何回繰り返しても、この候補の少なさは解消しません。実用には、公開値から秘密を求める計算が十分難しくなる大きさが必要です。Verify成功は秘密の復元ではなく、HUNTの得点にはしません。":"An honest verifier follows the protocol and draws the challenge uniformly. ZK for this verifier is called HVZK. Revealing nothing beyond y and making false claims hard to pass are different properties. With at most 11 possible secrets, this model does not provide the latter security. Repeating rounds over the same tiny group does not fix that small search space. Practical parameters must make recovering a secret from its public value computationally infeasible. Verification does not recover the secret or award HUNT points."}</p>
     </>}
     <nav style={{display:"flex",gap:12}}><button type="button" disabled={step===0} onClick={()=>setStep(step-1)}>{ja?"前へ":"Previous"}</button><button type="button" disabled={step===3} onClick={()=>setStep(step+1)}>{ja?"次へ":"Next"}</button></nav>
   </section>;

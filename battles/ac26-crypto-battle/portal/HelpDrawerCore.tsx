@@ -37,8 +37,8 @@ const COPY = {
     first: [
       "シェア（share）は、秘密分散で配る番号と数の組です。秘密分散のお題だけで使います。MPCでも使う方法はありますが、このゲームのMPCは隠す乱数を足し引きする別の方式です。",
       "『公開して答える（LEAK）』は、そのお題で求められたかけらを公開して、すぐ得点します。公開した数は『公開記録（PUBLIC LEDGER）』に残り、他のチームも読めます。",
-      "新しい試合のPROVEはゼロ知識証明（Schnorr）。aを先に固定し、検証者から届くeを使ってzを手計算します。秘密xと乱数rは端末内に残ります。旧試合は数独模型のままです。",
-      "LEAKとPROVEを選べるお題では「シェアを公開する」か「別の秘密xについて証明する」かを選びます。Schnorrはシェアの正しさを証明するものではありません。暗号化・準同型の足し算・MPC・じゃんけんにはそれぞれ別の入力欄があります。",
+      "新しい試合のPROVEはゼロ知識証明（Schnorr）の計算模型です。aを先に固定し、検証者から届くeを使ってzを手計算します。秘密xと乱数rは端末内に残ります。旧試合は数独模型のままです。",
+      "LEAKとPROVEを選べるお題では「シェアを公開する」か「別の数xを使った計算模型に答える」かを選びます。Schnorrはシェアの正しさを証明するものではありません。暗号化・準同型の足し算・MPC・じゃんけんにはそれぞれ別の入力欄があります。",
     ],
     evidenceTitle: "公開した情報は、どう使われる？",
     evidence: [
@@ -59,7 +59,7 @@ const COPY = {
       { name: "EC — 楕円曲線の点を足す", body: "楕円曲線は、決めた式を満たす座標(x,y)の集まりです。画面の式と逆元の表でP+Qを求め、xとyを半角スペースで区切って提出します。ECDSAという電子署名でも使う計算ですが、この問題は署名全体ではなく、7で割った余りで行う点加算です。" },
       { name: "FHE — 暗号のまま足す", body: "準同型暗号は、中身を隠した暗号文のまま計算する技術です。左右 2 個の数字の組を受け取り、左どうし・右どうしを足して、各々の余りを提出します。完全準同型暗号（FHE）は掛け算も扱います。このゲームは足し算を体験するモデルです。" },
       { name: "MPC — 自分の数を隠して合計に参加する", body: "秘密計算（MPC）は、複数人で秘密を保って計算する方法です。各社の数を公開せず、合計を求めたい場面を体験します。自分の数に『受け取った覆面』を足し、『送った覆面』を引いて、余りを小計として提出します。覆面は内緒で共有する数で、全社を足すと打ち消し合います。得られる合計も、割る数で割った余りです。" },
-      { name: "PROVE — ゼロ知識証明（Schnorr）", body: "公開値yに対応する秘密xを知ることを示します。a→e→zの順に会話し、検証者は2ᶻ ≡ a×yᵉ (mod23)を確認。秘密xは受け取りません。図と式の解説で、なぜ秘密を増やさないかを確かめられます。小さい数のHVZK教材で、旧試合の数独模型とは別方式です。" },
+      { name: "PROVE — ゼロ知識証明（Schnorr）", body: "公開値yに対応する数xを使って、Schnorrの検証式を手計算する模型です。候補が最大11通りなので、合格は秘密を知っていた保証にはなりません。シェアや数独の解は検査しません。a→e→zの順に会話し、検証者は2ᶻ ≡ a×yᵉ (mod23)を確認。秘密xは受け取りません。図と式の解説で、なぜ秘密を増やさないかを確かめられます。小さい数のHVZK教材で、旧試合の数独模型とは別方式です。" },
       { name: "DUEL — 相手とじゃんけんする", body: "手を先に見せると相手が勝つ手を選べるので、手と隠す数を混ぜた数字を先に出します。これをコミットメントと呼びます。自分の数字を出したら相手を待たず手と隠す数を審判へ非公開で渡し、両開封を同時公開して勝敗を決めます。小さい数では別の手への開け方を探せるため、同時公開を守る審判が必要です。commit-reveal 自体は ZK 証明ではありません。" },
     ],
     placesTitle: "画面のどこを見る？",
@@ -74,8 +74,8 @@ const COPY = {
     first: [
       "A share is an indexed value distributed by secret sharing. It belongs to the secret-sharing task. Some MPC protocols use shares; this game instead uses cancelling random masks for MPC.",
       "Publish to answer (LEAK) reveals the requested share and scores immediately. Everyone can read the value in the PUBLIC LEDGER.",
-      "New-match PROVE uses Schnorr zero-knowledge proof: fix a, receive e, then hand-calculate z. Private x and r stay in your browser. Legacy matches retain the Sudoku model.",
-      "Where both are offered, choose between publishing a share and proving knowledge of a separate x. Schnorr does not certify the share. Encryption, homomorphic addition, MPC and duels have separate inputs.",
+      "New-match PROVE uses a Schnorr zero-knowledge proof calculation model: fix a, receive e, then hand-calculate z. Private x and r stay in your browser. Legacy matches retain the Sudoku model.",
+      "Where both are offered, choose between publishing a share and completing a calculation model with a separate x. Schnorr does not certify the share. Encryption, homomorphic addition, MPC and duels have separate inputs.",
     ],
     evidenceTitle: "What can an opponent do with published information?",
     evidence: [
@@ -96,7 +96,7 @@ const COPY = {
       { name: "EC — Add elliptic curve points", body: "An elliptic curve is a set of coordinate pairs satisfying an equation. Use the displayed formula and inverse table to find P+Q; submit x space y. ECDSA digital signatures use point addition, but this exercise only covers addition modulo7, not a complete signature." },
       { name: "FHE — Add encrypted values", body: "Homomorphic encryption allows computation on hidden values. Receive pairs, add lefts and rights separately, and submit the remainders. Fully homomorphic encryption (FHE) also supports multiplication; this game models addition." },
       { name: "MPC — Contribute without showing your input", body: "Secure computation (MPC) lets multiple parties compute while keeping inputs private. To contribute to a company total, add received masks to your input and subtract sent masks. A mask is a privately shared number; each is added and subtracted once across the companies. Submit your subtotal’s remainder. The combined result is also a remainder, not an unrestricted total." },
-      { name: "PROVE — Schnorr zero-knowledge proof", body: "Zero-knowledge proofs show knowledge of x for public y through a→e→z. The verifier checks 2ᶻ ≡ a×yᵉ (mod23), without receiving x. The diagram guide explains why transcripts reveal no additional information. This is a tiny-parameter HVZK exercise, separate from legacy Sudoku matches." },
+      { name: "PROVE — Schnorr zero-knowledge proof", body: "Zero-knowledge proofs reveal no information beyond the public statement. This model hand-calculates the Schnorr equation using x for public y through a→e→z. At most 11 secret candidates exist, so acceptance does not certify prior knowledge. Shares and Sudoku solutions are not checked. The verifier checks 2ᶻ ≡ a×yᵉ (mod23), without receiving x. The diagram guide explains why transcripts reveal no additional information. This is a tiny-parameter HVZK exercise, separate from legacy Sudoku matches." },
       { name: "DUEL — Play an opponent", body: "Showing your hand first lets an opponent counter it. First send a commitment, a number mixing your hand with a hiding number. After sealing your number, give the judge your opening privately without waiting for the opponent. Both openings are published together to settle the duel. Tiny numbers permit alternative openings, so this model needs its judge to enforce simultaneous publication. Commit-reveal is not itself a ZK proof." },
     ],
     placesTitle: "Where should you look?",

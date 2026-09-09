@@ -41,7 +41,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
     onSubmit({kind:"schnorr-commit",contractId:order.id,y:proof.y,a:Number(a)});
   };
   return <section className="tc-input-panel" aria-label="Schnorr zero-knowledge proof">
-    <h3>{ja?"ゼロ知識証明（Schnorr）：秘密の数を知っていると示す":"Zero-knowledge proof (Schnorr): show knowledge of a secret"}</h3>
+    <h3>{ja?"ゼロ知識証明（Schnorr）の計算模型":"Zero-knowledge proof (Schnorr) calculation model"}</h3>
     <p className="tc-schnorr-progress">{ja ? `このお題は2回の送信で1つの証明を作ります。最後の応答が正しければ完了・+${order.points}点です。` : `Two submissions form one proof. A correct final response completes this Order for +${order.points} points.`}</p>
     <p>{ja?"あなたは x を知っています。検証者は y だけを使い、x を受け取らずに応答を検査します。":"You know x. The verifier checks your response using y, without receiving x."}</p>
     <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}} aria-label={ja?"証明の順番":"Proof sequence"}>
@@ -64,7 +64,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       {a !== "" && !correctCommitment && <p role="alert">{ja?"表の r の列を確認してください。a が式の答えと違います。送る前に直せます。":"Check the r column: a does not match the equation. Correct it before sending."}</p>}
       <p>{ja?"式の答えを入力すると、次へ進めます。":"Enter the equation’s answer to continue."}</p>
       <button type="button" className="tc-submit-small" disabled={busy||secret===null||!correctCommitment} onClick={commit}>{ja?"① 計算結果を送って、次へ":"① Send calculation and continue"}</button>
-    </> : proof.pending.used ? <p role="status">{(proof.pending.outcome === "hit" || (!proof.pending.outcome && order.status === "completed")) ? (ja?"検証成功：秘密を送らずに証明できました。":"Verification passed: you proved knowledge without sending the secret.") : (ja?"検証失敗：送った応答は検証式を満たしませんでした。この証明には再回答できません。":"Verification failed: your response did not satisfy the equation. This proof cannot be retried.")}</p> : <>
+    </> : proof.pending.used ? <p role="status">{(proof.pending.outcome === "hit" || (!proof.pending.outcome && order.status === "completed")) ? (ja?"模型の検証式が一致しました。秘密を知っていたことを保証する結果ではありません。":"The model equation matched. This result does not certify prior knowledge of the secret.") : (ja?"検証失敗：送った応答は検証式を満たしませんでした。この証明には再回答できません。":"Verification failed: your response did not satisfy the equation. This proof cannot be retried.")}</p> : <>
       <div className="tc-schnorr-progress" role="status"><strong>{ja?"1回目の送信が完了。あと1回で証明完了です。":"First submission complete. One more submission finishes the proof."}</strong></div>
       <h4>{ja?"送信 2 / 2：届いたeを使って、最後の答えを計算":"Submission 2 / 2: calculate the final answer using the returned e"}</h4>
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>
