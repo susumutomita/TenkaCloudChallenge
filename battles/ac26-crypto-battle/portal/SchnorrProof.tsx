@@ -66,7 +66,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       {a !== "" && !correctCommitment && <p role="alert">{ja?"表の r の列を確認してください。a が式の答えと違います。送る前に直せます。":"Check the r column: a does not match the equation. Correct it before sending."}</p>}
       <p>{ja?"式の答えを入力すると、次へ進めます。":"Enter the equation’s answer to continue."}</p>
       <button type="button" className="tc-submit-small" disabled={busy||secret===null||!correctCommitment} onClick={commit}>{ja?"① 計算結果を送って、次へ":"① Send calculation and continue"}</button>
-    </> : proof.pending.used ? <p role="status">{(proof.pending.outcome === "hit" || (!proof.pending.outcome && order.status === "completed")) ? (ja?"検証成功：秘密を送らずに証明できました。":"Verification passed: you proved knowledge without sending the secret.") : (ja?"検証失敗：送った応答は検証式を満たしませんでした。この証明には再回答できません。":"Verification failed: your response did not satisfy the equation. This proof cannot be retried.")}</p> : <>
+    </> : proof.pending.used ? <p role="status">{(proof.pending.outcome === "hit" || (!proof.pending.outcome && order.status === "completed")) ? (ja?"模型の検証式が一致しました。秘密を知っていたことを保証する結果ではありません。":"The model equation matched. This result does not certify prior knowledge of the secret.") : (ja?"検証失敗：送った応答は検証式を満たしませんでした。この証明には再回答できません。":"Verification failed: your response did not satisfy the equation. This proof cannot be retried.")}</p> : <>
       <div className="tc-schnorr-progress" role="status"><strong>{ja?"1回目の送信が完了。あと1回で証明完了です。":"First submission complete. One more submission finishes the proof."}</strong></div>
       <h4>{ja?"送信 2 / 2：届いたeを使って、最後の答えを計算":"Submission 2 / 2: calculate the final answer using the returned e"}</h4>
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>

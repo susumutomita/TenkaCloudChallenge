@@ -15,3 +15,13 @@ for(const locale of ["ja","en"] as const) test(`Schnorr limits appear before int
     expect(html).toContain(locale==="ja"?"保証できません":"cannot establish prior knowledge");
   }
 });
+
+for(const locale of ["ja","en"] as const) test(`completed Schnorr display does not certify prior knowledge (${locale})`,()=>{
+  const state=applyOp(initialState({eventId:"boundary",teamIds:["a","b"],matchSecret:"boundary"},STREAMING_ORDER_CONFIG),"a",{kind:"start"});
+  const order=projectForTeam(state,"a").myContracts.find(c=>c.schnorr)!;
+  // Render a completed projection fixture; this test checks copy, not protocol acceptance.
+  const completed={...order,status:"completed" as const,schnorr:{...order.schnorr!,pending:{y:order.schnorr!.y,a:2,e:1,used:true,outcome:"hit" as const}}};
+  const html=renderToStaticMarkup(createElement(SchnorrProof,{order:completed,teamId:"a",locale,busy:false,onSubmit:()=>{}}));
+  expect(html).toContain(locale==="ja"?"模型の検証式が一致しました":"The model equation matched");
+  expect(html).not.toContain(locale==="ja"?"秘密を送らずに証明できました":"you proved knowledge");
+});
