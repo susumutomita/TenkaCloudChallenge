@@ -1053,6 +1053,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [proveCells, setProveCells] = useState<readonly string[]>(() => emptyCells());
   const [proveOpen, setProveOpen] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<OrderReceipt | undefined>();
+  const [completionPending, setCompletionPending] = useState(false);
   const workspaceRef = useRef<HTMLElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
   const cipherInputRef = useRef<HTMLInputElement>(null);
@@ -1070,6 +1071,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
     setFeedback(null);
     attemptRef.current = 0;
     setOrderReceipt(undefined);
+    setCompletionPending(false);
   }, [polled.projection?.vault.teamId]);
   useEffect(() => {
     if (feedback && feedback.kind !== "hint") {
@@ -1178,6 +1180,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         if (!draft) return;
         if (draft.reward !== undefined && selectedOrder && next?.myContracts.some(order => order.id === selectedOrder.id && order.status === "completed")) {
           setOrderReceipt({ id: selectedOrder.id, points: draft.reward });
+          setCompletionPending(true);
         }
         setFeedback({ ...draft, attempt });
       }
@@ -1291,19 +1294,26 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
       <OrderQueue key={`${props.team.eventId}:${projection.vault.teamId}`} projection={projection} locale={locale}
-        selectedId={selectedOrder?.id} receipt={orderReceipt}
+        selectedId={completionPending ? undefined : selectedOrder?.id} receipt={orderReceipt}
         onSelect={(id) => {
           setSelectedOrderId(id);
+          setCompletionPending(false);
           setProveOpen(false);
           setFeedback(null);
           workspaceRef.current?.scrollIntoView({ block: "start" });
         }} />
 
       <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
-        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length ? () => { setFeedback(null); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length && !completionPending ? () => { setFeedback(null); setCompletionPending(false); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
       </div>
 
       <section ref={workspaceRef} className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
+      {completionPending && orderReceipt ? <div className="tc-ticket">
+        <h2>{orderReceipt.id.replace(/^.*-c/, "ORDER #")} · {locale === "ja" ? "完了" : "Completed"}</h2>
+        <p>{locale === "ja" ? `このお題の回答は完了しました。獲得した得点は ${orderReceipt.points} 点です。` : `This Order is complete. You earned ${orderReceipt.points} points.`}</p>
+        <p>{locale === "ja" ? "続けるときは「次のお題へ」、または上の一覧から別のお題を選んでください。" : "Choose Next Order or select another Order from the queue to continue."}</p>
+        <button type="button" className="tc-submit-small" disabled={!orders.length} onClick={() => { setCompletionPending(false); setFeedback(null); }}>{locale === "ja" ? "次のお題へ →" : "Next Order →"}</button>
+      </div> : <>
       {selectedOrder && (
         <div className={`tc-ticket${selectedOrder.remainingMs <= 30_000 ? " tc-ticket-urgent" : ""}`}>
           <div className="tc-ticket-head">
@@ -1741,6 +1751,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             )}
           </details>
       ) : <p className="tc-card-hint">{copy.noOrder}</p>}
+      </>}
       </section>
 
       {/*
