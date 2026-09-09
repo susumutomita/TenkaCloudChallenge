@@ -1028,6 +1028,13 @@ export function ageProjection(
 }
 
 /** Waiting is live projection state, never a success receipt to carry into play. */
+/** Side actions must not claim an Order completed by the same server tick. */
+export function completionReceipt(submitted: ContractProjection | undefined, next: CryptoBattleProjection | undefined, points: number | undefined): OrderReceipt | undefined {
+  if (!submitted || submitted.status !== "open" || points === undefined) return undefined;
+  if (!next?.myContracts.some(order => order.id === submitted.id && order.status === "completed")) return undefined;
+  return { id: submitted.id, points, item: submitted.task.kind === "ssm-decrypt" };
+}
+
 export function readyFeedback(next: CryptoBattleProjection | undefined, locale: Locale): FeedbackDraft | null {
   if (!next || isWaiting(next) || isClosed(next)) return null;
   const copy = FAST_MOVE_COPY[locale];
@@ -1054,6 +1061,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [proveOpen, setProveOpen] = useState(false);
   const [orderReceipt, setOrderReceipt] = useState<OrderReceipt | undefined>();
   const [completionPending, setCompletionPending] = useState(false);
+  const selectionRevision = useRef(0);
   const workspaceRef = useRef<HTMLElement>(null);
   const feedbackRef = useRef<HTMLDivElement>(null);
   const cipherInputRef = useRef<HTMLInputElement>(null);
@@ -1070,6 +1078,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   useEffect(() => {
     setFeedback(null);
     attemptRef.current = 0;
+    selectionRevision.current += 1;
     setOrderReceipt(undefined);
     setCompletionPending(false);
   }, [polled.projection?.vault.teamId]);
@@ -1159,6 +1168,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const run = async (
     task: () => Promise<PortalCoordinationOutcome>,
     success: (next: CryptoBattleProjection | undefined) => FeedbackDraft | null,
+    submittedOrder?: ContractProjection,
   ) => {
     if (submitting) return;
     setSubmitting(true);
@@ -1169,6 +1179,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
     // outcome can be reported without one.
     attemptRef.current += 1;
     const attempt = attemptRef.current;
+    const submittedSelection = selectionRevision.current;
     try {
       const outcome = await task();
       const next = liveProjection(outcome);
@@ -1178,11 +1189,12 @@ export default function FastMovePanel(props: PortalSlotProps) {
       } else {
         const draft = success(next);
         if (!draft) return;
-        if (draft.reward !== undefined && selectedOrder && next?.myContracts.some(order => order.id === selectedOrder.id && order.status === "completed")) {
-          setOrderReceipt({ id: selectedOrder.id, points: draft.reward });
-          setCompletionPending(true);
+        const receipt = completionReceipt(submittedOrder, next, draft.reward);
+        if (receipt) {
+          setOrderReceipt(receipt);
+          setCompletionPending(submittedSelection === selectionRevision.current);
         }
-        setFeedback({ ...draft, attempt });
+        if (submittedSelection === selectionRevision.current) setFeedback({ ...draft, attempt });
       }
     } catch {
       setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable, attempt });
@@ -1190,6 +1202,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
       setSubmitting(false);
     }
   };
+
+  const runOrder = (task: () => Promise<PortalCoordinationOutcome>, success: (next: CryptoBattleProjection | undefined) => FeedbackDraft | null) =>
+    run(task, success, selectedOrder);
 
   if (!client) return <p role="status">{locale === "ja" ? "試合に接続できません。ページを再読み込みし、直らなければ運営に連絡してください。" : "Cannot connect to the match. Reload the page; if the problem persists, contact the event organizer."}</p>;
   if (!projection) return <section className="tc-move-shell"><style>{CSS}</style><div role="status">{polled.status === null ? (locale === "ja" ? "最初の更新を待っています" : "Waiting for the first match update") : copy.unavailable}</div></section>;
@@ -1296,6 +1311,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <OrderQueue key={`${props.team.eventId}:${projection.vault.teamId}`} projection={projection} locale={locale}
         selectedId={completionPending ? undefined : selectedOrder?.id} receipt={orderReceipt}
         onSelect={(id) => {
+          selectionRevision.current += 1;
           setSelectedOrderId(id);
           setCompletionPending(false);
           setProveOpen(false);
@@ -1310,7 +1326,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <section ref={workspaceRef} className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
       {completionPending && orderReceipt ? <div className="tc-ticket">
         <h2>{orderReceipt.id.replace(/^.*-c/, "ORDER #")} · {locale === "ja" ? "完了" : "Completed"}</h2>
-        <p>{locale === "ja" ? `このお題の回答は完了しました。獲得した得点は ${orderReceipt.points} 点です。` : `This Order is complete. You earned ${orderReceipt.points} points.`}</p>
+        <p>{orderReceipt.item ? (locale === "ja" ? "このお題は完了です。横取りアイテムを獲得しました。アイテム欄から相手を選んで使えます。" : "This Order is complete. You acquired a score item. Choose an opponent in your inventory to use it.") : (locale === "ja" ? `このお題の回答は完了しました。獲得した得点は ${orderReceipt.points} 点です。` : `This Order is complete. You earned ${orderReceipt.points} points.`)}</p>
         <p>{locale === "ja" ? "続けるときは「次のお題へ」、または上の一覧から別のお題を選んでください。" : "Choose Next Order or select another Order from the queue to continue."}</p>
         <button type="button" className="tc-submit-small" disabled={!orders.length} onClick={() => { setCompletionPending(false); setFeedback(null); }}>{locale === "ja" ? "次のお題へ →" : "Next Order →"}</button>
       </div> : <>
@@ -1332,7 +1348,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       )}
 
       {(projection.lightning?.status === "available" || projection.lightning?.status === "armed" || projection.lightning?.status === "spent") && <Lightning projection={projection} order={selectedOrder} locale={locale} busy={submitting}
-        onSelect={id => { setSelectedOrderId(id); setProveOpen(false); }}
+        onSelect={id => { selectionRevision.current += 1; setSelectedOrderId(id); setCompletionPending(false); setProveOpen(false); }}
         onDeclare={id => void run(() => submitDeclareLightning(client, id), next => ({
           kind: next?.lightning?.status === "armed" && next.lightning.contractId === id ? "hint" : "error",
           title: locale === "ja" ? "ライトニングの指定" : "Lightning declaration",
@@ -1392,7 +1408,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             className="tc-action tc-leak-button"
             disabled={!selectedOrder || submitting || !leakAllowed}
             title={selectedOrder && !leakAllowed ? copy.leakBlocked : undefined}
-            onClick={() => selectedOrder && void run(
+            onClick={() => selectedOrder && void runOrder(
               () => submitLeak(client, selectedOrder.id),
               // [Issue #659] The confirmation has to name what actually became
               // public. A ladder LEAK publishes the row next to its answer, not
@@ -1468,7 +1484,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             type="button"
             className="tc-submit-small tc-fhe-button"
             disabled={submitting || !fheR.trim() || !fheY.trim()}
-            onClick={() => void run(
+            onClick={() => void runOrder(
               () => submitFhe(client, selectedOrder.id, { r: fheR.trim(), y: fheY.trim() }),
               (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.fheSuccess, body: copy.fheBody(points), reward: points, lesson: copy.fheLesson }; },
             )}
@@ -1536,7 +1552,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             type="button"
             className="tc-submit-small tc-cipher-button"
             disabled={submitting || !cipherAnswer.trim()}
-            onClick={() => void run(
+            onClick={() => void runOrder(
               () => submitCipher(client, selectedOrder.id, cipherAnswer.trim().split(/\s+/)),
               (next) => cipherFeedback(next, selectedOrder.id, locale),
             )}
@@ -1557,8 +1573,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
         onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "prove", title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
       />}
 
-      {selectedOrder?.task.kind === "ssm-decrypt" && <ScoreItemOrder key={`score-item:${selectedOrder.id}`} task={selectedOrder.task} contractId={selectedOrder.id} busy={submitting} locale={locale} onSubmit={op=>void run(()=>client.submitOp(op),next=>next?.scoreSteal?.held ? {kind:"prove",title:locale==="ja"?"横取りアイテム獲得！":"Score item acquired!",body:locale==="ja"?"相手を選び、好きなタイミングで1回使えます。":"Choose an opponent and use it once.",reward:0}:{kind:"error",title:locale==="ja"?"AWSの値と計算を確認してください":"Check the AWS value and calculation",body:next ? (locale==="ja"?`不正解。${projection.wrongProveCost}点の減点（最低0点）。`:`Incorrect; ${projection.wrongProveCost} point penalty, floored at0.`):copy.unavailable})}/>}
-      {selectedOrder?.task.kind === "anamorphic-rejection" && <AnamorphicWorksheet wrongCost={projection.wrongProveCost} key={`anamorphic:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+      {selectedOrder?.task.kind === "ssm-decrypt" && <ScoreItemOrder key={`score-item:${selectedOrder.id}`} task={selectedOrder.task} contractId={selectedOrder.id} busy={submitting} locale={locale} onSubmit={op=>void runOrder(()=>client.submitOp(op),next=>next?.scoreSteal?.held ? {kind:"prove",title:locale==="ja"?"横取りアイテム獲得！":"Score item acquired!",body:locale==="ja"?"相手を選び、好きなタイミングで1回使えます。":"Choose an opponent and use it once.",reward:0}:{kind:"error",title:locale==="ja"?"AWSの値と計算を確認してください":"Check the AWS value and calculation",body:next ? (locale==="ja"?`不正解。${projection.wrongProveCost}点の減点（最低0点）。`:`Incorrect; ${projection.wrongProveCost} point penalty, floored at0.`):copy.unavailable})}/>}
+      {selectedOrder?.task.kind === "anamorphic-rejection" && <AnamorphicWorksheet wrongCost={projection.wrongProveCost} key={`anamorphic:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void runOrder(
         ()=>client.submitOp({kind:"anamorphic",contractId:selectedOrder.id,answer}),
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
@@ -1568,7 +1584,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"このお題に正解！":"Order complete!",body:locale==="ja"?"答えを確認し、このお題の得点を加算しました。":"Your answer was verified and this Order scored."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。このお題の式と入力した答えを確認してください。`:`${delta} pt. Check this Order’s calculation and your answer.`};
         }
        )}/> }
-      {selectedOrder?.task.kind === "stark-trace" && <StarkWorksheet wrongCost={projection.wrongProveCost} key={`stark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+      {selectedOrder?.task.kind === "stark-trace" && <StarkWorksheet wrongCost={projection.wrongProveCost} key={`stark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void runOrder(
         ()=>client.submitOp({kind:"stark",contractId:selectedOrder.id,answer}),
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
@@ -1578,7 +1594,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"実行表と折り畳みの検査に成功！":"Trace and fold check complete!",body:locale==="ja"?"実行表のずれと折り畳みを別々に確認できました。":"You checked execution mismatches and the fold separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。上から順に、7で割った余りを確認してください。`:`${delta} pt. Check the four remainders by 7 in order.`};
         }
        )}/> }
-      {selectedOrder?.task.kind === "io-equivalence" && <IoWorksheet wrongCost={projection.wrongProveCost} key={`io:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+      {selectedOrder?.task.kind === "io-equivalence" && <IoWorksheet wrongCost={projection.wrongProveCost} key={`io:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void runOrder(
         ()=>client.submitOp({kind:"io",contractId:selectedOrder.id,answer}),
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
@@ -1588,7 +1604,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"計算と分布の比較に成功！":"Function and distribution check complete!",body:locale==="ja"?"同じ機能かどうかと、公開データの分布を別々に確認できました。":"You checked functional equivalence and the published distributions separately."}:{kind:"error",title:locale==="ja"?"比較結果が違います":"Incorrect comparison",body:locale==="ja"?`${delta} 点。空欄の余りと、rを含む公開データの組を確認してください。`:`${delta} pt. Check the missing remainders and complete outcomes including r.`};
         }
        )}/> }
-      {(selectedOrder?.task.kind === "enigma-encrypt" || selectedOrder?.task.kind === "ecdsa-sign" || selectedOrder?.task.kind === "rsa-decrypt") && <EvolutionWorksheet wrongCost={projection.wrongProveCost} key={`evolution:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+      {(selectedOrder?.task.kind === "enigma-encrypt" || selectedOrder?.task.kind === "ecdsa-sign" || selectedOrder?.task.kind === "rsa-decrypt") && <EvolutionWorksheet wrongCost={projection.wrongProveCost} key={`evolution:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void runOrder(
         ()=>client.submitOp({kind:"evolution",contractId:selectedOrder.id,answer}), next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const result=next.myContracts.find(c=>c.id===selectedOrder.id);
@@ -1596,7 +1612,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return result.status==="completed"?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"正解！":"Correct!",body:locale==="ja"?"式を使って変換できました。":"You completed the transformation."}:{kind:"error",title:locale==="ja"?"表と余りを確認してください":"Check the table and remainders",body:`${result.lastSubmissionPoints} pt`};
         }
       )}/>}
-      {selectedOrder?.task.kind === "snark-constraints" && <SnarkWorksheet wrongCost={projection.wrongProveCost} key={`snark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+      {selectedOrder?.task.kind === "snark-constraints" && <SnarkWorksheet wrongCost={projection.wrongProveCost} key={`snark:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void runOrder(
         ()=>client.submitOp({kind:"snark",contractId:selectedOrder.id,answer}), next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
           const hit=next.myContracts.some(c=>c.id===selectedOrder.id&&c.status==="completed");
@@ -1605,7 +1621,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return hit?{kind:"prove",reward:orderReward(selectedOrder,next),title:locale==="ja"?"制約の検査に成功！":"Constraint check complete!",body:answer.split(" ").every(v=>v==="0")?(locale==="ja"?"全て0：計算も配線も一致しています。":"All zero: gates and wires agree."):(locale==="ja"?"0でない箇所があり、不正な計算か配線を検出しました。":"Nonzero remainders expose incorrect gates or wires.")}:{kind:"error",title:locale==="ja"?"余りを確認してください":"Check the remainders",body:`${delta} pt`};
         }
       )}/>}
-      {selectedOrder?.task.kind === "ec-add" && <EcWorksheet key={`ec:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void run(
+      {selectedOrder?.task.kind === "ec-add" && <EcWorksheet key={`ec:${selectedOrder.id}`} task={selectedOrder.task} locale={locale} busy={submitting} onSubmit={answer=>void runOrder(
         ()=>client.submitOp({kind:"ec",contractId:selectedOrder.id,answer}),
         next=>{
           if(!next)return {kind:"error",title:copy.unavailable,body:copy.unavailable};
@@ -1629,7 +1645,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             type="button"
             className="tc-submit-small tc-mpc-button"
             disabled={submitting || !mpcPartial.trim()}
-            onClick={() => void run(
+            onClick={() => void runOrder(
               () => submitMpc(client, selectedOrder.id, mpcPartial.trim()),
               (next) => { const points = next?.myContracts.find(c => c.id === selectedOrder.id && c.status === "completed")?.points ?? selectedOrder.points; return { kind: "prove", title: copy.mpcSuccess, body: `${copy.mpcBody(points)} · ${copy.mpcAnswer}: ${mpcPartial.trim()}`, reward: points, lesson: copy.mpcLesson }; },
             )}
@@ -1652,7 +1668,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         The judge still receives and checks the complete grid. Used tables stay
         selectable so reuse remains a real decision, with its risk labelled.
       */}
-      {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder?.schnorr && proveAllowed && <SchnorrProof key={`schnorr:${selectedOrder.id}`} order={selectedOrder} teamId={projection.vault.teamId} locale={locale} busy={submitting} onSubmit={op=>void run(()=>client.submitOp(op),next=>{
+      {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder?.schnorr && proveAllowed && <SchnorrProof key={`schnorr:${selectedOrder.id}`} order={selectedOrder} teamId={projection.vault.teamId} locale={locale} busy={submitting} onSubmit={op=>void runOrder(()=>client.submitOp(op),next=>{
         if(op.kind === "schnorr-commit") return {kind:"hint",title:locale === "ja"?"検証者から e が届きました":"Verifier challenge received",body:locale === "ja"?"次は送信 2 / 2 です。届いた e を使って応答 z を計算してください。":"Next is submission 2 / 2. Calculate response z using the returned e."};
         const proof=next?.publicLedger.find(entry=>entry.kind === "proof" && entry.contractId === selectedOrder.id);
         return proof?.kind === "proof" && proof.publicKey ? {kind:"prove",reward:selectedOrder.points,title:locale === "ja"?"証明成功！":"Proof verified!",body:`${locale === "ja" ? "検証式が一致" : "Verification matches"}: ${power(2,Number(proof.response))} = ${Number(proof.commitment)*power(Number(proof.publicKey),Number(proof.challenge))%23}。${locale === "ja"?"秘密 x を送らず検証できました。":"Verified without sending x."}`} : {kind:"error",title:locale === "ja"?"検証式が一致しません":"Verification failed",body:selectedOrder.allowedMethods.length === 1 ? (locale === "ja" ? "このお題は不合格で終了しました。追加の期限切れ減点はありません。次のお題へ進んでください。" : "This Order ended with a failed proof. No additional deadline penalty applies. Continue to the next Order.") : (locale === "ja" ? "応答は1回だけです。期限までにLEAKへ切り替えるか、次のお題へ進んでください。" : "Only one proof response is accepted. Switch to LEAK before the deadline or continue to the next Order.")};
@@ -1694,7 +1710,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
             className="tc-submit-small tc-prove-submit"
             disabled={submitting || proveGrid === undefined}
             title={proveGrid === undefined ? copy.proveIncomplete : undefined}
-            onClick={() => proveGrid && void run(
+            onClick={() => proveGrid && void runOrder(
               () => submitProveSudoku(client, selectedOrder.id, proveGrid),
               // [Issue #709] Hit or miss is read off the projection the op
               // came back with -- a wrong grid lands and returns ok. A hit
