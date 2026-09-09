@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { completionReceipt } from "../../portal/FastMovePanel.tsx";
-import { initialState, applyOp, projectForTeam, tick } from "./reducer.ts";
+import { completionReceipt } from "../portal/FastMovePanel.tsx";
+import { initialState, applyOp, projectForTeam, tick } from "../game/src/reducer.ts";
 
 test("a single accepted answer completes only its own Order; side operations cannot claim it", () => {
   const state = applyOp(initialState({eventId:"receipt",teamIds:["a","b"]}),"a",{kind:"start"});
@@ -19,8 +19,8 @@ test("a single accepted answer completes only its own Order; side operations can
 });
 
 test("an optional item completion carries an item receipt instead of a zero-point reward", async () => {
-  const { STREAMING_ORDER_CONFIG } = await import("./reducer.ts");
-  const { scoreItemInputs } = await import("./score-steal.fixture.ts");
+  const { STREAMING_ORDER_CONFIG } = await import("../game/src/reducer.ts");
+  const { scoreItemInputs } = await import("../game/src/score-steal.fixture.ts");
   const inputs = scoreItemInputs(["a","b","c"]);
   let state = applyOp(initialState({eventId:"items",teamIds:["a","b","c"],matchSecret:"item-test",deploymentInputs:inputs},STREAMING_ORDER_CONFIG),"a",{kind:"start"});
   for (let t=0;t<=550_000;t+=10_000) {

@@ -78,6 +78,7 @@ type FeedbackKind = "ec" | "leak" | "prove" | "hunt" | "rotate" | "hint" | "erro
 export type FeedbackDraft = Omit<Feedback, "attempt">;
 
 export interface Feedback {
+  readonly passive?: boolean;
   readonly kind: FeedbackKind;
   readonly title: string;
   readonly body: string;
@@ -1083,7 +1084,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
     setCompletionPending(false);
   }, [polled.projection?.vault.teamId]);
   useEffect(() => {
-    if (feedback && feedback.kind !== "hint") {
+    if (feedback && feedback.kind !== "hint" && !feedback.passive) {
       feedbackRef.current?.focus({ preventScroll: true });
       feedbackRef.current?.scrollIntoView({ block: "nearest" });
     }
@@ -1180,12 +1181,17 @@ export default function FastMovePanel(props: PortalSlotProps) {
     attemptRef.current += 1;
     const attempt = attemptRef.current;
     const submittedSelection = selectionRevision.current;
+    const publishFeedback = (draft: FeedbackDraft) => setFeedback({
+      ...draft, attempt,
+      title: submittedOrder ? `${submittedOrder.id.replace(/^.*-c/, "ORDER #")} · ${draft.title}` : draft.title,
+      passive: submittedSelection !== selectionRevision.current,
+    });
     try {
       const outcome = await task();
       const next = liveProjection(outcome);
       if (next) setProjection(next);
       if (outcome.kind !== "ok") {
-        setFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale), attempt });
+        publishFeedback({ kind: "error", title: copy.rejected, body: outcomeError(outcome, locale) });
       } else {
         const draft = success(next);
         if (!draft) return;
@@ -1194,10 +1200,10 @@ export default function FastMovePanel(props: PortalSlotProps) {
           setOrderReceipt(receipt);
           setCompletionPending(submittedSelection === selectionRevision.current);
         }
-        if (submittedSelection === selectionRevision.current) setFeedback({ ...draft, attempt });
+        publishFeedback(draft);
       }
     } catch {
-      setFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable, attempt });
+      publishFeedback({ kind: "error", title: copy.rejected, body: copy.unavailable });
     } finally {
       setSubmitting(false);
     }
