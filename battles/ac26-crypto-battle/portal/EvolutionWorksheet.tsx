@@ -6,7 +6,7 @@ export default function EvolutionWorksheet({task,locale,busy,wrongCost,onSubmit}
  return <section className="tc-input-panel">
   {task.kind==="enigma-encrypt" && <>
    <h3>{ja?"エニグマ：反射板で折り返す（一桁模型）":"Enigma: reflect and return (one-digit model)"}</h3>
-   <p>{ja?"同じ位置なら、同じ操作で暗号を元に戻せます。まず車輪を1進め、下の配線を往復してください。":"At the same position, the same operation decrypts. Advance the wheel once, then follow the path out and back."}</p>
+   <p>{ja?"このお題は暗号化だけです。車輪を1進め、下の配線を往復して得た暗号文1個を提出すると完了です。":"This Order asks only for encryption. Advance the wheel once, follow the path out and back, and submit one ciphertext digit to complete it."}</p>
    <strong>{ja?"元の数":"Original"}: {task.plaintext[0]} · {ja?"初期位置":"Initial position"}: {task.initial} → {ja?"今回の位置":"Position for this character"}: {(task.initial+1)%4}</strong>
    <div style={{padding:12,background:"#eef5ff",margin:"12px 0"}}>{ja?"元の数 → 車輪を往路 → 反射板 → 車輪を復路 → 答え":"Original → wheel forward → reflector → wheel backward → answer"}</div>
    <p>{ja?"Wは車輪の変換表、Rは反射板の交換。W⁻¹は同じ表を右から左へ読む操作です。車輪を1進めると変換表も変わります。":"W is the wheel lookup, R the reflector swap, and W⁻¹ means reading the same table backward. Stepping changes the lookup."}</p><table><caption>{ja?"車輪Wの入力→出力（今回の位置）":"Wheel W input→output at this position"}</caption><tbody>{[0,1,2,3].map(m=><tr key={m}><th>{m}</th><td>→</td><td>{(ENIGMA_WHEEL[(m+task.initial+1)%4]!-(task.initial+1)%4+4)%4}</td></tr>)}</tbody></table>

@@ -1,8 +1,10 @@
+import {SplitAnamorphicWorksheet} from './SplitAnamorphicWorksheet.tsx';
 import {useState} from 'react';
 import {anamorphicPower,type AnamorphicTask} from '../game/src/anamorphic.ts';
 export function AnamorphicWorksheet({task,locale,busy,wrongCost,onSubmit}:{task:AnamorphicTask;locale:'ja'|'en';busy:boolean;wrongCost:number;onSubmit:(answer:string)=>void}){
  const ja=locale==='ja',[values,setValues]=useState(['','','']);
  const field=(i:number,label:string)=><label>{label}<input aria-label={label} maxLength={1} inputMode="numeric" value={values[i]} onChange={e=>setValues(values.map((v,j)=>i===j?e.target.value:v))}/></label>;
+ if(task.exercise)return <SplitAnamorphicWorksheet task={task} locale={locale} busy={busy} wrongCost={wrongCost} onSubmit={onSubmit}/>;
  return <section className="tc-input-panel">
  <h3>{ja?'アナモルフィック暗号：通常の通信で隠れたビットを送る':'Anamorphic encryption: a hidden bit inside ordinary communication'}</h3>
  <p>{ja?'通常の復号鍵を監視者に渡しても、追加の秘密を持つ相手には別のメッセージを送る考え方です。ビットは0か1。あなたは送信者と秘密の受信者を体験します。':'The idea is to send another message to a receiver with additional secret information even when a monitor holds the ordinary decryption key. A bit is 0 or 1. You act as the sender and the private receiver.'}</p>

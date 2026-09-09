@@ -434,6 +434,25 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
 
 /** The ladder for a task kind, in level order. */
 export function hintsFor(kind: OrderTaskKind): readonly HintSpec[] {
+  if(kind === "anamorphic-rejection")return HINT_LADDER[kind].map((hint,level)=>({...hint,text:(ctx:HintContext)=>{
+    if(ctx.task.kind!=="anamorphic-rejection" || !ctx.task.exercise)return hint.text(ctx);
+    const t=ctx.task;
+    if(t.exercise==='encrypt')return [
+      {ja:"同じ通常メッセージを暗号化した候補から、秘密の表で送りたいビットになるものを選ぶお題です。復号はしません。",en:"Select a ciphertext candidate whose secret lookup matches the intended bit. This Order requires no decryption."},
+      {ja:"選択の条件はF(c)=b。Fは秘密の表、cは候補、bは送りたいビットです。上から最初の一致を探します。b=1、表が0,1,1なら2番です。",en:"Select the first candidate c with F(c)=b, where F is the secret lookup and b the intended bit. For b=1 and lookup0,1,1, select2."},
+      {ja:`表のビットを上から${t.targetBit}と比べ、最初に一致する行の番号1個を提出します。`,en:`Compare each lookup bit with${t.targetBit} from the top. Submit only the first matching row number.`}
+    ][level]!;
+    if(t.exercise==='decrypt')return [
+      {ja:"今回は受け取った暗号文から、通常鍵を使って元の数を戻します。送る候補の選択は不要です。",en:"Recover the ordinary message from the supplied ciphertext using its ordinary key. No candidate selection is required."},
+      {ja:"sはaをx回掛けて7で割った余り。s×mの余りがbになるmを探します。s=4,b=5なら4×3の余り5なのでm=3。",en:"s is a to power x, remainder7. Find m so s×m leaves b. For s=4,b=5, m=3 since4×3 leaves5."},
+      {ja:`暗号文は(${t.candidates[0]!.join(',')})、鍵x=${t.ordinaryKey}。aをx回掛けた余りsを使い、s×1〜6でbと同じ余りになる数を探して1個提出します。`,en:`Ciphertext(${t.candidates[0]!.join(',')}), key x=${t.ordinaryKey}. Compute s, then try s×1 through s×6 and submit the one number leaving remainder b.`}
+    ][level]!;
+    return [
+      {ja:"目的のビットになる候補だけが選び直しの後に残ります。その候補に付いたくじの枚数を合計するお題です。",en:"Only trials matching the target bit survive rejection sampling. Sum their ticket counts."},
+      {ja:"選び直し後の確率＝候補の枚数÷受理される合計枚数。今回は分母だけ。1枚・2枚・3枚の候補が残るなら合計6枚です。",en:"Probability after rejection = candidate tickets / total accepted tickets. Submit the denominator only: counts1,2,3 total6."},
+      {ja:`秘密の表が${t.targetBit}の行だけに印を付け、その行のくじを足し、合計1個を提出します。`,en:`Mark rows whose bit is${t.targetBit}, add their tickets, and submit that total only.`}
+    ][level]!;
+  }}));
   return HINT_LADDER[kind];
 }
 

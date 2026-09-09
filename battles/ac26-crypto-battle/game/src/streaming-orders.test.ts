@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { initialState, applyOp, tick, projectForTeam, validateOp, STREAMING_ORDER_CONFIG } from "./reducer.ts";
+import { initialState, applyOp, tick, projectForTeam, validateOp, migrateState, STREAMING_ORDER_CONFIG } from "./reducer.ts";
 const create = () => tick(applyOp(initialState({ eventId: "streaming", teamIds: ["a", "b"], matchSecret: "streaming-test" }, { ...STREAMING_ORDER_CONFIG, orderArrivalJitterMs: 0 }), "a", { kind: "start" }), 0);
 test("orders arrive individually every 30s, have 180s deadlines and expire exactly once", () => {
   let state = create();
@@ -97,4 +97,24 @@ test("a delayed tick never overfills the queue and old unlimited configurations 
   const initial = create();
   const old = tick({ ...initial, config: { ...initial.config, maxOpenOrdersPerTeam: undefined } }, 150_000);
   expect(old.contracts.filter(c => c.teamId === "a" && c.status === "open")).toHaveLength(6);
+});
+
+
+test("batch Orders cannot consume a counterpart's reserved duel capacity",()=>{
+ let state=create();const b=state.contracts.find(c=>c.teamId==='b')!;
+ state={...state,config:{...state.config,contractsPerIssue:2},
+   contracts:[...state.contracts,{...b,id:'b-c4'}],
+   teams:{...state.teams,a:{...state.teams.a!,issuedOrderCount:5},b:{...state.teams.b!,issuedOrderCount:5}}};
+ state=tick(state,30_000);
+ expect(state.contracts.some(c=>c.task.kind==='rps-duel')).toBe(false);
+ expect(state.contracts.filter(c=>c.teamId==='a'&&c.status==='open')).toHaveLength(2);
+ expect(state.contracts.filter(c=>c.teamId==='b'&&c.status==='open')).toHaveLength(3);
+});
+
+test("v21 rows retain their unlimited queue during v22 migration",()=>{
+ const initial=create();const old={...initial,config:{...initial.config,maxOpenOrdersPerTeam:undefined}};
+ const upgraded=migrateState(JSON.parse(JSON.stringify(old)),21);
+ expect(upgraded.config.maxOpenOrdersPerTeam).toBeUndefined();
+ expect(upgraded.contracts).toEqual(old.contracts);
+ expect(()=>migrateState(old,22)).toThrow();
 });

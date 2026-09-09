@@ -78,6 +78,8 @@ export const SCENARIO_IDS = [
   "ecdsa-order",
   "ec-order",
   "anamorphic-order",
+  "anamorphic-decrypt-order",
+  "anamorphic-probability-order",
   "stark-order",
   "io-order",
   "snark-order",
@@ -117,6 +119,8 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
   "snark-order": {ja:"SNARK — 計算と配線の不正を見つける",en:"SNARK — check gates and wires"},
 
   "schnorr-lightning": {ja:"Schnorr — ライトニングを使って証明する",en:"Schnorr — prove with lightning"},
+  "anamorphic-decrypt-order": {ja:"アナモルフィック — 復号だけ",en:"Anamorphic — decryption only"},
+  "anamorphic-probability-order": {ja:"アナモルフィック — 確率だけ",en:"Anamorphic — probability only"},
   "anamorphic-order": {ja:"アナモルフィック暗号 — 通常復号と隠れたビット",en:"Anamorphic — ordinary message and hidden bit"},
   "stark-order": {ja:"STARK — 実行表と折り畳みを検査",en:"STARK — trace and fold"},
   "io-order": {ja:"iO — 同じ機能と公開分布を比べる",en:"iO — compare functions and distributions"},
@@ -352,7 +356,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver((id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
+  const driver = makeDriver((id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "anamorphic-decrypt-order" || id === "anamorphic-probability-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : undefined);
 
   switch (id) {
     // [Issue #677] The screen a deployed match shows before anyone plays: no
@@ -388,9 +392,12 @@ export function buildScenario(id: ScenarioId): Scenario {
       }
       break;
     }
-    case "anamorphic-order": {
+    case "anamorphic-order":
+    case "anamorphic-decrypt-order":
+    case "anamorphic-probability-order": {
+      const exercise=id==="anamorphic-decrypt-order"?"decrypt":id==="anamorphic-probability-order"?"probability":"encrypt";
       for(let i=0;i<150;i++) {
-        if(driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="anamorphic-rejection"))break;
+        if(driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="anamorphic-rejection"&&c.task.exercise===exercise))break;
         driver.advance(30_000);
         if(i===149)throw new Error("no anamorphic worksheet reached");
       }
