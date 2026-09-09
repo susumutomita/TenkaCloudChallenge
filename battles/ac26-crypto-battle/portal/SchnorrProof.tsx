@@ -44,31 +44,35 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
     <h3>{ja?"ゼロ知識証明（Schnorr）：秘密の数を知っていると示す":"Zero-knowledge proof (Schnorr): show knowledge of a secret"}</h3>
     <p>{ja?"あなたは x を知っています。検証者は y だけを使い、x を受け取らずに応答を検査します。":"You know x. The verifier checks your response using y, without receiving x."}</p>
     <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}} aria-label={ja?"証明の順番":"Proof sequence"}>
-      <strong>{ja?"① あなた：a を送る":"① You send a"}</strong><span>→</span><strong>{ja?"② 検証者：e を返す":"② Verifier sends e"}</strong><span>→</span><strong>{ja?"③ あなた：z を計算":"③ You calculate z"}</strong>
+      <strong>{ja?"あなた：a を送る":"You send a"}</strong><span>→</span><strong>{ja?"検証者：e を返す":"Verifier sends e"}</strong><span>→</span><strong>{ja?"あなた：z を計算して送る":"You calculate and send z"}</strong>
     </div>
     <p><strong>{ja?"自分だけの数":"Private witness"}: x = {secret??"…"}</strong>　{ja?"公開値":"Public value"}: y = 2<sup>{secret??"…"}</sup> mod 23 = {secret===null?proof.pending?.y:power(2,secret)}</p>
     <p>{ja?"この教材は小さい数なので、公開値 y から表で x を探せます。実用ではこの探索が困難になる大きさを使います。":"This tiny model finds x from public y using a power table. Practical parameters make this search infeasible."}</p>
     <p>{ja?"≡ は「左右を割った余りが等しい」という記号です。":"≡ means both sides have the same remainder."}</p>
     <p>{ja?"mod は「割った余り」。指数・応答は11で、掛け算の結果は23で余りを取ります。":"mod means remainder. Reduce exponents/responses modulo 11 and group products modulo 23."}</p>
     {!proof.pending ? <>
-      <h4>{ja?"① この式の答え a を入力して送る":"① Calculate and send a"}</h4>
+      <h4>{ja?"送信 1 / 2：2をr回掛け、23で割った余りを送る":"Submission 1 / 2: multiply 2 by itself r times, then send the remainder modulo 23"}</h4>
+      <p>{ja?"最初の送信だけでは完了しません。次に届く数を使って、もう一度計算します。":"The first submission does not complete the Order. Use the number returned for one more calculation."}</p>
       <p>{ja?"今回だけの内緒の乱数":"Fresh private random number"}: r = {nonce??"…"}</p>
       <p style={{fontSize:24}}>a = 2<sup>{nonce??"r"}</sup> mod 23 = □</p>
       <table><caption>{ja?"掛け算を確かめる表（2⁰ = 1）":"Power table (2⁰ = 1)"}</caption><tbody>
         <tr><th>r</th>{Array.from({length:11},(_,i)=><td key={i}>{i}</td>)}</tr>
         <tr><th>2<sup>r</sup> mod 23</th>{Array.from({length:11},(_,i)=><td key={i}>{power(2,i)}</td>)}</tr>
       </tbody></table>
-      <label>a <input aria-label="Schnorr a" inputMode="numeric" value={a} onChange={e=>setA(e.target.value)} /></label>
+      <label>{ja?"計算した余り a（0〜22）":"Calculated remainder a (0–22)"} <input aria-label="Schnorr a" inputMode="numeric" value={a} onChange={e=>setA(e.target.value)} /></label>
       {a !== "" && !correctCommitment && <p role="alert">{ja?"表の r の列を確認してください。a が式の答えと違います。送る前に直せます。":"Check the r column: a does not match the equation. Correct it before sending."}</p>}
-      <button type="button" disabled={busy||secret===null||!correctCommitment} onClick={commit}>{ja?"a を固定して、検証者の e を受け取る":"Fix a and receive the verifier's e"}</button>
+      <p>{ja?"式の答えを入力すると、次へ進めます。":"Enter the equation’s answer to continue."}</p>
+      <button type="button" className="tc-submit-small" disabled={busy||secret===null||!correctCommitment} onClick={commit}>{ja?"① 計算結果を送って、次へ":"① Send calculation and continue"}</button>
     </> : proof.pending.used ? <p role="status">{(proof.pending.outcome === "hit" || (!proof.pending.outcome && order.status === "completed")) ? (ja?"検証成功：秘密を送らずに証明できました。":"Verification passed: you proved knowledge without sending the secret.") : (ja?"検証失敗：送った応答は検証式を満たしませんでした。この証明には再回答できません。":"Verification failed: your response did not satisfy the equation. This proof cannot be retried.")}</p> : <>
-      <h4>{ja?"② a の固定後に、検証者から e が届きました":"② The verifier sent e after a was fixed"}</h4>
+      <div className="tc-schnorr-progress" role="status"><strong>{ja?"1回目の送信が完了。あと1回で証明完了です。":"First submission complete. One more submission finishes the proof."}</strong></div>
+      <h4>{ja?"送信 2 / 2：届いたeを使って、最後の答えを計算":"Submission 2 / 2: calculate the final answer using the returned e"}</h4>
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>
       {!matchesPending ? <p role="alert">{ja?"この端末に開始時の乱数 r がありません。証明を開始したタブで続けてください。":"The original private r is missing. Continue in the tab where you started."}</p> : <>
-        <h4>{ja?"③ 掛けて、足して、11で割った余りを入力":"③ Multiply, add, then enter the remainder modulo 11"}</h4>
+        <h4>{ja?"掛けて、足して、11で割った余りを入力":"Multiply, add, then enter the remainder modulo 11"}</h4>
         <p style={{fontSize:24}}>z = (r + e × x) mod 11<br/>= ({nonce} + {proof.pending.e} × {secret??"…"}) mod 11 = □</p>
-        <label>z (0–10) <input aria-label="Schnorr z" inputMode="numeric" value={z} onChange={e=>setZ(e.target.value)} /></label>
-        <button type="button" disabled={busy||!valid(z)} onClick={()=>onSubmit({kind:"schnorr-response",contractId:order.id,z:Number(z)})}>{ja?`応答 z を送る · +${order.points} 点`:`Send response z · +${order.points}`}</button>
+        <label>{ja?"計算した余り z（0〜10）":"Calculated remainder z (0–10)"} <input aria-label="Schnorr z" inputMode="numeric" value={z} onChange={e=>setZ(e.target.value)} /></label>
+        <p>{ja?"0も答えとして入力できます。数字を入力すると送信できます。":"Zero is a valid answer. Enter a number to enable submission."}</p>
+        <button type="button" className="tc-submit-small" disabled={busy||!valid(z)} onClick={()=>onSubmit({kind:"schnorr-response",contractId:order.id,z:Number(z)})}>{ja?`② 証明を完了する · 正解で+${order.points}点`:`② Complete proof · +${order.points} if correct`}</button>
       </>}
     </>}
     <p>{ja?"検証する式（x と r は使いません）":"Verification (does not use x or r)"}: <strong>2<sup>z</sup> ≡ a × y<sup>e</sup> (mod 23)</strong></p>

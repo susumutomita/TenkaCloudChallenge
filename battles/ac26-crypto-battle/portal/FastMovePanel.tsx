@@ -953,6 +953,11 @@ ${SUCCESS_CSS}
 .tc-scoreline-value{font-size:24px}.tc-scoreline-hint{font-size:12px}
 .tc-scoreline{justify-content:space-between}.tc-scoreline .tc-rival-score{margin:0;display:flex;gap:12px;flex-wrap:wrap;font-size:12px}
 .tc-records{font-size:13px;color:#42536a}
+.tc-records>.tc-records-button{min-height:44px;padding:11px 18px;background:#fff;color:#315f91;border:1px solid #8ca9c7;border-radius:8px;font:inherit;font-weight:700;max-width:100%;white-space:normal}
+.tc-records>.tc-records-button:hover{background:#edf5ff}
+.tc-input-panel>.tc-submit-small{min-height:44px;max-width:100%;white-space:normal}
+.tc-input-panel>.tc-submit-small:disabled{opacity:1;background:#9fb5cd;color:#fff}
+.tc-schnorr-progress{padding:12px;border-left:4px solid #315f91;background:#edf5ff}
 .tc-records>summary{padding:8px 0;cursor:pointer}
 .tc-result-anchor:empty{display:none}.tc-result-anchor:focus{outline:2px solid #2563a6;outline-offset:3px;border-radius:10px}
 .tc-workspace{display:grid;gap:12px;background:#fff;border:1px solid #b9cbe0;border-top:4px solid #315f91;border-radius:12px;padding:16px;box-shadow:0 3px 10px #1e3a5f08}
@@ -1622,7 +1627,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         selectable so reuse remains a real decision, with its risk labelled.
       */}
       {(proveOpen || selectedOrder?.task.kind === "zk-sudoku") && selectedOrder?.schnorr && proveAllowed && <SchnorrProof key={`schnorr:${selectedOrder.id}`} order={selectedOrder} teamId={projection.vault.teamId} locale={locale} busy={submitting} onSubmit={op=>void run(()=>client.submitOp(op),next=>{
-        if(op.kind === "schnorr-commit") return {kind:"hint",title:locale === "ja"?"検証者から e が届きました":"Verifier challenge received",body:locale === "ja"?"下の③で応答 z を計算してください。":"Calculate response z in step ③ below."};
+        if(op.kind === "schnorr-commit") return {kind:"hint",title:locale === "ja"?"検証者から e が届きました":"Verifier challenge received",body:locale === "ja"?"次は送信 2 / 2 です。届いた e を使って応答 z を計算してください。":"Next is submission 2 / 2. Calculate response z using the returned e."};
         const proof=next?.publicLedger.find(entry=>entry.kind === "proof" && entry.contractId === selectedOrder.id);
         return proof?.kind === "proof" && proof.publicKey ? {kind:"prove",reward:selectedOrder.points,title:locale === "ja"?"証明成功！":"Proof verified!",body:`${locale === "ja" ? "検証式が一致" : "Verification matches"}: ${power(2,Number(proof.response))} = ${Number(proof.commitment)*power(Number(proof.publicKey),Number(proof.challenge))%23}。${locale === "ja"?"秘密 x を送らず検証できました。":"Verified without sending x."}`} : {kind:"error",title:locale === "ja"?"検証式が一致しません":"Verification failed",body:selectedOrder.allowedMethods.length === 1 ? (locale === "ja" ? "このお題は不合格で終了しました。追加の期限切れ減点はありません。次のお題へ進んでください。" : "This Order ended with a failed proof. No additional deadline penalty applies. Continue to the next Order.") : (locale === "ja" ? "応答は1回だけです。期限までにLEAKへ切り替えるか、次のお題へ進んでください。" : "Only one proof response is accepted. Switch to LEAK before the deadline or continue to the next Order.")};
       })} />}

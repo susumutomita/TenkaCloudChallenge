@@ -695,7 +695,7 @@ export function MatchRecords({projection, locale}: {projection: CryptoBattleProj
   const dialog = useRef<HTMLDialogElement>(null);
   const ja = locale === "ja";
   return <div className="tc-records">
-    <button type="button" aria-haspopup="dialog" onClick={() => dialog.current?.showModal()}>{ja ? "記録を見る" : "View records"}</button>
+    <button type="button" className="tc-submit-small tc-records-button" aria-haspopup="dialog" onClick={() => dialog.current?.showModal()}>{ja ? "公開記録・自分の保管庫を開く" : "Open public records and my vault"}</button>
     <dialog ref={dialog} className="tc-help-dialog" aria-label={ja ? "公開記録と自分の保管庫" : "Public records and private vault"}>
       <header><h2>{ja ? "記録と保管庫" : "Records and vault"}</h2><button type="button" className="tc-help-control" onClick={() => dialog.current?.close()}>{ja ? "閉じてお題へ戻る" : "Close and return to the Order"}</button></header>
       <div className="tc-help-content"><p>{ja ? "確認中も試合の時間は進みます。" : "The match clock continues while viewing records."}</p><div className="tc-board-grid"><Ledger projection={projection} locale={locale} /><Vault projection={projection} locale={locale} /></div></div>
