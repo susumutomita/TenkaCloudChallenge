@@ -55,3 +55,5 @@ The same root `make before-commit` passed in the isolated checkout: all 21 works
 All five review findings addressed: validate the modulus before rendering; translate each encrypted-addition rejection; accept leading-zero practice answers with the same 700-digit bound; show an actual FHE mechanism diagram; wrap legacy 19-digit ciphertexts. The reducer and scoring remain unchanged.
 
 The browser accepted `05` / `02` in practice and the completion link opened the named encrypted-delivery figure. At 390px, the real legacy scenario with modulus 2305843009213693951 had no overflowing descendants in the delivery region (clientWidth and scrollWidth both 326px). Game regression suite: 871 passed; dev scenario suite: 114 passed.
+
+Second review: replaced the guide screenshot with a fresh, unanswered practice screen; both fields are blank and no completion verdict is shown. Defined ciphertext before the cards in Japanese and English. The optional arithmetic example now uses unrelated numbers and a different divisor. Browser confirmed the initial definition and blank screenshot; all 8 delivery tests passed.
