@@ -4,6 +4,10 @@
 
 これは [TenkaCloud](https://github.com/susumutomita/TenkaCloud) プラットフォーム向けの公開問題カタログです。プラットフォームがpackage・deployする問題payloadを管理し、deploy・採点dispatch・platform integrationはTenkaCloud本体が管理します。
 
+## まず1問体験
+
+暗号の予備知識なしで始められる[1問体験ガイド](battles/ac26-crypto-battle/FIRST-EXPERIENCE.md)へ。紙とペン、中学数学で暗号配送を体験できます。練習は得点・締切なし。運営者からの招待で参加する方法と、自分の端末でプレビューする方法、次の問題への進み方を案内します。公開済みの体験サービスではありません。
+
 ## カタログ構造
 
 - [`challenges/`](./challenges/) は個別演習です。

@@ -57,3 +57,15 @@ All five review findings addressed: validate the modulus before rendering; trans
 The browser accepted `05` / `02` in practice and the completion link opened the named encrypted-delivery figure. At 390px, the real legacy scenario with modulus 2305843009213693951 had no overflowing descendants in the delivery region (clientWidth and scrollWidth both 326px). Game regression suite: 871 passed; dev scenario suite: 114 passed.
 
 Second review: replaced the guide screenshot with a fresh, unanswered practice screen; both fields are blank and no completion verdict is shown. Defined ciphertext before the cards in Japanese and English. The optional arithmetic example now uses unrelated numbers and a different divisor. Browser confirmed the initial definition and blank screenshot; all 8 delivery tests passed.
+
+## Publication and HUNT scene proposals — not implemented here
+
+These are follow-up presentation designs, not new scoring rules or claims about the platform being compromised.
+
+| Authoritative trigger | Proposed scene and next action | Guardrail |
+| --- | --- | --- |
+| LEAK accepted and corresponding public record received | An opened-package icon with “情報を公開しました”, the actual public values and awarded points; “公開記録を見る” opens that record | Never announce publication while a request is pending or rejected. Show only values already public to all teams. |
+| HUNT accepted and score change received | A solved-lock icon with “相手の秘密を読み解きました”, the target and actual awarded points; return to the opponent list | A submitted guess alone is not success. Do not imply a server intrusion or invented damage. |
+| Defender receives an authoritative successful-HUNT record | “あなたの秘密が見破られました”, attacker, affected generation and actual score change; link to the existing ROTATE impact preview | Do not disclose the new secret or automatically rotate. Deduplicate by the existing record identity and retain the event in history. |
+
+Use a short static result card beside the relevant action, not a full-screen cutscene. Keep the Order queue, deadlines and answer fields visible. If optional movement is added, respect reduced motion and make the same meaning available in text. On a delayed or failed response, retain a pending/error state until the server result arrives. Validate both attacker and defender views, repeated refresh and rejected guesses before implementing these proposals.
