@@ -132,7 +132,7 @@ Press “I'M READY”. The match starts and Orders arrive when every team is rea
 3. **Result** — score and outcome above the answer area
 4. **HUNT** — select an opponent from the dropdown, then a method
 5. **Open public records and my vault** — optional public history and private vault in a dialog
-6. **Play, diagrams and formulas, practice, rules** — choose one purpose above the board
+6. **Try your first mission, how to play, diagrams and formulas, practice, rules** — choose one purpose above the board
 
 HUNT shows the selected opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer. ROTATE is a separate defence control.
 
