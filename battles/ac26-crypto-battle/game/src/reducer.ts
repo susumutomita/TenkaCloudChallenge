@@ -3092,9 +3092,9 @@ function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<Cryp
 
 function schnorrHint(level:number): {ja:string;en:string} {
   const hints=[
-    {ja:"PROVEはSchnorrの計算模型です。検証式に合う応答で得点します。候補が最大11通りしかないため、合格しても秘密を知っていたことを保証できません。シェアや数独の解は検査しません。まず今回だけの乱数から作った値を固定し、後から届く検証者の質問に応答します。秘密そのものは送りません。",en:"PROVE is a Schnorr calculation model. Points reward a response satisfying the equation. With at most 11 possible secrets, acceptance does not certify prior knowledge. Shares and Sudoku solutions are not checked. Fix a value made from fresh randomness before receiving the verifier’s question; answer without sending the secret itself."},
-    {ja:"aを送ると検証者からeが届きます。z=(r+e×x) mod11を計算します。例：r=3、e=5、x=7なら3+5×7=38、11で割った余りは5です。",en:"After a is fixed, the verifier sends e. Calculate z=(r+e×x) mod11. Example: r=3, e=5, x=7 gives 38 mod11=5."},
-    {ja:"入力するのは③のzです。rとxは自分の画面、eはaを送った後に表示されます。掛け算→足し算→11で割った余りの順に計算し、0〜10の整数を1個送ります。検証式は2ᶻ ≡ a×yᵉ (mod23)。xとrは送信しません。",en:"Enter z in step ③. Your screen provides r and x; e appears after sending a. Multiply, add, then reduce modulo11. Send one integer 0–10. Verification checks 2ᶻ ≡ a×yᵉ (mod23), without receiving x or r."},
+    {ja:"秘密の数xをそのまま送らず、今回だけの数rと混ぜた答えzを送ります。答えを確かめる相手を「検証者」と呼びます。先にaを送り、検証者が返した数eを使ってzを計算します。検証者は公開された数とzで式を確かめます。小さい数で計算を体験する模型です。",en:"Instead of sending your secret x, send an answer z that mixes it with a fresh number r. The person checking the answer is the verifier. Send a first, then use the returned number e to calculate z. The verifier checks an equation using public values and z. This is a small-number calculation model."},
+    {ja:"例：r=3、e=5、x=7\n① 掛ける：5 × 7 = 35\n② 足す：35 + 3 = 38\n③ 11で割る：38 = 11 × 3 + 5\n④ 余りの5をz欄へ入力する。\nこの「割った余り」をmodと書きます。",en:"Example: r=3, e=5, x=7\n① Multiply: 5 × 7 = 35\n② Add: 35 + 3 = 38\n③ Divide by 11: 38 = 11 × 3 + 5\n④ Enter the remainder, 5, in z.\nThis remainder operation is written mod."},
+    {ja:"① e × x = □①\n② □① + r = □②\n③ □②を11で割った余り = z\n④ 余りを「計算した余り z」欄に入力して送る。\n今回の数字は「ヒント③：今回の数字で計算」で確認できます。aをまだ送っていなければ、先にそちらの手順でaを送ります。",en:"① e × x = □①\n② □① + r = □②\n③ Remainder of □② divided by 11 = z\n④ Enter the remainder in “Calculated remainder z” and submit.\nSee your values in “Hint 3: calculate with your values”. If you have not sent a yet, follow its steps first."},
   ];
   return hints[level]!;
 }

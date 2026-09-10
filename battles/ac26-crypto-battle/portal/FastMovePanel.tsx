@@ -1760,7 +1760,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
                 {/* [Issue #740] The sudoku guide is the PROVE procedure; a disclosure Order (LEAK only) keeps its own rung-3 text. */}
                 {hint.level === 2 && !selectedOrder.schnorr && (selectedOrder.task.kind === "reveal-share" || selectedOrder.task.kind === "zk-sudoku") && selectedOrder.allowedMethods.includes("prove") ?
                   <SudokuGuide order={selectedOrder} projection={projection} table={proveTable} locale={locale} onOpenProof={() => { setProveOpen(true); requestAnimationFrame(() => document.querySelector(".tc-proof-inputs")?.scrollIntoView({ block: "start" })); }} /> :
-                  <p className="tc-hint-text"><MathText>{hint.text?.[locale] ?? ""}</MathText></p>}
+                  <p className="tc-hint-text" style={selectedOrder.schnorr ? {whiteSpace:"pre-line"} : undefined}><MathText>{hint.text?.[locale] ?? ""}</MathText></p>}
               </details>
             ))}
             {nextHint ? (

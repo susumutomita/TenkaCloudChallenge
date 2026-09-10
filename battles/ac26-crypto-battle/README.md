@@ -83,9 +83,7 @@ Every card shows its deadline, points, task, and accepted methods. A method abse
 
 ## Stuck? — HINT
 
-Every ORDER carries **three hints**. The first says where to look, the second
-gives the rule, the third walks the first step. Even after the third, the
-calculation is still yours to do.
+Hints progress through mechanism, a small example, and your own values. Schnorr hint 3 uses the current values in separate steps: multiply, add, find the remainder after division by 11, then enter z. Before sending a, it shows the steps for a instead. Results are not filled automatically; players calculate by hand.
 
 Each one costs points, and they get more expensive as you climb (**-2 / -4 /
 -8**). The price is printed on the button, so you compare before you press.

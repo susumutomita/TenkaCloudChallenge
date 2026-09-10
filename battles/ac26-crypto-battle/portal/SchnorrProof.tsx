@@ -3,6 +3,17 @@ import { useEffect, useState } from "react";
 import type { ContractProjection, CryptoBattleOp } from "../game/src/types.ts";
 import { power } from "../game/src/schnorr.ts";
 
+/** Private values stay in this tab; the player calculates each result. */
+export function SchnorrResponseSteps({r,x,e,locale}:{r:number;x:number;e:number;locale:"ja"|"en"}) {
+  const ja=locale==="ja";
+  return <ol aria-label={ja?"zを計算する順番":"Steps to calculate z"} style={{display:"grid",gap:12,paddingInlineStart:28}}>
+    <li>{ja?"掛ける":"Multiply"}<div style={{fontSize:24}}>{e} × {x} = □①</div></li>
+    <li>{ja?"①の答えに足す":"Add to answer ①"}<div style={{fontSize:24}}>□① + {r} = □②</div></li>
+    <li>{ja?"11で割った余りを出す":"Find the remainder after dividing by 11"}<div style={{fontSize:24}}>□② ÷ 11 → {ja?"余り":"remainder"} = z</div><small>{ja?"②が11未満なら、そのまま。11以上なら、11を引いて0〜10になるまで繰り返します。":"If ② is below 11, keep it. Otherwise subtract 11 repeatedly until it is 0–10."}</small></li>
+    <li><strong>{ja?"余りを「計算した余り z」欄に入力して送る":"Enter the remainder in “Calculated remainder z” and submit"}</strong></li>
+  </ol>;
+}
+
 /** The only private randomness stays in the participant browser. */
 export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:ContractProjection;teamId:string;locale:"ja"|"en";busy:boolean;onSubmit:(op:CryptoBattleOp)=>void}) {
   const proof=order.schnorr!;
@@ -70,14 +81,22 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>
       {!matchesPending ? <p role="alert">{ja?"この端末に開始時の乱数 r がありません。証明を開始したタブで続けてください。":"The original private r is missing. Continue in the tab where you started."}</p> : <>
         <h4>{ja?"掛けて、足して、11で割った余りを入力":"Multiply, add, then enter the remainder modulo 11"}</h4>
-        <p style={{fontSize:24}}>z = (r + e × x) mod 11<br/>= ({nonce} + {proof.pending.e} × {secret??"…"}) mod 11 = □</p>
+        {order.hints.filter(h=>h.text).length>=3 && <strong>{ja?"ヒント③：今回の数字で計算":"Hint 3: calculate with your values"}</strong>}
+        <SchnorrResponseSteps r={nonce!} x={secret!} e={proof.pending.e} locale={locale} />
         <label>{ja?"計算した余り z（0〜10）":"Calculated remainder z (0–10)"} <input aria-label="Schnorr z" inputMode="numeric" value={z} onChange={e=>setZ(e.target.value)} /></label>
         <p>{ja?"0も答えとして入力できます。数字を入力すると送信できます。":"Zero is a valid answer. Enter a number to enable submission."}</p>
         <button type="button" className="tc-submit-small" disabled={busy||!valid(z)} onClick={()=>onSubmit({kind:"schnorr-response",contractId:order.id,z:Number(z)})}>{ja?`② 証明を完了する · 正解で+${order.points}点`:`② Complete proof · +${order.points} if correct`}</button>
       </>}
     </>}
     <p>{ja?"検証する式（x と r は使いません）":"Verification (does not use x or r)"}: <strong>2<sup>z</sup> ≡ a × y<sup>e</sup> (mod 23)</strong></p>
-    {order.hints.filter(h=>h.text).length>=3 && <aside role="note"><strong>{ja?"購入済みヒント③・今回の数字":"Purchased hint 3 · your current values"}</strong><p>{!proof.pending ? (ja?`まず表の r=${nonce??"…"} の列を見て、下の数を a 欄に入力します。`:`Find r=${nonce??"…"} in the table and enter the number below it in a.`) : nonce===null ? (ja?"開始したタブで乱数を確認してください。":"Find the private randomness in the original tab.") : (ja?`まず ${proof.pending.e} × ${secret}、次に ${nonce} を足します。その結果から11を引き、0〜10になるまで繰り返して z 欄へ入力します。`:`Multiply ${proof.pending.e} × ${secret}, add ${nonce}, then subtract 11 until the result is 0–10. Enter it in z.`)}</p></aside>}
+    {!proof.pending && order.hints.filter(h=>h.text).length>=3 && <aside role="note"><strong>{ja?"ヒント③：今回の数字で計算":"Hint 3: calculate with your values"}</strong>
+      <ol>
+        <li>{ja?`今回の r は ${nonce??"…"}。`:`Your r is ${nonce??"…"}.`}</li>
+        <li>{ja?`2を${nonce??"r"}回掛ける（0回なら1）。`:`Multiply 2 by itself ${nonce??"r"} times (zero times means 1).`}</li>
+        <li>{ja?"その数を23で割った余りを求める。":"Find the remainder after dividing that number by 23."}</li>
+        <li>{ja?"余りを「計算した余り a」欄へ入力し、「① 計算結果を送って、次へ」を押す。":"Enter the remainder in “Calculated remainder a” and press “① Send calculation and continue”."}</li>
+      </ol>
+    </aside>}
     <details><summary>{ja?"なぜこれがゼロ知識？ 図と式で確認":"Why zero knowledge? Follow the equations"}</summary>
       <SchnorrLesson locale={locale}/>
     </details>
