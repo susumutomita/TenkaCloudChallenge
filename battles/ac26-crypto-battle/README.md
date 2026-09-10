@@ -1,5 +1,7 @@
 # Cryptography Battle
 
+New here? [Try one paper-and-pencil mission](FIRST-EXPERIENCE.md), with no cryptography prerequisite. **Try your first mission** on the problem page has no deadline, points or penalties. Competition Orders have deadlines and penalties.
+
 A timed team game of small, hand-calculated cryptography problems. Orders keep arriving at varying intervals; each new-match Order allows **3 minutes**. Decide what to solve, when to disclose information for an instant answer, and when to use an opponent's public evidence. The highest final score wins.
 
 **Correct answers earn points; missing an Order deadline deducts points (normally −15, with a zero floor).** The remaining time on each card is the submission deadline. Reading explanations does not pause it.

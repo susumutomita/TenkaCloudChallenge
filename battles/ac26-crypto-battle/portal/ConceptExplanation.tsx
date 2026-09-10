@@ -164,10 +164,10 @@ export function orderCalculation(task: OrderTaskProjection, prime: string, local
 export const CONCEPT_QUESTIONS: Record<Locale, Record<Concept, string>> = {"ja": {"enigma":"エニグマはなぜ同じ操作で戻せる？","rsa-decrypt":"秘密鍵でどう元に戻す？","ecdsa":"署名は何を確かめる？","anamorphic":"通常鍵を渡しても秘密を送れる？","stark":"STARK：実行表をどう検査する？","snark":"SNARKの算術化とは？","io":"iOとは？機能と分布を比べる","ec":"楕円曲線の点加算とは？","schnorr":"ゼロ知識証明：なぜ秘密を送らず確かめられる？","rotor": "位置が進む車輪って何？", "rsa": "公開鍵と元に戻す鍵とは？", "remainder": "割った余りって何？", "sharing": "秘密分散・シェアって何？", "mpc": "秘密計算で何ができる？", "zk": "ZKとは？数独の模型で見る", "fhe": "暗号のまま、どう計算する？", "caesar": "ずらす暗号って何？", "vigenere": "3個の鍵を繰り返すと？", "commit": "なぜ手を先に封じる？"}, "en": {"enigma":"Why does Enigma invert itself?","rsa-decrypt":"How does a private key decrypt?","ecdsa":"What does a signature verify?","anamorphic":"A hidden message despite sharing the ordinary key?","stark":"STARK: how is a trace checked?","snark":"What is SNARK arithmetization?","io":"What is iO? Compare functions and distributions","ec":"What is curve addition?","schnorr":"Zero knowledge: verify without the secret?","rotor": "How do advancing wheels work?", "rsa": "What are public and recovery keys?", "remainder": "What is a remainder?", "sharing": "What are secret sharing and shares?", "mpc": "What does MPC do?", "zk": "What is ZK? Explore a sudoku model", "fhe": "How can encrypted values be added?", "caesar": "What is a shift cipher?", "vigenere": "What changes with three repeated keys?", "commit": "Why seal a hand first?"}};
 
 const button = { cursor: "pointer", border: "1px solid #a4b5c6", borderRadius: 5, padding: "5px 9px", color: "#24476d", background: "#fff", fontSize: 12 } as const;
-export default function ConceptExplanation({ locale, topic, task, prime, embedded = false }: {
-  readonly locale: Locale; readonly topic?: Concept; readonly task?: OrderTaskProjection; readonly prime?: string; readonly embedded?: boolean;
+export default function ConceptExplanation({ locale, topic, task, prime, initialTopic, embedded = false }: {
+  readonly locale: Locale; readonly topic?: Concept; readonly task?: OrderTaskProjection; readonly prime?: string; readonly embedded?: boolean; readonly initialTopic?: Concept;
 }) {
-  const [selected, setSelected] = useState<Concept | null>(null);
+  const [selected, setSelected] = useState<Concept | null>(initialTopic ?? null);
   const [stepIndex, setStepIndex] = useState(0);
   const copy = EXPLANATIONS[locale];
   const topics = topic ? [topic] : (["remainder", "sharing", "schnorr", "zk", "commit", "mpc", "fhe", "caesar", "vigenere", "rotor", "enigma", "rsa", "rsa-decrypt", "ec", "ecdsa", "io", "snark", "stark", "anamorphic"] as Concept[]);
@@ -185,7 +185,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
       {lesson && step && <div style={{ border: "1px solid #bad1e8", borderRadius: 6, background: "#f5f9fe", padding: 12, marginTop: 6 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
           <strong>{lesson.name} · {stepIndex + 1} / {lesson.steps.length} — {step.title}</strong>
-          <button type="button" style={button} onClick={() => setSelected(null)}>{embedded ? (ja ? "テーマを選び直す" : "Choose another topic") : (ja ? "解説を閉じる" : "Close explanation")}</button>
+          <button type="button" style={button} onClick={() => setSelected(null)}>{embedded && !topic ? (ja ? "テーマを選び直す" : "Choose another topic") : (ja ? "解説を閉じる" : "Close explanation")}</button>
         </div>
         <div aria-live="polite">
           {step.diagram && <ConceptDiagram key={`${selected}:${stepIndex}`} kind={step.diagram} locale={locale} />}
@@ -204,7 +204,7 @@ export default function ConceptExplanation({ locale, topic, task, prime, embedde
           <span>{stepIndex + 1} / {lesson.steps.length}</span>
           {stepIndex < lesson.steps.length - 1
             ? <button type="button" style={button} onClick={() => setStepIndex((n) => n + 1)}>{ja ? "次へ" : "Next"}</button>
-            : <button type="button" style={button} onClick={() => setSelected(null)}>{embedded ? (ja ? "テーマを選び直す" : "Choose another topic") : (ja ? "問題に戻る" : "Back to the problem")}</button>}
+            : <button type="button" style={button} onClick={() => setSelected(null)}>{embedded && !topic ? (ja ? "テーマを選び直す" : "Choose another topic") : embedded ? (ja ? "解説を閉じる" : "Close explanation") : (ja ? "問題に戻る" : "Back to the problem")}</button>}
         </nav>
       </div>}
     </section>
