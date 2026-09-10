@@ -42,3 +42,11 @@ test('paid advanced hint destinations exist in the actual worksheets',async()=>{
  const io={kind:'io-equivalence' as const,a:2,b:1,c:0,d:1,missing:[1,2] as const};const ioHtml=renderToStaticMarkup(createElement(IoWorksheet,{...common,task:io}));
  for(const label of ['4行すべて同じ答え？','共通する組の個数（0〜4）','計算と比較を提出']){expect(ioHtml).toContain(label);expect(text(io).ja).toContain(label);}
 });
+
+test('RSA second rung provides the transferable formula before its worked example',()=>{
+ const hints=advancedHints(context({kind:'rsa-decrypt',ciphertext:8,n:15,d:3}),1)!;
+ for(const locale of ['ja','en'] as const){
+  expect(hints[locale]).toContain('m = c^d mod n');
+  expect(hints[locale].indexOf('m = c^d mod n')).toBeLessThan(hints[locale].indexOf('8×8=64'));
+ }
+});
