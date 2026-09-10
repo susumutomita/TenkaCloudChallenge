@@ -105,7 +105,7 @@ export function isCryptoBattleProjection(value: unknown): value is CryptoBattleP
   // and render `undefined` as the number to divide by. Failing closed here
   // surfaces `bad_projection` instead, which is what the participant needs to
   // see.
-  if (typeof v.prime !== "string" || v.prime.length === 0) return false;
+  if (typeof v.prime !== "string" || !/^[1-9][0-9]*$/.test(v.prime) || BigInt(v.prime) < 2n) return false;
   // [Issue #682] Same fail-closed rule as `prime`: the exposure lane renders
   // "2 / 3" from this, and a payload without it would render "2 / undefined".
   if (typeof v.threshold !== "number" || !Number.isFinite(v.threshold) || v.threshold <= 0) {

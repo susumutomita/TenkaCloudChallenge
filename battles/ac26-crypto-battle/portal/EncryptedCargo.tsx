@@ -9,7 +9,7 @@ export default function EncryptedCargo({ locale, inputs, prime, left, right, onL
       .tc-cargo{color:#183650}.tc-cargo h3{margin:8px 0;font-size:22px}
       .tc-cargo-route{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:16px 0}
       .tc-cargo-parcel{border:2px solid #85aac6;border-radius:12px;padding:14px;background:#edf6ff}
-      .tc-cargo-pair{display:flex;gap:12px;margin-top:10px}.tc-cargo-pair span{flex:1;text-align:center;background:white;border:1px solid #bccdde;border-radius:6px;padding:8px;font-size:20px;font-weight:700}
+      .tc-cargo-pair{display:flex;gap:12px;margin-top:10px}.tc-cargo-pair span{flex:1;min-width:0;overflow-wrap:anywhere;text-align:center;background:white;border:1px solid #bccdde;border-radius:6px;padding:8px;font-size:20px;font-weight:700}
       .tc-cargo-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px}
       .tc-cargo-columns label{display:block;background:#f5f8fb;border:1px solid #bccdde;border-radius:12px;padding:14px}
       .tc-cargo-columns code{display:block;font-size:22px;margin:12px 0;overflow-wrap:anywhere}

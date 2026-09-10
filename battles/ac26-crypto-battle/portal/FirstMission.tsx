@@ -1,6 +1,10 @@
 import { useState } from "react";
 import EncryptedCargo from "./EncryptedCargo.tsx";
 
+export function checkFirstMission(left: string, right: string): boolean {
+  return /^0{0,699}5$/.test(left.trim()) && /^0{0,699}2$/.test(right.trim());
+}
+
 /** Fixed public practice: no coordination client, deadline or scoring mutation. */
 export default function FirstMission({ locale, onLearn, onDone }: { locale: "ja" | "en"; onLearn: () => void; onDone: () => void }) {
   const ja = locale === "ja";
@@ -11,7 +15,7 @@ export default function FirstMission({ locale, onLearn, onDone }: { locale: "ja"
     <p><strong>{ja ? "練習専用：時間制限・得点・減点なし。何度でもやり直せます。" : "Practice only: no deadline, points or penalties. Unlimited retries."}</strong></p>
     <EncryptedCargo locale={locale} inputs={[{ r: 2, y: 4 }, { r: 3, y: 5 }]} prime={7} left={left} right={right}
       onLeft={value => { setLeft(value); setResult(null); }} onRight={value => { setRight(value); setResult(null); }} />
-    <button type="button" className="tc-help-control tc-first-submit" disabled={!left.trim() || !right.trim()} onClick={() => setResult(left.trim() === "5" && right.trim() === "2")}>
+    <button type="button" className="tc-help-control tc-first-submit" disabled={!left.trim() || !right.trim()} onClick={() => setResult(checkFirstMission(left, right))}>
       {ja ? "2つの答えを確認する（練習）" : "Check both answers (practice)"}
     </button>
     <div role="status">{result === false && <p>{ja ? "まだ一致していません。左どうし・右どうしを足し、7以上なら7を引きます。減点はありません。" : "Not quite. Add each column separately, then subtract 7 if the total is at least 7. No penalty."}</p>}

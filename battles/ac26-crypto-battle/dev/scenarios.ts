@@ -96,6 +96,7 @@ export const SCENARIO_IDS = [
   "rotor",
   "ledger-filling",
   "fhe-order",
+  "fhe-legacy",
   "mpc-order",
   "rps-order",
   "rps-reuse",
@@ -143,6 +144,7 @@ export const SCENARIO_LABELS: Readonly<Record<ScenarioId, ScenarioCopy>> = {
     ja: "中盤 — LEAK と PROVE が Ledger に並ぶ",
     en: "Midgame — LEAK and PROVE side by side on the Ledger",
   },
+  "fhe-legacy": {ja:"旧試合の暗号配送 — 19桁の数値", en:"Legacy encrypted delivery — 19-digit values"},
   "fhe-order": {
     ja: "暗号文のまま足す Order が開いている状態",
     en: "An encrypted-addition Order is open",
@@ -360,7 +362,7 @@ export interface Scenario {
 }
 
 export function buildScenario(id: ScenarioId): Scenario {
-  const driver = makeDriver((id === "score-item" || id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "anamorphic-decrypt-order" || id === "anamorphic-probability-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : id === "anamorphic-probability-order" ? "anamorphic-probability-0" : undefined, id === "score-item");
+  const driver = makeDriver(id === "fhe-legacy" ? {...DEV_CONFIG, prime:"2305843009213693951"} : (id === "score-item" || id === "enigma-order" || id === "rsa-decrypt-order" || id === "ecdsa-order" || id === "streaming" || id === "ec-order" || id === "anamorphic-order" || id === "anamorphic-decrypt-order" || id === "anamorphic-probability-order" || id === "stark-order" || id === "io-order" || id === "snark-order" || id === "schnorr-lightning") ? STREAMING_ORDER_CONFIG : id === "hint-booster" || id === "lightning" || id === "vigenere" || id === "rsa" || id === "rotor" ? {} : DEV_CONFIG, id === "rotor" ? "rotor-reader-5279136" : id === "rsa" ? "rsa-max-110" : id === "anamorphic-probability-order" ? "anamorphic-probability-0" : undefined, id === "score-item");
 
   switch (id) {
     case "score-item": {
@@ -514,6 +516,7 @@ export function buildScenario(id: ScenarioId): Scenario {
       break;
     }
 
+    case "fhe-legacy":
     case "fhe-order": {
       // Stop as soon as an encrypted-addition Order is on alpha's belt, without
       // serving it -- the point of this position is to SHOW the Order.

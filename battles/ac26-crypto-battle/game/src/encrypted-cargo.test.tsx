@@ -30,3 +30,29 @@ test("the completion explanation opens FHE directly instead of another selection
     expect(html).toContain("1 / 4");
   }
 });
+
+test("practice accepts leading-zero decimals and rejects non-decimal syntax", async () => {
+  const {checkFirstMission} = await import("../../portal/FirstMission.tsx");
+  expect(checkFirstMission("0".repeat(699)+"5", "2")).toBe(true);
+  expect(checkFirstMission("0".repeat(700)+"5", "2")).toBe(false);
+  for (const pair of [["5","2"],["05","02"],[" 005 ","0002"]]) expect(checkFirstMission(pair[0]!,pair[1]!)).toBe(true);
+  for (const pair of [["5.0","2"],["+5","2"],["5e0","2"],["","2"],["5","3"]]) expect(checkFirstMission(pair[0]!,pair[1]!)).toBe(false);
+});
+
+test("both introductory lessons contain the promised diagram", async () => {
+  const {default: ConceptExplanation} = await import("../../portal/ConceptExplanation.tsx");
+  for (const locale of ["ja","en"] as const) {
+    const html=renderToStaticMarkup(<ConceptExplanation locale={locale} topic="fhe" initialTopic="fhe" embedded />);
+    expect(html).toContain(locale==="ja"? 'aria-label="暗号配送のしくみ"':'aria-label="Encrypted delivery mechanism"');
+  }
+});
+
+
+test("all encrypted-delivery rejection variants are localized", async () => {
+  const {outcomeError}=await import("../../portal/FastMovePanel.tsx");
+  for (const error of ["submitted ciphertext does not decrypt to the requested sum", "submitted ciphertext's first component is not the sum of the Order's first components", "ciphertext components must be canonical, length-bounded decimal integers", "ciphertext components must already be reduced -- take the remainder after dividing by the modulus"]) {
+    const message=outcomeError({kind:"rejected",error},"ja");
+    expect(message).not.toBe(error);
+    expect(message).toMatch(/入力|確認/);
+  }
+});

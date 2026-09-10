@@ -49,3 +49,9 @@ Dev tests/typecheck, game tests/typecheck and catalog validation are reported in
 Root `make before-commit` in the user's checkout finds pre-existing Markdown errors under ignored `tmp/TenkaCloudChallenge-704`. That unrelated directory was not modified.
 
 The same root `make before-commit` passed in the isolated checkout: all 21 workspaces, including 7,440 infrastructure tests passed and 3 skipped. The problem-specific tests also passed independently against this change.
+
+## Codex review follow-up — 2026-09-10
+
+All five review findings addressed: validate the modulus before rendering; translate each encrypted-addition rejection; accept leading-zero practice answers with the same 700-digit bound; show an actual FHE mechanism diagram; wrap legacy 19-digit ciphertexts. The reducer and scoring remain unchanged.
+
+The browser accepted `05` / `02` in practice and the completion link opened the named encrypted-delivery figure. At 390px, the real legacy scenario with modulus 2305843009213693951 had no overflowing descendants in the delivery region (clientWidth and scrollWidth both 326px). Game regression suite: 871 passed; dev scenario suite: 114 passed.

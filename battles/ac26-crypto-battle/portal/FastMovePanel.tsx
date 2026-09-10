@@ -490,8 +490,14 @@ export const FAST_MOVE_COPY = {
   },
 } as const;
 
-function outcomeError(outcome: PortalCoordinationOutcome, locale: Locale): string {
-  if (outcome.kind === "rejected" && outcome.error === "submitted ciphertext does not decrypt to the requested sum") {
+export function outcomeError(outcome: PortalCoordinationOutcome, locale: Locale): string {
+  if (outcome.kind === "rejected" && outcome.error === "ciphertext components must be canonical, length-bounded decimal integers") {
+    return locale === "ja" ? "左右の欄に0以上の整数を1つずつ入力してください。小数や記号は使えません。" : "Enter one nonnegative decimal integer in each field, without fractions or symbols.";
+  }
+  if (outcome.kind === "rejected" && outcome.error === "ciphertext components must already be reduced -- take the remainder after dividing by the modulus") {
+    return locale === "ja" ? "合計をそのまま送らず、画面の割る数で割った余りを入力してください。" : "Enter the remainders after division by the displayed divisor, not the unreduced totals.";
+  }
+  if (outcome.kind === "rejected" && (outcome.error === "submitted ciphertext does not decrypt to the requested sum" || outcome.error === "submitted ciphertext's first component is not the sum of the Order's first components")) {
     return locale === "ja" ? "暗号文の合計が一致しません。左どうし・右どうしを足し、それぞれ割った余りを確認してください。期限内なら再提出できます。" : "The encrypted total does not match. Add each column separately and check both remainders. You can retry before the deadline.";
   }
   if (outcome.kind === "rejected") return rpsRejection(outcome.error, locale);
