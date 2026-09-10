@@ -35,6 +35,6 @@ export default function EvolutionWorksheet({task,locale,busy,wrongCost,onSubmit}
   </>}
   {(signature?["r","s"]:[ja?"答えの数字1個":"One answer digit"]).map((label,i)=><label key={label} style={{display:"inline-flex",gap:8,margin:8}}>{label}<input aria-label={label} value={values[i]} inputMode="numeric" maxLength={1} style={{width:60}} onChange={e=>setValues(v=>v.map((old,j)=>i===j?e.target.value:old))}/></label>)}
   <p>{ja?`不正解は最大${wrongCost}点減点。期限内なら再提出できます。`:`Incorrect answers cost up to ${wrongCost} points. Retry before the deadline.`}</p>
-  <button disabled={busy||!(signature?values:values.slice(0,1)).every(v=>/^[0-9]$/.test(v))} onClick={()=>onSubmit((signature?values:values.slice(0,1)).join(" "))}>{ja?"計算した答えを提出":"Submit calculated answer"}</button>
+  <button type="button" className="tc-submit-small" disabled={busy||!(signature?values:values.slice(0,1)).every(v=>/^[0-9]$/.test(v))} onClick={()=>onSubmit((signature?values:values.slice(0,1)).join(" "))}>{ja?"計算した答えを提出":"Submit calculated answer"}</button>
  </section>;
 }

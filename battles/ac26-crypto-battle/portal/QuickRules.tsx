@@ -56,7 +56,7 @@ export default function QuickRules({ locale }: Pick<PortalSlotProps, "locale">) 
       </ol>
       <p style={{ fontSize: 13, lineHeight: 1.8 }}>{copy.choice}</p>
       <h3 style={{ fontSize: 16 }}>{locale === "ja" ? "相手の公開情報は、攻撃の材料" : "Public evidence gives you an attack"}</h3>
-      <p style={{ fontSize: 13, lineHeight: 1.8 }}>{locale === "ja" ? "HUNT は、相手の公開情報から秘密を計算して当てる攻撃です。相手を選び、材料があといくつ必要かを確認します。材料がそろったら、式で計算して答えを送ります。ROTATE は自分の秘密を作り直す操作です。秘密に紐づく未回答のお題は無効・減点になり、じゃんけんは続きます。表示された影響を見てから使います。" : "HUNT is an attack that recovers a secret from an opponent’s public evidence. Choose the opponent and check what evidence is missing. When it is ready, calculate using the formula and submit. ROTATE replaces your own secrets and voids unanswered secret-bound Orders with a penalty. Rock-paper-scissors continues. Check the displayed consequences first."}</p>
+      <p style={{ fontSize: 13, lineHeight: 1.8 }}>{locale === "ja" ? "HUNT は、相手の公開情報から秘密を計算して当てる攻撃です。相手を選び、材料があといくつ必要かを確認します。材料がそろったら、式で計算して答えを送ります。" : "HUNT is an attack that recovers a secret from an opponent’s public evidence. Choose the opponent and check what evidence is missing. When it is ready, calculate using the formula and submit."}</p>
     </section>
   );
 }

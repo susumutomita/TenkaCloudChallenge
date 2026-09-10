@@ -396,10 +396,11 @@ describe("the disclosure Order's hints walk the only method it accepts", () => {
     const rungs = (HINT_LADDER["reveal-share"] ?? []).map((rung) => rung.text(ctx));
     expect(rungs).toHaveLength(HINT_LEVELS);
     for (const locale of ["ja", "en"] as const) {
-      // The last rung is the procedure: it walks LEAK, and the escape (ROTATE).
+      // The last rung walks LEAK and explains the cost of leaving it unanswered.
       const last = rungs[rungs.length - 1]?.[locale] ?? "";
       expect(last).toContain("LEAK");
-      expect(last).toContain("ROTATE");
+      expect(last).not.toContain("ROTATE");
+      expect(last).toContain(locale === "ja" ? "期限切れ" : "expire");
       expect(last).not.toContain("PROVE");
       expect(rungs[1]?.[locale]).toContain("2 + 1 = 3");
       expect(rungs[1]?.[locale]).toContain("2 + 0 = 2");

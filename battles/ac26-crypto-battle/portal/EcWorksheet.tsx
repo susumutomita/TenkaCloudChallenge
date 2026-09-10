@@ -26,6 +26,6 @@ export function EcWorksheet({task,locale,busy,onSubmit}:{task:Extract<OrderTaskP
  </>}
  <details><summary>{ja?"小さい例で計算を確認":"Worked example"}</summary><p>P=(2,1), Q=(3,1): λ=(1−1)×1⁻¹=0; x=0²−2−3=−5 → 2; y=0×(2−2)−1=−1 → 6. P+Q=(2,6).</p><p>{ja?"負の数には7を足し、7以上なら7を引いて、0〜6に直します。":"Add 7 to negative values or subtract 7 from values above6 until they lie in 0–6."}</p></details>
  <label>{ja?"答え：x と y を半角スペースで区切る（例：2 6）。無限遠点は O":"Answer: x space y (example: 2 6), or O for infinity"}<input aria-label="EC answer" value={answer} onChange={e=>setAnswer(e.target.value)} placeholder="x y / O" /></label>
- <button type="button" disabled={busy||!(/^[0-6] [0-6]$/.test(answer)||answer==="O")} onClick={()=>onSubmit(answer)}>{ja?"点を提出":"Submit point"}</button>
+ <button type="button" className="tc-submit-small" disabled={busy||!(/^[0-6] [0-6]$/.test(answer)||answer==="O")} onClick={()=>onSubmit(answer)}>{ja?"点を提出":"Submit point"}</button>
  </section>;
 }

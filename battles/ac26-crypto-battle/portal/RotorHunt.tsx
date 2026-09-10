@@ -68,8 +68,8 @@ export default function RotorHunt({
       </p>
       <p className="tc-card-hint">
         {ja
-          ? "回数はほかのHUNTと共通（同じ相手・世代へのシェア復元とじゃんけん予測）。成功はこの方式で1回。ROTATE後の旧世代には使えませんが、初期位置の数字が再登場することはあります。"
-          : "Attempts are shared with secret-share recovery and RPS predictions against this opponent/generation. One success per method. Old generations cannot be submitted after ROTATE, although numeric initial positions may recur."}
+          ? "回数はほかのHUNTと共通（同じ相手・世代へのシェア復元とじゃんけん予測）。成功はこの方式で1回。現在の世代だけが対象です。"
+          : "Attempts are shared with secret-share recovery and RPS predictions against this opponent/generation. One success per method. Only the current generation can be attacked."}
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
         <label>

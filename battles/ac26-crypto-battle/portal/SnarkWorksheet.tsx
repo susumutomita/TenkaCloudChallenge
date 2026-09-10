@@ -19,7 +19,7 @@ export function SnarkWorksheet({task,locale,busy,wrongCost,onSubmit}:{task:Const
    <input aria-label={`SNARK remainder ${i+1}`} style={{width:70}} inputMode="numeric" maxLength={1} value={values[i]} onChange={e=>setValues(v=>v.map((x,j)=>i===j?e.target.value:x))}/>
   </label>)}
   <p>{ja?`不正解は最大 ${wrongCost} 点減点。入力は残り、期限内なら再提出できます。`:`Incorrect answers cost up to ${wrongCost} points. Inputs stay; retry before the deadline.`}</p>
-  <button type="button" disabled={busy||!values.every(v=>/^[0-6]$/.test(v))} onClick={()=>onSubmit(values.join(' '))}>{ja?'検査結果を提出':'Submit check results'}</button>
+  <button type="button" className="tc-submit-small" disabled={busy||!values.every(v=>/^[0-6]$/.test(v))} onClick={()=>onSubmit(values.join(' '))}>{ja?'検査結果を提出':'Submit check results'}</button>
   <details><summary>{ja?'SNARK全体との関係・数学の式':'Relation to SNARKs and the general equation'}</summary>
    <p>{ja?'Qは演算を選ぶ係数です。添字L/R/M/O/Cは左入力・右入力・掛け算・出力・定数の係数を区別します。mod 7は「7で割った余りで比べる」という表記です。':'The Q values are coefficients selecting the operation. Subscripts L/R/M/O/C distinguish coefficients of the left input, right input, multiplication, output and constant. mod 7 means compare remainders after division by 7.'}</p>
    <p>Q<sub>L</sub>L + Q<sub>R</sub>R + Q<sub>M</sub>LR + Q<sub>O</sub>O + Q<sub>C</sub> = 0 (mod 7)</p>
