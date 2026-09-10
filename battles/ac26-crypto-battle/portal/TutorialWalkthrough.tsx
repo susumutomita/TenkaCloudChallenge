@@ -126,7 +126,7 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
       title: "公開すると、相手に材料を渡すことになる",
       purpose: "かけらを公開してすぐ得点する操作が LEAK です。公開した数は、みんなが読める公開記録（PUBLIC LEDGER）へ残ります。相手は前の場面の式を使えるので、公開する個数が大事になります。",
       steps: ["『同じ秘密から作った一組』を世代と呼びます。この例は同じ世代の異なる番号が 3 個で秘密を戻せる設定です。", "#1、#2、もう一度 #1 を公開しました。違う番号は何個ありますか。", "危険度の丸は公開操作の回数ではなく、同じ世代の異なる番号の個数を表します。"],
-      question: "公開済みの異なる番号の個数", result: "2 個です。#1 を再び出しても増えません。#3 も出すと 3 個になり、相手が秘密を戻して得点する HUNT（秘密を読み解く攻撃）に使えます。ROTATE（秘密を作り直す操作）をすると新しい世代になります。古いかけらと新しいかけらは混ぜて使えません。", retry: "番号は #1 と #2 です。重複した #1 をもう一度数えないでください。",
+      question: "公開済みの異なる番号の個数", result: "2 個です。#1 を再び出しても増えません。#3 も出すと 3 個になり、相手が秘密を戻して得点する HUNT（秘密を読み解く攻撃）に使えます。異なる世代のかけらは混ぜて使えません。", retry: "番号は #1 と #2 です。重複した #1 をもう一度数えないでください。",
     },
     en: {
       prompt: "You published shares #1, #2, then #1 again from the same secret.",
@@ -136,7 +136,7 @@ export const PRACTICE_STEPS: readonly PracticeStep[] = [
       title: "Publishing gives an opponent evidence",
       purpose: "LEAK publishes a share to score immediately. Everyone can read it in the PUBLIC LEDGER. An opponent can use the reconstruction formula from the previous scene, so the number of exposed shares matters.",
       steps: ["A generation is a set made from the same secret. This example requires three distinct indices in one generation.", "Publish #1, #2, then #1 again. How many different indices are visible?", "Exposure circles count distinct indices in one generation, not how many times you clicked publish."],
-      question: "The number of distinct public indices", result: "Two. Repeating #1 adds no new index. Publishing #3 would allow recovery and HUNT, an attack that scores by recovering the secret. ROTATE makes a new secret and generation; old and new shares cannot be mixed.", retry: "The distinct indices are #1 and #2. Count #1 only once.",
+      question: "The number of distinct public indices", result: "Two. Repeating #1 adds no new index. Publishing #3 would allow recovery and HUNT, an attack that scores by recovering the secret. Shares from different generations cannot be mixed.", retry: "The distinct indices are #1 and #2. Count #1 only once.",
     },
   },
   {
