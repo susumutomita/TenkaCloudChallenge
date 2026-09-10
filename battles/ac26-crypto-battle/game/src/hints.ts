@@ -213,8 +213,8 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
       id: "reveal-share/2",
       text: (ctx) => {
         if (!ctx.allowedMethods.includes("prove")) return {
-          ja: `例：同じ世代の #1 と #2 が公開済みなら 2 個です。#3 を LEAK すると 2 + 1 = 3 個。同じ #2 をもう一度出すなら 2 + 0 = 2 個です。数えるのは異なる番号です。この試合では ${ctx.threshold} 個で秘密を戻せます。未回答で期限切れにすると公開数は増えず、失効の減点を受けます。ROTATE（秘密を作り直す）なら現世代の公開数は 0 個に戻りますが、未回答のお題が無効になり減点されます。`,
-          en: `Example: public #1 and #2 from one generation count as 2 shares. LEAK #3: 2 + 1 = 3. Publish #2 again: 2 + 0 = 2. Count distinct indices. This match needs ${ctx.threshold} shares to recover the secret. Leaving the Order unanswered adds no exposure but incurs its expiry penalty. ROTATE (replace your secret set) resets the current generation's exposure to 0, but voids unanswered secret-bound Orders with a penalty.`,
+          ja: `例：同じ世代の #1 と #2 が公開済みなら 2 個です。#3 を LEAK すると 2 + 1 = 3 個。同じ #2 をもう一度出すなら 2 + 0 = 2 個です。数えるのは異なる番号です。この試合では ${ctx.threshold} 個で秘密を戻せます。未回答で期限切れにすると公開数は増えず、失効の減点を受けます。公開済みの情報は相手が読み続けられるため、公開する前に増える番号を確認します。`,
+          en: `Example: public #1 and #2 from one generation count as 2 shares. LEAK #3: 2 + 1 = 3. Publish #2 again: 2 + 0 = 2. Count distinct indices. This match needs ${ctx.threshold} shares to recover the secret. Leaving the Order unanswered adds no exposure but incurs its expiry penalty. Published information remains readable by opponents, so check which new index will be exposed before publishing.`,
         };
 
         const termsJa = Array.from({ length: ctx.threshold - 1 }, (_, i) => `係数${i + 1} × ${Array(i + 1).fill("番号").join(" × ")}`);
@@ -255,11 +255,11 @@ Why not two shares? Secret 2 with coefficients 2 and 5 gives #1: 2 + 2 + 5 = 9 �
             ja: `この Order は公開が条件です。求められているシェアは ${cards}（世代 ${ctx.vault.generation}）。
 ① まだ押さず、公開する値と次の公開数を確認します。
 ② 公開数を数える：${exposed.size} + ${added} = ${after} 個（公開済み + 新しい番号。同じ番号は重ねて数えない）。${reaches ? `必要な ${ctx.threshold} 個に達し、相手はあなたの秘密を戻せるようになります。` : `秘密を戻す ${ctx.threshold} 個にはまだ届きません。`}
-③ 公開してよければ「公開して答える (LEAK)」を押します。完了・得点・公開記録への追加を確認します。公開したくない場合は、押す前にROTATEの影響を確認します。`,
+③ 公開してよければ「公開して答える (LEAK)」を押します。完了・得点・公開記録への追加を確認します。公開しない場合は、このお題が期限切れになったときの減点を確認します。`,
             en: `This Order requires publication. Requested shares: ${cards} (generation ${ctx.vault.generation}).
 (1) Before pressing, check the values and the resulting exposure below.
 (2) Count your public shares: ${exposed.size} + ${added} = ${after} distinct indices (already public + new; duplicates count once). ${reaches ? `That reaches the ${ctx.threshold} an opponent needs to recover your secret.` : `Still below the ${ctx.threshold} needed for recovery.`}
-(3) To publish, press "Publish to answer (LEAK)". Check completion, points and the public record. To avoid publishing, check the impact of ROTATE before acting.`,
+(3) To publish, press "Publish to answer (LEAK)". Check completion, points and the public record. If you choose not to publish, check the penalty for letting this Order expire.`,
           };
         }
         return {

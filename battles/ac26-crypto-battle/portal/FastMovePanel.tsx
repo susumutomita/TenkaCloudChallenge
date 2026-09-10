@@ -1341,7 +1341,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
       <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
-        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length && !completionPending ? () => { setFeedback(null); setCompletionPending(false); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length && !completionPending ? () => { setActivePane("orders"); setFeedback(null); setCompletionPending(false); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
       </div>
 
       <div className="tc-play-controls">

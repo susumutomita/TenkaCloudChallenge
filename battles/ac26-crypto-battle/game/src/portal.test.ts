@@ -552,7 +552,7 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
       expect(html).toContain("LEAK");
       expect(html).toContain("PROVE");
       expect(html).toContain("HUNT");
-      expect(html).toContain("ROTATE");
+      expect(html).not.toContain("ROTATE");
       expect(html).toContain(locale === "ja" ? "この Battle の遊び方" : "How this Battle works");
     });
 
