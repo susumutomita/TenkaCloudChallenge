@@ -252,7 +252,7 @@ export const FAST_MOVE_COPY = {
     starting: "STARTING…",
     startSuccess: "MATCH STARTED",
     startBody: "The first Orders are on the belt.",
-    fheTitle: "ENCRYPTED ADDITION — FHE (homomorphic encryption)",
+    fheTitle: "HOMOMORPHIC ENCRYPTION — encrypted addition model",
     fheUse: "USED FOR: verifying a total without seeing anyone's amount",
     fheWhy: "WHY IT WORKS: the sum contains the content total plus the hiding-number total; the judge uses the separate input keys and original left values to subtract the hiding numbers",
     fheHelp: "DO THIS: add the lefts and the rights separately, then take each remainder after dividing by p",
@@ -417,7 +417,7 @@ export const FAST_MOVE_COPY = {
     starting: "開始中…",
     startSuccess: "MATCH STARTED",
     startBody: "最初の ORDER が届きました。",
-    fheTitle: "暗号文のまま足す ― FHE (準同型暗号)",
+    fheTitle: "準同型暗号 — 暗号文のまま足す（加算の模型）",
     /*
       [Issue #659] 1 Order = 3 行。「つかいみち / しくみ / やること」。
       
@@ -491,6 +491,9 @@ export const FAST_MOVE_COPY = {
 } as const;
 
 function outcomeError(outcome: PortalCoordinationOutcome, locale: Locale): string {
+  if (outcome.kind === "rejected" && outcome.error === "submitted ciphertext does not decrypt to the requested sum") {
+    return locale === "ja" ? "暗号文の合計が一致しません。左どうし・右どうしを足し、それぞれ割った余りを確認してください。期限内なら再提出できます。" : "The encrypted total does not match. Add each column separately and check both remainders. You can retry before the deadline.";
+  }
   if (outcome.kind === "rejected") return rpsRejection(outcome.error, locale);
   if (outcome.kind === "not_configured") return locale === "ja" ? "coordination が未設定です。" : "Coordination is not configured.";
   return FAST_MOVE_COPY[locale].unavailable;
