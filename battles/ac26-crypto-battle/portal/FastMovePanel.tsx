@@ -1706,7 +1706,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           <strong>{locale === "ja" ? "青い4マスに、置き換えた数字を入力" : "Fill the four blue cells with the renamed digits"}</strong>
 
           <div className="tc-card-hint">{copy.proveHelp}</div>
-          {!proveTable && <p role="status">{locale === "ja" ? "この世代の置き換えをすべて使いました。証明はできません。「答え方を選び直す」から公開して答えるか、別のお題へ進んでください。" : "All replacements in this generation have been used. Proof is unavailable. Choose another answer method to publish, or work on another Order."}</p>}
+          {!proveTable && <p role="status">{locale === "ja" ? "この世代の置き換えをすべて使いました。この旧方式のお題では、これ以上証明できません。別のお題へ進んでください。このお題は期限切れ時に減点されます。" : "All replacements in this generation have been used. No further proof is available for this legacy Order. Work on another Order; this one incurs its penalty when it expires."}</p>}
           {proveTable && <div className="tc-prove-table">
             <strong>{locale === "ja" ? "今回の置き換え" : "Replacements for this answer"}</strong>
             <PermutationChips pi={proveTable} />

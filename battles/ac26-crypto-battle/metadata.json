@@ -29,7 +29,7 @@
     "Shamir (t, n) しきい値秘密分散と Lagrange 補間を、公開情報から秘密を復元するHUNTで使う",
     "share を公開 (LEAK) するコストが即時ではなく将来の HUNT リスクとして発生することを理解する",
     "しきい値未満の share が秘密について何も語らないことを実行可能な形で確認する",
-    "secret rotation が過去に漏洩した share を無効化する仕組みを体験する",
+    "公開するシェアの異なる番号が増えると、秘密を復元できる条件に近づくことを体験する",
     "Schnorrの公開検証、模擬会話、知識の抽出を小さな数で確かめ、HVZKと実用上の安全性を区別する",
     "楕円曲線上の点加算・倍算を小さい数で計算し、ECDSA署名全体との違いを説明する。",
     "SNARKの算術化で、計算の制約とコピー制約を手計算で区別する"
@@ -60,7 +60,7 @@
         "Apply Shamir (t, n) threshold secret sharing and Lagrange interpolation to recover secrets from public evidence in HUNT",
         "Understand that revealing a share (LEAK) costs nothing immediately -- the cost arrives later, as HUNT risk",
         "Verify, executably, that fewer than the threshold of shares reveal nothing about the secret",
-        "Experience how secret rotation invalidates previously leaked shares",
+        "Experience how publishing distinct share indices brings opponents closer to reconstructing a secret",
         "Hand-check Schnorr verification, simulation and knowledge extraction, distinguishing HVZK from practical security.",
         "Calculate elliptic-curve addition and doubling with small numbers, distinguishing them from a complete ECDSA signature.",
         "Distinguish gate and copy constraints by hand in SNARK arithmetization"

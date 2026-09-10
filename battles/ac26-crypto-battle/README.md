@@ -64,7 +64,7 @@ New matches start with one Order and then receive more at varying intervals. The
 | What the card asks for | What you do |
 | --- | --- |
 | reveal a share | choose LEAK or PROVE |
-| publish a share (publication required) | LEAK only, full points; a new index adds one distinct public share, a duplicate adds zero. ROTATE first to avoid publishing |
+| publish a share (publication required) | LEAK only, full points; a new index adds one distinct public share, a duplicate adds zero. Leaving this Order unanswered avoids publication but incurs its expiry penalty |
 | show it without showing it | PROVE: commit a and calculate the response z to the verifier challenge e |
 | encrypt with your key | shift each symbol forward by your key (CIPHER), or LEAK |
 | encrypted addition | add both pairs component by component, remainder p |
