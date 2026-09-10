@@ -1,0 +1,23 @@
+name: event-host-rehearsal
+services:
+  event-host-rehearsal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      FLAG_SEED: "${FLAG_SEED:?Use the local runner to inject a per-run secret}"
+    ports:
+      - "127.0.0.1:18080:8080"
+      - "127.0.0.1:18081:8081"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"

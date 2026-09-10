@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>開催責任者のリハーサル / Event host rehearsal</title
+  ><link rel="stylesheet" href="style.css" />
+  <body>
+    <main>
+      <header>
+        <span>HOST REHEARSAL</span
+        ><label
+          >Language
+          <select id="locale">
+            <option value="ja">日本語</option>
+            <option value="en">English</option>
+          </select></label
+        >
+      </header>
+      <h1 id="title"></h1>
+      <p id="intro"></p>
+      <nav id="progress" aria-label="Progress"></nav>
+      <section id="scene"></section>
+      <p id="result" role="status" aria-live="polite"></p>
+      <section id="receipt-box" hidden>
+        <label id="receipt-label" for="receipt"></label
+        ><input id="receipt" readonly />
+        <p id="receipt-help"></p>
+        <button id="next" type="button"></button>
+      </section>
+      <section id="finish" hidden></section>
+      <footer>
+        <a
+          id="guide"
+          href="https://tenkacloud.com/docs/operate/run-an-event/"
+          target="_blank"
+          rel="noopener"
+        ></a>
+      </footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

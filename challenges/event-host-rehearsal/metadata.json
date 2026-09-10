@@ -1,0 +1,230 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "event-host-rehearsal",
+  "name": "はじめての開催責任者",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "20 分",
+  "shortDescription": "来月のイベント、誰と何をいつまでに準備する？人数・担当・開始判断・撤収を4つの場面で練習します。",
+  "description": "運営経験のない主催者向け。LPの開催ランブックを、数量計算と証拠に基づく判断を行うローカル問題として体験します。実AWS操作や本番開催の認定は行いません。",
+  "instructions": "## あなたは初めての開催責任者\n\n来月の暗号イベントを任されました。足し算・割り算と、表の読み取りで準備と判断を練習します。暗号やAWSの知識は不要です。\n\n1. **Web**を開き、参加人数からチーム数とPCの台数を計算します。\n2. 画面の4場面（準備→リハーサル→問い合わせ→撤収）で計画・判断を入力します。条件と計算方法は各場面にあります。\n3. 確認できると**確認票**が出ます。確認票はこの環境だけの提出用文字列です。対応するチェックポイントへコピーして提出すると各25点、合計100点です。\n\n練習画面の判断を間違えても得点は変わりません。ポータルへ誤った確認票を提出した場合は各チェックポイントの減点が適用されます。環境を再作成すると練習の進行はリセットされます。\n\nこれはローカルの架空イベントです。AWSの起動・削除や人への連絡は行いません。合格後は[開催ランブック](https://tenkacloud.com/docs/operate/run-an-event/)の企画表へ自分のイベントの条件を書き、本番の準備を確認してください。",
+  "tags": ["organizer", "runbook", "beginner", "local-play"],
+  "learningGoals": [
+    "参加人数から必要数量を求め担当の対応時間を確認する",
+    "受付・回答・採点の確認を分けて開始可否を判断する",
+    "記録による問い合わせ調査と未完了の撤収の引き継ぎを行う"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web"
+    },
+    {
+      "port": 18081,
+      "name": "Verify (loopback)"
+    }
+  ],
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "plan",
+        "label": "準備数と担当",
+        "points": 25,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "plan-1",
+            "content": "開催計画は、人数から必要数量を決め、競技時間中に判断できる担当を置くところから始めます。",
+            "penalty": 0
+          },
+          {
+            "id": "plan-2",
+            "content": "チーム数は人数を4で割って切り上げ。PCは人数＋予備。担当は競技の開始から終了まで対応できる人です。",
+            "penalty": 2
+          },
+          {
+            "id": "plan-3",
+            "content": "Web画面の人数を使って2つの数を計算し、対応時間表と競技時間を照らして担当を選びます。確認票をこのチェックポイントへ提出します。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "rehearsal",
+        "label": "開始できる？",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "rehearsal-1",
+            "content": "準備完了は設定したことではなく、参加者が最後まで使えたことを確認して判断します。",
+            "penalty": 0
+          },
+          {
+            "id": "rehearsal-2",
+            "content": "ログイン、回答受付、得点と履歴の反映は別々の確認です。どれが未確認か、画面のリハーサル結果を読みます。",
+            "penalty": 2
+          },
+          {
+            "id": "rehearsal-3",
+            "content": "開始条件と結果を比較し、現時点の開催判断と未確認の箇所を選びます。実際のイベントを開始する操作ではありません。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "incident",
+        "label": "得点の問い合わせ",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "incident-1",
+            "content": "問い合わせには対象の記録を特定する情報が必要です。調査担当へ渡してから判断します。",
+            "penalty": 0
+          },
+          {
+            "id": "incident-2",
+            "content": "オーダー番号、時刻、画面を採点記録と照合します。先に一律加点すると別の誤りが起きます。",
+            "penalty": 2
+          },
+          {
+            "id": "incident-3",
+            "content": "場面に表示されたオーダー番号をそのまま入力します。調査の担当と、証拠を照合する行動を選びます。",
+            "penalty": 3
+          }
+        ]
+      },
+      {
+        "id": "closeout",
+        "label": "撤収の引き継ぎ",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "closeout-1",
+            "content": "削除を頼んだことと、削除が完了したことは違います。残件は担当と次の確認を記録して引き継ぎます。",
+            "penalty": 0
+          },
+          {
+            "id": "closeout-2",
+            "content": "残存リソースがあるかを一覧で確認します。完了していなければ、誰がいつ削除結果と費用を確認するかを残します。",
+            "penalty": 2
+          },
+          {
+            "id": "closeout-3",
+            "content": "場面の残存数と担当者の申し出を読み、状態・担当・本日中の確認を記録します。現実のAWS資源を消す操作ではありません。",
+            "penalty": 3
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "event-operations",
+    "order": 10,
+    "chapter": "1. 開催の準備"
+  },
+  "i18n": {
+    "en": {
+      "name": "First-time event host",
+      "shortDescription": "Who prepares what, and by when? Practise quantities, staffing, start decisions and teardown in four scenes.",
+      "description": "A local rehearsal for new organizers, linked to the LP event runbook. No real AWS operations or event certification.",
+      "instructions": "## You are the first-time event host\n\nYou have been asked to host a cryptography event next month. Practise planning and decisions using addition, division and tables. No cryptography or AWS knowledge is required.\n\n1. Open **Web**. Calculate teams and computers from attendance.\n2. Work through four scenes: planning, rehearsal, score inquiry and teardown. Each scene provides the conditions and method.\n3. A confirmed decision produces a **receipt**, a submission string unique to this environment. Copy it into the matching Portal checkpoint for 25 points each, 100 total.\n\nWrong decisions in the practice page do not affect points. Submitting an incorrect receipt in the Portal incurs the checkpoint’s displayed penalty. Recreating the environment resets practice progress.\n\nThis is a fictional local event: no AWS launch/deletion or contact with people. After passing, use the [event runbook](https://tenkacloud.com/docs/operate/run-an-event/index.en.html) to plan and check your actual event.",
+      "learningGoals": [
+        "Plan quantities and match staff availability",
+        "Separate login, answer and scoring checks before sign-off",
+        "Investigate score records and hand over incomplete teardown"
+      ],
+      "checks": [
+        {
+          "id": "plan",
+          "label": "Resources and owner",
+          "hints": [
+            {
+              "id": "plan-1",
+              "content": "Plan quantities from attendance and appoint an owner available throughout play."
+            },
+            {
+              "id": "plan-2",
+              "content": "Teams = participants divided by four, rounded up. Computers = participants plus spares. The owner must cover the whole competition."
+            },
+            {
+              "id": "plan-3",
+              "content": "Use the numbers on the Web page, compare availability with play time, check the plan and submit its receipt here."
+            }
+          ]
+        },
+        {
+          "id": "rehearsal",
+          "label": "Ready to start?",
+          "hints": [
+            {
+              "id": "rehearsal-1",
+              "content": "Readiness means a participant completed the flow, not merely that settings exist."
+            },
+            {
+              "id": "rehearsal-2",
+              "content": "Login, answer acceptance and scoring/history are separate checks. Read what the rehearsal actually confirmed."
+            },
+            {
+              "id": "rehearsal-3",
+              "content": "Compare the start conditions with the evidence, choose the current decision and the outstanding check. This does not start a real event."
+            }
+          ]
+        },
+        {
+          "id": "incident",
+          "label": "A score question",
+          "hints": [
+            {
+              "id": "incident-1",
+              "content": "An inquiry needs enough information to identify the relevant record before a decision."
+            },
+            {
+              "id": "incident-2",
+              "content": "Reconcile Order ID, time and screen evidence with scoring records. Adding points first can create another error."
+            },
+            {
+              "id": "incident-3",
+              "content": "Copy the scene’s Order ID. Choose the investigation owner and the action that reconciles evidence."
+            }
+          ]
+        },
+        {
+          "id": "closeout",
+          "label": "Teardown handover",
+          "hints": [
+            {
+              "id": "closeout-1",
+              "content": "Requesting deletion is different from confirming deletion. Handover needs an owner and next check."
+            },
+            {
+              "id": "closeout-2",
+              "content": "Check the remaining resources. If work remains, record who will check deletion and costs, and when."
+            },
+            {
+              "id": "closeout-3",
+              "content": "Use the scene’s resource count and the assigned helper to record status, owner and today’s next check. No real resources are deleted."
+            }
+          ]
+        }
+      ],
+      "writeup": "## Take this into your event\n\nDerive quantities from attendance and participation mode. Verify that owners are available when needed. Sign-off relies on an observed login-answer-scoring flow, not settings alone. Identify evidence before investigating a score inquiry. Distinguish requesting deletion from confirming teardown.\n\nThese people and numbers were fictional. Fill the LP planning table with real conditions and rehearse venue, connectivity, staffing and the event flow."
+    }
+  },
+  "writeup": "## 開催に持ち帰ること\n\n数量は参加人数と活動方式から決めます。担当者がいるだけでなく、必要な時間に対応できるかを確認します。準備完了は設定画面ではなく、参加者がログイン・回答・採点まで通った証拠で判断します。問い合わせは対象の記録を特定して調査し、撤収は削除要求と削除完了を区別します。\n\n今回の人数や担当者は架空です。LPの企画表へ実際の条件を記入し、会場・通信・協力者と本番前のリハーサルで確認してください。"
+}
