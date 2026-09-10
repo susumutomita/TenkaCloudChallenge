@@ -642,7 +642,7 @@ describe("HelpDrawer.tsx -- ja/en smoke render", () => {
       expect(html).toContain(locale === "ja" ? "#1・#2・#1 は 2 個分" : "#1, #2, #1 count as two");
       expect(html).toContain("Schnorr");
       expect(html).toContain(locale === "ja" ? "端末内に残ります" : "stay in your browser");
-      expect(html).toContain(locale === "ja" ? "じゃんけんのお題は続きます" : "Rock-paper-scissors Orders continue");
+      expect(html).not.toContain(locale === "ja" ? "ROTATE は自分の秘密を作り直す操作" : "ROTATE creates a new secret");
     }
   });
 

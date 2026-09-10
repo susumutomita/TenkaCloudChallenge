@@ -30,7 +30,6 @@ import {
   submitProveSudoku,
   submitRevealHint,
   submitReady,
-  submitRotate,
   submitStart,
 } from "./RegistrationPanelCore.tsx";
 import ConceptExplanation from "./ConceptExplanation.tsx";
@@ -818,6 +817,17 @@ export function sudokuRotatePressure(
 
 
 const CSS = `
+.tc-play-controls{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:16px 0}
+.tc-play-controls [role=group][hidden]{display:none}
+.tc-play-controls [role=group]{display:flex;gap:8px}
+.tc-play-controls button{min-height:44px;padding:10px 18px}
+.tc-play-controls button[aria-pressed=false]{background:#eef3f8;color:#315f91;border:1px solid #9fb5cd}
+.tc-play-controls select{min-height:44px;border:1px solid #9fb5cd;border-radius:7px;padding:8px;background:white;color:#202b3c}
+.tc-play-layout{display:grid;gap:16px;align-items:start}
+.tc-play-layout>div{min-width:0}
+.tc-play-layout>div[hidden]{display:none}
+@media(min-width:1100px){.tc-play-columns{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+
 ${BOARD_CSS}
 ${DIE_CSS}
 ${SUDOKU_CSS}
@@ -1072,6 +1082,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const [projectionAtMs, setProjectionAtMs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedOrderId, setSelectedOrderId] = useState("");
+  const [layout, setLayout] = useState("tabs");
+  const [activePane, setActivePane] = useState("orders");
   // [Issue #709] Sixteen typed cells for the relabelled grid, and sixteen for
   // a recovered solution. Strings until submit: a half-typed grid is a normal
   // state, and Number("") would silently be 0.
@@ -1155,9 +1167,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
   const { visible: primaryActionsVisible, leakAllowed, proveAllowed } =
     primaryActionsFor(selectedOrder);
   const nextHint = nextHintFor(selectedOrder);
-  const tactics = useMemo(() => tacticAvailability(projection), [projection]);
-  const sudokuPressure = useMemo(() => sudokuRotatePressure(projection), [projection]);
-  const exposure = useMemo(() => exposureRows(projection), [projection]);
+
   const usedProveTables = JSON.stringify(projection?.vault.usedPermutations ?? []);
   // Stable across clock updates and equivalent poll responses, private to this client.
   const proveTable = useMemo(() => chooseProveTable(JSON.parse(usedProveTables)),
@@ -1327,28 +1337,38 @@ export default function FastMovePanel(props: PortalSlotProps) {
             : copy.scoreHint}</span>
         <div className="tc-rival-score">{Object.values(projection.teams).filter(t => t.teamId !== projection.vault.teamId).map(t => <span key={t.teamId}>{locale === "ja" ? "相手" : "Opponent"} · {t.teamName || t.teamId} <strong>{t.score} {locale === "ja" ? "点" : "pt"}</strong></span>)}</div>
       </div>
-      <BreachNotice key={`${props.team.eventId}:${projection.vault.teamId}:${projection.lastBreach?.sequence ?? 0}`} projection={projection} locale={locale} onDefend={()=>{
-        const defense=document.getElementById("tc-breach-defense");
-        defense?.scrollIntoView({block:"center",behavior:"smooth"});
-        defense?.focus({preventScroll:true});
-      }} />
+      <BreachNotice key={`${props.team.eventId}:${projection.vault.teamId}:${projection.lastBreach?.sequence ?? 0}`} projection={projection} locale={locale} />
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
+      <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length && !completionPending ? () => { setFeedback(null); setCompletionPending(false); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
+      </div>
+
+      <div className="tc-play-controls">
+        <div role="group" hidden={layout !== "tabs"} aria-label={locale === "ja" ? "表示する内容" : "Show panel"}>
+          <button type="button" className="tc-submit-small" aria-pressed={activePane === "orders"} onClick={() => setActivePane("orders")}>{locale === "ja" ? "お題を解く" : "Solve Orders"}</button>
+          <button type="button" className="tc-submit-small" aria-pressed={activePane === "hunt"} onClick={() => setActivePane("hunt")}>{locale === "ja" ? "相手を攻撃（HUNT）" : "Attack (HUNT)"}</button>
+        </div>
+        <label>{locale === "ja" ? "並べ方 " : "Layout "}<select aria-label={locale === "ja" ? "並べ方" : "Layout"} value={layout} onChange={e => setLayout(e.target.value)}>
+          <option value="tabs">{locale === "ja" ? "切り替え" : "Switch panels"}</option>
+          <option value="columns">{locale === "ja" ? "横並び" : "Side by side"}</option>
+          <option value="stack">{locale === "ja" ? "縦並び" : "Stacked"}</option>
+        </select></label>
+      </div>
       <OrderQueue key={`${props.team.eventId}:${projection.vault.teamId}`} projection={projection} locale={locale}
         selectedId={completionPending ? undefined : selectedOrder?.id} receipt={orderReceipt}
         onSelect={(id) => {
           selectionRevision.current += 1;
           setSelectedOrderId(id);
+          setActivePane("orders");
           setCompletionPending(false);
           setProveOpen(false);
           setFeedback(null);
           workspaceRef.current?.scrollIntoView({ block: "start" });
         }} />
 
-      <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
-        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length && !completionPending ? () => { setFeedback(null); setCompletionPending(false); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
-      </div>
-
+      <div className={`tc-play-layout tc-play-${layout}`}>
+      <div hidden={layout === "tabs" && activePane !== "orders"}>
       <section ref={workspaceRef} className="tc-workspace" aria-label={locale === "ja" ? "いま答えるお題" : "Current Order"}>
       {completionPending && orderReceipt ? <div className="tc-ticket">
         <h2>{orderReceipt.id.replace(/^.*-c/, "ORDER #")} · {locale === "ja" ? "完了" : "Completed"}</h2>
@@ -1792,44 +1812,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
       </>}
       </section>
 
-      {/*
-        [Issue #682] The exposure lane, always on screen. See `exposureRows`
-        for why it is not gated on anything being actionable yet.
-      */}
-      <details className="tc-exposure">
-        <summary>{locale === "ja" ? `秘密の公開状況 · あなた ${ownExposedShareCount(projection)}/${projection.threshold} 個` : `Secret exposure · you ${ownExposedShareCount(projection)}/${projection.threshold}`}
-          <span>{exposure.filter((row) => !row.isSelf).map((row) => `${row.teamName} ${row.exposed}/${projection.threshold}`).join(" · ")}</span>
-        </summary>
-        <div className="tc-card-hint">{copy.exposureHint(projection.threshold)}</div>
-        <div className="tc-exposure-rows">
-          {exposure.map((row) => (
-            <div
-              key={row.teamId}
-              className={`tc-exposure-row${row.isSelf ? " tc-exposure-self" : ""}${row.huntable || (row.isSelf && row.exposed > 0) ? " tc-exposure-hot" : ""}`}
-            >
-              <span className="tc-exposure-team">{row.isSelf ? copy.exposureSelf : row.teamName}</span>
-              <span className="tc-exposure-pips" aria-label={`${row.exposed}/${projection.threshold}`}>
-                {Array.from({ length: projection.threshold }, (_, i) => (
-                  <span key={i} className={`tc-pip${i < row.exposed ? " tc-pip-on" : ""}`} />
-                ))}
-              </span>
-              <span
-                className={`tc-exposure-state${row.huntable || (row.isSelf && row.exposed > 0) ? " tc-exposure-state-hot" : ""}`}
-              >
-                {row.huntable
-                  ? row.isSelf
-                    ? copy.exposureWarn
-                    : copy.exposureHuntable
-                  : row.isSelf && row.exposed > 0
-                    ? copy.exposureWarn
-                    : copy.exposureSafe}
-              </span>
-            </div>
-          ))}
-        </div>
-        {exposure.length <= 1 ? <p className="tc-exposure-note">{copy.exposureSolo}</p> : null}
-      </details>
-
+      </div>
+      <div hidden={layout === "tabs" && activePane !== "hunt"}>
       <HuntPanel projection={projection} locale={locale} submitting={submitting}
         onSubmit={(op) => run(() => client.submitOp(op), (next) => {
           if (op.kind === "hunt" || op.kind === "hunt-sudoku" || op.kind === "hunt-rotor") return huntFeedback(next, op.targetTeamId, locale, op.kind === "hunt-rotor" ? "rotor" : op.kind === "hunt-sudoku" ? "sudoku" : undefined);
@@ -1839,39 +1823,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
           return next ? { kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "試行回数を1回使いました。対戦の開封後に採点します。" : "One attempt reserved. Scoring waits for the duel's public openings." } : { kind: "error", title: copy.rejected, body: copy.unavailable };
         })} />
 
-        {tactics.rotate && <div id="tc-breach-defense" tabIndex={-1} className="tc-rotate-card">
-          <div className="tc-card-title">{locale === "ja" ? "自分の防御 · 秘密を作り直す（ROTATE）" : "Defend yourself · Replace your secrets (ROTATE)"}</div>
-          <div className="tc-card-hint">{copy.rotateHint}</div>
-          {projection.vault.rotatePenalty !== undefined && <p><strong>{locale === "ja" ? `実行すると −${projection.vault.rotatePenalty} 点` : `This action costs ${projection.vault.rotatePenalty} points`}</strong></p>}
-          {projection.publicRsaKeys?.length ? <p className="tc-card-hint">{locale === "ja" ? "RSAの新しい公開n/eも全員に見えます。小さい鍵の数は再登場する場合があり、ROTATEで因数分解を防げるわけではありません。" : "Everyone also sees the new RSA n/e. Tiny key numbers can recur; ROTATE does not prevent factoring."}</p> : null}
-          {sudokuPressure === "hunted" && <div className="tc-card-hint">{copy.rotateSudokuHunted}</div>}
-          {sudokuPressure === "exhausted" && <div className="tc-card-hint">{copy.rotateSudokuExhausted}</div>}
-          {/*
-            [Issue #659] ROTATE voids every Order still open, and each one now
-            costs what letting it expire costs -- up to a whole batch. That is a
-            bigger surprise than the LEAK rate this panel already discloses, and
-            it arrives at the worst moment: a team rotates because it is under
-            attack. State the price while the button is still unpressed, and
-            count the Orders actually at stake rather than quoting a rule.
-          */}
-          {(projection.vault.rotateMinimumPenalty ?? 0) > 0 && <div className="tc-card-warn">{locale === "ja" ? `公開専用Orderに回答済み：ROTATEは少なくとも −${projection.vault.rotateMinimumPenalty} 点。未処理Orderの減点がこれ以上なら、その減点だけです。` : `A disclosure Order was answered: ROTATE costs at least −${projection.vault.rotateMinimumPenalty} points, or the unanswered-Order penalty if larger.`}</div>}
-          {rotateVoidCount(projection) > 0 ? (
-            <div className="tc-card-warn">{copy.rotateCost(rotateVoidCount(projection))}</div>
-          ) : null}
-          <button
-            type="button"
-            className="tc-submit-small"
-            disabled={submitting || projection.vault.rotateCooldownRemainingMs > 0}
-            onClick={() => {
-              const before = projection.vault.generation;
-              void run(
-                () => submitRotate(client),
-                () => ({ kind: "rotate", title: copy.rotateSuccess, body: copy.rotateBody(before, before + 1) }),
-              );
-            }}
-          >{projection.vault.rotateCooldownRemainingMs > 0 ? `${Math.ceil(projection.vault.rotateCooldownRemainingMs / 1000)}s` : copy.rotate}</button>
-        </div>}
-
+      </div>
+      </div>
       <MatchRecords projection={projection} locale={locale} />
     </section>
   );

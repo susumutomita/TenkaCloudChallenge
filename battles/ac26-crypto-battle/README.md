@@ -546,3 +546,5 @@ verified behavior.
 PROVE scores a response satisfying the equation in a Schnorr calculation model, not secure authentication or evidence of prior possession of a secret. The statement concerns x for public y, not a share value or Sudoku solution. At most 11 secret candidates exist; repeating rounds over this same tiny group does not restore practical security. Transcript simulation demonstrates disclosure relative to y, while resisting false claims also requires appropriate cryptographic parameters. No protocol, score, wire format, or saved-state migration is changed by this clarification.
 
 Reference: [RFC 8235, security considerations](https://www.rfc-editor.org/rfc/rfc8235.html#section-6).
+
+The play area supports switching between Orders and HUNT, or showing them side by side or stacked. Switching preserves unfinished inputs. Public records remain available on demand; the exposure strip and ROTATE control are no longer shown. The English portal uses `diagram.en.svg` when supported by the host.
