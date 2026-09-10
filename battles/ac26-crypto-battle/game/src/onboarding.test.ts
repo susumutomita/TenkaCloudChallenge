@@ -144,7 +144,9 @@ describe("optional arithmetic practice", () => {
       const playTitle = locale === "ja" ? "遊び方" : "How to play";
       expect(status).toContain(tutorialTitle);
       expect(status).toContain(playTitle);
-      expect(status.match(/aria-haspopup="dialog"/g)).toHaveLength(4);
+      expect(status.match(/aria-haspopup="dialog"/g)).toHaveLength(5);
+      expect(status).toContain(locale === "ja" ? "まず1問体験" : "Try your first mission");
+      expect(status).not.toContain(locale === "ja" ? "開けずに、合計を届けよう" : "Deliver the total.");
       expect(status).toContain("<dialog");
       expect(status).not.toContain("<dialog open");
       expect(status).not.toContain('aria-label="crypto-battle-tutorial"');

@@ -1,3 +1,4 @@
+import EncryptedCargo from "./EncryptedCargo.tsx";
 import HintContent from "./HintContent.tsx";
 import { ScoreItemOrder, ScoreItemInventory } from "./ScoreSteal.tsx";
 import EvolutionWorksheet from "./EvolutionWorksheet.tsx";
@@ -251,7 +252,7 @@ export const FAST_MOVE_COPY = {
     starting: "STARTING…",
     startSuccess: "MATCH STARTED",
     startBody: "The first Orders are on the belt.",
-    fheTitle: "ENCRYPTED ADDITION — FHE (homomorphic encryption)",
+    fheTitle: "HOMOMORPHIC ENCRYPTION — encrypted addition model",
     fheUse: "USED FOR: verifying a total without seeing anyone's amount",
     fheWhy: "WHY IT WORKS: the sum contains the content total plus the hiding-number total; the judge uses the separate input keys and original left values to subtract the hiding numbers",
     fheHelp: "DO THIS: add the lefts and the rights separately, then take each remainder after dividing by p",
@@ -260,10 +261,10 @@ export const FAST_MOVE_COPY = {
     fheAnswerY: "your answer: right part",
     fhe: "SUBMIT CIPHERTEXT",
     fheHint: "COMPUTE / NOTHING REVEALED",
-    fheSuccess: "FHE SUCCESS",
+    fheSuccess: "ENCRYPTED DELIVERY COMPLETE",
     fheBody: (points: number) => `+${points} · ADDED WITHOUT DECRYPTING`,
     fheLesson:
-      "That was HOMOMORPHIC ENCRYPTION: you computed on numbers you could not read, and the answer came out right. Blockchains use it so a chain can verify a total without anyone publishing the amounts.",
+      "You delivered a ciphertext hiding the total. You added the visible pairs without decrypting their contents; the judge checked the result using its keys. This is an addition model, not full FHE.",
     mpcTitle: "MASKED SUBTOTAL — MPC (secure multi-party computation)",
     mpcUse: "USED FOR: offices finding a total while keeping each input private",
     mpcWhy: "A mask is a number shared privately by two offices. One adds it and the other subtracts it, so the masks cancel when all subtotals are added.",
@@ -416,7 +417,7 @@ export const FAST_MOVE_COPY = {
     starting: "開始中…",
     startSuccess: "MATCH STARTED",
     startBody: "最初の ORDER が届きました。",
-    fheTitle: "暗号文のまま足す ― FHE (準同型暗号)",
+    fheTitle: "準同型暗号 — 暗号文のまま足す（加算の模型）",
     /*
       [Issue #659] 1 Order = 3 行。「つかいみち / しくみ / やること」。
       
@@ -432,10 +433,10 @@ export const FAST_MOVE_COPY = {
     fheAnswerY: "答え: 右の値",
     fhe: "暗号文を提出",
     fheHint: "計算 / 何も明かさない",
-    fheSuccess: "正解！",
+    fheSuccess: "暗号配送完了！",
     fheBody: (points: number) => `+${points} · 復号せずに足した`,
     fheLesson:
-      "いまのが「準同型暗号」です。中身を読めない数のまま計算して、答えは正しく出ました。ブロックチェーンでは、金額を誰も公開せずに合計を検証するのに使われています。",
+      "合計を隠した暗号文を届けました。あなたは中身を復号せず、見えている数の組を足しました。判定側は鍵を使って結果を確認します。これは加算の模型で、完全準同型暗号そのものではありません。",
     mpcTitle: "自分の数を隠して合計する ― MPC (秘密計算)",
     mpcUse: "つかいみち: 各拠点が自分の数を隠し、合計の余りだけを出す",
     mpcWhy: "覆面は、2つの拠点が内緒で共有する数です。片方が足し、もう片方が引くので、全拠点の小計を足すと覆面は打ち消し合います。",
@@ -489,7 +490,16 @@ export const FAST_MOVE_COPY = {
   },
 } as const;
 
-function outcomeError(outcome: PortalCoordinationOutcome, locale: Locale): string {
+export function outcomeError(outcome: PortalCoordinationOutcome, locale: Locale): string {
+  if (outcome.kind === "rejected" && outcome.error === "ciphertext components must be canonical, length-bounded decimal integers") {
+    return locale === "ja" ? "左右の欄に0以上の整数を1つずつ入力してください。小数や記号は使えません。" : "Enter one nonnegative decimal integer in each field, without fractions or symbols.";
+  }
+  if (outcome.kind === "rejected" && outcome.error === "ciphertext components must already be reduced -- take the remainder after dividing by the modulus") {
+    return locale === "ja" ? "合計をそのまま送らず、画面の割る数で割った余りを入力してください。" : "Enter the remainders after division by the displayed divisor, not the unreduced totals.";
+  }
+  if (outcome.kind === "rejected" && (outcome.error === "submitted ciphertext does not decrypt to the requested sum" || outcome.error === "submitted ciphertext's first component is not the sum of the Order's first components")) {
+    return locale === "ja" ? "暗号文の合計が一致しません。左どうし・右どうしを足し、それぞれ割った余りを確認してください。期限内なら再提出できます。" : "The encrypted total does not match. Add each column separately and check both remainders. You can retry before the deadline.";
+  }
   if (outcome.kind === "rejected") return rpsRejection(outcome.error, locale);
   if (outcome.kind === "not_configured") return locale === "ja" ? "coordination が未設定です。" : "Coordination is not configured.";
   return FAST_MOVE_COPY[locale].unavailable;
@@ -1484,19 +1494,13 @@ export default function FastMovePanel(props: PortalSlotProps) {
       {selectedOrder?.task.kind === "homomorphic-sum" && (
         <div className="tc-input-panel">
           <strong style={{ fontSize: "12px" }}>{copy.fheTitle} · {selectedOrder.id.replace(/^.*-c/, "ORDER #")}</strong>
-          <div className="tc-lesson">
-            <div className="tc-lesson-use">{copy.fheUse}</div>
-            <div className="tc-lesson-why">{copy.fheWhy}</div>
-          </div>
-          <p className="tc-card-hint">{locale === "ja" ? `左どうし・右どうしを足し、それぞれ ${projection.prime} で割った余りを入力します。合計が ${projection.prime} 未満なら、その数のままです。` : `Add the left numbers and the right numbers separately. Enter each remainder after division by ${projection.prime}; a smaller total stays unchanged.`}</p>
-          <label className="tc-answer-label">{locale === "ja" ? "① 左の数を足す" : "1. Add the left numbers"}
-            <div><code>{selectedOrder.task.inputs.map(input => input.r).join(" + ")}</code> → {locale === "ja" ? `${projection.prime} で割った余り` : `remainder after division by ${projection.prime}`}</div>
-            <input aria-label="fast-fhe-r" inputMode="numeric" value={fheR} onChange={(event) => setFheR(event.target.value)} placeholder={locale === "ja" ? "左の答え" : "Left answer"} />
-          </label>
-          <label className="tc-answer-label">{locale === "ja" ? "② 右の数を足す" : "2. Add the right numbers"}
-            <div><code>{selectedOrder.task.inputs.map(input => input.y).join(" + ")}</code> → {locale === "ja" ? `${projection.prime} で割った余り` : `remainder after division by ${projection.prime}`}</div>
-            <input aria-label="fast-fhe-y" inputMode="numeric" value={fheY} onChange={(event) => setFheY(event.target.value)} placeholder={locale === "ja" ? "右の答え" : "Right answer"} />
-          </label>
+          <EncryptedCargo locale={locale} inputs={selectedOrder.task.inputs} prime={projection.prime}
+            left={fheR} right={fheY} onLeft={setFheR} onRight={setFheY} />
+          <p>{locale === "ja" ? `2つの答えを提出し、正解なら +${selectedOrder.points} 点。` : `Submit both answers: +${selectedOrder.points} for a correct answer. `}
+            {projection.expiryPenalty === undefined ? (locale === "ja" ? "締切と減点は上のお題一覧・スコア欄を確認してください。" : "See the Order queue and score line for deadline penalties.")
+              : projection.expiryPenalty === 0 ? (locale === "ja" ? "この試合は期限切れの減点なし。" : "No deadline penalty in this match.")
+              : locale === "ja" ? `締切まで未回答なら最大 ${Math.abs(projection.expiryPenalty)} 点の減点（最低0点）。` : `Unanswered at the deadline: up to ${Math.abs(projection.expiryPenalty)} points deducted (score floor 0).`}
+          </p>
           <ConceptExplanation key={selectedOrder.id} locale={locale} topic="fhe" task={selectedOrder.task} prime={projection.prime} />
           <button
             type="button"

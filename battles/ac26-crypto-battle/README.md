@@ -1,12 +1,14 @@
 # Cryptography Battle
 
+New here? [Try one paper-and-pencil mission](FIRST-EXPERIENCE.md), with no cryptography prerequisite. **Try your first mission** on the problem page has no deadline, points or penalties. Competition Orders have deadlines and penalties.
+
 A timed team game of small, hand-calculated cryptography problems. Orders keep arriving at varying intervals; each new-match Order allows **3 minutes**. Decide what to solve, when to disclose information for an instant answer, and when to use an opponent's public evidence. The highest final score wins.
 
 **Correct answers earn points; missing an Order deadline deducts points (normally −15, with a zero floor).** The remaining time on each card is the submission deadline. Reading explanations does not pause it.
 
 ![Game flow](diagram.svg)
 
-Four optional entries appear above the game: “How to play”, “Cryptography in diagrams and formulas”, “One-digit practice”, and “Rules reference”. They open on a separate scroll surface. Closing returns to the original Order, unfinished answer and page position. An ongoing match keeps running. Practice connects remainders, sharing, reconstruction, publication risk, MPC, ZK, FHE, Caesar and commit-reveal with small numbers. Reading without answering is allowed.
+Five optional entries appear above the game: “Try your first mission”, “How to play”, “Cryptography in diagrams and formulas”, “One-digit practice”, and “Rules reference”. They open on a separate scroll surface. Closing returns to the original Order, unfinished answer and page position. An ongoing match keeps running. Practice connects remainders, sharing, reconstruction, publication risk, MPC, ZK, FHE, Caesar and commit-reveal with small numbers. Reading without answering is allowed.
 Guided scenes first show a short instruction, calculation and one hole. Steps and reasons are available in a collapsed explanation; answer feedback is one sentence.
 
 The focused workspace groups the current Order, answer methods, scores, disclosure costs and inputs. MPC shows received-mask total, sent-mask total, the expression using the player's input and the remainder step with actual numbers. Results appear above the answer area. Hints and exposure details expand on demand. “Open public records and my vault” opens the public history and private vault in a separate dialog; close it to return to the mounted answer form. Detailed match data lives inside “Rules reference”, outside the timed workspace.
@@ -130,7 +132,7 @@ Press “I'M READY”. The match starts and Orders arrive when every team is rea
 3. **Result** — score and outcome above the answer area
 4. **HUNT** — select an opponent from the dropdown, then a method
 5. **Open public records and my vault** — optional public history and private vault in a dialog
-6. **Play, diagrams and formulas, practice, rules** — choose one purpose above the board
+6. **Try your first mission, how to play, diagrams and formulas, practice, rules** — choose one purpose above the board
 
 HUNT shows the selected opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer. ROTATE is a separate defence control.
 

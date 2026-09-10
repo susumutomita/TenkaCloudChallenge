@@ -4,6 +4,10 @@
 
 This repository is the public problem catalog for the [TenkaCloud](https://github.com/susumutomita/TenkaCloud) platform. It contains the problem payloads that the platform packages and deploys; the platform repository owns deployment, scoring dispatch, and integration.
 
+## Start with one mission
+
+New to cryptography? [Try the first encrypted-delivery mission](battles/ac26-crypto-battle/FIRST-EXPERIENCE.md). Use paper, a pen and school-level arithmetic; practice has no points or deadline. The guide explains how to join an organizer-provided event or run the local preview, then explore more problems. This is not a hosted public demo.
+
 ## Catalog layout
 
 - [`challenges/`](./challenges/) contains self-paced problems.

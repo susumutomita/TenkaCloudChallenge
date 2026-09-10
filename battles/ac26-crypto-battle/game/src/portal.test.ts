@@ -2155,3 +2155,18 @@ describe("the global guide exposes the evolution lessons",()=>{
   for(const text of locale==="ja"?["エニグマはなぜ同じ操作で戻せる？","秘密鍵でどう元に戻す？","署名は何を確かめる？"]:["Why does Enigma invert itself?","How does a private key decrypt?","What does a signature verify?"])expect(html).toContain(text);
  });
 });
+
+describe("encrypted delivery modulus validation", () => {
+  it("rejects decimal moduli beyond the existing 700-digit bound", () => {
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), prime: "9".repeat(701) })).toBe(false);
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), prime: "9".repeat(700) })).toBe(true);
+  });
+  for (const prime of ["oops", "0", "1", "-7", "7.5", " 97", "097", "0x61", "1e2"]) {
+    it(`rejects malformed modulus ${prime} before rendering`, () => {
+      expect(isCryptoBattleProjection({...fixtureProjection(), prime})).toBe(false);
+    });
+  }
+  it("retains the supported legacy large modulus", () => {
+    expect(isCryptoBattleProjection({...fixtureProjection(), prime:"2305843009213693951"})).toBe(true);
+  });
+});
