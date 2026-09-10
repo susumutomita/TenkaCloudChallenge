@@ -1,5 +1,8 @@
 # Cryptography Battle
 
+> Compatibility note: ROTATE is not available in the current participant UI. Remaining generation-change and ROTATE references below describe saved matches and the legacy API, not a player action.
+
+
 New here? [Try one paper-and-pencil mission](FIRST-EXPERIENCE.md), with no cryptography prerequisite. **Try your first mission** on the problem page has no deadline, points or penalties. Competition Orders have deadlines and penalties.
 
 A timed team game of small, hand-calculated cryptography problems. Orders keep arriving at varying intervals; each new-match Order allows **3 minutes**. Decide what to solve, when to disclose information for an instant answer, and when to use an opponent's public evidence. The highest final score wins.
@@ -17,7 +20,7 @@ The Order list stays visible while answering, with the pending count, task, dead
 
 “Cryptography in diagrams and formulas” explanations cover remainders, secret shares, MPC, ZK, FHE, and Caesar shifts in four or five steps: purpose, mechanism, a one-digit worked example, and the live inputs. Each calculation form also opens its relevant explanation locally; the last step copies the current Order’s operands into an unsolved expression. Reading never changes scores or match state and can be closed at any step.
 
-HUNT starts with an **opponent dropdown**, showing team name, ID, score and whether evidence is available. Available opponents come first; the optional evidence filter narrows the list. Choose a method for that opponent, inspect its public evidence, then hand-calculate and submit. Original and encrypted Caesar rows align vertically so the same positions can be compared. New evidence keeps the selected opponent stable while that opponent still matches the filter. ROTATE remains a separate defence control.
+HUNT starts with an **opponent dropdown**, showing team name, ID, score and whether evidence is available. Available opponents come first; the optional evidence filter narrows the list. Choose a method for that opponent, inspect its public evidence, then hand-calculate and submit. Original and encrypted Caesar rows align vertically so the same positions can be compared. New evidence keeps the selected opponent stable while that opponent still matches the filter.
 
 A share attack uses distinct indices from one generation. Vigenère needs all three key positions, RSA uses public n/e, and RPS predicts a hand from past openings. The reused-sudoku worksheet belongs only to saved legacy matches; new matches use Schnorr.
 
@@ -34,7 +37,6 @@ A share is an index-and-value pair used in secret sharing. This game creates fiv
 | **LEAK** | Publish a share, or an original/encrypted pair, to answer instantly | Public records can supply an opponent's attack |
 | **PROVE** | Commit a, receive e, and hand-calculate the Schnorr response z | Requires calculation; wrong submissions cost points |
 | **HUNT** | Recover a secret, key or hand from public information and attack | Secret, sudoku and hand misses cost points and attempts; an incorrect cipher key is rejected without a charge |
-| **ROTATE** | Replace the secret and key with a new generation | Unanswered secret-bound Orders become void and cost points; after a mandatory disclosure, pay at least one expiry penalty (the larger penalty only; score never falls below zero). Rock-paper-scissors continues |
 | **HINT** | Open one more step of how to solve the Order you have selected | Costs points — and they do not come back if you never solve it |
 
 An ordinary correct calculation earns +30, LEAK earns +10, and expiry costs −15. Check each card for its accepted methods and actual points.
@@ -51,7 +53,7 @@ New matches use a tiny-parameter Schnorr calculation model, not secure authentic
 
 ## Goal
 
-Score by solving the incoming Orders while managing what you reveal. **Shares are one kind of evidence, not the rule for every cryptographic task.** A leaked cipher pair, a public RSA key and a secret-sharing share support different calculations. The selected HUNT method explains what it needs. ROTATE changes the generation but also costs points; inspect its effect before using it.
+Score by solving the incoming Orders while managing what you reveal. **Shares are one kind of evidence, not the rule for every cryptographic task.** A leaked cipher pair, a public RSA key and a secret-sharing share support different calculations. The selected HUNT method explains what it needs.
 
 ## Orders keep arriving
 
@@ -80,7 +82,6 @@ Every card shows its deadline, points, task, and accepted methods. A method abse
 | FHE | add ciphertexts without decrypting |
 | MPC | submit one subtotal while each office's input stays private |
 | HUNT | submit a secret, a sudoku solution recovered from a reused relabelling, or a cipher key recovered from public records |
-| ROTATE | replace your secret and shares with a fresh generation |
 | HINT | open the next step of the selected ORDER's hint ladder. Nothing is published |
 
 ## Stuck? — HINT
@@ -134,7 +135,7 @@ Press “I'M READY”. The match starts and Orders arrive when every team is rea
 5. **Open public records and my vault** — optional public history and private vault in a dialog
 6. **Try your first mission, how to play, diagrams and formulas, practice, rules** — choose one purpose above the board
 
-HUNT shows the selected opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer. ROTATE is a separate defence control.
+HUNT shows the selected opponent’s public evidence and attack status. A ready method opens its worksheet, with formulas, diagrams and public values for the player to calculate and submit an answer.
 
 ## Data boundary
 
@@ -398,11 +399,11 @@ New Caesar orders contain three symbols. The answer field explicitly requests sp
 
 ### HUNT opponent selection (#782)
 
-The HUNT dropdown lists every opponent, prioritizes those with public evidence, and supports an evidence-only filter. All opponents remain selectable in a 100-team match. Select a team and method to see one worksheet. New evidence does not replace the selected worksheet. Successful attacks disable that method for the current generation; ROTATE remains a separate defense action.
+The HUNT dropdown lists every opponent, prioritizes those with public evidence, and supports an evidence-only filter. All opponents remain selectable in a 100-team match. Select a team and method to see one worksheet. New evidence does not replace the selected worksheet. Successful attacks disable that method for the current generation.
 
 ## When an opponent recovers your secret
 
-A notice above the answer workspace identifies the attacker, secret type, generation and actual score loss. Draft input stays intact. Review defense opens the ROTATE impact before committing that action. After rotation, the notice is labeled as a previous-generation event. Only the latest notice is retained; polling does not replay it. Old history is not backfilled with guessed penalties.
+A notice above the answer workspace identifies the attacker, secret type, generation and actual score loss. Draft input stays intact. After rotation, the notice is labeled as a previous-generation event. Only the latest notice is retained; polling does not replay it. Old history is not backfilled with guessed penalties.
 
 ### New-match Schnorr zero-knowledge proof (#783)
 

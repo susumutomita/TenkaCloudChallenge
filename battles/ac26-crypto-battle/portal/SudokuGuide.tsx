@@ -64,7 +64,6 @@ export default function SudokuGuide({ order, projection, table, locale, onOpenPr
       <p className="tc-hint-equation">{exposed.size} + {added} = {after} / {projection.threshold} {ja ? "個が公開" : "shares public"}</p>
       <p>{after >= projection.threshold ? (ja ? "相手が秘密を復元できる数に達します。" : "Enough shares to recover your secret.") : (ja ? "復元に必要な数にはまだ達しません。" : "Still below the recovery threshold.")}</p>
     </details>}
-    <details className="tc-why"><summary>{ja ? "秘密を作り直す場合（ROTATE）" : "Replacing your secrets (ROTATE)"}</summary><p>{ja ? "新しい世代に切り替わり、いまのお題は無効・期限切れと同じ減点になります。" : "Starts a new generation, voiding this Order with the expiry penalty."}</p></details>
   </div>;
 }
 

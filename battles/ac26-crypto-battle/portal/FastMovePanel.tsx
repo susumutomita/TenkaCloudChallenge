@@ -395,7 +395,7 @@ export const FAST_MOVE_COPY = {
     huntUnknownPoints: (left?: number) => `この古い結果には得点変化の記録がありません。${left === undefined ? "" : `あと ${left} 回。`}`,
     huntUnread: "HUNT を送信しました",
     huntUnreadBody: "結果を読み取れませんでした。スコアと、相手チップの残り回数を確認してください。",
-    huntCipherBody: "割り出した鍵が受理されました。相手が ROTATE するまで、この段は破れたままです。",
+    huntCipherBody: "割り出した鍵が受理されました。この世代では、この方式の攻撃は完了です。",
     rotateSuccess: "ROTATE",
     rotateBody: (from: number, to: number) => `世代 ${from} → 世代 ${to}`,
     rejected: "REJECTED",
@@ -1341,7 +1341,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
       <RpsResult projection={projection} locale={locale} />
       <RpsHuntStatus projection={projection} locale={locale} />
       <div ref={feedbackRef} tabIndex={-1} className="tc-result-anchor" aria-live="polite" aria-atomic="true">
-        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length && !completionPending ? () => { setActivePane("orders"); setFeedback(null); setCompletionPending(false); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
+        {feedback && <FeedbackBanner key={feedback.attempt} feedback={{ ...feedback, total: projection.teams[projection.vault.teamId]?.score }} locale={locale} onContinue={orders.length && (!completionPending || feedback.kind === "hunt") ? () => { setActivePane("orders"); setFeedback(null); setCompletionPending(false); workspaceRef.current?.scrollIntoView({ block: "start" }); } : undefined} />}
       </div>
 
       <div className="tc-play-controls">
@@ -1432,8 +1432,8 @@ export default function FastMovePanel(props: PortalSlotProps) {
             */}
             {selectedOrder.privacyConstraint === "must-disclose" && (
               <span className="tc-share-primer-rule">{locale === "ja"
-                ? " この依頼はかけらの公開が条件です。得点は計算と同じ満額で、未公開の番号なら公開数が増え、同じ番号なら増えません。公開専用Orderに答えた世代のROTATEは、未処理が0件でも最低1件分の失効点がかかります。増やしたくなければ、先に ROTATE で世代を変えます (開いている依頼は無効になります)。"
-                : " This request requires publishing the share. It pays the full computing rate; a new index increases exposure; a duplicate does not. After fulfilling a disclosure Order, ROTATE costs at least one expiry penalty even with no unfinished work. To avoid that, ROTATE to a new generation first (open Orders are voided)."}</span>
+                ? " この依頼はかけらの公開が条件です。得点は計算と同じ満額で、未公開の番号なら公開数が増え、同じ番号なら増えません。公開を避ける場合は、期限切れによる減点があります。"
+                : " This request requires publishing the share. It pays the full computing rate; a new index increases exposure; a duplicate does not. Choosing not to publish incurs the expiry penalty when the deadline passes."}</span>
             )}
           </p>
         )}
@@ -1720,7 +1720,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
           <strong>{locale === "ja" ? "青い4マスに、置き換えた数字を入力" : "Fill the four blue cells with the renamed digits"}</strong>
 
           <div className="tc-card-hint">{copy.proveHelp}</div>
-          {!proveTable && <p role="status">{locale === "ja" ? "この世代の置き換えをすべて使いました。下の「秘密を作り直す」で新しい世代に進めます。" : "All replacements in this generation have been used. Use the defense control below to start a new generation."}</p>}
+          {!proveTable && <p role="status">{locale === "ja" ? "この世代の置き換えをすべて使いました。証明はできません。「答え方を選び直す」から公開して答えるか、別のお題へ進んでください。" : "All replacements in this generation have been used. Proof is unavailable. Choose another answer method to publish, or work on another Order."}</p>}
           {proveTable && <div className="tc-prove-table">
             <strong>{locale === "ja" ? "今回の置き換え" : "Replacements for this answer"}</strong>
             <PermutationChips pi={proveTable} />
