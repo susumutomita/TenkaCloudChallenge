@@ -205,7 +205,7 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
       // sell a PROVE route the button row does not offer: the last paragraph of
       // rung 1 and the whole of rung 3 branch on what the Order accepts.
       text: (ctx) => ({
-        ja: `シェアは、秘密を分けて持つ「番号と数」の組です。自分の保管庫に${ctx.shareCount}個あります。\n同じ世代（同じ秘密から作った一組）の異なる番号が ${ctx.threshold} 個あれば秘密を戻せます。${ctx.threshold-1}個以下では、全 ${ctx.prime} 通りの秘密が候補に残ります。\nLEAKは指定されたシェアを公開して答える操作です。${ctx.allowedMethods.includes("prove")?"この保存試合のPROVEは、別の秘密である数独の解を使い、シェアを公開せずに答える方法です。":"このお題は公開が条件なので、答え方はLEAKだけです。計算や数値入力はありません。"}`,
+        ja: `かけら (share) は、シェアとも呼ぶ、秘密を分けて持つ「番号と数」の組です。自分の保管庫に${ctx.shareCount}個あります。\n同じ世代（同じ秘密から作った一組）の異なる番号が ${ctx.threshold} 個あれば秘密を戻せます。${ctx.threshold-1}個以下では、全 ${ctx.prime} 通りの秘密が候補に残ります。\nLEAKは指定されたシェアを公開して答える操作です。${ctx.allowedMethods.includes("prove")?"この保存試合のPROVEは、別の秘密である数独の解を使い、シェアを公開せずに答える方法です。":"このお題は公開が条件なので、答え方はLEAKだけです。計算や数値入力はありません。"}`,
         en: `A share is an index/value pair used to split a secret. Your vault holds ${ctx.shareCount} shares.\nCollect ${ctx.threshold} different indices from one generation (one set made from the same secret) to recover it. ${ctx.threshold-1} or fewer do not narrow the secret.\nLEAK publishes the requested shares to answer. ${ctx.allowedMethods.includes("prove")?"PROVE in this saved match uses a separate sudoku solution without publishing the share.":"This Order requires publication, so LEAK is the only method. No calculation or numeric input is needed."}`,
       }),
     },
@@ -286,8 +286,8 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Check
     {
       id: "homomorphic-sum/2",
       text: () => ({
-        ja: "例：割る数p=7、暗号文は(2,5)と(3,6)。\n① 左どうし：2 + 3 = 5 → 7未満なので5。\n② 右どうし：5 + 6 = 11 → 11 − 7 = 4。\n③ 答えの暗号文は(5,4)。左の欄に5、右の欄に4を入れます。\n「7で割った余り」をmod 7と書きます。中身を復号する計算は不要です。",
-        en: "Example: divisor p=7, ciphertexts (2,5) and (3,6).\n① Lefts: 2 + 3 = 5 → below 7, keep 5.\n② Rights: 5 + 6 = 11 → 11 − 7 = 4.\n③ Result (5,4): put 5 in the left field and 4 in the right field.\nThe remainder after division by 7 is written mod 7. No decryption is required.",
+        ja: "式：左の答え = 左の値の合計をpで割った余り。右の答え = 右の値の合計をpで割った余り。2組なら (r1+r2 mod p, y1+y2 mod p)。rは左、yは右、modは割った余りです。\n例：割る数p=7、暗号文は(2,5)と(3,6)。\n① 左どうし：2 + 3 = 5 → 7未満なので5。\n② 右どうし：5 + 6 = 11 → 11 − 7 = 4。\n③ 答えの暗号文は(5,4)。左の欄に5、右の欄に4を入れます。\n「7で割った余り」をmod 7と書きます。中身を復号する計算は不要です。",
+        en: "Rule: sum all left values and take the remainder by p; do the same for the right values. For two pairs: (r1+r2 mod p, y1+y2 mod p). r is left, y is right; mod means remainder.\nExample: divisor p=7, ciphertexts (2,5) and (3,6).\n① Lefts: 2 + 3 = 5 → below 7, keep 5.\n② Rights: 5 + 6 = 11 → 11 − 7 = 4.\n③ Result (5,4): put 5 in the left field and 4 in the right field.\nThe remainder after division by 7 is written mod 7. No decryption is required.",
       }),
     },
     {
@@ -318,18 +318,18 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Check
         return {
           ja: `${n}社の拠点が、自分の数を隠したまま合計を出します。「覆面」は2社だけで共有する隠す数です。
 一方が足し、もう一方が同じ数を引くため、全社の小計を足すと覆面だけが消えます。
-あなたは「自分の数＋受け取った覆面−送った覆面」という小計を提出します。受け取った覆面は足す数、送った覆面は引く数です。`,
+あなたが提出するのは、自分の数を覆面で隠した小計です。`,
           en: `${n} offices total their numbers without publishing each input. A mask is a hiding number shared privately by two offices.
 One adds it and the other subtracts it, so masks cancel when all subtotals are added.
-Submit your input plus received masks minus sent masks. Received means add; sent means subtract.`,
+Submit a subtotal that masks your own input.`,
         };
       },
     },
     {
       id: "masked-total/2",
       text: () => ({
-        ja: "例：自分の数3、受け取った覆面1と2、送った覆面6と5。割る数p=7。\n① 足す数：1 + 2 = 3。\n② 引く数：6 + 5 = 11。\n③ 小計：3 + 3 − 11 = −5。\n④ 負なら7を足す：−5 + 7 = 2。答えは2。\n0〜6に入るまで、負なら7を足し、7以上なら7を引きます。この「割った余り」をmodと書きます。",
-        en: "Example: input 3, received masks 1 and 2, sent masks 6 and 5; divisor p=7.\n① Received total: 1 + 2 = 3.\n② Sent total: 6 + 5 = 11.\n③ Subtotal: 3 + 3 − 11 = −5.\n④ Negative: add 7. −5 + 7 = 2. Answer: 2.\nAdd 7 if negative, subtract 7 if at least 7, until within 0–6. This remainder operation is written mod.",
+        ja: "式：小計 = 自分の数 + 受け取った覆面の合計 − 送った覆面の合計。この結果をpで割った余りにします。\n例：自分の数3、受け取った覆面1と2、送った覆面6と5。割る数p=7。\n① 足す数：1 + 2 = 3。\n② 引く数：6 + 5 = 11。\n③ 小計：3 + 3 − 11 = −5。\n④ 負なら7を足す：−5 + 7 = 2。答えは2。\n0〜6に入るまで、負なら7を足し、7以上なら7を引きます。この「割った余り」をmodと書きます。",
+        en: "Formula: subtotal = input + received mask total − sent mask total. Take the remainder after division by p.\nExample: input 3, received masks 1 and 2, sent masks 6 and 5; divisor p=7.\n① Received total: 1 + 2 = 3.\n② Sent total: 6 + 5 = 11.\n③ Subtotal: 3 + 3 − 11 = −5.\n④ Negative: add 7. −5 + 7 = 2. Answer: 2.\nAdd 7 if negative, subtract 7 if at least 7, until within 0–6. This remainder operation is written mod.",
       }),
     },
     {

@@ -60,7 +60,8 @@ describe("Issue #703: the Japanese copy calls a share one thing", () => {
     // Japanese sentence is the drift this catches.
     const glossed = "かけら (share)";
     expect(FAST_MOVE_COPY.ja.shareWhat).toContain(glossed);
-    expect(HINT_LADDER["reveal-share"][0]?.text(shareRungContext()).ja).toContain("シェアは、秘密を分けて持つ「番号と数」の組");
+    expect(HINT_LADDER["reveal-share"][0]?.text(shareRungContext()).ja).toContain(glossed);
+    expect(HINT_LADDER["reveal-share"][0]?.text(shareRungContext()).ja).toContain("シェアとも呼ぶ");
   });
 
   /**

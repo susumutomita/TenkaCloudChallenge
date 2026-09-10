@@ -50,3 +50,16 @@ test('RSA second rung provides the transferable formula before its worked exampl
   expect(hints[locale].indexOf('m = c^d mod n')).toBeLessThan(hints[locale].indexOf('8×8=64'));
  }
 });
+
+test('formula rung explains rotor advancement and EC doubling before own-value steps',()=>{
+ const enigma=advancedHints(context({kind:'enigma-encrypt',initial:3,plaintext:[0]}),1)!;
+ expect(enigma.ja).toContain('(初期位置+1)');
+ expect(enigma.en).toContain('(initial+1)');
+ expect(enigma.ja).toContain('初期位置3なら今回の位置0');
+ const ec=advancedHints(context({kind:'ec-add',left:[2,1],right:[2,1]}),1)!;
+ for(const locale of ['ja','en'] as const){
+  expect(ec[locale]).toContain('(3×x1²+2)');
+  expect(ec[locale]).toContain('3×2×2+2=14');
+  expect(ec[locale]).toContain('3 6');
+ }
+});
