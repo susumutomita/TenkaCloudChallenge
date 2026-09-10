@@ -62,8 +62,8 @@ test("the item walkthrough follows the current ciphertext without disclosing the
     const text = HINT_LADDER["ssm-decrypt"][2]!.text({
       ...base, task: { ...sample.order.task, ciphertext },
     });
-    expect(text.ja).toContain(`今回の暗号文は${ciphertext}`);
-    expect(text.en).toContain(`This Order's ciphertext is ${ciphertext}`);
+    expect(text.ja).toContain(`${ciphertext}−k=□`);
+    expect(text.en).toContain(`${ciphertext}−k=□`);
     expect(text.ja).toContain("復号した数字（0〜9）");
     for (const input of Object.values(scoreItemInputs(CTX.teamIds))) {
       expect(JSON.stringify(text)).not.toContain(JSON.parse(input.CoordinationPrivateItem).receipt);
@@ -432,11 +432,11 @@ describe("the disclosure Order's hints walk the only method it accepts", () => {
 test("new English paid hints include a worked example and the current operands",()=>{
  const p=projectForTeam(startedMatch(),"teamA"), base=ctxFor(p,firstOpenOrder(startedMatch(),"teamA"));
  const rsa=HINT_LADDER["rsa-decrypt"][2]!.text({...base,task:{kind:"rsa-decrypt",ciphertext:8,d:3,n:15}}).en;
- expect(rsa).toContain("c=8");expect(rsa).toContain("dividing by15");
+ expect(rsa).toContain("8×8=□");expect(rsa).toContain("A×8=□");expect(rsa).toContain("division by 15");
  const enigma=HINT_LADDER["enigma-encrypt"][2]!.text({...base,task:{kind:"enigma-encrypt",plaintext:[2],initial:1}}).en;
- expect(enigma).toContain("Input is 2");expect(enigma).toContain("initial position 1");expect(enigma).toContain("position 2");
+ expect(enigma).toContain("Find 2 on the left");expect(enigma).toContain("initial position 1");expect(enigma).toContain("position 2");
  const sig={...base,task:{kind:"ecdsa-sign" as const,hash:3,d:5,k:3}};
- expect(HINT_LADDER["ecdsa-sign"][1]!.text(sig).en).toContain("signature is(1,5)");
+ expect(HINT_LADDER["ecdsa-sign"][1]!.text(sig).en).toContain("signature: r=1,s=5");
  const last=HINT_LADDER["ecdsa-sign"][2]!.text(sig).en;
- expect(last).toContain("h=3, d=5, k=3");expect(last).toContain("3+5×r");
+ expect(last).toContain("column j=3");expect(last).toContain("5×r=□A");expect(last).toContain("3+A=□B");
 });
