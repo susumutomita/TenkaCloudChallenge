@@ -373,7 +373,8 @@ describe("Rotor: public wheels, evolving positions, private calculation", () => 
       play(host, "alpha", { kind: "reveal-hint", contractId: own.id }, NOW + i);
     const open = order(host);
     expect(open.hints.filter((h) => h.text !== undefined)).toHaveLength(3);
-    expect(open.hints[2]?.text?.ja).toContain("a=3, b=2");
+    expect(open.hints[2]?.text?.ja).toContain("a=3、b=2");
+    expect(open.hints[2]?.text?.ja).toContain("2文字目：m=2、a=0、b=3");
     expect(open.hints[2]?.text?.ja).not.toContain("3 2 2 3");
     expect(
       projectForTeam(host.state, "bravo").myContracts.map((c) => c.hints),

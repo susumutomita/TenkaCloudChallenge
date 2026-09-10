@@ -60,6 +60,16 @@ export default function RpsDuel({ order, opponentName, locale, submitting, onSub
         <div>{ja ? "見本：" : "Example: "}<i>m</i> = 1, <i>r</i> = 1 → 4 × 9 = 36 → 36 − 23 = <strong>13</strong></div>
         <p className="tc-card-hint">{ja ? "途中で23の倍数を引いても、積から23の倍数が減るだけなので、最後の余りは変わりません。" : "Subtracting multiples of 23 before multiplying only removes a multiple of 23 from the product, leaving its final remainder unchanged."}</p>
       </div>
+      {order.hints.filter(h=>h.text).length>=3 && <aside aria-label={ja?"今回の手で計算":"Calculate with your hand"}>
+        <strong>{ja?"ヒント③：今回選んだ数字":"Hint 3: your current choices"}</strong>
+        {!validChoice ? <p>{ja?"上の「手の番号」と「隠す数」を入力してください。":"Enter Hand number and Hiding number above."}</p> : <ol>
+          <li>m={hand} → 4<sup>{hand}</sup> → {POWER_FOURS.find(v=>v.m===hand)!.value}</li>
+          <li>r={randomness} → 9<sup>{randomness}</sup> → {POWER_NINES.find(v=>v.r===randomness)!.value}</li>
+          <li>{POWER_FOURS.find(v=>v.m===hand)!.value} × {POWER_NINES.find(v=>v.r===randomness)!.value} = □</li>
+          <li>{ja?"□を23で割った余りを「封じる数字」へ入力し、「数字を封じる」。":"Divide □ by 23. Enter the remainder in Sealed number and press Seal the number."}</li>
+          <li>{ja?"封じたら、同じ手と隠す数で「手を審判へ渡す」。":"After sealing, use the same hand and hiding number and press Give my opening to the judge."}</li>
+        </ol>}
+      </aside>}
       <label className="tc-answer-label">{ja ? "封じる数字 c（計算した余り）" : "Sealed number c (your calculated remainder)"}
         <input aria-label={ja ? "封じる数字" : "Sealed number"} value={sealedText} inputMode="numeric" maxLength={2} onChange={e => setSealed(e.target.value)} />
       </label>

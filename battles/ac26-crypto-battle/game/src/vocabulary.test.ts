@@ -60,7 +60,7 @@ describe("Issue #703: the Japanese copy calls a share one thing", () => {
     // Japanese sentence is the drift this catches.
     const glossed = "かけら (share)";
     expect(FAST_MOVE_COPY.ja.shareWhat).toContain(glossed);
-    expect(HINT_LADDER["reveal-share"][0]?.text(shareRungContext()).ja).toContain(glossed);
+    expect(HINT_LADDER["reveal-share"][0]?.text(shareRungContext()).ja).toContain("シェアは、秘密を分けて持つ「番号と数」の組");
   });
 
   /**
@@ -71,9 +71,9 @@ describe("Issue #703: the Japanese copy calls a share one thing", () => {
    */
   test("the first share hint names the thing and names the move", () => {
     const first = HINT_LADDER["reveal-share"][0]?.text(shareRungContext());
-    expect(first?.ja).toContain("MY VAULT");
+    expect(first?.ja).toContain("自分の保管庫");
     expect(first?.ja).toContain("LEAK");
-    expect(first?.en).toContain("MY VAULT");
+    expect(first?.en).toContain("Your vault");
     expect(first?.en).toContain("LEAK");
   });
 

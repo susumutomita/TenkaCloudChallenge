@@ -15,8 +15,15 @@ export function rotorGuide(
       ja: "式：4で割った余りを mod 4 と書き、負なら4を足して0〜3へ戻します。表の左から0番、1番、2番、3番です。P=[1,3,0,2]、Q=[3,0,2,1]。\nu=(P[(m+a) mod 4]−a) mod 4、c=(Q[(u+b) mod 4]−b) mod 4。mは元の数字、aは速い車輪、bは遅い車輪の今の位置、uは途中の数字、cは出力です。\n別の一桁例：m=3,a=0,b=1ならP[3]=2なのでu=2。Q[3]=1から1を引いてc=0。出力してからaを1へ進め、bは1のまま。aが3→0に戻るときだけbも1進め、bも3の次は0です。",
       en: "Formula: write the remainder after division by 4 as mod 4; if negative, add 4 to return to 0–3. Table entries are numbered 0,1,2,3 from the left. P=[1,3,0,2], Q=[3,0,2,1].\nu=(P[(m+a) mod 4]−a) mod 4; c=(Q[(u+b) mod 4]−b) mod 4. m is the original digit; a and b are the current fast and slow positions; u is the intermediate digit; c is the output.\nSeparate one-digit example: m=3,a=0,b=1 gives P[3]=2, so u=2. Q[3]=1 minus 1 gives c=0. Output first, then advance a to 1; b stays 1. Only when a wraps 3→0 does b advance too, also wrapping 3→0.",
     };
+  let {a,b}=task.myInitial;
+  const jaRows:string[]=[], enRows:string[]=[];
+  task.plaintext.forEach((m,i)=>{
+    jaRows.push(`${i+1}文字目：m=${m}、a=${a}、b=${b}\n① ${m}+${a} の4で割った余り → 表Pの位置。\n② その位置のPの値 − ${a} → 4で割った余りをuとする。\n③ u+${b} の4で割った余り → 表Qの位置。\n④ その位置のQの値 − ${b} → 4で割った余りが、この文字の答え。`);
+    enRows.push(`Character ${i+1}: m=${m}, a=${a}, b=${b}\n① Remainder of ${m}+${a} divided by 4 → position in P.\n② P at that position minus ${a} → remainder by 4 is u.\n③ Remainder of u+${b} divided by 4 → position in Q.\n④ Q at that position minus ${b} → remainder by 4 is this output.`);
+    b=(b+(a===3?1:0))%4;a=(a+1)%4;
+  });
   return {
-    ja: `この1題を計算してから次へ進みます。元の列は ${task.plaintext.join(" ")}、初期位置はa=${task.myInitial.a}, b=${task.myInitial.b}。\n① 表に4行を作り、各行へ元の数字m、今のa・bを書きます。② その行のmをPの式に入れてuを計算し、uをQの式に入れてcを書きます。③ cを出してからaを1進めます。aが3→0ならbも1進め、次の行へ写します。④ 出したcだけを上から4個、CIPHER欄へ入れて提出。完了表示と得点を確認します。\n先に誤答していた場合、期限内に正答しても0点で完了します。未入力・範囲外は誤答に数えません。再挑戦も最初のa・bから始めます。`,
-    en: `Finish this Order before moving on. Original row: ${task.plaintext.join(" ")}; initial positions a=${task.myInitial.a}, b=${task.myInitial.b}.\n(1) Make four worksheet rows for m and current a,b. (2) Use m in the P formula to calculate u, then u in the Q formula to write c. (3) Output c before advancing a by 1; if a wraps 3→0, advance b too. Copy the new positions to the next row. (4) Enter only the four outputs c, top to bottom, in CIPHER. Check completion and points.\nAfter an earlier wrong answer, a correct answer before the deadline completes for 0 points. Empty/out-of-range input is not a wrong answer. Every retry starts from the original a,b.`,
+    ja:`表は左から0・1・2・3番。負の数には4を足し、4以上なら4を引いて0〜3にします。\n${jaRows.join("\n\n")}\n最後：各文字の④の答えだけを順に${task.plaintext.length}個、半角スペースで区切り、暗号文の回答欄へ入力してCIPHERを押します。再挑戦も最初の位置から計算します。先に誤答していた場合は0点で完了します。`,
+    en:`Table positions are 0,1,2,3 from the left. Add 4 if negative, subtract 4 if at least 4, until within 0–3.\n${enRows.join("\n\n")}\nFinally enter only the ${task.plaintext.length} outputs from step ④, in order, separated by spaces, in the ciphertext answer field and press CIPHER. Retries start from the initial positions. Completion after an earlier wrong answer earns 0 points.`,
   };
 }

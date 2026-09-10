@@ -1,4 +1,4 @@
-import { anamorphicPower } from "./anamorphic.ts";
+import { advancedHints } from "./advanced-hints.ts";
 import { vigenereGuide } from "./vigenere-guide.ts";
 import { rotorGuide } from "./rotor-guide.ts";
 import { rsaGuide } from "./rsa-guide.ts";
@@ -124,68 +124,51 @@ export const HINT_LEVELS = 3;
  * these rungs alone (three seeds x four kinds) before this landed.
  */
 export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> = {
-  "ssm-decrypt": [
-    {id:"ssm-decrypt/1",text:()=>({ja:"暗号化で足した鍵を引くと元の数字に戻ります。AWSには鍵と、実際に値を取得したことを照合するランダムな受付コードが置かれています。",en:"Subtract the key added during encryption. AWS holds the key and a random receipt used to check the retrieved value."})},
-    {id:"ssm-decrypt/2",text:()=>({ja:"平文=(暗号文−鍵)を10で割った余り。例：暗号文2、鍵5なら2−5=−3、10を足して7です。",en:"Plaintext is the remainder of ciphertext minus key divided by10. Example:2−5=−3; add10 to get7."})},
-    {id:"ssm-decrypt/3",text:ctx=>{
-      if(ctx.task.kind!=="ssm-decrypt") throw new Error("wrong task");
-      return {
-        ja:`「AWSで鍵の値を見る」で開いたValue全体を「Valueの全体をコピーして貼る」欄へ貼ります。keyの数字をkとします。今回の暗号文は${ctx.task.ciphertext}なので、${ctx.task.ciphertext}−kを計算し、負なら10を足します。その数字1個を「復号した数字（0〜9）」へ入れ、「答えを送ってアイテムを獲得」を押します。receiptは貼るだけで、計算には使いません。`,
-        en:`Open Read the key in AWS and paste the complete Value into Paste the complete Value. Let k be its key number. This Order's ciphertext is ${ctx.task.ciphertext}: calculate ${ctx.task.ciphertext}−k and add 10 if negative. Enter that one number into Decrypted digit (0–9), then press Submit to acquire the item. Copy receipt as part of Value; do not use it in the calculation.`,
-      };
-    }},
-
-  ],
-  "enigma-encrypt": [
-    {id:"enigma-encrypt/1",text:()=>({ja:"車輪を1進めてから、配線を往復します。反射板で折り返し、帰りは表を逆に引きます。",en:"Advance the wheel first, reflect, then use the inverse wiring on return."})},
-    {id:"enigma-encrypt/2",text:()=>({ja:"Wは車輪の表、Rは反射板、W⁻¹は表の逆引き。元の数mの答えはW⁻¹(R(W(m)))。位置0の表0→1、1→3、2→0、3→2なら、0→1→0→2で答え2です。",en:"W is the wheel lookup, R the reflector, and W⁻¹ reads the lookup backward. The answer for input m is W⁻¹(R(W(m))). At position0, if W maps0→1,1→3,2→0,3→2, input0 travels0→1→0→2, giving2."})},
-    {id:"enigma-encrypt/3",text:ctx=>{if(ctx.task.kind!=="enigma-encrypt")throw new Error("wrong task");const t=ctx.task,a=(t.initial+1)%4;return {ja:`元の数は${t.plaintext[0]}、初期位置は${t.initial}。${t.initial}+1を4で割った余り${a}の表を使います。${t.plaintext[0]}を左から右へ引き、反射板で0↔1、2↔3を交換。同じ表を右から左へ戻り、その数1個を入力します。`,en:`Input is ${t.plaintext[0]}, initial position ${t.initial}. Use the table at position ${a}, the remainder of ${t.initial}+1 divided by4. Read ${t.plaintext[0]} left→right, swap0↔1 or2↔3 at the reflector, then read the same table right→left. Enter that one number.`};}}],
-  "rsa-decrypt": [
-    {id:"rsa-decrypt/1",text:()=>({ja:"公開鍵で作った暗号を、秘密鍵dで元に戻します。この練習用の鍵はHUNT対象ではありません。",en:"Use private exponent d to recover the original. This exercise key is outside HUNT."})},
-    {id:"rsa-decrypt/2",text:()=>({ja:"m=cᵈ mod n。毎回掛けたあと余りを取っても答えは同じです。例えば2³ mod5=(2×2×2) mod5=3。",en:"m=cᵈ mod n. Reduce after each multiplication. For example2³ mod5=3."})},
-    {id:"rsa-decrypt/3",text:ctx=>({ja:`c=${ctx.task.kind==="rsa-decrypt"?ctx.task.ciphertext:"?"}。c²を15で割った余りにします。d=3なので、c³=c²×c。最後の余り1個を提出します。`,en:`c=${ctx.task.kind==="rsa-decrypt"?ctx.task.ciphertext:"?"}. Multiply this number by itself and take the remainder after dividing by15. Multiply that remainder by c=${ctx.task.kind==="rsa-decrypt"?ctx.task.ciphertext:"?"}, then take the remainder after dividing by15 again. Enter that one number.`})}],
-  "ecdsa-sign": [
-    {id:"ecdsa-sign/1",text:()=>({ja:"署名は暗号文ではありません。公開鍵で、メッセージと署名が対応するかを確認できます。",en:"A signature is not ciphertext. A public key checks that the signature matches the message."})},
-    {id:"ecdsa-sign/2",text:()=>({ja:"kGは出発点Gをk回足した点。その左の数がr。逆元k⁻¹はkと掛けて7の余りが1になる数。s=k⁻¹(h+dr)の7で割った余りです。h=1,d=2,k=2ならr=1、s=4×3の余り5です。",en:"kG adds starting point G k times; r is its left coordinate. The inverse k⁻¹ multiplies k to leave remainder1 after division by7. s is the remainder of k⁻¹(h+dr) divided by7. For h=1,d=2,k=2, the table gives r=1 and inverse4; s=4×(1+2×1)=12 leaves5. The signature is(1,5)."})},
-    {id:"ecdsa-sign/3",text:ctx=>({ja:`${ctx.task.kind==="ecdsa-sign"?`h=${ctx.task.hash},d=${ctx.task.d},k=${ctx.task.k}。`:""}kの列でrを読み、h+d×rを計算。逆元表のk⁻¹を掛けて7の余りにします。rとsを別々の欄へ入力します。`,en:`${ctx.task.kind==="ecdsa-sign"?`h=${ctx.task.hash}, d=${ctx.task.d}, k=${ctx.task.k}. Read r from column ${ctx.task.k}. Calculate ${ctx.task.hash}+${ctx.task.d}×r, then multiply by the inverse in column ${ctx.task.k}.`:""} Take the remainder after dividing by7 for s. Enter r and s in their separate fields.`})}],
-  "anamorphic-rejection": [
-    {id:"anamorphic-rejection/1",text:()=>({ja:"同じ通常メッセージを暗号化した候補から、秘密の表で目的のビットになるものを選びます。監視者は通常鍵で普通の数を読み、受信者だけが追加の表でビットを読みます。",en:"Select an ordinary ciphertext whose secret lookup matches the intended bit. The monitor decodes an ordinary message; the receiver additionally decodes the bit using the lookup."})},
-    {id:"anamorphic-rejection/2",text:()=>({ja:"通常復号はs=aをx回掛けた数の7で割った余り。s×mの余りがbとなるmを探します。a=2,x=2,b=5ならs=4、4×3=12の余り5なのでm=3です。",en:"For ordinary decryption, s is a to power x, remainder7. Find m with s×m remainder7 equal to b. For a=2,x=2,b=5, s=4 and4×3=12 has remainder5, hence m=3."})},
-    {id:"anamorphic-rejection/3",text:ctx=>{if(ctx.task.kind!=="anamorphic-rejection")throw new Error("wrong task");return {ja:`秘密の判定が${ctx.task.targetBit}になる最初の行番号を入力。その行のaに対応するsを下の表で読み、s×1〜6でbと同じ余りを探します。最後は目的のビットと一致する3行を見つけ、応用のくじの表にあるその行の枚数を足して入力します。`,en:`Enter the first row whose secret bit is ${ctx.task.targetBit}. Read s for its a from the power table; try s×1 through s×6 to match remainder b. Finally find the three rows matching the target bit, sum their ticket counts in the transfer table, and enter that total.`};}},
-  ],
-  "stark-trace": [
-    {id:"stark-trace/1",text:()=>({ja:"まず実行表の各一歩が2乗の規則に合うか検査します。そのずれを式の余りへつなぎ、最後に商を折り畳みます。折り畳みが正しくても、実行表のずれは消えません。",en:"Check whether each trace step follows squaring, connect the mismatches to a remainder polynomial, then fold the quotient. A correct fold does not remove trace mismatches."})},
-    {id:"stark-trace/2",text:()=>({ja:"7で割った余りにします。2→5は5−2²=1。ずれu=1,v=3なら余りの定数2u−v=−1を7で割った余り6。商の定数2、Xの係数3、β=2なら折り畳みの定数は2+2×3=8の余り1です。",en:"Take remainders by7. Step2→5 gives5−2²=1. Mismatches u=1,v=3 give remainder constant2u−v=−1, hence6. Quotient constant2, X coefficient3 and β=2 give fold constant2+2×3=8, hence1."})},
-    {id:"stark-trace/3",text:ctx=>{if(ctx.task.kind!=="stark-trace")throw new Error("wrong hint task");const [a,b,c]=ctx.task.trace;return {ja:`最初は${b}−${a}²、次は${c}−${b}²の余りを入力。その答えをu,vとして2u−vの余りを3欄目へ。表示された商Qの定数に、${ctx.task.beta}×Xの係数を足した余りを最後の欄へ入れます。`,en:`Enter remainders of ${b}−${a}² and ${c}−${b}². Call them u,v and enter remainder2u−v in field3. In the final field enter Q’s displayed constant plus ${ctx.task.beta} times its X coefficient, reduced by7.`};}},
-  ],
-  "io-equivalence": [
-    {id:"io-equivalence/1",text:()=>({ja:"まず全入力で同じ答えになるかを確認します。次に答えを保って表へ変換した結果を比べます。同じ機能なら、元がどちらかを結果から見分けられないことがiOの条件です。",en:"First compare the answers on every input. Then compare the transformed tables that preserve these answers. iO requires equivalent programs to have indistinguishable transformed results."})},
-    {id:"io-equivalence/2",text:()=>({ja:"5で割った余りを使います。2×3+1=7なら余り2。表[0,1,2,3]を右へ1個回すと[3,0,1,2]で、入力2は位置(2+1)の3から答え2を読みます。",en:"Take remainders by5. 2×3+1=7 gives remainder2. Rotate [0,1,2,3] right by1 to get [3,0,1,2]; input2 reads position(2+1)=3 and returns2."})},
-    {id:"io-equivalence/3",text:ctx=>{if(ctx.task.kind!=="io-equivalence")throw new Error("wrong hint task");const t=ctx.task;return {ja:`Aの空欄は${t.a}×${t.missing[0]}+${t.b}、Bの空欄は${t.a}×(${t.missing[1]}+${t.d})+${t.c}の余り。表4行を比較し、全部同じなら1、違えば0。下の回した表もrと組にして比べ、両側の確率が0でない共通の組だけを数えて最後の欄へ入れます。`,en:`For A calculate ${t.a}×${t.missing[0]}+${t.b}; for B calculate ${t.a}×(${t.missing[1]}+${t.d})+${t.c}, taking remainders. Compare all4 rows: enter1 if identical, else0. Compare each rotated table together with r and count only outcomes with nonzero probability on both sides in the last field.`};}},
-  ],
-  "snark-constraints": [
-    {id:"snark-constraints/1",text:()=>({ja:"まず各行の計算を確かめ、次に前の出力が次の入力へ同じ値で届くか確かめます。行だけ正しくても、つなぎ方が違えば元の計算にはなりません。",en:"Check each gate, then whether the output reaches the next input unchanged. Correct individual gates alone do not establish correct wiring."})},
-    {id:"snark-constraints/2",text:()=>({ja:"7で割った余りで確認します。足し算2+3−5=0なら一致。掛け算3×4−4=8は7を引いて余り1なので不一致。配線が5→6なら5−6=−1、7を足して余り6なので不一致です。",en:"Take remainders by7: 2+3−5=0 passes. Multiplication 3×4−4=8; subtract7 to get remainder1, so it fails. A wire5→6 gives5−6=−1, remainder6, so it fails."})},
-    {id:"snark-constraints/3",text:ctx=>{
-      if(ctx.task.kind!=="snark-constraints")throw new Error("SNARK task required");
-      const [a,b,c]=ctx.task.rows;
-      const steps=`${a[0]}+${a[1]}−${a[2]}; ${b[0]}×${b[1]}−${b[2]}; ${c[0]}+${c[1]}−${c[2]}; ${a[2]}−${c[0]}; ${b[2]}−${c[1]}`;
-      return {ja:`この順で計算：${steps}。各結果に7を足すか引いて0〜6にし、上から5欄へ入力します。すべて0でなくても、正しく計算した余りを提出してください。`,en:`Calculate in order: ${steps}. Add or subtract7 until each result is0–6. Enter the five fields in order, even when the results are not all zero.`};
-    }},
-  ],
-  "ec-add": [
-    {id:"ec-add/1",text:()=>({ja:"曲線上の2点を通る線を考え、交点の上下を反転して答えの点を作ります。同じ点なら接線を使います。普通の座標の足し算とは違います。",en:"Use the line through two curve points, then reflect the intersection. A repeated point uses a tangent. This is not coordinate-wise addition."})},
-    {id:"ec-add/2",text:()=>({ja:"すべて7で割った余り。P=(2,1),Q=(3,1)なら傾きλ=(1−1)/(3−2)=0。x=λ²−2−3=2、y=λ(2−x)−1=6。結果は(2,6)。",en:"Reduce modulo7. P=(2,1),Q=(3,1): slope λ=(1−1)/(3−2)=0; x=λ²−2−3=2, y=λ(2−x)−1=6. Result (2,6)."})},
-    {id:"ec-add/3",text:ctx=>{
-      if(ctx.task.kind!=="ec-add")throw new Error("EC hint requires EC task");
-      const p=ctx.task.left,q=ctx.task.right,show=(v:typeof p)=>v?`(${v[0]},${v[1]})`:"O";
-      const values=`P=${show(p)}, Q=${show(q)}. `;
-      if(!p||!q)return {ja:values+"Oを足しても点は変わりません。もう一方の座標を半角スペースで区切って入力。両方OならOです。",en:values+"Adding O leaves the other point unchanged. Enter the other coordinates separated by a space; if both are O, enter O."};
-      if(p[0]===q[0]&&(p[1]+q[1])%7===0)return {ja:values+"xが同じでyの和が7の倍数です。互いに打ち消す点なので、回答欄へOを入力します。",en:values+"The x coordinates agree and the y sum is a multiple of7. They cancel; enter O."};
-      const slope=p[0]===q[0]?`(3×${p[0]}²+2)×(2×${p[1]})⁻¹`:`(${q[1]}−${p[1]})×(${q[0]}−${p[0]})⁻¹`;
-      return {ja:values+`まず λ=${slope} を逆元の表で計算。次に x=λ²−${p[0]}−${q[0]}、最後に y=λ×(${p[0]}−x)−${p[1]}。それぞれ7で割った余りにして「x 半角スペース y」を入力します。`,en:values+`Use the inverse table to calculate λ=${slope}, then x=λ²−${p[0]}−${q[0]}, and y=λ×(${p[0]}−x)−${p[1]}. Reduce each modulo7 and enter x space y.`};
-    }}
-  ],
+  "ssm-decrypt": ([0, 1, 2] as const).map(level => ({id: `ssm-decrypt/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "ssm-decrypt") throw new Error("Wrong task for ssm-decrypt hint");
+    return hint;
+  }})),
+  "enigma-encrypt": ([0, 1, 2] as const).map(level => ({id: `enigma-encrypt/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "enigma-encrypt") throw new Error("Wrong task for enigma-encrypt hint");
+    return hint;
+  }})),
+  "rsa-decrypt": ([0, 1, 2] as const).map(level => ({id: `rsa-decrypt/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "rsa-decrypt") throw new Error("Wrong task for rsa-decrypt hint");
+    return hint;
+  }})),
+  "ecdsa-sign": ([0, 1, 2] as const).map(level => ({id: `ecdsa-sign/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "ecdsa-sign") throw new Error("Wrong task for ecdsa-sign hint");
+    return hint;
+  }})),
+  "anamorphic-rejection": ([0, 1, 2] as const).map(level => ({id: `anamorphic-rejection/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "anamorphic-rejection") throw new Error("Wrong task for anamorphic-rejection hint");
+    return hint;
+  }})),
+  "stark-trace": ([0, 1, 2] as const).map(level => ({id: `stark-trace/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "stark-trace") throw new Error("Wrong task for stark-trace hint");
+    return hint;
+  }})),
+  "io-equivalence": ([0, 1, 2] as const).map(level => ({id: `io-equivalence/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "io-equivalence") throw new Error("Wrong task for io-equivalence hint");
+    return hint;
+  }})),
+  "snark-constraints": ([0, 1, 2] as const).map(level => ({id: `snark-constraints/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "snark-constraints") throw new Error("Wrong task for snark-constraints hint");
+    return hint;
+  }})),
+  "ec-add": ([0, 1, 2] as const).map(level => ({id: `ec-add/${level+1}`, text: (ctx: HintContext) => {
+    const hint = advancedHints(ctx, level);
+    if (!hint || ctx.task.kind !== "ec-add") throw new Error("Wrong task for ec-add hint");
+    return hint;
+  }})),
 
   /**
    * The share Order is the one place where the hint is about the GAME rather
@@ -222,14 +205,8 @@ export const HINT_LADDER: Readonly<Record<OrderTaskKind, readonly HintSpec[]>> =
       // sell a PROVE route the button row does not offer: the last paragraph of
       // rung 1 and the whole of rung 3 branch on what the Order accepts.
       text: (ctx) => ({
-        ja: `Order (= あなたのチームに届いた依頼) が、かけらを求めています。かけら (share) は秘密の数を ${ctx.shareCount} 個に分けたうちの 1 個。MY VAULT の #1〜#${ctx.shareCount} がそれです。
-作り方は、秘密と内緒で選んだ数を入れた式に、かけらの番号を入れて計算する方法です。番号 0 の値が秘密で、番号 1 以降の値がかけらになります。すべて ${ctx.prime} で割った余りで扱います。
-この試合では、同じ世代 (= 同じ秘密から作った一組) の異なる番号が ${ctx.threshold} 個あれば式が決まり、番号 0 の秘密を戻せます。${ctx.threshold - 1} 個では、0 から ${BigInt(ctx.prime) - 1n} までの秘密がどれも候補に残ります。無限の曲線ではなく、割った余りの範囲にある全 ${ctx.prime} 通りの秘密が残る、という意味です。
-LEAK はかけらを公開記録に載せる操作。必要な個数を集めて秘密を戻す攻撃を HUNT と呼びます。${ctx.allowedMethods.includes("prove") ? "PROVE は別の秘密である数独の解を持つことを示し、このかけらを出さずに Order に答えます。" : "この Order は「公開が条件」です。依頼主がかけらそのものを買うので、答え方は LEAK だけ、得点は計算して答えたときと同じ満額です。代わりに、まだ公開していない番号なら公開数が増え、同じ番号なら増えません。公開専用Orderに答えた世代のROTATEは、未処理が0件でも最低1件分の失効点がかかります。"}`,
-        en: `An Order (= a request sent to your team) asks for a share. A share is one of ${ctx.shareCount} pieces of your secret number: #1 to #${ctx.shareCount} in MY VAULT.
-A formula combines the secret with privately chosen numbers. Put a share index into that formula: index 0 gives the secret, and later indices give shares. Keep remainders after dividing by ${ctx.prime}.
-Here ${ctx.threshold} distinct indices from one generation (= one set made from the same secret) fix the formula and recover its value at 0. With ${ctx.threshold - 1} shares, every candidate secret from 0 to ${BigInt(ctx.prime) - 1n} remains possible. This is a finite set of ${ctx.prime} possible secrets, not infinitely many ordinary curves.
-LEAK publishes a share. Recovering a secret from enough shares is the HUNT attack. ${ctx.allowedMethods.includes("prove") ? "PROVE instead demonstrates that you hold your separate sudoku solution, completing the Order without publishing its requested share." : "This Order requires publication: the client is buying the share itself, so LEAK is the only answer and it pays the full computing rate. A previously unpublished index increases your public count; a duplicate does not. After fulfilling a disclosure Order, ROTATE costs at least one expiry penalty even with no unfinished work."}`,
+        ja: `シェアは、秘密を分けて持つ「番号と数」の組です。自分の保管庫に${ctx.shareCount}個あります。\n同じ世代（同じ秘密から作った一組）の異なる番号が ${ctx.threshold} 個あれば秘密を戻せます。${ctx.threshold-1}個以下では、全 ${ctx.prime} 通りの秘密が候補に残ります。\nLEAKは指定されたシェアを公開して答える操作です。${ctx.allowedMethods.includes("prove")?"この保存試合のPROVEは、別の秘密である数独の解を使い、シェアを公開せずに答える方法です。":"このお題は公開が条件なので、答え方はLEAKだけです。計算や数値入力はありません。"}`,
+        en: `A share is an index/value pair used to split a secret. Your vault holds ${ctx.shareCount} shares.\nCollect ${ctx.threshold} different indices from one generation (one set made from the same secret) to recover it. ${ctx.threshold-1} or fewer do not narrow the secret.\nLEAK publishes the requested shares to answer. ${ctx.allowedMethods.includes("prove")?"PROVE in this saved match uses a separate sudoku solution without publishing the share.":"This Order requires publication, so LEAK is the only method. No calculation or numeric input is needed."}`,
       }),
     },
     {
@@ -275,14 +252,14 @@ Why not two shares? Secret 2 with coefficients 2 and 5 gives #1: 2 + 2 + 5 = 9 �
         if (canLeak && !canProve) {
           const reaches = after >= ctx.threshold;
           return {
-            ja: `この Order は公開が条件です。求められているかけらは ${cards}（世代 ${ctx.vault.generation}）。
-① 「公開して答える (LEAK)」を押す。得点は表示どおりの満額で、公開記録にこの値が載ります。
+            ja: `この Order は公開が条件です。求められているシェアは ${cards}（世代 ${ctx.vault.generation}）。
+① まだ押さず、公開する値と次の公開数を確認します。
 ② 公開数を数える：${exposed.size} + ${added} = ${after} 個（公開済み + 新しい番号。同じ番号は重ねて数えない）。${reaches ? `必要な ${ctx.threshold} 個に達し、相手はあなたの秘密を戻せるようになります。` : `秘密を戻す ${ctx.threshold} 個にはまだ届きません。`}
-③ ${reaches ? "届かせたくなければ、押す前に ROTATE で世代を変えます（開いている依頼は無効になり、その分の減点があります）。届かせて相手より先に相手を読み解く、という選び方もあります。" : "届く前の Order が来たら、ROTATE で世代を変えるか、届かせて相手より先に読み解くかを決めます。"}`,
+③ 公開してよければ「公開して答える (LEAK)」を押します。完了・得点・公開記録への追加を確認します。公開したくない場合は、押す前にROTATEの影響を確認します。`,
             en: `This Order requires publication. Requested shares: ${cards} (generation ${ctx.vault.generation}).
-(1) Press "Publish to answer (LEAK)". It pays the full rate shown, and this value goes on the public record.
+(1) Before pressing, check the values and the resulting exposure below.
 (2) Count your public shares: ${exposed.size} + ${added} = ${after} distinct indices (already public + new; duplicates count once). ${reaches ? `That reaches the ${ctx.threshold} an opponent needs to recover your secret.` : `Still below the ${ctx.threshold} needed for recovery.`}
-(3) ${reaches ? "To avoid that, ROTATE to a new generation before pressing (open Orders are voided and charged). Or let it happen and read the opponent first -- that is also a choice." : "When the Order that would reach it arrives, decide: ROTATE first, or let it happen and read the opponent first."}`,
+(3) To publish, press "Publish to answer (LEAK)". Check completion, points and the public record. To avoid publishing, check the impact of ROTATE before acting.`,
           };
         }
         return {
@@ -293,7 +270,7 @@ ${canProve ? `PROVE：かけらの代わりに、自分の数独の解を使い�
           en: `Finish this selected Order before opening hints for the next one.
 Requested shares: ${cards} (generation ${ctx.vault.generation}).
 ${canLeak ? `LEAK: publish these values to complete it. ${exposed.size} already public + ${added} new = ${after} distinct indices. Duplicates count once. ${after >= ctx.threshold ? `This reaches the ${ctx.threshold} needed to recover your secret.` : `Still below the ${ctx.threshold} needed for recovery.`}` : "This Order does not accept LEAK."}
-${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choose an unused relabelling table. An arrow means original digit → replacement. (2) Find each right-hand hole's position in your solution on the left; follow the table's arrow. Example: original 2 with 2→1 means enter 1. (3) Fill four holes using the same table and press SUBMIT. A score and one opened group confirm completion. Reusing a table can help others recover your solution.` : "This Order does not accept PROVE."}`,
+${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Check the automatically assigned unused relabelling table. An arrow means original digit → replacement. (2) Find each right-hand hole's position in your solution on the left; follow the table's arrow. Example: original 2 with 2→1 means enter 1. (3) Fill four holes using the same table and press SUBMIT. A score and one opened group confirm completion. Reusing a table can help others recover your solution.` : "This Order does not accept PROVE."}`,
         };
       },
     },
@@ -302,15 +279,15 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
     {
       id: "homomorphic-sum/1",
       text: () => ({
-        ja: "Order (= あなたのチームに届いた依頼) です。ある数を、読めない形に閉じたものを「暗号文」といいます。閉じるのに使う秘密の数が「鍵」です。この試合で答え合わせをするのはゲーム側で、これを「判定側」と呼びます。鍵は判定側だけが持ち、暗号文ごとに別の鍵です。その暗号文が 2 つ、あなたに届いています。鍵はあなたには配られていません。閉じられている元の数を「中身」と呼びます。この Order の暗号文は (左, 右) という 2 つの数の組です。入力の左は 1〜p−1 からくじで選んだ数です。p は画面の割る数で、0 は選びません。右は中身に「隠す数」(= 鍵と左の数をかけたもの) を足し、p で割った余りです。鍵を知らないと隠す数がわからないので、右を見ても中身はわかりません。なぜ閉じたまま足せるのか。右は「中身 + 隠す数」という足し算だけでできています。だから 2 つの暗号文の右どうしを足すと、余りを取る前の「中身の合計 + 隠す数の合計」と同じ余りになります。判定側は隠す数の合計を知っているので、それを引けば中身の合計が取り出せます。つまり、閉じたまま足しても「中身の合計」は壊れずに中に残っていて、判定側だけがそれを取り出せます。あなたは開けずに足すだけでよく、開ける必要はありません。このように暗号文のまま計算する考え方が準同型暗号です。FHE (= 完全準同型暗号) は掛け算なども扱いますが、この教材は足し算の部分を小さい数で体験するモデルです。",
-        en: "This is an Order (= a request sent to your team). A number closed into an unreadable form is called a \"ciphertext\". The secret number used to close it is the \"key\". In this match the side that checks answers is the game itself; we call it the \"judge\". Only the judge holds keys, and each ciphertext has its own key. Two such ciphertexts have been handed to you. You were never given a key. The original number that is closed away is called the \"content\". Each ciphertext on this Order is a pair of numbers (left, right). Each input’s left is drawn from 1 to p−1, where p is the divisor on screen; never 0. The right is the remainder after dividing content plus a \"hiding number\" (= key times left) by p. Without the key you cannot know the hiding number, so seeing the right tells you nothing about the content. Why can you add without opening? The right is built only from addition: content + hiding number. So adding the two rights gives the same remainder as content total plus hiding-number total. The judge knows the hiding-number total, subtracts it, and gets the content total. In other words, adding the closed pairs keeps the content total intact inside, and only the judge can take it out. You only add; you never open. This is the idea of homomorphic encryption. FHE (fully homomorphic encryption) also supports multiplication; this teaching model demonstrates the addition part with small numbers.",
+        ja: "暗号文は、中身を隠した「左・右」の数の組です。右には、中身と隠す数が足されています。\n右どうしを足すと「中身の合計＋隠す数の合計」になります。判定側は各入力の鍵を持つので、隠す数の合計を引いて答え合わせできます。あなたは鍵を使わず、暗号文のまま足します。\nこれが準同型暗号の足し算の考え方です。FHE（完全準同型暗号）は掛け算も扱いますが、このお題は足し算の模型です。",
+        en: "A ciphertext is a pair, left and right, hiding an original number. The right combines the content and a hiding number.\nAdding the rights combines both the contents and the hiding numbers. The judge holds each input’s key and subtracts the hiding total to check the content total. You add without using a key or opening the ciphertexts.\nThis models additive homomorphic encryption. FHE (fully homomorphic encryption) also handles multiplication; this task models addition only.",
       }),
     },
     {
       id: "homomorphic-sum/2",
       text: () => ({
-        ja: "言葉で言うと、答えは「左どうしを足して p で割った余り」と「右どうしを足して p で割った余り」の 2 つの数です。数式で書きます。暗号文 1 を (r1, y1)、暗号文 2 を (r2, y2) とします (r が左の値、y が右の値)。答えの暗号文は、左が r1 + r2、右が y1 + y2 です。ただしこの Order の数はすべて 0 から p − 1 の範囲で、p は画面の「p (割る数)」です。足して p 以上になったら「p で割った余り」にします。例: 11 を 7 で割ると 1 あまり 4 なので、余りは 4。これを「11 mod 7 = 4」と書きます。どの数も p より小さいので、2 つ足しても p を引くのは多くても 1 回です。1 桁の例、p = 7: 暗号文 1 = (2, 5)、暗号文 2 = (3, 6)。左: 2 + 3 = 5。7 未満なのでそのまま 5。右: 5 + 6 = 11。7 以上なので 7 を引いて 4 (= 11 mod 7)。答えは (5, 4)。なぜこれでよいか: y1 は 1 個目の「中身 + 隠す数」を p で割った余り、y2 は 2 個目の同じ余りです。y1 + y2 を p で割った余りは、「中身の合計 + 隠す数の合計」を p で割った余りと同じです。余りをとっても足し算の形は崩れません。判定側は隠す数の合計を知っているので、中身の合計を取り出して答え合わせをします。",
-        en: "In words: the answer is two numbers, \"the lefts added, then the remainder after dividing by p\" and \"the rights added, then the remainder after dividing by p\". In symbols: call ciphertext 1 (r1, y1) and ciphertext 2 (r2, y2) (r is the left value, y is the right value). The answer ciphertext has left r1 + r2 and right y1 + y2. But every number on this Order lies between 0 and p − 1, where p is the screen's \"p (the divisor)\" — the number we divide by. If a sum reaches p, replace it with \"the remainder after dividing by p\". Example: 11 divided by 7 is 1 remainder 4, so the remainder is 4. This is written \"11 mod 7 = 4\". Every number is below p, so after adding two you subtract p at most once. One-digit example, p = 7: ciphertext 1 = (2, 5), ciphertext 2 = (3, 6). Left: 2 + 3 = 5. Below 7, so it stays 5. Right: 5 + 6 = 11. That is 7 or more, so subtract 7: 4 (= 11 mod 7). The answer is (5, 4). Why this is right: y1 and y2 are each input’s content plus hiding number, reduced to its remainder after division by p. The remainder of y1+y2 equals the remainder of content total plus hiding-number total. Taking the remainder keeps that addition shape. The judge knows the hiding total, so it extracts the content total and checks it.",
+        ja: "例：割る数p=7、暗号文は(2,5)と(3,6)。\n① 左どうし：2 + 3 = 5 → 7未満なので5。\n② 右どうし：5 + 6 = 11 → 11 − 7 = 4。\n③ 答えの暗号文は(5,4)。左の欄に5、右の欄に4を入れます。\n「7で割った余り」をmod 7と書きます。中身を復号する計算は不要です。",
+        en: "Example: divisor p=7, ciphertexts (2,5) and (3,6).\n① Lefts: 2 + 3 = 5 → below 7, keep 5.\n② Rights: 5 + 6 = 11 → 11 − 7 = 4.\n③ Result (5,4): put 5 in the left field and 4 in the right field.\nThe remainder after division by 7 is written mod 7. No decryption is required.",
       }),
     },
     {
@@ -326,8 +303,8 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
         const rs = inputs.map((c) => c.r).join(" + ");
         const ys = inputs.map((c) => c.y).join(" + ");
         return {
-          ja: `この Order の数で。${listJa}。p (割る数) = ${p}。① 左の値: ${rs} = ？ 結果が ${p} 以上なら ${p} を引く。その数を「答え: 左の値」の箱に入れる。② 右の値: ${ys} = ？ 結果が ${p} 以上なら ${p} を引く。その数を「答え: 右の値」の箱に入れる。③ どちらの箱も ${p} より小さい数になっていることを確かめて、「暗号文を提出」を押す。暗号文を開ける必要はなく、鍵も使いません。足して余りをとるだけで、判定側が中身の合計を確かめます。`,
-          en: `With this Order's numbers. ${listEn}. p (the divisor) = ${p}.\n(1) Left value: ${rs} = ? If the result is ${p} or more, subtract ${p}. Type that number into the "your answer: left part" box.\n(2) Right value: ${ys} = ? If the result is ${p} or more, subtract ${p}. Type that number into the "your answer: right part" box.\n(3) Check that both boxes hold a number smaller than ${p}, then press SUBMIT CIPHERTEXT. You never open a ciphertext and never use a key. You only add and take the remainder; the judge checks the content total.`,
+          ja: `この Order の数で。${listJa}。p (割る数) = ${p}。\n① 左の値: ${rs} = ？ 結果が ${p} 以上なら ${p} を繰り返し引く。その数を「答え: 左の値」の箱に入れる。\n② 右の値: ${ys} = ？ 結果が ${p} 以上なら ${p} を繰り返し引く。その数を「答え: 右の値」の箱に入れる。\n③ どちらの箱も ${p} より小さい数になっていることを確かめて、「暗号文を提出」を押す。暗号文を開ける必要はなく、鍵も使いません。足して余りをとるだけで、判定側が中身の合計を確かめます。`,
+          en: `With this Order's numbers. ${listEn}. p (the divisor) = ${p}.\n(1) Left value: ${rs} = ? If the result is ${p} or more, subtract ${p} repeatedly. Type that number into the "your answer: left part" box.\n(2) Right value: ${ys} = ? If the result is ${p} or more, subtract ${p} repeatedly. Type that number into the "your answer: right part" box.\n(3) Check that both boxes hold a number smaller than ${p}, then press SUBMIT CIPHERTEXT. You never open a ciphertext and never use a key. You only add and take the remainder; the judge checks the content total.`,
         };
       },
     },
@@ -339,16 +316,20 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
         if (ctx.task.kind !== "masked-total") throw new Error("masked-total/1 rendered against a " + ctx.task.kind + " Order");
         const n = ctx.task.partyCount;
         return {
-          ja: `この Order (= あなたのチームに届いた依頼) には ${n} つの拠点 (会社) がいて、あなたはその 1 つです。${n} 社は「数の合計」だけを知りたいのですが、自分の数は誰にも見せたくありません。そこで使うのが「覆面」です。覆面とは、2 つの拠点が内緒で決めた数のことです。この Order では、その数はもうあなたのカードに書いてあります。各拠点は自分の数そのものではなく「小計」(提出する数) を出します。覆面 1 つにつき、決めた 2 社のうち片方が足し、もう片方が引くと先に決めておきます。足す側から見るとその覆面は「受け取った覆面」、引く側から見ると「送った覆面」です。あなたのカードの「受け取った覆面」「送った覆面」は、この決めごとをあなたの側から見た名前です。つまりあなたが提出する「覆面をかけた小計」は、自分の数に受け取った覆面を足し、送った覆面を引いた数です。なぜうまくいくのでしょうか。${n} 社の小計を全部足すと、どの覆面も「足された 1 回」と「引かれた 1 回」がそろって消え、本当の数の合計だけが残ります。そして小計 1 つだけを見ても、中の覆面を知らない相手にはでたらめな数にしか見えません。だから自分の数は隠れたまま、合計だけが出ます。`,
-          en: `This Order (= a request sent to your team) has ${n} offices (companies), and you are one of them. The ${n} offices want to know only the total of their numbers, and none of them wants to show its own number. The tool for that is a "mask". A mask is a number that two offices agreed on in secret. In this Order those numbers are already written on your card. Each office publishes not its own number but a "subtotal" (the number it submits). For each mask, the two offices decide in advance which one adds it and which one subtracts it. Seen from the adding side that mask is a "received mask"; seen from the subtracting side it is a "sent mask". The "received masks" and "sent masks" on your card are those decisions, named from your side. So the "masked subtotal" you submit is your own number, plus the masks you received, minus the masks you sent. Why does it work? When all ${n} subtotals are added together, every mask was added once and subtracted once, so it disappears, and only the total of the real numbers remains. And one subtotal on its own looks like a random number to anyone who does not know the masks inside it. So your number stays hidden and only the total comes out.`,
+          ja: `${n}社の拠点が、自分の数を隠したまま合計を出します。「覆面」は2社だけで共有する隠す数です。
+一方が足し、もう一方が同じ数を引くため、全社の小計を足すと覆面だけが消えます。
+あなたは「自分の数＋受け取った覆面−送った覆面」という小計を提出します。受け取った覆面は足す数、送った覆面は引く数です。`,
+          en: `${n} offices total their numbers without publishing each input. A mask is a hiding number shared privately by two offices.
+One adds it and the other subtracts it, so masks cancel when all subtotals are added.
+Submit your input plus received masks minus sent masks. Received means add; sent means subtract.`,
         };
       },
     },
     {
       id: "masked-total/2",
       text: () => ({
-        ja: "言葉で書くと「小計 = 自分の数 + 受け取った覆面の合計 − 送った覆面の合計」です。ただしこのゲームでは、答えを「割る数 p で割った余り」に直します。余りとは、割り算で割り切れずに残る数のことです (9 を 7 で割ると 1 回割れて 2 が残るので、余りは 2)。余りに直す作業は「p を何回か足す、または引く」だけです。p を足しても引いても p で割った余りは変わらないので、余りに直しても覆面の打ち消し合いはそのまま成り立ち、合計の余りも変わりません。p = 7 の例で見ます。自分の数 3、受け取った覆面 1 と 2、送った覆面 6 と 5。3 + (1 + 2) − (6 + 5) = 3 + 3 − 11 = −5。負の数になったら 7 を足します: −5 + 7 = 2。0 以上 6 以下に入ったので、答えは 2 です。まだ負なら 7 をもう一度足し、7 以上なら 7 を引きます。0 以上 6 以下になるまで繰り返します。この「7 で割った余り」を、これから mod 7 と書きます。つまり −5 mod 7 = 2 です。",
-        en: "In words: subtotal = your own number + the total of the masks you received − the total of the masks you sent. But in this game the answer is turned into \"the remainder when divided by the divisor p\". A remainder is what is left over when a division does not come out even (9 divided by 7 goes 1 time with 2 left over, so the remainder is 2). Turning a number into its remainder only means adding or subtracting p some number of times, and adding or subtracting p never changes the remainder when divided by p. So the masks still cancel, and the remainder of the total is untouched. Example with p = 7: your number 3, masks received 1 and 2, masks sent 6 and 5. 3 + (1 + 2) − (6 + 5) = 3 + 3 − 11 = −5. It went negative, so add 7: −5 + 7 = 2. That is between 0 and 6 (both included), so the answer is 2. If it is still negative, add 7 again; if it is 7 or more, subtract 7. Repeat until it is between 0 and 6, both included. From here on, this \"remainder when divided by 7\" is written mod 7. So −5 mod 7 = 2.",
+        ja: "例：自分の数3、受け取った覆面1と2、送った覆面6と5。割る数p=7。\n① 足す数：1 + 2 = 3。\n② 引く数：6 + 5 = 11。\n③ 小計：3 + 3 − 11 = −5。\n④ 負なら7を足す：−5 + 7 = 2。答えは2。\n0〜6に入るまで、負なら7を足し、7以上なら7を引きます。この「割った余り」をmodと書きます。",
+        en: "Example: input 3, received masks 1 and 2, sent masks 6 and 5; divisor p=7.\n① Received total: 1 + 2 = 3.\n② Sent total: 6 + 5 = 11.\n③ Subtotal: 3 + 3 − 11 = −5.\n④ Negative: add 7. −5 + 7 = 2. Answer: 2.\nAdd 7 if negative, subtract 7 if at least 7, until within 0–6. This remainder operation is written mod.",
       }),
     },
     {
@@ -363,8 +344,8 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
         const S = sum(sent);
         const my = ctx.task.myInput;
         return {
-          ja: `この Order の数で計算します。割る数 p = ${p}。① 受け取った覆面を全部足します: ${received.join(" + ")} = ${R}。② 送った覆面を全部足します: ${sent.join(" + ")} = ${S}。③ 自分の数 ${my} に ① を足して ② を引きます: ${my} + ${R} − ${S} = ？ ④ 出た数が 0 未満なら ${p} を足します (まだ 0 未満ならもう一度足す)。${p} 以上なら ${p} を引きます (まだ ${p} 以上ならもう一度引く)。0 以上 ${p - 1n} 以下に入った数が答えです。⑤ その数を「公開する小計」の欄に入力して「小計を提出」を押します。自分の数をそのまま写すのでなく、計算した小計を提出します。覆面が打ち消し合えば、結果が自分の数と同じになる場合もあります。`,
-          en: `Now with this Order's numbers. Divisor p = ${p}.\n(1) Add up every mask you received: ${received.join(" + ")} = ${R}.\n(2) Add up every mask you sent: ${sent.join(" + ")} = ${S}.\n(3) Take your own number ${my}, add (1) and subtract (2): ${my} + ${R} − ${S} = ? (4) If the result is below 0, add ${p} (if it is still below 0, add ${p} again). If it is ${p} or more, subtract ${p} (if it is still ${p} or more, subtract ${p} again). The number that lands between 0 and ${p - 1n} (both included) is your answer.\n(5) Type it into the "your masked subtotal" field and press SUBMIT SUBTOTAL. Submit the calculated subtotal, not an unworked copy of your input; cancelling masks can legitimately make those two numbers equal.`,
+          ja: `この Order の数で計算します。割る数 p = ${p}。\n① 受け取った覆面を全部足します: ${received.join(" + ") || "0"} = ${R}。\n② 送った覆面を全部足します: ${sent.join(" + ") || "0"} = ${S}。\n③ 自分の数 ${my} に ① を足して ② を引きます: ${my} + ${R} − ${S} = ？\n④ 出た数が 0 未満なら ${p} を足します (まだ 0 未満ならもう一度足す)。${p} 以上なら ${p} を引きます (まだ ${p} 以上ならもう一度引く)。0 以上 ${p - 1n} 以下に入った数が答えです。\n⑤ その数を「公開する小計」の欄に入力して「小計を提出」を押します。自分の数をそのまま写すのでなく、計算した小計を提出します。覆面が打ち消し合えば、結果が自分の数と同じになる場合もあります。`,
+          en: `Now with this Order's numbers. Divisor p = ${p}.\n(1) Add up every mask you received: ${received.join(" + ") || "0"} = ${R}.\n(2) Add up every mask you sent: ${sent.join(" + ") || "0"} = ${S}.\n(3) Take your own number ${my}, add (1) and subtract (2): ${my} + ${R} − ${S} = ?\n(4) If the result is below 0, add ${p} (if it is still below 0, add ${p} again). If it is ${p} or more, subtract ${p} (if it is still ${p} or more, subtract ${p} again). The number that lands between 0 and ${p - 1n} (both included) is your answer.\n(5) Type it into the "your masked subtotal" field and press SUBMIT SUBTOTAL. Submit the calculated subtotal, not an unworked copy of your input; cancelling masks can legitimately make those two numbers equal.`,
         };
       },
     },
@@ -395,7 +376,7 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
         const rows = Array.from({ length: 4 }, (_, i) => ctx.vault.sudokuSolution.slice(i * 4, i * 4 + 4).join(" "));
         const used = ctx.vault.usedPermutations.map((table) => table.map((digit, i) => `${i + 1}→${digit}`).join(" ")).join(" / ");
         return {
-          ja: `① 証明の入力欄を開き（すでに開いていればそのまま）、自動で用意された「今回の置き換え」を確認します。世代は同じ秘密や解を使う一組のことです。この世代で使った表は ${used || "まだありません"}。使用済みの表は避けます。\n② 左の自分の解は、上から ${rows.join(" / ")} です。右は 12 マスが見本、4 マスが空欄です。\n③ 空欄と同じ位置を左で探します。その数字から、選んだ表の矢印の先へ読み替えて右に入力します。例の 2→1 なら、元が 2 の空欄に 1 を入れるということです。残りも同じ表で埋めます。\n④ 4 マスを入れたら SUBMIT を押します。審判は完成した 16 マスを検査し、通れば得点と、公開された 1 行・1 列・1 箱のどれか 1 組が表示されます。\n同じ表を再使用すると公開された組をつなげられます。HUNT は相手が秘密の答えを当てて得点する攻撃です。解が一つに絞られると HUNT されるので、次も新しい表が自動で用意されます。`,
+          ja: `① 証明の入力欄を開き（すでに開いていればそのまま）、自動で用意された「今回の置き換え」を確認します。世代は同じ秘密や解を使う一組のことです。この世代で使った表は ${used || "まだありません"}。使用済みの表は避けます。\n② 左の自分の解は、上から ${rows.join(" / ")} です。右は 12 マスが見本、4 マスが空欄です。\n③ 空欄と同じ位置を左で探します。その数字から、今回の表の矢印の先へ読み替えて右に入力します。例の 2→1 なら、元が 2 の空欄に 1 を入れるということです。残りも同じ表で埋めます。\n④ 4 マスを入れたら「答えを送る」を押します。審判は完成した 16 マスを検査し、通れば得点と、公開された 1 行・1 列・1 箱のどれか 1 組が表示されます。\n同じ表を再使用すると公開された組をつなげられます。HUNT は相手が秘密の答えを当てて得点する攻撃です。解が一つに絞られると HUNT されるので、次も新しい表が自動で用意されます。`,
           en: `(1) Open the proof input area if it is not already open, and check the automatically prepared relabelling table. A generation is one set using the same secret and solution. Tables already used this generation: ${used || "none"}. Avoid a used table.\n(2) Your solution's rows, top to bottom: ${rows.join(" / ")}. The right grid has twelve worked cells and four holes.\n(3) Find each hole's position on the left. Take that original digit through your chosen table's arrow, then enter its replacement on the right. For example, 2→1 means enter 1 in a hole whose original digit was 2. Use the same table for the remaining holes.\n(4) Fill four holes and press SUBMIT. The judge checks all sixteen cells; success shows the score and one opened row, column or box.\nReusing a table lets others connect opened groups. HUNT is an attack that scores by recovering another team’s secret answer. A uniquely determined solution can be HUNTed. A fresh table is prepared next time too.`,
         };
       },
@@ -445,47 +426,8 @@ ${canProve ? `PROVE: use your sudoku solution instead of these shares. (1) Choos
   ],
 };
 
-/** The final purchased hint walks only this participant's on-screen numbers. */
-function anamorphicNumberSteps(t: Extract<OrderTaskProjection, {kind:"anamorphic-rejection"}>): HintText {
-  if(t.exercise==='encrypt') {
-    const index=t.secretBits.indexOf(t.targetBit);
-    const steps=t.secretBits.slice(0,index+1).map((bit,i)=>`F(c${i+1}) = ${bit} ${bit===t.targetBit?'=':'≠'} ${t.targetBit}`).join('\n');
-    return {ja:`① 送りたい値 h = ${t.targetBit}。F は秘密の表で候補を0か1に読み替える操作です。\n② 上から比べます。\n${steps}\n③ 最初に一致した候補 ${index+1} の暗号文は (${t.candidates[index]!.join(', ')})。回答欄には候補番号 ${index+1} を入れて提出します。`,en:`1. Intended value h = ${t.targetBit}. F reads a candidate's bit from the secret lookup.\n2. Compare from the top.\n${steps}\n3. The first matching candidate is ${index+1}, ciphertext (${t.candidates[index]!.join(', ')}). Submit candidate number ${index+1}.`};
-  }
-  if(t.exercise==='decrypt') {
-    const [a,b]=t.candidates[0]!,mask=anamorphicPower(a,t.ordinaryKey);
-    const m=[1,2,3,4,5,6].find(n=>mask*n%7===b)!;
-    const factors=Array.from({length:t.ordinaryKey},()=>a).join(' × ')||'1';
-    const steps=Array.from({length:m},(_,i)=>`${mask} × ${i+1} = ${mask*(i+1)} → ${mask*(i+1)%7}`).join('\n');
-    return {ja:`① 暗号文 (${a}, ${b})、鍵 x = ${t.ordinaryKey}。s = aをx回掛けた数を7で割った余り。\n${factors} = ${a**t.ordinaryKey} → 余り ${mask}。\n② (${mask} × m) を7で割った余りが ${b} になるmを探します。矢印の右が余りです。\n${steps}\n③ 一致した元の数 m = ${m} を提出します。`,en:`1. Ciphertext (${a}, ${b}), key x = ${t.ordinaryKey}. s is a to the power x, remainder after division by7.\n${factors} = ${a**t.ordinaryKey} → remainder ${mask}.\n2. Find m so (${mask} × m) leaves remainder ${b}. Values after arrows are remainders.\n${steps}\n3. Submit the original number m = ${m}.`};
-  }
-  const rows=t.secretBits.flatMap((bit,i)=>bit===t.targetBit?[i]:[]);
-  const counts=rows.map(i=>t.tickets[i]!),total=counts.reduce((a,b)=>a+b,0);
-  return {ja:`① 秘密の表が ${t.targetBit} の行は ${rows.map(i=>i+1).join('・')} 番。\n② その行のくじを足します。合計 = ${counts.join(' + ')} = ${total}。\n③ 候補が選ばれる確率 = その候補のくじ枚数 ÷ ${total}。今回は分母の ${total} だけを提出します。`,en:`1. Rows whose lookup equals ${t.targetBit}: ${rows.map(i=>i+1).join(', ')}.\n2. Add their tickets: ${counts.join(' + ')} = ${total}.\n3. Candidate probability = its ticket count / ${total}. Submit only the denominator ${total}.`};
-}
-
-/** The ladder for a task kind, in level order. */
+/** The ladder for a task kind, including saved-match exercise variants. */
 export function hintsFor(kind: OrderTaskKind): readonly HintSpec[] {
-  if(kind === "anamorphic-rejection")return HINT_LADDER[kind].map((hint,level)=>({...hint,text:(ctx:HintContext)=>{
-    if(ctx.task.kind!=="anamorphic-rejection" || !ctx.task.exercise)return hint.text(ctx);
-    const t=ctx.task;
-    if(level===2) return anamorphicNumberSteps(t);
-    if(t.exercise==='encrypt')return [
-      {ja:"同じ通常メッセージを暗号化した候補から、秘密の表で送りたいビットになるものを選ぶお題です。復号はしません。",en:"Select a ciphertext candidate whose secret lookup matches the intended bit. This Order requires no decryption."},
-      {ja:"選択の条件はF(c)=b。Fは秘密の表、cは候補、bは送りたいビットです。上から最初の一致を探します。b=1、表が0,1,1なら2番です。",en:"Select the first candidate c with F(c)=b, where F is the secret lookup and b the intended bit. For b=1 and lookup0,1,1, select2."},
-      {ja:`表のビットを上から${t.targetBit}と比べ、最初に一致する行の番号1個を提出します。`,en:`Compare each lookup bit with${t.targetBit} from the top. Submit only the first matching row number.`}
-    ][level]!;
-    if(t.exercise==='decrypt')return [
-      {ja:"今回は受け取った暗号文から、通常鍵を使って元の数を戻します。送る候補の選択は不要です。",en:"Recover the ordinary message from the supplied ciphertext using its ordinary key. No candidate selection is required."},
-      {ja:"sはaをx回掛けて7で割った余り。s×mの余りがbになるmを探します。s=4,b=5なら4×3の余り5なのでm=3。",en:"s is a to power x, remainder7. Find m so s×m leaves b. For s=4,b=5, m=3 since4×3 leaves5."},
-      {ja:`暗号文は(${t.candidates[0]!.join(',')})、鍵x=${t.ordinaryKey}。aをx回掛けた余りsを使い、s×1〜6でbと同じ余りになる数を探して1個提出します。`,en:`Ciphertext(${t.candidates[0]!.join(',')}), key x=${t.ordinaryKey}. Compute s, then try s×1 through s×6 and submit the one number leaving remainder b.`}
-    ][level]!;
-    return [
-      {ja:"目的のビットになる候補だけが選び直しの後に残ります。その候補に付いたくじの枚数を合計するお題です。",en:"Only trials matching the target bit survive rejection sampling. Sum their ticket counts."},
-      {ja:"選び直し後の確率＝候補の枚数÷受理される合計枚数。今回は分母だけ。1枚・2枚・3枚の候補が残るなら合計6枚です。",en:"Probability after rejection = candidate tickets / total accepted tickets. Submit the denominator only: counts1,2,3 total6."},
-      {ja:`秘密の表が${t.targetBit}の行だけに印を付け、その行のくじを足し、合計1個を提出します。`,en:`Mark rows whose bit is${t.targetBit}, add their tickets, and submit that total only.`}
-    ][level]!;
-  }}));
   return HINT_LADDER[kind];
 }
 

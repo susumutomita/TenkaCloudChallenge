@@ -3093,7 +3093,7 @@ function applySchnorr(state: CryptoBattleState, teamId: string, op: Extract<Cryp
 function schnorrHint(level:number): {ja:string;en:string} {
   const hints=[
     {ja:"秘密の数xをそのまま送らず、今回だけの数rと混ぜた答えzを送ります。答えを確かめる相手を「検証者」と呼びます。先にaを送り、検証者が返した数eを使ってzを計算します。検証者は公開された数とzで式を確かめます。小さい数で計算を体験する模型です。",en:"Instead of sending your secret x, send an answer z that mixes it with a fresh number r. The person checking the answer is the verifier. Send a first, then use the returned number e to calculate z. The verifier checks an equation using public values and z. This is a small-number calculation model."},
-    {ja:"例：r=3、e=5、x=7\n① 掛ける：5 × 7 = 35\n② 足す：35 + 3 = 38\n③ 11で割る：38 = 11 × 3 + 5\n④ 余りの5をz欄へ入力する。\nこの「割った余り」をmodと書きます。",en:"Example: r=3, e=5, x=7\n① Multiply: 5 × 7 = 35\n② Add: 35 + 3 = 38\n③ Divide by 11: 38 = 11 × 3 + 5\n④ Enter the remainder, 5, in z.\nThis remainder operation is written mod."},
+    {ja:"式：z = (r + e × x) mod 11。r + e × x を11で割った余りです。\n例：r=3、e=5、x=7\n① 掛ける：5 × 7 = 35\n② 足す：35 + 3 = 38\n③ 11で割る：38 = 11 × 3 + 5\n④ 余りの5をz欄へ入力する。\nこの「割った余り」をmodと書きます。",en:"Formula: z = (r + e × x) mod 11, the remainder of r + e × x divided by 11.\nExample: r=3, e=5, x=7\n① Multiply: 5 × 7 = 35\n② Add: 35 + 3 = 38\n③ Divide by 11: 38 = 11 × 3 + 5\n④ Enter the remainder, 5, in z.\nThis remainder operation is written mod."},
     {ja:"① e × x = □①\n② □① + r = □②\n③ □②を11で割った余り = z\n④ 余りを「計算した余り z」欄に入力して送る。\n今回の数字は「ヒント③：今回の数字で計算」で確認できます。aをまだ送っていなければ、先にそちらの手順でaを送ります。",en:"① e × x = □①\n② □① + r = □②\n③ Remainder of □② divided by 11 = z\n④ Enter the remainder in “Calculated remainder z” and submit.\nSee your values in “Hint 3: calculate with your values”. If you have not sent a yet, follow its steps first."},
   ];
   return hints[level]!;

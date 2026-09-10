@@ -85,7 +85,7 @@ jobs:
       - name: Test and typecheck ac26 crypto battle
         if: needs.changes.outputs.battle == 'true'
         working-directory: battles/ac26-crypto-battle/game
-        run: bun test $(find src -name "*.test.ts" ! -name "state-size.test.ts") && bun run typecheck
+        run: bun test $(find src \( -name "*.test.ts" -o -name "*.test.tsx" \) ! -name "state-size.test.ts") && bun run typecheck
 
       # Issue #644: the local development harness. Its own package, so its own
       # install. Without these steps the harness would rot silently the first

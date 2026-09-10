@@ -14,7 +14,7 @@ export function rsaGuide(task: RsaTask, rung: 0 | 1 | 2): { readonly ja: string;
   const jaEnd = e === 3 ? `r2×${m}` : e === 5 ? `r4×${m}` : `r4×r2の余りをtとし、t×${m}`;
   const enEnd = e === 3 ? `r2×${m}` : e === 5 ? `r4×${m}` : `r4×r2, save its remainder as t, then calculate t×${m}`;
   return {
-    ja: `この1題を計算してから次のお題へ進みます。自分の値：m=${m}、n=${n}、e=${e}。\n① ${m}×${m}を計算し、${n}で割った余りをr2へ書く。${e === 3 ? "" : `\n② r2×r2を計算し、${n}で割った余りをr4へ書く。`}\n最後に${jaEnd}を計算。掛けるたび${n}の余りを取り、最後の余り1個をCIPHER欄へ入れて提出します。未入力・範囲外は誤答に数えません。正しく完了した表示を確認。先に誤答していた場合は0点で完了します。`,
-    en: `Finish this one Order before moving on. Your values: m=${m}, n=${n}, e=${e}.\n(1) Calculate ${m}×${m}; write the remainder after division by ${n} as r2.${e === 3 ? "" : `\n(2) Calculate r2×r2; write its remainder after division by ${n} as r4.`}\nFinally calculate ${enEnd}, taking the remainder after each multiplication. Enter the final single remainder in CIPHER. Empty/out-of-range input does not count as a wrong answer. Check the completed verdict; after an earlier wrong answer, completion earns 0 points.`,
+    ja: `この1題を計算してから次のお題へ進みます。自分の値：m=${m}、n=${n}、e=${e}。\n① ${m}×${m}を計算し、${n}で割った余りを紙にr2と書く。${e === 3 ? "" : `\n② r2×r2を計算し、${n}で割った余りを紙にr4と書く。`}\n最後に${jaEnd}を計算し、${n}で割った余りを出します。\n提出：最後の余り1個だけを暗号文の回答欄へ入れ、CIPHERを押します。r2・r4は途中計算のメモで、入力欄ではありません。未入力・範囲外は誤答に数えません。正しく完了した表示を確認。先に誤答していた場合は0点で完了します。`,
+    en: `Finish this one Order before moving on. Your values: m=${m}, n=${n}, e=${e}.\n(1) Calculate ${m}×${m}; write the remainder after division by ${n} on paper as r2.${e === 3 ? "" : `\n(2) Calculate r2×r2; write its remainder after division by ${n} on paper as r4.`}\nFinally calculate ${enEnd}, taking the remainder after each multiplication. Enter the final single remainder in CIPHER. Empty/out-of-range input does not count as a wrong answer. Check the completed verdict; after an earlier wrong answer, completion earns 0 points.`,
   };
 }
