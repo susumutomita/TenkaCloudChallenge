@@ -2157,6 +2157,10 @@ describe("the global guide exposes the evolution lessons",()=>{
 });
 
 describe("encrypted delivery modulus validation", () => {
+  it("rejects decimal moduli beyond the existing 700-digit bound", () => {
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), prime: "9".repeat(701) })).toBe(false);
+    expect(isCryptoBattleProjection({ ...fixtureProjection(), prime: "9".repeat(700) })).toBe(true);
+  });
   for (const prime of ["oops", "0", "1", "-7", "7.5", " 97", "097", "0x61", "1e2"]) {
     it(`rejects malformed modulus ${prime} before rendering`, () => {
       expect(isCryptoBattleProjection({...fixtureProjection(), prime})).toBe(false);

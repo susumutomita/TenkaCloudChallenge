@@ -35,7 +35,7 @@ export default function EncryptedCargo({ locale, inputs, prime, left, right, onL
     <p>{ja ? `合計が ${prime} 未満なら、そのまま。${prime} 以上なら、${prime} を引いて 0〜${BigInt(prime) - 1n} に入るまで繰り返します。` : `A total below ${prime} stays unchanged. Otherwise subtract ${prime} until it is between 0 and ${BigInt(prime) - 1n}.`}</p>
     <details><summary>{ja ? "余りの小さい例と、暗号のしくみ" : "A small remainder example and the mechanism"}</summary>
       <p>{ja ? "別の数で練習：5で割る場合、3 + 6 = 9、9 − 5 = 4。余りは4です。「mod」はこの余りを表します。" : "An unrelated example with divisor 5: 3 + 6 = 9, then 9 − 5 = 4. The remainder is 4. ‘mod’ means this remainder."}</p>
-      <p>{ja ? "式：(左の合計 mod p, 右の合計 mod p)。p は画面の割る数。暗号文は中身を隠した数の組です。右には中身と隠す数が混ざっています。足しても隠れたままなので、あなたには中身の合計は読めません。" : "Rule: (sum of left values mod p, sum of right values mod p). p is the displayed divisor. Each ciphertext is a pair hiding a number. Its right value mixes the content with a mask. Adding preserves that mask; you cannot read the plaintext total."}</p>
+      <p>{ja ? "式：(左の合計 mod p, 右の合計 mod p)。p は画面の割る数。暗号文は中身を隠した数の組です。右には中身と隠す数が混ざっています。足しても隠れたままなので、あなたには中身の合計は読めません。" : "Rule: (sum of left values mod p, sum of right values mod p). p is the displayed divisor. Each ciphertext is a pair hiding a number. Its right value mixes the content with a mask. Adding preserves that mask; you cannot read the sum of the numbers hidden inside."}</p>
       <p>{ja ? "鍵を持つ判定側は、各入力の鍵と左の値を使って隠す数を取り除き、合計を確認します。これが準同型暗号の『復号せずに計算する』体験です。この教材は加算の模型で、掛け算も扱う完全準同型暗号（FHE）そのものではありません。" : "The judge uses each input’s key and left value to remove the masks and check the total. This models homomorphic computation without decryption. It is an addition model, not full FHE, which also supports multiplication."}</p>
     </details>
   </section>;
