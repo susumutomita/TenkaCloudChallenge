@@ -25,7 +25,7 @@ export function disclosurePreview(projection: CryptoBattleProjection, order: Con
     ? "守るもの：車輪の初期位置。公開するもの：元の4文字と暗号の4文字。相手は対応から初期位置a・bを計算し、HUNTに入力します。1組で特定できる場合もありますが、候補が残る場合もあります。"
     : "Protect: initial wheel positions. Publish: four original and four encrypted digits. Opponents calculate initial a and b for HUNT. One pair may suffice, but multiple candidates can remain.";
   if (order.task.kind === "rsa-encrypt") return ja
-    ? "公開するもの：平文m（元の数）・暗号文c・公開鍵n/e。RSAのHUNTはmやcではなく、nを作る異なる素数2個を入力します。この小さいnは公開鍵だけで攻撃でき、LEAKは不要です。"
+    ? "公開するもの：元の数 m と暗号の答え c（平文と暗号文）・公開鍵n/e。RSAのHUNTはmやcではなく、nを作る異なる素数2個を入力します。この小さいnは公開鍵だけで攻撃でき、LEAKは不要です。"
     : "Publish: plaintext m, ciphertext c and public n/e. RSA HUNT takes two distinct prime factors of n, not m or c. This tiny n is attackable from the public key alone; LEAK is not required.";
   if (order.task.kind === "caesar-shift") {
     if (order.task.rung === "vigenere") {
@@ -49,6 +49,6 @@ export function disclosurePreview(projection: CryptoBattleProjection, order: Con
   const after = indices.size;
   const pieces = order.task.shareIndices.map(index => `#${index}`).join("・");
   return ja
-    ? `守るもの：元の秘密の数。公開するもの：かけら ${pieces} の番号と値。元の秘密そのものではありません。同じ組の公開済み番号 ${before} → ${after}/${projection.threshold} 種類（同じ番号は1個）。${after >= projection.threshold ? "復元の材料がそろいます。" : `異なる${projection.threshold}個が必要です。`} 相手がHUNTで答えるのは、かけらから復元した元の秘密です。`
+    ? `守るもの：元の秘密の数。公開するもの：かけら ${pieces} の番号と値。元の秘密そのものではありません。同じ組の公開済み番号 ${before} → ${after} 個（必要な異なる番号は${projection.threshold}個。同じ番号は1個）。${after >= projection.threshold ? "復元の材料がそろいます。" : `異なる${projection.threshold}個が必要です。`} 相手がHUNTで答えるのは、かけらから復元した元の秘密です。`
     : `Protect: the original secret. Publish: indices and values of shares ${pieces}, not the original secret. Distinct current-set indices ${before} → ${after}/${projection.threshold}; duplicates count once. ${after >= projection.threshold ? "Reconstruction evidence will be complete." : `${projection.threshold} distinct shares are needed.`} Opponents submit the reconstructed original secret in HUNT.`;
 }

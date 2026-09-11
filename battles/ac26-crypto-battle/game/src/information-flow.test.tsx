@@ -25,7 +25,8 @@ describe("free LEAK-to-HUNT rules", () => {
       expect(html).toContain("<details");
       expect(html).toContain('open=""');
       expect(html).toContain(LEAK_HUNT_RULES[locale].title);
-      expect(html).toContain(LEAK_HUNT_RULES[locale].disclaimer);
+      const disclaimer = renderToStaticMarkup(<span>{LEAK_HUNT_RULES[locale].disclaimer}</span>).slice(6, -7);
+      expect(html).toContain(disclaimer);
       expect(html).toContain("5 − 2 = 3");
       expect(html).toContain("RSA");
       expect(html).toContain("Rotor");
@@ -61,9 +62,9 @@ describe("LEAK button previews name the HUNT answer", () => {
     expect(disclosurePreview(projection, shareOrder([2]), "ja")).toContain("元の秘密そのものではありません");
   });
   test("duplicates, other teams and retired generations do not inflate exposure", () => {
-    expect(disclosurePreview(projection, shareOrder([1]), "ja")).toContain("1 → 1/3");
-    expect(disclosurePreview(projection, shareOrder([2]), "ja")).toContain("1 → 2/3");
-    expect(disclosurePreview(projection, shareOrder([2, 3]), "ja")).toContain("1 → 3/3");
+    expect(disclosurePreview(projection, shareOrder([1]), "ja")).toContain("1 → 1 個");
+    expect(disclosurePreview(projection, shareOrder([2]), "ja")).toContain("1 → 2 個");
+    expect(disclosurePreview(projection, shareOrder([2, 3]), "ja")).toContain("1 → 3 個");
     expect(disclosurePreview(projection, shareOrder([2, 3]), "ja")).toContain("復元の材料がそろいます");
   });
   test("required disclosure retains its meaning and does not offer an alternative", () => {
