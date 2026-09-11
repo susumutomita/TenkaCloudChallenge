@@ -13,7 +13,13 @@ export function orderHeading(order: ContractProjection, locale: Locale): string 
         ? `シェア ${pieces} を公開して得点する（秘密分散・公開が条件）`
         : `A request to publish your secret share ${pieces} (publication required, full points)`;
     }
-    return locale === "ja" ? `かけら ${pieces} を公開して即答するか、計算で証明する` : `Publish share ${pieces}, or complete the proof calculation`;
+    const canLeak = order.allowedMethods.includes("leak");
+    const spentProof = order.schnorr?.pending?.used && order.schnorr.pending.outcome === "miss";
+    const canProve = order.allowedMethods.includes("prove") && !spentProof;
+    if (canLeak && !canProve) return locale === "ja" ? `かけら ${pieces} を公開して答える` : `Publish share ${pieces} to answer`;
+    if (!canLeak && canProve) return locale === "ja" ? "かけらを公開せず、計算で証明する" : "Complete the proof calculation without publishing a share";
+    if (canLeak && canProve) return locale === "ja" ? `かけら ${pieces} を公開して即答するか、計算で証明する` : `Publish share ${pieces}, or complete the proof calculation`;
+    return orderLabel(order, locale);
   }
   return orderLabel(order, locale);
 }

@@ -15,7 +15,7 @@ const projection = {
   ],
 } as unknown as CryptoBattleProjection;
 function shareOrder(indices: number[], required = false): ContractProjection {
-  return { task: { kind: "reveal-share", shareIndices: indices }, privacyConstraint: required ? "must-disclose" : "none" } as ContractProjection;
+  return { task: { kind: "reveal-share", shareIndices: indices }, privacyConstraint: required ? "must-disclose" : "none", allowedMethods: required ? ["leak"] : ["leak", "prove"] } as ContractProjection;
 }
 
 describe("free LEAK-to-HUNT rules", () => {
@@ -70,6 +70,14 @@ describe("LEAK button previews name the HUNT answer", () => {
   test("required disclosure retains its meaning and does not offer an alternative", () => {
     expect(orderHeading(shareOrder([2], true), "ja")).toContain("公開が条件");
     expect(orderHeading(shareOrder([2], true), "en")).toContain("publication required");
+  });
+  test("a forbidden LEAK and a spent Schnorr proof are never offered by the heading", () => {
+    const proofOnly = { ...shareOrder([2]), allowedMethods: ["prove"] } as ContractProjection;
+    expect(orderHeading(proofOnly, "ja")).toBe("かけらを公開せず、計算で証明する");
+    expect(orderHeading(proofOnly, "en")).toBe("Complete the proof calculation without publishing a share");
+    const spent = { ...shareOrder([2]), schnorr: { pending: { used: true, outcome: "miss" } } } as unknown as ContractProjection;
+    expect(orderHeading(spent, "ja")).toBe("かけら #2 を公開して答える");
+    expect(orderHeading(spent, "en")).toBe("Publish share #2 to answer");
   });
   test("Caesar explicitly asks for the key, not the already-visible plaintext", () => {
     const order = { task: { kind: "caesar-shift", rung: "caesar", pairsToBreak: 1 } } as ContractProjection;
