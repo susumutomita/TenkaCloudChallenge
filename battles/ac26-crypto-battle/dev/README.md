@@ -7,9 +7,11 @@ It exists for one reason: before it, checking whether an Order card lined up or
 a LEAK animation read correctly meant a full deploy into a real event. Now it is
 a reload.
 
+[Play guide](../README.md) · [Operator guide](../OPERATOR.md)
+
 ```bash
 cd battles/ac26-crypto-battle/dev
-bun install
+bun install --frozen-lockfile --ignore-scripts
 bun run dev          # http://localhost:5644  (PORT=... to change)
 ```
 
@@ -46,16 +48,13 @@ Read this before quoting anything you see here.
 | `../portal/*.tsx` — all three declared slots, plus their imports | authentication and tenant isolation |
 | the optimistic-lock version and tick-before-op ordering | the tick cadence (the clock is yours to drive) |
 
-No game logic is re-implemented here. `host.ts` is the whole platform-shaped
-part, and it is about forty lines of plumbing around
+No game logic is re-implemented here. `host.ts` provides the platform-shaped
+plumbing around
 `initialState` / `validateOp` / `applyOp` / `tick` / `projectForTeam`.
 
-It calls those five hooks directly rather than importing
-`../coordination/crypto-battle.ts`, because that file is compiled against
-`@tenkacloud/coordination-plugin-sdk` — which exists in this repository only as
-a types-only ambient declaration, and which this repository's AGENTS.md
-"Repository boundary" forbids depending on for real. The wrapper itself is a
-six-line passthrough already covered by
+It calls those five hooks directly. The production adapter,
+`../coordination/crypto-battle.ts`, implements the platform's coordination-plugin
+contract and is checked separately by
 `../game/src/coordination-plugin.test.ts`.
 
 ## The toolbar
@@ -82,18 +81,26 @@ faking it.
 | --- | --- |
 | `fresh` | Match just started, first Orders issued, empty Ledger. |
 | `lightning` | Normal minute 61: alpha has one endgame card; choose a calculation Order, declare, then answer for its doubled reward. |
-| `vigenere` | Standard five-minute TTL: bravo has exposed all three distinct key positions, alpha has an open cipher Order. |
+| `vigenere` | A deterministic fixture with all three key positions exposed; use the fixture's displayed deadline. |
 | `ledger-filling` | A LEAKed share and a PROVE transcript side by side. |
 | `rps-reuse` | Two public bravo openings reuse r; the next sealed hand can be predicted through the real participant controls. |
 | `hunt-reachable` | `alpha` has leaked threshold-many distinct shares of its current generation. |
-| `after-rotate` | `bravo` landed a HUNT, then `alpha` re-keyed — generation 2, penalty applied. |
+| `after-rotate` | Legacy compatibility fixture: `bravo` landed a HUNT, then `alpha` re-keyed through the retained API. This is not a current player control. |
 | `ended` | Match over; every op is rejected and the surface is read-only. |
 
-The participant HUNT cards now report readiness from public evidence (Issue #742).
+These fixtures cover individual states, including saved legacy rules. They do not
+all use the production new-match pacing. See the [operator guide](../OPERATOR.md)
+for the current three-Order cap and three-minute deadlines. The scenario selector
+also includes newer cryptographic worksheets; [scenarios.ts](scenarios.ts) is the
+complete list.
+
+The participant HUNT surface reports readiness from public evidence.
 Shamir needs distinct current-generation indices; sudoku opens a worksheet for a repeated public tag
 without testing whether a solution is unique; Caesar uses its rung-specific
 pair threshold and Vigenère requires three distinct public key positions; RPS requires past reuse and a currently sealed target. The
-worksheet never fills a recovered answer. ROTATE is a separate defence card.
+worksheet never fills a recovered answer. Orders and HUNT can be switched, shown
+side by side or stacked, with inputs retained and the Order queue still visible.
+The current main UI does not display a ROTATE control or an exposure strip.
 
 ## Participant walkthrough
 

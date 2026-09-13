@@ -1,30 +1,39 @@
 # TenkaCloudChallenge
 
-> 日本語版: [README.ja.md](./README.ja.md)
+[日本語](README.ja.md)
 
-This repository is the public problem catalog for the [TenkaCloud](https://github.com/susumutomita/TenkaCloud) platform. It contains the problem payloads that the platform packages and deploys; the platform repository owns deployment, scoring dispatch, and integration.
+The public problem catalog for [TenkaCloud](https://github.com/susumutomita/TenkaCloud). It contains individual exercises and team competitions, with each problem's instructions, runtime artifacts and tests.
 
-## Start with one mission
+## Find a problem
 
-New to cryptography? [Try the first encrypted-delivery mission](battles/ac26-crypto-battle/FIRST-EXPERIENCE.md). Use paper, a pen and school-level arithmetic; practice has no points or deadline. The guide explains how to join an organizer-provided event or run the local preview, then explore more problems. This is not a hosted public demo.
+| Directory | What it contains |
+| --- | --- |
+| [challenges/](challenges/) | Individual exercises |
+| [battles/](battles/) | Team competitions |
 
-## Catalog layout
+Start with a problem's README for its scenario, prerequisites and verification steps. Its `metadata.json` declares the runtime, scoring contract and catalog status. Availability in an event depends on the platform and the organizer's selection; inclusion here does not mean every problem has been tested in a live event.
 
-- [`challenges/`](./challenges/) contains self-paced problems.
-- [`battles/`](./battles/) contains head-to-head problems.
-- Each problem owns its `metadata.json` and runtime artifacts (`template.yaml`, `local/`, portal components, or services as applicable).
-- [`runtimes/`](./runtimes/) contains runtime implementations genuinely shared by multiple problems. StackStack is one such family; problem-specific code still belongs inside its problem directory.
-- [`SCHEMA.json`](./SCHEMA.json) and [`SIMULATION_SCHEMA.json`](./SIMULATION_SCHEMA.json) define the catalog contracts.
+To run an event or start the platform locally, follow the [TenkaCloud setup guide](https://github.com/susumutomita/TenkaCloud#quickstart).
 
-## Validation
+## Add or update a problem
+
+Follow the [authoring contract](AGENTS.md). Keep a problem's metadata, bilingual READMEs, runtime, fixtures and tests in its own directory. Start from a problem with the same runtime and scoring contract.
+
+- [SCHEMA.json](SCHEMA.json) defines problem metadata.
+- [SIMULATION_SCHEMA.json](SIMULATION_SCHEMA.json) defines simulation overlays.
+- [runtimes/](runtimes/) holds implementations shared unchanged by multiple problems.
+
+TenkaCloud owns deployment, authentication, scoring dispatch and the participant/admin applications. This repository owns the problem content. Keep secrets and reference answers out of participant-visible files and images.
+
+## Validate changes
 
 ```bash
 make install
 make agent-gate
 ```
 
-The root validator checks metadata, required bilingual READMEs, simulation overlays, and catalog cross-references. The pull-request CI runs only this lightweight validation. Runtime code and participant-facing tests stay with the problem that owns them and should be run when that problem changes.
+This checks metadata, bilingual README presence, simulation overlays and catalog cross-references. Run the affected problem's own tests as documented in its README as well. CI selects additional game and capacity checks for relevant code changes; catalog validation alone does not prove runtime behavior or live deployment.
 
-Do not expose secrets, flags, hidden checks, or reference answers on participant-visible surfaces. Deployment, production operations, and platform integration remain the responsibility of the TenkaCloud repository.
+## License
 
-The catalog is licensed under Apache-2.0.
+[Apache-2.0](LICENSE).

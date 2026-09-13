@@ -31,11 +31,11 @@ After practice, view the diagrams, try another exercise, explore the [catalog](.
 
 未投稿。公開する場合は運営者がリンク・開催情報を確認してください。ログインキーや localhost の URL は掲載しません。
 
-> 中学数学で暗号を体験してみませんか？中身を開けずに合計の暗号文を作る「暗号配送」から始められます。紙とペンで1問、次はチームで守る・公開する選択へ。小さい数の教材で、実用暗号の安全性を再現するものではありません。問題集の「1問体験ガイド」へ。
+> 中学数学で暗号を体験してみませんか？中身を開けずに合計の暗号文を作る「暗号配送」から始められます。紙とペンで1問、次はチームで守る・公開する選択へ。小さい数の教材で、実用暗号の安全性を再現するものではありません。暗号バトルの「1問体験ガイド」へ。
 
 Draft, not posted:
 
-> Try cryptography with school-level arithmetic: combine encrypted packages without opening them. Start with one paper-and-pencil mission, then explore protecting and sharing information as a team. These small-number models are not production cryptography. Follow the catalog’s first-mission guide.
+> Try cryptography with school-level arithmetic: combine encrypted packages without opening them. Start with one paper-and-pencil mission, then explore protecting and sharing information as a team. These small-number models are not production cryptography. Follow Cryptography Battle's first-mission guide.
 
 ## 聞いてみる / Feedback
 

@@ -1,30 +1,39 @@
 # TenkaCloudChallenge
 
-> English: [README.md](./README.md)
+[English](README.md)
 
-これは [TenkaCloud](https://github.com/susumutomita/TenkaCloud) プラットフォーム向けの公開問題カタログです。プラットフォームがpackage・deployする問題payloadを管理し、deploy・採点dispatch・platform integrationはTenkaCloud本体が管理します。
+[TenkaCloud](https://github.com/susumutomita/TenkaCloud) 向けの公開問題カタログです。個別演習とチーム対戦の問題文、実行に必要なファイル、テストを管理します。
 
-## まず1問体験
+## 問題を探す
 
-暗号の予備知識なしで始められる[1問体験ガイド](battles/ac26-crypto-battle/FIRST-EXPERIENCE.md)へ。紙とペン、中学数学で暗号配送を体験できます。練習は得点・締切なし。運営者からの招待で参加する方法と、自分の端末でプレビューする方法、次の問題への進み方を案内します。公開済みの体験サービスではありません。
+| ディレクトリ | 内容 |
+| --- | --- |
+| [challenges/](challenges/) | 個別に取り組む演習 |
+| [battles/](battles/) | チームで競う対戦問題 |
 
-## カタログ構造
+各問題のREADMEに、シナリオ・前提知識・確認方法があります。`metadata.json`には実行環境、採点方法、カタログ上の状態を定義します。イベントで使える問題はプラットフォームの対応と運営者の選択によって決まります。掲載されている全問題を実イベントで検証済みという意味ではありません。
 
-- [`challenges/`](./challenges/) は個別演習です。
-- [`battles/`](./battles/) は対戦形式の問題です。
-- 各問題は `metadata.json` とruntime artifact（`template.yaml`、`local/`、portal component、serviceなど）を所有します。
-- [`runtimes/`](./runtimes/) は複数問題が同一実装を共有するときだけ使うruntime置き場です。StackStackはその1 familyで、問題固有コードは各問題ディレクトリに置きます。
-- [`SCHEMA.json`](./SCHEMA.json) と [`SIMULATION_SCHEMA.json`](./SIMULATION_SCHEMA.json) がcatalog contractを定義します。
+イベントの開催やプラットフォームのローカル起動は、[TenkaCloudのセットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/README.ja.md#クイックスタート)を参照してください。
 
-## 検証
+## 問題を追加・修正する
+
+[作成ルール](AGENTS.md)に従い、問題ごとのディレクトリに、メタデータ・日英README・実行コード・検証用データ・テストをまとめます。実行環境と採点方法が近い既存問題を出発点にしてください。
+
+- [SCHEMA.json](SCHEMA.json)：問題メタデータの形式
+- [SIMULATION_SCHEMA.json](SIMULATION_SCHEMA.json)：シミュレーション設定の形式
+- [runtimes/](runtimes/)：複数の問題が同じ実装を共有する場合の置き場
+
+デプロイ、認証、採点の呼び出し、参加者・管理者画面はTenkaCloud本体が担当します。このリポジトリは問題内容を担当します。参加者向けファイルやイメージに秘密値や模範解答を含めないでください。
+
+## 変更を検証する
 
 ```bash
 make install
 make agent-gate
 ```
 
-root validatorはmetadata、日英README、simulation overlay、catalog cross-referenceを検証します。PRのCIが実行するのはこの軽量な検証だけです。runtime codeとparticipant向けtestは、それを所有する問題の中に置き、その問題を変更するときに実行します。
+メタデータ、日英READMEの有無、シミュレーション設定、カタログ内の参照を検証します。加えて、変更した問題のREADMEにあるテストを実行してください。CIでは変更内容に応じてゲームや容量の検証も選択されます。カタログ検証だけでは、実行時の動作や実環境へのデプロイは確認できません。
 
-secret、flag、hidden check、reference answerをparticipant-visible surfaceへ漏らさないでください。deploy、production operation、platform integrationはTenkaCloud repositoryの責務です。
+## ライセンス
 
-このcatalogはApache-2.0 licenseです。
+[Apache-2.0](LICENSE)。

@@ -1,579 +1,144 @@
-# ac26-crypto-battle operator runbook
+# Cryptography Battle — operator guide
 
-This file contains only the current operating contract. Implementation history
-belongs in Git and Issues, not in the runbook.
+[Play guide (English)](README.md) · [遊び方（日本語）](README.ja.md) · [Local preview](dev/README.md)
 
-## Runtime boundary
+This guide describes current operation. For scheduling, staffing and event preparation, use the [event-host rehearsal](../../challenges/event-host-rehearsal/README.md). Historical implementation and validation results remain in Git, Issues and the dated records under `dev/`.
+
+## Before an event
+
+1. Use compatible versions of TenkaCloud and this problem pack. The platform must support the coordination plugin, score delivery and team projections.
+2. Allocate teams and time. Default play is 90 minutes, designed around four-person teams; allow additional time for joining, the first mission and debriefing.
+3. Choose pacing and whether to enable the optional score-steal exercise **before** deploying the pack. Complete all team deployments before creating the match.
+4. Rehearse the first mission, one completed Order, one HUNT, an expiry and the official scoreboard. Check both Japanese and English if the event needs them.
+5. Start a fresh match. Ready normally starts play only after all teams are ready. The waiting room also provides an explicit action to start without everyone.
+
+These steps describe operator work; the commands below run only local validation, not deployment.
+
+## Pacing and topic selection
+
+Edit [game/src/pacing.ts](game/src/pacing.ts) and rebuild the problem for a **new** match:
+
+| Setting | Default | Supported values |
+| --- | --- | --- |
+| `MATCH_PACING.answerSeconds` | 180 seconds | Integer 30–900; applies to regular and rush Orders |
+| `MATCH_PACING.arrivalSeconds` | 30 seconds | Integer 10–300 |
+| `MATCH_PACING.arrivalJitterSeconds` | 10 seconds | Integer 0 up to `arrivalSeconds - 1` |
+
+For example, `answerSeconds: 240` gives four minutes. Arrival timing varies around the base interval; do not put the exact schedule in participant instructions. The seeded schedule is shared by teams and does not reroll on reload.
+
+[STREAMING_ORDER_CONFIG in reducer.ts](game/src/reducer.ts) is the production new-match configuration: one Order per arrival, at most three unanswered Orders per team including duels, and mixed cryptographic topics. `DEFAULT_CONFIG` also supports older fixtures and is not the complete production pacing configuration.
+
+A full queue skips arrivals without charging for an unissued Order or accumulating a later burst. Delivery resumes at a subsequent arrival after room opens. Duels need room on both teams. After the two opening tasks, non-duel topics follow shuffled bags; RSA is not restricted to the endgame. New anamorphic encryption, decryption and probability exercises are separate Orders. Legacy combined tasks remain readable.
+
+Settings are bundled with the problem, not an in-match administrator control. Existing matches retain their stored settings and issued deadlines when code is deployed.
+
+## Scores and deadline behavior
+
+The Order's displayed reward and accepted methods are authoritative for that Order. Defaults come from [reducer.ts](game/src/reducer.ts), with cipher-specific rules in [ladder.ts](game/src/ladder.ts).
+
+| Event | Standard behavior |
+| --- | --- |
+| Correct calculation | +30; rush reward +45; an applicable declared Lightning card doubles the reward |
+| Voluntary LEAK | +10 |
+| Publication-required Order | LEAK earns its full displayed reward; leaving it unanswered publishes nothing |
+| Unanswered deadline | −15 once, with a score floor of zero |
+| Purchased hints | −2, −4, −8; a charge is not refunded by leaving the Order unfinished |
+| RPS outcome | Win +30, draw +10, loss 0 |
+
+Do not apply one retry policy to every task. A well-formed wrong Schnorr response costs 6 and consumes that proof attempt. A proof-only Order then ends; an Order allowing LEAK can still be completed by LEAK. The failed proof does not force another expiry deduction. Legacy Sudoku and other worksheets have their own retry rules. Vigenère/Rotor/RSA encryption misses can also forfeit that Order's later calculation reward. Other validation failures may reject an operation without changing score. Check the method's visible explanation and its tests before changing these rules.
+
+For RPS expiry, an accepted opening qualifies for a forfeit win if the opponent does not finish. A submitted commitment also qualifies when the opponent has not committed at all. If both committed but the player has not supplied their own opening, that player still has a required action and can receive the ordinary expiry penalty. Timeout does not publish a private opening. See [rps.ts](game/src/rps.ts).
+
+HUNT prices differ by method. Shamir and Rotor use the shared per-attacker/target/generation attempt budget; RPS reservations share that budget, while legacy Sudoku has a separate budget. Cipher-specific rewards and validations must not be inferred from the general +25/−12 HUNT values. The Portal displays method-specific effects before submission. A breach notice reports the target's loss; no ROTATE action is currently offered in the main UI.
+
+## Endgame support
+
+At the configured endgame boundary (normally minute 60), eligibility is fixed from scores at that boundary:
+
+- Lowest-ranked teams, including ties, receive ten minutes without hint deductions. Solo practice is excluded.
+- The bottom two teams receive one Lightning card; ties at the distribution boundary are included. For two teams only the lower-ranked team qualifies; solo practice is excluded.
+- Lightning must be declared for an eligible calculation Order. It does not double LEAK, HUNT, RPS outcomes or deductions, and does not extend a deadline.
+
+The relevant implementations are [booster.ts](game/src/booster.ts) and [lightning.ts](game/src/lightning.ts). Preserve the saved allocation on reload or upgrade; never recompute an earlier allocation from later scores.
+
+## Optional score-steal exercise
+
+Disabled by default. In [metadata.json](metadata.json), operators can set:
+
+| Parameter | Value |
+| --- | --- |
+| `cfnParameters.ScoreStealEnabled` | `"true"` to enable |
+| `cfnParameters.ScoreStealKey` | An integer string from `"1"` to `"9"` |
+| `cfnParameters.ScoreStealSeed` | Keep `"__RANDOM_PASSWORD__"`; the existing deploy chain injects a per-deployment receipt |
+
+Use a dedicated AWS account per team. Complete every team deployment with consistent settings before starting a new match. This requires platform SDK 0.2 deployment-input support and filtering of `CoordinationPrivate` outputs; do not use the template alone against an older platform.
+
+After five minutes, the exercise can replace an ordinary arrival with queue room. It is offered once per team, counts toward the three-Order cap and uses the normal deadline. The participant opens their own Parameter Store value, pastes the full value containing `key` and `receipt`, and decrypts one digit. The receipt is checked by the server and is not part of the arithmetic.
+
+Acquisition alone gives no points. Using the item transfers up to 10 of an opponent's remaining points to the holder. Acquisition and use are each limited to once per team per match; a victim can be charged once, and a zero-score target is ineligible. Consumption and both score changes are saved together through the existing coordination path. See [score-steal.ts](game/src/score-steal.ts).
+
+## Runtime, private data and official scores
 
 ```text
-Participant Portal
-  └─ team-bound coordination client
-       └─ TenkaCloud dispatcher (auth, persistence, optimistic lock)
-            └─ coordination/crypto-battle.ts
-                 └─ game/src/reducer.ts
+Participant Portal → authenticated team coordination API
+  → TenkaCloud dispatcher (persistence and concurrency control)
+    → coordination/crypto-battle.ts → game/src/reducer.ts
+  → official score and history delivery
 ```
 
-`coordination/crypto-battle.ts` is a thin adapter. Game meaning lives in the
-pure reducer: `initialState`, `tick`, `validateOp`, `applyOp`, and
-`projectForTeam`. The Challenge repository does not import TenkaCloud runtime
-packages into the game model.
+[crypto-battle.ts](coordination/crypto-battle.ts) adapts the pure game hooks: `initialState`, `tick`, `validateOp`, `applyOp` and `projectForTeam`. TenkaCloud owns dispatch, authentication and persistence. No game server is deployed per team.
 
-## Data separation
+| Data | Access |
+| --- | --- |
+| `matchSecret`, full state and seed | Trusted platform only |
+| Own vault and open Orders | Owning team's projection |
+| Opponent's un-leaked shares and keys | Not projected to the attacker |
+| Public ledger, public keys and public puzzles | Public according to the relevant protocol; not all public data comes from LEAK |
+| Optional item receipt | Server-side deployment input and the owning team's scoped AWS read; not public deployment output or ledger data |
 
-| Data | Stored where | Browser visibility |
-| --- | --- | --- |
-| match secret | separate TenkaCloud coordination secret record | never projected |
-| match state seed | trusted match state | never projected |
-| each team's current secret and shares | trusted match state | owning team only, through `vault` |
-| another team's un-leaked shares | trusted match state | never projected |
-| open Orders | trusted match state | owning team only |
-| LEAK / PROVE / FHE / MPC artifacts | public ledger | every team |
-| MPC private input and masks | derived while projecting the owning team | owning team only |
+Production hidden values derive from `CoordinationContext.matchSecret`, never public `eventId`. Local fixtures may use the explicit non-secret marker `local-play-not-secret:<eventId>`; reaching it in a real event is a wiring error. Never log or export live secrets in a replay or test fixture. All reads to the browser must use the team projection.
 
-The only supported read path is `projectForTeam`. Do not hand state directly to
-Portal code or create another projection helper.
+The plugin exposes `teamScores` and operation reasons for official score delivery. A score in the local harness is not an official score. If the live board and Portal disagree, inspect the deployed platform/catalog revisions and official delivery/refresh path before changing game arithmetic.
 
-### Match seed
+## Saved matches and upgrades
 
-Production initialization must receive `CoordinationContext.matchSecret` from
-TenkaCloud. `eventId` is public routing data and must not seed hidden values.
+The current reader version is declared by `STATE_SCHEMA_VERSION`, and `migrateState` in [reducer.ts](game/src/reducer.ts) defines supported migrations. Do not maintain a separate version number in this guide.
 
-For unit tests and local preview only, absence of `matchSecret` produces the
-explicit marker `local-play-not-secret:<eventId>`. This fallback is
-deterministic and intentionally not secret. A real event that reaches it is a
-platform wiring defect.
+Upgrade between events. Preserve stored Orders, deadlines, ledger entries, score changes and attack reservations. Old Sudoku proofs, combined anamorphic worksheets and generation/ROTATE records are compatibility data, not the current player route. Do not feed a newer row to an older plugin.
 
-The fixed `MATCH_SECRET` in `vertical-playtest-fixture.ts` is test data. Do not
-copy a live match secret into a fixture, replay, log, response, or debrief.
+A legacy v2 row with an unspent nonce-reuse HUNT is deliberately rejected by migration rather than silently losing an earned attack. Finish that match with its compatible plugin, or arrange a deliberate reset with the event owner. Reset/delete must remove only the target match state and its separate secret record through the platform lifecycle.
 
-## Match lifecycle
+## Resources, cost and cleanup
 
-1. TenkaCloud mints the match secret before first state creation.
-2. `initialState` creates team secrets, shares, sudoku solutions with their public puzzles, and the Order plan.
-3. `tick` advances time, phases, expiry, and Order issuance.
-4. `validateOp` rejects malformed, stale or unauthorized moves. A well-formed
-   PROVE or Vigenère/Rotor/RSA CIPHER miss is accepted and charged by `applyOp`.
-5. `applyOp` changes state only after validation.
-6. `projectForTeam` returns the team's vault and Orders plus the public ledger.
-7. Reset/delete removes both state and the separate match-secret record.
+The [template](template.yaml) normally creates a participant viewer IAM role. The optional item adds one **Standard/String Parameter Store parameter per team**, scoped value reads and metadata-only `ssm:DescribeParameters` listing. It adds no item-specific Lambda, KMS key or S3 bucket. `ExternalId` remains required for the participant role.
 
-All state and operations must remain JSON-safe. Large field and group values
-cross the state/op boundary as decimal strings, never JavaScript numbers or
-raw `bigint`.
+The default operating region is `ap-northeast-1`; check the event deployment region. Expected play lasts 90 minutes. Existing platform API/Lambda invocations, score/state storage, logs and any hosting/network usage still contribute to the event's costs; CloudShell usage is also separate from game arithmetic. A zero total bill is not guaranteed. Use current account billing tools for estimates rather than a fixed price table.
 
-### Upgrading across a schema version
+After the event, the operator deletes the problem stacks through TenkaCloud's supported lifecycle, removing the parameter and viewer role, and removes the match state/secret when no longer needed. Deleting this problem does not delete shared platform hosting, logs or storage; those can continue billing under the platform's retention and teardown policy.
 
-The plugin declares `stateSchemaVersion` (12, including the generation-scoped disclosure retirement fee) and a
-`migrateState` that lifts older rows on first touch. One case is refused on
-purpose: a v2 row whose ledger still holds an unspent nonce-reuse HUNT (two
-Schnorr transcripts sharing a commitment on a team's current generation, and
-an attacker that has not collected on it). v3 has no move that attack maps
-onto, and dropping it silently would change the match's scoring mid-run. The
-platform leaves such a row untouched, so finish that match on the plugin that
-made it, or reset it, before deploying the upgrade. Upgrade between events,
-not during one.
+## Local verification
 
-## Participant surface
-
-The default surface is deliberately staged:
-
-1. read the always-visible problem explanation above the board; the compact
-   “Read the guided explanation (optional)” control opens a walkthrough only on request;
-2. pick one ORDER and choose the action it accepts;
-3. for sudoku PROVE, select a relabelling table and fill four holes beside
-   twelve worked cells; all four digit substitutions are exercised once;
-4. open tactics or the full reference when needed.
-
-The tutorial starts collapsed on every visit, including the waiting room. It
-never gates or automatically interrupts play, and can be closed in place. It
-uses only fixed practice data; changing team or deployment resets practice.
-
-The optional explanation has ten scenes: remainder, additive sharing, indexed
-sharing, reconstruction, exposure, MPC, ZK, FHE, Caesar, commit-reveal. Each
-scene can be read without answering; Next is never gated by correctness. An
-optional one-digit field checks understanding, and a separate control shows
-the fixed answer with a one-sentence takeaway. Calculation steps and full reasons
-remain in the free collapsed explanation. There is no practice score, fake Contract, or
-fake Ledger. The numbered sharing example explains the candidate secrets and
-why the private-number terms cancel without requiring a second disclosure.
-
-Free concept explanations are separate from practice. They start as compact
-controls in the top topic disclosure and beside each calculation form, use fixed one-digit
-examples, and show unsolved expressions from only the current team's projected
-Order operands. No hint purchase or tutorial completion is needed. FHE is
-labelled an addition model with separate per-input keys; the ZK explanation
-states that this game trusts a judge holding the solution.
-
-The sudoku scaffold is an explicit participant aid: it applies the selected
-table to twelve cells of the owning team's solution. Four answers remain empty,
-and the trusted judge still checks the complete submitted grid. Tables used in
-the same generation remain selectable with a reuse warning, preserving the
-misuse that sudoku HUNT teaches. The Portal must not fill these four answers,
-fill a HUNT answer or show another team's private material. The HUNT guide may
-count public evidence and display interpolation factors, leaving the arithmetic
-and submission to the participant. Guessing below the threshold remains available
-with the normal attempt cost.
-
-## Local UI harness
-
-```bash
-cd battles/ac26-crypto-battle/dev
-bun install --frozen-lockfile
-bun test
-bun run typecheck
-bun run dev                 # http://localhost:5644
-```
-
-The harness uses the real reducer and Portal components, but fake auth and
-in-memory persistence. It is suitable for responsive UI and interaction checks;
-it is not evidence for tenant isolation, persistence, or deployed Portal E2E.
-
-## Game and security checks
-
-```bash
-cd battles/ac26-crypto-battle/game
-bun install --frozen-lockfile
-bun test
-bun run typecheck
-```
-
-The suite covers reducer behavior, JSON round-trips, method/order compatibility,
-sudoku-relabelling verification, Shamir reconstruction, FHE/MPC behavior,
-reused-relabelling HUNT, team projections, deterministic replay, and the vertical playtest.
-
-From the TenkaCloudChallenge root, also run:
+From the TenkaCloudChallenge root:
 
 ```bash
 make install
 make agent-gate
 ```
 
-## Tuning
-
-`DEFAULT_CONFIG` in `game/src/reducer.ts` owns match duration, phase boundaries,
-Order cadence, batch size and TTLs, ROTATE cooldown, threshold/share count, and
-the score values that apply to every Order.
-
-### The disclosure Order and why the match connects
-
-The existing five-task rotation is preserved. Every other ordinary share slot
-requires publication; the alternating share slot still permits LEAK or PROVE.
-The opener remains unchanged. Disclosure indices advance cyclically through
-1..shareCount, so consecutive disclosures have distinct indices. Keeping five
-slots preserves the established Vigenere/Rotor/RSA issuance schedule.
-
-Publication still requires pressing LEAK. Expiry only penalizes; it publishes
-nothing. Disclosure LEAK pays the Order's full rate, including rush. ROTATE is
-visible before the first disclosure even at zero exposure; its normal cooldown
-and voided-Order penalty still apply. Duel byes can shift disclosure timing per
-team, so read opponents' exposure from public records rather than your schedule.
-`game/src/interaction.test.ts` verifies both competent teams land Shamir HUNTs
-without voluntary LEAKs, and that rotating before the third share prevents these
-attacks at a score cost. This is a deterministic test, not a human playtest.
-
-### Field size and HUNT attempt limits
-
-Treat `config.prime`, `config.maxHuntAttemptsPerTarget`, and
-`config.scores.wrongHunt` as coupled settings. The match defaults are `97`,
-`3`, and `8`; `scores.huntBonus` is `25`. This is a teaching field, not a
-cryptographic security parameter. Smaller numbers make hand calculation easier
-and blind guessing easier too. Never lower the prime or raise the attempt cap
-without checking the scoring tradeoff at the same time.
-
-For each override, check that the prime exceeds `shareCount`, the attempt cap
-is smaller than the prime and no larger than `threshold`, and
-`huntBonus / prime < wrongHunt`. The default-only assertion in
-`game/src/reducer.test.ts` does not validate operator overrides. For the default
-field, one uniform blind guess has an unclamped expected score change of
-`25/97 - 8*96/97`, which is negative; the score floor at zero still applies, so
-the attempt cap is necessary even when a team has no points to lose.
-
-The budget is per attacker, target, and generation; a hit spends an attempt
-and prevents another reward on that pairing. A well-formed wrong answer costs
-`wrongHunt` and spends one attempt. Malformed or unreduced inputs are refused
-without either cost. Shamir HUNT, FHE, and MPC inputs must already be in
-`0..prime-1`: adding the prime to a correct answer is a format error.
-
-Use a replay or fixture with the proposed config to check correct recovery,
-wrong-answer cost, exhausted attempts, and ROTATE before using an override.
-`field.ts`'s library default `P = 2^61 - 1` is for arithmetic tests; the match
-passes `config.prime` explicitly, with `HAND_PRIME = 97` as its default.
-
-### Order economics
-
-Per-rung economics live in `game/src/ladder.ts`'s `CIPHER_RUNGS`, not in
-`DEFAULT_CONFIG`: how many published pairs break a rung, how long its plaintext
-is, and what breaking it pays. They belong to the rung because that is what the
-ladder varies — see the header of that file.
-
-Hint text lives in `game/src/hints.ts`, its prices in `DEFAULT_CONFIG.scores.hintCosts`
-(one entry per level, `[2, 4, 8]`). Two constraints bind them together and
-`game/src/hints.test.ts` enforces both: every task kind carries the same number
-of hints, and the whole ladder must cost less than `contract - contractLeak`
-(30 - 10), or a team that needs help scores better by leaking than by learning —
-the "LEAK is always optimal" failure #659's simulation was rebuilt to remove.
-
-Hint text is served from the plugin, not the Portal bundle, and only for the
-levels a team has bought. Moving it into the Portal's locale tables (where every
-other participant-facing string lives) would ship every hint to the browser and
-make its price apply only to players who do not open devtools.
-
-Change tuning with a replay/fixture assertion that explains the intended player
-effect. Do not tune by changing validation rules or by weakening a test.
-
-**Order distribution is the one knob that decides whether the match is a game.**
-`contractsPerIssue` (6) is sized so a fast team clears the batch and a slow team
-overflows. Too low and nobody ever has to LEAK, so nothing is published and HUNT
-never fires; too high and every team overflows, so being fast stops paying.
-Issue #659 sizes it as "team size + 1 to 2" for the standard three-person team.
-The plugin is handed team ids and never headcount, so a different team size has
-to be re-tuned by hand.
-
-**Match size depends on the backend and is checked by the platform's capacity preflight.**
-The full-play fixture completes every mechanism, buys every hint and uses
-26-character team IDs and epoch times. It spends RPS attempts against all eligible
-opponents, then rotates near match end to exercise pending predictions beside the
-nearly full ledger. At 99 teams the measured peak is **2,968,946 UTF-8 bytes**,
-with **9,604 simultaneous predictions**; the terminal row is **2,887,478 bytes**
-(2026-09-05). These are measurements of this deterministic route, not a universal
-bound over every operation sequence. Duration/batch changes require remeasurement.
-
-Schema 4 replaces repeated IDs in private budget/prediction keys with positions in
-the fixed sorted roster, and stores a ledger Order number only when the original
-ID can be reconstructed exactly. Public projections, successful-HUNT history and
-ledger contents stay identical. Retired-generation counters are discarded only
-when no pending prediction needs them for a refund. Upgrade migrates v1/v2/v3 rows;
-unknown IDs/counts fail migration without rewriting the row. A rollback to schema 3
-must not read schema-4 rows. Finish running matches on their compatible plugin.
-The existing v2 unspent-Schnorr-exposure upgrade restriction still applies.
-
-Schema 5 records the actual own score change on new Shamir and sudoku HUNT
-results, including a penalty limited by the zero-score floor. Upgrade accepts
-schemas 1–4 and keeps older results without a score delta; their outcome remains
-visible, but the Portal reports the delta as unrecorded instead of guessing it
-from today's rules. A schema-4 plugin must not read schema-5 rows after rollback.
-
-`metadata.json` reserves **31 KiB per team + 1,536 bytes**. The platform owns the
-limits below; this problem does not raise them. The local capacity tests retain
-25% headroom and check both the peak and the final state.
-
-| Backend | Platform policy | Default-match capacity |
-| --- | --- | --- |
-| Turso / libSQL | 4 MiB, environment-overridable | 99 teams with at least 25% headroom in the tested route |
-| DynamoDB | 400 KiB item; platform reserves 16 KiB | 12 teams with 25% headroom in the tested route; declaration preflight limit 12 |
-
-## Rock-paper-scissors lifecycle
-
-After the opening, one of every six Order slots is a paired duel. The default
-six-Order batch therefore has one of each mechanism. Teams rotate through a
-circle schedule; an odd roster rotates one bye, which receives an individual
-Order instead. Small batches still receive the other five mechanisms. Late
-unseen slots are consumed but not issued or charged. All deadlines stop at match end.
-
-`rps-commit` accepts only the nonzero order-11 subgroup modulo 23. A second
-commitment is refused. `rps-open` requires the submitting team’s own commitment and a matching hand
-and hiding number; a mismatch is rejected without a penalty. The first accepted
-opening can be accepted before the opponent commits and stays judge-private; the second atomically settles both Orders and
-publishes both openings. Win 30, draw 10, loss 0, configurable through `scores`.
-ROTATE changes long-lived secrets and does not cancel a duel. At timeout, a team
-that finished its current stage gets `duelWin`; the team with a required action
-outstanding receives ordinary `expiredOrder`. No opening is published on timeout.
-
-`Contract.rps` and `TeamState.issuedDuelCount` are optional on old rows; missing
-counters mean zero. Old score configs backfill `duelWin` and `duelDraw` through
-existing config migration. Persisted openings must never be spread into another
-team's projection. Tests cover all 33 first openings and all nine hand pairs.
-The toy has no computational binding security; fairness relies on the judge
-keeping openings private until both arrive. It is commit-reveal, not a full ZK protocol.
-
-## RPS reuse prediction HUNT
-
-`hunt-rps { targetTeamId, duelId, predictedHand }` accepts a hand 1–3 only when the
-target's current duel is sealed and not yet privately opened, and two distinct
-past public duels show equal randomness. Evidence may cross generations; ROTATE
-does not erase it. Any other team may predict, not only the paired opponent.
-Acceptance does not test the hidden answer or assume the current r was reused.
-
-The same `huntAttempts` budget as Shamir HUNT is reserved immediately against the
-target's acceptance generation. A hunter gets one immutable prediction per duel,
-even if the target rotates. Only the hunter sees the pending receipt. Both public
-openings trigger hit `huntBonus` / miss `wrongHunt` once, with score floor zero;
-first opening alone never produces a grade or answer oracle. Forfeit/expiry cancels
-all predictions, shows no hand, and refunds the exact reserved generation.
-
-Browser rehearsal: select `rps-reuse` in the local harness, alpha seat. Use only
-the public rows and free tables to predict bravo, submit, then finish both sides
-of the duel using the controls. Confirm no early grade, the public outcome and
-separate HUNT points. Automated tests cover misses, expiry, rotation, shared budgets,
-malformed inputs, third-team privacy and old projection compatibility.
-
-## Release checks
-
-- game tests and typecheck
-- dev-harness tests and typecheck
-- fresh browser scenarios for the initial, in-progress, and ended states
-- repository `make agent-gate`
-
-A real-AWS walkthrough and an independent third-party playtest are optional
-pre-event rehearsals. Record them when useful, but do not block development or
-merge when they have not run.
-
-The [participant walkthrough](dev/PLAYTHROUGH.ja.md) lists the nine checks
-for the next event, local scenario setup, and a result template. The explanation
-is optional and opens above the board; automatic display is not required.
-Record the Portal Score/Rank refresh and team-name initialization separately
-from local harness evidence.
-
-## Source map
-
-- `game/src/reducer.ts` — state transitions, validation, projection
-- `game/src/types.ts` — JSON-safe state/op/projection contract
-- `coordination/crypto-battle.ts` — TenkaCloud plugin adapter
-- `portal/` — participant slots
-- `dev/` — local browser harness
-- `game/src/vertical-playtest-fixture.ts` — deterministic multi-move fixture
-- `game/src/replay.ts` — public debrief timeline
-
-
-### Visual guidance release check (2026-09-06)
-
-In the local harness, use `fresh` / alpha / Japanese. Select PROVE and table
-`1→3 2→1 3→4 4→2`; derive the four holes from the visible left board. A wrong
-last hole shows PROVE MISS and no celebration. Correcting it shows the awarded
-30 points and total, with a short confetti burst and a persistent result.
-In `hunt-reachable` / bravo, open the HUNT entry. The visible alpha shares at
-indices 3,4,5 have values 36,61,10 and factors 10,-15,6. The displayed operation
-gives -495, whose remainder modulo 97 is 87; submitting it succeeds. This
-rehearsal uses public worksheet values, not alpha's vault. These are fixed local
-harness examples, not event secrets. Game tests also check all 3-of-5 index
-subsets over fields 7,11,97 and exclude duplicate, retired and own-team evidence.
-
-
-### Schema 6: endgame hint booster
-
-The new `endgameBooster` persists one distribution decision. Activation is
-immediate at distribution because #659 §9 defines no separate activation move.
-The ranking is read after ordinary deadline/RPS settlement at the endgame
-boundary and before an operation stamped at that same time. A late tick reads
-that boundary state only to select recipients; its real state still follows the
-original single-tick issuance/expiry path, avoiding newly issued unseen Orders
-and artificial catch-up penalties. Hosts must retain tick → validate → apply.
-
-Versions 1–5 before the boundary migrate to pending. Already-past legacy states
-migrate to an explicit unavailable decision: no prior ranking is stored, and
-current scores cannot reconstruct it. Numeric roster HUNT budgets, pending RPS
-reservations and the public ledger are preserved. Reload/checkpoint round trips
-retain the saved decision. Rollback requires a schema-compatible plugin; do not
-feed schema-6 rows to older plugins.
-
-The optional `reveal-hint.expectedCost` binds the new Portal's displayed price
-to the atomic hint operation. Older clients may omit it; they retain the existing
-server-priced contract. Regular prices remain projected so a local countdown
-can restore them between polls. No score event is created for a zero delta.
-
-Validation: `bun test` and `bun run typecheck` in `game/`, including
-`src/booster.test.ts` (actual reducer/host, existing RPS reservations, JSON
-checkpoints, delay equivalence and real component rendering), plus the local
-browser route recorded in `dev/BOOSTER-PLAYTHROUGH.md`.
-
-### Schema 7: a public-position Vigenère cycle
-
-`caesar-shift` remains the wire task discriminator for compatibility; `rung`
-distinguishes Caesar and Vigenère. New Vigenère tasks and cipher-pair records
-carry public `keyPosition` (zero-based 0..2; displayed as 1..3); compact records
-use `kp`. The derived private key is three integers, visible only on the owning
-team's Order projection. Old Caesar rows keep their scalar keys and omitted
-positions. Schema-6 migration preserves contracts, ledger bytes, HUNT/RPS
-reservations, and the saved booster award; the existing migration chain remains.
-Rollback must not feed schema-7 rows to a pre-Vigenère plugin.
-
-The issue's full-length Vigenère example reveals every key from one known pair.
-This implementation therefore issues one position per Order, with a publicly
-known period and offset, and checks **coverage**, not record count, for the
-participant attack route. A long pair covering a cycle still reveals all keys.
-The server requires public pairs covering all three distinct positions for that
-target/rung/current generation before comparing the submitted key. Repeated
-positions and records from other teams, generations or rungs do not unlock HUNT.
-Caesar retains its existing validator.
-
-This follows the private trusted-judge and time-progression decisions in
-[PR #661](https://github.com/susumutomita/TenkaCloudChallenge/pull/661), and the
-incremental rung contract in [#659 §13](https://github.com/susumutomita/TenkaCloudChallenge/issues/659).
-The owner's [week 2 notes](https://github.com/susumutomita/advanced-cryptography-note/blob/58344a29ea39c25839475ba9a594c115ed89989b/week2/index.html)
-(section 「三つ組は1乗算1回限り」) demonstrate how subtracting public masked values
-exposes relations when a mask repeats. That is related algebra, not a claim
-that Vigenère implements Beaver triples or achieves one-time-pad security.
-No dedicated Vigenère treatment was found in the checked local seminar notes.
-
-The Rotor model below completes the next cipher exercise. The existing
-homomorphic-sum Order already runs in every phase; it is an addition-only
-teaching model and is not full FHE. No additional homomorphic Order is introduced.
-
-
-### Schema 8: Vigenère answer adjudication
-
-A well-formed incorrect Vigenère CIPHER is an accepted move: charge the existing
-`scores.wrongProve` (default 6), persist `Contract.cipherFailed=true`, and publish
-nothing. Subsequent correct answers complete that Order for 0; LEAK remains at
-its normal points, and ROTATE/deadline retain the ordinary one-time expiry
-penalty. Shape/length/alphabet errors are rejected without a failure record.
-This removes the guaranteed six-candidate reward without new point constants,
-clocks or attempt-budget configuration. It does not prevent a lucky first guess.
-
-`TeamState.lastCipher` and the own projection record the actual result/delta;
-SDK `ok` alone is not a correct answer. The browser states the reward forfeiture
-before the answer and offers a zero-point completion after a miss. Schema-7
-migration preserves all Vigenère records, numeric HUNT reservations and booster
-allocation; missing failure flags mean no previously charged miss. Existing
-true flags survive migration, reload, LEAK and ROTATE. Rollback requires a
-schema-8-compatible plugin. Caesar's existing retry adjudication is unchanged.
-
-Free Vigenère material carries the problem's own values, a general formula and
-an unrelated small example. The three paid guide texts, including live-value
-instructions at level 3, reach the Portal only through projected purchased hints.
-
-
-### Schema 9: fixed endgame lightning
-
-`endgameLightning` fixes eligible teams once on the same temporary boundary tick
-used by the hint booster. Actual time advancement remains the original single
-tick, so a late poll does not issue/penalize unseen Orders. The host ticks before
-an operation, fixing eligibility before that operation's score changes. Rank
-cutoff is the second-lowest roster entry for 3+ teams, lowest for two, and none
-for solo practice; ties at the cutoff all receive one card.
-
-Each card is available, armed for one Order, or terminal; targeting writes the
-Order ID, reward and existing deadline atomically with the operation. These
-records survive terminal Order pruning. Only the owning projection exposes the
-card. Ordinary calculation completions share the multiplier, including private
-CIPHER, encrypted addition and masked totals. RPS duel outcomes and all LEAK,
-HUNT, hint and penalty paths keep their existing score rules. No extra award
-occurs at declaration, and no zero-delta score history event is needed.
-
-`answerAttempted=false` is written on newly issued calculation Orders. An accepted
-PROVE miss changes it to true; Vigenère uses its existing `cipherFailed` too.
-Legacy absence is unknown and ineligible, not a made-up empty history. Existing
-CIPHER/FHE/MPC validation rejections still do not write attempt state. A wrong
-answer after declaration does not detach the card. Existing Vigenère forfeiture
-makes the multiplier zero and remains visible; the card is spent on correct
-completion, LEAK, deadline, ROTATE or match end. There is no new penalty/timer.
-
-Migration supports v1–v8, preserving compact roster reservations, Vigenère failure
-flags and booster decisions. Missing allocation is pending before the boundary
-and unavailable after it; it is never reconstructed from a later score. Schema-9
-rows require a compatible plugin on rollback. Verify game/dev tests and types,
-`make agent-gate`, and the `lightning` harness scenario; AWS rehearsal is optional.
-
-
-### Schema 10: small RSA encryption and public-key factor HUNT
-
-Only normal cipher slots scheduled at/after endgame use RSA. Parameters are
-(3,11,3), (5,11,3), (5,13,5), (7,11,7), representing (p,q,e). Derivation stays
-server-side and separated from the Shamir seed domain; n/e project to everyone
-from endgame, while m projects only on its owner's Order until LEAK. The tiny
-set intentionally allows repeats after ROTATE; do not claim key renewal makes
-factoring infeasible. `rsa-pair` stores public n/e/m/c only. Its compact `p` field
-means plaintext, not a prime factor. CIPHER uses the existing BigInt modular
-power helper and failure/zero-retry/lightning scoring paths.
-
-Migration from v9 preserves existing Orders, compact Shamir/sudoku/RPS attempt
-reservations, ledger records, Vigenère failure bits and declared lightning cards.
-Only future normal endgame cipher slots become RSA. Completed Order IDs reuse
-the ledger's exact `teamId-cN` ↔ numeric N codec, while unfamiliar IDs stay
-verbatim and the participant projection returns full strings. Rollback must use
-a plugin that understands all schema-10 encodings, including the RSA hunt log;
-older decoders must not read these rows. No resource, IAM, timer or point value
-is introduced. The measured capacity declaration is updated above.
-
-RSA success reservations encode `r<pairIndex>:<generation>`, where `pairIndex`
-is attacker roster position × fixed roster length + target roster position, written
-in base 36. This preserves ID separation
-without storing long IDs for every attacker/target pair. ROTATE discards only
-retired RSA reservations, since old-generation submissions are rejected anyway.
-Other HUNT history, public records and per-team attacked-generation lists remain.
-
-Every new successful RSA HUNT also appends its exact millisecond timestamp to
-`huntLog`. One compact row per target/generation stores a sorted-roster slot per
-attacker, with zero for absence and an exact offset from the row's base time.
-ROTATE never removes these rows: replay can still name every attacker, target,
-generation and time. Legacy Shamir/sudoku object entries remain readable.
-Earlier schema-10 candidate rows containing only reservations have no recorded
-RSA timestamps; migration preserves those guards but cannot invent past replay
-events. The 99-team test retains all 106,722 new RSA successes across eleven
-generations, including differently timed attacks that require wider encoding.
-
-The RSA HUNT checks distinct prime factors of the current n in either order.
-It never compares an internal canonical d. See `game/src/rsa.test.ts` for the
-complete small parameter/residue sweep, malformed input, private projection,
-actual host scoring, migration, repeated submission and ROTATE regressions;
-`game/src/state-size.test.ts` includes public RSA LEAK and pairwise HUNT traffic.
-The independent packet and browser evidence are in `dev/RSA-READING.md`.
-
-
-### Schema 11: Rotor and lossless HUNT bookkeeping
-
-New normal pressure cipher slots alternate Vigenère and Rotor; issue time fixes
-the task even under a late tick. Existing RSA, Vigenère, scalar Caesar, RPS,
-lightning, booster and failed-CIPHER state retain their rules. A Rotor public pair
-stores only plaintext/ciphertext, owner, generation, Order and publication time.
-The owner's initial positions are derived at projection time, never stored in an
-Order or public artifact. One pair is an entry gate, not a uniqueness predicate.
-Rotor attempts share the existing Shamir/RPS count; Sudoku remains independent.
-
-Schema11 changes the saved representation, with no new public information:
-
-- Public Ledger entries use fixed tuples and the existing sorted match roster.
-  Old short-key objects and literal team/Order/artifact IDs remain readable. Every
-  value, exact publication time, ID and ledger entry order survives projection
-  and replay; unfamiliar IDs are kept verbatim.
-- Shamir, Sudoku, RSA and Rotor successes share the existing dense exact-time
-  audit codec with distinct method tags. If compaction would change a legacy
-  same-millisecond replay order, migration retains that entire old huntLog.
-  Each audit also rejects repeat success,
-  avoiding a duplicate guard. ROTATE retains these records across generations.
-- Classic cipher success and legacy guard-only rows use one bit per fixed roster
-  attacker, grouped by method/target/generation. A guard without a recorded time
-  remains untimed: migration does not invent an event in the replay.
-- The two independent HUNT counters use fixed roster slots and the same lossless
-  safe-integer codec as audit offsets. Counts above3 stay exact. Schema4–10
-  numeric keys are validated; schema1–3 logical keys first use the existing
-  converter. Reserved RPS refunds retain their own old-generation counts.
-- Latest HUNT verdicts use roster tuples. Legacy objects, including absent score
-  deltas, stay readable; an unknown historical delta is never reported as zero.
-
-The schema-11 migration accepted schemas1–10, preserving existing Vigenère failure flags,
-lightning and booster decisions, RPS predictions and current-generation guards.
-Only a guard with a matching real audit record is removed as redundant. Other
-untimed guards remain; the existing retired-RSA-guard policy is unchanged.
-Malformed identities/counts fail without rewriting the saved row. Mixed-version
-workers must respect the declared schema (currently12). Roll back only to a worker that
-understands that version; never relabel a row as an older version. No platform
-configuration or cleanup change accompanies this migration.
-
-
-### Disclosure ROTATE floor (PR #752 follow-up)
-
-Answering a publication-required Order records `disclosureRotationCost` on the
-current team generation, equal to one expiry penalty. ROTATE charges the larger
-of this floor and its existing voided-Order penalties, never both. The marker
-survives JSON reload and Order pruning and clears on rotation. Optional disclosure
-alone does not activate it. The Portal receives `rotateMinimumPenalty` and shows
-it before ROTATE; the publication primer also states this price.
-
-The escape bot now clears other work first, publishes, then immediately rotates
-after each disclosure. It pays the floor even with no unanswered work and scores
-below the race policy. Avoiding exposure remains a paid choice, not a guarantee
-that both human teams will choose to attack. The 90-minute RPS test retains all
-attacks, but its final score is 135 lower (nine disclosure retirement fees of15).
-
-Browser check for PR #752: the real local dev harness at 375×812 rendered
-`LEAK +30` and `LEAKのみ` on the disclosure card, with document scrollWidth375.
-Selecting a disclosure and submitting LEAK showed the minimum15-point ROTATE
-cost before its button. Screenshots: disclosure-mobile-752.png and
-disclosure-rotate-price-752.png in the local verification output directory.
-This used the harness's accelerated, paused scenario, not an AWS event or timed
-human gameplay. The existing sticky Order queue remains visible while scrolling.
-
-### Disclosure retirement schema 12
-
-Schema 12 records the generation-scoped disclosure retirement fee. Migration accepts schemas 1–11, preserving saved scores, Orders and history. A legacy generation has no fee until a new mandatory disclosure is answered; no historical fee is invented. The platform must reject schema-12 rows on older workers, including during rollback. ROTATE charges the larger nominal fee (retirement minimum or voided-Order penalties) once, with the existing zero score floor.
+For game or participant-flow changes, run the owning packages:
+
+```bash
+cd battles/ac26-crypto-battle/game
+bun install --frozen-lockfile --ignore-scripts
+bun test
+bun run typecheck
+cd ../dev
+bun install --frozen-lockfile --ignore-scripts
+bun test
+bun run typecheck
+bun run dev
+```
+
+The full game suite includes long capacity traces. CI chooses ordinary and capacity checks based on affected files; do not remove required coverage to shorten a run. For a documentation-only change, check the documented facts and links plus the catalog gate.
+
+The [preview guide](dev/README.md) explains scenarios and participant interactions. The harness uses real game/Portal code with fake auth and in-memory state. It can validate inputs, results, retention, language and layout; it cannot validate production isolation, official persistence or live AWS permissions. Rehearse those in the intended event when needed, and record exactly what ran. Historical test counts and screenshots are evidence of that revision, not a current completion claim.
