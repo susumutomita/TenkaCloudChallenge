@@ -19,7 +19,7 @@ These steps describe operator work; the commands below run only local validation
 | DynamoDB | 12 |
 | libSQL / Turso | 99 (the catalog maximum) |
 
-These are deployment admission limits for standard platform-generated team IDs. The [metadata](metadata.json) declares a state budget of `31 KiB × teams + 1,536 bytes`. TenkaCloud reserves space below DynamoDB's 400 KiB item ceiling and adds its own score envelope; 12 teams fit. SQL uses a default 4 MiB **platform policy**, not a libSQL/Turso product limit, permitting the catalog maximum of 99. The problem's budget calculation is covered by [state-size.test.ts](game/src/state-size.test.ts). Choose the backend before allocating a larger roster; deployment preflight checks the actual roster and configured budget and rejects teams above that limit.
+These are deployment admission limits for standard platform-generated team IDs. The [metadata](metadata.json) declares a state budget of `31 KiB × teams + 1,536 bytes`. TenkaCloud reserves space below DynamoDB's 400 KiB item ceiling and adds its own score envelope; 12 teams fit. SQL uses a default 4 MiB **platform policy**, not a libSQL/Turso product limit, permitting the catalog maximum of 99. The problem's budget calculation is covered by [state-size.test.ts](game/src/state-size.test.ts). Before assigning teams on SQL, check whether the platform environment overrides `COORDINATION_STATE_MAX_BYTES`; a smaller configured budget can admit fewer teams. Choose the backend before allocating a larger roster; deployment preflight checks the actual roster and configured budget and rejects teams above that limit.
 
 ## Pacing and topic selection
 
