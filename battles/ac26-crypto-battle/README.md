@@ -47,9 +47,9 @@ Open **HUNT**, choose an opponent and a method with available evidence, then cal
 | --- | --- |
 | Three distinct shares from one team and generation | The original secret |
 | A Caesar original/encrypted pair | The shift key |
-| Vigenère pairs covering all three key positions | The three key values |
-| Rotor original/encrypted pairs | The two initial wheel positions |
-| RSA public modulus | Its two distinct prime factors; no LEAK is needed |
+| Vigenère, which repeats three shift keys: pairs covering all three positions | The three key values |
+| Rotor, which uses two moving wiring wheels: original/encrypted pairs | The two initial wheel positions |
+| RSA, which encrypts using multiplication and remainders: the public divisor n | Its two distinct prime factors; no LEAK is needed |
 | Past reused hiding numbers and a currently sealed RPS hand | The predicted hand |
 
 A share is an index-and-value pair used to distribute a secret. The standard game makes five shares; three different indices from the same secret's group, called a **generation**, reconstruct it. Repeating one index does not count twice.
@@ -58,12 +58,13 @@ The HUNT form shows the reward, deduction and remaining attempts for that method
 
 ## What you can explore
 
-New matches mix topics after the opening Orders, so RSA and other later techniques need not wait until the end of the match.
+New matches mix topics after the first two Orders, so RSA and other later techniques need not wait until the end of the match.
 
-- **Encryption and decryption:** Caesar, Vigenère, Rotor, an Enigma model, and textbook RSA.
-- **Computing with hidden values:** secret sharing, masked totals (MPC), and adding ciphertexts without decrypting them.
-- **Proofs and signatures:** Schnorr zero-knowledge calculations, elliptic-curve addition, ECDSA, and parts of SNARK/STARK verification.
-- **Other ideas:** comparing equivalent programs (iO), anamorphic ciphertext selection and commit-reveal rock-paper-scissors.
+- **Encryption and decryption:** shift symbols with Caesar or Vigenère, follow moving wires with Rotor or the Enigma model, and multiply with remainders using RSA. Decryption recovers the original message.
+- **Computing with hidden values:** distribute a secret into shares, combine private inputs without revealing them (MPC), and add ciphertexts without decrypting them (homomorphic addition).
+- **Proofs:** demonstrate knowledge of a secret number without sending it (Schnorr zero-knowledge proof), or inspect calculation constraints used in SNARK/STARK proof systems.
+- **Signatures:** add points satisfying a particular equation (an elliptic curve), then use that operation in ECDSA to make a signature—a mark on data checked with a key that can be shared publicly.
+- **Other ideas:** compare programs whose internal workings should be hard to distinguish (indistinguishability obfuscation, iO), hide an extra message inside an ordinary ciphertext (anamorphic encryption), or seal and reveal a rock-paper-scissors hand.
 
 Encryption and decryption are separate Orders. New anamorphic selection, decryption and probability Orders also complete independently. Schnorr's commitment and response are two steps of one proof, not encryption followed by decryption.
 
@@ -86,3 +87,9 @@ Some endgame teams receive hint support or a one-use calculation multiplier. An 
 | Inspect the problem definition | [metadata.json](metadata.json) |
 
 Runtime and scores use TenkaCloud's existing coordination service. No per-team game server is created. The local preview uses in-memory state and fake authentication; it does not verify official score persistence, live AWS permissions or deployed behavior. See the operator guide for resources, cleanup and verification boundaries.
+
+## Resources and cleanup
+
+- Each team deployment creates a participant viewer IAM role. Enabling the optional item also creates one Standard/String Parameter Store parameter per team. The default Region is `ap-northeast-1`; allow 90 minutes of play plus event preparation.
+- The existing platform's API/Lambda calls, score/state storage, logs, hosting and network usage can incur costs. The optional item adds no dedicated Lambda, KMS key or S3 bucket. A zero total bill is not guaranteed.
+- After the event, delete the problem stacks through TenkaCloud to remove the roles and parameters; remove the match state and its secret through the platform lifecycle when no longer needed. Shared hosting, logs and storage remain until their own retention or teardown removes them and may continue billing. See the [operator guide](OPERATOR.md) for details.
