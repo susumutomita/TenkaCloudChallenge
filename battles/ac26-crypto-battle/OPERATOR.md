@@ -7,12 +7,19 @@ This guide describes current operation. For scheduling, staffing and event prepa
 ## Before an event
 
 1. Use compatible versions of TenkaCloud and this problem pack. The platform must support the coordination plugin, score delivery and team projections.
-2. Allocate teams and time. Default play is 90 minutes, designed around four-person teams; allow additional time for joining, the first mission and debriefing.
+2. Allocate teams within the backend limits below. Default play is 90 minutes, designed around four-person teams; allow additional time for joining, the first mission and debriefing.
 3. Choose pacing and whether to enable the optional score-steal exercise **before** deploying the pack. Complete all team deployments before creating the match.
 4. Rehearse the first mission, one completed Order, one HUNT, an expiry and the official scoreboard. Check both Japanese and English if the event needs them.
 5. Start a fresh match. Ready normally starts play only after all teams are ready. The waiting room also provides an explicit action to start without everyone.
 
 These steps describe operator work; the commands below run only local validation, not deployment.
+
+| State-storage backend | Maximum teams per match |
+| --- | --- |
+| DynamoDB | 12 |
+| libSQL / Turso | 99 (the catalog maximum) |
+
+These are deployment admission limits. The [metadata](metadata.json) declares a state budget of `31 KiB × teams + 1,536 bytes`. With the 400 KiB DynamoDB limit this admits 12 teams; libSQL's 4 MiB limit permits the catalog maximum of 99. The admission calculation is covered by [state-size.test.ts](game/src/state-size.test.ts). Choose the backend before allocating a larger roster; a deployment preflight rejects a roster above its limit.
 
 ## Pacing and topic selection
 

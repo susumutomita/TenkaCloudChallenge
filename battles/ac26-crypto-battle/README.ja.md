@@ -88,6 +88,25 @@ HUNT画面に、方式ごとの得点・減点・残り回数が表示されま�
 
 進行と採点はTenkaCloudの既存の連携サービスで処理し、チームごとのゲームサーバーは作りません。ローカルプレビューはメモリ上の状態と仮の認証で動き、公式得点の保存・実AWS権限・デプロイ先の動作を検証するものではありません。作成するリソース、片付け、検証の範囲は運営ガイドに記載しています。
 
+### ローカルで検証する
+
+リポジトリのルートから、カタログ・ゲーム・プレビューを検証します。
+
+```bash
+make install
+make agent-gate
+cd battles/ac26-crypto-battle/game
+bun install --frozen-lockfile --ignore-scripts
+bun test
+bun run typecheck
+cd ../dev
+bun install --frozen-lockfile --ignore-scripts
+bun test
+bun run typecheck
+```
+
+ゲームの全テストには時間のかかる容量検証も含みます。画面を操作する場合は`dev/`から`bun run dev`を実行します。シナリオと検証の範囲は[プレビューガイド](dev/README.md)を参照してください。
+
 ## 作成するリソースと片付け
 
 - 各チームのデプロイで、参加者の閲覧用IAMロールを作ります。追加アイテムを有効にすると、チームごとにStandard/StringのParameter Storeパラメータも1個作ります。標準リージョンは`ap-northeast-1`、試合は90分で、別途準備時間を見込みます。

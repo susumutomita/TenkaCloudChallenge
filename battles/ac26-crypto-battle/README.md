@@ -88,6 +88,25 @@ Some endgame teams receive hint support or a one-use calculation multiplier. An 
 
 Runtime and scores use TenkaCloud's existing coordination service. No per-team game server is created. The local preview uses in-memory state and fake authentication; it does not verify official score persistence, live AWS permissions or deployed behavior. See the operator guide for resources, cleanup and verification boundaries.
 
+### Local verification
+
+From the repository root, validate the catalog, game and preview:
+
+```bash
+make install
+make agent-gate
+cd battles/ac26-crypto-battle/game
+bun install --frozen-lockfile --ignore-scripts
+bun test
+bun run typecheck
+cd ../dev
+bun install --frozen-lockfile --ignore-scripts
+bun test
+bun run typecheck
+```
+
+The full game suite includes long capacity traces. For interactive checks, run `bun run dev` from `dev/`; see the [preview guide](dev/README.md) for scenarios and verification limits.
+
 ## Resources and cleanup
 
 - Each team deployment creates a participant viewer IAM role. Enabling the optional item also creates one Standard/String Parameter Store parameter per team. The default Region is `ap-northeast-1`; allow 90 minutes of play plus event preparation.
