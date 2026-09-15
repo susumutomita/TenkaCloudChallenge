@@ -33,8 +33,10 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
   const [nonce,setNonce]=useState<number|null>(null);
   const [a,setA]=useState("");
   const [z,setZ]=useState("");
+  const [commitError,setCommitError]=useState(false);
   const storageKey=`tc-schnorr:${teamId}:${order.id}`;
   useEffect(()=>{
+    setCommitError(false);
     if(proof.pending) {
       if(secret!==null && nonce!==null && power(2,secret)===proof.pending.y && power(2,nonce)===proof.pending.a) return;
       setSecret(null); setNonce(null); setZ("");
@@ -55,10 +57,11 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
     setSecret(x??null);setNonce(draw());
   },[storageKey,proof.y,proof.pending?.a,proof.pending?.y]);
   const matchesPending = nonce!==null && secret!==null && (!proof.pending || (power(2,nonce)===proof.pending.a && power(2,secret)===proof.pending.y));
-  const valid=(v:string)=>/^\d+$/.test(v)&&Number(v)<=10;
-  const correctCommitment = nonce !== null && /^\d+$/.test(a) && Number(a) === power(2,nonce);
+  const valid=(v:string,max=10)=>/^\d+$/.test(v)&&Number(v)<=max;
   const commit=()=>{
-    if(nonce===null||secret===null||!correctCommitment)return;
+    if(busy||nonce===null||secret===null||!valid(a,22))return;
+    if(Number(a)!==power(2,nonce)) { setCommitError(true); return; }
+    setCommitError(false);
     try { sessionStorage.setItem(storageKey,JSON.stringify({x:secret,r:nonce})); } catch { /* Current tab can continue using its witness. */ }
     onSubmit({kind:"schnorr-commit",contractId:order.id,y:proof.y,a:Number(a)});
   };
@@ -82,10 +85,11 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
         <tr><th>r</th>{Array.from({length:11},(_,i)=><td key={i}>{i}</td>)}</tr>
         <tr><th>2<sup>r</sup> mod 23</th>{Array.from({length:11},(_,i)=><td key={i}>{power(2,i)}</td>)}</tr>
       </tbody></table>
-      <label>{ja?"計算した余り a（0〜22）":"Calculated remainder a (0–22)"} <input aria-label="Schnorr a" inputMode="numeric" value={a} onChange={e=>setA(e.target.value)} /></label>
-      {a !== "" && !correctCommitment && <p role="alert">{ja?"表の r の列を確認してください。a が式の答えと違います。送る前に直せます。":"Check the r column: a does not match the equation. Correct it before sending."}</p>}
-      <p>{ja?"式の答えを入力すると、次へ進めます。":"Enter the equation’s answer to continue."}</p>
-      <button type="button" className="tc-submit-small" disabled={busy||secret===null||!correctCommitment} onClick={commit}>{ja?"① 計算結果を送って、次へ":"① Send calculation and continue"}</button>
+      <label>{ja?"計算した余り a（0〜22）":"Calculated remainder a (0–22)"} <input aria-label="Schnorr a" inputMode="numeric" value={a} onChange={e=>{setA(e.target.value);setCommitError(false);}} /></label>
+      {a !== "" && !valid(a,22) && <p role="alert">{ja?"0〜22の整数を1個入力してください。":"Enter one integer from 0 to 22."}</p>}
+      {commitError && <p role="alert">{ja?"計算が合いません。2をr回掛け、23で割った余りをもう一度確認してください。まだ送信されておらず、減点もありません。":"The calculation does not match. Multiply 2 by itself r times and check the remainder modulo 23 again. Nothing was sent and no points were deducted."}</p>}
+      <p>{ja?"数字を入力してボタンを押すと計算を確認します。合っていればaを送信し、次の数eを受け取ります。":"Enter a number and press the button to check it. If it matches, a is sent and you receive the next number e."}</p>
+      <button type="button" className="tc-submit-small" disabled={busy||secret===null||nonce===null||!valid(a,22)} onClick={commit}>{ja?"① 計算結果を確認して、次へ":"① Check calculation and continue"}</button>
     </> : proof.pending.used ? <p role="status">{(proof.pending.outcome === "hit" || (!proof.pending.outcome && order.status === "completed")) ? (ja?"模型の検証式が一致しました。秘密を知っていたことを保証する結果ではありません。":"The model equation matched. This result does not certify prior knowledge of the secret.") : (ja?"検証失敗：送った応答は検証式を満たしませんでした。この証明には再回答できません。":"Verification failed: your response did not satisfy the equation. This proof cannot be retried.")}</p> : <>
       <div className="tc-schnorr-progress" role="status"><strong>{ja?"1回目の送信が完了。あと1回で証明完了です。":"First submission complete. One more submission finishes the proof."}</strong></div>
       <h4>{ja?"送信 2 / 2：届いたeを使って、最後の答えを計算":"Submission 2 / 2: calculate the final answer using the returned e"}</h4>
@@ -104,7 +108,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
         <li>{ja?`今回の r は ${nonce??"…"}。`:`Your r is ${nonce??"…"}.`}</li>
         <li>{ja?`2を${nonce??"r"}回掛ける（0回なら1）。`:`Multiply 2 by itself ${nonce??"r"} times (zero times means 1).`}</li>
         <li>{ja?"その数を23で割った余りを求める。":"Find the remainder after dividing that number by 23."}</li>
-        <li>{ja?"余りを「計算した余り a」欄へ入力し、「① 計算結果を送って、次へ」を押す。":"Enter the remainder in “Calculated remainder a” and press “① Send calculation and continue”."}</li>
+        <li>{ja?"余りを「計算した余り a」欄へ入力し、「① 計算結果を確認して、次へ」を押す。":"Enter the remainder in “Calculated remainder a” and press “① Check calculation and continue”."}</li>
       </ol>
     </aside>}
     <details><summary>{ja?"なぜこれがゼロ知識？ 図と式で確認":"Why zero knowledge? Follow the equations"}</summary>

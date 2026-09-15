@@ -68,6 +68,8 @@ New matches mix topics after the first two Orders, so RSA and other later techni
 
 Encryption and decryption are separate Orders. New anamorphic selection, decryption and probability Orders also complete independently. Schnorr's commitment and response are two steps of one proof, not encryption followed by decryption.
 
+For Schnorr's first step, any integer from 0 to 22 enables the button. The calculation is checked when pressed; a mismatch keeps the input editable without sending a commitment or deducting points. A matching result starts the proof conversation. The final response is scored by the verifier.
+
 These are small-number teaching models, not secure cryptographic implementations. The [model guide](docs/MODELS.md) explains what each exercise demonstrates and what it omits. Saved older matches can retain different rules and combined worksheets.
 
 ## Rock-paper-scissors and optional support
