@@ -1,0 +1,285 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Office Link Gate: complete all four knowledge checks before receiving one flag. No real document changes."
+Parameters:
+  NamePrefix:
+    Type: String
+    AllowedPattern: ^tc-[a-z0-9]+(-[a-z0-9]+)+$
+    MaxLength: 84
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: ^[0-9]{12}$
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+  PlayKey:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  ProgressKey:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  CompletionSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+Resources:
+  WorkshopLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${NamePrefix}-office
+      RetentionInDays: 1
+  WorkshopRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteOwnLogs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::GetAtt:
+                    - WorkshopLogs
+                    - Arn
+  Workshop:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 5
+      LoggingConfig:
+        LogGroup:
+          Ref: WorkshopLogs
+      Role:
+        Fn::GetAtt:
+          - WorkshopRole
+          - Arn
+      Environment:
+        Variables:
+          PLAY_KEY:
+            Ref: PlayKey
+          PROGRESS_KEY:
+            Ref: ProgressKey
+          FLAG_COMPLETION:
+            Ref: CompletionSecret
+      Code:
+        ZipFile: |
+          """Sequential learning Challenge. One official flag only after every check."""
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import os
+          from urllib.parse import parse_qs
+
+          WEB_HTML = ""
+          WEB_JS = ""
+          WEB_CSS = ""
+          CHECKS = ("completion",)
+
+
+          def text(lang, ja, en):
+              return en if lang == "en" else ja
+
+
+          def secret(name):
+              value = os.environ[name]
+              if len(value) < 24:
+                  raise ValueError("Workshop secrets must contain at least 24 characters")
+              return value
+
+
+          def token(stage):
+              signature = hmac.new(secret("PROGRESS_KEY").encode(), f"office-link-gate:v1:{stage}".encode(), hashlib.sha256).hexdigest()
+              return f"{stage}.{signature}"
+
+
+          def stage_of(receipt):
+              if receipt == "":
+                  return 0
+              if not isinstance(receipt, str):
+                  return None
+              for stage in range(1, 5):
+                  if hmac.compare_digest(receipt.encode(), token(stage).encode()):
+                      return stage
+              return None
+
+
+          def lesson(stage, lang):
+              t = lambda ja, en: text(lang, ja, en)
+              lessons = [
+                  {"title": t("同じ場所を見よう", "Look in the same place"),
+                   "concept": t("リージョンは、AWSの設備がある地域。東京と大阪は別の場所なので、同じ名前の資料でも置き場所を確かめます。", "An AWS region is a place where AWS runs its equipment. Tokyo and Osaka are different locations: check where an item lives, even if its name matches."),
+                   "example": t("例：横浜の受付で預かった荷物は、静岡の受付にはありません。まず場所をそろえます。", "Example: a parcel at reception in Yokohama is not at reception in Shizuoka. First agree on the location."),
+                   "question": t("仲間は『大阪で案内を保存した』と言っています。東京を探してもありません。最初に何をする？", "Your teammate saved the invitation in Osaka. You cannot find it in Tokyo. What do you do first?"),
+                   "options": [t("探す場所を大阪へそろえる", "Look in Osaka too"), t("案内の名前を変える", "Rename the invitation"), t("案内を削除する", "Delete the invitation")],
+                   "hints": [t("同じ名前でも、場所が違えば別のものです。", "The same name in another place can refer to something else."), t("例：棚Aの荷物を棚Bで探しても見つかりません。", "Example: an item on shelf A is not on shelf B."), t("仲間が保存した地域を読む → 自分が探している地域と比べる → 場所を合わせる選択肢を選ぶ。", "Read where your teammate saved it → compare where you searched → choose the action that aligns locations.")]},
+                  {"title": t("必要なことだけ許可しよう", "Allow only what is needed"),
+                   "concept": t("権限は『誰が、何に、何をしてよいか』の約束。AWSではIAMという仕組みで決めます。読む人へ、編集や他の資料の閲覧まで許可する必要はありません。", "A permission says who may do what to which resource. AWS IAM manages these rules. A reader does not necessarily need editing rights or access to other documents."),
+                   "example": t("例：来場者にメニューを見せても、店の売上表は見せません。", "Example: guests may read a menu without seeing the restaurant's sales records."),
+                   "question": t("来場者は案内を読むだけ。社内名簿は非公開です。どの権限にする？", "Visitors only need to read the invitation. The staff list is private. Which permission fits?"),
+                   "options": [t("全部の資料を編集できる", "Edit every document"), t("案内だけ読める", "Read only the invitation"), t("何も読めない", "Read nothing")],
+                   "hints": [t("困りごとの解消と、見せない資料の保護を両立します。", "Solve the access problem while protecting private documents."), t("例：メニューだけ読めれば、注文の相談ができます。", "Example: reading only the menu is enough to discuss an order."), t("必要な資料を読む → 必要な操作を読む → 両方だけを許可する選択肢を選ぶ。", "Find the needed document → find the needed action → allow only that combination.")]},
+                  {"title": t("控えの中身を確かめよう", "Check what a backup contains"),
+                   "concept": t("バックアップは、ある時刻の内容を保存した控え。復旧は、その控えから戻すことです。AWSのS3には過去版を残すバージョニングがあります。新しい控えでも、消えた後の内容なら元には戻りません。", "A backup is a copy saved at a particular time. Recovery restores a copy. AWS S3 versioning can retain older versions. The newest copy may already contain a deletion."),
+                   "example": t("例：9:10に内容を更新、9:20に削除。9:15の正常な控えなら更新後の内容を戻せます。", "Example: content was updated at 9:10 and deleted at 9:20. An intact 9:15 copy retains the update."),
+                   "question": t("12:10に会場を青へ変更。12:20に削除。12:05は赤、12:15は青、12:25は空です。どの控えを戻す？", "The venue changed to Blue at 12:10, then was deleted at 12:20. The 12:05 copy says Red, 12:15 says Blue, and 12:25 is empty. Which copy should you restore?"),
+                   "options": ["12:25", "12:05", "12:15"],
+                   "hints": [t("欲しいのは、消える前の一番新しい正常な内容です。", "You need the latest intact content from before deletion."), t("例：消えた後の控えに戻すと、空のままです。", "Example: restoring a copy made after deletion may restore an empty page."), t("削除時刻を読む → それより前の控えを比べる → 会場変更が入ったものを選ぶ。", "Read the deletion time → compare earlier copies → choose one containing the venue update.")]},
+                  {"title": t("直った証拠を仲間へ渡そう", "Hand over evidence that it works"),
+                   "concept": t("操作が成功した表示だけでなく、必要な結果が出たか確かめます。読む人2人・操作する人・確認する人の4人で相談し、次は担当を交代します。", "Check the required outcome, not only a successful operation message. Four teammates take two reader roles, one operator role and one checker role, then rotate."),
+                   "example": t("例：案内が読めても、会場が古ければ復旧完了ではありません。内容まで見ます。", "Example: a readable invitation with an old venue is not fully recovered. Check its contents."),
+                   "question": t("別の拠点へ復旧した案内を共有しました。完了前に、何を確かめて引き継ぐ？", "You shared a recovered invitation with another office. What should you check before handing over?"),
+                   "options": [t("成功メッセージだけを読む", "Only read the success message"), t("宛先・読める資料と操作・戻った内容を仲間と確認する", "Check the destination, allowed documents and actions, and restored contents together"), t("管理者権限を配って終了する", "Give everyone administrator access and finish")],
+                   "hints": [t("ここまでの3つの知識を、結果の確認に使います。", "Use the three concepts you learned to check the result."), t("例：案内は読めるが名簿も読めるなら、共有範囲が広すぎます。", "Example: if visitors can read the invitation and the staff list, sharing is too broad."), t("届け先を確認 → 必要な権限だけか確認 → 復旧した内容を確認 → この3つを含む引き継ぎを選ぶ。", "Check destination → check only needed access is allowed → check restored content → choose a handoff covering all three.")]},
+              ]
+              return lessons[stage]
+
+
+          def response(status, body, mime="application/json; charset=utf-8"):
+              return {"statusCode": status, "headers": {"content-type": mime, "cache-control": "no-store", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"}, "body": body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)}
+
+
+          def view(stage, lang):
+              result = {"stage": stage, "total": 4, "done": stage == 4, "token": token(stage) if stage else ""}
+              if stage == 4:
+                  result["flag"] = "TC{" + secret("FLAG_COMPLETION") + "}"
+              else:
+                  result["lesson"] = lesson(stage, lang)
+              return result
+
+
+          def handler(event, context=None):
+              pieces = event.get("rawPath", "/").split("/", 2)
+              if len(pieces) != 3 or not hmac.compare_digest(pieces[1].encode(), secret("PLAY_KEY").encode()):
+                  return response(404, {"error": "not_found"})
+              route = pieces[2]
+              method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+              lang = "en" if parse_qs(event.get("rawQueryString", "")).get("lang") == ["en"] else "ja"
+              if method == "GET":
+                  assets = {"": (WEB_HTML, "text/html"), "app.js": (WEB_JS, "text/javascript"), "style.css": (WEB_CSS, "text/css")}
+                  return response(200, assets[route][0], assets[route][1] + "; charset=utf-8") if route in assets else response(404, {"error": "not_found"})
+              if method != "POST" or route not in ("api/state", "api/answer"):
+                  return response(405, {"error": "method_not_allowed"})
+              body = event.get("body") or ""
+              if len(body) > 8192:
+                  return response(413, {"error": "too_large"})
+              try:
+                  if event.get("isBase64Encoded"):
+                      body = base64.b64decode(body, validate=True).decode("utf-8")
+                  data = json.loads(body)
+              except (ValueError, UnicodeError):
+                  return response(400, {"error": "invalid_json"})
+              if not isinstance(data, dict):
+                  return response(400, {"error": "invalid_submission"})
+              stage = stage_of(data.get("token", ""))
+              if stage is None:
+                  return response(403, {"error": "invalid_progress"})
+              if route == "api/state":
+                  return response(200, view(stage, lang))
+              if stage == 4 or data.get("stage") != stage or type(data.get("stage")) is not int:
+                  return response(409, {"error": "wrong_stage"})
+              if data.get("choice") != ("0", "1", "2", "1")[stage]:
+                  return response(200, {"correct": False, "message": text(lang, "もう一度、例と今回の場面を比べて相談しよう。減点はありません。", "Compare the example with this situation and discuss it again. No points are lost.")})
+              return response(200, {"correct": True, **view(stage + 1, lang)})
+
+          WEB_HTML = '<!doctype html>\n<html lang="ja">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="color-scheme" content="light">\n  <title>つながるオフィスの準備 / Office Link Preparation</title>\n  <link rel="stylesheet" href="style.css">\n  <script src="app.js" defer></script>\n</head>\n<body><div id="app"><p>画面を準備しています / Loading…</p></div><noscript>JavaScriptを有効にしてください / Enable JavaScript to play.</noscript></body>\n</html>\n'
+
+          WEB_JS = '"use strict";\nconst lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja";\ndocument.documentElement.lang = lang;\nconst t = (ja, en) => lang === "en" ? en : ja;\nconst root = document.getElementById("app");\nconst key = `office-link-gate:${location.pathname}`;\nlet receipt = "", current = null, selected = null, hintCount = 0, pending = false, feedback = "", storageAvailable = true;\ntry { receipt = localStorage.getItem(key) || ""; } catch { storageAvailable = false; }\nfunction el(tag, attrs = {}, ...children) {\n  const n = document.createElement(tag);\n  for (const [k, v] of Object.entries(attrs)) {\n    if (k.startsWith("on")) n.addEventListener(k.slice(2).toLowerCase(), v);\n    else if (k === "disabled") n.disabled = v;\n    else n.setAttribute(k, v);\n  }\n  children.flat().filter(c => c !== null && c !== undefined).forEach(c => n.append(typeof c === "string" ? document.createTextNode(c) : c));\n  return n;\n}\nconst button = (label, action, cls = "primary") => el("button", { type: "button", class: cls, onclick: action, disabled: pending }, label);\nasync function copy(value, event) {\n  const node = event.currentTarget;\n  try { await navigator.clipboard.writeText(value); node.textContent = t("コピーしました", "Copied"); }\n  catch { feedback = t("コピーできません。表示中の文字列を選択してください。", "Copy failed. Select the displayed text instead."); render(); }\n}\nasync function request(route, payload) {\n  const r = await fetch(`api/${route}?lang=${lang}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(10000) });\n  if (!r.ok) throw new Error(r.status === 403 ? "progress" : "network");\n  return r.json();\n}\nfunction accept(result) {\n  current = result; receipt = result.token; selected = null; hintCount = 0;\n  try { localStorage.setItem(key, receipt); } catch { storageAvailable = false; }\n}\nasync function restore(value = receipt) {\n  pending = true; render();\n  try { accept(await request("state", { token: value })); feedback = ""; }\n  catch (e) { feedback = e.message === "progress" ? t("このチームの引き継ぎコードを確認してください。最初から学び直すこともできます。", "Check this team\'s handoff code. You can also start learning again.") : t("接続できません。再試行するか運営者へ連絡してください。", "Could not connect. Retry or contact the host."); }\n  finally { pending = false; render(); }\n}\nasync function submit() {\n  if (pending) return;\n  if (selected === null) { feedback = t("相談して、答えを1つ選んでください。", "Discuss and choose one answer."); render(); return; }\n  pending = true; feedback = ""; render();\n  try {\n    const result = await request("answer", { token: receipt, stage: current.stage, choice: selected });\n    if (result.correct === true) { accept(result); feedback = t("確認できました。次は担当を交代しよう。", "Checked! Swap roles for the next step."); }\n    else feedback = result.message;\n  } catch { feedback = t("送信できません。選択は残しています。再試行してください。", "Could not submit. Your choice is preserved. Retry."); }\n  finally { pending = false; render(); document.getElementById("feedback")?.focus(); }\n}\nfunction render() {\n  root.replaceChildren(el("header", { class: "topbar" }, el("span", { class: "brand" }, "TENKACLOUD / GATE"), el("a", { href: `?lang=${lang === "ja" ? "en" : "ja"}` }, lang === "ja" ? "English" : "日本語")));\n  const main = el("main"); root.append(main);\n  main.append(el("p", { class: "eyebrow" }, t("4人で準備 → 修了 → GameDay", "Prepare together → graduate → GameDay")), el("h1", {}, t("チームで、準備をそろえよう。", "Get your team ready.")));\n  if (feedback) main.append(el("p", { id: "feedback", class: "feedback", role: "status", tabindex: "-1" }, feedback));\n  if (!storageAvailable) main.append(el("p", { class: "notice" }, t("進捗を保存できません。端末を閉じる前に引き継ぎコードを控えてください。", "Progress cannot be saved. Keep your handoff code before closing the browser.")));\n  if (!current) {\n    main.append(button(t("読み込み直す", "Retry loading"), () => restore()), button(t("最初から学ぶ", "Start learning again"), () => restore(""), "secondary"));\n    return;\n  }\n  if (current.done) {\n    main.append(el("section", { class: "celebration" }, el("h2", {}, t("4つの確認、修了！", "All four checks completed!")), el("p", {}, t("ポータルの「つながるオフィスの準備」へ修了の合言葉を提出。100点と修了が反映されたら、問題一覧を更新してGameDayへ進みます。", "Submit your completion passphrase to Office Link Preparation in the portal. Once the 100 points and completion appear, refresh the problem list and open GameDay."))));\n    main.append(el("article", { class: "receipt" }, el("code", {}, current.flag), button(t("修了の合言葉をコピー", "Copy completion passphrase"), e => copy(current.flag, e))));\n  } else {\n    const l = current.lesson;\n    main.append(el("p", { class: "eyebrow" }, `${t("確認", "Check")} ${current.stage + 1} / 4`), el("p", { class: "role-tip" }, t(`説明担当は${current.stage + 1}人目。残りの3人は例を読み、操作し、結果を確かめます。`, `Teammate ${current.stage + 1} explains. The other three read the example, operate and check the result.`)));\n    main.append(el("section", { class: "lesson" }, el("h2", {}, l.title), el("p", { class: "lead" }, l.concept), el("p", {}, l.example)));\n    main.append(el("section", { class: "control-room" }, el("fieldset", {}, el("legend", {}, l.question), el("div", { class: "choices" }, l.options.map((label, i) => el("label", { class: "choice" }, el("input", { type: "radio", name: "choice", value: String(i), ...(selected === String(i) ? { checked: "" } : {}), disabled: pending, onchange: () => { selected = String(i); } }), el("span", {}, label))))), el("p", {}, t("選ぶ前に、なぜそう思うか仲間へ一言で伝えよう。", "Before choosing, tell your teammates why in one sentence.")), button(pending ? t("確認中…", "Checking…") : t("相談した答えを確かめる", "Check our answer"), submit), el("div", { class: "hint-area" }, button(t(`助け舟（無料） ${hintCount}/3`, `Free hint ${hintCount}/3`), () => { hintCount = Math.min(3, hintCount + 1); render(); }, "secondary"), l.hints.slice(0, hintCount).map(h => el("p", {}, h)))));\n    main.append(el("p", { class: "boundary" }, t("今は準備中。4つすべて確認してから、修了の合言葉を1つ受け取ります。ここでの試行・ヒントは減点なし。", "This is preparation. Complete all four checks to receive one completion passphrase. Attempts and hints here have no penalty.")));\n  }\n  const input = el("input", { class: "handoff-code", id: "handoff", autocomplete: "off", maxlength: "100", disabled: pending });\n  main.append(el("details", { class: "handoff" }, el("summary", {}, t("別の端末へ担当を交代する", "Hand over to another device")), el("p", {}, t("同じ端末なら人だけ交代。別端末では同じGameUrlを開き、このコードで続きを受け取ります。ポータルへ提出する合言葉とは別です。", "On the same device, swap people. On another device, open the same GameUrl and import this code. It is not a portal scoring passphrase.")), receipt ? el("article", { class: "receipt" }, el("code", {}, receipt), button(t("引き継ぎコードをコピー", "Copy handoff code"), e => copy(receipt, e), "secondary")) : null, el("label", { for: "handoff" }, t("仲間から受け取ったコード", "Code from your teammate")), input, button(t("続きを受け取る", "Resume from code"), () => restore(input.value.trim()), "secondary")));\n}\nrestore();\n'
+
+          WEB_CSS = ':root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#122b3b;background:#f3f7f6;line-height:1.65;color-scheme:light}*{box-sizing:border-box}body{margin:0}button,input,a{font:inherit}button,a{-webkit-tap-highlight-color:transparent}button{cursor:pointer}a{color:#086a64}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #d96f11;outline-offset:4px}.topbar{background:#102d38;color:white;display:flex;justify-content:space-between;align-items:center;padding:18px max(22px,calc((100% - 1080px)/2));gap:16px}.topbar a{color:white;font-size:.85rem}.brand{font-weight:800;letter-spacing:.1em;text-decoration:none}main{max-width:1130px;margin:auto;padding:34px 25px 70px}.eyebrow{font-size:.8rem;letter-spacing:.1em;font-weight:800;color:#096a63;margin:0 0 8px}h1{font-size:clamp(2rem,4.5vw,3.8rem);line-height:1.25;letter-spacing:-.035em;white-space:pre-line;margin:10px 0 22px}h2{font-size:1.35rem;line-height:1.5;margin:10px 0 20px}h3{font-size:1.1rem;margin:8px 0}p{margin:12px 0}.lead{font-size:1.12rem;max-width:760px}.hero{background:white;border:1px solid #d7e3df;border-radius:24px;padding:clamp(25px,5vw,58px);box-shadow:0 12px 36px #102d3808}.journey{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:34px 0}.journey>div{display:flex;flex-direction:column;gap:14px;background:#eaf5f0;border-radius:14px;padding:23px}.icon{font-size:2rem;color:#077269}.primary,.secondary,.missions button{border-radius:12px;font-weight:750;min-height:48px;padding:12px 22px;transition:background .15s}.primary{background:#086b62;color:white;border:2px solid #086b62;box-shadow:0 4px 0 #064d48;margin:16px 0 12px}.primary:hover{background:#054c45}.primary:disabled{opacity:.65;cursor:wait}.secondary{background:white;border:1.5px solid #79988f;color:#24453b}.secondary:disabled{opacity:.55;cursor:default}.boundary,footer{font-size:.88rem;color:#4e6570;max-width:900px;margin-top:26px}.missions{display:flex;gap:10px;margin:0 0 30px}.missions button{flex:1;background:#fff;border:1px solid #c8d8d2;color:#264a49;text-align:left;font-size:.9rem}.missions button.active{background:#d8f0e5;border:2px solid #086b62}.mission-heading h1{font-size:clamp(1.9rem,3.8vw,2.8rem)}.role-tip{font-size:.9rem;border-left:4px solid #d98621;padding:10px 15px;background:#fff6e9}.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0}.role-card{background:#fff;border:1px solid #cbded6;border-top:5px solid #28a18a;border-radius:15px;padding:22px}.role-card:nth-child(2){border-top-color:#db923f}.role-card a{font-size:.85rem}.control-room{background:white;padding:28px;border-radius:20px;border:1px solid #cbded6}.control-room>h2{color:#566c74}.choices{display:flex;gap:12px;flex-wrap:wrap}.choice{flex:1;min-width:145px;display:flex;gap:10px;align-items:center;padding:18px 14px;border:2px solid #cfdbd7;border-radius:13px;cursor:pointer}.choice:has(input:checked){background:#e0f5eb;border-color:#08776b}.choice input{accent-color:#08776b;width:20px;height:20px;flex-shrink:0}.choice span{display:flex;flex-direction:column}.choice small{color:#48645f}.choice:hover{background:#f1f8f4}fieldset{border:0;padding:0;margin:0 0 24px}legend{font-weight:750;margin-bottom:10px}.hint-area{border-top:1px solid #dce5e1;padding-top:18px;margin-top:20px}.hint-area p{border-left:3px solid #e4bc73;padding-left:12px}.feedback{padding:18px 23px;border-radius:14px;margin:20px 0;font-weight:650}.error{background:#fff2df;color:#6d3c06;border:1px solid #c6924d}.success{background:#ddf3e3;color:#185032;border:1px solid #8fba9c}.lesson{background:#dff2e8;border:1px solid #98c5af;padding:26px;border-radius:18px;margin:20px 0}.lesson h2{margin-bottom:6px}.finished{background:#e0f1e8;padding:23px;border-radius:17px;margin:18px 0}.receipts{margin-top:30px;border-top:1px solid #cadbd2;padding-top:18px}.receipts>p{font-size:.92rem}.receipt{position:relative;background:white;border:1px dashed #789c8d;padding:20px;margin-top:15px;border-radius:13px}.receipt p{font-size:.85rem}.receipt code{display:block;overflow-wrap:anywhere;margin:10px 0;font-size:.95rem;color:#304956}.points{float:right;color:#056055;font-weight:800}.celebration{background:#103b42;color:#fff;padding:28px;border-radius:18px;margin-top:28px}.solo-card{background:white;padding:35px;border:3px solid #188675;border-radius:20px}.large{font-size:1.7rem}.notice{background:#fff0d9;padding:15px}details{margin-top:20px}summary{cursor:pointer;color:#28594c;font-weight:650}footer{border-top:1px solid #ceddd5;padding-top:18px}@media(max-width:650px){main{padding:23px 16px 40px}.topbar{padding:14px 16px}.brand{font-size:.7rem}.journey{grid-template-columns:1fr;gap:10px;margin:25px 0}.journey>div{flex-direction:row;align-items:center;padding:13px 17px}.missions{gap:6px}.missions button{padding:10px 8px;font-size:.75rem}.role-grid{grid-template-columns:1fr}.control-room{padding:22px 17px}.choices{flex-direction:column}.choice{min-height:64px}.primary{width:100%;font-size:1rem}.solo-card{padding:22px}.large{font-size:1.3rem}}\n\n.handoff{margin:16px 0 24px}.handoff-code{display:block;width:100%;max-width:650px;border:2px solid #79988f;border-radius:10px;padding:12px;margin:8px 0 16px}\n'
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+  WorkshopUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn:
+        Fn::GetAtt:
+          - Workshop
+          - Arn
+      AuthType: NONE
+  UrlAccess:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: Workshop
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+  UrlInvocation:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: Workshop
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: arn:${AWS::Partition}:iam::${TenkaCloudAccountId}:root
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ConsoleSessionBaseline
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: "*"
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+Outputs:
+  GameUrl:
+    Description: Team-private workshop link. Share only with your teammates.
+    Value:
+      Fn::Sub: ${WorkshopUrl.FunctionUrl}${PlayKey}/
+  ParticipantViewerRoleArn:
+    Value:
+      Fn::GetAtt:
+        - ParticipantViewerRole
+        - Arn
+  CompletionFlag:
+    Description: Scorer only; filtered from participant outputs.
+    Value:
+      Fn::Sub: TC{${CompletionSecret}}

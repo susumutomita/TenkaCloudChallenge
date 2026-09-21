@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'challenges/office-link-gameday/**'
+      - 'challenges/office-link-gate/**'
       - '.github/workflows/office-link-gameday.yml'
   push:
     branches: [main]
     paths:
       - 'challenges/office-link-gameday/**'
+      - 'challenges/office-link-gate/**'
       - '.github/workflows/office-link-gameday.yml'
 
 permissions:
@@ -26,5 +28,7 @@ jobs:
         with:
           bun-version: '1.3.11'
       - run: bun install --frozen-lockfile
+      - run: make -C challenges/office-link-gate test
+      - run: node --check challenges/office-link-gate/web.js
       - run: make -C challenges/office-link-gameday test
       - run: node --check challenges/office-link-gameday/web.js

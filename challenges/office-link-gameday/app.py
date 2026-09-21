@@ -101,9 +101,14 @@ def evaluate(check, values, lang):
         predecessor = check.removesuffix("-why")
         receipt = values.get("receipt")
         if not isinstance(receipt, str) or not hmac.compare_digest(receipt.encode(), flag(predecessor).encode()):
-            return False, t("先にこのミッションを直して、同じ端末で解説ミッションへ進んでください。", "Complete this mission's repair first, then continue to its explanation on the same device.")
+            return False, t("先にこのミッションを直すか、仲間から続きを引き継いでください。", "Complete this mission's repair first, or resume progress from your teammate.")
         expected = {"delivery-why": "1", "sharing-why": "1", "restore-why": "1"}[check]
         return values.get("reason") == expected, t("直った理由のカードと、次の相談をもう一度見比べましょう。", "Compare the repair lesson with the next request once more.")
+    if check in ("sharing", "restore"):
+        previous = "delivery-why" if check == "sharing" else "sharing-why"
+        receipt = values.get("previous")
+        if not isinstance(receipt, str) or not hmac.compare_digest(receipt.encode(), flag(previous).encode()):
+            return False, t("先に前のミッションの操作と解説を終えてください。", "Complete the previous mission's repair and explanation first.")
     if check == "delivery":
         return values.get("destination") == variant, t("まだ届きません。受付の拠点コードと、配送先マップを見比べてください。", "Not delivered yet. Compare the reception code with the delivery map.")
     if check == "sharing":
@@ -144,7 +149,7 @@ def handler(event, context=None):
         if route == "api/scenario":
             return response(200, scenario(lang))
         return response(404, {"error": "not_found"})
-    if method != "POST" or route not in ("api/play", "api/handoff"):
+    if method != "POST" or route not in ("api/play", "api/handoff", "api/resume"):
         return response(405, {"error": "method_not_allowed"})
     body = event.get("body") or ""
     if len(body) > 8192:
@@ -157,6 +162,13 @@ def handler(event, context=None):
         return response(400, {"error": "invalid_json"})
     if not isinstance(data, dict) or not isinstance(data.get("values"), dict):
         return response(400, {"error": "invalid_submission"})
+    if route == "api/resume":
+        receipt = data["values"].get("receipt")
+        found = next((i for i, check in enumerate(CHECKS) if isinstance(receipt, str) and hmac.compare_digest(receipt.encode(), flag(check).encode())), None)
+        if found is None:
+            return response(200, {"correct": False, "message": text(lang, "このチームで最後に受け取った合言葉を確認してください。", "Check the last passphrase earned by this team.")})
+        receipts = [{"checkpoint": c, "flag": flag(c), "points": POINTS[i]} for i, c in enumerate(CHECKS[:found + 1])]
+        return response(200, {"correct": True, **receipts[-1], "receipts": receipts})
     check = data.get("checkpoint")
     if not isinstance(check, str) or check not in CHECKS:
         return response(400, {"error": "unknown_checkpoint"})

@@ -6,7 +6,7 @@
 
 Local preview of the implemented workshop. Official scoring is handled by the existing portal.
 
-**A team competition for colleagues who have never used AWS.** Combine role-card clues to repair a fictional event, then answer a new request to explain what you learned. It is designed for cross-office conversation, rather than individual tutorial completion.
+**A team competition for colleagues who have never used AWS.** First complete [Preparation](../office-link-gate/README.md), then combine role-card clues to repair a fictional event, then answer a new request to explain what you learned. It is designed for cross-office conversation, rather than individual tutorial completion.
 
 | Mission | Repair | Scored explanation | Points |
 | --- | --- | --- | --- |
@@ -14,7 +14,13 @@ Local preview of the implemented workshop. Official scoring is handled by the ex
 | Share just the invitation | Decide who may read which documents | Check required access and forbidden access | 20 + 15 |
 | Recover the invitation | Compare the timeline with saved copies | Recover missing bookings after a page already works | 20 + 15 |
 
-Start with 3–4 people per team and 60 minutes: 40 minutes of competition, 20 for introduction and reflection. Rank teams by the official score at the deadline; celebrate equal scores as ties. Repairs and explanations score independently. Workshop hints, attempts and unfinished missions carry no penalty. An incorrect portal passphrase costs 5 points under the standard difficulty-1 rule; copy it into the matching numbered field. Conversation frequency and quality are not automatically graded.
+Use four people per team and 60 minutes: 20 for Preparation, 25 for GameDay, and 15 for introduction and reflection. Rank teams by the official score at the deadline; celebrate equal scores as ties. Repairs and explanations score independently. Workshop hints, attempts and unfinished missions carry no penalty. An incorrect portal passphrase costs 5 points under the standard difficulty-1 rule; copy it into the matching numbered field. Conversation frequency and quality are not automatically graded.
+
+## Preparation Gate
+
+Include only `office-link-gate` and `office-link-gameday` in the event. Enable the existing Progression Gate with [event-gate.json](event-gate.json). Preparation issues one scoring flag only after every check; GameDay has six checkpoints worth 100 points. Together the event totals 200 points.
+
+GameDay also enforces repair → explanation → next mission on the server. One unfinished task is available at a time; completed work remains reviewable. The gate is event configuration, not a second prerequisite graph in catalog metadata.
 
 ## First action
 
@@ -22,7 +28,7 @@ Open **GameUrl** in the portal and choose **Choose roles and begin**. Readers op
 
 Both the metadata and workshop are bilingual. Select English inside the workshop when needed; the portal does not propagate language to this separate tab. Portal checkpoint labels contain both languages within the existing multi-flag contract.
 
-When switching devices, receive the repair passphrase (A) from the previous operator and paste it into **Take over the explanation from a teammate’s device** at the same GameUrl. On the same device, simply continue.
+When switching devices, receive the last earned passphrase (A or B) and paste it into **Resume from a teammate’s device** at the same GameUrl. On the same device, simply continue.
 
 ## Runtime and scoring
 

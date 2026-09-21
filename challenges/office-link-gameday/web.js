@@ -80,18 +80,23 @@ async function submit(check, required, handoff = false) {
     message = { kind: "error", text: handoff ? t("前の担当から操作の合言葉を受け取って、貼り付けてください。", "Paste the repair passphrase from the previous operator.") : t("選択肢をそれぞれ1つ選んでください。", "Choose one option in each group.") };
     render(); return;
   }
+  if (!handoff && ["sharing", "restore"].includes(check)) values.previous = state.receipts[check === "sharing" ? "delivery-why" : "sharing-why"]?.flag;
   if (check.endsWith("-why")) values.receipt = state.receipts[check.replace("-why", "")]?.flag;
   pending = true; message = null; render();
   try {
-    const response = await fetch(`api/${handoff ? "handoff" : "play"}?lang=${lang}`, {
+    const response = await fetch(`api/${handoff ? "resume" : "play"}?lang=${lang}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(10000),
       body: JSON.stringify({ checkpoint: check, values }),
     });
     if (!response.ok) throw new Error("request failed");
     const result = await response.json();
-    if (result.correct === true && typeof result.flag === "string" && result.checkpoint === check) {
-      state.receipts[check] = result; save();
+    if (result.correct === true && typeof result.flag === "string" && (handoff || result.checkpoint === check)) {
+      if (handoff) {
+        for (const earned of result.receipts) state.receipts[earned.checkpoint] = earned;
+        state.mission = missions.findIndex(m => result.checkpoint === m.id || result.checkpoint === m.id + "-why");
+      } else state.receipts[check] = result;
+      save();
       message = { kind: "success", text: handoff ? t("引き継ぎました。次の相談に答えよう。", "Handoff complete. Answer the next request.") : t("成功！提出用の合言葉を受け取りました。", "Success! Your passphrase is ready to submit.") };
     } else if (result.correct === false && typeof result.message === "string") {
       message = { kind: "error", text: result.message + t(" ここでの試行は減点されません。", " Trying here costs no points.") };
@@ -124,32 +129,35 @@ function render() {
   if (!state.started) {
     main.append(el("section", { class: "hero" }, heading(t("相談が、得点になる。", "Turn conversation into points.")),
       el("h1", {}, t("離れていても、\nチームでつなごう。", "Different offices.\nOne team.")),
-      el("p", { class: "lead" }, t("交流会の案内が届かない。見せてはいけない資料もある。仲間の手がかりを集めて、3つのミッションをクリアしよう。", "Invitations are stuck. Some documents must stay private. Combine your teammates' clues to clear three missions.")),
-      el("p", {}, t("AWS経験・プログラミング不要。3〜4人で、読む人・操作する人・確認する人を交代します。", "No AWS or coding experience required. In teams of 3–4, rotate reader, operator and checker.")),
+      el("p", { class: "lead" }, t("準備Challengeで学んだ場所・権限・復旧を使おう。仲間の手がかりを集めて、3つのミッションを1つずつクリア。", "Use the regions, permissions and recovery concepts from Preparation. Combine your teammates' clues to clear three missions, one at a time.")),
+      el("p", {}, t("AWS経験・プログラミング不要。4人で、読む人・操作する人・確認する人を交代します。", "No AWS or coding experience required. In teams of four, rotate reader, operator and checker.")),
       button(t("役割を分けて、はじめる →", "Choose roles and begin →"), () => { state.started = true; save(); render(); }, { class: "primary" }),
       el("div", { class: "journey", "aria-label": t("3つのミッション", "Three missions") }, missions.map((m, i) => el("div", {}, el("span", { class: "icon" }, m.icon), el("strong", {}, `${i + 1}. ${m.title}`))))));
     main.append(el("p", { class: "boundary" }, t("これはクラウドの仕組みを体験する模型です。実際の社内資料やAWSの設定は変更しません。正式な得点はTenkaCloudポータルで確認します。", "This is a model of cloud concepts. It does not change real company files or AWS settings. Official scores live in the TenkaCloud portal.")));
     return;
   }
+  if (state.mission > 0 && !state.receipts[missions[state.mission - 1].id + "-why"]) state.mission = 0;
   const m = missions[state.mission];
   main.append(el("nav", { class: "missions", "aria-label": t("ミッション", "Missions") }, missions.map((item, i) =>
-    button(`${state.receipts[item.id + "-why"] ? "✓ " : ""}${i + 1}. ${item.title}`, () => move(i), { class: i === state.mission ? "active" : "", "aria-current": i === state.mission ? "step" : "false", disabled: pending })
+    button(`${i > 0 && !state.receipts[missions[i - 1].id + "-why"] ? "🔒 " : state.receipts[item.id + "-why"] ? "✓ " : ""}${i + 1}. ${item.title}`, () => move(i), { class: i === state.mission ? "active" : "", "aria-current": i === state.mission ? "step" : "false", disabled: pending || (i > 0 && !state.receipts[missions[i - 1].id + "-why"]) })
   )));
   main.append(el("section", { class: "mission-heading" }, heading(`MISSION 0${state.mission + 1} / 03`), el("h1", {}, m.title), el("p", { class: "lead" }, m.goal)));
   main.append(el("p", { class: "role-tip" }, t("読む人：カードを1枚ずつ担当 ／ 操作する人：話を聞いて試す ／ 確認する人：結果を声に出す", "Readers: take a card each / Operator: listen and try / Checker: say what changed")));
   main.append(roleCards(m));
   if (message) main.append(el("div", { id: "feedback", class: `feedback ${message.kind}`, role: "status", tabindex: "-1" }, message.text));
   const done = state.receipts[m.id];
-  if (!done) {
+  {
     const handoffKey = `handoff:${m.id}`;
     main.append(el("details", { class: "handoff" },
-      el("summary", {}, t("別の端末で操作した仲間から、解説を引き継ぐ", "Take over the explanation from a teammate's device")),
-      el("p", {}, t("前の担当に操作の合言葉（A）をコピーしてもらい、チーム内で受け取ります。", "Ask the previous operator to copy the repair passphrase (A) and share it within your team.")),
-      el("label", { for: "handoff-receipt" }, t("このミッションの操作の合言葉", "This mission's repair passphrase")),
+      el("summary", {}, t("仲間から続きを引き継ぐ", "Resume from a teammate's device")),
+      el("p", {}, t("前の担当が最後に得た合言葉（AまたはB）を受け取ります。そこまでの進捗を復元します。", "Ask your teammate for their last earned passphrase (A or B). Progress up to that point will be restored.")),
+      el("label", { for: "handoff-receipt" }, t("最後に得た合言葉", "Last earned passphrase")),
       el("input", { id: "handoff-receipt", class: "handoff-code", type: "text", autocomplete: "off", maxlength: "100", disabled: pending,
         value: state.values[handoffKey]?.receipt || "", oninput: event => { (state.values[handoffKey] ||= {}).receipt = event.target.value.trim(); save(); } }),
-      button(t("受け取って、解説へ進む", "Accept and start the explanation"), () => submit(m.id, ["receipt"], true), { class: "secondary", disabled: pending })
+      button(t("続きを受け取る", "Resume from this point"), () => submit(m.id, ["receipt"], true), { class: "secondary", disabled: pending })
     ));
+  }
+  if (!done) {
     const panel = el("section", { class: "control-room" }, heading(t("操作担当の画面", "Operator's panel")), el("h2", {}, m.before));
     for (const field of m.fields) panel.append(choices(field, m.id));
     panel.append(button(pending ? t("確認しています…", "Checking…") : m.button, () => submit(m.id, m.fields.map(f => f.id)), { class: "primary", disabled: pending }));

@@ -15,7 +15,7 @@
 
 イベントの開催やプラットフォームのローカル起動は、[TenkaCloudのセットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/README.ja.md#クイックスタート)を参照してください。
 
-AWS未経験者の交流会には、[つながるオフィス](challenges/office-link-gameday/README.ja.md)。仲間の手がかりで3つのミッションを解き、操作と解説でそれぞれ得点します。60分の進行台本付きです。AWSでの開催と、採点を伴わないローカルプレビューに対応します。
+AWS未経験者の交流会には、[つながるオフィス](challenges/office-link-gameday/README.ja.md)。4人で準備Challengeを修了するとGateが本戦を解放。1問ずつ相談して進み、操作と解説で得点します。60分の進行台本付きです。AWSでの開催と、採点を伴わないローカルプレビューに対応します。
 
 ## 問題を追加・修正する
 

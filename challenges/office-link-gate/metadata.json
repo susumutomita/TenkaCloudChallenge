@@ -1,0 +1,64 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-link-gate",
+  "name": "つながるオフィスの準備 — 4人で学ぶGate",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "20 分",
+  "shortDescription": "場所・権限・復旧・結果の確認を1問ずつ相談。全4段階を修了するとGameDayへ進める、4人チームの準備Challenge。",
+  "instructions": "## 4人で準備をそろえ、GameDayへ\n\n1. GameUrlを開く。説明・例を読む・操作・確認の4役を決める。\n2. 今の1問を相談して答える。終わったら担当を交代。場所・権限・復旧・結果の確認を順に学ぶ。\n3. 全4段階の修了後、合言葉をコピーしてこのページへ提出する。100点と修了が反映されたら問題一覧を更新し、GameDayへ進む。\n\n準備中の部分点はありません。問題画面での試行・助け舟は無料。ポータルへ誤った合言葉を提出すると5点減点です。引き継ぎコードは得点用の合言葉ではありません。GameUrlとコードは同じチームだけで共有します。これはクラウドの考え方を学ぶ模型です。",
+  "description": "既存Progression Gateの起点にする単一flag Challenge。全4段階の成功をサーバーで順に検証し、最後にだけ100点の合言葉を発行。準備途中は公式加点しない。",
+  "tags": [
+    "beginner",
+    "teamwork",
+    "gameday",
+    "communication",
+    "aws",
+    "browser"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "同じ地域を探す必要を説明する",
+    "必要な資料と操作だけを許可する",
+    "控えの時刻と内容から復旧先を選ぶ",
+    "仲間と結果を確かめて引き継ぐ"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Office Link Preparation — a four-person learning Gate",
+      "shortDescription": "Discuss regions, permissions, recovery and outcome checks, one at a time. Complete all four before entering GameDay.",
+      "instructions": "## Prepare together, then enter GameDay\n\n1. Open GameUrl. Assign four roles: explain, read the example, operate, check.\n2. Discuss the current question. Rotate after each step: location, permissions, recovery, outcome verification.\n3. After all four checks, copy the completion passphrase and submit it on this page. Once the 100 points and completion appear, refresh the problem list and enter GameDay.\n\nThere are no partial preparation points. Workshop attempts and hints are free. An incorrect portal passphrase costs 5 points. Handoff codes are not scoring passphrases. Share GameUrl and handoff codes only within the team. This is a model of cloud concepts.",
+      "description": "Single-flag Challenge for the existing Progression Gate. The server validates all four sequential checks before issuing a 100-point completion flag. There are no partial official points.",
+      "learningGoals": [
+        "Explain why the region matters",
+        "Allow only required documents and actions",
+        "Select recovery by timestamp and contents",
+        "Verify and hand over outcomes together"
+      ]
+    }
+  }
+}

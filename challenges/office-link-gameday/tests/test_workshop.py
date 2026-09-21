@@ -30,6 +30,8 @@ class WorkshopTest(unittest.TestCase):
                             "body": json.dumps(data) if data is not None else ""})
 
     def play(self, check, values, lang="ja"):
+        if check in ("sharing", "restore"):
+            values = {**values, "previous": app.flag("delivery-why" if check == "sharing" else "sharing-why")}
         result = self.request(data={"checkpoint": check, "values": values}, lang=lang)
         self.assertEqual(result["statusCode"], 200)
         return json.loads(result["body"])
@@ -66,6 +68,24 @@ class WorkshopTest(unittest.TestCase):
             self.assertTrue(explanation["correct"])
             earned.append(explanation["flag"])
         self.assertEqual(len(set(earned)), 6)
+
+    def test_future_missions_require_previous_explanation_and_resume_is_team_scoped(self):
+        previous = ""
+        for check, values in self.inputs().items():
+            if check != "delivery":
+                for invalid in ["", app.flag(check), "あ", "not-issued"]:
+                    rejected = json.loads(self.request(data={"checkpoint": check, "values": {**values, "previous": invalid}})["body"])
+                    self.assertFalse(rejected["correct"])
+                    self.assertNotIn("flag", rejected)
+            repaired = json.loads(self.request(data={"checkpoint": check, "values": {**values, "previous": previous}})["body"])
+            self.assertTrue(repaired["correct"])
+            explained = self.play(check + "-why", {"receipt": repaired["flag"], "reason": "1"})
+            previous = explained["flag"]
+            resumed = json.loads(self.request("api/resume", data={"values": {"receipt": previous}})["body"])
+            self.assertEqual(resumed["receipts"][-1]["checkpoint"], check + "-why")
+            self.assertEqual([r["checkpoint"] for r in resumed["receipts"]], list(app.CHECKS[:app.CHECKS.index(check + "-why") + 1]))
+        with patch.dict(os.environ, {"FLAG_RESTORE_WHY": secrets.token_hex(24)}):
+            self.assertFalse(json.loads(self.request("api/resume", data={"values": {"receipt": previous}})["body"])["correct"])
 
     def test_no_answer_or_capability_in_initial_assets(self):
         for route in ["", "app.js", "style.css", "api/scenario"]:
