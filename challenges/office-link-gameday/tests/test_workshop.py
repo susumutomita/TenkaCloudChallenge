@@ -38,8 +38,8 @@ class WorkshopTest(unittest.TestCase):
         # Infer the first destination from the same public clue cards, not a flag.
         mission = json.loads(self.request("api/scenario", "GET")["body"])["missions"][0]
         card = mission["cards"][0]["body"]
-        destination = next(o["id"] for o in mission["fields"][0]["options"] if o["detail"] in card)
-        return {"delivery": {"destination": destination}, "sharing": {"scope": "invitation", "permission": "read"}, "restore": {"backup": "good"}}
+        destination = next(str(i) for i, entry in enumerate(mission["cards"][1]["body"].split(" · ")) if entry.rsplit("=", 1)[1].strip() in card)
+        return {"delivery": {"destination": destination}, "sharing": {"scope": "0", "permission": "1"}, "restore": {"backup": "1"}}
 
     def test_six_independent_checkpoints_and_retry(self):
         metadata = json.loads((ROOT / "metadata.json").read_text())
@@ -47,7 +47,7 @@ class WorkshopTest(unittest.TestCase):
         self.assertEqual([f["id"] for f in metadata["scoring"]["flags"]], list(app.CHECKS))
         self.assertEqual([f["points"] for f in metadata["scoring"]["flags"]], list(app.POINTS))
         self.assertTrue(all(f["wrongAnswerPenalty"] == 5 for f in metadata["scoring"]["flags"]))
-        reasons = {"delivery": "region", "sharing": "both", "restore": "rehearse"}
+        reasons = {"delivery": "1", "sharing": "1", "restore": "1"}
         earned = []
         for check, values in self.inputs().items():
             wrong = self.play(check, {})
@@ -79,10 +79,35 @@ class WorkshopTest(unittest.TestCase):
             for route in ["", "api/scenario", "app.js", "style.css"]:
                 self.assertEqual(self.request(route, "GET", key=key)["statusCode"], 404)
 
+    def test_controls_do_not_reveal_clue_mappings_or_verdict_ids(self):
+        for language in ["ja", "en"]:
+            missions = json.loads(self.request("api/scenario", "GET", lang=language)["body"])["missions"]
+            for mission in missions:
+                for field in mission["fields"]:
+                    self.assertEqual([o["id"] for o in field["options"]], [str(i) for i in range(len(field["options"]))])
+                    self.assertTrue(all("detail" not in o for o in field["options"]))
+                self.assertEqual([o["id"] for o in mission["reasons"]], ["0", "1", "2"])
+
     def test_receipt_cannot_unlock_another_team(self):
         receipt = self.play("delivery", self.inputs()["delivery"])["flag"]
         with patch.dict(os.environ, {"FLAG_DELIVERY": secrets.token_hex(24)}):
-            self.assertFalse(self.play("delivery-why", {"receipt": receipt, "reason": "region"})["correct"])
+            self.assertFalse(self.play("delivery-why", {"receipt": receipt, "reason": "1"})["correct"])
+
+    def test_operator_handoff_accepts_only_this_team_and_mission_receipt(self):
+        for check, values in self.inputs().items():
+            receipt = self.play(check, values)["flag"]
+            data = {"checkpoint": check, "values": {"receipt": receipt}}
+            result = json.loads(self.request("api/handoff", data=data)["body"])
+            self.assertTrue(result["correct"])
+            self.assertEqual(result["flag"], receipt)
+            self.assertTrue(self.play(check + "-why", {"receipt": result["flag"], "reason": "1"})["correct"])
+            for bad in ["", "あ", app.flag(check + "-why"), app.flag("sharing" if check != "sharing" else "delivery")]:
+                data["values"]["receipt"] = bad
+                self.assertFalse(json.loads(self.request("api/handoff", data=data)["body"])["correct"])
+            data["values"]["receipt"] = receipt
+            with patch.dict(os.environ, {"FLAG_" + check.upper(): secrets.token_hex(24)}):
+                self.assertFalse(json.loads(self.request("api/handoff", data=data)["body"])["correct"])
+        self.assertFalse(json.loads(self.request("api/handoff", data={"checkpoint": "restore-why", "values": {"receipt": app.flag("restore-why")}})["body"])["correct"])
 
     def test_invalid_inputs_fail_without_secret_leaks(self):
         for data in [[], 5, "hello", {}, {"checkpoint": [], "values": {}}, {"checkpoint": "missing", "values": {}}, {"checkpoint": "delivery", "values": []}]:

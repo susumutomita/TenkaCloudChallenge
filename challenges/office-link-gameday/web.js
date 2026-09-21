@@ -60,8 +60,8 @@ function choices(field, check) {
 }
 function roleCards(mission) {
   return el("div", { class: "role-grid" }, mission.cards.map((card, index) => el("article", { class: "role-card" },
-    heading(card.role), el("h3", {}, card.title), el("p", {}, card.body),
-    el("a", { href: link(index), target: "_blank", rel: "noopener noreferrer" }, t("この役割のカードを別画面で開く ↗", "Open this role card separately ↗"))
+    heading(card.role), el("h3", {}, card.title),
+    el("a", { href: link(index), target: "_blank", rel: "noopener noreferrer" }, t("担当する手がかりカードを開く ↗", "Open your clue card ↗"))
   )));
 }
 function receipt(check, label) {
@@ -73,17 +73,17 @@ function receipt(check, label) {
     el("p", {}, t("ポータルの同じ名前の回答欄へ貼り付けて提出すると得点になります。", "Paste into the matching answer field in the portal and submit to score.")),
     el("code", { tabindex: "0" }, result.flag), copyButton);
 }
-async function submit(check, required) {
+async function submit(check, required, handoff = false) {
   if (pending) return;
-  const values = { ...(state.values[check] || {}) };
+  const values = { ...(state.values[handoff ? `handoff:${check}` : check] || {}) };
   if (required.some(key => typeof values[key] !== "string")) {
-    message = { kind: "error", text: t("選択肢をそれぞれ1つ選んでください。", "Choose one option in each group.") };
+    message = { kind: "error", text: handoff ? t("前の担当から操作の合言葉を受け取って、貼り付けてください。", "Paste the repair passphrase from the previous operator.") : t("選択肢をそれぞれ1つ選んでください。", "Choose one option in each group.") };
     render(); return;
   }
   if (check.endsWith("-why")) values.receipt = state.receipts[check.replace("-why", "")]?.flag;
   pending = true; message = null; render();
   try {
-    const response = await fetch(`api/play?lang=${lang}`, {
+    const response = await fetch(`api/${handoff ? "handoff" : "play"}?lang=${lang}`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       signal: AbortSignal.timeout(10000),
       body: JSON.stringify({ checkpoint: check, values }),
@@ -92,7 +92,7 @@ async function submit(check, required) {
     const result = await response.json();
     if (result.correct === true && typeof result.flag === "string" && result.checkpoint === check) {
       state.receipts[check] = result; save();
-      message = { kind: "success", text: t("成功！提出用の合言葉を受け取りました。", "Success! Your passphrase is ready to submit.") };
+      message = { kind: "success", text: handoff ? t("引き継ぎました。次の相談に答えよう。", "Handoff complete. Answer the next request.") : t("成功！提出用の合言葉を受け取りました。", "Success! Your passphrase is ready to submit.") };
     } else if (result.correct === false && typeof result.message === "string") {
       message = { kind: "error", text: result.message + t(" ここでの試行は減点されません。", " Trying here costs no points.") };
     } else throw new Error("unexpected response");
@@ -141,6 +141,15 @@ function render() {
   if (message) main.append(el("div", { id: "feedback", class: `feedback ${message.kind}`, role: "status", tabindex: "-1" }, message.text));
   const done = state.receipts[m.id];
   if (!done) {
+    const handoffKey = `handoff:${m.id}`;
+    main.append(el("details", { class: "handoff" },
+      el("summary", {}, t("別の端末で操作した仲間から、解説を引き継ぐ", "Take over the explanation from a teammate's device")),
+      el("p", {}, t("前の担当に操作の合言葉（A）をコピーしてもらい、チーム内で受け取ります。", "Ask the previous operator to copy the repair passphrase (A) and share it within your team.")),
+      el("label", { for: "handoff-receipt" }, t("このミッションの操作の合言葉", "This mission's repair passphrase")),
+      el("input", { id: "handoff-receipt", class: "handoff-code", type: "text", autocomplete: "off", maxlength: "100", disabled: pending,
+        value: state.values[handoffKey]?.receipt || "", oninput: event => { (state.values[handoffKey] ||= {}).receipt = event.target.value.trim(); save(); } }),
+      button(t("受け取って、解説へ進む", "Accept and start the explanation"), () => submit(m.id, ["receipt"], true), { class: "secondary", disabled: pending })
+    ));
     const panel = el("section", { class: "control-room" }, heading(t("操作担当の画面", "Operator's panel")), el("h2", {}, m.before));
     for (const field of m.fields) panel.append(choices(field, m.id));
     panel.append(button(pending ? t("確認しています…", "Checking…") : m.button, () => submit(m.id, m.fields.map(f => f.id)), { class: "primary", disabled: pending }));

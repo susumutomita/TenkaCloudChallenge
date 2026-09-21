@@ -22,6 +22,8 @@ Replace estimates with measured effort after each event.
 
 An incorrect passphrase in the portal costs 5 points under the standard difficulty-1 rule. Trying inside the workshop is free. Demonstrate copying into the matching numbered A/B field before play.
 
+When rotating devices, the previous operator shares the repair passphrase (A) within the team. The new operator opens the same mission at the same GameUrl and uses **Take over the explanation from a teammate’s device**. Passphrases from another team or mission are rejected. When sharing one device, rotate the person and continue directly.
+
 ## Deploy and distribute
 
 1. Follow the [platform event runbook](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/event-runbook.md). Pin a catalog commit containing `office-link-gameday` and register competitor accounts through the existing bootstrap path.

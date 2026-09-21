@@ -12,7 +12,7 @@ Local preview of the implemented workshop. Official scoring is handled by the ex
 | --- | --- | --- | --- |
 | Deliver the invitation | Combine reception's code with a map | Find a named setting in the right region | 15 + 15 |
 | Share just the invitation | Decide who may read which documents | Check required access and forbidden access | 20 + 15 |
-| Recover the invitation | Compare the timeline with saved copies | Explain why restoration needs testing | 20 + 15 |
+| Recover the invitation | Compare the timeline with saved copies | Recover missing bookings after a page already works | 20 + 15 |
 
 Start with 3–4 people per team and 60 minutes: 40 minutes of competition, 20 for introduction and reflection. Rank teams by the official score at the deadline; celebrate equal scores as ties. Repairs and explanations score independently. Workshop hints, attempts and unfinished missions carry no penalty. An incorrect portal passphrase costs 5 points under the standard difficulty-1 rule; copy it into the matching numbered field. Conversation frequency and quality are not automatically graded.
 
@@ -21,6 +21,8 @@ Start with 3–4 people per team and 60 minutes: 40 minutes of competition, 20 f
 Open **GameUrl** in the portal and choose **Choose roles and begin**. Readers open a card and relay clues to the operator. Copy each earned passphrase into the matching numbered portal field and submit it. Swap the operator before the explanation.
 
 Both the metadata and workshop are bilingual. Select English inside the workshop when needed; the portal does not propagate language to this separate tab. Portal checkpoint labels contain both languages within the existing multi-flag contract.
+
+When switching devices, receive the repair passphrase (A) from the previous operator and paste it into **Take over the explanation from a teammate’s device** at the same GameUrl. On the same device, simply continue.
 
 ## Runtime and scoring
 
