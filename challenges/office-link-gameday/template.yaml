@@ -4,7 +4,7 @@ Parameters:
   NamePrefix:
     Type: String
     AllowedPattern: ^tc-[a-z0-9]+(-[a-z0-9]+)+$
-    MaxLength: 54
+    MaxLength: 84
   TenkaCloudAccountId:
     Type: String
     AllowedPattern: ^[0-9]{12}$
@@ -87,12 +87,13 @@ Resources:
   Workshop:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName:
-        Fn::Sub: ${NamePrefix}-office
       Runtime: python3.12
       Handler: index.handler
       MemorySize: 128
       Timeout: 5
+      LoggingConfig:
+        LogGroup:
+          Ref: WorkshopLogs
       Role:
         Fn::GetAtt:
           - WorkshopRole

@@ -14,7 +14,7 @@ def template():
     for variable, file in [("WEB_HTML", "web.html"), ("WEB_JS", "web.js"), ("WEB_CSS", "web.css")]:
         code += "\n" + variable + " = " + repr((ROOT / file).read_text()) + "\n"
     parameters = {
-        "NamePrefix": {"Type": "String", "AllowedPattern": "^tc-[a-z0-9]+(-[a-z0-9]+)+$", "MaxLength": 54},
+        "NamePrefix": {"Type": "String", "AllowedPattern": "^tc-[a-z0-9]+(-[a-z0-9]+)+$", "MaxLength": 84},
         "TenkaCloudAccountId": {"Type": "String", "AllowedPattern": "^[0-9]{12}$"},
         "ExternalId": {"Type": "String", "NoEcho": True, "MinLength": 16},
     }
@@ -38,8 +38,8 @@ def template():
             }]}}],
         }},
         "Workshop": {"Type": "AWS::Lambda::Function", "Properties": {
-            "FunctionName": {"Fn::Sub": "${NamePrefix}-office"},
             "Runtime": "python3.12", "Handler": "index.handler", "MemorySize": 128, "Timeout": 5,
+            "LoggingConfig": {"LogGroup": {"Ref": "WorkshopLogs"}},
             "Role": {"Fn::GetAtt": ["WorkshopRole", "Arn"]},
             "Environment": {"Variables": variables}, "Code": {"ZipFile": code},
             "Tags": [{"Key": "TenkaCloud:NamePrefix", "Value": {"Ref": "NamePrefix"}}],

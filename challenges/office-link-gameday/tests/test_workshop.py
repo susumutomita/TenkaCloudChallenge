@@ -110,6 +110,13 @@ class WorkshopTest(unittest.TestCase):
 
     def test_deployed_code_is_the_same_handler_and_has_no_cloud_write_permissions(self):
         template = build.template()
+        # Platform names combine two slugs of up to 40 characters. Let CFN
+        # choose the Lambda name so long valid team names do not exceed 64.
+        longest_prefix = "tc-" + "p" * 40 + "-" + "t" * 40
+        self.assertGreaterEqual(template["Parameters"]["NamePrefix"]["MaxLength"], len(longest_prefix))
+        function = template["Resources"]["Workshop"]["Properties"]
+        self.assertNotIn("FunctionName", function)
+        self.assertEqual(function["LoggingConfig"]["LogGroup"], {"Ref": "WorkshopLogs"})
         code = template["Resources"]["Workshop"]["Properties"]["Code"]["ZipFile"]
         namespace = {}
         exec(compile(code, "index.py", "exec"), namespace)
