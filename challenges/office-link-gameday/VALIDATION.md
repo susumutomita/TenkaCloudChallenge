@@ -1,0 +1,27 @@
+# Office Link validation
+
+Implementation evidence and pre-event rehearsal are separate.
+
+## Automated checks
+
+`make test` executes six Python tests against the real Lambda handler and its generated deployment artifact. They cover six independent checkpoints, 100-point metadata, repair/explanation separation, incorrect choices, retry stability, prerequisites, foreign-team receipts, unknown checkpoints, invalid JSON/base64, body bounds, method handling, localized verdicts, private assets and least-privilege deployment contracts.
+
+`make agent-gate` at catalog root checks the new metadata alongside all existing problems. The problem owns its code and tests; it adds no platform scoring branches.
+
+## Participant route
+
+Exercised on 2026-09-21 in Chromium against `preview.py`, using the actual handler and assets, without mocked API responses:
+
+- Started from the Japanese introduction and used the visible reception/map clues to deliver the invitation.
+- Completed each repair and its separate explanation: all six passphrases were issued and the final completion message appeared.
+- Chose an incorrect sharing scope, saw the staff-list exposure feedback, corrected the choice and continued. The second choice remained selected after the failed attempt.
+- Reloaded after completion; all three mission markers and earned passphrases remained available.
+- Switched to English; mission names, explanations and the final message changed language while progress remained.
+- Opened a role-card link in a separate tab; it showed the assigned clue and a return link without answer controls.
+- Inspected desktop and 390 × 844 mobile screenshots. The primary start button was visible; mobile document width equaled the viewport, with no horizontal overflow. Browser error collection was empty.
+
+The browser's submitted passphrases are disposable preview values, not credentials or production scoring evidence. A local preview does not establish live AWS deployment, official platform scoring or multi-person engagement.
+
+## Before a real event
+
+Not yet run: live AWS deployment in `ap-northeast-1`, two real teams' official score/scoreboard updates, shared voice/chat playtest with beginners, measured time to first score, and actual AWS teardown/billing checks. Follow the host runbook's rehearsal checklist. These are pre-event checks, not completed implementation claims.

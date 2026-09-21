@@ -1,0 +1,30 @@
+name: office-link-gameday
+
+on:
+  pull_request:
+    paths:
+      - 'challenges/office-link-gameday/**'
+      - '.github/workflows/office-link-gameday.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'challenges/office-link-gameday/**'
+      - '.github/workflows/office-link-gameday.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  workshop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: '1.3.11'
+      - run: bun install --frozen-lockfile
+      - run: make -C challenges/office-link-gameday test
+      - run: node --check challenges/office-link-gameday/web.js

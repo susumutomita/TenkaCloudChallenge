@@ -1,0 +1,107 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-link-gameday",
+  "name": "つながるオフィス — 相談してひらくGameDay",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "60 分（競技40分・説明と振り返り20分）",
+  "shortDescription": "仲間の手がかりを集めて、招待状・共有・復旧の3ミッションを攻略。操作も解説も得点になる、AWS未経験者向けのチーム戦。",
+  "instructions": "## 仲間の手がかりで、交流会をひらこう\n\n招待状が届かない、資料を共有できない、案内が消えた。3〜4人で役割を交代して、3つの困りごとを解決します。AWS経験やプログラミングは不要です。\n\n1. **アクセス先URLの「GameUrl」**を開き、「役割を分けて、はじめる」を押す。\n2. **読む人・操作する人・確認する人**を決める。読む人は役割カードを開き、手がかりを仲間へ伝える。\n3. 操作して成功したら、合言葉をコピー。このページの**同じ番号の回答欄**へ貼って提出すると得点になる。\n4. 操作担当を交代し、**「次の相談」への説明**も送る。説明の合言葉はBの回答欄へ提出する。\n\n合言葉は到達を示す `TC{…}` の文字列です。操作と解説は別々に得点になります。6つすべて提出して100点。同じ合言葉の再提出では加点されません。問題画面での試行・ヒント・未完了による減点はありません。ポータルへ間違った合言葉を提出すると5点減点です。コピーして同じ番号の欄へ提出してください。残り時間と正式な得点はポータルで確認してください。\n\n問題画面はクラウドの仕組みを学ぶ模型です。実際の社内資料やAWSの設定は操作しません。GameUrlはチーム内だけで共有します。",
+  "description": "企業内の拠点間交流向け、ブラウザだけで解く入門GameDay。問題は模型。配信はチーム別Lambda Function URL、採点は既存multi-flag。操作と解説の6チェックポイントで100点。ローカルプレビューは同じhandlerで動くが正式な開催・採点はAWS上のTenkaCloudを利用。",
+  "tags": [
+    "beginner",
+    "teamwork",
+    "gameday",
+    "communication",
+    "aws",
+    "browser"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "役割ごとの手がかりを言葉で共有して解決する",
+    "地域・必要な権限・復旧の考え方を具体例で説明する",
+    "直す人と確認する人を交代し、結果を確かめる"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "DeliverySecret": "__RANDOM_PASSWORD__",
+    "DeliveryWhySecret": "__RANDOM_PASSWORD__",
+    "SharingSecret": "__RANDOM_PASSWORD__",
+    "SharingWhySecret": "__RANDOM_PASSWORD__",
+    "RestoreSecret": "__RANDOM_PASSWORD__",
+    "RestoreWhySecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "multi-flag",
+    "flags": [
+      {
+        "id": "delivery",
+        "label": "1A. 招待状を届ける / Deliver",
+        "flagOutputKey": "DeliveryFlag",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "delivery-why",
+        "label": "1B. 仲間に説明する / Explain",
+        "flagOutputKey": "DeliveryWhyFlag",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "sharing",
+        "label": "2A. 案内だけを共有 / Share safely",
+        "flagOutputKey": "SharingFlag",
+        "points": 20,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "sharing-why",
+        "label": "2B. 仲間に説明する / Explain",
+        "flagOutputKey": "SharingWhyFlag",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "restore",
+        "label": "3A. 案内を取り戻す / Recover",
+        "flagOutputKey": "RestoreFlag",
+        "points": 20,
+        "wrongAnswerPenalty": 5
+      },
+      {
+        "id": "restore-why",
+        "label": "3B. 仲間に説明する / Explain",
+        "flagOutputKey": "RestoreWhyFlag",
+        "points": 15,
+        "wrongAnswerPenalty": 5
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Office Link — a GameDay built on conversation",
+      "shortDescription": "Combine clues to deliver, share and recover. Both repairs and explanations score points in this team game for AWS beginners.",
+      "instructions": "## Open the event with your teammates' clues\n\nInvitations are stuck, documents cannot be shared, and the venue notice is missing. Rotate roles in a team of 3–4 to solve three problems. No AWS or coding experience needed.\n\n1. Open **GameUrl under access URLs**, then choose **Choose roles and begin**. Use the English link in the workshop if needed.\n2. Choose **readers, an operator and a checker**. Readers open their role cards and tell the operator what they see.\n3. After a successful repair, copy its passphrase. Paste it into the **matching numbered answer field on this page** and submit to score.\n4. Swap the operator. Answer the **next request** to explain what you learned; submit that passphrase in the matching B field.\n\nA passphrase is a `TC{…}` string that proves you reached a checkpoint. Repair and explanation score independently. Submit all six for 100 points. Repeating a submission awards no extra points. Workshop attempts, hints and unfinished missions carry no penalty. An incorrect passphrase submitted in the portal costs 5 points. Copy it into the matching numbered field. The portal shows the official score and time remaining.\n\nThe workshop is a model of cloud concepts. You do not operate real company documents or AWS settings. Share GameUrl only within your team.",
+      "description": "A browser-only model for cross-office team building. Separate team Lambda Function URLs and existing multi-flag scoring provide six independent checkpoints worth 100 points. Local preview runs the same handler; official hosting and scoring use TenkaCloud on AWS.",
+      "learningGoals": [
+        "Combine role-specific clues by talking to teammates",
+        "Explain regions, permissions and recovery with concrete examples",
+        "Rotate the operator and checker and verify the outcome"
+      ]
+    }
+  }
+}

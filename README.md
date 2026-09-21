@@ -15,6 +15,8 @@ Start with a problem's README for its scenario, prerequisites and verification s
 
 To run an event or start the platform locally, follow the [TenkaCloud setup guide](https://github.com/susumutomita/TenkaCloud#quickstart).
 
+For a beginner social event, try [Office Link](challenges/office-link-gameday/README.md): combine teammates' clues across three missions, earning separate points for repairs and explanations. It includes a 60-minute host script, AWS event hosting and an unscored local preview.
+
 ## Add or update a problem
 
 Follow the [authoring contract](AGENTS.md). Keep a problem's metadata, bilingual READMEs, runtime, fixtures and tests in its own directory. Start from a problem with the same runtime and scoring contract.

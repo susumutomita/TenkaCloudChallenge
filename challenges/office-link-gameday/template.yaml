@@ -1,0 +1,384 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Office Link: browser-based team missions and scored explanations. No real document changes."
+Parameters:
+  NamePrefix:
+    Type: String
+    AllowedPattern: ^tc-[a-z0-9]+(-[a-z0-9]+)+$
+    MaxLength: 54
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: ^[0-9]{12}$
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+  PlayKey:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  DeliverySecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  DeliveryWhySecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  SharingSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  SharingWhySecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  RestoreSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  RestoreWhySecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+Resources:
+  WorkshopLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${NamePrefix}-office
+      RetentionInDays: 1
+  WorkshopRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteOwnLogs
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::GetAtt:
+                    - WorkshopLogs
+                    - Arn
+  Workshop:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName:
+        Fn::Sub: ${NamePrefix}-office
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 5
+      Role:
+        Fn::GetAtt:
+          - WorkshopRole
+          - Arn
+      Environment:
+        Variables:
+          PLAY_KEY:
+            Ref: PlayKey
+          FLAG_DELIVERY:
+            Ref: DeliverySecret
+          FLAG_DELIVERY_WHY:
+            Ref: DeliveryWhySecret
+          FLAG_SHARING:
+            Ref: SharingSecret
+          FLAG_SHARING_WHY:
+            Ref: SharingWhySecret
+          FLAG_RESTORE:
+            Ref: RestoreSecret
+          FLAG_RESTORE_WHY:
+            Ref: RestoreWhySecret
+      Code:
+        ZipFile: |
+          """Problem-owned workshop handler; AWS Lambda and the local preview use this code."""
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import os
+          from urllib.parse import parse_qs
+
+          WEB_HTML = ""  # Embedded by build.py; injected from disk by preview.py.
+          WEB_JS = ""
+          WEB_CSS = ""
+          CHECKS = ("delivery", "delivery-why", "sharing", "sharing-why", "restore", "restore-why")
+          POINTS = (15, 15, 20, 15, 20, 15)
+
+
+          def text(lang, ja, en):
+              return en if lang == "en" else ja
+
+
+          def secret(name):
+              value = os.environ[name]
+              if len(value) < 24:
+                  raise ValueError("Workshop secrets must contain at least 24 characters")
+              return value
+
+
+          def flag(check):
+              return "TC{" + secret("FLAG_" + check.upper().replace("-", "_")) + "}"
+
+
+          def scenario(lang):
+              """Only clues and available actions leave the server; no verdict keys or flags."""
+              t = lambda ja, en: text(lang, ja, en)
+              variant = hashlib.sha256(secret("FLAG_DELIVERY").encode()).digest()[0] % 3
+              codes = ("A7", "B4", "C2")
+              sites = [t("海辺の拠点", "Seaside office"), t("森の拠点", "Forest office"), t("丘の拠点", "Hill office")]
+              destinations = [{"id": str(i), "label": sites[i], "detail": codes[i]} for i in range(3)]
+              return {"missions": [
+                  {
+                      "id": "delivery", "icon": "↗", "title": t("招待状を届けよう", "Deliver the invitation"),
+                      "goal": t("別の拠点にいる仲間へ、交流会の招待状を届ける。", "Get an invitation to colleagues at another office."),
+                      "before": t("招待状は、宛先が分からず止まっています。", "The invitation is waiting for a destination."),
+                      "cards": [
+                          {"role": t("依頼を読む人", "Request reader"), "title": t("受付からのメモ", "Reception note"), "body": t(f"招待先の拠点コードは {codes[variant]}。同じコードの宛先へ届けてください。", f"The receiving office code is {codes[variant]}. Deliver to the office with that code.")},
+                          {"role": t("地図を読む人", "Map reader"), "title": t("配送先マップ", "Delivery map"), "body": " · ".join(sites[i] + " = " + codes[i] for i in range(3))},
+                      ],
+                      "fields": [{"id": "destination", "label": t("招待状の宛先", "Invitation destination"), "options": destinations}],
+                      "button": t("この宛先へ届ける", "Deliver here"),
+                      "hints": [t("呼び名が違っても、同じ拠点コードなら同じ宛先です。", "Different names can refer to the same office code."), t("例えば D8 宛てなら、地図で D8 と書かれた拠点を探します。", "For example, for code D8, find the office marked D8 on the map."), t("受付メモのコードを声に出す → 地図で同じコードを探す → その拠点を選んで届けます。", "Read out the reception code → find the same code on the map → select that office and deliver.")],
+                      "lesson": t("届いた！宛先をそろえると、相手まで届きます。AWSにも東京や大阪などの『リージョン＝設備のある地域』があります。同じ名前の設定でも、地域が違えば別物です。", "Delivered! Matching the destination gets the message to its recipient. AWS has regions, such as Tokyo and Osaka: places where its equipment runs. The same setting name in two regions refers to different things."),
+                      "why": t("次の相談：同じ名前の設定が見つかりません。仲間は大阪、自分は東京を見ています。最初に何をそろえる？", "Next request: you cannot find a setting by name. Your colleague is looking in Osaka and you are looking in Tokyo. What should you align first?"),
+                      "reasons": [
+                          {"id": "rename", "label": t("設定の名前を全部変える", "Rename every setting")},
+                          {"id": "region", "label": t("見ている地域をそろえる", "Look in the same region")},
+                          {"id": "more", "label": t("同じ設定を何個も作る", "Create several copies")},
+                      ],
+                      "whyHint": t("設定の名前より先に、探している場所が同じか確かめます。", "Before changing the name, check whether you are looking in the same place."),
+                  },
+                  {
+                      "id": "sharing", "icon": "▣", "title": t("案内だけを共有しよう", "Share just the invitation"),
+                      "goal": t("来場者に案内を見せる。社内名簿は見せない。", "Let visitors read the invitation. Keep the staff list private."),
+                      "before": t("来場者はまだ案内を読めません。", "Visitors cannot read the invitation yet."),
+                      "cards": [
+                          {"role": t("依頼を読む人", "Request reader"), "title": t("受付からのお願い", "Reception request"), "body": t("来場者には案内を読むだけの権限が必要。書き換える必要はありません。", "Visitors need permission to read the invitation. They do not need to edit it.")},
+                          {"role": t("資料を確認する人", "Document keeper"), "title": t("共有してよいもの", "Sharing boundary"), "body": t("『案内』は配ってよい。『社内名簿』は社外へ出せない。権限とは、誰が何をしてよいかの約束です。", "The invitation may be distributed. The staff list must stay internal. A permission is a rule about who may do what.")},
+                      ],
+                      "fields": [
+                          {"id": "scope", "label": t("来場者に見せる資料", "Documents visitors may see"), "options": [{"id": "invitation", "label": t("案内だけ", "Invitation only")}, {"id": "all", "label": t("案内と社内名簿", "Invitation and staff list")}, {"id": "none", "label": t("何も見せない", "Nothing")}]},
+                          {"id": "permission", "label": t("許可する操作", "Allowed action"), "options": [{"id": "edit", "label": t("読む・書き換える", "Read and edit")}, {"id": "read", "label": t("読むだけ", "Read only")}]},
+                      ],
+                      "button": t("共有して、見え方を確かめる", "Share and check visibility"),
+                      "hints": [t("開けない問題は、全部公開すればよいとは限りません。必要な人に必要な資料だけを渡します。", "Fixing access does not mean making everything public. Share only what the recipient needs."), t("例：メニューを見せたいだけなら、来店者に売上表の編集まで許可しません。", "Example: showing guests a menu does not require letting them edit sales records."), t("受付の『読むだけ』と、資料係の『配ってよいもの』を聞く → 2つの選択欄を合わせる → 来場者の見え方を確認します。", "Ask reception which action is needed and the keeper which document may be shared → set both controls → check the visitor's view.")],
+                      "lesson": t("案内は読める、名簿は読めない、書き換えもできない。これが『必要な権限だけを渡す』です。AWSのIAMも、誰がどの資源で何をしてよいかを決める仕組みです。", "Visitors can read the invitation, cannot read the staff list, and cannot edit. That is giving only the permissions needed. AWS IAM defines who may do what to which resource."),
+                      "why": t("次の相談：請求書を読む担当へ権限を渡します。確認する組み合わせは？", "Next request: grant an invoice reader access. Which pair of checks should you run?"),
+                      "reasons": [{"id": "admin", "label": t("管理者権限があることだけ", "Only check administrator access")}, {"id": "both", "label": t("請求書は読める ＋ 給与表は読めない", "Invoices are readable + payroll is not")}, {"id": "block", "label": t("全部の資料が読めない", "No document can be read")}],
+                      "whyHint": t("必要な操作ができることと、不要な操作ができないことを両方確認します。", "Check both that the needed action works and that unnecessary access is blocked."),
+                  },
+                  {
+                      "id": "restore", "icon": "↶", "title": t("消えた案内を取り戻そう", "Recover the missing invitation"),
+                      "goal": t("消える直前までの案内を取り戻して、仲間に確認してもらう。", "Recover the latest intact invitation and ask a teammate to check it."),
+                      "before": t("案内が消えて、来場者が迷っています。", "The invitation is missing and visitors cannot find the venue."),
+                      "cards": [
+                          {"role": t("記録を読む人", "Timeline reader"), "title": t("何が起きた？", "What happened?"), "body": t("10:00 初版を公開。10:10 会場を『青いホール』へ変更。10:20 誤操作で案内を消した。", "10:00 first edition published. 10:10 venue changed to Blue Hall. 10:20 invitation accidentally deleted.")},
+                          {"role": t("控えを持つ人", "Backup keeper"), "title": t("残っている控え", "Saved copies"), "body": t("10:05 赤いホール / 10:15 青いホール / 10:25 案内なし。バックアップとは、戻すために残した控えです。", "10:05 Red Hall / 10:15 Blue Hall / 10:25 no invitation. A backup is a saved copy you can recover from.")},
+                      ],
+                      "fields": [{"id": "backup", "label": t("どの控えへ戻す？", "Which copy should you restore?"), "options": [{"id": "early", "label": "10:05", "detail": t("赤いホール", "Red Hall")}, {"id": "good", "label": "10:15", "detail": t("青いホール", "Blue Hall")}, {"id": "late", "label": "10:25", "detail": t("案内なし", "No invitation")}] }],
+                      "button": t("この控えから復旧する", "Recover from this copy"),
+                      "hints": [t("新しい控えでも、消えた後の状態を保存していたら復旧できません。", "A newer backup may already contain the deletion."), t("例：9:30 に消えたなら、9:40 よりも、消える前の正常な控えが必要です。", "Example: after a 9:30 deletion, a 9:40 copy may be too late. You need a healthy copy from before deletion."), t("記録係に消えた時刻を聞く → その前で一番新しい控えを選ぶ → 戻った会場名を記録と照らします。", "Ask when deletion happened → pick the latest intact copy before that → compare the restored venue with the timeline.")],
+                      "lesson": t("青いホールの案内が戻りました。控えを残すだけでなく、戻して読めるか確かめて初めて復旧です。AWSのS3には、同じファイルの過去版を残す『バージョニング』という機能があります。", "The Blue Hall invitation is back. Keeping a copy is not enough: recover it and check that people can read it. AWS S3 offers versioning to retain earlier versions of a file."),
+                      "why": t("次の相談：控えの一覧に『保存成功』とあります。これだけで安心？", "Next request: a backup list says 'saved successfully'. Is that enough?"),
+                      "reasons": [{"id": "saved", "label": t("保存成功なら確認は不要", "Saving succeeded, so no check is needed")}, {"id": "latest", "label": t("一番新しい控えを無条件で使う", "Always use the newest copy")}, {"id": "rehearse", "label": t("戻して、中身が正しいか確かめる", "Restore and check the contents")}],
+                      "whyHint": t("『控えがある』と『必要な内容へ戻せる』は別です。使う人の目で確認します。", "Having a copy is different from recovering the content you need. Check it as a user."),
+                  },
+              ]}
+
+
+          def evaluate(check, values, lang):
+              t = lambda ja, en: text(lang, ja, en)
+              variant = str(hashlib.sha256(secret("FLAG_DELIVERY").encode()).digest()[0] % 3)
+              if check.endswith("-why"):
+                  predecessor = check.removesuffix("-why")
+                  receipt = values.get("receipt")
+                  if not isinstance(receipt, str) or not hmac.compare_digest(receipt.encode(), flag(predecessor).encode()):
+                      return False, t("先にこのミッションを直して、同じ端末で解説ミッションへ進んでください。", "Complete this mission's repair first, then continue to its explanation on the same device.")
+                  expected = {"delivery-why": "region", "sharing-why": "both", "restore-why": "rehearse"}[check]
+                  return values.get("reason") == expected, t("直った理由のカードと、次の相談をもう一度見比べましょう。", "Compare the repair lesson with the next request once more.")
+              if check == "delivery":
+                  return values.get("destination") == variant, t("まだ届きません。受付の拠点コードと、配送先マップを見比べてください。", "Not delivered yet. Compare the reception code with the delivery map.")
+              if check == "sharing":
+                  ok = values.get("scope") == "invitation" and values.get("permission") == "read"
+                  if values.get("scope") == "all":
+                      return False, t("案内は読めますが、社内名簿まで見えています。共有範囲を見直そう。", "The invitation is readable, but the staff list is visible too. Reconsider the scope.")
+                  return ok, t("受付の必要な操作と、共有してよい資料の両方を確かめよう。", "Check both the action reception needs and which document may be shared.")
+              return values.get("backup") == "good", t("必要な案内へ戻っていません。消えた時刻と、会場変更の記録を見比べよう。", "The needed invitation is not restored. Compare the deletion time with the venue change.")
+
+
+          def response(status, body, mime="application/json; charset=utf-8"):
+              return {"statusCode": status, "headers": {
+                  "content-type": mime, "cache-control": "no-store", "referrer-policy": "no-referrer",
+                  "x-content-type-options": "nosniff",
+                  "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+              }, "body": body if isinstance(body, str) else json.dumps(body, ensure_ascii=False)}
+
+
+          def handler(event, context=None):
+              path = event.get("rawPath", "/")
+              # Each team receives its own random capability URL. It is not a login key
+              # for the platform and never authorizes score changes or AWS account access.
+              pieces = path.split("/", 2)
+              access = secret("PLAY_KEY")
+              if len(pieces) != 3 or not hmac.compare_digest(pieces[1].encode(), access.encode()):
+                  return response(404, {"error": "not_found"})
+              route = pieces[2]
+              method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+              query = parse_qs(event.get("rawQueryString", ""))
+              lang = "en" if query.get("lang") == ["en"] else "ja"
+              if method == "GET":
+                  if route == "":
+                      return response(200, WEB_HTML, "text/html; charset=utf-8")
+                  if route == "app.js":
+                      return response(200, WEB_JS, "text/javascript; charset=utf-8")
+                  if route == "style.css":
+                      return response(200, WEB_CSS, "text/css; charset=utf-8")
+                  if route == "api/scenario":
+                      return response(200, scenario(lang))
+                  return response(404, {"error": "not_found"})
+              if method != "POST" or route != "api/play":
+                  return response(405, {"error": "method_not_allowed"})
+              body = event.get("body") or ""
+              if len(body) > 8192:
+                  return response(413, {"error": "too_large"})
+              try:
+                  if event.get("isBase64Encoded"):
+                      body = base64.b64decode(body, validate=True).decode("utf-8")
+                  data = json.loads(body)
+              except (ValueError, UnicodeError):
+                  return response(400, {"error": "invalid_json"})
+              if not isinstance(data, dict) or not isinstance(data.get("values"), dict):
+                  return response(400, {"error": "invalid_submission"})
+              check = data.get("checkpoint")
+              if not isinstance(check, str) or check not in CHECKS:
+                  return response(400, {"error": "unknown_checkpoint"})
+              ok, message = evaluate(check, data["values"], lang)
+              if not ok:
+                  return response(200, {"correct": False, "message": message})
+              return response(200, {"correct": True, "checkpoint": check, "flag": flag(check), "points": POINTS[CHECKS.index(check)]})
+
+          WEB_HTML = '<!doctype html>\n<html lang="ja">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="color-scheme" content="light">\n  <title>つながるオフィス / Office Link</title>\n  <link rel="stylesheet" href="style.css">\n  <script src="app.js" defer></script>\n</head>\n<body><div id="app"><p>画面を準備しています / Loading…</p></div><noscript>JavaScriptを有効にしてください / Enable JavaScript to play.</noscript></body>\n</html>\n'
+
+          WEB_JS = '"use strict";\nconst query = new URLSearchParams(location.search);\nconst lang = query.get("lang") === "en" ? "en" : "ja";\ndocument.documentElement.lang = lang;\nconst t = (ja, en) => lang === "en" ? en : ja;\nconst root = document.getElementById("app");\nconst stateKey = `office-link:${location.pathname}`;\nlet state = { mission: 0, started: false, receipts: {}, hints: {}, values: {} };\nlet missions = [];\nlet pending = false;\nlet message = null;\nlet storageAvailable = true;\ntry {\n  const stored = JSON.parse(localStorage.getItem(stateKey) || "null");\n  if (stored && typeof stored === "object" && stored.receipts && stored.hints && stored.values) {\n    state = { ...state, ...stored, mission: [0, 1, 2].includes(stored.mission) ? stored.mission : 0 };\n  }\n} catch { storageAvailable = false; }\n\nfunction save() {\n  try { localStorage.setItem(stateKey, JSON.stringify(state)); }\n  catch { storageAvailable = false; }\n}\nfunction el(tag, attrs = {}, ...children) {\n  const node = document.createElement(tag);\n  for (const [key, value] of Object.entries(attrs)) {\n    if (key.startsWith("on")) node.addEventListener(key.slice(2).toLowerCase(), value);\n    else if (key === "class") node.className = value;\n    else if (key === "disabled") node.disabled = value;\n    else node.setAttribute(key, value);\n  }\n  for (const child of children.flat()) if (child !== null && child !== undefined) {\n    node.append(typeof child === "string" ? document.createTextNode(child) : child);\n  }\n  return node;\n}\nconst button = (label, action, attrs = {}) => el("button", { type: "button", onclick: action, ...attrs }, label);\nconst heading = (label) => el("p", { class: "eyebrow" }, label);\nfunction move(index) { state.mission = index; message = null; save(); render(); }\nfunction link(role) {\n  const url = new URL(location.href);\n  url.searchParams.set("role", String(role));\n  url.searchParams.set("mission", String(state.mission));\n  return url.href;\n}\nasync function copy(value, node) {\n  try { await navigator.clipboard.writeText(value); node.textContent = t("コピーしました", "Copied"); }\n  catch { node.textContent = t("コピーできません。表示中の文字列を選択してください", "Copy failed. Select the displayed text instead."); }\n}\nfunction choices(field, check) {\n  const selected = state.values[check] || {};\n  return el("fieldset", {}, el("legend", {}, field.label), el("div", { class: "choices" }, field.options.map(option =>\n    el("label", { class: "choice" }, el("input", {\n      type: "radio", name: field.id, value: option.id,\n      disabled: pending,\n      ...(selected[field.id] === option.id ? { checked: "" } : {}),\n      onchange: () => { (state.values[check] ||= {})[field.id] = option.id; save(); },\n    }), el("span", {}, el("strong", {}, option.label), option.detail ? el("small", {}, option.detail) : null))\n  )));\n}\nfunction roleCards(mission) {\n  return el("div", { class: "role-grid" }, mission.cards.map((card, index) => el("article", { class: "role-card" },\n    heading(card.role), el("h3", {}, card.title), el("p", {}, card.body),\n    el("a", { href: link(index), target: "_blank", rel: "noopener noreferrer" }, t("この役割のカードを別画面で開く ↗", "Open this role card separately ↗"))\n  )));\n}\nfunction receipt(check, label) {\n  const result = state.receipts[check];\n  if (!result) return null;\n  const copyButton = button(t("合言葉をコピー", "Copy passphrase"), event => copy(result.flag, event.currentTarget), { class: "secondary" });\n  return el("article", { class: "receipt" },\n    el("strong", {}, label), el("span", { class: "points" }, `+${result.points}`),\n    el("p", {}, t("ポータルの同じ名前の回答欄へ貼り付けて提出すると得点になります。", "Paste into the matching answer field in the portal and submit to score.")),\n    el("code", { tabindex: "0" }, result.flag), copyButton);\n}\nasync function submit(check, required) {\n  if (pending) return;\n  const values = { ...(state.values[check] || {}) };\n  if (required.some(key => typeof values[key] !== "string")) {\n    message = { kind: "error", text: t("選択肢をそれぞれ1つ選んでください。", "Choose one option in each group.") };\n    render(); return;\n  }\n  if (check.endsWith("-why")) values.receipt = state.receipts[check.replace("-why", "")]?.flag;\n  pending = true; message = null; render();\n  try {\n    const response = await fetch(`api/play?lang=${lang}`, {\n      method: "POST", headers: { "Content-Type": "application/json" },\n      signal: AbortSignal.timeout(10000),\n      body: JSON.stringify({ checkpoint: check, values }),\n    });\n    if (!response.ok) throw new Error("request failed");\n    const result = await response.json();\n    if (result.correct === true && typeof result.flag === "string" && result.checkpoint === check) {\n      state.receipts[check] = result; save();\n      message = { kind: "success", text: t("成功！提出用の合言葉を受け取りました。", "Success! Your passphrase is ready to submit.") };\n    } else if (result.correct === false && typeof result.message === "string") {\n      message = { kind: "error", text: result.message + t(" ここでの試行は減点されません。", " Trying here costs no points.") };\n    } else throw new Error("unexpected response");\n  } catch {\n    message = { kind: "error", text: t("通信できませんでした。入力は残しています。もう一度送るか、運営者を呼んでください。", "Could not connect. Your choices are preserved. Retry or ask the host for help.") };\n  } finally { pending = false; render(); }\n  document.getElementById("feedback")?.focus();\n}\nfunction render() {\n  root.replaceChildren();\n  const languageUrl = new URL(location.href);\n  languageUrl.searchParams.set("lang", lang === "ja" ? "en" : "ja");\n  root.append(el("header", { class: "topbar" },\n    el("a", { class: "brand", href: `./?lang=${lang}` }, "TENKACLOUD / OFFICE LINK"),\n    el("a", { href: languageUrl.href }, lang === "ja" ? "English" : "日本語")));\n  const main = el("main"); root.append(main);\n  if (!storageAvailable) main.append(el("p", { class: "notice" }, t("このブラウザには進捗を保存できません。更新する前に合言葉をポータルへ提出してください。", "Progress cannot be saved in this browser. Submit passphrases to the portal before reloading.")));\n  const requestedRole = query.get("role");\n  if (requestedRole === "0" || requestedRole === "1") {\n    const index = Number(query.get("mission"));\n    const mission = missions[[0, 1, 2].includes(index) ? index : 0];\n    const card = mission.cards[Number(requestedRole)];\n    main.append(heading(t("仲間に声で伝えるカード", "Read this card to a teammate")), el("h1", {}, card.title),\n      el("article", { class: "solo-card" }, el("p", { class: "large" }, card.body)),\n      el("p", {}, t("操作担当に、見えている手がかりを伝えてください。自分の画面を見せなくても相談できます。", "Tell the operator what you see. Try helping without showing them your screen.")),\n      el("a", { href: `./?lang=${lang}` }, t("操作画面へ戻る", "Back to the control room")));\n    return;\n  }\n  if (!state.started) {\n    main.append(el("section", { class: "hero" }, heading(t("相談が、得点になる。", "Turn conversation into points.")),\n      el("h1", {}, t("離れていても、\\nチームでつなごう。", "Different offices.\\nOne team.")),\n      el("p", { class: "lead" }, t("交流会の案内が届かない。見せてはいけない資料もある。仲間の手がかりを集めて、3つのミッションをクリアしよう。", "Invitations are stuck. Some documents must stay private. Combine your teammates\' clues to clear three missions.")),\n      el("p", {}, t("AWS経験・プログラミング不要。3〜4人で、読む人・操作する人・確認する人を交代します。", "No AWS or coding experience required. In teams of 3–4, rotate reader, operator and checker.")),\n      button(t("役割を分けて、はじめる →", "Choose roles and begin →"), () => { state.started = true; save(); render(); }, { class: "primary" }),\n      el("div", { class: "journey", "aria-label": t("3つのミッション", "Three missions") }, missions.map((m, i) => el("div", {}, el("span", { class: "icon" }, m.icon), el("strong", {}, `${i + 1}. ${m.title}`))))));\n    main.append(el("p", { class: "boundary" }, t("これはクラウドの仕組みを体験する模型です。実際の社内資料やAWSの設定は変更しません。正式な得点はTenkaCloudポータルで確認します。", "This is a model of cloud concepts. It does not change real company files or AWS settings. Official scores live in the TenkaCloud portal.")));\n    return;\n  }\n  const m = missions[state.mission];\n  main.append(el("nav", { class: "missions", "aria-label": t("ミッション", "Missions") }, missions.map((item, i) =>\n    button(`${state.receipts[item.id + "-why"] ? "✓ " : ""}${i + 1}. ${item.title}`, () => move(i), { class: i === state.mission ? "active" : "", "aria-current": i === state.mission ? "step" : "false", disabled: pending })\n  )));\n  main.append(el("section", { class: "mission-heading" }, heading(`MISSION 0${state.mission + 1} / 03`), el("h1", {}, m.title), el("p", { class: "lead" }, m.goal)));\n  main.append(el("p", { class: "role-tip" }, t("読む人：カードを1枚ずつ担当 ／ 操作する人：話を聞いて試す ／ 確認する人：結果を声に出す", "Readers: take a card each / Operator: listen and try / Checker: say what changed")));\n  main.append(roleCards(m));\n  if (message) main.append(el("div", { id: "feedback", class: `feedback ${message.kind}`, role: "status", tabindex: "-1" }, message.text));\n  const done = state.receipts[m.id];\n  if (!done) {\n    const panel = el("section", { class: "control-room" }, heading(t("操作担当の画面", "Operator\'s panel")), el("h2", {}, m.before));\n    for (const field of m.fields) panel.append(choices(field, m.id));\n    panel.append(button(pending ? t("確認しています…", "Checking…") : m.button, () => submit(m.id, m.fields.map(f => f.id)), { class: "primary", disabled: pending }));\n    const count = state.hints[m.id] || 0;\n    panel.append(el("div", { class: "hint-area" }, button(t(`助け舟を出す（無料） ${count}/3`, `Get a free hint ${count}/3`), () => { state.hints[m.id] = Math.min(count + 1, 3); save(); render(); }, { class: "secondary", disabled: count >= 3 }),\n      m.hints.slice(0, count).map((hint, i) => el("p", {}, `${i + 1}. ${hint}`))));\n    main.append(panel);\n  } else {\n    main.append(el("section", { class: "lesson" }, heading(t("直った！今度は、仲間に説明しよう。", "Repaired! Now explain it to a teammate.")), el("h2", {}, t("なぜ、うまくいった？", "Why did that work?")), el("p", { class: "lead" }, m.lesson)));\n    if (!state.receipts[m.id + "-why"]) {\n      const panel = el("section", { class: "control-room" }, heading(t("解説ミッション / 操作担当を交代", "Explanation mission / Swap the operator")),\n        choices({ id: "reason", label: m.why, options: m.reasons }, m.id + "-why"),\n        el("p", {}, t("選ぶ前に、その理由を仲間へ一言で伝えよう。", "Before choosing, tell a teammate why in one sentence.")),\n        button(pending ? t("確認しています…", "Checking…") : t("この説明で引き継ぐ", "Send this explanation"), () => submit(m.id + "-why", ["reason"]), { class: "primary", disabled: pending }),\n        el("details", {}, el("summary", {}, t("解説ミッションの助け舟（無料）", "Free explanation hint")), el("p", {}, m.whyHint)));\n      main.append(panel);\n    } else {\n      main.append(el("section", { class: "finished" }, el("h2", {}, t("解説ミッションも成功！", "Explanation cleared!")),\n        el("p", {}, t("次は役割を交代しよう。合言葉の提出も忘れずに。", "Swap roles for the next mission. Remember to submit your passphrases.")),\n        state.mission < 2 ? button(t("次のミッションへ →", "Next mission →"), () => move(state.mission + 1), { class: "primary" }) : null));\n    }\n  }\n  main.append(el("section", { class: "receipts" }, el("h2", {}, t("ポータルへ提出する合言葉", "Passphrases to submit in the portal")),\n    el("p", {}, t("ここは提出前の控えです。ポータルの得点・提出済み表示が正式な結果です。操作と解説は別々に提出できます。ポータルへの誤った合言葉は5点減点なので、コピーして同じ番号の欄へ貼り付けます。", "These are your submission notes. The portal\'s score and solved status are official. Repair and explanation score independently. A wrong portal passphrase costs 5 points, so copy it into the matching numbered field.")),\n    receipt(m.id, `${state.mission + 1}A. ${m.title}`), receipt(m.id + "-why", `${state.mission + 1}B. ${t("仲間に説明する", "Explain to a teammate")}`)));\n  if (Object.keys(state.receipts).length === 6) main.append(el("section", { class: "celebration" }, el("h2", {}, t("3つのミッション、つながった！", "All three missions connected!")), el("p", {}, t("6つの合言葉を提出して100点へ。最後に『仲間のどの一言が役立った？』を1人ずつ話そう。", "Submit all six passphrases for 100 points. Finish by sharing one thing a teammate said that helped."))));\n  main.append(el("footer", {}, t("模型の中で何度でも試せます。ヒント・操作の試行・未完了による減点はありません。公式の残り時間はポータルで確認。", "Retry freely in this model. Hints, repair attempts and unfinished missions cost no points. Check the portal for the official time remaining.")));\n}\nasync function start() {\n  try {\n    const response = await fetch(`api/scenario?lang=${lang}`, { signal: AbortSignal.timeout(10000) });\n    if (!response.ok) throw new Error("unavailable");\n    missions = (await response.json()).missions;\n    render();\n  } catch {\n    root.replaceChildren(el("main", {}, el("h1", {}, t("問題を開けませんでした", "Could not open the mission")),\n      el("p", {}, t("運営者から受け取ったURLを確認してください。", "Check the URL provided by your host.")), button(t("再読み込み", "Reload"), () => location.reload(), { class: "primary" })));\n  }\n}\nstart();\n'
+
+          WEB_CSS = ':root{font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:#122b3b;background:#f3f7f6;line-height:1.65;color-scheme:light}*{box-sizing:border-box}body{margin:0}button,input,a{font:inherit}button,a{-webkit-tap-highlight-color:transparent}button{cursor:pointer}a{color:#086a64}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #d96f11;outline-offset:4px}.topbar{background:#102d38;color:white;display:flex;justify-content:space-between;align-items:center;padding:18px max(22px,calc((100% - 1080px)/2));gap:16px}.topbar a{color:white;font-size:.85rem}.brand{font-weight:800;letter-spacing:.1em;text-decoration:none}main{max-width:1130px;margin:auto;padding:34px 25px 70px}.eyebrow{font-size:.8rem;letter-spacing:.1em;font-weight:800;color:#096a63;margin:0 0 8px}h1{font-size:clamp(2rem,4.5vw,3.8rem);line-height:1.25;letter-spacing:-.035em;white-space:pre-line;margin:10px 0 22px}h2{font-size:1.35rem;line-height:1.5;margin:10px 0 20px}h3{font-size:1.1rem;margin:8px 0}p{margin:12px 0}.lead{font-size:1.12rem;max-width:760px}.hero{background:white;border:1px solid #d7e3df;border-radius:24px;padding:clamp(25px,5vw,58px);box-shadow:0 12px 36px #102d3808}.journey{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:34px 0}.journey>div{display:flex;flex-direction:column;gap:14px;background:#eaf5f0;border-radius:14px;padding:23px}.icon{font-size:2rem;color:#077269}.primary,.secondary,.missions button{border-radius:12px;font-weight:750;min-height:48px;padding:12px 22px;transition:background .15s}.primary{background:#086b62;color:white;border:2px solid #086b62;box-shadow:0 4px 0 #064d48;margin:16px 0 12px}.primary:hover{background:#054c45}.primary:disabled{opacity:.65;cursor:wait}.secondary{background:white;border:1.5px solid #79988f;color:#24453b}.secondary:disabled{opacity:.55;cursor:default}.boundary,footer{font-size:.88rem;color:#4e6570;max-width:900px;margin-top:26px}.missions{display:flex;gap:10px;margin:0 0 30px}.missions button{flex:1;background:#fff;border:1px solid #c8d8d2;color:#264a49;text-align:left;font-size:.9rem}.missions button.active{background:#d8f0e5;border:2px solid #086b62}.mission-heading h1{font-size:clamp(1.9rem,3.8vw,2.8rem)}.role-tip{font-size:.9rem;border-left:4px solid #d98621;padding:10px 15px;background:#fff6e9}.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0}.role-card{background:#fff;border:1px solid #cbded6;border-top:5px solid #28a18a;border-radius:15px;padding:22px}.role-card:nth-child(2){border-top-color:#db923f}.role-card a{font-size:.85rem}.control-room{background:white;padding:28px;border-radius:20px;border:1px solid #cbded6}.control-room>h2{color:#566c74}.choices{display:flex;gap:12px;flex-wrap:wrap}.choice{flex:1;min-width:145px;display:flex;gap:10px;align-items:center;padding:18px 14px;border:2px solid #cfdbd7;border-radius:13px;cursor:pointer}.choice:has(input:checked){background:#e0f5eb;border-color:#08776b}.choice input{accent-color:#08776b;width:20px;height:20px;flex-shrink:0}.choice span{display:flex;flex-direction:column}.choice small{color:#48645f}.choice:hover{background:#f1f8f4}fieldset{border:0;padding:0;margin:0 0 24px}legend{font-weight:750;margin-bottom:10px}.hint-area{border-top:1px solid #dce5e1;padding-top:18px;margin-top:20px}.hint-area p{border-left:3px solid #e4bc73;padding-left:12px}.feedback{padding:18px 23px;border-radius:14px;margin:20px 0;font-weight:650}.error{background:#fff2df;color:#6d3c06;border:1px solid #c6924d}.success{background:#ddf3e3;color:#185032;border:1px solid #8fba9c}.lesson{background:#dff2e8;border:1px solid #98c5af;padding:26px;border-radius:18px;margin:20px 0}.lesson h2{margin-bottom:6px}.finished{background:#e0f1e8;padding:23px;border-radius:17px;margin:18px 0}.receipts{margin-top:30px;border-top:1px solid #cadbd2;padding-top:18px}.receipts>p{font-size:.92rem}.receipt{position:relative;background:white;border:1px dashed #789c8d;padding:20px;margin-top:15px;border-radius:13px}.receipt p{font-size:.85rem}.receipt code{display:block;overflow-wrap:anywhere;margin:10px 0;font-size:.95rem;color:#304956}.points{float:right;color:#056055;font-weight:800}.celebration{background:#103b42;color:#fff;padding:28px;border-radius:18px;margin-top:28px}.solo-card{background:white;padding:35px;border:3px solid #188675;border-radius:20px}.large{font-size:1.7rem}.notice{background:#fff0d9;padding:15px}details{margin-top:20px}summary{cursor:pointer;color:#28594c;font-weight:650}footer{border-top:1px solid #ceddd5;padding-top:18px}@media(max-width:650px){main{padding:23px 16px 40px}.topbar{padding:14px 16px}.brand{font-size:.7rem}.journey{grid-template-columns:1fr;gap:10px;margin:25px 0}.journey>div{flex-direction:row;align-items:center;padding:13px 17px}.missions{gap:6px}.missions button{padding:10px 8px;font-size:.75rem}.role-grid{grid-template-columns:1fr}.control-room{padding:22px 17px}.choices{flex-direction:column}.choice{min-height:64px}.primary{width:100%;font-size:1rem}.solo-card{padding:22px}.large{font-size:1.3rem}}\n'
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+  WorkshopUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn:
+        Fn::GetAtt:
+          - Workshop
+          - Arn
+      AuthType: NONE
+  UrlAccess:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: Workshop
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+  UrlInvocation:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: Workshop
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: arn:${AWS::Partition}:iam::${TenkaCloudAccountId}:root
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: ConsoleSessionBaseline
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: "*"
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+Outputs:
+  GameUrl:
+    Description: Team-private workshop link. Share only with your teammates.
+    Value:
+      Fn::Sub: ${WorkshopUrl.FunctionUrl}${PlayKey}/
+  ParticipantViewerRoleArn:
+    Value:
+      Fn::GetAtt:
+        - ParticipantViewerRole
+        - Arn
+  DeliveryFlag:
+    Description: Scorer only; filtered from participant outputs.
+    Value:
+      Fn::Sub: TC{${DeliverySecret}}
+  DeliveryWhyFlag:
+    Description: Scorer only; filtered from participant outputs.
+    Value:
+      Fn::Sub: TC{${DeliveryWhySecret}}
+  SharingFlag:
+    Description: Scorer only; filtered from participant outputs.
+    Value:
+      Fn::Sub: TC{${SharingSecret}}
+  SharingWhyFlag:
+    Description: Scorer only; filtered from participant outputs.
+    Value:
+      Fn::Sub: TC{${SharingWhySecret}}
+  RestoreFlag:
+    Description: Scorer only; filtered from participant outputs.
+    Value:
+      Fn::Sub: TC{${RestoreSecret}}
+  RestoreWhyFlag:
+    Description: Scorer only; filtered from participant outputs.
+    Value:
+      Fn::Sub: TC{${RestoreWhySecret}}
