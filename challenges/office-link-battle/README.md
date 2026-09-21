@@ -1,4 +1,4 @@
-# Office Link — a GameDay built on conversation
+# Office Link — a Battle built on conversation
 
 [日本語](README.ja.md) · [60-minute host runbook](OPERATOR.md)
 
@@ -14,13 +14,13 @@ Local preview of the implemented workshop. Official scoring is handled by the ex
 | Share just the invitation | Decide who may read which documents | Check required access and forbidden access | 20 + 15 |
 | Recover the invitation | Compare the timeline with saved copies | Recover missing bookings after a page already works | 20 + 15 |
 
-Use four people per team and 60 minutes: 20 for Preparation, 25 for GameDay, and 15 for introduction and reflection. Rank teams by the official score at the deadline; celebrate equal scores as ties. Repairs and explanations score independently. Workshop hints, attempts and unfinished missions carry no penalty. An incorrect portal passphrase costs 5 points under the standard difficulty-1 rule; copy it into the matching numbered field. Conversation frequency and quality are not automatically graded.
+Use four people per team and 60 minutes: 20 for Preparation, 25 for Battle, and 15 for introduction and reflection. Rank teams by the official score at the deadline; celebrate equal scores as ties. Repairs and explanations score independently. Workshop hints, attempts and unfinished missions carry no penalty. An incorrect portal passphrase costs 5 points under the standard difficulty-1 rule; copy it into the matching numbered field. Conversation frequency and quality are not automatically graded.
 
 ## Preparation Gate
 
-Include only `office-link-gate` and `office-link-gameday` in the event. Enable the existing Progression Gate with [event-gate.json](event-gate.json). Preparation issues one scoring flag only after every check; GameDay has six checkpoints worth 100 points. Together the event totals 200 points.
+Include only `office-link-gate` and `office-link-battle` in the event. Enable the existing Progression Gate with [event-gate.json](event-gate.json). Preparation issues one scoring flag only after every check; Battle has six checkpoints worth 100 points. Together the event totals 200 points.
 
-GameDay also enforces repair → explanation → next mission on the server. One unfinished task is available at a time; completed work remains reviewable. The gate is event configuration, not a second prerequisite graph in catalog metadata.
+Battle also enforces repair → explanation → next mission on the server. One unfinished task is available at a time; completed work remains reviewable. The gate is event configuration, not a second prerequisite graph in catalog metadata.
 
 ## First action
 

@@ -26,7 +26,7 @@ The browser's submitted passphrases are disposable preview values, not credentia
 
 ## Sequential Gate follow-up — 2026-09-21
 
-The event now uses Preparation as a single-flag Gate and this GameDay as its only unlock target. The ninth runtime test rejects future missions without the previous explanation receipt and checks that resume restores only validated, same-team progress. Both generated deployment artifacts and JavaScript syntax checks passed; catalog validation accepted 119 problems. The existing platform Gate suites passed 50 tests without changes to Gate or scoring logic.
+The event now uses Preparation as a single-flag Gate and this Battle as its only unlock target. The ninth runtime test rejects future missions without the previous explanation receipt and checks that resume restores only validated, same-team progress. Both generated deployment artifacts and JavaScript syntax checks passed; catalog validation accepted 119 problems. The existing platform Gate suites passed 50 tests without changes to Gate or scoring logic.
 
 In Chromium, missions 2 and 3 started disabled. Finishing 1A alone left them disabled; finishing 1B unlocked only mission 2. A fresh browser imported the 1B passphrase and recovered 1A/1B without replaying them. That operator read the separate sharing and recovery role cards, completed 2A/2B and 3A/3B in sequence, and received the completion display. Browser error collection was empty. The updated public preview image contains only the introduction, without team credentials or passphrases.
 

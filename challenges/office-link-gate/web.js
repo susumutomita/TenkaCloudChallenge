@@ -51,7 +51,7 @@ async function submit() {
 function render() {
   root.replaceChildren(el("header", { class: "topbar" }, el("span", { class: "brand" }, "TENKACLOUD / GATE"), el("a", { href: `?lang=${lang === "ja" ? "en" : "ja"}` }, lang === "ja" ? "English" : "日本語")));
   const main = el("main"); root.append(main);
-  main.append(el("p", { class: "eyebrow" }, t("4人で準備 → 修了 → GameDay", "Prepare together → graduate → GameDay")), el("h1", {}, t("チームで、準備をそろえよう。", "Get your team ready.")));
+  main.append(el("p", { class: "eyebrow" }, t("4人で準備 → 修了 → Battle", "Prepare together → graduate → Battle")), el("h1", {}, t("チームで、準備をそろえよう。", "Get your team ready.")));
   if (feedback) main.append(el("p", { id: "feedback", class: "feedback", role: "status", tabindex: "-1" }, feedback));
   if (!storageAvailable) main.append(el("p", { class: "notice" }, t("進捗を保存できません。端末を閉じる前に引き継ぎコードを控えてください。", "Progress cannot be saved. Keep your handoff code before closing the browser.")));
   if (!current) {
@@ -59,7 +59,7 @@ function render() {
     return;
   }
   if (current.done) {
-    main.append(el("section", { class: "celebration" }, el("h2", {}, t("4つの確認、修了！", "All four checks completed!")), el("p", {}, t("ポータルの「つながるオフィスの準備」へ修了の合言葉を提出。100点と修了が反映されたら、問題一覧を更新してGameDayへ進みます。", "Submit your completion passphrase to Office Link Preparation in the portal. Once the 100 points and completion appear, refresh the problem list and open GameDay."))));
+    main.append(el("section", { class: "celebration" }, el("h2", {}, t("4つの確認、修了！", "All four checks completed!")), el("p", {}, t("ポータルの「つながるオフィスの準備」へ修了の合言葉を提出。100点と修了が反映されたら、問題一覧を更新してBattleへ進みます。", "Submit your completion passphrase to Office Link Preparation in the portal. Once the 100 points and completion appear, refresh the problem list and open Battle."))));
     main.append(el("article", { class: "receipt" }, el("code", {}, current.flag), button(t("修了の合言葉をコピー", "Copy completion passphrase"), e => copy(current.flag, e))));
   } else {
     const l = current.lesson;

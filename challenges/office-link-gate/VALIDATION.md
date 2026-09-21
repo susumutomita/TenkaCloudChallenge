@@ -4,7 +4,7 @@
 
 `make test`: four Python tests passed against the real handler and the generated CloudFormation code. They cover all four sequential steps, no scoring flag before completion, retry/resume, tampered and foreign-team tokens, scoring-secret separation, malformed requests, private assets, bilingual output and least-privilege deployment declarations. `node --check web.js` passed. Catalog validation accepted all 119 metadata files.
 
-The existing platform Progression Gate's two focused suites passed (50 tests). The provided `event-gate.json` was also parsed using the actual platform schema and exercised with the existing completion/lock functions: score 0 and incomplete keeps GameDay locked; the completion score unlocks it; an unfinished second team remains locked. This is code-level integration evidence, not a deployed portal test.
+The existing platform Progression Gate's two focused suites passed (50 tests). The provided `event-gate.json` was also parsed using the actual platform schema and exercised with the existing completion/lock functions: score 0 and incomplete keeps Battle locked; the completion score unlocks it; an unfinished second team remains locked. This is code-level integration evidence, not a deployed portal test.
 
 ## Participant evidence
 
@@ -14,4 +14,4 @@ The local preview does not implement official event scores or event-level Gate e
 
 ## Before hosting
 
-Use the [host rehearsal checklist](../office-link-gameday/OPERATOR.md) for real AWS deployment, feature-flag/required-policy configuration, two-team portal lock/unlock and score isolation, beginner play timing, four-person conversation, and teardown/billing checks. These external checks have not been performed and are not claimed as implementation evidence.
+Use the [host rehearsal checklist](../office-link-battle/OPERATOR.md) for real AWS deployment, feature-flag/required-policy configuration, two-team portal lock/unlock and score isolation, beginner play timing, four-person conversation, and teardown/billing checks. These external checks have not been performed and are not claimed as implementation evidence.

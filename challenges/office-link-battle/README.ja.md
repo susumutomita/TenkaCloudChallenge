@@ -1,4 +1,4 @@
-# つながるオフィス — 相談してひらくGameDay
+# つながるオフィス — 相談してひらくBattle
 
 [English](README.md) · [60分の開催台本](OPERATOR.ja.md)
 
@@ -18,7 +18,7 @@
 
 ## 準備から本戦へのGate
 
-イベントには `office-link-gate` と `office-link-gameday` の2問だけを入れます。既存のProgression Gateを有効にし、[event-gate.json](event-gate.json)の設定で準備修了まで本戦をロックします。準備は途中で公式加点しない単一flag問題、本戦は6項目合計100点。イベント合計200点です。
+イベントには `office-link-gate` と `office-link-battle` の2問だけを入れます。既存のProgression Gateを有効にし、[event-gate.json](event-gate.json)の設定で準備修了まで本戦をロックします。準備は途中で公式加点しない単一flag問題、本戦は6項目合計100点。イベント合計200点です。
 
 本戦内も操作 → 解説 → 次のミッションの順にサーバーで確認します。未完了の課題は一度に1つ。終えた問題やミッションは復習できます。Gate設定はイベント側に置き、カタログの独自前提グラフは作りません。
 

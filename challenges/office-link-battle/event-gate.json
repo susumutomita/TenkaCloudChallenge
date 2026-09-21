@@ -1,7 +1,7 @@
 {
   "gateProblemId": "office-link-gate",
   "unlockTargetIds": [
-    "office-link-gameday"
+    "office-link-battle"
   ],
   "defaultPolicy": "required",
   "completionBonus": 0

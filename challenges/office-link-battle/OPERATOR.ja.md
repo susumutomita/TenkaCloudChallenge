@@ -38,9 +38,9 @@
 
 ## Gateの設定と配布
 
-1. [本体のAWS開催手順](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/event-runbook.md)でLiteと競技アカウントを準備。イベントには **office-link-gate と office-link-gameday の2問だけ**を登録し、各チームへ両方デプロイする。
+1. [本体のAWS開催手順](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/event-runbook.md)でLiteと競技アカウントを準備。イベントには **office-link-gate と office-link-battle の2問だけ**を登録し、各チームへ両方デプロイする。
 2. イベント詳細の **「進行 / Gate」** を開く。TenantAdminで **「このテナントで Progression Gate 機能を有効化する」** をONにする（既定OFF）。同じテナント内の他イベントへの影響は、そのイベントのGate設定も確認する。
-3. **Gate challenge = office-link-gate**、**アンロック対象 = office-link-gameday だけ**、**デフォルト policy = required**、完了ボーナス = 0。全チームのpolicyは継承とし、offの上書きを置かない。保存して再読み込みし、設定を確認する。[event-gate.json](event-gate.json)が同じAPI設定。
+3. **Gate challenge = office-link-gate**、**アンロック対象 = office-link-battle だけ**、**デフォルト policy = required**、完了ボーナス = 0。全チームのpolicyは継承とし、offの上書きを置かない。保存して再読み込みし、設定を確認する。[event-gate.json](event-gate.json)が同じAPI設定。
 4. 公式競技時間は準備20分＋本戦25分を目安に **45分**。全員が準備画面を開けてから開始。最初は準備だけが操作でき、本戦の接続先・回答は既存Gateでロックされる。
 5. 準備の4確認を終えると、修了の合言葉を1つ発行。ポータルへ正しく提出して100点＋修了となったチームから、問題一覧を更新して本戦へ。準備途中の加点はない。本戦100点と合わせてイベント合計200点、追加ボーナスなし。
 6. ポータルURLとチームキーはチーム限定で配布。本戦のGameUrlを事前配布しない。リハーサルは別イベント・別チームで行い、本番へ試験得点を混ぜない。
@@ -52,7 +52,7 @@
 
 Liteランチャーの既定 `ProblemsRepoRef` は最後に公開したリリースを指すため、この新しいセットを含むとは限りません。リハーサルで使う本体チェックアウトの `release/tenkacloud-release.json` にある `sources.catalog.commit` を控え、ランチャーの **ProblemsRepoRef** へ指定します。本体の **RepoRef** もリハーサルするコミットへ固定してください。公開済みリリースに収録されるまでは候補版での開催準備です。
 
-ローカルから `make deploy` する場合も、本体の `problems` をそのgitlinkへ合わせます。デプロイ前に `challenges/office-link-gate/metadata.json` と `challenges/office-link-gameday/metadata.json` の両方が存在することを確認します。版を変えても既存イベントに問題やGate設定が自動登録されるわけではありません。
+ローカルから `make deploy` する場合も、本体の `problems` をそのgitlinkへ合わせます。デプロイ前に `challenges/office-link-gate/metadata.json` と `challenges/office-link-battle/metadata.json` の両方が存在することを確認します。版を変えても既存イベントに問題やGate設定が自動登録されるわけではありません。
 
 ## 60分の司会台本
 
