@@ -2,7 +2,7 @@
 
 [English](README.md) · [開催ランブック](OPERATOR.ja.md) · [企画 #884](https://github.com/susumutomita/TenkaCloudChallenge/issues/884)
 
-4人で相談し、実際のAWS設定を直して拠点のページを届け続ける入門Battleです。先に [準備Challenge](../../challenges/office-link-gate/README.ja.md) でEC2起動・IGW・経路・Session Manager・HTTPを1つずつ体験します。本戦は準備とは別のEC2とVPCを用意します。
+異なる拠点から同じ会場へ集まった4人で相談し、実際のAWS設定を直して拠点のページを届け続ける入門Battleです。操作や説明を交代しながら学び、共同作業を交流のきっかけにします。先に [準備Challenge](../../challenges/office-link-gate/README.ja.md) でEC2起動・IGW・経路・Session Manager・HTTPを1つずつ体験します。本戦は準備とは別のEC2とVPCを用意します。
 
 ![チームの構成](diagram.svg)
 

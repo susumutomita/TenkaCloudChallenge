@@ -2,18 +2,20 @@
 
 [日本語](OPERATOR.ja.md) · [Runtime and costs](README.md)
 
-Start with 2–4 teams of four, not a capacity guarantee. Mix sites and experience; rotate operating, reading the diagram, explaining and checking. Share a result rather than grading how much each person speaks.
+The first event assumes engineers from different offices **meet at one venue to learn AWS and get to know each other**. Start with 2–4 teams of four, not a capacity guarantee. Mix offices, departments and AWS experience within each team. Teammates sit together, discuss one task and rotate operating, reading the diagram, explaining and checking. Speaking frequency and individual understanding are not automatically graded.
 
 | When | Owner / estimated effort | Ready when |
 | --- | --- | --- |
-| 2–4 weeks before | Lead and helpers, 60 minutes | Goal, audience, date, venue/calls, budget, teardown owner recorded |
+| 2–4 weeks before | Lead and helpers, 60 minutes | Learning and social goals, audience, date, venue, budget and teardown owner recorded |
 | 2 weeks before | Technical owner, half a day | Lite, two rehearsal teams, competitor account per team, pinned versions and support channel ready |
 | 1 week before | Host, technical owner, beginner readers, half a day | Real-AWS rehearsal below completed; propagation, recovery and cleanup times measured |
-| Day before | Lead, 60 minutes | Mixed teams, preferably one PC per person, private team calls, login details, role rotation, backup staff |
+| Day before | Lead, 60 minutes | Teams mixing offices and experience, preferably one PC per person, shared tables with power and Wi-Fi, login details, role rotation, backup staff |
 | 60 minutes before | Technical owner, 30–60 minutes | Login, team AWS role, Preparation URL and Battle lock checked; scoring not started |
-| Event | Host plus technical owner, reserve 90–120 minutes | Intro 5, Preparation about 40, Battle about 30–45, reflection 10; adjust using rehearsal |
+| Event | Host plus technical owner, reserve 90–120 minutes | Introductions and role assignment 5, Preparation about 40, Battle about 30–45, reflection 10; adjust using rehearsal |
 | After | Technical owner, 30–60 minutes | Save scores, delete deployments, check remaining resources and billing; assign cleanup failures |
 | Next week | All staff, 30 minutes | Update the template with actual times, blockers, useful conversations and costs |
+
+Arrange a shared table, power and Wi-Fi for each team; one laptop per participant is recommended. Use the five-minute introduction for names, everyday roles, AWS experience and the first role assignment. Before choosing an explanation answer, have a teammate briefly explain the reason. End with each person sharing something they learned from another teammate, creating a reason to talk again.
 
 Confirm funding independently; do not assume free support from a named organization. Use only the core preparation and Battle initially. Select the seven extra Challenges for separate events.
 

@@ -2,7 +2,7 @@
 
 [日本語](README.ja.md) · [Host runbook](OPERATOR.md) · [Plan #884](https://github.com/susumutomita/TenkaCloudChallenge/issues/884)
 
-Four teammates repair real AWS settings to keep their site reachable. Complete [Office Link Preparation](../../challenges/office-link-gate/README.md) first: launch EC2, connect an internet gateway, add a route, connect through Session Manager, and permit HTTP. The Battle provisions a **separate EC2 and VPC**.
+Four teammates from different offices meet at one venue and repair real AWS settings to keep their site reachable. Taking turns operating and explaining creates a shared learning experience and a reason to talk. Complete [Office Link Preparation](../../challenges/office-link-gate/README.md) first: launch EC2, connect an internet gateway, add a route, connect through Session Manager, and permit HTTP. The Battle provisions a **separate EC2 and VPC**.
 
 ![Team architecture](diagram.svg)
 

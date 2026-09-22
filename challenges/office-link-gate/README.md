@@ -2,7 +2,7 @@
 
 [日本語](README.ja.md) · [Parent scope #884](https://github.com/susumutomita/TenkaCloudChallenge/issues/884)
 
-Four teammates bring one real EC2 server online: **launch → attach an internet gateway → add a route → connect with Session Manager → allow HTTP**. The page program is supplied; beginners operate AWS rather than write code. Rotate operator, diagram reader, explainer and verifier after each mission.
+Engineers from different offices meet at one venue to learn AWS and get to know each other. Four teammates bring one real EC2 server online: **launch → attach an internet gateway → add a route → connect with Session Manager → allow HTTP**. The page program is supplied; beginners operate AWS rather than write code. Rotate operator, diagram reader, explainer and verifier after each mission.
 
 Open the portal's **AWS Console**, then **GameUrl**. The board shows one mission, exact resource IDs, console links, a small diagram, observable success and three free hints. Each real operation check is followed by a short explanation question. Only all five completed missions issue **one final 100-point flag**. A wrong portal flag costs 5 points; board attempts and hints are free.
 
