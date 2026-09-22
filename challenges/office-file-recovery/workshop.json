@@ -1,0 +1,102 @@
+{
+  "id": "office-file-recovery",
+  "labKind": "s3-restore",
+  "title": {
+    "ja": "消えた案内を取り戻そう — S3の過去版",
+    "en": "Recover the handover note — S3 versions"
+  },
+  "missions": [
+    {
+      "check": "s3-restore",
+      "title": {
+        "ja": "前の内容を、いまのファイルへ戻す",
+        "en": "Restore earlier content as the current file"
+      },
+      "goal": {
+        "ja": "会議室の案内が間違った内容に上書きされました。残っている過去の版を調べ、正しい案内を取り戻そう。",
+        "en": "The meeting room note was overwritten incorrectly. Inspect its earlier versions and restore the correct note."
+      },
+      "concept": {
+        "ja": "S3のバージョニングは、同じファイル名の変更履歴を残す仕組み。過去版を読むだけでは現在の内容は変わりません。正しい過去版を保存し、同じ名前でアップロードし直します。",
+        "en": "S3 versioning preserves changes under the same file name. Reading an old version does not change the current file. Download the correct earlier version and upload it again under the same name."
+      },
+      "console": "s3",
+      "resourceKeys": [
+        "bucketName",
+        "objectKey",
+        "fileContent"
+      ],
+      "steps": {
+        "ja": [
+          "指定のバケットを開き、「バージョンの表示」をON。同じ handover.txt の複数の版が見える。",
+          "版ごとに内容をダウンロードして読み比べ、下の「届けたい内容」と合う版を探す。",
+          "正しい版を handover.txt という名前で手元へ保存し、同じバケットへアップロードし直す。バージョンの表示をOFFにして現在の内容を読み、「操作できたか確かめる」を押す。"
+        ],
+        "en": [
+          "Open the specified bucket and turn on Show versions. Find the versions of handover.txt.",
+          "Download the versions and compare them with Intended content below.",
+          "Save the correct version locally as handover.txt and upload it into the same bucket again. Turn Show versions off, read the current file, then press Check my AWS changes."
+        ]
+      },
+      "success": {
+        "ja": "過去の履歴を残したまま、新しい現在の版が正しい案内になる。",
+        "en": "Earlier versions remain and the new current version contains the correct note."
+      },
+      "question": {
+        "ja": "正しい過去版をダウンロードしただけでは、なぜ完了にならない？",
+        "en": "Why is downloading the correct older version not enough?"
+      },
+      "choices": {
+        "ja": [
+          "古い版は開いた瞬間に消えるから",
+          "手元のコピーだけが変わり、S3の現在の内容はまだ直っていないから",
+          "ファイル名を必ず変更する必要があるから"
+        ],
+        "en": [
+          "Old versions disappear when read",
+          "Only the local copy changed; the current S3 object is still wrong",
+          "The file must always be renamed"
+        ]
+      },
+      "correctChoice": 1,
+      "hints": {
+        "ja": [
+          "過去版は履歴です。復旧は、読める現在の内容を正しいものへ戻す操作です。",
+          "変更前：現在は WRONG ROOM、過去版には meeting room A。変更後：新しい現在の版が meeting room A、以前の2版も残ります。",
+          "バージョンを表示 → 過去版を開く → 正しい内容を handover.txt で保存 → 同じ名前でアップロード → 現在の内容を確認。"
+        ],
+        "en": [
+          "Past versions are history. Recovery changes what readers get from the current object.",
+          "Before: the current file says WRONG ROOM; an older version says meeting room A. After: a new current version says meeting room A and both earlier versions remain.",
+          "Show versions → open an older version → save the correct one as handover.txt → upload under the same key → check the current content."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "過去の正しい版",
+          "手元に保存",
+          "現在の版へ戻す"
+        ],
+        "en": [
+          "Correct older version",
+          "Download",
+          "Restore as current"
+        ]
+      },
+      "diagramFocus": 1,
+      "source": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/RestoringPreviousVersions.html",
+      "explanationHints": {
+        "ja": [
+          "ダウンロードは手元へコピーする操作です。S3にある現在の内容を書き戻す操作とは違います。",
+          "前：S3の現在版は誤った内容。過去版を手元で開いても、仲間がS3から読む現在版はまだ誤ったままです。",
+          "「手元の過去版」と「S3の現在版」を分ける → 仲間が読むのはどちらか確認 → まだ直っていない場所を説明する選択肢を選ぼう。"
+        ],
+        "en": [
+          "Downloading makes a local copy. It does not replace the current object stored in S3.",
+          "Before: the current S3 object is wrong. Opening an older local copy still leaves teammates reading the wrong current object.",
+          "Separate the local older version from the current S3 version → identify which teammates read → select the explanation about the unchanged location."
+        ]
+      }
+    }
+  ]
+}

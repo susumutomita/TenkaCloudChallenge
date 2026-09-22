@@ -15,6 +15,8 @@
 
 イベントの開催やプラットフォームのローカル起動は、[TenkaCloudのセットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/README.ja.md#クイックスタート)を参照してください。
 
+初心者4人チーム向け：[つながるオフィス](battles/office-link-battle/README.ja.md) は、実AWSの準備5題 → 既存Gate → 復旧Battle。S3等の追加Challengeは別開催で選べます。[開催ランブック](battles/office-link-battle/OPERATOR.ja.md)を参照してください。
+
 ## 問題を追加・修正する
 
 [作成ルール](AGENTS.md)に従い、問題ごとのディレクトリに、メタデータ・日英README・実行コード・検証用データ・テストをまとめます。実行環境と採点方法が近い既存問題を出発点にしてください。

@@ -1,0 +1,56 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-job-queue",
+  "name": "拠点をまたぐ仕事のバトン — SQS入門",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "15 分",
+  "shortDescription": "拠点間で作業時刻がずれても、依頼をなくさず渡したい。仲間へメッセージを送り、受け取った人が処理を完了しよう。",
+  "instructions": "## 相談して、AWSで試す\n\n拠点間で作業時刻がずれても、依頼をなくさず渡したい。仲間へメッセージを送り、受け取った人が処理を完了しよう。\n\n1. ポータルの「AWS Consoleを開く」でチームの権限へ接続し、GameUrlを開く。\n2. 指定された対象だけを操作し、仲間へ説明する。ヒントと画面内の確認は無料。\n3. 全ステップ完了後の合言葉をこのページへ提出。正解100点、誤った合言葉は5点減点。\n\nこれは独立した追加Challengeです。初回の準備Gateと本戦には自動で追加されません。AWS利用料は開催者負担です。",
+  "description": "実AWSの設定・データ・操作記録を検査する独立した初心者向けChallenge。",
+  "tags": [
+    "beginner",
+    "aws",
+    "sqs",
+    "teamwork"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "送信・受信・削除の3種類のAWS操作記録があり、未処理の依頼が残っていない。"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Pass jobs between sites — SQS basics",
+      "shortDescription": "The two sites work at different times. Leave a job for a teammate and have the recipient finish it.",
+      "description": "Independent beginner Challenge checking actual AWS configuration, data, or operation records.",
+      "learningGoals": [
+        "AWS records sending, receiving, and deleting, with no remaining jobs."
+      ],
+      "instructions": "## Discuss and try it on AWS\n\nThe two sites work at different times. Leave a job for a teammate and have the recipient finish it.\n\n1. Use Open AWS Console in the portal to enter the team role, then open GameUrl.\n2. Work on the specified resources and explain the change to a teammate. Hints and workshop checks are free.\n3. Finish every step and submit the final passphrase here: 100 points; a wrong passphrase costs 5.\n\nThis is an independent optional Challenge, not automatically included in the core Gate/Battle event. The host pays AWS charges."
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-link-gate",
+  "name": "つながるオフィスの準備 — AWS入門Challenge",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "40 分",
+  "shortDescription": "4人で1台のEC2を起動し、ネットワークと接続権限を整えて仲間へページを届ける。5つの実操作と説明を終えるとBattleへ。",
+  "instructions": "## チームの拠点を開通させよう\n\nWebページのプログラムは準備済みです。4人で相談し、AWSでサーバーと通信経路を完成させます。\n\n1. ポータルの「AWS Consoleを開く」でチーム用の権限に接続し、GameUrl（ミッション画面）を開く。\n2. 操作担当は1人。ほかの3人は図を読む・次の一手を説明・結果を確認する役を担当する。表示中の1台だけを操作し、ミッションごとに交代する。\n3. 各ミッションでAWSの操作と説明問題を両方完了すると次へ進む。全5題が終わったら、修了の合言葉をこのページへ提出する。100点と完了を確認し、問題一覧を更新してBattleへ。\n\n画面内の試行・助け舟は無料。途中の部分点はありません。ポータルへ誤った合言葉を提出すると5点減点。GameUrlと引き継ぎコードはチーム内だけで共有します。AWSの利用料は開催者負担です。",
+  "description": "実AWSのEC2起動・IGW接続・経路設定・Session Manager接続・HTTP疎通を問題固有Lambdaで検査する準備Gate。各操作の確認と説明問題を順に完了したときだけ最終100点flagを発行する。",
+  "tags": [
+    "beginner",
+    "teamwork",
+    "aws",
+    "ec2",
+    "networking",
+    "gate"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "EC2の実行状態とステータスチェックを確かめる",
+    "VPCの出口とルートテーブルの役割を説明する",
+    "EC2に必要なIAMロールを付けてSession Managerへ接続する",
+    "HTTPだけを許可して実際の表示を確認する",
+    "操作と検証を仲間へ引き継ぐ"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Office Link Preparation — AWS Intro Challenge",
+      "shortDescription": "Launch one EC2 server together, connect its network and permissions, and deliver a page. Complete five real operations and explanations before Battle.",
+      "instructions": "## Bring your team’s site online\n\nThe page program is ready. Work together to connect its server on AWS.\n\n1. Use Open AWS Console in the portal to sign in with your team’s role, then open GameUrl (the mission board).\n2. One person operates. The other three read the diagram, explain the next action, and verify the result. Work on the one server shown and rotate each mission.\n3. Complete both the AWS operation and explanation in each of five missions. Submit the final passphrase on this page. Check for 100 points and completion, then refresh the problem list to enter Battle.\n\nWorkshop attempts and hints are free. No partial points. A wrong portal passphrase costs 5 points. Share GameUrl and handoff codes only within your team. The host pays for AWS usage.",
+      "description": "Problem-owned Lambda verifies EC2 launch, IGW attachment, routing, Session Manager use and HTTP reachability. One final 100-point flag is issued only after every operation and explanation.",
+      "learningGoals": [
+        "Check EC2 running state and health",
+        "Explain a VPC’s internet exit and route table",
+        "Attach an IAM role and connect using Session Manager",
+        "Allow HTTP and verify the real page",
+        "Hand over operations and verification to teammates"
+      ]
+    }
+  }
+}

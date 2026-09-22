@@ -1,0 +1,478 @@
+{
+  "id": "office-link-gate",
+  "title": {
+    "ja": "開通ミッション：チームの拠点をつなげよう",
+    "en": "Connection mission: bring your team's site online"
+  },
+  "missions": [
+    {
+      "check": "launch",
+      "title": {
+        "ja": "1台目のサーバーを起動",
+        "en": "Launch your first server"
+      },
+      "goal": {
+        "ja": "別の拠点の仲間へページを届けます。ページのプログラムは準備済み。まず、それを動かすEC2を1台起動しよう。",
+        "en": "Deliver a page to teammates at another site. The page program is already prepared. First, launch one EC2 server to run it."
+      },
+      "concept": {
+        "ja": "EC2はAWSで借りるコンピューターで、1台をインスタンスと呼びます。起動テンプレートは、基本ソフト（OS）やサイズをまとめた設定表。ステータスチェックはサーバーが正常かを確かめる検査です。",
+        "en": "EC2 is a computer you rent on AWS; one server is called an instance. A launch template specifies its operating system (OS) and size. Status checks test the server’s health."
+      },
+      "console": "launch",
+      "resourceKeys": [
+        "launchTemplateId",
+        "instanceType",
+        "imageId",
+        "serverName"
+      ],
+      "steps": {
+        "ja": [
+          "AWSコンソールで、下のIDと同じ起動テンプレートを選ぶ。",
+          "「テンプレートからインスタンスを起動」を開く。設定はそのまま、台数を1にして起動する。",
+          "起動完了画面のインスタンスID（i-で始まる番号）をチームで控える。状態が「実行中」、チェックが正常になったら「操作できたか確かめる」を押す。"
+        ],
+        "en": [
+          "In the AWS console, select the launch template matching the ID below.",
+          "Choose Launch instance from template. Keep its settings and launch exactly one instance.",
+          "Share the instance ID (starting i-) from the launch result. Wait for Running and healthy checks, then press Check my AWS changes."
+        ]
+      },
+      "success": {
+        "ja": "実行中のEC2と、正常なステータスチェックが見える。",
+        "en": "An EC2 instance is running and its status checks are healthy."
+      },
+      "question": {
+        "ja": "起動ボタンを押した直後は「起動中」でした。仲間へ完了と伝える前に見るのは？",
+        "en": "Right after launch it said Pending. What should you check before handing over?"
+      },
+      "choices": {
+        "ja": [
+          "ボタンを押した時刻だけ",
+          "実行中の状態とステータスチェック",
+          "チーム名の文字数"
+        ],
+        "en": [
+          "Only when the button was pressed",
+          "Running state and status checks",
+          "The length of the team name"
+        ]
+      },
+      "correctChoice": 1,
+      "hints": {
+        "ja": [
+          "起動は受付と完了が別です。チェックはAWSがサーバーの健康を確かめた結果です。",
+          "変更前：状態「起動中」、チェック「初期化中」。変更後：状態「実行中」、チェック正常。ボタンを押しただけでは後者になりません。",
+          "下の起動テンプレートIDを探す → 1台起動 → インスタンス一覧の状態とチェックを見る → この画面で確かめる。"
+        ],
+        "en": [
+          "Requesting a launch is different from completing it. Checks report the server's health.",
+          "Before: Pending, checks Initializing. After: Running, checks healthy. Clicking Launch alone is not the latter.",
+          "Find the template ID below → launch one instance → inspect state and checks → verify here."
+        ]
+      },
+      "source": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EC2_GetStarted.html",
+      "diagram": {
+        "ja": [
+          "EC2（サーバー）",
+          "通信の道案内",
+          "IGW（出口）",
+          "インターネット"
+        ],
+        "en": [
+          "EC2 server",
+          "Route directions",
+          "IGW exit",
+          "Internet"
+        ]
+      },
+      "diagramFocus": 0,
+      "explanationHints": {
+        "ja": [
+          "起動の依頼と、使える状態になることは別です。EC2の状態と、AWSが調べるステータスチェックで確認します。",
+          "前：起動中で準備が続いている。後：実行中になり、ステータスチェックも成功する。押した時刻だけではこの違いを判断できません。",
+          "問題文の「起動中」に注目 → 状態が変わったか確認 → チェック結果も確認。この2つを確かめる選択肢を仲間へ説明しよう。"
+        ],
+        "en": [
+          "Requesting launch and having a usable server are different. EC2 state and AWS status checks provide the evidence.",
+          "Before: Pending, still preparing. After: Running with successful status checks. A click timestamp cannot distinguish these states.",
+          "Find Pending in the question → check the resulting state → check the status checks. Explain which choice checks both."
+        ]
+      }
+    },
+    {
+      "check": "gateway",
+      "title": {
+        "ja": "拠点にインターネットの出口を作る",
+        "en": "Give the site an internet exit"
+      },
+      "goal": {
+        "ja": "サーバーは起動しました。外の仲間と通信できるよう、拠点のネットワークに出口をつなごう。",
+        "en": "Your server is running. Connect an exit to its network so it can reach the outside world."
+      },
+      "concept": {
+        "ja": "VPCはチーム専用のネットワーク。インターネットゲートウェイ（IGW）は、そのネットワークをインターネットへつなぐ出口です。 タグは資源につける名札で、キーが項目名、値がその内容。公開IPはインターネットからこのサーバーを探すための住所です。",
+        "en": "A VPC is your team's network. An internet gateway (IGW) connects that network to the internet. Tags label resources: the key names a field and the value is its content. A public IP is the server’s address on the internet."
+      },
+      "console": "gateway",
+      "resourceKeys": [
+        "vpcId",
+        "namePrefix"
+      ],
+      "steps": {
+        "ja": [
+          "VPCコンソールの「インターネットゲートウェイ」で新しく作成する。",
+          "タグのキーを TenkaCloud:NamePrefix、値を下のチーム識別名にする。",
+          "作った出口を「VPCにアタッチ」で下のVPC IDへ接続する。この画面の「操作できたか確かめる」を押すと、演習側が公開IPを設定して結果に表示します。"
+        ],
+        "en": [
+          "Create an internet gateway in the VPC console.",
+          "Add tag key TenkaCloud:NamePrefix with the team identifier below as its value.",
+          "Attach the gateway to the VPC ID below. Return and press Check my AWS changes: the lab assigns the public IP and displays it in the result."
+        ]
+      },
+      "success": {
+        "ja": "出口の接続先が自分のVPCになる。通信経路は次のミッションで設定します。",
+        "en": "The gateway is attached to your VPC. The next mission adds the route."
+      },
+      "question": {
+        "ja": "出口を作っただけでは、なぜまだ足りない？",
+        "en": "Why is creating a gateway alone not enough?"
+      },
+      "choices": {
+        "ja": [
+          "どのVPCの出口か、接続先を決める必要がある",
+          "サーバー名を長くする必要がある",
+          "EC2をもう1台増やす必要がある"
+        ],
+        "en": [
+          "It must be attached to the VPC it serves",
+          "The server needs a longer name",
+          "A second EC2 instance is required"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "出口は、使いたいネットワークへ接続して初めて役立ちます。",
+          "変更前：作ったIGWの接続先は空欄。アタッチ後：接続先に指定したVPC IDが表示されます。",
+          "作ったIGWを選ぶ → アクション → VPCにアタッチ → 下のVPC IDを選ぶ → 接続先を確認する。"
+        ],
+        "en": [
+          "An exit must connect to the network that needs it.",
+          "Before: the new IGW has no attachment. After: its attachment shows your VPC ID.",
+          "Select your IGW → Actions → Attach to VPC → select the VPC ID below → check the attachment."
+        ]
+      },
+      "source": "https://docs.aws.amazon.com/vpc/latest/userguide/working-with-igw.html",
+      "diagram": {
+        "ja": [
+          "EC2（サーバー）",
+          "通信の道案内",
+          "IGW（出口）",
+          "インターネット"
+        ],
+        "en": [
+          "EC2 server",
+          "Route directions",
+          "IGW exit",
+          "Internet"
+        ]
+      },
+      "diagramFocus": 2,
+      "explanationHints": {
+        "ja": [
+          "IGWはVPCとインターネットを結ぶ出口です。作成は出口を用意する操作、アタッチはその出口を拠点へつなぐ操作です。",
+          "前：IGWは一覧にあるが、どのVPCにも付いていない。後：VPCのIDが接続先として表示される。数は同じ1個でも通信のつながりが変わります。",
+          "「作っただけ」のIGWと図のVPCを見る → 足りないのは物の数か、物同士のつながりかを比べる → 必要な接続先を説明する選択肢を選ぼう。"
+        ],
+        "en": [
+          "An IGW connects a VPC to the internet. Creating provides the gateway; attaching connects it to a site.",
+          "Before: the gateway exists without a VPC. After: its attachment shows the VPC ID. The gateway count stays one, but connectivity changes.",
+          "Compare the created gateway with the VPC in the diagram → decide whether a resource or a connection is missing → choose the explanation about that connection."
+        ]
+      }
+    },
+    {
+      "check": "route",
+      "title": {
+        "ja": "出口までの道案内を足す",
+        "en": "Add directions to the exit"
+      },
+      "goal": {
+        "ja": "出口はできました。外へ送る通信がその出口へ向かうよう、経路を1本追加しよう。",
+        "en": "The exit exists. Add one route so outbound traffic finds it."
+      },
+      "concept": {
+        "ja": "サブネットはVPCの中の区画。ルートテーブルは通信先ごとの道案内で、関連付けた区画で使われます。宛先 0.0.0.0/0 は、ほかに具体的な案内がないインターネットの宛先全体。ターゲットは通信を次に渡す先です。",
+        "en": "A subnet is a section of a VPC. Its associated route table directs traffic. Destination 0.0.0.0/0 covers internet destinations without a more specific route. The target is where traffic goes next."
+      },
+      "console": "route",
+      "resourceKeys": [
+        "routeTableId",
+        "subnetId"
+      ],
+      "steps": {
+        "ja": [
+          "下のルートテーブルIDを開き、サブネットの関連付けが下のIDと一致するか確認する。",
+          "ルートを編集し、送信先 0.0.0.0/0、ターゲットを先ほどのIGWにして追加する。",
+          "「操作できたか確かめる」を押す。観測プログラムがEC2から外へHTTPS（通信内容を保護するWeb通信）を試し、成功を表示します。"
+        ],
+        "en": [
+          "Open the route table below and check its subnet association.",
+          "Edit routes: add destination 0.0.0.0/0 with your IGW as target.",
+          "Press Check my AWS changes. The observation program tests an outbound HTTPS request (protected web traffic) and reports success."
+        ]
+      },
+      "success": {
+        "ja": "有効な経路ができ、EC2から外への通信が確認できる。",
+        "en": "The route is active and EC2's outbound connection succeeds."
+      },
+      "question": {
+        "ja": "別のサブネットのルートテーブルを直しても、このEC2がつながらないのはなぜ？",
+        "en": "Why does changing another subnet's route table not fix this EC2?"
+      },
+      "choices": {
+        "ja": [
+          "経路はサーバーの名前で決まるから",
+          "どの表でも自動で全サブネットへ適用されるから",
+          "EC2がいるサブネットに関連付いた表が使われるから"
+        ],
+        "en": [
+          "Routes depend on the server name",
+          "Every table applies to every subnet automatically",
+          "EC2 uses the table associated with its subnet"
+        ]
+      },
+      "correctChoice": 2,
+      "hints": {
+        "ja": [
+          "出口があっても、通信がそこへ進む道案内が必要です。",
+          "変更前：表に区画内の経路だけがある。変更後：宛先 0.0.0.0/0、ターゲット igw-…、状態「有効」の行が増えます。",
+          "下の表を開く → サブネットを照合 → 0.0.0.0/0 を追加 → ターゲットに自分のIGW → 保存 → 確かめる。"
+        ],
+        "en": [
+          "An exit also needs a route directing traffic towards it.",
+          "Before: only a local route exists. After: a row has destination 0.0.0.0/0, target igw-…, and state Active.",
+          "Open the table → match the subnet → add 0.0.0.0/0 → target your IGW → save → verify."
+        ]
+      },
+      "source": "https://docs.aws.amazon.com/vpc/latest/userguide/working-with-igw.html",
+      "diagram": {
+        "ja": [
+          "EC2（サーバー）",
+          "通信の道案内",
+          "IGW（出口）",
+          "インターネット"
+        ],
+        "en": [
+          "EC2 server",
+          "Route directions",
+          "IGW exit",
+          "Internet"
+        ]
+      },
+      "diagramFocus": 1,
+      "explanationHints": {
+        "ja": [
+          "EC2の通信は、そのEC2がいるサブネットに関連付いたルートテーブルを使います。別の表を編集しても、この対応は変わりません。",
+          "例：拠点Aは表A、拠点Bは表Bを使う。表Bに出口を書いても、拠点Aが読む表Aには道が増えません。",
+          "このEC2のサブネットIDを確認 → 関連付けられた表を確認 → 「別のサブネットの表」との違いを説明できる選択肢を選ぼう。"
+        ],
+        "en": [
+          "EC2 uses the route table associated with its subnet. Editing another table does not change that association.",
+          "Example: site A uses table A and site B uses table B. Adding an exit to B does not add directions to A.",
+          "Identify this EC2 subnet → identify its associated table → choose the explanation distinguishing it from another subnet’s table."
+        ]
+      }
+    },
+    {
+      "check": "session",
+      "title": {
+        "ja": "サーバーの中へ入って確認",
+        "en": "Step inside the server"
+      },
+      "goal": {
+        "ja": "外との通信ができました。サーバーに接続して、仲間へ引き継ぐ確認コマンドを動かそう。",
+        "en": "The network works. Connect to the server and run the handover check."
+      },
+      "concept": {
+        "ja": "IAMロールは、AWSでできる操作をまとめた権限。Session Managerは、鍵ファイルを配らずにサーバーのコマンド画面へ入る仕組みです。接続用プログラムは準備済みですが、EC2側にも接続用の権限が必要です。",
+        "en": "An IAM role grants permissions for AWS actions. Session Manager opens a command screen on a server without distributing key files. Its connection agent is already installed; EC2 still needs the required permissions."
+      },
+      "console": "instance",
+      "resourceKeys": [
+        "serverName",
+        "instanceProfileName"
+      ],
+      "steps": {
+        "ja": [
+          "EC2一覧で下のサーバー名を探し、控えたインスタンスIDと照合。アクション → セキュリティ → IAMロールを変更で下のロールを付ける。",
+          "「接続」→ Session Managerを開く。接続ボタンが使えなければ数分待って再表示し、IAMロールと前のミッションの経路を確かめる。",
+          "接続後、touch /tmp/office-link-visited を入力してEnter。サーバー内に確認の印を残します。通常は文字が表示されません。この画面へ戻って「操作できたか確かめる」を押す。"
+        ],
+        "en": [
+          "Find the server name below in EC2 and match the instance ID you recorded. Actions → Security → Modify IAM role: attach the role shown below.",
+          "Open Connect → Session Manager. If Connect is unavailable, wait a few minutes, refresh, and check the role and the previous mission’s route.",
+          "Enter touch /tmp/office-link-visited and press Enter. It leaves a handover marker; normally nothing is printed. Return here and press Check my AWS changes."
+        ]
+      },
+      "success": {
+        "ja": "チームのSession Manager接続と、サーバー内でのコマンド実行が確認できる。",
+        "en": "The team's Session Manager connection and command execution are verified."
+      },
+      "question": {
+        "ja": "ネットワークは正常なのにSession Managerで入れません。EC2側で確かめるものは？",
+        "en": "The network works, but Session Manager does not. What should you check on EC2?"
+      },
+      "choices": {
+        "ja": [
+          "ページの背景色",
+          "接続に必要なIAMロールが付いているか",
+          "ページを見るために全通信を許可したか"
+        ],
+        "en": [
+          "The page's background colour",
+          "Whether the required IAM role is attached",
+          "Whether all traffic was allowed to view the page"
+        ]
+      },
+      "correctChoice": 1,
+      "hints": {
+        "ja": [
+          "通信できることと、AWSのサービスを利用する権限があることは別です。",
+          "変更前：EC2のIAMロールが空欄。変更後：演習用ロールが表示され、接続後に touch /tmp/office-link-visited を実行できます。通常、成功時の出力は空です。",
+          "EC2のIAMロールを下の名前と照合 → 正しいロールを付ける → Session Managerで接続 → touchコマンド → この画面で確認。"
+        ],
+        "en": [
+          "Network access and permission to use an AWS service are separate.",
+          "Before: EC2 has no IAM role. After: it shows the lab role and you can connect and run touch /tmp/office-link-visited. Success normally prints nothing.",
+          "Match EC2's role to the name below → attach it → connect with Session Manager → run touch → verify here."
+        ]
+      },
+      "source": "https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-getting-started-instance-profile.html",
+      "diagram": {
+        "ja": [
+          "EC2（サーバー）",
+          "通信の道案内",
+          "IGW（出口）",
+          "インターネット"
+        ],
+        "en": [
+          "EC2 server",
+          "Route directions",
+          "IGW exit",
+          "Internet"
+        ]
+      },
+      "diagramFocus": 0,
+      "explanationHints": {
+        "ja": [
+          "通信の道と、AWSサービスを使う権限は別です。Session ManagerにはEC2側の権限も必要です。",
+          "例：ページは開けるのに管理接続ができない。通信が通っていても、EC2のロールがなければ必要なAWS操作を実行できません。",
+          "問題文ではネットワークは正常 → 直す対象を通信から権限へ絞る → EC2に付いているものを確かめる選択肢を選ぼう。"
+        ],
+        "en": [
+          "A network path and permissions to use AWS services are separate. Session Manager also needs EC2-side permissions.",
+          "Example: a page opens but management access fails. Working networking does not grant the AWS permissions provided by the EC2 role.",
+          "The question says networking works → focus on permissions → select the check for what is attached to EC2."
+        ]
+      }
+    },
+    {
+      "check": "http",
+      "title": {
+        "ja": "仲間へWebページを届ける",
+        "en": "Deliver the page to your teammates"
+      },
+      "goal": {
+        "ja": "サーバーに入れました。最後に、仲間のブラウザからチームのページを開けるようにしよう。",
+        "en": "You can manage the server. Now let your teammates open its page in a browser."
+      },
+      "concept": {
+        "ja": "セキュリティグループは通信を許可するルール。ポートは通信の用途を分ける番号で、このページはHTTP（Webページの通信）の80番を使います。インバウンドは外から入る方向。接続元は入ってくる相手で、0.0.0.0/0 は全インターネットを表します。",
+        "en": "A security group lists allowed traffic. A port number identifies its purpose; this page uses HTTP (web traffic) on port 80. Inbound means entering the server. Source is who may connect; 0.0.0.0/0 covers the internet."
+      },
+      "console": "security",
+      "resourceKeys": [
+        "serverName",
+        "securityGroupId",
+        "httpSourceCidr",
+        "publicIp"
+      ],
+      "steps": {
+        "ja": [
+          "下のセキュリティグループを開き、インバウンドルールを編集する。",
+          "種類「HTTP」を選ぶと通信方式「TCP」と80番が入る。接続元は下の指定を使う。演習の観測用8080番は残し、ルールを保存する。",
+          "下の「チームのページを開く」から仲間にも表示を試してもらう。「操作できたか確かめる」でHTTP 200（ページ取得成功）が出るか確認する。"
+        ],
+        "en": [
+          "Open the security group below and edit inbound rules.",
+          "Select type HTTP; TCP (the transport method) and port 80 are filled in. Use the source below. Keep the fixed observation rule for port 8080 and save.",
+          "Use Open the team page below and ask a teammate to try it too. Press Check my AWS changes to verify HTTP 200 (page received successfully)."
+        ]
+      },
+      "success": {
+        "ja": "必要な通信だけを許可し、チームのページがHTTP 200で応答する。",
+        "en": "Only the required traffic is allowed and the team page returns HTTP 200."
+      },
+      "question": {
+        "ja": "別拠点の相談です（この演習環境は変更しません）。HTTPのページは8081番で待ち、仲間203.0.113.7だけに見せたい。/32 は指定したIP 1個だけを表します。経路と管理接続は正常です。URLと入口のルールをどう組み合わせますか？",
+        "en": "A different site asks for advice (do not change this lab). Its HTTP page listens on port 8081 and only teammate 203.0.113.7 should access it. /32 means that one IP address. Routing and management access work. Which URL and entrance rule fit?"
+      },
+      "choices": {
+        "ja": [
+          "URLは http://サーバーIP:8081/、TCP 8081を203.0.113.7/32だけに許可",
+          "URLは http://サーバーIP/、TCP 80を203.0.113.7/32だけに許可",
+          "URLは http://サーバーIP:8081/、TCP 8081を全インターネットに許可"
+        ],
+        "en": [
+          "Use http://server-IP:8081/ and allow TCP 8081 only from 203.0.113.7/32",
+          "Use http://server-IP/ and allow TCP 80 only from 203.0.113.7/32",
+          "Use http://server-IP:8081/ and allow TCP 8081 from the whole internet"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "表示できることと、開けすぎていないことを両方確かめます。",
+          "変更前：8080番だけ許可。変更後：HTTP 80番を指定の接続元に許可する行が増え、ページが表示されます。",
+          "HTTP 80番と指定の接続元を追加 → 8080番以外の不要な許可を追加していないか確認 → ページを開く → この画面で確かめる。"
+        ],
+        "en": [
+          "Check both that it works and that access is not too broad.",
+          "Before: only port 8080 is allowed. After: a rule allows HTTP port 80 from the specified source and the page loads.",
+          "Add HTTP 80 and the specified source → keep only the fixed 8080 rule alongside it → open the page → verify here."
+        ]
+      },
+      "source": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/security-group-rules-reference.html",
+      "diagram": {
+        "ja": [
+          "EC2（サーバー）",
+          "通信の道案内",
+          "IGW（出口）",
+          "インターネット"
+        ],
+        "en": [
+          "EC2 server",
+          "Route directions",
+          "IGW exit",
+          "Internet"
+        ]
+      },
+      "diagramFocus": 0,
+      "explanationHints": {
+        "ja": [
+          "ブラウザが向かうポートと、入口で許可するポートが一致して初めて届きます。接続元の指定は「誰を通すか」です。",
+          "例：ページが9000番で待ち、仲間が1人だけなら、URLを http://サーバーIP:9000/ にし、入口も9000番をその人のIPだけに許可します。80番のままでは一致しません。",
+          "今回のページは8081番 → サーバーIPの直後、/ より前の :8081 を確認 → ルールのTCP 8081を確認 → 接続元203.0.113.7/32を確認。3つとも一致する提案を選ぼう。"
+        ],
+        "en": [
+          "The browser destination port must match the port allowed at the entrance. The source restriction decides who may enter.",
+          "Example: a page listens on 9000 for one teammate. Use http://server-IP:9000/ and allow port 9000 from that person’s IP. Leaving port 80 does not match.",
+          "This page uses 8081 → check :8081 directly after the server IP and before / → check TCP 8081 in the rule → check source 203.0.113.7/32. Select the proposal matching all three."
+        ]
+      }
+    }
+  ]
+}

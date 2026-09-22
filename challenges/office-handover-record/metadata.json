@@ -1,0 +1,58 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-handover-record",
+  "name": "引き継ぎ台帳を作ろう — DynamoDB入門",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "15 分",
+  "shortDescription": "口頭だけだと依頼を忘れてしまいます。横浜への引き継ぎを、仲間が検索できる場所に記録しよう。",
+  "instructions": "## 相談して、AWSで試す\n\n口頭だけだと依頼を忘れてしまいます。横浜への引き継ぎを、仲間が検索できる場所に記録しよう。\n\n1. ポータルの「AWS Consoleを開く」でチームの権限へ接続し、GameUrlを開く。\n2. 指定された対象だけを操作し、仲間へ説明する。ヒントと画面内の確認は無料。\n3. 全ステップ完了後の合言葉をこのページへ提出。正解100点、誤った合言葉は5点減点。\n\nこれは独立した追加Challengeです。初回の準備Gateと本戦には自動で追加されません。AWS利用料は開催者負担です。",
+  "description": "実AWSの設定・データ・操作記録を検査する独立した初心者向けChallenge。",
+  "tags": [
+    "beginner",
+    "aws",
+    "dynamodb",
+    "teamwork"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "指定テーブルに、横浜行き・待機中の引き継ぎが保存される。",
+    "同じ記録の status が done になり、送り先は変わらない。"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Keep a team handover record — DynamoDB basics",
+      "shortDescription": "Verbal requests get forgotten. Record the Yokohama handover where teammates can find it.",
+      "description": "Independent beginner Challenge checking actual AWS configuration, data, or operation records.",
+      "learningGoals": [
+        "The specified table stores the Yokohama handover with waiting status.",
+        "The same record has status done and its destination is unchanged."
+      ],
+      "instructions": "## Discuss and try it on AWS\n\nVerbal requests get forgotten. Record the Yokohama handover where teammates can find it.\n\n1. Use Open AWS Console in the portal to enter the team role, then open GameUrl.\n2. Work on the specified resources and explain the change to a teammate. Hints and workshop checks are free.\n3. Finish every step and submit the final passphrase here: 100 points; a wrong passphrase costs 5.\n\nThis is an independent optional Challenge, not automatically included in the core Gate/Battle event. The host pays AWS charges."
+    }
+  }
+}

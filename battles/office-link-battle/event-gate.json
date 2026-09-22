@@ -1,0 +1,8 @@
+{
+  "gateProblemId": "office-link-gate",
+  "unlockTargetIds": [
+    "office-link-battle"
+  ],
+  "defaultPolicy": "required",
+  "completionBonus": 0
+}

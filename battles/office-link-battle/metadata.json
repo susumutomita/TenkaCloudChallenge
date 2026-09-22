@@ -1,0 +1,104 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-link-battle",
+  "name": "つながるオフィス — AWS復旧Battle",
+  "category": "Battle",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "30 分（準備Challengeは別に約40分）",
+  "shortDescription": "本戦用の拠点に、小さな障害が発生。4人で原因を確かめ、AWSで直し、接続を保った時間で競います。",
+  "instructions": "## 拠点をつなぎ続けろ\n\n先に「つながるオフィスの準備 — AWS入門Challenge」を修了します。本戦は別のEC2・VPCを使います。操作対象はGameUrl内の「このチームの構成」にあるIDと照合してください。本戦では、用意されたEC2（クラウドのサーバー）に運営者が一度に1つだけ障害を入れます。準備と同じAWSの画面で直せます。\n\n1. 「デプロイ出力」の **HealthUrlHint** を、このページの「Endpoint登録」→ **拠点の状態 / Site health** にコピーして登録。末尾にhealthを足しません。登録前は得点しません。\n2. 同じ「デプロイ出力」の **GameUrl** を開く。「状況を更新」で現在の症状と図を確認し、ポータルの「AWS Consoleを開く」でチームの権限へ接続する。\n3. 運営から配られた自分の **A〜DのカードURL** を開きます。4人の手がかりを持ち寄り、各自が確認を送ります。\n4. 4人で、操作・図の確認・手順の説明・結果確認を交代。直したら「復旧できたか確かめる」、理由を相談して説明問題に答えると次のラウンドへ進める。\n\n正常な1分は **+100点**、接続不良・管理権限の欠落・管理ラウンドの接続未確認は **−100点**。確認・説明・ヒント自体は無料で、説明だけの追加得点はありません。合言葉の提出はありません。正式な得点と残り時間はポータルで見ます。\n\nAWSの変更反映には時間がかかる場合があります。10分未復旧なら運営の自動復旧が始まり、1分間隔で状況を確認します。前の復旧処理中は重ねて実行せず、失敗時は最短3分後に再試行します。失った点は戻りません。実AWSを使うため、ローカルの画面プレビューでは競技・採点できません。\n\n## 別チームともつながろう\n\nこのページの「隣のチームと、つながろう」で合言葉を受け取り、別チームと交換します。お互いが相手の合言葉を送るとそれぞれ **+20点**。別々の3組まで、最大 **+60点** です。断られたり、確認待ちでも減点はありません。復旧の稼働点とは別に加算されます。",
+  "description": "実EC2のIGW・ルート・IAMロール・HTTP許可を、運営用Lambdaで1つずつ変更する。既存uptime-flat採点、参加者登録まで空のendpoint、条件付き状態更新で直列進行、EventBridgeで期限後の復旧を再試行。Lite専用のプラットフォーム例外は追加しない。",
+  "tags": [
+    "beginner",
+    "aws",
+    "teamwork",
+    "battle",
+    "ec2",
+    "recovery"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Recovery board and health"
+    },
+    {
+      "port": 80,
+      "name": "Team page"
+    },
+    {
+      "port": 8080,
+      "name": "Non-secret observations"
+    }
+  ],
+  "learningGoals": [
+    "準備で学んだ構成と症状を見比べ、原因を1つずつ直す",
+    "Session Managerへの接続と確認コマンドで管理アクセスの回復を確かめる",
+    "操作・図の確認・説明・結果確認を4人で交代する"
+  ],
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "CooperationSecret": "__RANDOM_PASSWORD__"
+  },
+  "i18n": {
+    "en": {
+      "name": "Office Link — AWS Recovery Battle",
+      "shortDescription": "Small faults interrupt your connected site. Diagnose and repair them as a team of four; compete on time kept healthy.",
+      "instructions": "## Keep the sites connected\n\nComplete Office Link Preparation first. The Battle uses a separate EC2 and VPC. Match IDs with This team’s resources in GameUrl. The host introduces one fault at a time on a prepared EC2 server. Repair it using the same AWS screens you practised.\n\n1. Copy **HealthUrlHint** from Deployment outputs into **Site health** under Endpoint registration. Do not append health. There are no points before registration.\n2. Open **GameUrl** from the same Deployment outputs and Refresh situation to see the current symptom and diagram. Use Open AWS Console in the portal to enter your team's role.\n3. Open your own **A–D card link** from the host. Combine the four clues; each person sends a confirmation.\n4. Rotate four roles: operating, reading the diagram, explaining and verifying. After repairing, Check our recovery and answer the explanation together to finish that round.\n\nA healthy minute earns **+100 points**. Unreachable service, missing management permissions or an unverified session in the management round costs **100 points**. Checks, explanations and hints are free; explanations do not award extra points. There is no passphrase submission. Official scores and remaining time are in the portal.\n\nAWS changes may take time to propagate. After 10 unrecovered minutes, host recovery starts; it checks each minute, prevents overlapping restores, and retries failures after at least three minutes. Lost points are not refunded. This uses real AWS; the local UI preview does not run the competition or official scoring.\n\n## Connect with another team\n\nGet your code under Connect with another team on this page. Exchange it with another team and each submit the other code. Both confirmations earn **+20 points each**, up to three different partners (**+60 max**), added to uptime points. Waiting or declining costs nothing.",
+      "description": "Real EC2 gateway, route, role and HTTP faults, applied one at a time by an operator-only Lambda. Existing uptime-flat scoring, empty default endpoint until registration, conditional state transitions and timed recovery retries. No problem-specific platform exception.",
+      "learningGoals": [
+        "Compare symptoms with the prepared architecture and repair one cause at a time",
+        "Verify restored management access with a new Session Manager session and check command",
+        "Rotate operating, reading the diagram, explaining and verifying"
+      ]
+    }
+  },
+  "endpoints": [
+    {
+      "slot": "health",
+      "default": {
+        "from": "cfn-output",
+        "key": "HealthUrl"
+      },
+      "overridable": true,
+      "label": "拠点の状態 / Site health",
+      "description": "HealthUrlHint をそのまま登録。採点時に health を確認します。 / Register HealthUrlHint unchanged; the scorer appends health."
+    }
+  ],
+  "scoring": {
+    "kind": "uptime-flat",
+    "endpoints": [
+      {
+        "slot": "health",
+        "path": "/health",
+        "expectStatus": [
+          200
+        ]
+      }
+    ],
+    "pointsPerSuccess": 100,
+    "failurePenalty": -100
+  },
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/plugin.ts",
+    "name": "チーム間の合言葉交換 / Partner exchange",
+    "description": "双方の確認で交流ボーナス / Both teams confirm to earn a cooperation bonus",
+    "publicHint": true,
+    "stateBudget": {
+      "bytesPerTeam": 2048,
+      "baseBytes": 1024
+    }
+  }
+}

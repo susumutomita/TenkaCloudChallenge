@@ -1,0 +1,101 @@
+{
+  "id": "office-server-watch",
+  "labKind": "cpu-alarm",
+  "title": {
+    "ja": "サーバーの見張り役 — CloudWatch入門",
+    "en": "Watch the team server — CloudWatch basics"
+  },
+  "missions": [
+    {
+      "check": "cpu-alarm",
+      "title": {
+        "ja": "サーバーの忙しさを見張る",
+        "en": "Watch how busy a server is"
+      },
+      "goal": {
+        "ja": "画面をずっと見ていなくても、サーバーが忙しいと気づけるようにしたい。用意されたEC2に監視の条件を設定しよう。",
+        "en": "You cannot watch the server constantly. Configure a rule to detect when the prepared EC2 gets busy."
+      },
+      "concept": {
+        "ja": "CloudWatchはAWSの数値を観測するサービス。CPU使用率はサーバーの忙しさを0〜100%で表します。アラームは条件を超えたときに状態が変わる仕組み。今回は直近5分の平均が80%を超えると、画面の状態が変わる設定を作ります。メール通知は使いません。静的なしきい値は固定の境界値です。",
+        "en": "CloudWatch observes AWS measurements. CPU utilization represents how busy a server is, from 0 to 100%. An alarm changes state when a condition is met. Here we configure an average above 80%. Here the five-minute average crossing a fixed (static) threshold changes the on-screen state. No email notification is configured."
+      },
+      "console": "alarm",
+      "resourceKeys": [
+        "instanceId",
+        "alarmName"
+      ],
+      "steps": {
+        "ja": [
+          "CloudWatchの「アラームを作成」→「メトリクスの選択」（観測する数値）。EC2 → インスタンス別メトリクスで、この画面のEC2 IDの CPUUtilization を選ぶ。値が未表示なら数分待って一覧を更新する。",
+          "統計は平均、期間は5分。しきい値の種類は「静的」、条件は「より大きい」80。「追加設定」の「アラームを実行するデータポイント」を1/1にする（5分平均が一度80%を超えると条件成立）。次の通知設定では「削除」で通知欄を外す。EC2の停止などのアクションも付けない。",
+          "この画面のアラーム名で作成し、下で確かめる。「データ不足」は最初に起きることがあります。今回は設定を確認し、実際の高負荷による発報やメール受信は完了条件にしません。"
+        ],
+        "en": [
+          "Create an alarm → Select metric. Choose EC2 → Per-instance metrics → CPUUtilization for the instance ID on this page. If not listed yet, wait a few minutes and refresh.",
+          "Choose Average, period 5 minutes, Static threshold, Greater than 80. Under Additional configuration set Datapoints to alarm to 1 out of 1: one five-minute average above 80 meets the condition. On the next page remove the notification entry; add no EC2 actions.",
+          "Create it with the alarm name on this page, then check below. Initial Insufficient data is normal. This exercise checks configuration; actual high-load triggering and email delivery are not required."
+        ]
+      },
+      "success": {
+        "ja": "指定EC2のCPUを5分平均・80%超・1回で監視する設定ができる。",
+        "en": "The rule watches the specified EC2 CPU average over 5 minutes, above 80%, for one evaluation."
+      },
+      "question": {
+        "ja": "設定確認が成功した時点で、何が分かりますか？",
+        "en": "What does passing this check prove?"
+      },
+      "choices": {
+        "ja": [
+          "狙ったEC2に監視条件を設定した。実際の発報は別の確認が必要",
+          "実際に80%を超える負荷を掛けた",
+          "必ずメールが届いた"
+        ],
+        "en": [
+          "The intended EC2 has the rule; triggering still needs a separate test",
+          "The server was actually driven above 80%",
+          "An email definitely arrived"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "監視する対象と、気づきたい条件を組にします。サーバー名が似ていてもIDを照合します。",
+          "前：数値を見続ける必要がある。後：指定した5分平均が80%を超えるとアラームの状態が変わる設定になる。",
+          "指定EC2 IDのCPUUtilization → 平均・5分 → 静的・より大きい80 → 追加設定のデータポイント1/1 → 通知欄を削除、アクションなし → 指定名で作成。画面の状態を変える設定の確認で、メールは送りません。"
+        ],
+        "en": [
+          "Pair a resource with a condition. Match the instance ID even if server names look similar.",
+          "Before: someone must watch continuously. After: a rule can change alarm state when the five-minute average exceeds 80%.",
+          "Match the EC2 ID and CPUUtilization → Average, 5 minutes → Static, Greater than 80 → Additional configuration, datapoints 1/1 → remove notification, no actions → create with the specified name. This checks the on-screen state rule, not email delivery."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "EC2のCPU",
+          "CloudWatchで観測",
+          "条件を超えると状態変更"
+        ],
+        "en": [
+          "EC2 CPU",
+          "CloudWatch watches",
+          "Condition changes state"
+        ]
+      },
+      "diagramFocus": 1,
+      "source": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/US_AlarmAtThresholdEC2.html",
+      "explanationHints": {
+        "ja": [
+          "監視の設定、条件を超えること、通知が届くことは別々の確認です。この検査は設定を調べます。",
+          "例：直近5分の平均が80%を超えたら検知する条件を保存しても、その平均が20%なら条件を満たしません。通知先も設定していなければメールは送りません。",
+          "成功したのは「設定確認」 → 実際の負荷やメール送信は試したかを分ける → 今回の証拠で言える範囲を選ぼう。"
+        ],
+        "en": [
+          "Configuring an alarm, crossing its threshold, and receiving a notification are different checks. This checker examines configuration.",
+          "Example: saving a rule for a five-minute CPU average above 80% does not meet the condition when that average is 20%. With no notification action configured, it does not send email.",
+          "The configuration check passed → distinguish this from load or email tests → select only what this evidence proves."
+        ]
+      }
+    }
+  ]
+}

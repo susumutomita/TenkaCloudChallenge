@@ -1,0 +1,58 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-file-delivery",
+  "name": "拠点へ資料を届けよう — S3入門",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10 分",
+  "shortDescription": "別の拠点の仲間に案内を届けます。配布ファイルをS3へ置き、仲間が同じ保存場所から読めるようにしよう。",
+  "instructions": "## チームで資料を届ける\n\n別の拠点の仲間に案内を届けます。配布ファイルをS3へ置き、仲間が同じ保存場所から読めるようにしよう。\n\n1. ポータルの「AWS Consoleを開く」でチームの権限へ接続し、GameUrlを開く。\n2. 表示された対象だけを操作し、仲間と結果を読み比べる。操作確認と説明問題が終わると合言葉が出る。\n3. 合言葉をこのページへ提出。正解100点、誤った合言葉は5点減点。画面内の確認とヒントは無料。\n\nこれは追加Challengeです。準備Gateと本戦だけのイベントには自動で追加されません。AWSの利用料は開催者負担です。",
+  "description": "S3の実オブジェクトと公開防止設定を確認する追加Challenge。操作と説明の両方で最終100点。",
+  "tags": [
+    "beginner",
+    "aws",
+    "s3",
+    "teamwork"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "現在の handover.txt が、配布した案内と同じ内容で保存されている。",
+    "公開せずにチームの権限でファイルを扱う"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Deliver a handover note — S3 basics",
+      "shortDescription": "Teammates at another site need the handover note. Put the supplied file in S3 so they can read it from the same storage.",
+      "instructions": "## Deliver the team note\n\nTeammates at another site need the handover note. Put the supplied file in S3 so they can read it from the same storage.\n\n1. Use Open AWS Console in the portal to sign in with your team’s role, then open GameUrl.\n2. Work only on the displayed resources and compare results with a teammate. Complete the operation check and explanation to receive a passphrase.\n3. Submit it on this page: 100 points; a wrong passphrase costs 5. Workshop checks and hints are free.\n\nThis is an optional Challenge, not automatically added to the core Gate/Battle event. The host pays for AWS usage.",
+      "description": "Optional Challenge checking real S3 objects and public access blocks. Both the operation and explanation are required for one 100-point final flag.",
+      "learningGoals": [
+        "The current handover.txt contains the supplied note.",
+        "Use team permissions without making files public"
+      ]
+    }
+  }
+}

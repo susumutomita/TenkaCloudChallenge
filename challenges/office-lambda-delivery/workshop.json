@@ -1,0 +1,110 @@
+{
+  "id": "office-lambda-delivery",
+  "labKind": "lambda-run",
+  "title": {
+    "ja": "3個の荷物を受け付けよう — Lambda入門",
+    "en": "Accept three parcels — Lambda basics"
+  },
+  "missions": [
+    {
+      "check": "lambda-run",
+      "title": {
+        "ja": "3個の荷物を受け付けよう — Lambda入門",
+        "en": "Accept three parcels — Lambda basics"
+      },
+      "goal": {
+        "ja": "別拠点から3個の荷物が届きます。用意された受付プログラムをAWSで動かし、受付番号を仲間に渡そう。",
+        "en": "Three parcels arrive from another site. Run the supplied receiving program on AWS and hand its receipt to a teammate."
+      },
+      "concept": {
+        "ja": "Lambdaは、入力を渡すとプログラムを動かすサービスです。JSONは、項目名と値を組にする書き方。teamはチーム名、parcelsは荷物の数です。acceptedがtrueなら受付成功、receiptが受付番号です。",
+        "en": "Lambda runs a program when given input. JSON pairs field names with values: team is the team name and parcels is the parcel count. accepted: true means success; receipt identifies this execution."
+      },
+      "console": "lambda",
+      "resourceKeys": [
+        "functionName",
+        "testEvent"
+      ],
+      "inputs": [
+        {
+          "key": "receipt",
+          "label": {
+            "ja": "実行結果の受付番号（receipt）",
+            "en": "Receipt from the execution result"
+          }
+        }
+      ],
+      "steps": {
+        "ja": [
+          "「AWSで操作する」で用意された関数を開く →「テスト」タブ → テストイベントのJSON入力欄へ、この画面の「テスト用の入力」を貼る →「テスト」ボタンで実行。保存する場合はイベント名を付け、共有設定は「プライベート」。プログラムの作成は不要です。",
+          "実行結果の詳細で accepted: true と receipt を確認。receiptの値を下の受付番号欄へコピーする。ログが届くまで少し時間がかかる場合は、待ってから確認し直す。",
+          "仲間に受付番号と荷物の数を伝え、下のボタンで確かめる。入力を変えて再実行すると別の実行結果になります。"
+        ],
+        "en": [
+          "Open the supplied function → Test tab → paste this page’s Test input into the test event JSON editor → click Test. If saving, name the event and choose Private. No programming is needed.",
+          "Expand the execution result and find accepted: true and receipt. Copy the receipt value into the field below. If logs have not arrived yet, wait briefly and retry the check.",
+          "Tell a teammate the receipt and parcel count, then check below. Changing the input and running again produces another execution result."
+        ]
+      },
+      "success": {
+        "ja": "このチームの関数が3個の荷物を受け付けた記録が見つかる。",
+        "en": "A real record confirms this team’s function accepted three parcels."
+      },
+      "question": {
+        "ja": "荷物を4個に変えた入力が拒否されました。何を確かめますか？",
+        "en": "An input with four parcels was rejected. What should you check?"
+      },
+      "choices": {
+        "ja": [
+          "入力のparcelsと、プログラムが受け付ける条件",
+          "EC2のサーバーを新しく作る必要があるか",
+          "S3を全世界へ公開しているか"
+        ],
+        "en": [
+          "The input parcels value and the program’s acceptance rule",
+          "Whether a new EC2 server is required",
+          "Whether S3 is publicly accessible"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "入力を受け取ったときだけ、用意したプログラムが動きます。今回は3個の荷物を受け付けます。",
+          "前：まだ受付番号がない。後：teamとparcelsを渡して実行すると accepted: true と receipt が返る。",
+          "この画面の「テスト用の入力」をコピー → 関数の「テスト」タブのJSON欄へ貼る →「テスト」ボタン →「実行結果」の詳細を開く → receiptの値だけを下の受付番号欄へ貼って確認。"
+        ],
+        "en": [
+          "The supplied program runs when called with input. Here it accepts three parcels.",
+          "Before: no receipt. After: running the supplied team and parcels input returns accepted: true and a receipt.",
+          "Copy Test input → function’s Test tab → paste into its JSON editor → Test button → expand Execution result → paste only the receipt value into the receipt field below → check."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "3個の荷物",
+          "Lambdaで受付",
+          "仲間へ受付番号"
+        ],
+        "en": [
+          "Three parcels",
+          "Lambda execution",
+          "Receipt to teammate"
+        ]
+      },
+      "diagramFocus": 1,
+      "source": "https://docs.aws.amazon.com/lambda/latest/dg/testing-functions.html",
+      "explanationHints": {
+        "ja": [
+          "Lambdaは渡した入力でプログラムを動かします。実行できたかと、その入力を受け付けるかは別です。",
+          "例：3個を受け付ける処理へ4個を渡すと、同じ関数でも入力条件により拒否できます。別のサーバーを増やしても条件は変わりません。",
+          "変えたのは parcels の値 → テスト入力と、関数の受け付ける条件を照合 → 今回の変化に関係する確認を選ぼう。"
+        ],
+        "en": [
+          "Lambda runs a program on the supplied input. Being able to run it and having an accepted input are separate.",
+          "Example: a function accepting three parcels can reject four. Adding another server would not change its acceptance condition.",
+          "The changed field is parcels → compare the test input with the function’s condition → choose the check related to that change."
+        ]
+      }
+    }
+  ]
+}

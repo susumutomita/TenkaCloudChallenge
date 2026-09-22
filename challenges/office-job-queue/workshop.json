@@ -1,0 +1,100 @@
+{
+  "id": "office-job-queue",
+  "labKind": "sqs",
+  "title": {
+    "ja": "拠点をまたぐ仕事のバトン — SQS入門",
+    "en": "Pass jobs between sites — SQS basics"
+  },
+  "missions": [
+    {
+      "check": "sqs",
+      "title": {
+        "ja": "仕事を送り、受け取り、片付ける",
+        "en": "Send, receive, and finish a job"
+      },
+      "goal": {
+        "ja": "拠点間で作業時刻がずれても、依頼をなくさず渡したい。仲間へメッセージを送り、受け取った人が処理を完了しよう。",
+        "en": "The two sites work at different times. Leave a job for a teammate and have the recipient finish it."
+      },
+      "concept": {
+        "ja": "SQSのキューは、依頼を一時的に置く場所です。受信すると30秒だけ見えなくなり、削除すると処理完了。受信しただけでは依頼が戻ってきます。 Standardは一般的なキュー。配信遅延は届くまでの待ち時間、保持は未処理のまま保存できる期間、可視性タイムアウトは受信後に隠す時間です。SQS管理の暗号化は保存中の内容をサービス側の鍵で保護します。",
+        "en": "An SQS queue holds jobs temporarily. Receiving hides a job for 30 seconds; deleting finishes it. Receiving alone lets it reappear. Standard is the general-purpose queue type. Delivery delay postpones availability; retention limits storage time; visibility timeout hides a received job while it is processed. SQS-managed encryption protects stored content with service-managed keys."
+      },
+      "console": "sqs",
+      "resourceKeys": [
+        "queueName"
+      ],
+      "steps": {
+        "ja": [
+          "SQSの「キューを作成」でStandardとこの画面の名前を選ぶ。配信遅延0秒、保持4日、可視性タイムアウト30秒、暗号化はSQS管理を使い、ほかの設定は標準のまま作成する。",
+          "「メッセージを送受信」で本文に「資料を横浜へ届けてください」と入力して1回送信。仲間へ、キュー名を伝える。",
+          "担当を交代し、「メッセージをポーリング」で受信。本文を読み、選択して削除する。読んでいる間に30秒が過ぎたら、同じ依頼をもう一度ポーリングして削除。再送は不要です。下で確認する。AWSの操作記録の反映は数分かかるため、記録待ちなら待って再確認。"
+        ],
+        "en": [
+          "Create a Standard queue with the name on this page. Use no delivery delay, four-day retention, 30-second visibility timeout, SQS-managed encryption, and other defaults.",
+          "In Send and receive messages, send “Deliver the handover note to Yokohama” once. Tell a teammate the queue name.",
+          "Swap operators. Poll for messages, read, select and delete the job. If the 30 seconds elapse while reading, poll for the same job again and delete it; do not send another copy. Check below. Operation metrics may take several minutes; wait and recheck if pending."
+        ]
+      },
+      "success": {
+        "ja": "送信・受信・削除の3種類のAWS操作記録があり、未処理の依頼が残っていない。",
+        "en": "AWS records sending, receiving, and deleting, with no remaining jobs."
+      },
+      "question": {
+        "ja": "読んだのに削除しないと、依頼はどうなりますか？",
+        "en": "What happens if you read a message but do not delete it?"
+      },
+      "choices": {
+        "ja": [
+          "しばらくすると、もう一度受信できる",
+          "読んだ瞬間に永遠に消える",
+          "必ず別チームへ移る"
+        ],
+        "en": [
+          "It becomes available to receive again",
+          "It disappears permanently when read",
+          "It moves to another team"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "受信と処理完了は別です。作業中は一時的に隠し、終わったら削除します。",
+          "前：送信された依頼がある。受信直後：一時的に見えない。削除後：戻らない。",
+          "指定名のStandardキューへ1件だけ送信 → 仲間が「メッセージをポーリング」して読む → 選択して削除。時間切れで再表示されたら同じ依頼を受信し直して削除。再送せず、数分待って下で確認。"
+        ],
+        "en": [
+          "Receiving and completing are separate. Hide the job while working, then delete it.",
+          "Before: a queued job. After receiving: temporarily hidden. After deletion: it stays gone.",
+          "Send once to the named Standard queue → teammate polls, reads, selects and deletes. If visibility expires, receive the same job again and delete it. Do not resend; wait a few minutes and check below."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "送信する人",
+          "SQSのキュー",
+          "受信して削除"
+        ],
+        "en": [
+          "Sender",
+          "SQS queue",
+          "Receive and delete"
+        ]
+      },
+      "diagramFocus": 1,
+      "source": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/step-receive-delete-message.html",
+      "explanationHints": {
+        "ja": [
+          "SQSは受信しただけでは依頼を消しません。処理中は一時的に見えなくし、削除で完了を知らせます。",
+          "例：担当者が受信後に止まっても、30秒後に再び受信できれば、別の担当が引き継げます。削除するとその依頼は戻りません。",
+          "「受信した」「削除していない」を確認 → 30秒が過ぎた後を考える → 再び作業を引き受けられる選択肢を選ぼう。"
+        ],
+        "en": [
+          "Receiving does not remove an SQS message. It temporarily hides the request; deletion acknowledges completion.",
+          "Example: if a worker stops after receiving, the request can be received again after 30 seconds. Deleting it prevents that return.",
+          "The message was received but not deleted → consider what happens after 30 seconds → choose the outcome allowing another attempt."
+        ]
+      }
+    }
+  ]
+}

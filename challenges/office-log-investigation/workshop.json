@@ -1,0 +1,118 @@
+{
+  "id": "office-log-investigation",
+  "labKind": "lambda-logs",
+  "title": {
+    "ja": "荷物の行き先を追え — CloudWatch Logs入門",
+    "en": "Trace the parcel destination — CloudWatch Logs basics"
+  },
+  "missions": [
+    {
+      "check": "lambda-logs",
+      "title": {
+        "ja": "荷物の行き先を追え — CloudWatch Logs入門",
+        "en": "Trace the parcel destination — CloudWatch Logs basics"
+      },
+      "goal": {
+        "ja": "受付は成功したけれど、どの拠点へ送ったか分かりません。実行の記録を仲間と調べ、送り先を報告しよう。",
+        "en": "The parcels were accepted, but the destination is missing. Investigate the execution record together and report where they went."
+      },
+      "concept": {
+        "ja": "Lambdaは、入力を渡すとプログラムを動かすサービスです。JSONは、項目名と値を組にする書き方。receiptは今回の受付番号、ログは実行したときの記録です。CloudWatch Logsに記録が保存され、destinationが送り先を表します。 accepted: true は受付に成功したという意味です。",
+        "en": "Lambda runs a program when given input. JSON pairs field names with values. A receipt identifies one execution; logs record what happened. CloudWatch Logs stores these records, and destination identifies the receiving site. accepted: true means the request was accepted."
+      },
+      "console": "lambda",
+      "resourceKeys": [
+        "functionName",
+        "testEvent",
+        "studentLogGroup"
+      ],
+      "inputs": [
+        {
+          "key": "receipt",
+          "label": {
+            "ja": "実行結果の受付番号（receipt）",
+            "en": "Receipt from the execution result"
+          }
+        },
+        {
+          "key": "destination",
+          "label": {
+            "ja": "同じ受付番号のログにある送り先（destination）",
+            "en": "Destination in the log for that receipt"
+          }
+        }
+      ],
+      "steps": {
+        "ja": [
+          "「AWSで操作する」で用意された関数を開く →「テスト」タブ → テストイベントのJSON入力欄へ、この画面の「テスト用の入力」を貼る →「テスト」ボタンで実行。保存する場合はイベント名を付け、共有設定は「プライベート」。プログラムの作成は不要です。",
+          "実行結果の詳細で accepted: true と receipt を確認。receiptの値を下の受付番号欄へコピーする。ログが届くまで少し時間がかかる場合は、待ってから確認し直す。",
+          "仲間が「モニタリング」→「CloudWatchのログを表示」を開く。表示されたロググループ名をこの画面と照合 →「すべてのログストリームを検索」→ 時間範囲を直近1時間 → フィルター欄に receipt の値を貼る → 一致する記録を展開 → destination の値を下へ写す。"
+        ],
+        "en": [
+          "Open the supplied function → Test tab → paste this page’s Test input into the test event JSON editor → click Test. If saving, name the event and choose Private. No programming is needed.",
+          "Expand the execution result and find accepted: true and receipt. Copy the receipt value into the field below. If logs have not arrived yet, wait briefly and retry the check.",
+          "A teammate opens Monitor → View CloudWatch logs. Match the log group name with this page → Search all log streams → Last 1 hour → paste the receipt value in Filter events → expand the matching record → copy destination below."
+        ]
+      },
+      "success": {
+        "ja": "実行の受付番号と、同じログに記録された送り先が確認できる。",
+        "en": "The receipt and destination match the same execution record."
+      },
+      "question": {
+        "ja": "別の受付番号にも送り先がありました。どれを報告しますか？",
+        "en": "Another receipt also has a destination. Which do you report?"
+      },
+      "choices": {
+        "ja": [
+          "今回の受付番号と一致する記録の送り先",
+          "いちばん上にある記録なら何でもよい",
+          "他チームのログにある送り先"
+        ],
+        "en": [
+          "The destination recorded for this exact receipt",
+          "Whichever record is at the top",
+          "The destination in another team’s log"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "実行結果は呼び出した人への返事、ログは後から調べる記録です。受付番号を手掛かりに、同じ処理を追えます。",
+          "前：受付成功しか分からない。後：同じ受付番号の記録で、どの拠点へ送ったか分かる。",
+          "テストを実行してreceiptを控える → モニタリングから指定ロググループを開く →「すべてのログストリームを検索」→ 直近1時間、フィルター欄にreceiptの値 → 記録を展開 → destinationを写す。ログ反映待ちなら実行し直さず少し待って検索する。"
+        ],
+        "en": [
+          "The result replies to the caller; logs record what happened for later investigation. Match a receipt to follow one execution.",
+          "Before: you only know acceptance succeeded. After: the matching receipt record reveals the destination.",
+          "Run the test and keep receipt → Monitor → the specified log group → Search all log streams → Last 1 hour, filter by receipt value → expand record → copy destination. If logs are pending, wait and search again without rerunning."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "テストの入力",
+          "Lambdaで受付",
+          "ログで追跡"
+        ],
+        "en": [
+          "Test input",
+          "Lambda execution",
+          "Trace its log"
+        ]
+      },
+      "diagramFocus": 2,
+      "source": "https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-view.html",
+      "explanationHints": {
+        "ja": [
+          "ログには複数の実行が並びます。受付番号は、今回の実行の記録を区別する目印です。",
+          "例：受付Aの送り先と受付Bの送り先が違うとき、最後に表示された行だけを選ぶと別の依頼を報告してしまいます。",
+          "今回入力した受付番号を見る → ログの receipt と一致する行を探す → その行の destination を報告する考え方を選ぼう。"
+        ],
+        "en": [
+          "Logs contain multiple executions. The receipt identifies the record for this particular run.",
+          "Example: receipts A and B have different destinations. Picking the last displayed row could report the wrong request.",
+          "Find this run’s receipt → match it to receipt in the log → select the approach that reports destination from that same record."
+        ]
+      }
+    }
+  ]
+}

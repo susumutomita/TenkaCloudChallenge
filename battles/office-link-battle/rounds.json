@@ -1,0 +1,228 @@
+[
+  {
+    "kind": "gateway",
+    "title": {
+      "ja": "拠点が外へ出られない",
+      "en": "The site cannot reach outside"
+    },
+    "symptom": {
+      "ja": "本戦用ページに届きません。準備で学んだ「外への出口」を、本戦の構成で見比べよう。",
+      "en": "The Battle page is unreachable. Compare this Battle’s internet exit with what you learned during preparation."
+    },
+    "diagram": {
+      "ja": "VPC（拠点のネットワーク）→ 外への出口 → インターネット",
+      "en": "VPC (site network) → internet exit → internet"
+    },
+    "hints": {
+      "ja": [
+        "IGW（インターネットゲートウェイ）は、VPCを外とつなぐ出口。存在するだけでなく、このVPCにつながっている必要があります。",
+        "前：出口はあるが拠点から外れている。後：同じ出口をこのVPCへ付け直すと、通信の道が戻ります。",
+        "指定のIGWを開く → アクション → VPCにアタッチ → 指定のVPCを選ぶ → 下で確認。公開IPの付け直しは検査側が行います。"
+      ],
+      "en": [
+        "An internet gateway connects a VPC to the internet. It must be attached to this VPC, not merely exist.",
+        "Before: the exit exists but is detached. After: reattaching the same gateway reconnects the site.",
+        "Open the specified IGW → Actions → Attach to VPC → choose the specified VPC → check below. The checker re-associates the reserved public IP."
+      ]
+    },
+    "question": {
+      "ja": "出口を用意しただけでは、なぜ届きませんでしたか？",
+      "en": "Why was having a gateway alone insufficient?"
+    },
+    "choices": {
+      "ja": [
+        "このVPCへ接続されていなかったから",
+        "EC2をもう1台作る必要があったから",
+        "サーバーの名前が短かったから"
+      ],
+      "en": [
+        "It was not attached to this VPC",
+        "A second EC2 was needed",
+        "The server name was too short"
+      ]
+    },
+    "correctChoice": 0,
+    "explanationHints": {
+      "ja": [
+        "IGWはVPCとインターネットを結ぶ出口です。作成は出口を用意する操作、アタッチはその出口を拠点へつなぐ操作です。",
+        "前：IGWは一覧にあるが、どのVPCにも付いていない。後：VPCのIDが接続先として表示される。数は同じ1個でも通信のつながりが変わります。",
+        "「作っただけ」のIGWと図のVPCを見る → 足りないのは物の数か、物同士のつながりかを比べる → 必要な接続先を説明する選択肢を選ぼう。"
+      ],
+      "en": [
+        "An IGW connects a VPC to the internet. Creating provides the gateway; attaching connects it to a site.",
+        "Before: the gateway exists without a VPC. After: its attachment shows the VPC ID. The gateway count stays one, but connectivity changes.",
+        "Compare the created gateway with the VPC in the diagram → decide whether a resource or a connection is missing → choose the explanation about that connection."
+      ]
+    }
+  },
+  {
+    "kind": "route",
+    "title": {
+      "ja": "出口への道案内がない",
+      "en": "The route to the exit is missing"
+    },
+    "symptom": {
+      "ja": "出口はつながっています。サーバーが使う道案内を確かめよう。",
+      "en": "The exit is attached. Check the directions the server uses."
+    },
+    "diagram": {
+      "ja": "サブネット → ルートテーブル（道案内）→ IGW",
+      "en": "Subnet → route table (directions) → IGW"
+    },
+    "hints": {
+      "ja": [
+        "ルートテーブルは宛先と進む先の組です。出口があっても、外への宛先がなければ通信は届きません。",
+        "前：拠点内の道だけ。後：0.0.0.0/0（外向きの宛先）から指定IGWへ進む道がある。",
+        "指定ルートテーブルを開く → ルートを編集 → 宛先0.0.0.0/0、ターゲットは指定IGW → 保存 → 下で確認。"
+      ],
+      "en": [
+        "A route table pairs destinations with next hops. An attached gateway still needs a route toward it.",
+        "Before: local routes only. After: 0.0.0.0/0 points to the specified gateway.",
+        "Open the specified route table → Edit routes → destination 0.0.0.0/0, target the specified IGW → save → check."
+      ]
+    },
+    "question": {
+      "ja": "直したのはどの関係ですか？",
+      "en": "Which relationship did you repair?"
+    },
+    "choices": {
+      "ja": [
+        "外向きの宛先と、進む出口の対応",
+        "誰がサーバーを操作してよいか",
+        "ページの文字の色"
+      ],
+      "en": [
+        "External destinations and their next hop",
+        "Who may operate the server",
+        "The page text color"
+      ]
+    },
+    "correctChoice": 0,
+    "explanationHints": {
+      "ja": [
+        "ルートテーブルは「どこへ行きたいか」という宛先と、「次にどこへ進むか」というターゲットを結び付ける道案内です。",
+        "前：拠点内へ向かう行だけがある。後：外向きの宛先0.0.0.0/0に、ターゲットとしてIGWが対応する行が加わる。",
+        "修復で足した行を見る → 宛先は0.0.0.0/0 → ターゲットは指定IGW。この2つを結ぶ関係を説明する選択肢を選ぼう。"
+      ],
+      "en": [
+        "A route table pairs a destination (where traffic is going) with a target (its next hop).",
+        "Before: only the local route exists. After: an added row pairs destination 0.0.0.0/0 with the internet gateway target.",
+        "Inspect the repaired row → destination 0.0.0.0/0 → target the specified IGW. Select the explanation describing that pair."
+      ]
+    }
+  },
+  {
+    "kind": "role",
+    "title": {
+      "ja": "サーバーを管理する接続を戻す",
+      "en": "Restore server management access"
+    },
+    "symptom": {
+      "ja": "ページは見えても、管理用のロール設定に不備があります。EC2が使う権限を確認しよう。ロールを直したら新しいSession Manager接続で sudo touch /tmp/office-link-visited（確認用ファイルを作る）を実行します。",
+      "en": "The page may work, but its management role configuration is incomplete. Check the permissions attached to EC2. After repairing the role, open a new Session Manager session and run sudo touch /tmp/office-link-visited to create the check file."
+    },
+    "diagram": {
+      "ja": "あなた → Session Manager → EC2用のIAMロール → サーバー",
+      "en": "You → Session Manager → EC2 IAM role → server"
+    },
+    "hints": {
+      "ja": [
+        "IAMロールは、AWSサービスを利用する権限のまとまり。Session Managerで入るために、EC2側にも用意されたロールが必要です。",
+        "前：EC2にロールが付いていない。後：用意されたロールが付き、管理の接続に必要な権限が戻る。",
+        "指定EC2 → アクション → セキュリティ → IAMロールを変更 → 表示されたロールへ更新。接続 → Session Managerで新しく入り、sudo touch /tmp/office-link-visited を実行して下で確認。touchは確認用ファイルを作るコマンドで、成功しても文字は出ません。接続回復には数分かかる場合があります。"
+      ],
+      "en": [
+        "An IAM role grants permissions to use AWS services. The EC2 side needs the prepared role for Session Manager.",
+        "Before: EC2 has no role. After: the prepared role restores the required management permissions.",
+        "Select the EC2 → Actions → Security → Modify IAM role → attach the displayed role. Open a new Connect → Session Manager session and run sudo touch /tmp/office-link-visited, then check below. touch creates the check file; success prints nothing. Session access can take a few minutes to recover."
+      ]
+    },
+    "question": {
+      "ja": "ページが開けても、なぜ修復が必要でしたか？",
+      "en": "Why was a repair needed even if the page opened?"
+    },
+    "choices": {
+      "ja": [
+        "ページを届ける通信と、管理の権限は別だから",
+        "ページの内容を暗号化し直すから",
+        "必ず公開IPが変わるから"
+      ],
+      "en": [
+        "Page delivery and management permissions are separate",
+        "The page must be encrypted again",
+        "The public IP always changes"
+      ]
+    },
+    "correctChoice": 0,
+    "explanationHints": {
+      "ja": [
+        "ページ用の通信と、管理のためのAWS権限は別々です。一方が使えても、もう一方が使えるとは限りません。",
+        "例：HTTP 80番のルールを変えずにEC2のロールを外すと、ページが見えても管理用のAWS操作に必要な権限が足りなくなります。",
+        "修復で付け直したのはIAMロール → ページの通信ではなく管理の権限が戻った → この違いを説明する選択肢を選ぼう。"
+      ],
+      "en": [
+        "Page traffic and AWS management permissions are separate. One working does not prove the other works.",
+        "Example: removing the EC2 role without changing HTTP port 80 can leave the page available while management permissions are missing.",
+        "You reattached an IAM role → management permissions returned, not a new page route → choose the explanation separating these functions."
+      ]
+    }
+  },
+  {
+    "kind": "http",
+    "title": {
+      "ja": "ページへの入口を開ける",
+      "en": "Reopen the page entrance"
+    },
+    "symptom": {
+      "ja": "ネットワークはつながっています。ページを見る通信が、入口で止められていないか確かめよう。",
+      "en": "The network is connected. Check whether the page’s traffic is blocked at its entrance."
+    },
+    "diagram": {
+      "ja": "仲間のブラウザ → セキュリティグループ（入口の許可）→ HTTP 80",
+      "en": "Teammate’s browser → security group (entrance permissions) → HTTP 80"
+    },
+    "hints": {
+      "ja": [
+        "セキュリティグループは、どこから何番の通信を受け入れるかを決めます。このページはHTTPの80番を使います。",
+        "前：観測用8080番だけ。後：8080番を残し、HTTP 80番の入口も許可される。",
+        "指定グループ → インバウンドルールを編集 → HTTP / TCP 80 / 0.0.0.0/0を追加 → 8080番は残す → 保存 → 下で確認。"
+      ],
+      "en": [
+        "A security group decides which sources and ports may enter. This page uses HTTP on port 80.",
+        "Before: only observation port 8080. After: port 8080 remains and HTTP port 80 is also permitted.",
+        "Open the specified group → Edit inbound rules → add HTTP / TCP 80 / 0.0.0.0/0 → keep port 8080 → save → check."
+      ]
+    },
+    "question": {
+      "ja": "別拠点の設計です。利用者203.0.113.7/32だけがTCP 8443のページを開き、監視元198.51.100.8/32だけがTCP 9000を確認します。必要最小限の入口は？ この設問ではAWSを変更しません。",
+      "en": "A different site serves its page on TCP 8443 only to user 203.0.113.7/32. Only monitor 198.51.100.8/32 checks TCP 9000. Which rules allow just these connections? Do not modify AWS for this question."
+    },
+    "choices": {
+      "ja": [
+        "8443 ← 203.0.113.7/32、9000 ← 198.51.100.8/32",
+        "前と同じ80・8080 ← 0.0.0.0/0",
+        "8443・9000 ← 0.0.0.0/0",
+        "8443 ← 198.51.100.8/32、9000 ← 203.0.113.7/32"
+      ],
+      "en": [
+        "8443 from 203.0.113.7/32; 9000 from 198.51.100.8/32",
+        "Reuse 80 and 8080 from 0.0.0.0/0",
+        "8443 and 9000 from 0.0.0.0/0",
+        "8443 from 198.51.100.8/32; 9000 from 203.0.113.7/32"
+      ]
+    },
+    "correctChoice": 0,
+    "explanationHints": {
+      "ja": [
+        "入口は「通信する相手」と「ポート番号」の組です。/32はそのIPアドレス1つだけ、0.0.0.0/0はすべての相手を意味します。",
+        "例：ある人だけを9001番へ通すなら、その人のIP/32とTCP 9001を組にします。前の演習で使った番号をそのままコピーはできません。",
+        "設問のページ利用者と8443番を組にする → 監視元と9000番を組にする → 相手が入れ替わっていないか、全員公開になっていないか確認して選ぼう。"
+      ],
+      "en": [
+        "An entrance rule pairs a source with a port. /32 means one IP address; 0.0.0.0/0 means all sources.",
+        "Example: to admit one person on port 9001, pair that IP/32 with TCP 9001. Copying the earlier exercise ports would not work.",
+        "Pair the page user with 8443 → pair the monitor with 9000 → check that sources are neither swapped nor opened to everyone, then choose."
+      ]
+    }
+  }
+]

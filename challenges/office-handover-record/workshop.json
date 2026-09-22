@@ -1,0 +1,190 @@
+{
+  "id": "office-handover-record",
+  "labKind": "dynamodb",
+  "title": {
+    "ja": "引き継ぎ台帳を作ろう — DynamoDB入門",
+    "en": "Keep a team handover record — DynamoDB basics"
+  },
+  "missions": [
+    {
+      "check": "dynamodb-create",
+      "title": {
+        "ja": "引き継ぎの記録を作る",
+        "en": "Create a handover record"
+      },
+      "goal": {
+        "ja": "口頭だけだと依頼を忘れてしまいます。横浜への引き継ぎを、仲間が検索できる場所に記録しよう。",
+        "en": "Verbal requests get forgotten. Record the Yokohama handover where teammates can find it."
+      },
+      "concept": {
+        "ja": "DynamoDBは、項目名と値を組にして記録するデータベースです。テーブルは記録の保存場所、キーは記録を見つける目印。今回は recordId という文字列のキーを使い、1件の引き継ぎを管理します。 容量モードは処理量の用意のしかた。「オンデマンド」は使った処理量に応じる方式で、今回は台数の見積りをしません。追加インデックスは別の目印で探す仕組みで、今回は不要です。",
+        "en": "DynamoDB stores records as named fields and values. A table holds records; a key identifies one record. Here the string key recordId identifies a handover. Capacity mode controls how processing capacity is provided. On-demand scales with use; no capacity estimate is needed here. Additional indexes provide other lookup keys and are not needed for this task."
+      },
+      "console": "dynamodb",
+      "resourceKeys": [
+        "tableName"
+      ],
+      "steps": {
+        "ja": [
+          "DynamoDBの「テーブルを作成」でこの画面のテーブル名を入力。パーティションキー（検索の目印）は recordId、型は文字列。ソートキー（2つ目の目印）は使わず、容量モードはオンデマンド、追加インデックスは不要です。",
+          "使用可能になったら「テーブルの項目を探索」→「項目を作成」。既にあるrecordIdの値欄へ handover。「新しい属性を追加」→「文字列」で名前 destination・値 YOKOHAMA を追加。同じ方法で名前 status・値 waiting を追加し、「項目を作成」で保存する。",
+          "仲間へ recordId の値を伝える。仲間が項目を探索して同じ記録を見つけたら、下で確かめる。"
+        ],
+        "en": [
+          "Choose Create table. Use the table name on this page and a String partition key named recordId. Do not add a sort key or indexes; use On-demand capacity.",
+          "Once Active, choose Explore table items → Create item. Set the existing recordId value to handover. Add new attribute → String: name destination, value YOKOHAMA. Add another String: name status, value waiting. Choose Create item to save.",
+          "Tell a teammate the recordId value. They find that record in Explore table items, then check below."
+        ]
+      },
+      "success": {
+        "ja": "指定テーブルに、横浜行き・待機中の引き継ぎが保存される。",
+        "en": "The specified table stores the Yokohama handover with waiting status."
+      },
+      "question": {
+        "ja": "同じ依頼を仲間が見つける目印はどれですか？",
+        "en": "What lets a teammate find this same request?"
+      },
+      "choices": {
+        "ja": [
+          "recordId の handover",
+          "画面の色",
+          "サーバーの公開IP"
+        ],
+        "en": [
+          "recordId = handover",
+          "The screen color",
+          "A server public IP"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "キーが同じなら同じ記録を探せます。保存する場所と目印を仲間に伝えます。",
+          "前：依頼は口頭だけ。後：handoverを探すと、送り先と待機中の状態が読める。",
+          "指定名・文字列キーrecordId・オンデマンドでテーブルを作成 → 項目作成でrecordIdの値をhandover → 文字列属性destinationを追加して値YOKOHAMA → 文字列属性statusを追加して値waiting → 保存 → 仲間がhandoverを探す。"
+        ],
+        "en": [
+          "A key identifies one record. Share the table and key with a teammate.",
+          "Before: a verbal request. After: finding handover reveals its destination and waiting status.",
+          "Create the named table with String key recordId and On-demand → Create item, set recordId to handover → add String destination = YOKOHAMA → add String status = waiting → save → teammate finds handover."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "依頼する人",
+          "DynamoDBの記録",
+          "受け取る人"
+        ],
+        "en": [
+          "Requester",
+          "DynamoDB record",
+          "Recipient"
+        ]
+      },
+      "diagramFocus": 1,
+      "source": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/getting-started-step-1.html",
+      "explanationHints": {
+        "ja": [
+          "キーは記録を見分ける目印です。同じ目印で探すと、同じ依頼を見つけられます。",
+          "例：recordId が request-A と request-B なら別々の依頼です。表示順が変わってもキーは目印として使えます。",
+          "作った項目の recordId を見る → その値を仲間へ伝える → 同じ項目を探せる組を選ぼう。"
+        ],
+        "en": [
+          "A key identifies a record. Looking up the same key locates the same request.",
+          "For example, recordId request-A and request-B identify different requests even when the displayed order changes.",
+          "Look at the item’s recordId → tell your teammate its value → select the pair that locates the same item."
+        ]
+      }
+    },
+    {
+      "check": "dynamodb-update",
+      "title": {
+        "ja": "担当を交代して完了にする",
+        "en": "Hand over and mark it done"
+      },
+      "goal": {
+        "ja": "仲間が作業を終えました。同じ記録を更新し、依頼した人にも完了を伝えよう。",
+        "en": "Your teammate finished the work. Update the same record so the requester can see completion."
+      },
+      "concept": {
+        "ja": "DynamoDBは、項目名と値を組にして記録するデータベースです。テーブルは記録の保存場所、キーは記録を見つける目印。今回は recordId という文字列のキーを使い、1件の引き継ぎを管理します。",
+        "en": "DynamoDB stores records as named fields and values. A table holds records; a key identifies one record. Here the string key recordId identifies a handover."
+      },
+      "console": "dynamodb",
+      "resourceKeys": [
+        "tableName"
+      ],
+      "steps": {
+        "ja": [
+          "操作担当を交代する。指定テーブルの「項目を探索」で recordId が handover の記録を開く。",
+          "新しい記録を増やさず、同じ記録の status を waiting から done へ変えて保存する。destination は YOKOHAMA のまま。",
+          "最初の担当者が一覧を更新して done を読めたら、下で確かめる。"
+        ],
+        "en": [
+          "Swap operators. Explore the specified table and open recordId = handover.",
+          "Edit that same record: change status from waiting to done and save. Keep destination as YOKOHAMA.",
+          "The original requester refreshes the list and sees done. Check below."
+        ]
+      },
+      "success": {
+        "ja": "同じ記録の status が done になり、送り先は変わらない。",
+        "en": "The same record has status done and its destination is unchanged."
+      },
+      "question": {
+        "ja": "新しいキーで別の記録を作ると何が困りますか？",
+        "en": "Why not create a separate record with a new key?"
+      },
+      "choices": {
+        "ja": [
+          "元の依頼が waiting のまま残り、完了が伝わらない",
+          "保存したデータが必ず全世界へ公開される",
+          "Lambdaが停止する"
+        ],
+        "en": [
+          "The original request stays waiting, hiding completion",
+          "All saved data becomes public",
+          "Lambda stops"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "更新は同じ目印の記録を書き替えます。依頼した人も、その目印で状態を読み直せます。",
+          "前：handoverのstatusがwaiting。後：同じhandoverのstatusがdone。",
+          "項目を探索 → handoverを開く → statusだけdoneへ → 保存 → 仲間が一覧を更新。"
+        ],
+        "en": [
+          "Updating changes the record with the same key. The requester reads that key again.",
+          "Before: handover is waiting. After: that same handover is done.",
+          "Explore items → open handover → change status to done → save → teammate refreshes."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "担当者が完了",
+          "同じ記録を更新",
+          "依頼者が確認"
+        ],
+        "en": [
+          "Work finished",
+          "Update same record",
+          "Requester checks"
+        ]
+      },
+      "diagramFocus": 1,
+      "source": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/getting-started-step-5.html",
+      "explanationHints": {
+        "ja": [
+          "更新は同じキーの記録を変える操作です。別のキーで作成すると、元の記録も残ります。",
+          "例：request-A が waiting のまま、request-B を done にしても、Aを見ている仲間には完了が伝わりません。",
+          "仲間は元の handover を見ている → 別のキーを増やした場合の元の status を考える → 引き継ぎが止まる理由を選ぼう。"
+        ],
+        "en": [
+          "Updating changes a record with the same key. Creating another key leaves the original record in place.",
+          "Example: request-A remains waiting while request-B is done. A teammate following A still sees unfinished work.",
+          "Your teammate follows handover → consider its status if another key is created → choose why the handoff would fail."
+        ]
+      }
+    }
+  ]
+}
