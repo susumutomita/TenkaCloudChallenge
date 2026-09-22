@@ -109,4 +109,16 @@ class BasicServiceTest(unittest.TestCase):
         self.db.delete_table.side_effect=RuntimeError('AccessDenied')
         with self.assertRaisesRegex(RuntimeError,'AccessDenied'):lifecycle['remove_created_resource'](self.db,{**self.config,'labKind':'dynamodb'})
 
+    def test_protected_table_is_unprotected_before_teardown_and_failure_is_visible(self):
+        self.table['DeletionProtectionEnabled']=True
+        lifecycle['remove_created_resource'](self.db,{**self.config,'labKind':'dynamodb'})
+        self.db.update_table.assert_called_once_with(TableName='tc-team-handover',DeletionProtectionEnabled=False)
+        names=[call[0] for call in self.db.mock_calls]
+        self.assertLess(names.index('update_table'),names.index('delete_table'))
+        self.db.get_waiter.assert_any_call('table_exists')
+        self.db.reset_mock()
+        self.db.update_table.side_effect=RuntimeError('AccessDenied')
+        with self.assertRaisesRegex(RuntimeError,'AccessDenied'):lifecycle['remove_created_resource'](self.db,{**self.config,'labKind':'dynamodb'})
+        self.db.delete_table.assert_not_called()
+
 if __name__=='__main__':unittest.main()

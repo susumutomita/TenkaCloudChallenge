@@ -28,6 +28,10 @@ def remove_created_resource(client, config):
     kind=config['labKind']
     try:
         if kind=='dynamodb':
+            table=client.describe_table(TableName=config['tableName'])['Table']
+            if table.get('DeletionProtectionEnabled'):
+                client.update_table(TableName=config['tableName'],DeletionProtectionEnabled=False)
+                client.get_waiter('table_exists').wait(TableName=config['tableName'],WaiterConfig={'Delay':2,'MaxAttempts':20})
             client.delete_table(TableName=config['tableName'])
             client.get_waiter('table_not_exists').wait(TableName=config['tableName'],WaiterConfig={'Delay':5,'MaxAttempts':30})
         elif kind=='sqs':

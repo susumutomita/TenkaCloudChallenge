@@ -30,6 +30,9 @@ def execute(ec2, config):
             tags = {t["Key"]: t["Value"] for t in instance.get("Tags", [])}
             if instance["VpcId"] != config["vpcId"] or tags.get("TenkaCloud:NamePrefix") != config["namePrefix"]:
                 raise ValueError("Instance does not belong to this lab")
+            # The launch wizard can override termination protection. Cleanup
+            # remains restricted to the tagged instance on this lab's ENI.
+            ec2.modify_instance_attribute(InstanceId=instance_id, DisableApiTermination={"Value": False})
             ec2.terminate_instances(InstanceIds=[instance_id])
             ec2.get_waiter("instance_terminated").wait(InstanceIds=[instance_id], WaiterConfig={"Delay": 5, "MaxAttempts": 30})
     gateways = ec2.describe_internet_gateways(Filters=[{"Name": "tag:TenkaCloud:NamePrefix", "Values": [config["namePrefix"]]}])["InternetGateways"]

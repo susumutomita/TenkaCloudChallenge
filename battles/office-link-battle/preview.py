@@ -21,6 +21,7 @@ def main():
     app = {}
     exec(compile(runpy.run_path(str(ROOT/'build.py'))['compile_code'](), 'index.py', 'exec'), app)
     os.environ['PLAY_KEY'] = secrets.token_hex(24)
+    os.environ['COOPERATION_SECRET'] = secrets.token_hex(32)
     lock = threading.RLock()
 
     class Store:
@@ -76,7 +77,7 @@ def main():
     url = f'http://127.0.0.1:{server.server_port}/{os.environ["PLAY_KEY"]}/'
     if args.info_file:
         descriptor = os.open(args.info_file,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
-        with os.fdopen(descriptor,'w') as stream: json.dump({'url':url},stream)
+        with os.fdopen(descriptor,'w') as stream: json.dump({'url':url,'cards':[url+'#card='+card for card in app['member_cards'](os.environ['COOPERATION_SECRET'])]},stream)
     print('UI fixtures only, no AWS or official scoring: '+url,flush=True)
     server.serve_forever()
 

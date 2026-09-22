@@ -194,32 +194,34 @@
       ]
     },
     "question": {
-      "ja": "すべてのポートを開く必要はありましたか？",
-      "en": "Did every port need to be opened?"
+      "ja": "別拠点の設計です。利用者203.0.113.7/32だけがTCP 8443のページを開き、監視元198.51.100.8/32だけがTCP 9000を確認します。必要最小限の入口は？ この設問ではAWSを変更しません。",
+      "en": "A different site serves its page on TCP 8443 only to user 203.0.113.7/32. Only monitor 198.51.100.8/32 checks TCP 9000. Which rules allow just these connections? Do not modify AWS for this question."
     },
     "choices": {
       "ja": [
-        "ない。ページの80番と指定の観測用8080番だけでよい",
-        "ある。1〜65535番をすべて公開する",
-        "ある。別チームの入口も変更する"
+        "8443 ← 203.0.113.7/32、9000 ← 198.51.100.8/32",
+        "前と同じ80・8080 ← 0.0.0.0/0",
+        "8443・9000 ← 0.0.0.0/0",
+        "8443 ← 198.51.100.8/32、9000 ← 203.0.113.7/32"
       ],
       "en": [
-        "No. Only page port 80 and the fixed observation port 8080",
-        "Yes. Open all ports 1–65535",
-        "Yes. Change another team’s entrance too"
+        "8443 from 203.0.113.7/32; 9000 from 198.51.100.8/32",
+        "Reuse 80 and 8080 from 0.0.0.0/0",
+        "8443 and 9000 from 0.0.0.0/0",
+        "8443 from 198.51.100.8/32; 9000 from 203.0.113.7/32"
       ]
     },
     "correctChoice": 0,
     "explanationHints": {
       "ja": [
-        "入口の許可は通信の目的ごとに選びます。この演習はページ用80番と、検査用8080番を使います。",
-        "例：80番が閉じているなら80番を追加するとページへの通信を戻せます。別の番号まで全部許可しても、ページの目的には不要です。",
-        "ページが使う80番を確認 → 観測用8080番を残す → それ以外が必要かを考え、今回の2つの用途で説明できる選択肢を選ぼう。"
+        "入口は「通信する相手」と「ポート番号」の組です。/32はそのIPアドレス1つだけ、0.0.0.0/0はすべての相手を意味します。",
+        "例：ある人だけを9001番へ通すなら、その人のIP/32とTCP 9001を組にします。前の演習で使った番号をそのままコピーはできません。",
+        "設問のページ利用者と8443番を組にする → 監視元と9000番を組にする → 相手が入れ替わっていないか、全員公開になっていないか確認して選ぼう。"
       ],
       "en": [
-        "Entrance permissions follow the required purpose: port 80 serves the page and 8080 serves observations.",
-        "Example: reopening closed port 80 restores page traffic. Allowing every other port does not help deliver this page.",
-        "Identify page port 80 → keep observation port 8080 → decide whether other ports are needed and select the explanation matching these two purposes."
+        "An entrance rule pairs a source with a port. /32 means one IP address; 0.0.0.0/0 means all sources.",
+        "Example: to admit one person on port 9001, pair that IP/32 with TCP 9001. Copying the earlier exercise ports would not work.",
+        "Pair the page user with 8443 → pair the monitor with 9000 → check that sources are neither swapped nor opened to everyone, then choose."
       ]
     }
   }

@@ -14,7 +14,7 @@ ref,sub,attr,allow,policy,trust=[shared[k] for k in ['ref','sub','attr','allow',
 
 def compile_code():
     code='\n'.join((FAMILY/name).read_text().replace('from check_errors import NotReady, require\n','').replace('from service_checks import ServiceChecks\n','') for name in ['check_errors.py','service_checks.py','checks.py'])
-    code+='\n'+(ROOT/'controller.py').read_text().replace('from checks import AwsChecks, NotReady\n','')+'\n'+(ROOT/'app.py').read_text()
+    code+='\n'+(ROOT/'controller.py').read_text().replace('from checks import AwsChecks, NotReady\n','')+'\n'+(ROOT/'cooperation.py').read_text()+'\n'+(ROOT/'app.py').read_text()
     code+='\nROUNDS = '+repr(json.loads((ROOT/'rounds.json').read_text()))+'\n'
     observations=json.loads((FAMILY/'observations.json').read_text())
     observations['Attach the prepared EC2 role to restore management access']='用意されたEC2用ロールを付け、管理用の接続を戻してください。'
@@ -28,6 +28,7 @@ def template():
     t=shared['template'](ROOT.parents[1]/'challenges'/'office-link-gate')
     t['Description']='One real AWS recovery fault at a time, using existing uptime-flat scoring.'
     for key in ['ProgressKey','CompletionSecret']:del t['Parameters'][key]
+    t['Parameters']['CooperationSecret']={'Type':'String','NoEcho':True,'MinLength':24,'Description':'Private role-card seed; do not distribute to participants.'}
     r=t['Resources'];tags=r['Vpc']['Properties']['Tags']
     arn=lambda kind,name:sub('arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:'+kind+'/'+name)
     r['Gateway']={'Type':'AWS::EC2::InternetGateway','Properties':{'Tags':tags}}
@@ -50,6 +51,7 @@ def template():
     for name in ['Workshop','Cleanup']:
         r[name]['Properties']['Environment']['Variables']={'LAB_CONFIG':sub(json.dumps(config))}
     r['Workshop']['Properties']['Environment']['Variables']['PLAY_KEY']=ref('PlayKey')
+    r['Workshop']['Properties']['Environment']['Variables']['COOPERATION_SECRET']=ref('CooperationSecret')
     r['Workshop']['Properties']['Code']['ZipFile']=compile_code()
     state_permissions=allow(['dynamodb:GetItem','dynamodb:PutItem'],attr('RoundState','Arn'))
     r['WorkshopRole']['Properties']['Policies'][0]['PolicyDocument']['Statement'].append(state_permissions)
@@ -64,7 +66,7 @@ def template():
         allow(['ec2:AuthorizeSecurityGroupIngress','ec2:RevokeSecurityGroupIngress'],arn('security-group','${LabSecurityGroup}'))]
     r['FaultRole']={'Type':'AWS::IAM::Role','Properties':{'AssumeRolePolicyDocument':trust({'Service':'lambda.amazonaws.com'}),'Policies':[{'PolicyName':'FaultAndRestoreOnlyThisLab','PolicyDocument':policy(faults)}]}}
     r['FaultController']={'Type':'AWS::Lambda::Function','Properties':{'Runtime':'python3.12','Handler':'index.operator_handler','MemorySize':128,'Timeout':120,
-        'Role':attr('FaultRole','Arn'),'Environment':{'Variables':{'LAB_CONFIG':sub(json.dumps(config))}},'Code':{'ZipFile':compile_code()},'LoggingConfig':{'LogGroup':ref('FaultLogs')},'Tags':tags}}
+        'Role':attr('FaultRole','Arn'),'Environment':{'Variables':{'LAB_CONFIG':sub(json.dumps(config)),'COOPERATION_SECRET':ref('CooperationSecret'),'GAME_URL':sub('${WorkshopUrl.FunctionUrl}${PlayKey}/')}},'Code':{'ZipFile':compile_code()},'LoggingConfig':{'LogGroup':ref('FaultLogs')},'Tags':tags}}
     r['Watchdog']={'Type':'AWS::Events::Rule','DependsOn':'CleanupHook','Properties':{'ScheduleExpression':'rate(1 minute)','State':'ENABLED','Targets':[{'Id':'RestoreExpiredFault','Arn':attr('FaultController','Arn')}]}}
     r['WatchdogAccess']={'Type':'AWS::Lambda::Permission','Properties':{'FunctionName':ref('FaultController'),'Action':'lambda:InvokeFunction','Principal':'events.amazonaws.com','SourceArn':attr('Watchdog','Arn')}}
     r['WorkshopUrl']['DependsOn']='CleanupHook'

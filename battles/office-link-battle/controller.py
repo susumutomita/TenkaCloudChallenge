@@ -66,14 +66,16 @@ class Battle:
             raise
         return self.store.save(active,{**active,'phase':'active'})
 
-    def verify(self):
+    def verify(self, revision=None):
         old=self.store.read()
+        if revision is not None and old['revision']!=revision:raise Conflict('State changed; refresh')
         if old['phase']!='active':raise Conflict('Refresh the round before checking')
         self.health()
         return self.store.save(old,{**old,'phase':'review','recoveredBy':'team'})
 
-    def explain(self, choice):
+    def explain(self, choice, revision=None):
         old=self.store.read()
+        if revision is not None and old['revision']!=revision:raise Conflict('State changed; refresh')
         if old['phase']!='review':raise Conflict('Check recovery before the explanation')
         if choice != str(ROUNDS[old['index']]['correctChoice']):return False
         self.store.save(old,{'phase':'idle','index':old['index']+1,'revision':old['revision']})
@@ -83,7 +85,7 @@ class Battle:
         old=self.store.read()
         if old['phase'] not in ('active','applying','restoring'):return old
         if old['phase']=='restoring' and self.now()<old.get('recoverAfter',0):return old
-        if old['phase']=='applying' and self.now()<old['deadline']:raise Conflict('Fault is still being applied')
+        if not force and old['phase']=='applying' and self.now()<old['deadline']:raise Conflict('Fault is still being applied')
         if not force and self.now()<old['deadline']:return old
         # A recovery lease exceeds the operator Lambda's 120-second timeout.
         # Duplicate timer deliveries must not restore concurrently.

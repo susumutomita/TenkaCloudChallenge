@@ -119,6 +119,22 @@ class BattleTest(unittest.TestCase):
         self.now=1782
         self.assertEqual(self.engine.recover()['recoveredBy'],'watchdog')
 
+    def test_emergency_restore_does_not_wait_for_interrupted_apply_deadline(self):
+        # Simulate AWS accepting the fault but the following state write failing.
+        active=self.engine.start('gateway')
+        self.store.state={**active,'phase':'applying'}
+        with self.assertRaises(app['Conflict']):self.engine.recover()
+        result=self.engine.recover(force=True)
+        self.assertEqual(result['phase'],'review')
+        self.assertEqual(result['recoveredBy'],'operator')
+
+    def test_finale_requires_new_ports_and_sources_instead_of_repeating_repair(self):
+        self.store.state={'revision':1,'index':3,'phase':'review'}
+        self.assertFalse(self.engine.explain('1'))  # Original 80/8080 rules.
+        self.assertFalse(self.engine.explain('2'))  # New ports open to everyone.
+        self.assertFalse(self.engine.explain('3'))  # Correct ports, swapped sources.
+        self.assertTrue(self.engine.explain('0'))
+
     def test_restore_operations_only_touch_configured_resources(self):
         ec2=self.fixture.ec2
         self.fixture.gateway['Attachments']=[]
@@ -137,7 +153,7 @@ class BattleTest(unittest.TestCase):
             event={'rawPath':'/'+'p'*24+'/'+route,'requestContext':{'http':{'method':'POST' if body is not None else 'GET'}}}
             if body is not None:event['body']=json.dumps(body)
             return app['handler'](event)
-        with patch.dict(os.environ,{'PLAY_KEY':'p'*24}),patch.dict(app,{'battle':lambda:self.engine}):
+        with patch.dict(os.environ,{'PLAY_KEY':'p'*24,'COOPERATION_SECRET':'c'*32}),patch.dict(app,{'battle':lambda:self.engine}):
             self.assertEqual(request('api/start',{})['statusCode'],405)
             initial=request('api/state');self.assertNotIn('correctChoice',initial['body']);self.assertNotIn('hints',initial['body'])
             self.assertEqual(request('health')['statusCode'],200)
@@ -148,7 +164,12 @@ class BattleTest(unittest.TestCase):
                 for round_info in app['ROUNDS']:
                     self.assertEqual(len(set(round_info['explanationHints'][language])),3)
                     self.assertNotEqual(round_info['hints'][language],round_info['explanationHints'][language])
-            self.assertEqual(request('api/check',{'revision':current['revision']})['statusCode'],200)
+            self.assertEqual(request('api/check',{'revision':current['revision']})['statusCode'],403)
+            coop=app['Cooperation'](self.engine,'c'*32)
+            cards=app['member_cards']('c'*32)
+            for card in cards:
+                self.assertEqual(request('api/share',{'revision':self.store.read()['revision'],'card':card,'answer':coop.expected(0)})['statusCode'],200)
+            self.assertEqual(request('api/check',{'revision':self.store.read()['revision'],'card':cards[0]})['statusCode'],200)
             self.fixture.fetch.side_effect=app['NotReady']('Unreachable')
             self.assertEqual(request('health')['statusCode'],503)
 

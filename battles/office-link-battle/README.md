@@ -12,7 +12,15 @@ Copy **HealthUrlHint** from portal Deployment outputs into the **Site health** e
 
 One host-triggered fault → discuss the symptom and diagram → repair in AWS → check the real resource → explain → rotate operators. Roles are operating, reading the diagram, explaining, and checking. Free hints are available. Answering a question does not repair AWS.
 
-Existing `uptime-flat` awards +100 per successful scoring tick and −100 per failed tick (normally every minute). The default endpoint is empty until participant registration; deployment alone earns nothing. Explanations do not award extra points and there is no flag submission. Official score, rank and end time remain in the portal. Allow roughly 30–45 minutes for four recoveries, plus about 40 minutes for Preparation. These are unmeasured planning estimates.
+Existing `uptime-flat` awards +100 per successful scoring tick and −100 per failed tick (normally every minute). The default endpoint is empty until participant registration; deployment alone earns nothing. Explanations do not award extra points. Separate partner exchanges award up to +60 as described below; there is no flag submission. Official score, rank and end time remain in the portal. Allow roughly 30–45 minutes for four recoveries, plus about 40 minutes for Preparation. These are unmeasured planning estimates.
+
+## Four roles and partner exchanges
+
+The host privately gives one A–D card link to each teammate. A card reveals only that person's clue. Combine numbers, reconstruct the network path, then exchange two halves of a key across pairs. Every card must confirm the shared result. Recovery checks and explanations require different designated cards, rotating A → B → C → D over the four rounds. AI can help calculate; it cannot submit another person's confirmation without their card.
+
+The portal also offers **Connect with another team**. Exchange the displayed codes in person and each submit the other team's code. Only reciprocal confirmations award +20 to both teams, once per pair, up to three different partners (+60 per team). A capped team can help a new partner without earning more. Waiting, cancellation and declined invitations have no penalty. Uptime scoring continues independently; the existing coordination host adds the bonus without replacing the uptime total.
+
+Card possession is the authority, not proof of a distinct human. Someone given all cards or all team credentials can act for everyone. Hosts distribute cards separately and encourage discussion. For absence, the host can mark missing confirmations as assisted and reassign the missing person's card to a present teammate; see the runbook.
 
 ## Runtime and authority
 
@@ -32,6 +40,8 @@ Delete the problem deployment from the admin console after the event. The timer 
 
 ## Verification
 
+Requires Python 3.12+, Node.js and Bun 1.3.11.
+
 ```bash
 python3 -m venv /tmp/office-check
 /tmp/office-check/bin/pip install -r ../../runtimes/aws-intro/requirements-test.txt
@@ -39,6 +49,6 @@ PATH=/tmp/office-check/bin:$PATH make test
 make preview  # UI fixtures only: no real AWS or official score
 ```
 
-The unchanged [aws-intro runtime](../../runtimes/aws-intro) supplies the AWS checks. `build.py` bundles code and assets into `template.yaml`. Also run `make install && make agent-gate` at the catalog root. [VALIDATION.md](VALIDATION.md) separates local evidence from the optional, unperformed AWS rehearsal.
+The shared [aws-intro runtime](../../runtimes/aws-intro) supplies the AWS checks. `build.py` bundles code and assets into `template.yaml`. Also run `make install && make agent-gate` at the catalog root. [VALIDATION.md](VALIDATION.md) separates local evidence from the optional, unperformed AWS rehearsal.
 
 CFN lint W2010 warnings reflect the existing capability-URL output contract. NoEcho does not hide Outputs. The participant role cannot read CFN outputs; share GameUrl only within the team.

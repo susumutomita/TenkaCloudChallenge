@@ -6,6 +6,7 @@ test:
 	python3 build.py --check
 	python3 -m unittest discover -s tests -v
 	node --check web.js
+	bun test tests/exchange.test.ts
 
 preview:
 	python3 preview.py

@@ -29,6 +29,16 @@ Confirm funding independently; do not assume free support from a named organizat
 
 Preparation saves progress on the device; use its visible handoff code when swapping devices. Battle state reloads from the same GameUrl. URLs, codes and flags stay within the team.
 
+## Distribute private role cards
+
+After deployment, invoke the private FaultController with `{"operation":"cards"}`. It returns four A–D URLs. Keep the response private, give one URL to each person, and delete the local response after distribution. Never publish the whole list in shared chat or on the projector. The common GameUrl has no card and cannot confirm another member's action.
+
+Use the existing operator invocation below with payload `{"operation":"cards"}` and a private output file (`umask 077`). For an absent member, `{"operation":"assist","members":[2]}` marks card C's confirmation as host-assisted (A=0 through D=3). Reassign C's card to a present teammate when C is the operator or explainer. Assistance does not change health or score. It works only in an active/review round; normal AWS recovery still applies.
+
+For partner exchange, have teams meet another team and each enter the other's displayed code in the portal. Both confirmations are required; +20 each, up to three partners. A late/odd team can connect with an already rewarded team; the latter receives no additional reward after its cap. No waiting penalty. Check the official score increases by 20 without erasing uptime points.
+
+Host-prepared AWS environments may be distributed through the platform's [participant self-registration](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/participant-self-registration.en.md). One representative reserves once per team; AWS accounts are still prepared in advance.
+
 ## Starting and operating faults
 
 Normally wait for all teams to finish Preparation before Battle endpoint registration and fault introduction. Early finishers explain their architecture. Preparation contributes a common 100-point base; compete over the same Battle window. Agree on assistance for slower teams in advance; do not silently disable the Gate.

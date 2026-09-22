@@ -60,6 +60,16 @@ class TemplateTest(unittest.TestCase):
         self.assertNotIn('CleanupUrl',r)
         self.assertTrue(r['UrlInvocation']['Properties']['InvokedViaFunctionUrl'])
 
+    def test_only_cleanup_can_remove_termination_protection_on_owned_instances(self):
+        r=builder['template'](PROBLEM)['Resources']
+        cleanup=r['CleanupRole']['Properties']['Policies'][0]['PolicyDocument']['Statement']
+        statement=next(s for s in cleanup if 'ec2:ModifyInstanceAttribute' in s['Action'])
+        self.assertNotEqual(statement['Resource'],'*')
+        self.assertEqual(statement['Condition']['StringEquals']['ec2:Attribute'],'disableApiTermination')
+        self.assertEqual(statement['Condition']['StringEquals']['aws:ResourceTag/TenkaCloud:NamePrefix'],{'Ref':'NamePrefix'})
+        participant=r['ParticipantViewerRole']['Properties']['Policies'][0]['PolicyDocument']['Statement']
+        self.assertFalse(any('ec2:ModifyInstanceAttribute' in s['Action'] for s in participant))
+
     def test_all_observations_have_japanese_text(self):
         tree=ast.parse((FAMILY/'checks.py').read_text()+'\n'+(FAMILY/'service_checks.py').read_text())
         messages=[]

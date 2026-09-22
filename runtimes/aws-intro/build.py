@@ -123,6 +123,7 @@ def template(problem):
             statements += [allow(["ec2:AssociateAddress"], [address, eni]), allow(["ec2:AssociateAddress"], instances, owned)]
         else:
             statements += [allow(["ec2:DisassociateAddress"], [address, eni]), allow(["ec2:TerminateInstances"], instances, owned),
+                allow(["ec2:ModifyInstanceAttribute"], instances, {"StringEquals": {**owned["StringEquals"], "ec2:Attribute": "disableApiTermination"}}),
                 allow(["ec2:DetachInternetGateway"], vpc), allow(["ec2:DetachInternetGateway", "ec2:DeleteInternetGateway"], gateways, owned)]
         r[name + "Role"] = {"Type": "AWS::IAM::Role", "Properties": {"AssumeRolePolicyDocument": trust({"Service": "lambda.amazonaws.com"}), "Policies": [{"PolicyName": "LabAuthority", "PolicyDocument": policy(statements)}]}}
         variables = dict(environment)
@@ -203,7 +204,7 @@ def service_template(problem):
         participant += [allow(['dynamodb:ListTables','dynamodb:DescribeEndpoints'],'*'),
             allow(['dynamodb:CreateTable','dynamodb:DescribeTable','dynamodb:PutItem','dynamodb:GetItem','dynamodb:UpdateItem','dynamodb:Scan','dynamodb:Query','dynamodb:ListTagsOfResource'],table)]
         checker += [allow(['dynamodb:DescribeTable','dynamodb:GetItem'],table)]
-        lifecycle += [allow(['dynamodb:DescribeTable','dynamodb:DeleteTable'],table)]
+        lifecycle += [allow(['dynamodb:DescribeTable','dynamodb:UpdateTable','dynamodb:DeleteTable'],table)]
     elif kind == 'sqs':
         queue=sub('arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${NamePrefix}-handover')
         config.update(queueName='${NamePrefix}-handover',queueArn='arn:${AWS::Partition}:sqs:${AWS::Region}:${AWS::AccountId}:${NamePrefix}-handover',accountId='${AWS::AccountId}')
