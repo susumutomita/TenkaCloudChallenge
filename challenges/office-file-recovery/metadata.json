@@ -1,0 +1,58 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-file-recovery",
+  "name": "消えた案内を取り戻そう — S3の過去版",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10 分",
+  "shortDescription": "会議室の案内が間違った内容に上書きされました。残っている過去の版を調べ、正しい案内を取り戻そう。",
+  "instructions": "## チームで資料を届ける\n\n会議室の案内が間違った内容に上書きされました。残っている過去の版を調べ、正しい案内を取り戻そう。\n\n1. ポータルの「AWS Consoleを開く」でチームの権限へ接続し、GameUrlを開く。\n2. 表示された対象だけを操作し、仲間と結果を読み比べる。操作確認と説明問題が終わると合言葉が出る。\n3. 合言葉をこのページへ提出。正解100点、誤った合言葉は5点減点。画面内の確認とヒントは無料。\n\nこれは追加Challengeです。準備Gateと本戦だけのイベントには自動で追加されません。AWSの利用料は開催者負担です。",
+  "description": "S3の実オブジェクトと公開防止設定を確認する追加Challenge。操作と説明の両方で最終100点。",
+  "tags": [
+    "beginner",
+    "aws",
+    "s3",
+    "teamwork"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "過去の履歴を残したまま、新しい現在の版が正しい案内になる。",
+    "公開せずにチームの権限でファイルを扱う"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Recover the handover note — S3 versions",
+      "shortDescription": "The meeting room note was overwritten incorrectly. Inspect its earlier versions and restore the correct note.",
+      "instructions": "## Deliver the team note\n\nThe meeting room note was overwritten incorrectly. Inspect its earlier versions and restore the correct note.\n\n1. Use Open AWS Console in the portal to sign in with your team’s role, then open GameUrl.\n2. Work only on the displayed resources and compare results with a teammate. Complete the operation check and explanation to receive a passphrase.\n3. Submit it on this page: 100 points; a wrong passphrase costs 5. Workshop checks and hints are free.\n\nThis is an optional Challenge, not automatically added to the core Gate/Battle event. The host pays for AWS usage.",
+      "description": "Optional Challenge checking real S3 objects and public access blocks. Both the operation and explanation are required for one 100-point final flag.",
+      "learningGoals": [
+        "Earlier versions remain and the new current version contains the correct note.",
+        "Use team permissions without making files public"
+      ]
+    }
+  }
+}

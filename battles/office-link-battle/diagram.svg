@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="370" viewBox="0 0 960 370" role="img" aria-labelledby="title desc">
+<title id="title">Office Link: the path to the team server</title><desc id="desc">Browser to internet gateway to route table to security group to EC2. Session Manager also needs the EC2 IAM role. Repair one connection at a time.</desc>
+<rect width="960" height="370" rx="24" fill="#eef6f4"/>
+<g font-family="sans-serif" fill="#193733"><text x="32" y="50" font-size="25" font-weight="bold">拠点をつなぐ / Connect the sites</text><text x="32" y="82" font-size="17">症状を見る → 1か所ずつ確かめる / Observe → check one connection</text></g>
+<g stroke="#177568" stroke-width="3" fill="white"><rect x="28" y="115" width="160" height="80" rx="14"/><rect x="212" y="115" width="160" height="80" rx="14"/><rect x="396" y="115" width="160" height="80" rx="14"/><rect x="580" y="115" width="160" height="80" rx="14"/><rect x="764" y="115" width="166" height="80" rx="14"/></g>
+<g font-family="sans-serif" fill="#193733" text-anchor="middle" font-size="17"><text x="108" y="147">仲間のブラウザ</text><text x="108" y="173">Browser</text><text x="292" y="147">外への出口</text><text x="292" y="173">IGW</text><text x="476" y="147">道案内</text><text x="476" y="173">Route table</text><text x="660" y="147">入口の許可</text><text x="660" y="173">Security group</text><text x="847" y="147">チームのサーバー</text><text x="847" y="173">EC2 / HTTP 80</text></g>
+<g fill="#177568"><path d="M190 151h12v-7l10 11-10 11v-7h-12z"/><path d="M374 151h12v-7l10 11-10 11v-7h-12z"/><path d="M558 151h12v-7l10 11-10 11v-7h-12z"/><path d="M742 151h12v-7l10 11-10 11v-7h-12z"/></g>
+<rect x="212" y="231" width="530" height="90" rx="14" fill="#fff3d8" stroke="#b38b32" stroke-width="2"/>
+<g font-family="sans-serif" fill="#193733" text-anchor="middle" font-size="18"><text x="477" y="264">サーバーの中へ入る / Manage the server</text><text x="477" y="296">Session Manager + EC2のIAMロール / IAM role</text></g><path d="M746 275h101v-74" fill="none" stroke="#b38b32" stroke-width="3"/><path d="m841 210 6-12 6 12" fill="#b38b32"/>
+</svg>

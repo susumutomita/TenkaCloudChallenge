@@ -1,0 +1,829 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "AWS introductory team Challenge: cpu-alarm"
+Parameters:
+  NamePrefix:
+    Type: String
+    MaxLength: 71
+    AllowedPattern: ^tc-[a-z0-9]+(-[a-z0-9]+)+$
+  TenkaCloudAccountId:
+    Type: String
+    AllowedPattern: ^[0-9]{12}$
+  ExternalId:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+  PlayKey:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  ProgressKey:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  CompletionSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 24
+    MaxLength: 64
+    AllowedPattern: ^[A-Za-z0-9]+$
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.78.0.0/24
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: Vpc
+      CidrBlock: 10.78.0.0/28
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+  ServerGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId:
+        Ref: Vpc
+      GroupDescription: CPU observation only; no inbound traffic
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId:
+        Ref: AmiId
+      InstanceType: t3.micro
+      SubnetId:
+        Ref: Subnet
+      SecurityGroupIds:
+        - Ref: ServerGroup
+      MetadataOptions:
+        HttpTokens: required
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+        - Key: Name
+          Value:
+            Fn::Sub: ${NamePrefix}-observe
+      Monitoring: false
+  ParticipantViewerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                Fn::Sub: arn:${AWS::Partition}:iam::${TenkaCloudAccountId}:root
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId:
+                  Ref: ExternalId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SignInLocalDevelopmentAccess
+      Policies:
+        - PolicyName: OperateOnlyThisLab
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudshell:CreateEnvironment
+                  - cloudshell:CreateSession
+                  - cloudshell:GetEnvironmentStatus
+                  - cloudshell:StartEnvironment
+                  - cloudshell:StopEnvironment
+                  - cloudshell:DeleteEnvironment
+                  - cloudshell:PutCredentials
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - cloudwatch:ListMetrics
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:GetMetricStatistics
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:DescribeAlarmHistory
+                  - cloudwatch:ListTagsForResource
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${NamePrefix}-cpu
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricAlarm
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${NamePrefix}-cpu
+                Condition:
+                  "Null":
+                    cloudwatch:AlarmActions: "true"
+  WorkshopLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 1
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+  WorkshopRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LabAuthority
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:DescribeAlarms
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${NamePrefix}-cpu
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::GetAtt:
+                    - WorkshopLogs
+                    - Arn
+  Workshop:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 30
+      Role:
+        Fn::GetAtt:
+          - WorkshopRole
+          - Arn
+      LoggingConfig:
+        LogGroup:
+          Ref: WorkshopLogs
+      Environment:
+        Variables:
+          LAB_CONFIG:
+            Fn::Sub: '{"namePrefix": "${NamePrefix}", "region": "${AWS::Region}", "labKind": "cpu-alarm", "instanceId": "${Server}", "alarmName": "${NamePrefix}-cpu"}'
+          PLAY_KEY:
+            Ref: PlayKey
+          PROGRESS_KEY:
+            Ref: ProgressKey
+          FLAG_COMPLETION:
+            Ref: CompletionSecret
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+      Code:
+        ZipFile: |
+          """Expected negative observations are distinct from operational failures."""
+          class NotReady(Exception):
+              """A documented observable condition has not been met yet."""
+
+
+          def require(condition, message):
+              if not condition:
+                  raise NotReady(message)
+
+          """Service exercises sharing the workshop's AWS client and progress protocol."""
+
+          import json
+          import re
+          from datetime import datetime, timedelta, timezone
+
+
+          class ServiceChecks:
+              def dynamodb_item(self, status):
+                  db=self.client('dynamodb')
+                  try:
+                      table=db.describe_table(TableName=self.config['tableName'])['Table']
+                  except Exception as error:
+                      if getattr(error,'response',{}).get('Error',{}).get('Code')=='ResourceNotFoundException':
+                          raise NotReady('Create the named DynamoDB table first') from error
+                      raise
+                  require(table.get('TableStatus')=='ACTIVE', 'Wait until the DynamoDB table is active')
+                  require(table.get('KeySchema')==[{'AttributeName':'recordId','KeyType':'HASH'}] and table.get('AttributeDefinitions')==[{'AttributeName':'recordId','AttributeType':'S'}], 'Use recordId as the string partition key without a sort key')
+                  require(table.get('BillingModeSummary',{}).get('BillingMode')=='PAY_PER_REQUEST', 'Use on-demand capacity for this table')
+                  require(not table.get('GlobalSecondaryIndexes') and not table.get('LocalSecondaryIndexes'), 'This exercise needs no extra indexes')
+                  item=db.get_item(TableName=self.config['tableName'],Key={'recordId':{'S':'handover'}},ConsistentRead=True).get('Item',{})
+                  require(item.get('destination')=={'S':'YOKOHAMA'} and item.get('status')=={'S':status}, 'Find handover and check its destination and status')
+                  return {'recordId':'handover','status':status,'read':'consistent'}
+
+              def sqs_delivery(self):
+                  sqs=self.client('sqs')
+                  try:
+                      url=sqs.get_queue_url(QueueName=self.config['queueName'],QueueOwnerAWSAccountId=self.config['accountId'])['QueueUrl']
+                  except Exception as error:
+                      if getattr(error,'response',{}).get('Error',{}).get('Code') in ('AWS.SimpleQueueService.NonExistentQueue','QueueDoesNotExist'):
+                          raise NotReady('Create the named Standard queue first') from error
+                      raise
+                  attrs=sqs.get_queue_attributes(QueueUrl=url,AttributeNames=['All'])['Attributes']
+                  require(attrs.get('QueueArn')==self.config['queueArn'], 'Use the queue assigned to this team')
+                  require(attrs.get('FifoQueue','false')=='false' and attrs.get('DelaySeconds')=='0' and attrs.get('MessageRetentionPeriod')=='345600' and attrs.get('VisibilityTimeout')=='30' and not attrs.get('RedrivePolicy'), 'Use Standard queue defaults: no delay, four-day retention, thirty-second visibility')
+                  require(attrs.get('SqsManagedSseEnabled')=='true' and not attrs.get('KmsMasterKeyId'), 'Use SQS-managed encryption for this queue')
+                  created=datetime.fromtimestamp(int(attrs['CreatedTimestamp']),timezone.utc)
+                  now=datetime.now(timezone.utc)
+                  require(timedelta(0) <= now-created < timedelta(hours=6), 'Use this event queue within six hours of creation')
+                  counts={}
+                  for name in ['NumberOfMessagesSent','NumberOfMessagesReceived','NumberOfMessagesDeleted']:
+                      metric=self.client('cloudwatch').get_metric_statistics(Namespace='AWS/SQS',MetricName=name,
+                          Dimensions=[{'Name':'QueueName','Value':self.config['queueName']}],StartTime=created,EndTime=now+timedelta(minutes=1),Period=60,Statistics=['Sum'])
+                      counts[name]=sum(point.get('Sum',0) for point in metric.get('Datapoints',[]))
+                  # Counts can include retries. We require evidence of each operation,
+                  # not a unique-message count; emptiness alone can never complete.
+                  require(all(count>0 for count in counts.values()), 'Wait for AWS to record send, receive, and delete operations; then check again')
+                  require(all(attrs.get(name)=='0' for name in ['ApproximateNumberOfMessages','ApproximateNumberOfMessagesNotVisible','ApproximateNumberOfMessagesDelayed']), 'Finish deleting received messages; receiving alone only hides them temporarily')
+                  return {'send':'recorded','receive':'recorded','delete':'recorded','queue':'empty'}
+
+              def cpu_alarm(self):
+                  result=self.client('cloudwatch').describe_alarms(AlarmNames=[self.config['alarmName']],AlarmTypes=['MetricAlarm'])
+                  alarms=result.get('MetricAlarms',[])
+                  require(len(alarms)==1, 'Create the named CPU alarm first')
+                  alarm=alarms[0]
+                  require(alarm.get('Namespace')=='AWS/EC2' and alarm.get('MetricName')=='CPUUtilization' and alarm.get('Dimensions')==[{'Name':'InstanceId','Value':self.config['instanceId']}], 'Select CPUUtilization for the prepared EC2 instance')
+                  require(alarm.get('Statistic')=='Average' and alarm.get('Period')==300 and alarm.get('EvaluationPeriods')==1 and alarm.get('DatapointsToAlarm',1)==1 and alarm.get('ComparisonOperator')=='GreaterThanThreshold' and alarm.get('Threshold')==80, 'Use average over five minutes, greater than eighty, with one evaluation')
+                  require(not any(alarm.get(name) for name in ['AlarmActions','OKActions','InsufficientDataActions','Metrics']) and not alarm.get('ExtendedStatistic'), 'Create a simple metric alarm without notification or recovery actions')
+                  return {'instanceId':self.config['instanceId'],'alarm':'configured','trigger':'not tested'}
+
+              def s3_object(self):
+                  s3 = self.client('s3')
+                  name = self.config['bucketName']
+                  block = s3.get_public_access_block(Bucket=name)['PublicAccessBlockConfiguration']
+                  require(all(block.get(key) is True for key in ['BlockPublicAcls','IgnorePublicAcls','BlockPublicPolicy','RestrictPublicBuckets']), 'Keep all four S3 public access blocks enabled')
+                  try:
+                      result = s3.get_object(Bucket=name, Key=self.config['objectKey'])
+                  except Exception as error:
+                      if getattr(error,'response',{}).get('Error',{}).get('Code') in ('NoSuchKey','NoSuchVersion'):
+                          raise NotReady('The team file is not saved at the requested key yet') from error
+                      raise
+                  with result['Body'] as body:
+                      data = body.read(8193)
+                  try:
+                      content=data.decode('utf-8-sig').replace('\r\n','\n').rstrip('\n')
+                  except UnicodeError as error:
+                      raise NotReady('The current file content differs from the team handover note') from error
+                  require(content == self.config['fileContent'].rstrip('\n'), 'The current file content differs from the team handover note')
+                  return {'bucket':name, 'key':self.config['objectKey'], 'content':'verified'}
+
+              def s3_restore(self):
+                  s3 = self.client('s3')
+                  name = self.config['bucketName']
+                  require(s3.get_bucket_versioning(Bucket=name).get('Status') == 'Enabled', 'Keep S3 versioning enabled')
+                  result = self.s3_object()
+                  versions = s3.list_object_versions(Bucket=name, Prefix=self.config['objectKey'], MaxKeys=1000)
+                  matching = [v for v in versions.get('Versions',[]) if v['Key']==self.config['objectKey']]
+                  require(len(matching) >= 3 and any(v.get('IsLatest') for v in matching), 'Restore the earlier content as a new current version')
+                  # Listing a healthy old version alone cannot pass: s3_object reads the
+                  # current object without VersionId. Participants cannot delete history.
+                  return {**result, 'versions':'preserved', 'currentVersion':'restored'}
+
+              def lambda_record(self, inputs, include_destination=False):
+                  receipt=inputs.get('receipt','')
+                  require(isinstance(receipt,str) and re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}',receipt) is not None, 'Copy the receipt from your Lambda execution result')
+                  logs=self.client('logs')
+                  request={'logGroupName':self.config['studentLogGroup'],'filterPattern':'"'+receipt+'"','limit':100}
+                  previous=None
+                  while True:
+                      response=logs.filter_log_events(**request)
+                      for event in response.get('events',[]):
+                          try: record=json.loads(event['message'])
+                          except (ValueError,UnicodeError): continue  # Other runtime log lines are not our receipt.
+                          if not isinstance(record,dict): continue
+                          if record.get('receipt')!=receipt or record.get('team')!=self.config['namePrefix'] or record.get('parcels')!=3:
+                              continue
+                          if include_destination:
+                              require(inputs.get('destination','').strip()==record.get('destination'), 'Read the destination in the log for this receipt')
+                          return {'receipt':receipt,'execution':'verified','log':'verified' if include_destination else 'recorded'}
+                      token=response.get('nextToken')
+                      if not token or token==previous: break
+                      previous=token;request['nextToken']=token
+                  raise NotReady('The execution receipt is not in this function log yet')
+
+          """AWS observations for the introductory workshop family.
+
+          Resource identities come only from the deployed stack, never from a submitted
+          ARN or URL. Clients are injected in unit tests; production uses the AWS SDK.
+          No check converts an AWS error into a successful or empty observation.
+          """
+          import ipaddress
+          import json
+          import urllib.request
+          import urllib.error
+
+
+
+
+          def tags_match(resource, prefix):
+              return any(t.get("Key") == "TenkaCloud:NamePrefix" and t.get("Value") == prefix
+                         for t in resource.get("Tags", []))
+
+
+          def fetch_json(url):
+              # The caller constructs this URL from the stack's EC2 address. Never follow
+              # a student's redirect to another team, metadata endpoint, or private host.
+              class NoRedirect(urllib.request.HTTPRedirectHandler):
+                  def redirect_request(self, req, fp, code, msg, headers, newurl):
+                      return None
+              opener = urllib.request.build_opener(NoRedirect, urllib.request.ProxyHandler({}))
+              try:
+                  with opener.open(url, timeout=4) as response:
+                      require(response.status == 200, "HTTP response is not 200")
+                      data = response.read(8193)
+              except (urllib.error.URLError, TimeoutError) as error:
+                  raise NotReady("The lab page could not be reached") from error
+              require(len(data) <= 8192, "HTTP response is too large")
+              try:
+                  return json.loads(data)
+              except (ValueError, UnicodeError) as error:
+                  raise NotReady("The lab page returned invalid data") from error
+
+
+
+
+          class AwsChecks(ServiceChecks):
+              def __init__(self, config, clients=None, fetch=fetch_json):
+                  self.config = config
+                  self.clients = clients if clients is not None else {}
+                  self.fetch = fetch
+
+              def client(self, service):
+                  if service not in self.clients:
+                      import boto3
+                      from botocore.config import Config
+                      self.clients[service] = boto3.client(service, region_name=self.config["region"],
+                          config=Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 1}))
+                  return self.clients[service]
+
+              def instance(self):
+                  ec2 = self.client("ec2")
+                  nic = ec2.describe_network_interfaces(NetworkInterfaceIds=[self.config["networkInterfaceId"]])["NetworkInterfaces"]
+                  require(len(nic) == 1 and nic[0]["VpcId"] == self.config["vpcId"], "Lab network interface does not match")
+                  instance_id = nic[0].get("Attachment", {}).get("InstanceId")
+                  require(bool(instance_id), "The lab network interface has no running server yet")
+                  reservations = ec2.describe_instances(InstanceIds=[instance_id])["Reservations"]
+                  instances = [i for r in reservations for i in r.get("Instances", [])]
+                  require(len(instances) == 1, "The lab server could not be identified")
+                  instance = instances[0]
+                  require(instance["VpcId"] == self.config["vpcId"] and instance["SubnetId"] == self.config["subnetId"], "Server is outside the lab network")
+                  require(tags_match(instance, self.config["namePrefix"]), "Server does not belong to this lab")
+                  require(instance["State"]["Name"] == "running", "Wait for the server to enter running state")
+                  require(instance["ImageId"] == self.config["imageId"], "Server image differs from the lab image")
+                  require(instance["InstanceType"] == self.config["instanceType"], "Server size differs from the lab size")
+                  return instance, nic[0]
+
+              def launch(self):
+                  instance, _ = self.instance()
+                  statuses = self.client("ec2").describe_instance_status(InstanceIds=[instance["InstanceId"]])["InstanceStatuses"]
+                  require(len(statuses) == 1, "AWS has not reported the server checks yet")
+                  require(all(statuses[0].get(key, {}).get("Status") == "ok" for key in ("SystemStatus", "InstanceStatus")), "Wait for both EC2 status checks to pass")
+                  return {"instanceId": instance["InstanceId"], "state": "running", "checks": "ok"}
+
+              def attached_gateway(self):
+                  gateways = self.client("ec2").describe_internet_gateways(Filters=[{"Name": "attachment.vpc-id", "Values": [self.config["vpcId"]]}])["InternetGateways"]
+                  require(len(gateways) == 1, "The lab VPC needs an attached internet gateway")
+                  gateway = gateways[0]
+                  require(tags_match(gateway, self.config["namePrefix"]), "Use the gateway created for this lab")
+                  require(any(a.get("VpcId") == self.config["vpcId"] and a.get("State") == "available" for a in gateway.get("Attachments", [])), "Wait for the gateway attachment to become available")
+                  return gateway["InternetGatewayId"]
+
+              def gateway(self):
+                  gateway_id = self.attached_gateway()
+                  # Existing interfaces cannot request auto-assigned public IPv4 at
+                  # launch. The host supplies one reserved EIP only after the learner
+                  # connects the IGW. This is setup assistance, explicitly shown in UI.
+                  ec2 = self.client("ec2")
+                  addresses = ec2.describe_addresses(AllocationIds=[self.config["allocationId"]])["Addresses"]
+                  require(len(addresses) == 1, "The host's lab address is unavailable")
+                  address = addresses[0]
+                  require(address.get("NetworkInterfaceId") in (None, self.config["networkInterfaceId"]), "The lab address is attached to a different resource")
+                  if not address.get("AssociationId"):
+                      ec2.associate_address(AllocationId=self.config["allocationId"], NetworkInterfaceId=self.config["networkInterfaceId"], AllowReassociation=False)
+                  return {"gatewayId": gateway_id, "publicIp": address["PublicIp"]}
+
+              def route_config(self):
+                  gateway_id = self.attached_gateway()
+                  tables = self.client("ec2").describe_route_tables(RouteTableIds=[self.config["routeTableId"]])["RouteTables"]
+                  require(len(tables) == 1 and tables[0]["VpcId"] == self.config["vpcId"], "The route table does not belong to this lab")
+                  table = tables[0]
+                  require(any(a.get("SubnetId") == self.config["subnetId"] and a.get("AssociationState", {}).get("State") == "associated" for a in table.get("Associations", [])), "The route table is not associated with the lab subnet")
+                  require(any(r.get("DestinationCidrBlock") == "0.0.0.0/0" and r.get("GatewayId") == gateway_id and r.get("State") == "active" for r in table.get("Routes", [])), "The subnet needs an active route to its attached internet gateway")
+                  return gateway_id
+
+              def server_response(self, port):
+                  instance, nic = self.instance()
+                  address = nic.get("Association", {}).get("PublicIp")
+                  require(bool(address), "The lab server has no public address yet")
+                  require(ipaddress.ip_address(address).is_global, "The lab address must be a public IP")
+                  data = self.fetch(f"http://{address}:{port}/check")
+                  require(isinstance(data, dict) and data.get("lab") == self.config["namePrefix"], "The responding server is not this team's lab")
+                  return instance, address, data
+
+              def route(self):
+                  gateway_id = self.route_config()
+                  _, address, data = self.server_response(8080)
+                  require(data.get("outboundIp") == address, "The lab server's outbound HTTPS check did not succeed")
+                  return {"gatewayId": gateway_id, "outboundHttps": True}
+
+              def session(self, after=0):
+                  instance, _, data = self.server_response(8080)
+                  require(instance.get("IamInstanceProfile", {}).get("Arn") == self.config["instanceProfileArn"], "The lab's Session Manager role is not attached")
+                  require(data.get("sessionCommandRan") is True, "Run the workshop check command inside your Session Manager session")
+                  if after:
+                      require(isinstance(data.get("sessionCommandAt"), (int, float)) and data['sessionCommandAt'] >= after, "Run the check command again after this recovery round started")
+                  expected_owner = f"arn:{self.config.get('partition', 'aws')}:sts::{self.config['accountId']}:assumed-role/{self.config['participantRoleName']}/"
+                  ssm = self.client("ssm")
+                  for state in ("Active", "History"):
+                      request = {"State": state, "Filters": [{"key": "Target", "value": instance["InstanceId"]}]}
+                      while True:
+                          result = ssm.describe_sessions(**request)
+                          if any(s.get("Target") == instance["InstanceId"] and s.get("Owner", "").startswith(expected_owner)
+                                 and (not after or (s.get('StartDate') is not None and s['StartDate'].timestamp() >= after)) for s in result.get("Sessions", [])):
+                              return {"instanceId": instance["InstanceId"], "session": "verified", "command": "verified"}
+                          if not result.get("NextToken"):
+                              break
+                          request["NextToken"] = result["NextToken"]
+                  raise NotReady("No Session Manager session from this team's participant role was found")
+
+              def http(self):
+                  self.route_config()
+                  instance, nic = self.instance()
+                  # Additional attached groups could make a too-wide rule effective even
+                  # if the expected group looks correct. Check the actual NIC's groups.
+                  require({g["GroupId"] for g in nic.get("Groups", [])} == {self.config["securityGroupId"]}, "Use only the lab security group")
+                  groups = self.client("ec2").describe_security_groups(GroupIds=[self.config["securityGroupId"]])["SecurityGroups"]
+                  require(len(groups) == 1 and groups[0]["VpcId"] == self.config["vpcId"], "Security group does not belong to the lab")
+                  required = ("tcp", 80, 80, self.config["httpSourceCidr"])
+                  control = ("tcp", 8080, 8080, "0.0.0.0/0")
+                  actual = set()
+                  for permission in groups[0].get("IpPermissions", []):
+                      require(not permission.get("Ipv6Ranges") and not permission.get("UserIdGroupPairs") and not permission.get("PrefixListIds"), "Remove unrelated inbound permissions")
+                      for source in permission.get("IpRanges", []):
+                          actual.add((permission.get("IpProtocol"), permission.get("FromPort"), permission.get("ToPort"), source["CidrIp"]))
+                  require(actual == {required, control}, "Allow the requested HTTP source and keep only the lab's fixed observation port")
+                  _, address, data = self.server_response(80)
+                  require(data.get("outboundIp") == address, "The lab server's outbound HTTPS check did not succeed")
+                  return {"instanceId": instance["InstanceId"], "httpStatus": 200, "sourceCidr": self.config["httpSourceCidr"]}
+
+              def run(self, kind, inputs=None):
+                  if kind in ("dynamodb-create", "dynamodb-update"):
+                      return self.dynamodb_item("waiting" if kind == "dynamodb-create" else "done")
+                  if kind in ("lambda-run", "lambda-logs"):
+                      return self.lambda_record(inputs or {}, kind == "lambda-logs")
+                  allowed = {"launch": self.launch, "gateway": self.gateway, "route": self.route,
+                             "session": self.session, "http": self.http, "s3-save": self.s3_object, "s3-restore": self.s3_restore,
+                             "sqs": self.sqs_delivery, "cpu-alarm": self.cpu_alarm}
+                  if kind not in allowed:
+                      raise ValueError("Unsupported AWS check")
+                  return allowed[kind]()
+
+          """Signed, sequential progress around real AWS checks; no early scoring flag."""
+          import base64
+          import hashlib
+          import hmac
+          import json
+          import os
+          from urllib.parse import parse_qs
+
+
+          WEB_HTML = ""
+          WEB_JS = ""
+          WEB_CSS = ""
+          CURRICULUM = {}
+          OBSERVATIONS = {}
+
+
+          def choose(value, language):
+              return value[language] if isinstance(value, dict) and "ja" in value and "en" in value else value
+
+
+          def localized(value, language):
+              if isinstance(value, list):
+                  return [localized(item, language) for item in value]
+              if isinstance(value, dict):
+                  if "ja" in value and "en" in value:
+                      return value[language]
+                  return {key: localized(item, language) for key, item in value.items() if key != "correctChoice"}
+              return value
+
+
+          def secret(name):
+              value = os.environ[name]
+              if len(value) < 24:
+                  raise ValueError("Workshop secrets must contain at least 24 characters")
+              return value
+
+
+          def signature(stage):
+              payload = f"aws-intro:v1:{CURRICULUM['id']}:{stage}".encode()
+              return hmac.new(secret("PROGRESS_KEY").encode(), payload, hashlib.sha256).hexdigest()
+
+
+          def receipt(stage):
+              return f"{stage}.{signature(stage)}" if stage else ""
+
+
+          def read_receipt(value):
+              if value == "":
+                  return 0
+              if not isinstance(value, str) or len(value) > 100:
+                  return None
+              for stage in range(1, 2 * len(CURRICULUM["missions"]) + 1):
+                  if hmac.compare_digest(value.encode(), receipt(stage).encode()):
+                      return stage
+              return None
+
+
+          def response(status, data, mime="application/json; charset=utf-8"):
+              return {"statusCode": status, "headers": {
+                  "content-type": mime, "cache-control": "no-store", "referrer-policy": "no-referrer",
+                  "x-content-type-options": "nosniff",
+                  "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+              }, "body": data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)}
+
+
+          def configuration():
+              return json.loads(os.environ["LAB_CONFIG"])
+
+
+          def view(stage, language):
+              count = len(CURRICULUM["missions"])
+              done = stage == count * 2
+              data = {"stage": stage, "total": count, "done": done, "token": receipt(stage),
+                  "title": choose(CURRICULUM["title"], language), "mode": "aws", "problemId": CURRICULUM["id"],
+                  "steps": [choose(m["title"], language) for m in CURRICULUM["missions"]]}
+              if done:
+                  data["flag"] = "TC{" + secret("FLAG_COMPLETION") + "}"
+              else:
+                  mission = CURRICULUM["missions"][stage // 2]
+                  data["mission"] = localized(mission, language)
+                  data["phase"] = "explain" if stage % 2 else "operate"
+                  config = configuration()
+                  # Only explicitly public resource hints cross the boundary. Never
+                  # spread environment variables, flags, or arbitrary configuration.
+                  public_keys = {"tableName", "queueName", "alarmName", "instanceId", "functionName", "studentLogGroup", "testEvent", "bucketName", "objectKey", "fileContent", "namePrefix", "region", "vpcId", "subnetId", "networkInterfaceId", "routeTableId",
+                      "serverName", "publicIp", "securityGroupId", "instanceProfileName", "instanceType", "imageId", "launchTemplateId", "httpSourceCidr"}
+                  data["resources"] = {key: value for key, value in config.items() if key in public_keys}
+              return data
+
+
+          def handler(event, context=None):
+              parts = event.get("rawPath", "").split("/", 2)
+              if len(parts) != 3 or not hmac.compare_digest(parts[1].encode(), secret("PLAY_KEY").encode()):
+                  return response(404, {"error": "not_found"})
+              route = parts[2]
+              method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+              language = "en" if parse_qs(event.get("rawQueryString", "")).get("lang") == ["en"] else "ja"
+              if method == "GET":
+                  if route == "starter.txt" and CURRICULUM.get("labKind") == "s3-save":
+                      result = response(200, configuration()["fileContent"], "text/plain; charset=utf-8")
+                      result["headers"]["content-disposition"] = 'attachment; filename="handover.txt"'
+                      return result
+                  assets = {"": (WEB_HTML, "text/html"), "app.js": (WEB_JS, "text/javascript"), "style.css": (WEB_CSS, "text/css")}
+                  return response(200, assets[route][0], assets[route][1] + "; charset=utf-8") if route in assets else response(404, {"error": "not_found"})
+              if method != "POST" or route not in ("api/state", "api/check"):
+                  return response(405, {"error": "method_not_allowed"})
+              raw = event.get("body") or ""
+              if len(raw) > 8192:
+                  return response(413, {"error": "too_large"})
+              try:
+                  if event.get("isBase64Encoded"):
+                      raw = base64.b64decode(raw, validate=True).decode("utf-8")
+                  data = json.loads(raw)
+              except (ValueError, UnicodeError):
+                  return response(400, {"error": "invalid_json"})
+              if not isinstance(data, dict):
+                  return response(400, {"error": "invalid_submission"})
+              stage = read_receipt(data.get("token", ""))
+              if stage is None:
+                  return response(403, {"error": "invalid_progress"})
+              if route == "api/state":
+                  return response(200, view(stage, language))
+              if type(data.get("stage")) is not int or data["stage"] != stage or stage == 2 * len(CURRICULUM["missions"]):
+                  return response(409, {"error": "wrong_stage"})
+              mission = CURRICULUM["missions"][stage // 2]
+              if stage % 2:
+                  if data.get("choice") != str(mission["correctChoice"]):
+                      return response(200, {"correct": False, "message": choose({"ja": "構成図と、操作した前後の違いを仲間と見比べよう。", "en": "Compare the diagram and the before/after change together."}, language)})
+                  evidence = {}
+              else:
+                  try:
+                      inputs = data.get("inputs", {})
+                      if not isinstance(inputs, dict) or any(not isinstance(value, str) or len(value) > 256 for value in inputs.values()):
+                          return response(400, {"error": "invalid_inputs"})
+                      checker = AwsChecks(configuration())
+                      evidence = checker.run(mission["check"], inputs) if mission.get("inputs") else checker.run(mission["check"])
+                  except NotReady as error:
+                      return response(200, {"correct": False, "message": choose({"ja": "まだ確認できません。AWSの観測結果を手掛かりに、手順を確かめてください。", "en": "Not ready yet. Use the AWS observation to check your steps."}, language), "observation": OBSERVATIONS.get(str(error), str(error)) if language == "ja" else str(error)})
+                  except Exception as error:
+                      # Do not turn AccessDenied, timeouts, or malformed AWS replies into
+                      # an incorrect answer. This is an operational error; keep progress.
+                      code = getattr(error, "response", {}).get("Error", {}).get("Code", type(error).__name__)
+                      return response(503, {"error": "aws_check_failed", "code": code})
+              return response(200, {"correct": True, "evidence": evidence, **view(stage + 1, language)})
+
+          CURRICULUM = {'id': 'office-server-watch', 'labKind': 'cpu-alarm', 'title': {'ja': 'サーバーの見張り役 — CloudWatch入門', 'en': 'Watch the team server — CloudWatch basics'}, 'missions': [{'check': 'cpu-alarm', 'title': {'ja': 'サーバーの忙しさを見張る', 'en': 'Watch how busy a server is'}, 'goal': {'ja': '画面をずっと見ていなくても、サーバーが忙しいと気づけるようにしたい。用意されたEC2に監視の条件を設定しよう。', 'en': 'You cannot watch the server constantly. Configure a rule to detect when the prepared EC2 gets busy.'}, 'concept': {'ja': 'CloudWatchはAWSの数値を観測するサービス。CPU使用率はサーバーの忙しさを0〜100%で表します。アラームは条件を超えたときに状態が変わる仕組み。今回は直近5分の平均が80%を超えると、画面の状態が変わる設定を作ります。メール通知は使いません。静的なしきい値は固定の境界値です。', 'en': 'CloudWatch observes AWS measurements. CPU utilization represents how busy a server is, from 0 to 100%. An alarm changes state when a condition is met. Here we configure an average above 80%. Here the five-minute average crossing a fixed (static) threshold changes the on-screen state. No email notification is configured.'}, 'console': 'alarm', 'resourceKeys': ['instanceId', 'alarmName'], 'steps': {'ja': ['CloudWatchの「アラームを作成」→「メトリクスの選択」（観測する数値）。EC2 → インスタンス別メトリクスで、この画面のEC2 IDの CPUUtilization を選ぶ。値が未表示なら数分待って一覧を更新する。', '統計は平均、期間は5分。しきい値の種類は「静的」、条件は「より大きい」80。「追加設定」の「アラームを実行するデータポイント」を1/1にする（5分平均が一度80%を超えると条件成立）。次の通知設定では「削除」で通知欄を外す。EC2の停止などのアクションも付けない。', 'この画面のアラーム名で作成し、下で確かめる。「データ不足」は最初に起きることがあります。今回は設定を確認し、実際の高負荷による発報やメール受信は完了条件にしません。'], 'en': ['Create an alarm → Select metric. Choose EC2 → Per-instance metrics → CPUUtilization for the instance ID on this page. If not listed yet, wait a few minutes and refresh.', 'Choose Average, period 5 minutes, Static threshold, Greater than 80. Under Additional configuration set Datapoints to alarm to 1 out of 1: one five-minute average above 80 meets the condition. On the next page remove the notification entry; add no EC2 actions.', 'Create it with the alarm name on this page, then check below. Initial Insufficient data is normal. This exercise checks configuration; actual high-load triggering and email delivery are not required.']}, 'success': {'ja': '指定EC2のCPUを5分平均・80%超・1回で監視する設定ができる。', 'en': 'The rule watches the specified EC2 CPU average over 5 minutes, above 80%, for one evaluation.'}, 'question': {'ja': '設定確認が成功した時点で、何が分かりますか？', 'en': 'What does passing this check prove?'}, 'choices': {'ja': ['狙ったEC2に監視条件を設定した。実際の発報は別の確認が必要', '実際に80%を超える負荷を掛けた', '必ずメールが届いた'], 'en': ['The intended EC2 has the rule; triggering still needs a separate test', 'The server was actually driven above 80%', 'An email definitely arrived']}, 'correctChoice': 0, 'hints': {'ja': ['監視する対象と、気づきたい条件を組にします。サーバー名が似ていてもIDを照合します。', '前：数値を見続ける必要がある。後：指定した5分平均が80%を超えるとアラームの状態が変わる設定になる。', '指定EC2 IDのCPUUtilization → 平均・5分 → 静的・より大きい80 → 追加設定のデータポイント1/1 → 通知欄を削除、アクションなし → 指定名で作成。画面の状態を変える設定の確認で、メールは送りません。'], 'en': ['Pair a resource with a condition. Match the instance ID even if server names look similar.', 'Before: someone must watch continuously. After: a rule can change alarm state when the five-minute average exceeds 80%.', 'Match the EC2 ID and CPUUtilization → Average, 5 minutes → Static, Greater than 80 → Additional configuration, datapoints 1/1 → remove notification, no actions → create with the specified name. This checks the on-screen state rule, not email delivery.']}, 'diagram': {'ja': ['EC2のCPU', 'CloudWatchで観測', '条件を超えると状態変更'], 'en': ['EC2 CPU', 'CloudWatch watches', 'Condition changes state']}, 'diagramFocus': 1, 'source': 'https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/US_AlarmAtThresholdEC2.html', 'explanationHints': {'ja': ['監視の設定、条件を超えること、通知が届くことは別々の確認です。この検査は設定を調べます。', '例：直近5分の平均が80%を超えたら検知する条件を保存しても、その平均が20%なら条件を満たしません。通知先も設定していなければメールは送りません。', '成功したのは「設定確認」 → 実際の負荷やメール送信は試したかを分ける → 今回の証拠で言える範囲を選ぼう。'], 'en': ['Configuring an alarm, crossing its threshold, and receiving a notification are different checks. This checker examines configuration.', 'Example: saving a rule for a five-minute CPU average above 80% does not meet the condition when that average is 20%. With no notification action configured, it does not send email.', 'The configuration check passed → distinguish this from load or email tests → select only what this evidence proves.']}}]}
+          WEB_HTML = '<!doctype html>\n<html lang="ja">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>TenkaCloud · AWS Challenge</title><link rel="stylesheet" href="style.css"><script src="app.js" defer></script></head>\n<body><div id="app"><p>準備中 / Loading…</p></div><noscript>JavaScriptを有効にしてください / Enable JavaScript.</noscript></body>\n</html>\n'
+          WEB_JS = '"use strict";\nconst lang = new URLSearchParams(location.search).get("lang") === "en" ? "en" : "ja";\ndocument.documentElement.lang = lang;\nconst t = (ja, en) => lang === "en" ? en : ja;\nconst root = document.getElementById("app");\nconst key = `aws-intro:v1:${location.pathname}`;\nlet fieldValues = {};\nlet receipt = "", current = null, selected = null, hintCount = 0, pending = false, feedback = "", failed = false, storageAvailable = true;\ntry { receipt = localStorage.getItem(key) || ""; } catch { storageAvailable = false; }\nfunction el(tag, attrs = {}, ...children) {\n  const n = document.createElement(tag);\n  for (const [k, v] of Object.entries(attrs)) {\n    if (k.startsWith("on")) n.addEventListener(k.slice(2).toLowerCase(), v);\n    else if (k === "disabled") n.disabled = v;\n    else n.setAttribute(k, v);\n  }\n  children.flat().filter(c => c !== null && c !== undefined).forEach(c => n.append(typeof c === "string" ? document.createTextNode(c) : c));\n  return n;\n}\nconst button = (label, action, cls = "primary") => el("button", { type: "button", class: cls, onclick: action, disabled: pending }, label);\nasync function copy(value, event) {\n  const node = event.currentTarget;\n  try { await navigator.clipboard.writeText(value); node.textContent = t("コピーしました", "Copied"); }\n  catch { feedback = t("コピーできません。表示中の文字列を選択してください。", "Copy failed. Select the displayed text instead."); render(); }\n}\nasync function request(route, payload) {\n  const r = await fetch(`api/${route}?lang=${lang}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(35000) });\n  if (!r.ok) throw new Error(r.status === 403 ? "progress" : r.status === 503 ? "aws" : "network");\n  return r.json();\n}\nfunction accept(result) {\n  current = result; receipt = result.token; selected = null; hintCount = 0; fieldValues = {};\n  try { localStorage.setItem(key, receipt); } catch { storageAvailable = false; }\n}\nasync function restore(value = receipt) {\n  pending = true; render();\n  try { accept(await request("state", { token: value })); feedback = ""; }\n  catch (e) { feedback = e.message === "progress" ? t("このチームの引き継ぎコードを確認してください。最初から学び直すこともできます。", "Check this team\'s handoff code. You can also start learning again.") : t("接続できません。再試行するか運営者へ連絡してください。", "Could not connect. Retry or contact the host."); }\n  finally { pending = false; render(); }\n}\nasync function submit() {\n  if (pending) return;\n  if (current.phase === "explain" && selected === null) { feedback = t("相談して、答えを1つ選んでください。", "Discuss and choose one answer."); render(); return; }\n  pending = true; feedback = ""; failed = false; render();\n  try {\n    const result = await request("check", { token: receipt, stage: current.stage, choice: selected, inputs: fieldValues });\n    if (result.correct === true) { accept(result); feedback = current.phase === "explain" ? t("AWSの状態を確認できました。仲間に、何が変わったか伝えよう。", "AWS state verified. Tell your teammates what changed.") : t("ミッション達成！ 操作担当を交代しよう。", "Mission complete! Swap the operator."); }\n    else { failed = true; feedback = [result.message, result.observation].filter(Boolean).join(" "); }\n  } catch (e) { failed = true; feedback = e.message === "aws" ? t("AWSの確認処理でエラーが起きました。進捗はそのままです。再試行して続く場合は運営へ連絡してください。", "The AWS check failed. Progress is preserved. Retry; if it persists, contact the host.") : t("送信できません。入力は残しています。再試行してください。", "Could not submit. Your input is preserved. Retry."); }\n  finally { pending = false; render(); document.getElementById("feedback")?.focus(); }\n}\nconst resourceNames = {\n  tableName: ["作成するテーブル名", "Table name to create"], queueName: ["作成するキュー名", "Queue name to create"], alarmName: ["作成するアラーム名", "Alarm name to create"], instanceId: ["監視するEC2のID", "EC2 instance to monitor"],\n  functionName: ["実行する関数", "Function to run"], studentLogGroup: ["探すログの保存場所", "Log group to inspect"], testEvent: ["テスト用の入力（JSON）", "Test input (JSON)"],\n  bucketName: ["バケット（保存場所）", "Bucket (storage)"], objectKey: ["ファイル名", "Object key (file name)"], fileContent: ["届けたい内容", "Intended content"],\n  serverName: ["サーバー名（EC2のName）", "Server name (EC2 Name)"], publicIp: ["公開IP（サーバーの住所）", "Public IP (server address)"],\n  namePrefix: ["チーム識別名（タグの値）", "Team identifier (tag value)"], region: ["リージョン（AWSの地域）", "AWS Region"],\n  vpcId: ["VPC", "VPC"], subnetId: ["サブネット", "Subnet"], networkInterfaceId: ["ネットワーク接続口", "Network interface"],\n  launchTemplateId: ["起動テンプレート", "Launch template"], instanceType: ["サーバーのサイズ", "Server size"], imageId: ["OSのイメージ", "OS image"],\n  routeTableId: ["ルートテーブル", "Route table"], instanceProfileName: ["EC2に付けるロール", "Role to attach to EC2"],\n  securityGroupId: ["セキュリティグループ", "Security group"], httpSourceCidr: ["HTTPを許可する接続元", "Allowed HTTP source"],\n};\nfunction consoleUrl(kind, resources) {\n  const region = encodeURIComponent(resources.region);\n  if (kind === "dynamodb") return `https://${resources.region}.console.aws.amazon.com/dynamodbv2/home?region=${region}#tables`;\n  if (kind === "sqs") return `https://${resources.region}.console.aws.amazon.com/sqs/v3/home?region=${region}#/queues`;\n  if (kind === "alarm") return `https://${resources.region}.console.aws.amazon.com/cloudwatch/home?region=${region}#alarmsV2:`;\n  const paths = {launch: "ec2/home#LaunchTemplates:", instance: "ec2/home#Instances:", gateway: "vpcconsole/home#igws:", route: "vpcconsole/home#RouteTables:", security: "ec2/home#SecurityGroups:"};\n  if (kind === "lambda") return `https://${resources.region}.console.aws.amazon.com/lambda/home?region=${region}#/functions/${encodeURIComponent(resources.functionName)}?tab=testing`;\n  if (kind === "logs") return `https://${resources.region}.console.aws.amazon.com/cloudwatch/home?region=${region}#logsV2:log-groups/log-group/${encodeURIComponent(resources.studentLogGroup)}`;\n  if (kind === "s3") return `https://s3.console.aws.amazon.com/s3/buckets/${encodeURIComponent(resources.bucketName)}?region=${region}&tab=objects`;\n  const path = paths[kind];\n  return path ? `https://${resources.region}.console.aws.amazon.com/${path.replace("#", `?region=${region}#`)}` : null;\n}\nfunction render() {\n  root.replaceChildren(el("header", {class:"topbar"}, el("span", {class:"brand"}, "TENKACLOUD / AWS CHALLENGE"), el("a", {href:`?lang=${lang === "ja" ? "en" : "ja"}`}, lang === "ja" ? "English" : "日本語")));\n  const main = el("main"); root.append(main);\n  main.append(el("p", {class:"eyebrow"}, t("相談する → AWSで試す → 仲間へつなぐ", "DISCUSS → TRY ON AWS → HAND OVER")), el("h1", {}, current?.title || t("チームのミッション", "Your team\'s mission")));\n  if (current?.mode === "preview") main.append(el("p", {class:"notice"}, t("画面検証用プレビューです。AWSの観測はテスト用データで、実AWSの操作・採点は行いません。", "UI preview only. AWS observations are test fixtures; no real AWS operations or official scoring.")));\n  if (current?.evidence && Object.keys(current.evidence).length) main.append(el("p", {class:"success"}, Object.entries(current.evidence).map(([key,value]) => `${key}: ${value}`).join(" · ")));\n  if (feedback) main.append(el("p", {id:"feedback", class:`feedback${failed ? " error" : ""}`, role:"status", tabindex:"-1"}, feedback));\n  if (!storageAvailable) main.append(el("p", {class:"notice"}, t("進捗を保存できません。閉じる前に引き継ぎコードを控えてください。", "Progress cannot be stored. Keep a handoff code before closing.")));\n  if (!current) { main.append(button(t("読み込み直す", "Retry loading"), () => restore()), button(t("最初から学ぶ", "Start again"), () => restore(""), "secondary")); return; }\n  const missionIndex = Math.floor(current.stage / 2);\n  main.append(el("ol", {class:"journey", "aria-label":t("進み具合", "Progress")}, current.steps.map((title, i) => el("li", {class:i < missionIndex ? "past" : i === missionIndex ? "active" : "", ...(i === missionIndex ? {"aria-current":"step"} : {})}, `${i < missionIndex ? "✓" : i + 1} ${title}`))));\n  if (current.done) {\n    main.append(el("section", {class:"celebration"}, el("h2", {}, t("チームでミッション達成！", "Mission accomplished together!")), el("p", {}, t("下の合言葉をコピーし、このChallengeのポータル回答欄へ提出してください。100点と完了の表示を確認しよう。準備Gateとして開催されている場合は、問題一覧を更新するとBattleへ進めます。", "Copy this passphrase and submit it to this Challenge\'s answer box in the portal. Check for 100 points and completion. If this is the event\'s preparation Gate, refresh the problem list to enter Battle.")), el("article", {class:"receipt"}, el("code", {}, current.flag), button(t("修了の合言葉をコピー", "Copy completion passphrase"), e => copy(current.flag, e)))));\n  } else {\n    const m = current.mission;\n    main.append(el("p", {class:"team-note"}, t(`操作担当は${missionIndex % 4 + 1}人目。ほかの3人は、図を読む・次の一手を説明する・結果を確認する役です。`, `Teammate ${missionIndex % 4 + 1} operates. The other three read the diagram, explain the next action, and verify the result.`)));\n    const box = el("section", {class:"mission"});\n    const side = el("aside", {class:"resources", "aria-label":t("今回の対象", "Your resources")});\n    main.append(el("div", {class:"workspace"}, box, side));\n    box.append(el("p", {class:"eyebrow"}, `${missionIndex + 1} / ${current.total} · ${current.phase === "operate" ? t("AWSで試す", "TRY ON AWS") : t("仲間へ説明する", "EXPLAIN TO YOUR TEAM")}`), el("h2", {}, m.title), el("p", {class:"lead"}, m.goal));\n    const link = consoleUrl(m.console, current.resources);\n    if (current.phase === "operate" && link) box.append(el("a", {class:"console-link", href:link, target:"_blank", rel:"noopener noreferrer"}, t("AWSで操作する ↗", "Open AWS console ↗")));\n    box.append(el("p", {class:"concept"}, m.concept));\n    if (m.diagram) box.append(el("div", {class:"route-map", role:"img", "aria-label":m.diagram.join(" → ")}, m.diagram.flatMap((label, i) => [i ? el("b", {"aria-hidden":"true"}, "→") : null, el("span", {class:i === m.diagramFocus ? "focus" : ""}, label)])));\n    if (current.phase === "operate") {\n      box.append(el("ol", {class:"steps"}, m.steps.map(step => el("li", {}, step))), el("p", {class:"success"}, `✓ ${m.success}`));\n      if (m.check === "s3-save") box.append(el("a", {href:"starter.txt", download:"handover.txt", class:"console-link"}, t("配布ファイルを保存", "Download the supplied file")));\n      for (const input of m.inputs || []) {\n        const control = el("input", {id:`answer-${input.key}`, type:"text", value:fieldValues[input.key] || "", maxlength:"256", autocomplete:"off", disabled:pending, oninput:e => {fieldValues[input.key] = e.target.value;}});\n        box.append(el("label", {class:"answer-field", for:`answer-${input.key}`}, input.label, control));\n      }\n      box.append(el("div", {class:"actions"}, button(pending ? t("AWSを確認中…", "Checking AWS…") : t("操作できたか確かめる", "Check my AWS changes"), submit)));\n      box.append(el("p", {class:"small"}, t("先にポータルの「AWS Consoleを開く」でチームの権限へ接続してください。上のリンクはAWSの画面を開きます。", "First use Open AWS Console in the portal to sign in with your team\'s role. The link above opens the relevant AWS screen.")));\n    } else {\n      box.append(el("fieldset", {}, el("legend", {}, m.question), el("div", {class:"choices"}, m.choices.map((label, i) => el("label", {class:"choice"}, el("input", {type:"radio", name:"choice", value:String(i), ...(selected === String(i) ? {checked:""} : {}), disabled:pending, onchange:() => {selected = String(i);}}), el("span", {}, label))))), button(pending ? t("確認中…", "Checking…") : t("相談した答えを確かめる", "Check our answer"), submit));\n    }\n    box.append(el("div", {class:"hint-area"}, button(t(`助け舟（無料） ${hintCount}/3`, `Free hint ${hintCount}/3`), () => {hintCount = Math.min(3, hintCount + 1); render();}, "secondary"), (current.phase === "operate" ? m.hints : m.explanationHints).slice(0, hintCount).map(h => el("p", {}, h))));\n    side.append(el("h3", {}, t("自分のチームのものを選ぶ", "Choose your team\'s resources")), el("p", {class:"small"}, t("同じ名前のものがあっても、IDとリージョンを照合しよう。", "Match the IDs and Region, even if names look similar.")));\n    const dl = el("dl"); side.append(dl);\n    if (m.check === "http" && current.resources.publicIp) side.append(el("p", {}, el("a", {href:`http://${current.resources.publicIp}/`, target:"_blank", rel:"noopener noreferrer"}, t("チームのページを開く ↗", "Open the team page ↗"))));\n    for (const key of ["region", ...m.resourceKeys]) {\n      if (current.resources[key] !== undefined) dl.append(el("dt", {}, resourceNames[key] ? t(...resourceNames[key]) : key), el("dd", {}, el("code", {}, String(current.resources[key]))));\n    }\n    side.append(el("p", {class:"boundary"}, t("この画面での確認・助け舟は無料。すべて達成したら、最後に1つの合言葉を提出して得点します。", "Checks and hints here are free. Finish every mission, then submit one passphrase for points.")), el("a", {href:m.source, target:"_blank", rel:"noopener noreferrer", class:"small"}, t("AWS公式の手順 ↗", "AWS official instructions ↗")));\n  }\n  const input = el("input", {id:"handoff", autocomplete:"off", maxlength:"100", disabled:pending});\n  main.append(el("details", {class:"handoff"}, el("summary", {}, t("別の端末へ担当を交代する", "Hand over to another device")), el("p", {}, t("同じ端末なら人だけ交代。別端末では同じGameUrlを開き、このコードで続きを受け取ります。得点用の合言葉とは別です。チーム内だけで共有してください。", "On the same device, swap people. On another device, open the same GameUrl and import this code. It is not a scoring passphrase. Share only within your team.")), receipt ? el("article", {class:"receipt"}, el("code", {}, receipt), button(t("引き継ぎコードをコピー", "Copy handoff code"), e => copy(receipt, e), "secondary")) : null, el("label", {for:"handoff"}, t("仲間から受け取ったコード", "Code from your teammate")), input, button(t("続きを受け取る", "Resume from code"), () => restore(input.value.trim()), "secondary")));\n}\nrestore();\n'
+          WEB_CSS = ':root{font-family:system-ui,-apple-system,sans-serif;color:#182f38;background:#f2f6f5;font-size:17px;line-height:1.65}*{box-sizing:border-box}body{margin:0}button,input{font:inherit}a{color:#175d8c;text-underline-offset:4px}button,.console-link{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:.7rem 1.3rem;border-radius:12px;border:2px solid transparent;font-weight:750;cursor:pointer;white-space:normal;text-decoration:none}button.primary,.console-link{background:#086556;color:white;box-shadow:0 3px 0 #004d40}.secondary{background:white;color:#18524b;border-color:#bed3ce}button:disabled{opacity:.6;cursor:wait;box-shadow:none}button:hover:not(:disabled),.console-link:hover{filter:brightness(.92)}:focus-visible{outline:3px solid #d17100;outline-offset:4px}.topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem max(1rem,calc((100vw - 1120px)/2));background:#183d36;color:white}.topbar a{color:white}.brand{font-weight:800;letter-spacing:.1em;font-size:.8rem}main{max-width:1120px;margin:0 auto;padding:2rem 1rem 4rem}h1{font-size:clamp(1.7rem,4vw,2.5rem);line-height:1.25;max-width:27ch;margin:.4rem 0 1.5rem}h2{font-size:1.45rem;line-height:1.4;margin:0 0 .7rem}h3{font-size:1.03rem;margin:0 0 .5rem}p{margin:.5rem 0 1rem}.eyebrow{color:#4e6861;font-weight:700;font-size:.8rem;letter-spacing:.08em}.journey{display:flex;gap:.55rem;padding:0;margin:0 0 1.5rem;list-style:none;flex-wrap:wrap}.journey li{padding:.45rem .75rem;border:1px solid #d5e2de;border-radius:10px;background:white;font-size:.8rem;max-width:220px}.journey .past{color:#32695c;background:#e1f0e8}.journey .active{border:2px solid #08715c;background:#e0f4e8;font-weight:750}.team-note{border-left:4px solid #dfa234;padding:.7rem 1rem;background:#fff6df;margin:1rem 0}.workspace{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(250px,.8fr);gap:1.2rem}.mission,.resources,.celebration,.handoff{background:white;border:1px solid #d5e2de;border-radius:18px;padding:1.5rem}.mission{box-shadow:0 10px 24px #173d3610}.lead{font-size:1.13rem}.concept{background:#ecf5f2;padding:.8rem 1rem;border-radius:12px}.steps{padding-left:1.55rem}.steps li{padding:.4rem 0 .7rem .3rem}.steps li::marker{font-weight:bold;color:#08715c}.success{font-size:.94rem;color:#2d6153;border-left:3px solid #5d9e84;padding:.6rem .8rem}.actions{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-top:1.25rem}.resources{align-self:start;background:#fafffd}.resources dl{margin:0}.resources dt{font-size:.8rem;color:#4d675e;margin-top:1rem}.resources dd{margin:0;overflow-wrap:anywhere}.resources code,.receipt code{font-family:ui-monospace,monospace;font-size:.87rem;overflow-wrap:anywhere}.hint-area{margin-top:1.3rem}.hint-area p{padding:.6rem .8rem;background:#fff6df;border-radius:8px;font-size:.94rem}.feedback{border:2px solid #4c9480;background:#e9f8f0;border-radius:12px;padding:1rem}.feedback.error{border-color:#cb9544;background:#fff5e2}.notice{background:#fff0d1;padding:1rem;border-radius:10px}.boundary{font-size:.85rem;color:#4f6860;margin-top:1rem}fieldset{border:0;padding:0;margin:1rem 0}legend{font-size:1.12rem;font-weight:750;margin-bottom:.8rem}.choices{display:grid;gap:.7rem}.choice{display:flex;align-items:start;gap:.8rem;padding:.9rem;border:2px solid #d6e2de;border-radius:12px;cursor:pointer}.choice:has(input:checked){border-color:#08715c;background:#ecf8f1}.choice input{margin:.45rem 0 0;accent-color:#086556;width:18px;height:18px;flex:none}.handoff{margin-top:1.5rem;padding:1rem 1.4rem}.handoff summary{cursor:pointer;font-weight:700}.handoff input{display:block;width:100%;padding:.7rem;border:1px solid #9ab7ac;border-radius:9px;margin:.5rem 0}.receipt{display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;margin:1rem 0;padding:1rem;background:#eef6f1;border-radius:12px}.receipt code{flex:1;min-width:180px}.route-map{display:flex;align-items:stretch;gap:.45rem;flex-wrap:wrap;margin:1.2rem 0}.route-map span{border:1px solid #b8d1c5;border-radius:9px;padding:.4rem .65rem;font-size:.84rem;background:white}.route-map .focus{background:#d4eddf;border:2px solid #086556}.route-map b{align-self:center;color:#688777}.celebration{border-top:6px solid #086556}.small{font-size:.85rem}@media(max-width:740px){.workspace{grid-template-columns:1fr}.mission,.resources{padding:1.1rem}.journey li{max-width:none;font-size:.75rem}.topbar{padding:1rem}.actions>*{width:100%}main{padding-top:1.25rem}}\n/* Keep the current action near the top on a laptop-sized viewport. */\nmain{padding-top:1.15rem}h1{max-width:none;font-size:clamp(1.45rem,3vw,1.9rem);margin:.25rem 0 1rem}.notice{font-size:.85rem;padding:.65rem 1rem}.journey{margin-bottom:1rem}.journey li{padding:.35rem .6rem}.team-note{font-size:.88rem;padding:.55rem .9rem}.topbar{padding-top:.7rem;padding-bottom:.7rem}\n.answer-field{display:block;font-weight:650;margin:1rem 0}.answer-field input{display:block;width:100%;font:inherit;font-weight:400;border:2px solid #aac9bc;border-radius:10px;padding:.65rem;margin-top:.35rem}.resources code{white-space:pre-wrap}\n'
+
+          OBSERVATIONS = {'HTTP response is not 200': 'ページを正常に受け取れませんでした。', 'HTTP response is too large': '演習ページの応答が大きすぎます。', 'The lab page could not be reached': 'EC2のページに届きません。経路と通信ルールを確認してください。', 'The lab page returned invalid data': '演習の観測プログラムから正しい応答を受け取れませんでした。', 'Lab network interface does not match': '演習のネットワーク接続口を特定できません。運営へ連絡してください。', 'The lab network interface has no running server yet': '指定の接続口を使うEC2がまだ起動していません。', 'The lab server could not be identified': '演習のEC2を特定できません。対象のIDを確認してください。', 'Server is outside the lab network': 'EC2が指定のVPCまたはサブネットにありません。', 'Server does not belong to this lab': 'EC2のチーム識別タグが一致しません。', 'Wait for the server to enter running state': 'EC2が実行中になるまで待ってください。', 'Server image differs from the lab image': 'EC2のOSイメージが起動テンプレートと違います。', 'Server size differs from the lab size': 'EC2のサイズが起動テンプレートと違います。', 'AWS has not reported the server checks yet': 'AWSのステータスチェックがまだ出ていません。', 'Wait for both EC2 status checks to pass': 'EC2のシステムとインスタンスのチェックが両方正常になるまで待ってください。', 'The lab VPC needs an attached internet gateway': '指定のVPCにインターネットゲートウェイが接続されていません。', 'Use the gateway created for this lab': 'ゲートウェイのチーム識別タグを確認してください。', 'Wait for the gateway attachment to become available': 'ゲートウェイの接続完了を待ってください。', "The host's lab address is unavailable": '演習用の公開IPを取得できません。運営へ連絡してください。', 'The lab address is attached to a different resource': '公開IPが別の資源に接続されています。運営へ連絡してください。', 'The route table does not belong to this lab': '指定のVPCにあるルートテーブルを使ってください。', 'The route table is not associated with the lab subnet': 'ルートテーブルの関連付け先が指定のサブネットと違います。', 'The subnet needs an active route to its attached internet gateway': 'サブネットの表に、接続済みIGWへ向かう有効な経路がありません。', 'The lab server has no public address yet': 'EC2に公開IPがまだ付きません。出口のミッションを確認してください。', 'The lab address must be a public IP': '演習の接続先が公開IPではありません。運営へ連絡してください。', "The responding server is not this team's lab": '応答したページがこのチームの演習と一致しません。', "The lab server's outbound HTTPS check did not succeed": 'EC2から外へのWeb通信が成功していません。経路を確認してください。', "The lab's Session Manager role is not attached": 'EC2に指定のSession Manager用ロールが付いていません。', 'Run the workshop check command inside your Session Manager session': 'Session Managerで接続し、表示された確認コマンドを実行してください。', "No Session Manager session from this team's participant role was found": 'このチームの権限でSession Managerに接続した記録がありません。', 'Use only the lab security group': 'EC2に付いているセキュリティグループを指定のものと照合してください。', 'Security group does not belong to the lab': 'セキュリティグループが指定のVPCと違います。', 'Remove unrelated inbound permissions': '演習で使わない通信の許可が追加されています。', "Allow the requested HTTP source and keep only the lab's fixed observation port": 'HTTP 80番と指定の接続元、観測用8080番の2つに通信ルールをそろえてください。', 'Keep all four S3 public access blocks enabled': 'S3の4つの公開防止設定を有効にしたまま使ってください。', 'The team file is not saved at the requested key yet': '指定された名前でチームのファイルがまだ保存されていません。', 'The current file content differs from the team handover note': '現在のファイルの内容が、届けたい内容と違います。', 'Keep S3 versioning enabled': 'S3のバージョニングを有効のままにしてください。', 'Restore the earlier content as a new current version': '過去の内容を現在のファイルとしてアップロードし直してください。', 'Copy the receipt from your Lambda execution result': 'Lambdaの実行結果から receipt の値をコピーしてください。', 'Read the destination in the log for this receipt': 'この receipt に対応するログの destination を読み取ってください。', 'The execution receipt is not in this function log yet': '対象の実行記録がまだログにありません。関数と入力を確認し、少し待って再試行してください。', 'Create the named DynamoDB table first': '指定された名前でDynamoDBのテーブルを作成してください。', 'Wait until the DynamoDB table is active': 'テーブルが使用可能（ACTIVE）になるまで待ってください。', 'Use recordId as the string partition key without a sort key': 'パーティションキーは文字列のrecordIdだけにし、ソートキーは付けません。', 'Use on-demand capacity for this table': 'このテーブルはオンデマンドの容量モードを使います。', 'This exercise needs no extra indexes': 'この問題では追加のインデックスは不要です。', 'Find handover and check its destination and status': 'handoverを探して、送り先destinationと状態statusを確認してください。', 'Create the named Standard queue first': '指定された名前でStandardキューを作成してください。', 'Use the queue assigned to this team': 'このチームに指定されたキューを使ってください。', 'Use Standard queue defaults: no delay, four-day retention, thirty-second visibility': 'Standardキューで配信遅延0秒、保持4日、可視性タイムアウト30秒を使い、デッドレターキューは付けません。', 'Use SQS-managed encryption for this queue': 'キューの暗号化はSQS管理（SSE-SQS）を選んでください。', 'Use this event queue within six hours of creation': 'キュー作成から6時間以内のイベントで使ってください。古い環境は運営者へ確認してください。', 'Wait for AWS to record send, receive, and delete operations; then check again': '送信・受信・削除の記録がまだそろっていません。操作済みならAWSの記録反映を数分待ち、再送せずに確認し直してください。', 'Finish deleting received messages; receiving alone only hides them temporarily': '受信したメッセージの削除まで終えてください。受信だけでは一時的に隠れている状態です。', 'Create the named CPU alarm first': '指定された名前でCPUのアラームを作成してください。', 'Select CPUUtilization for the prepared EC2 instance': '用意されたEC2のInstanceIdを照合し、CPUUtilizationを選んでください。', 'Use average over five minutes, greater than eighty, with one evaluation': '平均・5分・80より大きい・評価1回中1回の設定にしてください。', 'Create a simple metric alarm without notification or recovery actions': '通知や自動復旧などのアクションを付けず、1つの数値を監視するアラームにしてください。', 'Run the check command again after this recovery round started': 'このラウンド開始後にSession Managerで接続し、確認コマンドをもう一度実行してください。'}
+  LifecycleLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 1
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+  LifecycleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LabAuthority
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudwatch:DeleteAlarms
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:${NamePrefix}-cpu
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  Fn::GetAtt:
+                    - LifecycleLogs
+                    - Arn
+  Lifecycle:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 240
+      Role:
+        Fn::GetAtt:
+          - LifecycleRole
+          - Arn
+      LoggingConfig:
+        LogGroup:
+          Ref: LifecycleLogs
+      Environment:
+        Variables:
+          LAB_CONFIG:
+            Fn::Sub: '{"namePrefix": "${NamePrefix}", "region": "${AWS::Region}", "labKind": "cpu-alarm", "instanceId": "${Server}", "alarmName": "${NamePrefix}-cpu"}'
+      Tags:
+        - Key: TenkaCloud:NamePrefix
+          Value:
+            Ref: NamePrefix
+      Code:
+        ZipFile: |
+          """Seed/remove only the configured exercise resources (CFN-only Lambda)."""
+          import json
+          import os
+          import urllib.request
+
+
+          def execute(event, s3, config):
+              bucket = config['bucketName']
+              if event['RequestType'] == 'Create' and config['labKind'] == 's3-restore':
+                  # Exact content is public teaching material, never a flag or credential.
+                  # CFN retries replace the current fixture predictably; learners begin
+                  # only after the deployment completes.
+                  s3.put_object(Bucket=bucket, Key=config['objectKey'], Body=config['fileContent'].encode(), ContentType='text/plain; charset=utf-8')
+                  s3.put_object(Bucket=bucket, Key=config['objectKey'], Body=b'Office link: WRONG ROOM\n', ContentType='text/plain; charset=utf-8')
+              if event['RequestType'] == 'Delete':
+                  while True:
+                      # Always delete the first page: no stale pagination marker after a
+                      # deletion, and delete markers count as objects to remove too.
+                      response=s3.list_object_versions(Bucket=bucket, MaxKeys=1000)
+                      objects=[{'Key':v['Key'],'VersionId':v['VersionId']} for key in ['Versions','DeleteMarkers'] for v in response.get(key,[])]
+                      if not objects: break
+                      result=s3.delete_objects(Bucket=bucket, Delete={'Objects':objects,'Quiet':True})
+                      if result.get('Errors'): raise RuntimeError('S3 object cleanup failed')
+
+
+          def remove_created_resource(client, config):
+              """The participant can create one fixed name; only this role can delete it."""
+              kind=config['labKind']
+              try:
+                  if kind=='dynamodb':
+                      client.delete_table(TableName=config['tableName'])
+                      client.get_waiter('table_not_exists').wait(TableName=config['tableName'],WaiterConfig={'Delay':5,'MaxAttempts':30})
+                  elif kind=='sqs':
+                      url=client.get_queue_url(QueueName=config['queueName'],QueueOwnerAWSAccountId=config['accountId'])['QueueUrl']
+                      client.delete_queue(QueueUrl=url)
+                  elif kind=='cpu-alarm':
+                      client.delete_alarms(AlarmNames=[config['alarmName']])
+                  else: raise ValueError('Unsupported lifecycle kind')
+              except Exception as error:
+                  code=getattr(error,'response',{}).get('Error',{}).get('Code')
+                  absent={'dynamodb':('ResourceNotFoundException',),'sqs':('AWS.SimpleQueueService.NonExistentQueue','QueueDoesNotExist'),'cpu-alarm':()}
+                  if code not in absent.get(kind,()): raise
+
+
+          def handler(event, context):
+              import boto3
+              config=json.loads(os.environ['LAB_CONFIG'])
+              status, reason='SUCCESS', 'Exercise data lifecycle completed'
+              try:
+                  from botocore.config import Config
+                  service={'dynamodb':'dynamodb','sqs':'sqs','cpu-alarm':'cloudwatch'}.get(config['labKind'],'s3')
+                  client=boto3.client(service,region_name=config['region'],config=Config(connect_timeout=3,read_timeout=5,retries={'max_attempts':1}))
+                  if service=='s3': execute(event,client,config)
+                  elif event['RequestType']=='Delete': remove_created_resource(client,config)
+              except Exception as error:
+                  code=getattr(error,'response',{}).get('Error',{}).get('Code',type(error).__name__)
+                  # Only confirmed absence during teardown is already complete.
+                  if not (event['RequestType']=='Delete' and code=='NoSuchBucket'):
+                      status,reason='FAILED','Exercise data lifecycle failed: '+code
+              body=json.dumps({'Status':status,'Reason':reason,'PhysicalResourceId':event.get('PhysicalResourceId',event['LogicalResourceId']),
+                  'StackId':event['StackId'],'RequestId':event['RequestId'],'LogicalResourceId':event['LogicalResourceId'],'Data':{}}).encode()
+              request=urllib.request.Request(event['ResponseURL'],data=body,method='PUT',headers={'Content-Type':'','Content-Length':str(len(body))})
+              with urllib.request.urlopen(request,timeout=10) as result:
+                  if result.status != 200: raise RuntimeError('CloudFormation response failed')
+  DataLifecycle:
+    Type: Custom::WorkshopData
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+          - Lifecycle
+          - Arn
+  WorkshopUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn:
+        Fn::GetAtt:
+          - Workshop
+          - Arn
+      AuthType: NONE
+  UrlAccess:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: Workshop
+      Action: lambda:InvokeFunctionUrl
+      Principal: "*"
+      FunctionUrlAuthType: NONE
+  UrlInvocation:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName:
+        Ref: Workshop
+      Action: lambda:InvokeFunction
+      Principal: "*"
+      InvokedViaFunctionUrl: true
+Outputs:
+  GameUrl:
+    Value:
+      Fn::Sub: ${WorkshopUrl.FunctionUrl}${PlayKey}/
+  ParticipantViewerRoleArn:
+    Value:
+      Fn::GetAtt:
+        - ParticipantViewerRole
+        - Arn
+  CompletionFlag:
+    Value:
+      Fn::Sub: TC{${CompletionSecret}}

@@ -1,0 +1,102 @@
+{
+  "id": "office-file-delivery",
+  "labKind": "s3-save",
+  "title": {
+    "ja": "拠点へ資料を届けよう — S3入門",
+    "en": "Deliver a handover note — S3 basics"
+  },
+  "missions": [
+    {
+      "check": "s3-save",
+      "title": {
+        "ja": "チームの資料を保存して渡す",
+        "en": "Save and hand over the team note"
+      },
+      "goal": {
+        "ja": "別の拠点の仲間に案内を届けます。配布ファイルをS3へ置き、仲間が同じ保存場所から読めるようにしよう。",
+        "en": "Teammates at another site need the handover note. Put the supplied file in S3 so they can read it from the same storage."
+      },
+      "concept": {
+        "ja": "S3はファイルを保存するサービス。バケットは保存場所、オブジェクトは保存したファイル、キーはその名前です。今回はチームだけが読める場所を用意してあります。",
+        "en": "S3 stores files. A bucket is a storage container, an object is a stored file, and its key is its name. A private team bucket is ready for you."
+      },
+      "console": "s3",
+      "resourceKeys": [
+        "bucketName",
+        "objectKey",
+        "fileContent"
+      ],
+      "steps": {
+        "ja": [
+          "下の「配布ファイルを保存」で handover.txt を手元へ保存する。",
+          "AWSコンソールで指定のバケットを開き、「アップロード」からそのファイルを保存する。公開設定は変えない。",
+          "仲間へ担当を交代し、同じバケットから handover.txt をダウンロードして内容を照合。「操作できたか確かめる」を押す。"
+        ],
+        "en": [
+          "Use Download the supplied file below to save handover.txt locally.",
+          "Open the specified bucket in AWS and upload the file. Keep public access blocked.",
+          "Swap teammates. Download handover.txt from the same bucket and compare its contents, then press Check my AWS changes."
+        ]
+      },
+      "success": {
+        "ja": "現在の handover.txt が、配布した案内と同じ内容で保存されている。",
+        "en": "The current handover.txt contains the supplied note."
+      },
+      "question": {
+        "ja": "仲間にも読んでもらうため、公開設定を変える必要はありましたか？",
+        "en": "Did your teammate need you to make the bucket public?"
+      },
+      "choices": {
+        "ja": [
+          "ない。同じチームの権限で指定バケットを読める",
+          "ある。全世界へ公開しないと誰も読めない",
+          "ある。他チームのバケットへ移す必要がある"
+        ],
+        "en": [
+          "No. The same team role can read the specified bucket",
+          "Yes. Everyone on the internet must have access",
+          "Yes. It must be moved into another team’s bucket"
+        ]
+      },
+      "correctChoice": 0,
+      "hints": {
+        "ja": [
+          "ファイルの保存場所と、読める人の権限は別です。公開しなくても、チームの権限なら読めます。",
+          "変更前：指定バケットに handover.txt がない。変更後：一覧に表示され、ダウンロードすると同じ案内が読めます。",
+          "配布ファイルを保存 → 指定バケットへアップロード → 名前を照合 → 仲間がダウンロード → 確かめる。"
+        ],
+        "en": [
+          "Storage and read permissions are separate. The team role can read the file without public access.",
+          "Before: no handover.txt in the bucket. After: it appears and downloads with the same note.",
+          "Download the supplied file → upload to your bucket → match its name → a teammate downloads it → verify."
+        ]
+      },
+      "diagram": {
+        "ja": [
+          "手元の資料",
+          "S3の保存場所",
+          "仲間が読む"
+        ],
+        "en": [
+          "Local note",
+          "S3 storage",
+          "Teammate reads"
+        ]
+      },
+      "diagramFocus": 1,
+      "source": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/uploading-an-object-bucket.html",
+      "explanationHints": {
+        "ja": [
+          "S3の公開設定と、チームの権限で読むことは別です。許可された仲間は、全世界へ公開しなくてもファイルを読めます。",
+          "例：同じチーム権限でログインした2人は読めるが、ログインしていない人には読ませない。これでも仲間への共有は成立します。",
+          "仲間は同じチームの権限を使う → 指定バケットで読み取りを試す → 全世界へ公開する必要があるかを判断しよう。"
+        ],
+        "en": [
+          "Public access and access through a team role are different. Authorized teammates can read without public access.",
+          "Example: two people signed into the same team role can read, while an unsigned visitor cannot. The team still shares the file.",
+          "Your teammate uses the same role → reads the specified bucket → decide whether internet-wide public access is needed."
+        ]
+      }
+    }
+  ]
+}

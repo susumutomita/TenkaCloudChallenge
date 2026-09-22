@@ -1,17 +1,19 @@
-# Preparation Gate validation
+# AWS Preparation validation
 
-## Automated evidence — 2026-09-21
+This supersedes the former browser-model evidence. The current program observes real AWS resources; its local preview substitutes explicitly labelled AWS fixtures.
 
-`make test`: four Python tests passed against the real handler and the generated CloudFormation code. They cover all four sequential steps, no scoring flag before completion, retry/resume, tampered and foreign-team tokens, scoring-secret separation, malformed requests, private assets, bilingual output and least-privilege deployment declarations. `node --check web.js` passed. Catalog validation accepted all 119 metadata files.
+## Local evidence — 2026-09-22
 
-The existing platform Progression Gate's two focused suites passed (50 tests). The provided `event-gate.json` was also parsed using the actual platform schema and exercised with the existing completion/lock functions: score 0 and incomplete keeps Battle locked; the completion score unlocks it; an unfinished second team remains locked. This is code-level integration evidence, not a deployed portal test.
+- Compiled-handler tests cover five sequential operation/explanation stages, signed progress, no scoring flag before final completion, handoff, foreign/tampered tokens, strict request validation and asset secrecy.
+- Shared family tests exercise EC2/network/Session Manager/HTTP observations, SDK request contracts, resource isolation and cleanup failures. They also cover the seven service Challenge consumers.
+- A Chromium run drove the real UI/handler with declared AWS fixtures: all five operations and explanations, incorrect-answer retention, visible handoff into another session, and English/mobile completion. A separate Lambda receipt UI run confirmed failed-check input retention, hints and device handoff. These observations do not prove AWS operations or official scoring.
+- A further browser pass rejected the old-port answer to the new 8081/source-restricted transfer question, revealed explanation-specific hints and completed only after correction. Battle explanation hints were also exercised through visible controls.
+- Independent participant readers found concrete leaps in AWS controls, terms and progress semantics. The first pass findings were used to revise steps/hints before family expansion; a second read improved Lambda, logs, DynamoDB, SQS, CloudWatch and Battle instructions.
 
-## Participant evidence
+## Required local commands
 
-Chromium exercised `preview.py` with the actual handler and no mocked responses. An incorrect first answer stayed on question 1 without a penalty; a correct answer advanced to question 2 without exposing a scoring passphrase. A fresh browser imported the displayed handoff code, resumed at question 2, and completed questions 2–4. Only completion displayed the scoring passphrase. Its copy button showed the copied confirmation. Switching to English retained completion. The 390 × 844 completion screenshot was inspected and browser error collection was empty.
+Run the owning `make test`, shared `runtimes/aws-intro` tests, generated-template checks, `cfn-lint`, and catalog `make install && make agent-gate`. The current family passed 68 Python tests and catalog validation accepted all 126 metadata files. Existing platform Gate suites passed 45 tests. The actual event-gate.json passed the platform schema and locked/complete/second-team isolation checks. This is code-level integration, not deployed scoring evidence.
 
-The local preview does not implement official event scores or event-level Gate enforcement. Preview credentials and screenshots containing disposable passphrases are not public artifacts.
+## Not exercised in real AWS
 
-## Before hosting
-
-Use the [host rehearsal checklist](../office-link-battle/OPERATOR.md) for real AWS deployment, feature-flag/required-policy configuration, two-team portal lock/unlock and score isolation, beginner play timing, four-person conversation, and teardown/billing checks. These external checks have not been performed and are not claimed as implementation evidence.
+Provisioning, participant SSO console permissions/deep links, actual connectivity, official score/Gate/header/rank agreement, propagation times, four-person play and deletion/billing. Follow the [host rehearsal checklist](../../battles/office-link-battle/OPERATOR.md). Local and SDK fixtures are not a deployment certification; these are optional pre-event rehearsals rather than unclosed development requirements.

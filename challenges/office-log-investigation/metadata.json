@@ -1,0 +1,59 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-log-investigation",
+  "name": "荷物の行き先を追え — CloudWatch Logs入門",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10 分",
+  "shortDescription": "受付は成功したけれど、どの拠点へ送ったか分かりません。実行の記録を仲間と調べ、送り先を報告しよう。",
+  "instructions": "## チームで受付を確かめる\n\n受付は成功したけれど、どの拠点へ送ったか分かりません。実行の記録を仲間と調べ、送り先を報告しよう。\n\n1. ポータルの「AWS Consoleを開く」でチームの権限へ接続し、GameUrlを開く。\n2. 指定された関数のテストに、画面の入力を貼り付けて実行する。仲間と結果を確認し、操作と説明問題を終える。\n3. 最後の合言葉をこのページへ提出。正解100点、誤った合言葉は5点減点。画面内の確認とヒントは無料。\n\nこれは独立した追加Challengeです。初回の準備Gateと本戦には自動で追加されません。AWS利用料は開催者負担です。",
+  "description": "実Lambdaの実行ログを根拠に、操作と説明を確認する追加Challenge。",
+  "tags": [
+    "beginner",
+    "aws",
+    "lambda",
+    "cloudwatch",
+    "teamwork"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "実行の受付番号と、同じログに記録された送り先が確認できる。",
+    "入力・実行・記録の関係を説明する"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Trace the parcel destination — CloudWatch Logs basics",
+      "shortDescription": "The parcels were accepted, but the destination is missing. Investigate the execution record together and report where they went.",
+      "instructions": "## Check the team’s delivery\n\nThe parcels were accepted, but the destination is missing. Investigate the execution record together and report where they went.\n\n1. Use Open AWS Console in the portal to enter your team’s role, then open GameUrl.\n2. Paste the supplied input into Test for the specified function. Run it and discuss the result. Complete the operation and explanation.\n3. Submit the final passphrase on this page: 100 points; a wrong passphrase costs 5. Workshop checks and hints are free.\n\nThis is an independent optional Challenge, not automatically included in the core Gate/Battle event. The host pays AWS charges.",
+      "description": "Optional Challenge verifying the operation and explanation against a real Lambda execution log.",
+      "learningGoals": [
+        "The receipt and destination match the same execution record.",
+        "Explain how input, execution, and records relate"
+      ]
+    }
+  }
+}

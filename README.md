@@ -15,7 +15,7 @@ Start with a problem's README for its scenario, prerequisites and verification s
 
 To run an event or start the platform locally, follow the [TenkaCloud setup guide](https://github.com/susumutomita/TenkaCloud#quickstart).
 
-For a beginner social event, try [Office Link](challenges/office-link-battle/README.md): complete Preparation as a team of four, unlock Battle through the existing Gate, and tackle one task at a time. Repairs and explanations score separately. It includes a 60-minute host script, AWS event hosting and an unscored local preview.
+For a beginner team event: [Office Link](battles/office-link-battle/README.md) — five real AWS preparation missions, an existing Gate, then an uptime recovery Battle. Four people per team; host-selected extra service Challenges are separate. See the [host runbook](battles/office-link-battle/OPERATOR.md).
 
 ## Add or update a problem
 

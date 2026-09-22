@@ -1,29 +1,45 @@
-# Office Link Preparation — a four-person learning Gate
+# Office Link Preparation — AWS Intro Challenge
 
-[日本語](README.ja.md) · [Battle](../office-link-battle/README.md) · [60-minute host runbook](../office-link-battle/OPERATOR.md)
+[日本語](README.ja.md) · [Parent scope #884](https://github.com/susumutomita/TenkaCloudChallenge/issues/884)
 
-Learn the concepts needed for Battle: matching regions, granting only needed permissions, restoring an intact copy, and verifying the outcome. Four teammates explain, read the example, operate and check, rotating after each question. Open **GameUrl** in the portal and discuss the one question shown.
+Four teammates bring one real EC2 server online: **launch → attach an internet gateway → add a route → connect with Session Manager → allow HTTP**. The page program is supplied; beginners operate AWS rather than write code. Rotate operator, diagram reader, explainer and verifier after each mission.
 
-## Complete preparation before Battle
+Open the portal's **AWS Console**, then **GameUrl**. The board shows one mission, exact resource IDs, console links, a small diagram, observable success and three free hints. Each real operation check is followed by a short explanation question. Only all five completed missions issue **one final 100-point flag**. A wrong portal flag costs 5 points; board attempts and hints are free.
 
-The server verifies all four steps in sequence. **Only the last step issues one completion passphrase**, worth 100 points when submitted in the existing portal. There are no partial official points: the platform's existing first-score Gate rule cannot unlock Battle halfway through learning.
+## Gate and scope
 
-Include only this problem and `office-link-battle` in the event. Use the [Gate configuration](../office-link-battle/event-gate.json). A TenantAdmin must enable Progression Gate in the event's Gate panel (default OFF), set policy to `required`, team overrides to inherit, and additional bonus to 0. One Battle problem unlocks after preparation. Completed content remains reviewable. This is not proof that every individual understands; the host listens to all four explanations.
+Use only `office-link-gate` and `office-link-battle` in the first event. Enable the platform's existing Progression Gate (default OFF), select this Challenge as the Gate, Battle as the sole unlock target, `required` policy, zero extra bonus and inherited team settings. Check the participant view before the event. The platform unlocks on a first positive score, so this Challenge deliberately issues no intermediate flags. This is team completion, not proof of every individual's understanding.
 
-Workshop attempts and hints are free. An incorrect portal passphrase costs 5 points. The intermediate handoff code is progress, not a scoring passphrase. Open the same GameUrl on another device and import it to resume validated progress. Altered and foreign-team codes are rejected.
+Preparation is tracked by #886, the [real AWS recovery Battle](../../battles/office-link-battle/README.md) by #892, and the host integration by #893. S3 and other extension Challenges are optional, not added to the first event automatically.
 
-## Runtime and security
+## AWS resources and isolation
 
-Existing AWS CloudFormation + `flag` scoring. Each team receives a 128MB Lambda, Function URL, one-day CloudWatch log group and IAM roles. `build.py` embeds the same handler and assets into `template.yaml`. Progress tokens use HMAC with a separate secret. Editing browser progress cannot skip server checks or obtain the flag.
+Each team needs a **separate competition AWS account**. The stack creates a VPC, subnet, route table, security group, fixed network interface, reserved public IPv4 address, launch template, Session Manager instance profile, two Lambdas and one-day logs. The student launches one `t3.micro` with an 8 GiB `gp3` root volume from the prepared template. The fixed primary network interface prevents a second simultaneous instance. The student creates the IGW; after attachment is verified, the board associates only this lab's reserved address. AWS cannot detach an IGW while public addresses remain attached, so the initial network starts without a public address association.
 
-The existing random-password injection generates independent access, progress-signing and scoring secrets. Metadata declares the scoring output for the existing participant-output redaction. Initial assets contain no secrets or scoring passphrases. Share GameUrl and handoff codes only within the team. The workshop cannot directly change official scores.
+The checker verifies exact stack identities, running state, EC2 status checks, VPC/subnet association, actual outbound HTTPS, the team's Session Manager session plus a server marker, and HTTP reachability with the required ingress rules. Port 8080 is a fixed observation endpoint; the student adds only port 80. Neither contains secrets.
 
-The execution role only writes its own logs. The participant role keeps standard sign-in/CloudShell permissions and ExternalId, without access to function code, environment variables or stack outputs. Requests and tokens are not logged.
+Read-only EC2 list APIs are account/Region-wide because those APIs do not support resource-level scoping. Mutations are resource/tag-scoped. The participant cannot modify checker code, read its environment, retrieve stack outputs, assign arbitrary roles, or modify launch templates. ExternalId remains mandatory. Access, progress-signing and final scoring secrets are separate. Signed progress can be handed to a teammate; browser edits cannot advance it.
 
-## Cost, teardown and validation
+The family runtime is [`../../runtimes/aws-intro`](../../runtimes/aws-intro), shared unchanged with the S3, Lambda, logs, DynamoDB, SQS and CloudWatch extension Challenges. `build.py` packages exactly that source and this problem's `workshop.json` into `template.yaml`.
 
-Initial rehearsal region: Tokyo, `ap-northeast-1`. Allow about 20 minutes for preparation. Requests, execution, transfer and logs may incur charges, separately from platform and Battle costs. No EC2, NAT, RDS, S3 bucket, Secrets Manager secret or customer-managed KMS key is created. Unauthorized requests still invoke Lambda; zero cost is not guaranteed.
+## Cost and teardown
 
-Delete both problem deployments through the admin console afterwards and confirm removal of their functions, URLs, logs and roles. Clear browser data on shared devices. Live AWS scoring, Gate lock/unlock, teardown and beginner understanding remain pre-event rehearsal checks.
+Default rehearsal Region: Tokyo (`ap-northeast-1`). Allow **about 40 minutes**, including AWS propagation and discussion. Budget separately for a subsequent Battle. EC2, EBS, public IPv4, Lambda invocations/execution, logs and data transfer can incur charges. No NAT Gateway, RDS, Secrets Manager secret or customer-managed KMS key is added. Public IPv4 is charged even before the student finishes; zero cost is not promised.
 
-Run `make install` at catalog root, then `make build && make test` here with Python 3.12+ and the catalog's pinned Bun. `make preview` starts the same handler on localhost:5685. This preview covers learning and verdicts only; it does not provide official portal scores, event-level Gate enforcement or multiplayer ranking. Stop with Ctrl-C. Finish with `make agent-gate` at catalog root.
+Delete the deployment through the admin console. Its CloudFormation cleanup hook disassociates the lab address, terminates only the tagged instance attached to the fixed lab interface, waits for termination, and removes only this lab's IGWs before the stack network is deleted. A cleanup failure reports FAILED; investigate its logs and retry deletion. Confirm no EC2, volumes, IPv4 allocation, IGW, Lambda or log groups remain. Clear progress on shared browsers. Begin each event with fresh deployments; redeploying changed code is not a learner reset.
+
+## Verification
+
+```sh
+make build
+make test
+python3 -m venv /tmp/aws-intro-tests
+/tmp/aws-intro-tests/bin/pip install -r ../../runtimes/aws-intro/requirements-test.txt
+/tmp/aws-intro-tests/bin/python -m unittest discover -s ../../runtimes/aws-intro/tests -v
+/tmp/aws-intro-tests/bin/cfn-lint template.yaml
+make preview
+```
+
+`make preview` binds localhost only and explicitly labels fixture observations. Without `--fixture-file`, AWS checks do not pass. It proves UI behavior, not real AWS permissions, provisioning, costs, Gate scoring or connectivity. See [VALIDATION.md](VALIDATION.md) for evidence and the optional pre-event AWS rehearsal. At catalog root also run `make install && make agent-gate`.
+
+CFN lint reports W2010 for capability URL/final flag outputs: these are the existing platform's output contract, not proof that NoEcho hides outputs. The participant role cannot read CloudFormation outputs; the portal redacts the declared scoring output. Verify that boundary during rehearsal.

@@ -3,14 +3,30 @@ name: office-link-battle
 on:
   pull_request:
     paths:
-      - 'challenges/office-link-battle/**'
+      - 'battles/office-link-battle/**'
       - 'challenges/office-link-gate/**'
+      - 'challenges/office-file-delivery/**'
+      - 'challenges/office-file-recovery/**'
+      - 'challenges/office-lambda-delivery/**'
+      - 'challenges/office-log-investigation/**'
+      - 'challenges/office-handover-record/**'
+      - 'challenges/office-job-queue/**'
+      - 'challenges/office-server-watch/**'
+      - 'runtimes/aws-intro/**'
       - '.github/workflows/office-link-battle.yml'
   push:
     branches: [main]
     paths:
-      - 'challenges/office-link-battle/**'
+      - 'battles/office-link-battle/**'
       - 'challenges/office-link-gate/**'
+      - 'challenges/office-file-delivery/**'
+      - 'challenges/office-file-recovery/**'
+      - 'challenges/office-lambda-delivery/**'
+      - 'challenges/office-log-investigation/**'
+      - 'challenges/office-handover-record/**'
+      - 'challenges/office-job-queue/**'
+      - 'challenges/office-server-watch/**'
+      - 'runtimes/aws-intro/**'
       - '.github/workflows/office-link-battle.yml'
 
 permissions:
@@ -28,7 +44,17 @@ jobs:
         with:
           bun-version: '1.3.11'
       - run: bun install --frozen-lockfile
+      - run: python3 -m pip install -r runtimes/aws-intro/requirements-test.txt
       - run: make -C challenges/office-link-gate test
-      - run: node --check challenges/office-link-gate/web.js
-      - run: make -C challenges/office-link-battle test
-      - run: node --check challenges/office-link-battle/web.js
+      - run: python3 -m unittest discover -s runtimes/aws-intro/tests -v
+      - run: node --check runtimes/aws-intro/web.js
+      - run: make -C challenges/office-file-delivery test
+      - run: make -C challenges/office-file-recovery test
+      - run: make -C challenges/office-lambda-delivery test
+      - run: make -C challenges/office-log-investigation test
+      - run: make -C challenges/office-handover-record test
+      - run: make -C challenges/office-job-queue test
+      - run: make -C challenges/office-server-watch test
+      - run: make -C battles/office-link-battle test
+      - run: node --check battles/office-link-battle/web.js
+      - run: cfn-lint --non-zero-exit-code error challenges/office-*/template.yaml battles/office-link-battle/template.yaml

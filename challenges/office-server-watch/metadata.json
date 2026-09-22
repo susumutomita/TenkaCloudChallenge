@@ -1,0 +1,56 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "office-server-watch",
+  "name": "サーバーの見張り役 — CloudWatch入門",
+  "category": "Challenge",
+  "status": "ready",
+  "visibility": "public",
+  "difficulty": 1,
+  "estimatedDuration": "10 分",
+  "shortDescription": "画面をずっと見ていなくても、サーバーが忙しいと気づけるようにしたい。用意されたEC2に監視の条件を設定しよう。",
+  "instructions": "## 相談して、AWSで試す\n\n画面をずっと見ていなくても、サーバーが忙しいと気づけるようにしたい。用意されたEC2に監視の条件を設定しよう。\n\n1. ポータルの「AWS Consoleを開く」でチームの権限へ接続し、GameUrlを開く。\n2. 指定された対象だけを操作し、仲間へ説明する。ヒントと画面内の確認は無料。\n3. 全ステップ完了後の合言葉をこのページへ提出。正解100点、誤った合言葉は5点減点。\n\nこれは独立した追加Challengeです。初回の準備Gateと本戦には自動で追加されません。AWS利用料は開催者負担です。",
+  "description": "実AWSの設定・データ・操作記録を検査する独立した初心者向けChallenge。",
+  "tags": [
+    "beginner",
+    "aws",
+    "cpu-alarm",
+    "teamwork"
+  ],
+  "exposedPorts": [
+    {
+      "port": 443,
+      "name": "Workshop (HTTPS)"
+    }
+  ],
+  "learningGoals": [
+    "指定EC2のCPUを5分平均・80%超・1回で監視する設定ができる。"
+  ],
+  "runtime": {
+    "provider": "aws",
+    "engine": "cloudformation",
+    "entry": "template.yaml"
+  },
+  "cfnTemplate": "template.yaml",
+  "cfnParameters": {
+    "PlayKey": "__RANDOM_PASSWORD__",
+    "ProgressKey": "__RANDOM_PASSWORD__",
+    "CompletionSecret": "__RANDOM_PASSWORD__"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "CompletionFlag",
+    "points": 100,
+    "wrongAnswerPenalty": 5
+  },
+  "i18n": {
+    "en": {
+      "name": "Watch the team server — CloudWatch basics",
+      "shortDescription": "You cannot watch the server constantly. Configure a rule to detect when the prepared EC2 gets busy.",
+      "description": "Independent beginner Challenge checking actual AWS configuration, data, or operation records.",
+      "learningGoals": [
+        "The rule watches the specified EC2 CPU average over 5 minutes, above 80%, for one evaluation."
+      ],
+      "instructions": "## Discuss and try it on AWS\n\nYou cannot watch the server constantly. Configure a rule to detect when the prepared EC2 gets busy.\n\n1. Use Open AWS Console in the portal to enter the team role, then open GameUrl.\n2. Work on the specified resources and explain the change to a teammate. Hints and workshop checks are free.\n3. Finish every step and submit the final passphrase here: 100 points; a wrong passphrase costs 5.\n\nThis is an independent optional Challenge, not automatically included in the core Gate/Battle event. The host pays AWS charges."
+    }
+  }
+}

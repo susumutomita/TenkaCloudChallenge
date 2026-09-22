@@ -1,22 +1,22 @@
 {
   "$schema": "../../SCHEMA.json",
   "id": "office-link-gate",
-  "name": "つながるオフィスの準備 — 4人で学ぶGate",
+  "name": "つながるオフィスの準備 — AWS入門Challenge",
   "category": "Challenge",
   "status": "ready",
   "visibility": "public",
   "difficulty": 1,
-  "estimatedDuration": "20 分",
-  "shortDescription": "場所・権限・復旧・結果の確認を1問ずつ相談。全4段階を修了するとBattleへ進める、4人チームの準備Challenge。",
-  "instructions": "## 4人で準備をそろえ、Battleへ\n\n1. GameUrlを開く。説明・例を読む・操作・確認の4役を決める。\n2. 今の1問を相談して答える。終わったら担当を交代。場所・権限・復旧・結果の確認を順に学ぶ。\n3. 全4段階の修了後、合言葉をコピーしてこのページへ提出する。100点と修了が反映されたら問題一覧を更新し、Battleへ進む。\n\n準備中の部分点はありません。問題画面での試行・助け舟は無料。ポータルへ誤った合言葉を提出すると5点減点です。引き継ぎコードは得点用の合言葉ではありません。GameUrlとコードは同じチームだけで共有します。これはクラウドの考え方を学ぶ模型です。",
-  "description": "既存Progression Gateの起点にする単一flag Challenge。全4段階の成功をサーバーで順に検証し、最後にだけ100点の合言葉を発行。準備途中は公式加点しない。",
+  "estimatedDuration": "40 分",
+  "shortDescription": "4人で1台のEC2を起動し、ネットワークと接続権限を整えて仲間へページを届ける。5つの実操作と説明を終えるとBattleへ。",
+  "instructions": "## チームの拠点を開通させよう\n\nWebページのプログラムは準備済みです。4人で相談し、AWSでサーバーと通信経路を完成させます。\n\n1. ポータルの「AWS Consoleを開く」でチーム用の権限に接続し、GameUrl（ミッション画面）を開く。\n2. 操作担当は1人。ほかの3人は図を読む・次の一手を説明・結果を確認する役を担当する。表示中の1台だけを操作し、ミッションごとに交代する。\n3. 各ミッションでAWSの操作と説明問題を両方完了すると次へ進む。全5題が終わったら、修了の合言葉をこのページへ提出する。100点と完了を確認し、問題一覧を更新してBattleへ。\n\n画面内の試行・助け舟は無料。途中の部分点はありません。ポータルへ誤った合言葉を提出すると5点減点。GameUrlと引き継ぎコードはチーム内だけで共有します。AWSの利用料は開催者負担です。",
+  "description": "実AWSのEC2起動・IGW接続・経路設定・Session Manager接続・HTTP疎通を問題固有Lambdaで検査する準備Gate。各操作の確認と説明問題を順に完了したときだけ最終100点flagを発行する。",
   "tags": [
     "beginner",
     "teamwork",
-    "battle",
-    "communication",
     "aws",
-    "browser"
+    "ec2",
+    "networking",
+    "gate"
   ],
   "exposedPorts": [
     {
@@ -25,10 +25,11 @@
     }
   ],
   "learningGoals": [
-    "同じ地域を探す必要を説明する",
-    "必要な資料と操作だけを許可する",
-    "控えの時刻と内容から復旧先を選ぶ",
-    "仲間と結果を確かめて引き継ぐ"
+    "EC2の実行状態とステータスチェックを確かめる",
+    "VPCの出口とルートテーブルの役割を説明する",
+    "EC2に必要なIAMロールを付けてSession Managerへ接続する",
+    "HTTPだけを許可して実際の表示を確認する",
+    "操作と検証を仲間へ引き継ぐ"
   ],
   "runtime": {
     "provider": "aws",
@@ -49,15 +50,16 @@
   },
   "i18n": {
     "en": {
-      "name": "Office Link Preparation — a four-person learning Gate",
-      "shortDescription": "Discuss regions, permissions, recovery and outcome checks, one at a time. Complete all four before entering Battle.",
-      "instructions": "## Prepare together, then enter Battle\n\n1. Open GameUrl. Assign four roles: explain, read the example, operate, check.\n2. Discuss the current question. Rotate after each step: location, permissions, recovery, outcome verification.\n3. After all four checks, copy the completion passphrase and submit it on this page. Once the 100 points and completion appear, refresh the problem list and enter Battle.\n\nThere are no partial preparation points. Workshop attempts and hints are free. An incorrect portal passphrase costs 5 points. Handoff codes are not scoring passphrases. Share GameUrl and handoff codes only within the team. This is a model of cloud concepts.",
-      "description": "Single-flag Challenge for the existing Progression Gate. The server validates all four sequential checks before issuing a 100-point completion flag. There are no partial official points.",
+      "name": "Office Link Preparation — AWS Intro Challenge",
+      "shortDescription": "Launch one EC2 server together, connect its network and permissions, and deliver a page. Complete five real operations and explanations before Battle.",
+      "instructions": "## Bring your team’s site online\n\nThe page program is ready. Work together to connect its server on AWS.\n\n1. Use Open AWS Console in the portal to sign in with your team’s role, then open GameUrl (the mission board).\n2. One person operates. The other three read the diagram, explain the next action, and verify the result. Work on the one server shown and rotate each mission.\n3. Complete both the AWS operation and explanation in each of five missions. Submit the final passphrase on this page. Check for 100 points and completion, then refresh the problem list to enter Battle.\n\nWorkshop attempts and hints are free. No partial points. A wrong portal passphrase costs 5 points. Share GameUrl and handoff codes only within your team. The host pays for AWS usage.",
+      "description": "Problem-owned Lambda verifies EC2 launch, IGW attachment, routing, Session Manager use and HTTP reachability. One final 100-point flag is issued only after every operation and explanation.",
       "learningGoals": [
-        "Explain why the region matters",
-        "Allow only required documents and actions",
-        "Select recovery by timestamp and contents",
-        "Verify and hand over outcomes together"
+        "Check EC2 running state and health",
+        "Explain a VPC’s internet exit and route table",
+        "Attach an IAM role and connect using Session Manager",
+        "Allow HTTP and verify the real page",
+        "Hand over operations and verification to teammates"
       ]
     }
   }
