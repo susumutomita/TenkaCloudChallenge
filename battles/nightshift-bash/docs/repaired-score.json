@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "team": "test-11051",
+  "phase": "repair",
+  "score": 1000,
+  "maxScore": 1000,
+  "discovery": 300,
+  "repair": 400,
+  "service": 300,
+  "checks": {
+    "backupBeforeRestart": 1,
+    "pathBeforeRestart": 1,
+    "restart": 1,
+    "backupProtected": 1,
+    "pathProtected": 1,
+    "durable": 1,
+    "validOrders": 1,
+    "deduplication": 1,
+    "invalidRejected": 1
+  }
+}

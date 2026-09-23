@@ -1,0 +1,34 @@
+name: Nightshift Bash GameDay
+
+on:
+  pull_request:
+    paths:
+      - 'battles/nightshift-bash/**'
+      - '.github/workflows/nightshift-bash.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'battles/nightshift-bash/**'
+      - '.github/workflows/nightshift-bash.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightshift-bash-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: battles/nightshift-bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        run: make syntax
+      - name: Docker runtime integration
+        run: bash tests/run.sh docker
