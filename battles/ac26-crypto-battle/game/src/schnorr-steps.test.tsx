@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SchnorrResponseSteps, SchnorrResponseGuide } from "../../portal/SchnorrProof.tsx";
+import { SchnorrResponseSteps, SchnorrResponseGuide, SchnorrResponseValues } from "../../portal/SchnorrProof.tsx";
 
 for (const locale of ["ja", "en"] as const) {
   test(`response guide uses this player's values without filling the answer (${locale})`, () => {
@@ -28,5 +28,17 @@ for (const locale of ["ja", "en"] as const) {
       expect(html).toContain("z = (r + e × x) mod 11");
       expect(html.includes("10 × 5 = □①")).toBe(opened === 3);
     }
+  });
+}
+
+for (const locale of ["ja", "en"] as const) {
+  test(`r, e and x all stay visible on submission 2 without buying hints (${locale})`, () => {
+    // r was shown only on submission 1, so z = (r + e × x) mod 11 was not computable from the free screen.
+    const html = renderToStaticMarkup(<SchnorrResponseValues r={4} x={8} e={5} locale={locale} />);
+    expect(html).toContain("r = 4");
+    expect(html).toContain("e = 5");
+    expect(html).toContain("x = 8");
+    expect(html).toContain("a = 2⁴ mod 23 = 16");
+    expect(html).not.toContain("z =");
   });
 }
