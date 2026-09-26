@@ -1,5 +1,7 @@
 # NIGHTSHIFT — Protect the Night Batch
 
+This is an unranked workshop with public reference solutions. Points show your own repair progress; they are not competition scores or prize rankings.
+
 You are the night operations team at an online shop. Its batch job (a program that processes orders together) shows suspicious behavior and may be exposing information. Investigate in the terminal, fix the problems, and keep valid orders working.
 
 Start with `id`, `ls -la /srv/nightshift`, and `cat /srv/nightshift/logs/batch.log`. They show your current user, the files you inherited, and recent processing results.

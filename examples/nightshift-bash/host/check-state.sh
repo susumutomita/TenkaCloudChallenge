@@ -58,89 +58,83 @@ service_check() {
         && $rejected_content == *"$i4,1,100,999,"* ]]; then INVALID_OK=1; fi
 }
 
-probe_cleanup() {
-    [[ -n ${ACTIVE_PROBE:-} ]] || return 0
-    as_role auditor /bin/bash --noprofile --norc -s -- "$ACTIVE_PROBE" <<'CLEANUP'
+# Check the complete pathname as the low-privilege auditor. This includes every
+# replaceable directory entry, intermediate link, and the final link destination.
+# No participant-controlled file is opened or evaluated as root.
+path_is_protected() {
+    as_role auditor /bin/bash --noprofile --norc -s -- "$1" <<'CHECK_PATH'
 set -euo pipefail
-nonce=$1
-scratch="/home/auditor/.probe-$nonce"
-[[ -d $scratch && ! -L $scratch ]] || exit 1
-IFS= read -r target < "$scratch/target"
-[[ $target == /* ]] || exit 1
-IFS= read -r mode < "$scratch/mode"
-case "$mode" in
-    move)
-        rm -f -- "$target"
-        if [[ -e $scratch/original || -L $scratch/original ]]; then mv -- "$scratch/original" "$target"; fi
-        ;;
-    overwrite)
-        cat "$scratch/original" > "$target"
-        IFS= read -r permissions < "$scratch/permissions"
-        [[ $permissions =~ ^[0-7]{3,4}$ ]] || exit 1
-        current=$(stat -c '%a' "$target")
-    [[ $current == "$permissions" ]] || chmod "$permissions" "$target"
-        ;;
-    *) exit 1 ;;
-esac
-rm -rf -- "$scratch"
-CLEANUP
-    ACTIVE_PROBE=''
+pending=$1
+[[ $pending == /* && $pending != *$'\n'* ]] || exit 1
+parent=/
+links=0
+while [[ -n $pending ]]; do
+    pending=${pending#/}
+    part=${pending%%/*}
+    if [[ $pending == */* ]]; then pending=${pending#*/}; else pending=''; fi
+    case "$part" in
+        ''|.) continue ;;
+        ..) parent=${parent%/*}; [[ -n $parent ]] || parent=/; continue ;;
+    esac
+    entry="${parent%/}/$part"
+    # A non-searchable directory blocks all auditor access below it. Its own
+    # replacement possibility was already checked on the previous iteration.
+    [[ -x $parent ]] || exit 0
+    if [[ -w $parent ]]; then
+        # Sticky directories only permit replacing one's own entries, unless
+        # the auditor owns the directory itself (or can create a missing entry).
+        if [[ ! -k $parent || -O $parent || -O $entry || ( ! -e $entry && ! -L $entry ) ]]; then
+            exit 1
+        fi
+    fi
+    if [[ -L $entry ]]; then
+        links=$((links + 1)); (( links <= 40 )) || exit 1
+        target=$(/usr/bin/readlink -- "$entry") || exit 1
+        [[ -n $target && $target != *$'\n'* ]] || exit 1
+        [[ -z $pending ]] || target="$target/$pending"
+        if [[ $target == /* ]]; then parent=/; fi
+        pending=$target
+    else
+        # A missing component cannot be created under its protected parent.
+        [[ -e $entry ]] || exit 0
+        if [[ -z $pending ]]; then [[ ! -w $entry ]]; exit $?; fi
+        [[ -d $entry ]] || exit 1
+        parent=$entry
+    fi
+done
+[[ ! -w $parent ]]
+CHECK_PATH
 }
-ACTIVE_PROBE=''
-trap 'probe_cleanup >/dev/null 2>&1 || true' EXIT
 
 path_check() {
-    local stage=$1 nonce="${CHECK_NONCE}-$1" result rc=0
-    # Exercise the SAME writable command location an auditor can reach.
-    # All probe placement/restoration runs as auditor, never root.
-    result=$(as_role auditor /bin/bash --noprofile --norc -s -- "$nonce" <<'PLACE'
-set -euo pipefail
-nonce=$1
-target=/srv/nightshift/vendor/bin/render-receipt
-scratch="/home/auditor/.probe-$nonce"
-# Follow the command to the file that actually executes, under auditor privileges.
-# A protected link does not protect a writable destination (or its directory).
-if [[ -L $target ]]; then target=$(/usr/bin/readlink -e -- "$target") || exit 1; fi
-parent=${target%/*}
-if [[ -d $parent && -w $parent && -x $parent ]]; then
-    mkdir -m 0700 -- "$scratch"
-    printf '%s\n' "$target" > "$scratch/target"
-    printf 'move\n' > "$scratch/mode"
-    if [[ -e $target || -L $target ]]; then mv -- "$target" "$scratch/original"; fi
-elif [[ -f $target && -w $target ]]; then
-    mkdir -m 0700 -- "$scratch"
-    printf '%s\n' "$target" > "$scratch/target"
-    printf 'overwrite\n' > "$scratch/mode"
-    cp -- "$target" "$scratch/original"
-    stat -c '%a' "$target" > "$scratch/permissions"
-else
-    printf 'blocked\n'
-    exit 20
-fi
-{
-    printf '#!/bin/bash\n'
-    printf 'printf "probe\\n" > /srv/nightshift/evidence/probe-%s\n' "$nonce"
-    printf 'exec /srv/nightshift/app/bin/render-receipt "$@"\n'
-} > "$target"
-[[ -x $target ]] || chmod 0755 "$target"
-printf 'placed\n'
-PLACE
-    ) || rc=$?
-    if (( rc == 20 )) && [[ $result == blocked ]]; then return 0; fi
-    # Unexpected inability to place/restore is a failed check, never a free pass.
-    if [[ $result != placed || $rc -ne 0 ]]; then
-        ACTIVE_PROBE=$nonce
-        probe_cleanup >/dev/null 2>&1 || true
-        return 1
-    fi
-    ACTIVE_PROBE=$nonce
-    printf 'P-%s-%s,1,7\n' "${CHECK_NONCE:0:12}" "$stage" | deliver_unlocked >/dev/null 2>&1 || {
-        probe_cleanup >/dev/null 2>&1 || true; return 1;
-    }
-    tick_unlocked >/dev/null 2>&1 || true
-    if as_role batch /usr/bin/test -e "$LAB/evidence/probe-$nonce"; then rc=1; else rc=0; fi
-    probe_cleanup >/dev/null 2>&1 || return 1
-    return "$rc"
+    local batch_path directory candidate
+    # Config and startup code can change the next invocation's PATH even when
+    # today's selected executable is protected.
+    path_is_protected "$LAB/app/config/runtime.env" || return 1
+    path_is_protected "$LAB/app/bin/process-orders.sh" || return 1
+    path_is_protected "$LAB/app/startup.d" || return 1
+    batch_path=$(/usr/bin/timeout --signal=TERM --kill-after=1 4 \
+        /usr/bin/setpriv --reuid 1300 --regid 1400 --clear-groups --no-new-privs \
+        /usr/bin/env -i PATH=/usr/bin:/bin HOME=/home/batch USER=batch LOGNAME=batch \
+        /bin/bash --noprofile --norc -c '
+            set -euo pipefail
+            source /srv/nightshift/app/config/runtime.env
+            builtin printf "%s\n" "$PATH"
+        ' < /dev/null 9>&-) || return 1
+    [[ -n $batch_path && $batch_path != *$'\n'* ]] || return 1
+    # Examine earlier directories too: an auditor can add an executable there
+    # even if the batch currently falls through to a protected command later.
+    while :; do
+        directory=${batch_path%%:*}
+        [[ $directory == /* ]] || return 1
+        candidate="${directory%/}/render-receipt"
+        path_is_protected "$candidate" || return 1
+        if as_role batch /usr/bin/test -f "$candidate" && as_role batch /usr/bin/test -x "$candidate"; then
+            return 0
+        fi
+        [[ $batch_path == *:* ]] || return 1
+        batch_path=${batch_path#*:}
+    done
 }
 
 before_backup=0; before_path=0; restart_ok=0

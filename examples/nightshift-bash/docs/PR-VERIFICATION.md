@@ -7,8 +7,9 @@ Base: `susumutomita/TenkaCloudChallenge` main at `5704cee278ede234c103e8fe5c9a6e
 - Reproduced the Docker CI failure: the auditor-created command could not execute on the application tmpfs. Docker mounts tmpfs with `noexec` unless overridden.
 - Enabled `exec` only for `/srv/nightshift`, which intentionally contains executable exercise scripts. Kept `nosuid`, `nodev`, read-only rootfs, network isolation, and `/run` and `/tmp` `noexec`.
 - `make syntax`: passed for all Bash scripts and executables.
-- `bash tests/run.sh docker`: **48/48 passed**, using the real Docker build and runtime. Reference repair reached **1000/1000**, including two batch-service restarts. The grader rejects deleted keys, disabled processing, forged score files, and repairs that regress on restart.
-- Regression coverage also rejects a writable executable behind a protected symbolic link and a writable destination directory, preserves the link/target during probes, and accepts a fully protected link.
+- `bash tests/run.sh docker`: **56/56 passed**, using the real Docker build and runtime. Reference repair reached **1000/1000**, including two batch-service restarts. The grader rejects deleted keys, disabled processing, forged score files, and repairs that regress on restart.
+- Eight further regressions cover earlier PATH commands/directories, writable or linked configuration, replaceable config/command paths and ancestors, plus protected-link acceptance.
+- Regression coverage also rejects a writable executable behind a protected symbolic link and a writable destination directory, leaves the link/target unchanged during permission checks, and accepts a fully protected link.
 - The English introduction is read as auditor inside the container; all nine English hints are exercised through the CLI, including invalid-locale rejection.
 - CLI `doctor`, `start`, initial `score --json`, and an interactive `shell` were exercised. The participant reads `START-HERE.md` as UID 1100 (`auditor`), not root. `repair` switched new shells to UID 1200 (`operator`); `down` removed only the verification container and its state.
 - `make agent-gate`: all 126 existing metadata records passed. This validates the existing catalog, not native support for this unregistered pack.

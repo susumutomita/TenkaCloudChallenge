@@ -86,8 +86,8 @@ original=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/bin/render-re
 grade
 assert_contains "$RESULT" '"score":600,' 'vulnerable but working service earns no repair points'
 after=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/bin/render-receipt)
-[[ $after == "$original" ]] || fail 'probe restores participant executable'
-pass 'probe restores participant executable byte-for-byte'
+[[ $after == "$original" ]] || fail 'permission checks preserve participant executable'
+pass 'permission checks preserve participant executable byte-for-byte'
 lab_exec 1200 /bin/bash -s <<'PARTIAL'
 set -euo pipefail
 chmod 0640 /srv/nightshift/backup/settlement.key
@@ -146,7 +146,7 @@ grade
 assert_contains "$RESULT" '"pathProtected":0' 'existing writable executable defeats directory-only hardening'
 after=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/bin/render-receipt)
 [[ $original == "$after" ]] || fail 'in-place probe restoration'
-pass 'in-place probe restores bytes and executable remains usable'
+pass 'permission checks preserve bytes and executable remains usable'
 reference_repair
 # A protected symlink can still execute an auditor-writable target.
 lab_exec 1200 /bin/bash -c 'mkdir /srv/nightshift/vendor/linked; chmod 0777 /srv/nightshift/vendor/linked /srv/nightshift/vendor/bin'
@@ -166,7 +166,7 @@ assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'protected symlink doe
 after=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/linked/renderer)
 [[ $original == "$after" ]] || fail 'symlink target restoration'
 [[ $(lab_exec 1100 /usr/bin/readlink /srv/nightshift/vendor/bin/render-receipt) == /srv/nightshift/vendor/linked/renderer ]] || fail 'symlink preservation'
-pass 'probe restores destination bytes and preserves the command symlink'
+pass 'permission checks preserve destination bytes and preserves the command symlink'
 # A safe symlink to a protected executable remains a valid repair.
 lab_exec 0 /usr/bin/chown 1200:1400 /srv/nightshift/vendor/linked/renderer
 grade
@@ -175,6 +175,50 @@ assert_contains "$RESULT" '"score":1000,' 'protected symlink and protected desti
 lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor/linked
 grade
 assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'writable destination directory defeats a protected symlink'
+reference_repair
+# Resolve actual PATH, including empty earlier locations and mutable config.
+lab_exec 1100 /bin/bash -s <<'EARLIER'
+set -euo pipefail
+mkdir -p /home/auditor/bin
+cat > /home/auditor/bin/render-receipt <<'APP'
+#!/bin/bash
+exec /srv/nightshift/app/bin/render-receipt "$@"
+APP
+chmod 0755 /home/auditor/bin/render-receipt
+EARLIER
+lab_exec 1200 /bin/bash -c 'printf "export PATH=/home/auditor/bin:/srv/nightshift/app/bin:/usr/bin:/bin\n" > /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'earlier auditor-owned PATH executable is rejected'
+lab_exec 1100 /usr/bin/rm /home/auditor/bin/render-receipt
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'empty writable directory before selected command is rejected'
+reference_repair
+lab_exec 1200 /usr/bin/chmod 0666 /srv/nightshift/app/config/runtime.env
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'safe current PATH in writable config is rejected'
+lab_exec 1200 /usr/bin/chmod 0644 /srv/nightshift/app/config/runtime.env
+lab_exec 1100 /bin/bash -c 'printf "export PATH=/srv/nightshift/app/bin:/usr/bin:/bin\n" > /home/auditor/safe.env; chmod 0644 /home/auditor/safe.env'
+lab_exec 1200 /bin/bash -c 'rm /srv/nightshift/app/config/runtime.env; ln -s /home/auditor/safe.env /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'config symlink to auditor-owned file is rejected'
+lab_exec 1200 /usr/bin/rm /srv/nightshift/app/config/runtime.env
+reference_repair
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/app/config
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'replaceable protected config is rejected'
+lab_exec 1200 /usr/bin/chmod 0755 /srv/nightshift/app/config
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor/bin
+lab_exec 1100 /usr/bin/ln -s /srv/nightshift/app/bin/render-receipt /srv/nightshift/vendor/bin/render-receipt
+lab_exec 1200 /bin/bash -c 'printf "export PATH=/srv/nightshift/vendor/bin:/srv/nightshift/app/bin:/usr/bin:/bin\n" > /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'replaceable symlink to protected executable is rejected'
+lab_exec 1200 /usr/bin/chmod 0755 /srv/nightshift/vendor/bin
+grade
+assert_contains "$RESULT" '"score":1000,' 'protected command symlink and all ancestors pass'
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'replaceable ancestor of protected command is rejected'
+lab_exec 1200 /usr/bin/chmod 0755 /srv/nightshift/vendor
 reference_repair
 # A restart hook which breaks only on its second invocation must not keep stale points.
 lab_exec 1200 /bin/bash -s <<'FLAKY'

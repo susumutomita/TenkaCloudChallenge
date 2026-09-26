@@ -10,7 +10,8 @@ source "$PACKAGE_ROOT/lib/docker.sh"
 
 usage() {
     cat <<'HELP'
-NIGHTSHIFT — Bash Battle / 夜間バッチを守れ
+NIGHTSHIFT — unranked Bash practice / 夜間バッチを守れ（自主練）
+公開解答付きの自主練です。点数は到達度の目安で、順位・賞品・採用/認定には使えません。
 
 ./gameday.sh doctor                       Dockerと必要コマンドの確認
 ./gameday.sh build                        演習イメージのビルド

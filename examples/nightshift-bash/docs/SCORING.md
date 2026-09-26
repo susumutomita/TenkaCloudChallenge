@@ -1,4 +1,6 @@
-# Standalone scoring contract
+# Standalone self-assessment contract
+
+Public reference answers make this an unranked workshop. Points measure personal progress only, not competition standing.
 
 `gameday.sh score TEAM --json` emits one JSON object. It is not a TenkaCloud-native `/verify` response.
 
@@ -11,7 +13,7 @@
 
 Checks are `backupBeforeRestart`, `pathBeforeRestart`, `restart`, `backupProtected`, `pathProtected`, `durable`, `validOrders`, `deduplication`, and `invalidRejected`.
 
-Scoring is active, not a read-only query. During repair it places/restores a harmless command probe, submits generated order fixtures, restarts the batch service, and repeats a second restart when the first passes. The final reported state is the last tested state, including a regression at the second restart. Missing/failed service work cannot earn repair points. Unknown verifier output causes a failure, not a score update.
+Scoring is active, not a read-only query. During repair it checks the actual batch PATH and its configuration/command/ancestor permissions as auditor, submits generated order fixtures, restarts the batch service, and repeats a second restart when the first passes. The final reported state is the last tested state, including a regression at the second restart. Missing/failed service work cannot earn repair points. Unknown verifier output causes a failure, not a score update.
 
 `repair = 150 * backupProtected * serviceOK + 150 * pathProtected * serviceOK + 100 * durable`, where `serviceOK` is the conjunction of validOrders/deduplication/invalidRejected.
 
