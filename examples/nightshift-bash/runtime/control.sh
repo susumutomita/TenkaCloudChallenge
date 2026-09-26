@@ -54,12 +54,12 @@ case "$operation" in
         : > /run/nightshift/ready
         printf 'initialized\n'
         ;;
-    revoke-sessions) close_exercise_sessions ;;
-    tick|restart|deliver|live)
+    tick|restart|deliver|live|revoke-sessions)
         [[ -f /run/nightshift/ready ]] || exit 1
         exec 9>/run/nightshift/service.lock
         /usr/bin/flock -w 12 9 || exit 75
         case "$operation" in
+            revoke-sessions) close_exercise_sessions ;;
             tick) tick_unlocked ;;
             restart) restart_unlocked; tick_unlocked ;;
             deliver) deliver_unlocked ;;
