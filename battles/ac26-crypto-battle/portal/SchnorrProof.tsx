@@ -14,6 +14,18 @@ export function SchnorrResponseSteps({r,x,e,locale}:{r:number;x:number;e:number;
   </ol>;
 }
 
+/** Every input of z stays on screen for free; only the worked procedure is hint 3. */
+export function SchnorrResponseValues({r,x,e,locale}:{r:number;x:number;e:number;locale:"ja"|"en"}) {
+  const ja=locale==="ja";
+  return <dl aria-label={ja?"zの計算に使う数":"Values used to calculate z"} style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"4px 12px"}}>
+    <dt><strong>r = {r}</strong></dt><dd>{ja?`送信1で使った今回だけの乱数（a = 2${sup(r)} mod 23 = ${power(2,r)}）。この端末だけが持ち、送りません。`:`The fresh random number from submission 1 (a = 2${sup(r)} mod 23 = ${power(2,r)}). Only this browser has it; it is not sent.`}</dd>
+    <dt><strong>e = {e}</strong></dt><dd>{ja?"検証者から届いた質問の数。":"The challenge number returned by the verifier."}</dd>
+    <dt><strong>x = {x}</strong></dt><dd>{ja?"自分だけの数（秘密）。送りません。":"Your private number (the secret). It is not sent."}</dd>
+  </dl>;
+}
+const SUPERSCRIPT="⁰¹²³⁴⁵⁶⁷⁸⁹";
+function sup(n:number){return String(n).split("").map(d=>SUPERSCRIPT[Number(d)]).join("");}
+
 export function SchnorrResponseGuide({r,x,e,locale,hints}:{r:number;x:number;e:number;locale:"ja"|"en";hints:ContractProjection["hints"]}) {
   const ja=locale==="ja";
   return <>
@@ -96,6 +108,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>
       {!matchesPending ? <p role="alert">{ja?"この端末に開始時の乱数 r がありません。証明を開始したタブで続けてください。":"The original private r is missing. Continue in the tab where you started."}</p> : <>
         <h4>{ja?"掛けて、足して、11で割った余りを入力":"Multiply, add, then enter the remainder modulo 11"}</h4>
+        <SchnorrResponseValues r={nonce!} x={secret!} e={proof.pending.e} locale={locale} />
         <SchnorrResponseGuide r={nonce!} x={secret!} e={proof.pending.e} locale={locale} hints={order.hints} />
         <label>{ja?"計算した余り z（0〜10）":"Calculated remainder z (0–10)"} <input aria-label="Schnorr z" inputMode="numeric" value={z} onChange={e=>setZ(e.target.value)} /></label>
         <p>{ja?"0も答えとして入力できます。数字を入力すると送信できます。":"Zero is a valid answer. Enter a number to enable submission."}</p>
