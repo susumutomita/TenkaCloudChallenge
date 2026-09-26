@@ -1,5 +1,7 @@
 # NIGHTSHIFT — 夜間バッチを守れ
 
+English: `cat /srv/nightshift/START-HERE.en.md`
+
 あなたは通販会社の夜間運用チームです。注文をまとめて処理する「バッチ」に、不審な動作と情報漏えいの疑いが見つかりました。ターミナルから調べ、安全に直し、正常な注文処理を続けてください。
 
 最初に `id`、`ls -la /srv/nightshift`、`cat /srv/nightshift/logs/batch.log` を実行してください。今の利用者、引き継いだファイル、最近の注文処理が見えます。

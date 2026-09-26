@@ -3,12 +3,12 @@ name: Nightshift Bash Battle
 on:
   pull_request:
     paths:
-      - 'battles/nightshift-bash/**'
+      - 'examples/nightshift-bash/**'
       - '.github/workflows/nightshift-bash.yml'
   push:
     branches: [main]
     paths:
-      - 'battles/nightshift-bash/**'
+      - 'examples/nightshift-bash/**'
       - '.github/workflows/nightshift-bash.yml'
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: battles/nightshift-bash
+        working-directory: examples/nightshift-bash
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:

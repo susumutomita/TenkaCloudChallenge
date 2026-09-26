@@ -1,6 +1,6 @@
 # TenkaCloud integration status
 
-This release is a **standalone operator-CLI prototype**, not an installed/catalog-ready TenkaCloud problem. This contribution stages the existing standalone payload under `battles/nightshift-bash/`. It does not modify TenkaCloud, register the problem, or declare unsupported metadata.
+This release is a **standalone operator-CLI prototype**, not an installed/catalog-ready TenkaCloud problem. This contribution stages the existing standalone payload under `examples/nightshift-bash/`. It does not modify TenkaCloud, register the problem, or declare unsupported metadata.
 
 The catalog README and authoring contract were inspected on 2026-09-23. They distinguish problem payloads from platform-owned deployment/scoring dispatch and require a supported verifier contract for local-play containers. They also warn that adding a schema value is not evidence of executable platform support.
 
@@ -14,7 +14,7 @@ This pack therefore deliberately does not claim a fabricated metadata runtime, s
 
 No `metadata.json` is provided. The current catalog validator discovers metadata files recursively, so a green catalog-only check would not validate this unregistered payload. The dedicated Nightshift workflow runs Bash syntax and the actual Docker integration suite from this directory instead. Do not mark native catalog support complete based on either check.
 
-The current standalone image has a root supervisor for UID transitions; participant shells and editable workload code are non-root. This differs from the catalog's non-root Compose/verify contract and must be resolved in a coordinated platform design, not hidden by a fabricated `runtime` value. Participant statements/hints are currently Japanese; the package README is bilingual. Native registration also requires English participant content.
+The current standalone image has a root supervisor for UID transitions; participant shells and editable workload code are non-root. This differs from the catalog's non-root Compose/verify contract and must be resolved in a coordinated platform design, not hidden by a fabricated `runtime` value. Participant statements, all nine hints, and the package README are available in Japanese and English. The standalone package lives under `examples/`, outside the catalog directories.
 
 ## Existing boundaries available for an adapter
 

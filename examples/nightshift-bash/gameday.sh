@@ -22,7 +22,7 @@ NIGHTSHIFT — Bash Battle / 夜間バッチを守れ
 ./gameday.sh tick [team]                  注文バッチを1回実行
 ./gameday.sh reboot [team]                バッチサービスの再起動（OSではない）
 ./gameday.sh status [team]                フェーズと最後の採点結果
-./gameday.sh hint <mission:1-3> <step:1-3> 無料の段階的ヒント
+./gameday.sh hint <mission:1-3> <step:1-3> [ja|en] 無料の段階的ヒント
 ./gameday.sh reset [team] --yes           全進捗を消し、新しい秘密値で作り直す
 ./gameday.sh down [team] --yes            この演習のコンテナと状態を削除
 ./gameday.sh test                        Dockerで統合テスト（専用testチーム）
@@ -36,8 +36,9 @@ command=${1:-help}; shift || true
 case "$command" in
     help|-h|--help) usage; exit 0 ;;
     hint)
-        [[ $# -eq 2 && $1 =~ ^[123]$ && $2 =~ ^[123]$ ]] || { usage >&2; exit 64; }
-        cat "$PACKAGE_ROOT/runtime/participant/hint-$1-$2.md"
+        [[ ( $# -eq 2 || $# -eq 3 ) && $1 =~ ^[123]$ && $2 =~ ^[123]$ && ${3:-ja} =~ ^(ja|en)$ ]] || { usage >&2; exit 64; }
+        suffix=""; [[ ${3:-ja} != en ]] || suffix=.en
+        cat "$PACKAGE_ROOT/runtime/participant/hint-$1-$2$suffix.md"
         exit 0
         ;;
     doctor)

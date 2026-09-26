@@ -48,6 +48,16 @@ grade() { SCORE_FORMAT=json; RESULT=$(collect_score); }
 reference_repair() { lab_exec 1200 /bin/bash -s < "$PACKAGE_ROOT/tests/reference-repair.sh"; }
 
 printf '# Nightshift integration / backend=%s\n' "$backend"
+english=$(lab_exec 1100 /usr/bin/cat /srv/nightshift/START-HERE.en.md)
+assert_contains "$english" 'Start with `id`' 'English participant introduction is readable in the container'
+for mission in 1 2 3; do
+    for step in 1 2 3; do
+        hint=$(bash "$PACKAGE_ROOT/gameday.sh" hint "$mission" "$step" en)
+        assert_contains "$hint" "# $mission / Hint $step" "English mission $mission hint $step is available through CLI"
+    done
+done
+assert_denied 'hint locale cannot escape the participant directory' bash "$PACKAGE_ROOT/gameday.sh" hint 1 1 ../../host/score
+
 assert_denied 'auditor cannot read batch-only proof token' lab_exec 1100 /usr/bin/cat /srv/nightshift/service/proof-token
 assert_denied 'operator is not root and cannot read batch-only token' lab_exec 1200 /usr/bin/cat /srv/nightshift/service/proof-token
 assert_denied 'auditor cannot modify the trusted runtime' lab_exec 1100 /bin/bash -c 'echo tampered >> /opt/nightshift/lib.sh'
@@ -137,6 +147,34 @@ assert_contains "$RESULT" '"pathProtected":0' 'existing writable executable defe
 after=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/bin/render-receipt)
 [[ $original == "$after" ]] || fail 'in-place probe restoration'
 pass 'in-place probe restores bytes and executable remains usable'
+reference_repair
+# A protected symlink can still execute an auditor-writable target.
+lab_exec 1200 /bin/bash -c 'mkdir /srv/nightshift/vendor/linked; chmod 0777 /srv/nightshift/vendor/linked /srv/nightshift/vendor/bin'
+lab_exec 1100 /bin/bash -s <<'LINKED'
+set -euo pipefail
+cat > /srv/nightshift/vendor/linked/renderer <<'APP'
+#!/bin/bash
+exec /srv/nightshift/app/bin/render-receipt "$@"
+APP
+chmod 0755 /srv/nightshift/vendor/linked/renderer
+ln -s /srv/nightshift/vendor/linked/renderer /srv/nightshift/vendor/bin/render-receipt
+LINKED
+lab_exec 1200 /bin/bash -c 'chmod 0755 /srv/nightshift/vendor/bin /srv/nightshift/vendor/linked; printf "export PATH=/srv/nightshift/vendor/bin:/srv/nightshift/app/bin:/usr/bin:/bin\n" > /srv/nightshift/app/config/runtime.env'
+original=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/linked/renderer)
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'protected symlink does not hide an auditor-writable destination'
+after=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/linked/renderer)
+[[ $original == "$after" ]] || fail 'symlink target restoration'
+[[ $(lab_exec 1100 /usr/bin/readlink /srv/nightshift/vendor/bin/render-receipt) == /srv/nightshift/vendor/linked/renderer ]] || fail 'symlink preservation'
+pass 'probe restores destination bytes and preserves the command symlink'
+# A safe symlink to a protected executable remains a valid repair.
+lab_exec 0 /usr/bin/chown 1200:1400 /srv/nightshift/vendor/linked/renderer
+grade
+assert_contains "$RESULT" '"score":1000,' 'protected symlink and protected destination pass'
+# Replacing a read-only target through a writable directory is still unsafe.
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor/linked
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'writable destination directory defeats a protected symlink'
 reference_repair
 # A restart hook which breaks only on its second invocation must not keep stale points.
 lab_exec 1200 /bin/bash -s <<'FLAKY'

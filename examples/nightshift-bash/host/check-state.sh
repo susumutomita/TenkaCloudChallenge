@@ -64,8 +64,9 @@ probe_cleanup() {
 set -euo pipefail
 nonce=$1
 scratch="/home/auditor/.probe-$nonce"
-target=/srv/nightshift/vendor/bin/render-receipt
 [[ -d $scratch && ! -L $scratch ]] || exit 1
+IFS= read -r target < "$scratch/target"
+[[ $target == /* ]] || exit 1
 IFS= read -r mode < "$scratch/mode"
 case "$mode" in
     move)
@@ -97,12 +98,18 @@ set -euo pipefail
 nonce=$1
 target=/srv/nightshift/vendor/bin/render-receipt
 scratch="/home/auditor/.probe-$nonce"
-if [[ -d /srv/nightshift/vendor/bin && -w /srv/nightshift/vendor/bin && -x /srv/nightshift/vendor/bin ]]; then
+# Follow the command to the file that actually executes, under auditor privileges.
+# A protected link does not protect a writable destination (or its directory).
+if [[ -L $target ]]; then target=$(/usr/bin/readlink -e -- "$target") || exit 1; fi
+parent=${target%/*}
+if [[ -d $parent && -w $parent && -x $parent ]]; then
     mkdir -m 0700 -- "$scratch"
+    printf '%s\n' "$target" > "$scratch/target"
     printf 'move\n' > "$scratch/mode"
     if [[ -e $target || -L $target ]]; then mv -- "$target" "$scratch/original"; fi
-elif [[ -f $target && ! -L $target && -w $target ]]; then
+elif [[ -f $target && -w $target ]]; then
     mkdir -m 0700 -- "$scratch"
+    printf '%s\n' "$target" > "$scratch/target"
     printf 'overwrite\n' > "$scratch/mode"
     cp -- "$target" "$scratch/original"
     stat -c '%a' "$target" > "$scratch/permissions"

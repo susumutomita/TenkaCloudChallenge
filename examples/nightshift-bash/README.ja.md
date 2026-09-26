@@ -4,9 +4,9 @@ Bash Battle v0.1.0。**調べる → 無害に実証する → 業務を止め�
 
 参加者の操作、アプリ、採点器はBashとLinuxコマンドだけ。Python、Node.js、AWSアカウント、攻撃フレームワークは不要です。安全に変更できる使い捨て環境をDockerで用意します。「Bash内蔵コマンドだけ」という意味ではありません。
 
-**この版は単体CLI版です。TenkaCloudに登録・統合済みではありません。2026-09-27にmacOS/ColimaのDocker 29.6.1でビルドと統合テスト33項目が成功し、模範修復の1,000点を確認しました。最新の検証範囲は [検証記録](docs/PR-VERIFICATION.md) にあります。**
+**この版は単体CLI版です。TenkaCloudに登録・統合済みではありません。2026-09-27にmacOS/ColimaのDocker 29.6.1でビルドと統合テスト48項目が成功し、模範修復の1,000点を確認しました。最新の検証範囲は [検証記録](docs/PR-VERIFICATION.md) にあります。**
 
-**Portalへのカタログ登録は対象外です。** 未対応ランタイムを宣言しないため `metadata.json` は置いておらず、Portalの問題一覧には登録されません。ネイティブ連携と参加者向け英語版は別途実装が必要です。
+**Portalへのカタログ登録は対象外です。** 未対応ランタイムを宣言しないため `metadata.json` は置いておらず、Portalの問題一覧には登録されません。ネイティブ連携は別途実装が必要です。英語の問題文は `START-HERE.en.md`、英語ヒントは `./gameday.sh hint 1 1 en` で開けます。
 
 ## まず起動する
 
@@ -15,7 +15,7 @@ Bash Battle v0.1.0。**調べる → 無害に実証する → 業務を止め�
 リポジトリのルートから、問題のフォルダに移動して実行します。
 
 ```bash
-cd battles/nightshift-bash
+cd examples/nightshift-bash
 ./gameday.sh doctor
 ./gameday.sh start team1
 ./gameday.sh shell team1

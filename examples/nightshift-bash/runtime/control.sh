@@ -44,6 +44,7 @@ case "$operation" in
         /usr/bin/chmod 0664 "$LAB/logs/batch.log"
         /usr/bin/chmod 0755 "$LAB/logs"
         /usr/bin/cp /opt/nightshift/participant/START-HERE.md "$LAB/START-HERE.md"
+        /usr/bin/cp /opt/nightshift/participant/START-HERE.en.md "$LAB/START-HERE.en.md"
         printf '%s\n' "$session" > /run/nightshift/session
         printf '0\n' > /run/nightshift/counter
         : > /run/nightshift/service.lock

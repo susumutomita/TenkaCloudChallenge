@@ -6,20 +6,20 @@ A standalone, Bash-and-Linux-utilities Battle: investigate, demonstrate a harmle
 
 Version 0.1.0 includes three missions, two non-root participant roles, organizer-side scoring, per-run random exercise keys, staged hints, reference solutions, and integration tests. Python, Node.js, AWS accounts, and offensive frameworks are not runtime dependencies. Docker supplies the disposable Linux environment; “Bash only” does not mean “shell builtins only.”
 
-**Standalone CLI pack:** this directory intentionally has no `metadata.json` and is not selectable in the Portal. Native registration, a supported runtime/scoring adapter, and bilingual participant surfaces are not implemented. See [integration status](docs/TENKACLOUD.md).
+**Standalone CLI pack:** this directory intentionally has no `metadata.json` and is not selectable in the Portal. Native registration and a supported runtime/scoring adapter are not implemented. Japanese and English participant statements and hints are included. See [integration status](docs/TENKACLOUD.md).
 
 ## Start
 
-From the repository root, enter `battles/nightshift-bash` with Docker Engine/Desktop running:
+From the repository root, enter `examples/nightshift-bash` with Docker Engine/Desktop running:
 
 ```bash
-cd battles/nightshift-bash
+cd examples/nightshift-bash
 ./gameday.sh doctor
 ./gameday.sh start team1
 ./gameday.sh shell team1
 ```
 
-Inside the container, read `/srv/nightshift/START-HERE.md`. Participant content is Japanese in this first release. Image construction requires network access; the running exercise container has no network access.
+Inside the container, read `/srv/nightshift/START-HERE.en.md` (Japanese: `START-HERE.md`). For English hints, the organizer can run `./gameday.sh hint 1 1 en`; replace the two numbers with the mission and hint step. Image construction requires network access; the running exercise container has no network access.
 
 After collecting evidence, exit and run:
 
@@ -55,7 +55,7 @@ An optional Linux-root test backend is `sudo bash tests/run.sh namespace`. It us
 
 ## Verification status
 
-Docker build and the full integration suite passed on 2026-09-27 using Docker 29.6.1 on macOS/Colima: **33 assertions**, including a reference repair scoring **1000/1000** and two actual batch-service restarts. The application tmpfs explicitly allows execution of the exercise scripts; `/run` and `/tmp` remain `noexec`. The earlier Linux namespace results are retained in `docs/VERIFICATION.md`; current evidence and untested boundaries are in [PR verification](docs/PR-VERIFICATION.md).
+Docker build and the full integration suite passed on 2026-09-27 using Docker 29.6.1 on macOS/Colima: **48 assertions**, including a reference repair scoring **1000/1000** and two actual batch-service restarts. The application tmpfs explicitly allows execution of the exercise scripts; `/run` and `/tmp` remain `noexec`. The earlier Linux namespace results are retained in `docs/VERIFICATION.md`; current evidence and untested boundaries are in [PR verification](docs/PR-VERIFICATION.md).
 
 This package is **not integrated with TenkaCloud**. `docs/TENKACLOUD.md` describes the missing trusted host adapter; the score JSON is a standalone contract, not a supported TenkaCloud `/verify` response.
 
