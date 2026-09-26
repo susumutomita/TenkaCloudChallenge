@@ -7,8 +7,9 @@ Base: `susumutomita/TenkaCloudChallenge` main at `5704cee278ede234c103e8fe5c9a6e
 - Reproduced the Docker CI failure: the auditor-created command could not execute on the application tmpfs. Docker mounts tmpfs with `noexec` unless overridden.
 - Enabled `exec` only for `/srv/nightshift`, which intentionally contains executable exercise scripts. Kept `nosuid`, `nodev`, read-only rootfs, network isolation, and `/run` and `/tmp` `noexec`.
 - `make syntax`: passed for all Bash scripts and executables.
-- `bash tests/run.sh docker`: **65/65 passed**, using the real Docker build and runtime. Reference repair reached **1000/1000**, including two batch-service restarts. The grader rejects deleted keys, disabled processing, forged score files, and repairs that regress on restart.
+- `bash tests/run.sh docker`: **72/72 passed**, using the real Docker build and runtime. Reference repair reached **1000/1000**, including two batch-service restarts. The grader rejects deleted keys, disabled processing, forged score files, and repairs that regress on restart.
 - Additional cases reject owner-controlled read-only executables/configuration paths, backup targets, startup hooks and sticky-directory links; oversized outputs fail explicitly, and an existing stale image tag is rebuilt on start.
+- Configuration-function/hash overrides, inaccessible path descendants and NUL-corrupted outputs are rejected; quoted PATH/comments and valid output recovery pass.
 - Eight further regressions cover earlier PATH commands/directories, writable or linked configuration, replaceable config/command paths and ancestors, plus protected-link acceptance.
 - Regression coverage also rejects a writable executable behind a protected symbolic link and a writable destination directory, leaves the link/target unchanged during permission checks, and accepts a fully protected link.
 - The English introduction is read as auditor inside the container; all nine English hints are exercised through the CLI, including invalid-locale rejection.

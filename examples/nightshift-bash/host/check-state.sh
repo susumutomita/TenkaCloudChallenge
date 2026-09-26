@@ -23,6 +23,9 @@ file=$1
 [[ -f $file ]] || exit 1
 size=$(/usr/bin/stat -Lc '%s' -- "$file")
 [[ $size =~ ^[0-9]+$ ]] && (( size <= 1048576 )) || exit 1
+# Bash strings cannot preserve NUL: reject binary data before substitution.
+text_size=$(/usr/bin/tr -d '\000' < "$file" | /usr/bin/wc -c)
+(( text_size == size )) || exit 1
 /usr/bin/cat -- "$file"
 READ_OUTPUT
 }
@@ -91,9 +94,9 @@ while [[ -n $pending ]]; do
         ..) parent=${parent%/*}; [[ -n $parent ]] || parent=/; continue ;;
     esac
     entry="${parent%/}/$part"
-    # A non-searchable directory blocks all auditor access below it. Its own
-    # replacement possibility was already checked on the previous iteration.
-    [[ -x $parent ]] || exit 0
+    # A retained working directory or descriptor can outlive lost traversal.
+    # Unverifiable descendants are not evidence of protection.
+    [[ -x $parent ]] || exit 1
     if [[ -w $parent ]]; then
         # Sticky directories only permit replacing one's own entries, unless
         # the auditor owns the directory itself (or can create a missing entry).
@@ -134,14 +137,23 @@ path_check() {
         [[ -e $hook || -L $hook ]] || continue
         path_is_protected "$hook" || return 1
     done
-    batch_path=$(/usr/bin/timeout --signal=TERM --kill-after=1 4 \
-        /usr/bin/setpriv --reuid 1300 --regid 1400 --clear-groups --no-new-privs \
-        /usr/bin/env -i PATH=/usr/bin:/bin HOME=/home/batch USER=batch LOGNAME=batch \
-        /bin/bash --noprofile --norc -c '
-            set -euo pipefail
-            source /srv/nightshift/app/config/runtime.env
-            builtin printf "%s\n" "$PATH"
-        ' < /dev/null 9>&-) || return 1
+    # This exercise config is data: one PATH assignment, comments and blanks.
+    # Never evaluate arbitrary Bash/function/alias/hash overrides in the grader.
+    local config line value count=0
+    config=$(read_output "$LAB/app/config/runtime.env") || return 1
+    local assignment='^[[:space:]]*(export[[:space:]]+)?PATH=([^[:space:]]+)[[:space:]]*$'
+    while IFS= read -r line; do
+        [[ $line =~ ^[[:space:]]*(#.*)?$ ]] && continue
+        [[ $line =~ $assignment ]] || return 1
+        value=${BASH_REMATCH[2]}
+        case "$value" in
+            \"*\"|\'*\') value=${value:1:${#value}-2} ;;
+        esac
+        [[ $value =~ ^[A-Za-z0-9_./:-]+$ ]] || return 1
+        count=$((count + 1)); (( count == 1 )) || return 1
+        batch_path=$value
+    done <<< "$config"
+    (( count == 1 )) || return 1
     [[ -n $batch_path && $batch_path != *$'\n'* ]] || return 1
     # Examine earlier directories too: an auditor can add an executable there
     # even if the batch currently falls through to a protected command later.

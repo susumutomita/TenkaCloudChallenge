@@ -49,3 +49,5 @@ Ask the organizer to run `./gameday.sh score team1`. Grading really restarts the
 Work only inside `/srv/nightshift` and your own home in this disposable container. The organizer host, grader, other teams, and everything outside the container are out of scope. Do not attack networks, extract real data, flood processes, or disrupt grading.
 
 Each mission has three free hints. Ask the organizer to run `./gameday.sh hint MISSION STEP en`, for example `./gameday.sh hint 1 1 en`. English hints are also readable at `/opt/nightshift/participant/hint-1-1.en.md` (replace the two numbers).
+
+Keep `app/config/runtime.env` to one PATH assignment plus comments and blank lines: `export PATH=/absolute/directory:/another/directory`. PATH defines command search order. Do not put functions or other shell operations there. Keep parent directories inspectable by auditor and protect the secret file itself; hiding unverifiable descendants does not demonstrate that they are safe.

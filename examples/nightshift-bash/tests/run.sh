@@ -280,6 +280,50 @@ assert_contains "$RESULT" '"repair":0,"service":0' 'oversized rejections fail in
 lab_exec 1300 /bin/bash -c ': > /srv/nightshift/orders/rejected.csv'
 grade
 assert_contains "$RESULT" '"score":1000,' 'complete output validation recovers after operator clears oversized fixtures'
+# Configuration cannot override command lookup with shell functions or hashes.
+lab_exec 1200 /bin/bash -s <<'FUNCTION'
+cat > /srv/nightshift/app/config/runtime.env <<'CONFIG'
+export PATH=/srv/nightshift/app/bin:/usr/bin:/bin
+render-receipt() { /srv/nightshift/app/bin/render-receipt "$@"; }
+CONFIG
+FUNCTION
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'runtime config shell function override is rejected'
+lab_exec 1200 /bin/bash -s <<'HASH'
+cat > /srv/nightshift/app/config/runtime.env <<'CONFIG'
+export PATH=/srv/nightshift/app/bin:/usr/bin:/bin
+hash -p /srv/nightshift/app/bin/render-receipt render-receipt
+CONFIG
+HASH
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'runtime config hash override is rejected'
+reference_repair
+lab_exec 1200 /bin/bash -c 'printf "# safe configuration\nexport PATH=\"/srv/nightshift/app/bin:/usr/bin:/bin\"\n" > /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"score":1000,' 'quoted PATH assignment and comments remain valid'
+# Removing ancestor traversal does not invalidate a retained directory handle.
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor/bin
+lab_exec 1100 /bin/bash -s <<'HELD'
+mkdir /srv/nightshift/vendor/bin/held
+cat > /srv/nightshift/vendor/bin/held/render-receipt <<'APP'
+#!/bin/bash
+exec /srv/nightshift/app/bin/render-receipt "$@"
+APP
+chmod 0755 /srv/nightshift/vendor/bin/held/render-receipt
+HELD
+lab_exec 1200 /bin/bash -c 'chmod 0750 /srv/nightshift/vendor/bin; printf "export PATH=/srv/nightshift/vendor/bin/held:/srv/nightshift/app/bin:/usr/bin:/bin\n" > /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'unverifiable descendants below a non-searchable ancestor are rejected'
+reference_repair
+lab_exec 1300 /bin/bash -c 'printf "\\0" >> /srv/nightshift/orders/receipts.csv'
+grade
+assert_contains "$RESULT" '"repair":0,"service":0' 'NUL-containing receipts cannot be normalized into passing CSV'
+lab_exec 1300 /bin/bash -c ': > /srv/nightshift/orders/receipts.csv; printf "\\0" >> /srv/nightshift/orders/rejected.csv'
+grade
+assert_contains "$RESULT" '"repair":0,"service":0' 'NUL-containing rejections cannot be normalized into passing CSV'
+lab_exec 1300 /bin/bash -c ': > /srv/nightshift/orders/rejected.csv'
+grade
+assert_contains "$RESULT" '"score":1000,' 'valid text outputs recover after binary corruption is cleared'
 # A restart hook which breaks only on its second invocation must not keep stale points.
 lab_exec 1200 /bin/bash -s <<'FLAKY'
 set -euo pipefail
