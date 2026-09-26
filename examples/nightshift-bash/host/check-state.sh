@@ -126,12 +126,25 @@ done
 CHECK_PATH
 }
 
+trusted_program() {
+    # The lesson repairs permissions/config/startup, not business-program logic.
+    # Matching the shipped implementation closes untracked forwarding chains.
+    as_role batch /bin/bash --noprofile --norc -s -- "$1" "$2" <<'TRUSTED'
+set -euo pipefail
+[[ -f $1 ]] || exit 1
+actual=$(/usr/bin/sha256sum -- "$1")
+expected=$(/usr/bin/sha256sum -- "/opt/nightshift/seed/app/bin/$2")
+[[ ${actual%% *} == "${expected%% *}" ]]
+TRUSTED
+}
+
 path_check() {
     local batch_path directory candidate hook
     # Config and startup code can change the next invocation's PATH even when
     # today's selected executable is protected.
     path_is_protected "$LAB/app/config/runtime.env" || return 1
     path_is_protected "$LAB/app/bin/process-orders.sh" || return 1
+    trusted_program "$LAB/app/bin/process-orders.sh" process-orders.sh || return 1
     path_is_protected "$LAB/app/startup.d" || return 1
     for hook in "$LAB"/app/startup.d/*.sh; do
         [[ -e $hook || -L $hook ]] || continue
@@ -163,12 +176,15 @@ path_check() {
         candidate="${directory%/}/render-receipt"
         path_is_protected "$candidate" || return 1
         if as_role batch /usr/bin/test -f "$candidate" && as_role batch /usr/bin/test -x "$candidate"; then
-            return 0
+            trusted_program "$candidate" render-receipt
+            return $?
         fi
         [[ $batch_path == *:* ]] || return 1
         batch_path=${batch_path#*:}
     done
 }
+
+close_auditor_sessions || exit 1
 
 before_backup=0; before_path=0; restart_ok=0
 backup_check >/dev/null 2>&1 && before_backup=1

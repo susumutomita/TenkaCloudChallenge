@@ -176,7 +176,8 @@ after=$(lab_exec 1100 /usr/bin/sha256sum /srv/nightshift/vendor/linked/renderer)
 [[ $original == "$after" ]] || fail 'symlink target restoration'
 [[ $(lab_exec 1100 /usr/bin/readlink /srv/nightshift/vendor/bin/render-receipt) == /srv/nightshift/vendor/linked/renderer ]] || fail 'symlink preservation'
 pass 'permission checks preserve destination bytes and preserves the command symlink'
-# A safe symlink to a protected executable remains a valid repair.
+# A safe symlink to the shipped implementation remains a valid repair.
+lab_exec 1100 /usr/bin/cp /opt/nightshift/seed/app/bin/render-receipt /srv/nightshift/vendor/linked/renderer
 lab_exec 0 /usr/bin/chown 1200:1400 /srv/nightshift/vendor/linked/renderer
 grade
 assert_contains "$RESULT" '"score":1000,' 'protected symlink and protected destination pass'
@@ -324,6 +325,42 @@ assert_contains "$RESULT" '"repair":0,"service":0' 'NUL-containing rejections ca
 lab_exec 1300 /bin/bash -c ': > /srv/nightshift/orders/rejected.csv'
 grade
 assert_contains "$RESULT" '"score":1000,' 'valid text outputs recover after binary corruption is cleared'
+# Protected wrappers cannot delegate to an unverified writable program.
+lab_exec 1100 /bin/bash -c 'chmod 0755 /home/auditor; cp /opt/nightshift/seed/app/bin/render-receipt /home/auditor/payload; chmod 0755 /home/auditor/payload'
+lab_exec 1200 /bin/bash -s <<'FORWARD'
+cat > /srv/nightshift/app/bin/render-receipt <<'APP'
+#!/bin/bash
+exec /home/auditor/payload "$@"
+APP
+FORWARD
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'protected wrapper cannot hide a writable transitive executable'
+lab_exec 1200 /usr/bin/cp /opt/nightshift/seed/app/bin/render-receipt /srv/nightshift/app/bin/render-receipt
+lab_exec 1200 /bin/bash -s <<'WORKER'
+cat > /srv/nightshift/app/bin/process-orders.sh <<'APP'
+#!/bin/bash
+exec /opt/nightshift/seed/app/bin/process-orders.sh "$@"
+APP
+WORKER
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'replacement business worker cannot bypass declared command lookup'
+lab_exec 1200 /usr/bin/cp /opt/nightshift/seed/app/bin/process-orders.sh /srv/nightshift/app/bin/process-orders.sh
+if [[ $backend == docker ]]; then
+    # Keep a real auditor write descriptor open across chmod; grading must revoke it.
+    lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/app/bin/render-receipt
+    lab_exec 1100 /bin/bash -c 'exec 3<>/srv/nightshift/app/bin/render-receipt; echo $$ > /tmp/held-auditor; exec /usr/bin/sleep 120' &
+    holder=$!
+    for attempt in {1..30}; do
+        if lab_exec 0 /usr/bin/test -f /tmp/held-auditor; then break; fi
+        sleep 0.1
+    done
+    held_pid=$(lab_exec 0 /usr/bin/cat /tmp/held-auditor)
+    lab_exec 1200 /usr/bin/chmod 0755 /srv/nightshift/app/bin/render-receipt
+    grade
+    wait "$holder" || true # The expected UID-scoped revocation terminates this exec.
+    assert_denied 'grading terminates the old auditor process with an open write descriptor' lab_exec 0 /usr/bin/kill -0 "$held_pid"
+    assert_contains "$RESULT" '"score":1000,' 'trusted repair is awarded only after prior auditor descriptors close'
+fi
 # A restart hook which breaks only on its second invocation must not keep stale points.
 lab_exec 1200 /bin/bash -s <<'FLAKY'
 set -euo pipefail

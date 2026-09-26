@@ -12,7 +12,7 @@ copy_file() {
     mkdir -p -- "$root$(dirname -- "$source")"
     cp -L -- "$source" "$root$source"
 }
-for name in bash env setpriv timeout flock install cp chown find chmod cat grep sha256sum head stat rm mv mkdir rmdir sleep date od tr id ls sed awk ps sort touch tail wc ln readlink test cut base64 uname true false tee cmp printf basename dirname; do
+for name in bash env setpriv timeout flock install cp chown find chmod cat grep sha256sum head stat rm mv mkdir rmdir sleep date od tr id ls sed awk ps pgrep sort touch tail wc ln readlink test cut base64 uname true false tee cmp printf basename dirname; do
     binary=$(command -v "$name")
     [[ $binary == /* ]] || binary="/usr/bin/$name"
     [[ -x $binary ]] || { echo "Missing $name" >&2; exit 1; }

@@ -4,7 +4,7 @@ Bash Battleの自主練教材 v0.1.0。**調べる → 無害に実証する →
 
 参加者の操作、アプリ、採点器はBashとLinuxコマンドだけ。Python、Node.js、AWSアカウント、攻撃フレームワークは不要です。安全に変更できる使い捨て環境をDockerで用意します。「Bash内蔵コマンドだけ」という意味ではありません。
 
-**この版は単体CLI版です。TenkaCloudに登録・統合済みではありません。2026-09-27にmacOS/ColimaのDocker 29.6.1でビルドと統合テスト72項目が成功し、模範修復の1,000点を確認しました。最新の検証範囲は [検証記録](docs/PR-VERIFICATION.md) にあります。**
+**この版は単体CLI版です。TenkaCloudに登録・統合済みではありません。2026-09-27にmacOS/ColimaのDocker 29.6.1でビルドと統合テスト76項目が成功し、模範修復の1,000点を確認しました。最新の検証範囲は [検証記録](docs/PR-VERIFICATION.md) にあります。**
 
 **Portalへのカタログ登録は対象外です。** 未対応ランタイムを宣言しないため `metadata.json` は置いておらず、Portalの問題一覧には登録されません。ネイティブ連携は別途実装が必要です。英語の問題文は `START-HERE.en.md`、英語ヒントは `./gameday.sh hint 1 1 en` で開けます。
 
@@ -45,7 +45,7 @@ cat /srv/nightshift/logs/batch.log
 ./gameday.sh score team1
 ```
 
-調査が終わったら運営がフェーズを切り替えます。この時点で調査得点は確定し、後から追加できません。開き直したシェルは修復用のoperatorです。既存のauditorシェルがrootやoperatorに変わるわけではありません。
+調査が終わったら運営がフェーズを切り替えます。この時点で調査得点は確定し、後から追加できません。開き直したシェルは修復用のoperatorです。既存のauditorシェルとプロセスは終了し、開きっぱなしのファイルも閉じます。採点時にも同じ終了処理を行います。確認用のauditorシェルは採点後に開き直せます。
 
 ```bash
 ./gameday.sh repair team1 --yes
@@ -58,6 +58,8 @@ cat /srv/nightshift/logs/batch.log
 ./gameday.sh score team1
 ./gameday.sh score team1 --json
 ```
+
+修復するのは設定・権限・起動スクリプトです。業務処理本体の `process-orders.sh` と選ばれた `render-receipt` は配布時の実装と一致する必要があります。別のプログラムへの転送で正常処理に見せかける修復は認めません。
 
 **採点中は実際にバッチサービスが再起動します。** 成功する修復は、さらにもう一度再起動して確かめます。OSやDockerコンテナの再起動ではありません。採点中は編集を止めてください。コマンドを書き換えずに、batchのPATH、設定ファイル、リンク先と親ディレクトリをauditorの権限で検査します。検査用の注文とログは演習内に残ります。
 

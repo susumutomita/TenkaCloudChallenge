@@ -110,6 +110,7 @@ case "$command" in
             repair)
                 read_state "$TEAM_DIR/phase"
                 [[ $REPLY == audit ]] || { printf 'すでに修復フェーズです。\n'; exit 0; }
+                lab_exec 0 /bin/bash /opt/nightshift/control.sh close-auditor
                 printf 'repair\n' > "$TEAM_DIR/phase"
                 printf '調査得点を確定しました。新しい shell は operator で開きます。\n'
                 ;;

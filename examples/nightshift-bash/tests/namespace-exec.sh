@@ -24,8 +24,8 @@ exec unshare --user --map-users=0:0:65536 --map-groups=0:0:65536 \
             mount --bind "$root/$tree" "$root/$tree"
             mount -o remount,bind,rw "$root/$tree"
         done
-        # /proc is intentionally empty: nested environments may prohibit a new proc mount.
-        # The test suite does not certify ps/process-inspection behavior.
+        # Session revocation requires a private process view. Fail if unavailable.
+        mount -t proc proc "$root/proc"
         for device in null zero random urandom; do mount --bind "/dev/$device" "$root/dev/$device"; done
         exec chroot "$root" /usr/bin/setpriv --reuid "$uid" --regid "$gid" --clear-groups --no-new-privs \
             /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin HOME="/home/$role" \

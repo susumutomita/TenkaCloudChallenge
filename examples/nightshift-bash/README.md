@@ -38,6 +38,8 @@ Repair as `operator`, then exit and score:
 ./gameday.sh score team1 --json
 ```
 
+Promotion to repair and every grading run end existing auditor processes/shells, closing retained file descriptors. Reopen an auditor shell after grading if needed. The two business programs must match the shipped implementation; repair configuration, permissions and startup hooks.
+
 Scoring actually restarts the **batch service**, not the operating system. Stop editing during scoring. The grader checks the batch PATH, configuration, command links and parent directories under auditor permissions without modifying those files. Test orders and logs remain in the exercise.
 
 ## Self-assessment points
@@ -57,7 +59,7 @@ An optional Linux-root test backend is `sudo bash tests/run.sh namespace`. It us
 
 ## Verification status
 
-Docker build and the full integration suite passed on 2026-09-27 using Docker 29.6.1 on macOS/Colima: **72 assertions**, including a reference repair scoring **1000/1000** and two actual batch-service restarts. The application tmpfs explicitly allows execution of the exercise scripts; `/run` and `/tmp` remain `noexec`. The earlier Linux namespace results are retained in `docs/VERIFICATION.md`; current evidence and untested boundaries are in [PR verification](docs/PR-VERIFICATION.md).
+Docker build and the full integration suite passed on 2026-09-27 using Docker 29.6.1 on macOS/Colima: **76 assertions**, including a reference repair scoring **1000/1000** and two actual batch-service restarts. The application tmpfs explicitly allows execution of the exercise scripts; `/run` and `/tmp` remain `noexec`. The earlier Linux namespace results are retained in `docs/VERIFICATION.md`; current evidence and untested boundaries are in [PR verification](docs/PR-VERIFICATION.md).
 
 This package is **not integrated with TenkaCloud**. `docs/TENKACLOUD.md` describes the missing trusted host adapter; the score JSON is a standalone contract, not a supported TenkaCloud `/verify` response.
 

@@ -57,3 +57,31 @@ restart_unlocked() {
             done
         ' < /dev/null 9>&-
 }
+
+# Promotion/grading revokes old auditor processes and their open descriptors.
+# The CLI lock prevents new supported shell sessions during this transition.
+close_auditor_sessions() {
+    require_lab
+    [[ -r /proc/self/status ]] || { echo 'A private /proc is required.' >&2; return 1; }
+    local attempt pids rc pid state live
+    for attempt in {1..20}; do
+        rc=0; pids=$(/usr/bin/pgrep -u 1100) || rc=$?
+        (( rc == 1 )) && return 0
+        (( rc == 0 )) || return 1
+        live=0
+        for pid in $pids; do
+            [[ $pid =~ ^[0-9]+$ ]] || return 1
+            if ! state=$(/usr/bin/ps -p "$pid" -o stat=); then
+                kill -0 "$pid" 2>/dev/null && return 1
+                continue
+            fi
+            [[ $state == Z* ]] && continue # Zombies retain no file descriptors.
+            live=1
+            kill -KILL "$pid" 2>/dev/null || { kill -0 "$pid" 2>/dev/null && return 1; }
+        done
+        (( live == 0 )) && return 0
+        /usr/bin/sleep 0.05
+    done
+    echo 'Auditor processes did not stop; refusing to grade.' >&2
+    return 1
+}
