@@ -16,7 +16,7 @@ The container has network `none`, no published ports, no host bind mounts or soc
 
 Docker image construction requires internet access. This restriction applies to the running exercise, not the trusted build process. The Debian base image and apt packages are version-tagged rather than digest/lockfile pinned in this first release; rebuilds are not bit-for-bit reproducible.
 
-The authoring environment did not have Docker. These launch flags, image construction, and health check are supplied but have not been executed there. Validate them with `./gameday.sh test` on the actual organizer host. Health status only means initialization completed, not that the participant's business application is correct.
+Docker image construction and all 33 integration assertions passed on macOS/Colima on 2026-09-27. The application tmpfs uses `exec` so editable exercise scripts can run; `/run` and `/tmp` retain `noexec`. Validate the runtime on each organizer host with `./gameday.sh test`. Health status only means initialization completed, not that the participant's business application is correct.
 
 Containers share the host kernel. Do not treat this package as an absolute sandbox for hostile users. For an external event, prefer a dedicated disposable VM/host, patch the container runtime, avoid actual credentials, and rehearse teardown. Reference: https://docs.docker.com/engine/security/
 

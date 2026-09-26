@@ -2,11 +2,11 @@
 
 **[日本語の起動手順](README.ja.md)**
 
-A standalone, Bash-and-Linux-utilities GameDay: investigate, demonstrate a harmless misuse, repair without interrupting valid order processing, and verify the result after restarting the batch service.
+A standalone, Bash-and-Linux-utilities Battle: investigate, demonstrate a harmless misuse, repair without interrupting valid order processing, and verify the result after restarting the batch service.
 
 Version 0.1.0 includes three missions, two non-root participant roles, organizer-side scoring, per-run random exercise keys, staged hints, reference solutions, and integration tests. Python, Node.js, AWS accounts, and offensive frameworks are not runtime dependencies. Docker supplies the disposable Linux environment; “Bash only” does not mean “shell builtins only.”
 
-**Draft catalog contribution:** this directory intentionally has no `metadata.json` and is not selectable in the Portal. Native registration, a supported runtime/scoring adapter, and bilingual participant surfaces are not implemented. See [integration status](docs/TENKACLOUD.md).
+**Standalone CLI pack:** this directory intentionally has no `metadata.json` and is not selectable in the Portal. Native registration, a supported runtime/scoring adapter, and bilingual participant surfaces are not implemented. See [integration status](docs/TENKACLOUD.md).
 
 ## Start
 
@@ -55,7 +55,7 @@ An optional Linux-root test backend is `sudo bash tests/run.sh namespace`. It us
 
 ## Verification status
 
-The authoring environment had no Docker executable/daemon. The same runtime, OS permissions, reference routes, and scoring scripts were exercised using Linux namespaces: **33 integration assertions passed**. Docker image construction, Docker-specific capability/resource flags, interactive terminal behavior, macOS/WSL2, and a real multi-team event have **not** been tested here. See `docs/VERIFICATION.md` for evidence and exact boundaries.
+Docker build and the full integration suite passed on 2026-09-27 using Docker 29.6.1 on macOS/Colima: **33 assertions**, including a reference repair scoring **1000/1000** and two actual batch-service restarts. The application tmpfs explicitly allows execution of the exercise scripts; `/run` and `/tmp` remain `noexec`. The earlier Linux namespace results are retained in `docs/VERIFICATION.md`; current evidence and untested boundaries are in [PR verification](docs/PR-VERIFICATION.md).
 
 This package is **not integrated with TenkaCloud**. `docs/TENKACLOUD.md` describes the missing trusted host adapter; the score JSON is a standalone contract, not a supported TenkaCloud `/verify` response.
 

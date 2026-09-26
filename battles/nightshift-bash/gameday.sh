@@ -10,7 +10,7 @@ source "$PACKAGE_ROOT/lib/docker.sh"
 
 usage() {
     cat <<'HELP'
-NIGHTSHIFT — Bash GameDay / 夜間バッチを守れ
+NIGHTSHIFT — Bash Battle / 夜間バッチを守れ
 
 ./gameday.sh doctor                       Dockerと必要コマンドの確認
 ./gameday.sh build                        演習イメージのビルド

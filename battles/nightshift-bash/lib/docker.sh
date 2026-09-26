@@ -49,6 +49,7 @@ start_container() {
     printf 'audit\n' > "$TEAM_DIR/phase"
     # No host bind mounts, no published ports, no Docker socket, no external network.
     # Only the disposable application/home/run/tmp trees are writable.
+    # Docker tmpfs defaults to noexec; the lab deliberately runs editable app scripts.
     if ! docker run -d --name "$CONTAINER" \
         --label "org.tenkacloud.nightshift.session=$session" \
         --network none --read-only --security-opt no-new-privileges:true \
@@ -56,7 +57,7 @@ start_container() {
         --cap-add SETUID --cap-add SETGID --cap-add KILL \
         --pids-limit 96 --memory 256m --memory-swap 256m --cpus 1 \
         --ulimit nofile=256:256 --ulimit fsize=16777216:16777216 \
-        --tmpfs /srv/nightshift:rw,nosuid,nodev,size=32m,mode=0755 \
+        --tmpfs /srv/nightshift:rw,exec,nosuid,nodev,size=32m,mode=0755 \
         --tmpfs /home:rw,nosuid,nodev,size=16m,mode=0755 \
         --tmpfs /run:rw,nosuid,nodev,noexec,size=8m,mode=0755 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=8m,mode=1777 \
