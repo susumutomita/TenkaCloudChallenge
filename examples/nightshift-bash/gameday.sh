@@ -77,7 +77,7 @@ fi
 LOCK_DIR="$TEAM_DIR/.lock"
 if ! mkdir -- "$LOCK_DIR" 2>/dev/null; then
     printf '同じチームへの操作が実行中、または中断したロックが残っています: %s\n' "$LOCK_DIR" >&2
-    printf '別の操作が動いていないことを確認してから .lock を削除してください。\n' >&2
+    printf 'シェルが開いていれば exit してから再実行してください。中断した場合だけ、記録されたPIDの終了を確認してロックを削除します。\n' >&2
     exit 75
 fi
 printf '%s\n' "$$" > "$LOCK_DIR/pid"
@@ -100,8 +100,9 @@ case "$command" in
                 case "$phase" in audit) uid=1100; gid=1100; role=auditor ;; repair) uid=1200; gid=1400; role=operator ;; *) exit 1 ;; esac
                 if [[ ${1:-} == auditor ]]; then uid=1100; gid=1100; role=auditor; fi
                 [[ -t 0 && -t 1 ]] || { printf 'shell は対話ターミナルで実行してください。\n' >&2; exit 1; }
-                release_lock; trap - EXIT
-                exec docker exec -it --user "$uid:$gid" --workdir /srv/nightshift "$CONTAINER" \
+                # Keep the team lock until the interactive exec has exited.
+                # Callers exit their shell before promotion or scoring.
+                docker exec -it --user "$uid:$gid" --workdir /srv/nightshift "$CONTAINER" \
                     /usr/bin/env -i PATH=/usr/bin:/bin HOME="/home/$role" USER="$role" LOGNAME="$role" \
                     LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM="${TERM:-xterm-256color}" \
                     "PS1=[$TEAM:$role] \w \$ " /bin/bash --noprofile --norc
@@ -110,7 +111,7 @@ case "$command" in
             repair)
                 read_state "$TEAM_DIR/phase"
                 [[ $REPLY == audit ]] || { printf 'すでに修復フェーズです。\n'; exit 0; }
-                lab_exec 0 /bin/bash /opt/nightshift/control.sh close-auditor
+                lab_exec 0 /bin/bash /opt/nightshift/control.sh revoke-sessions
                 printf 'repair\n' > "$TEAM_DIR/phase"
                 printf '調査得点を確定しました。新しい shell は operator で開きます。\n'
                 ;;

@@ -24,7 +24,7 @@ After preparing the evidence, exit and ask the organizer to run `./gameday.sh su
 
 ## Second half: repair / operator / 700 points
 
-After the organizer runs `repair`, a new shell uses the operator account. This account is not root but can repair settings, permissions and startup scripts. Keep both business programs unchanged from the shipped implementation. Promotion and grading end existing auditor shells/processes to close retained file descriptors.
+After the organizer runs `repair`, a new shell uses the operator account. This account is not root but can repair settings, permissions and startup scripts. Keep both business programs unchanged from the shipped implementation. Promotion and grading end existing exercise shells/processes to close retained file descriptors.
 
 Make these conditions hold without stopping order processing:
 

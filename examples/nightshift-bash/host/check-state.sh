@@ -184,7 +184,7 @@ path_check() {
     done
 }
 
-close_auditor_sessions || exit 1
+close_exercise_sessions || exit 1
 
 before_backup=0; before_path=0; restart_ok=0
 backup_check >/dev/null 2>&1 && before_backup=1

@@ -10,7 +10,7 @@ The root supervisor exists solely for initial fixture installation, role changes
 
 Organizer grading logic is kept in `host/`, excluded from the image, and streamed through stdin to a trusted root shell only for grading. Expected secrets are shell-local variables, not environment variables or command-line arguments. The participant cannot simply edit a local score file to alter host scoring.
 
-This separation does not prevent cheating by someone who controls the organizer host, can read the full source/reference solution out of band, or receives Docker access. There is no remote authentication or terminal-delivery service in this release. Promotion and grading terminate existing auditor processes, closing retained descriptors. The selected renderer and worker are matched to the shipped programs; custom forwarding programs are not accepted as protected. Intentional PID exhaustion, sophisticated side channels, and hostile concurrent mutation are not certified. The training rules explicitly exclude grader/host attacks.
+This separation does not prevent cheating by someone who controls the organizer host, can read the full source/reference solution out of band, or receives Docker access. There is no remote authentication or terminal-delivery service in this release. Promotion and grading terminate existing exercise processes (auditor, operator and batch), closing retained descriptors. The selected renderer and worker are matched to the shipped programs; custom forwarding programs are not accepted as protected. Intentional PID exhaustion, sophisticated side channels, and hostile concurrent mutation are not certified. The training rules explicitly exclude grader/host attacks.
 
 ## Docker isolation configured by the launcher
 
@@ -18,7 +18,7 @@ The container has network `none`, no published ports, no host bind mounts or soc
 
 Docker image construction requires internet access. This restriction applies to the running exercise, not the trusted build process. The Debian base image and apt packages are version-tagged rather than digest/lockfile pinned in this first release; rebuilds are not bit-for-bit reproducible.
 
-Docker image construction and all 76 integration assertions passed on macOS/Colima on 2026-09-27. The application tmpfs uses `exec` so editable exercise scripts can run; `/run` and `/tmp` retain `noexec`. Validate the runtime on each organizer host with `./gameday.sh test`. Health status only means initialization completed, not that the participant's business application is correct.
+Docker image construction and all 80 integration assertions passed on macOS/Colima on 2026-09-27. The application tmpfs uses `exec` so editable exercise scripts can run; `/run` and `/tmp` retain `noexec`. Validate the runtime on each organizer host with `./gameday.sh test`. Health status only means initialization completed, not that the participant's business application is correct.
 
 Containers share the host kernel. Do not treat this package as an absolute sandbox for hostile users. For an external event, prefer a dedicated disposable VM/host, patch the container runtime, avoid actual credentials, and rehearse teardown. Reference: https://docs.docker.com/engine/security/
 

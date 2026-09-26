@@ -361,6 +361,35 @@ if [[ $backend == docker ]]; then
     assert_denied 'grading terminates the old auditor process with an open write descriptor' lab_exec 0 /usr/bin/kill -0 "$held_pid"
     assert_contains "$RESULT" '"score":1000,' 'trusted repair is awarded only after prior auditor descriptors close'
 fi
+if [[ $backend == docker ]]; then
+    # An audit payload can fork as batch; that old process must not forge receipts.
+    lab_exec 1300 /bin/bash -c 'echo $$ > /tmp/held-batch; exec /usr/bin/sleep 120' &
+    batch_holder=$!
+    for attempt in {1..30}; do
+        if lab_exec 0 /usr/bin/test -f /tmp/held-batch; then break; fi
+        sleep 0.1
+    done
+    batch_pid=$(lab_exec 0 /usr/bin/cat /tmp/held-batch)
+    printf '00000000000000000000000000000000\n' | lab_exec 1200 /bin/bash -c 'cat > /srv/nightshift/backup/settlement.key'
+    grade
+    wait "$batch_holder" || true
+    assert_denied 'grading revokes batch daemons created by earlier audit payloads' lab_exec 0 /usr/bin/kill -0 "$batch_pid"
+    assert_contains "$RESULT" '"repair":0,"service":0' 'an incorrect key cannot earn points after compromised processes are revoked'
+    printf '%s\n' "$good_key" | lab_exec 1200 /bin/bash -c 'cat > /srv/nightshift/backup/settlement.key'
+    # Startup may fork an operator daemon as well; each restart must close it.
+    lab_exec 1200 /bin/bash -s <<'DAEMON'
+cat > /srv/nightshift/app/startup.d/50-background.sh <<'HOOK'
+#!/bin/bash
+/usr/bin/sleep 120 </dev/null >/dev/null 2>&1 &
+echo $! > /home/operator/background-pid
+HOOK
+DAEMON
+    grade
+    daemon_pid=$(lab_exec 0 /usr/bin/cat /home/operator/background-pid)
+    assert_denied 'restart does not leave editable startup-hook daemons running' lab_exec 0 /usr/bin/kill -0 "$daemon_pid"
+    assert_contains "$RESULT" '"score":1000,' 'trusted processing still completes after startup descendants are revoked'
+    lab_exec 1200 /usr/bin/rm /srv/nightshift/app/startup.d/50-background.sh /home/operator/background-pid
+fi
 # A restart hook which breaks only on its second invocation must not keep stale points.
 lab_exec 1200 /bin/bash -s <<'FLAKY'
 set -euo pipefail

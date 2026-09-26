@@ -54,7 +54,7 @@ case "$operation" in
         : > /run/nightshift/ready
         printf 'initialized\n'
         ;;
-    close-auditor) close_auditor_sessions ;;
+    revoke-sessions) close_exercise_sessions ;;
     tick|restart|deliver|live)
         [[ -f /run/nightshift/ready ]] || exit 1
         exec 9>/run/nightshift/service.lock

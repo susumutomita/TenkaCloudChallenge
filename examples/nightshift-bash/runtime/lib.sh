@@ -44,6 +44,7 @@ tick_unlocked() {
 }
 
 restart_unlocked() {
+    local result=0
     # All editable startup code is executed as operator, NEVER root.
     /usr/bin/timeout --signal=TERM --kill-after=1 5 \
         /usr/bin/setpriv --reuid 1200 --regid 1400 --clear-groups --no-new-privs \
@@ -55,17 +56,20 @@ restart_unlocked() {
             for hook in /srv/nightshift/app/startup.d/*.sh; do
                 /bin/bash --noprofile --norc "$hook"
             done
-        ' < /dev/null 9>&-
+        ' < /dev/null 9>&- || result=$?
+    # Editable startup hooks may fork: close descendants before validating state.
+    close_exercise_sessions || return 1
+    return "$result"
 }
 
-# Promotion/grading revokes old auditor processes and their open descriptors.
+# Promotion/grading revokes old exercise processes and their open descriptors.
 # The CLI lock prevents new supported shell sessions during this transition.
-close_auditor_sessions() {
+close_exercise_sessions() {
     require_lab
     [[ -r /proc/self/status ]] || { echo 'A private /proc is required.' >&2; return 1; }
     local attempt pids rc pid state live
     for attempt in {1..20}; do
-        rc=0; pids=$(/usr/bin/pgrep -u 1100) || rc=$?
+        rc=0; pids=$(/usr/bin/pgrep -u 1100,1200,1300) || rc=$?
         (( rc == 1 )) && return 0
         (( rc == 0 )) || return 1
         live=0
@@ -82,6 +86,6 @@ close_auditor_sessions() {
         (( live == 0 )) && return 0
         /usr/bin/sleep 0.05
     done
-    echo 'Auditor processes did not stop; refusing to grade.' >&2
+    echo 'Exercise processes did not stop; refusing to grade.' >&2
     return 1
 }
