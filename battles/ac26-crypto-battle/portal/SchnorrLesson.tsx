@@ -91,30 +91,30 @@ export function SchnorrLesson({locale,initialStep=0}:{locale:"ja"|"en";initialSt
         <td style={cell}>{g}<sup>{Z}</sup> mod {p} = {GZ}</td>
         <td style={cell}>{A} × {Y}<sup>{E}</sup> mod {p} = {A} × {YE} mod {p} = {A*YE%p}</td>
       </tr></tbody></table>
-      <p>{t(`${Y}${"⁵"} の計算：${Y}² = ${Y*Y} → ${Y*Y%p}、${Y}⁴ = ${Y*Y%p}² = ${(Y*Y%p)**2} → ${power(Y,4)}、${Y}⁵ = ${power(Y,4)} × ${Y} = ${power(Y,4)*Y} → ${YE}（→ は ${p} で割った余り）。`,`Computing ${Y}⁵: ${Y}² = ${Y*Y} → ${Y*Y%p}, ${Y}⁴ = ${Y*Y%p}² = ${(Y*Y%p)**2} → ${power(Y,4)}, ${Y}⁵ = ${power(Y,4)} × ${Y} = ${power(Y,4)*Y} → ${YE} (→ means remainder mod ${p}).`)}</p>
+      <p>{t(`${Y}${"⁵"} の計算：${Y}² = ${Y*Y} → ${Y*Y%p}、${Y}⁴ ≡ ${Y*Y%p}² = ${(Y*Y%p)**2} → ${power(Y,4)}、${Y}⁵ ≡ ${power(Y,4)} × ${Y} = ${power(Y,4)*Y} → ${YE}（→ は ${p} で割った余り）。`,`Computing ${Y}⁵: ${Y}² = ${Y*Y} → ${Y*Y%p}, ${Y}⁴ ≡ ${Y*Y%p}² = ${(Y*Y%p)**2} → ${power(Y,4)}, ${Y}⁵ ≡ ${power(Y,4)} × ${Y} = ${power(Y,4)*Y} → ${YE} (→ means remainder mod ${p}).`)}</p>
       <p>{t("順番が大事です。a を先に送って固定し、そのあとで e が決まります。なぜ大事かは「ずるを見分ける」のページで分かります。","Order matters: a is fixed first, and only then is e chosen. The page on catching cheaters shows why.")}</p>
     </>},
     {title:t("なぜ検証式が成り立つ？（完全性）","Why does the check pass? (completeness)"),body:<>
       <p>{t("x を知っている人の z なら、いつでも左右が一致することを、道具の決まり①②③だけで示します。","Using only rules ①②③, we show that the equation always holds when z was computed from the real x.")}</p>
       <p style={equation}>
-        g<sup>z</sup> = g<sup>r + e×x</sup>　{t("（z の作り方。③で mod 11 は気にしなくてよい）","(definition of z; by ③ the mod 11 does not matter)")}<br/>
+        g<sup>z</sup> ≡ g<sup>r + e×x</sup>　{t("（③より、指数の余りを戻しても mod 23 の値は同じ）","(rule ③: restoring the exponent preserves its remainder mod 23)")}<br/>
         　= g<sup>r</sup> × g<sup>e×x</sup>　{t("（①）","(rule ①)")}<br/>
         　= g<sup>r</sup> × (g<sup>x</sup>)<sup>e</sup>　{t("（②）","(rule ②)")}<br/>
-        　= a × y<sup>e</sup>　{t("（a = gʳ、y = gˣ だから）","(since a = gʳ and y = gˣ)")}
+        　≡ a × y<sup>e</sup> (mod {p})　{t("（a と y は、それぞれ gʳ と gˣ の余り）","(a and y are the remainders of gʳ and gˣ)")}
       </p>
-      <p>{t(`数で確認：g^z = 2^${Z}、そして r + e×x = ${R} + ${E}×${X} = ${R+E*X}。2^${R+E*X} = 2^${R} × (2^${X})^${E} = ${A} × ${Y}^${E}。${R+E*X} を ${q} で割った余りが ${Z} なので、③より 2^${R+E*X} と 2^${Z} は同じ余り ${GZ} になります。`,`Check with numbers: r + e×x = ${R} + ${E}×${X} = ${R+E*X}. 2^${R+E*X} = 2^${R} × (2^${X})^${E} = ${A} × ${Y}^${E}. Since ${R+E*X} leaves remainder ${Z} mod ${q}, rule ③ gives 2^${R+E*X} and 2^${Z} the same remainder ${GZ}.`)}</p>
+      <p>{t(`数で確認：g^z = 2^${Z}、そして r + e×x = ${R} + ${E}×${X} = ${R+E*X}。2^${R+E*X} = 2^${R} × (2^${X})^${E} ≡ ${A} × ${Y}^${E} (mod ${p})。${R+E*X} を ${q} で割った余りが ${Z} なので、③より 2^${R+E*X} と 2^${Z} は同じ余り ${GZ} になります。`,`Check with numbers: r + e×x = ${R} + ${E}×${X} = ${R+E*X}. 2^${R+E*X} = 2^${R} × (2^${X})^${E} ≡ ${A} × ${Y}^${E} (mod ${p}). Since ${R+E*X} leaves remainder ${Z} mod ${q}, rule ③ gives 2^${R+E*X} and 2^${Z} the same remainder ${GZ}.`)}</p>
       <div style={box}>{t("検証者の式に x と r は出てきません。検証者は a、e、z、y という自分が受け取った（または公開の）数だけで検査できます。ただし「式に x がない」ことだけでは、z から x が漏れないとは言えません。次のページで確かめます。","Neither x nor r appears in the verifier's equation: it uses only a, e, z and y. But “x is not in the equation” does not by itself mean z leaks nothing about x. The next page checks that.")}</div>
     </>},
     {title:t("なぜ r を足すの？（x を隠すしくみ）","Why add r? (how x stays hidden)"),body:<>
       <p><strong>{t("もし r を足さなかったら","What if r were not added?")}</strong></p>
       <p>{t(`z = e × x mod ${q} を送ることになります。例：z = ${E} × ${X} mod ${q} = ${Z_NO_R}。検証者は e = ${E} を知っているので、「${E} × □ を ${q} で割った余りが ${Z_NO_R}」になる □ を 0〜${q-1} で探すと、□ = ${X} だけが当てはまり、x がばれます。`,`You would send z = e × x mod ${q}, e.g. ${E} × ${X} mod ${q} = ${Z_NO_R}. The verifier knows e = ${E}, so trying □ = 0…${q-1} in “${E} × □ has remainder ${Z_NO_R} mod ${q}” finds only □ = ${X}: x leaks.`)}</p>
       <p><strong>{t("r を足すと","With r added")}</strong></p>
-      <p>{t(`検証者に見えるのは e = ${E} と z = ${Z} だけで、r は見えません。そこで「もし x が □ だったら、r はいくつだったはずか」を全部の候補で計算してみます（r = (z − e × □) mod ${q}、負なら ${q} を足す）。`,`The verifier sees only e = ${E} and z = ${Z}, not r. For every candidate □ for x, compute which r would have produced this z: r = (z − e × □) mod ${q} (add ${q} while negative).`)}</p>
+      <p>{t(`ここでは公開値 y と約束 a をいったん除き、e = ${E} と z = ${Z} の2つだけを見ます。そこで「もし x が □ だったら、r はいくつだったはずか」を全部の候補で計算してみます（r = (z − e × □) mod ${q}、負なら ${q} を足す）。`,`For this step, set aside public y and commitment a and look only at e = ${E} and z = ${Z}. For every candidate □ for x, compute which r would have produced this z: r = (z − e × □) mod ${q} (add ${q} while negative).`)}</p>
       <table style={table}><tbody>
         <tr><th style={cell}>{t("x の候補 □","candidate x □")}</th>{Array.from({length:q},(_,i)=><td key={i} style={cell}>{i}</td>)}</tr>
         <tr><th style={cell}>{t("そのときの r","matching r")}</th>{Array.from({length:q},(_,i)=><td key={i} style={{...cell,fontWeight:i===X?700:400}}>{mod(Z-E*i,q)}</td>)}</tr>
       </tbody></table>
-      <p>{t(`どの候補にも、ちょうど1つの r が対応し、r の値は 0〜${q-1} が1回ずつ出ます（本物は x = ${X}, r = ${R}）。r は0〜${q-1}を同じ確率（1/${q}ずつ）で選んだ乱数なので、検証者にとってはどの候補も同じくらいありえます。z を見ても候補を1つも絞れません。`,`Each candidate has exactly one matching r, and the r values cover 0–${q-1} once each (the real pair is x = ${X}, r = ${R}). Because r was drawn with equal probability 1/${q} for each value, every candidate stays equally likely to the verifier; seeing z does not narrow them down at all.`)}</p>
+      <p>{t(`どの候補にも、ちょうど1つの r が対応し、r の値は 0〜${q-1} が1回ずつ出ます（本物は x = ${X}, r = ${R}）。r は0〜${q-1}を同じ確率（1/${q}ずつ）で選んだ乱数なので、この2つの数だけでは候補を絞れません。ただし実際の検証者は y と a も見ます。記録全体は次のページで確かめます。`,`Each candidate has exactly one matching r, and the r values cover 0–${q-1} once each (the real pair is x = ${X}, r = ${R}). Because r was drawn with equal probability 1/${q} for each value, these two numbers alone do not narrow the candidates. The verifier also sees y and a; the next page checks the whole transcript.`)}</p>
       <p>{t(`言いかえると、e を決めたとき z = (r + e × x) mod ${q} は r を ${q} 通りの z にずれなく一対一で移します。r が「どの値も同じ確率」（一様）なら、z も一様になり、x がいくつでも z の出方は同じです。`,`Put differently, for a fixed e, z = (r + e × x) mod ${q} maps the ${q} values of r one-to-one onto the ${q} values of z. If r is uniform (every value equally likely), z is uniform too, and its distribution is the same whatever x is.`)}</p>
       <div style={box}>{t("だから r は毎回新しく選び、送らず、2回使わないことが必須です（理由は「ずるを見分ける」のページ）。","So r must be fresh every time, never sent, and never reused (see the page on catching cheaters).")}</div>
     </>},
@@ -125,12 +125,12 @@ export function SchnorrLesson({locale,initialStep=0}:{locale:"ja"|"en";initialSt
       <p>{t(`e と z を先に 0〜${q-1} から選び、検証式が合うように a を後から決めます。`,`Pick e and z first from 0–${q-1}, then choose a so the equation holds.`)}</p>
       <p style={equation}>a = g<sup>z</sup> × (y<sup>e</sup> {t("を 1 に戻す数","undone")}) = g<sup>z</sup> × y<sup>{q}−e</sup> mod {p}</p>
       <p>{t(`「y^e を 1 に戻す数」は、y^e に掛けて ${p} で割った余りが 1 になる数で、逆元と呼びます。y は ${q} 回掛けると 1 に戻るので、y^e × y^(${q}−e) = y^${q} ≡ 1。つまり y をあと ${q}−e 回掛けた数が逆元です。`,`“The number that undoes y^e” is the one whose product with y^e has remainder 1 mod ${p}; it is called the inverse. Since y returns to 1 after ${q} multiplications, y^e × y^(${q}−e) = y^${q} ≡ 1, so y multiplied ${q}−e more times is the inverse.`)}</p>
-      <p>{t(`例：y = ${Y}、e = ${SIM_E}、z = ${SIM_Z} を先に選ぶ。`,`Example: pick y = ${Y}, e = ${SIM_E}, z = ${SIM_Z} first.`)}</p>
+      <p>{t(`例：公開値 y = ${Y} は固定。e = ${SIM_E}、z = ${SIM_Z} を先に選ぶ。`,`Example: keep public y = ${Y} fixed; pick e = ${SIM_E} and z = ${SIM_Z} first.`)}</p>
       <ol>
         <li>{g}<sup>{SIM_Z}</sup> mod {p} = {SIM_GZ}</li>
         <li>{Y}<sup>{SIM_E}</sup> mod {p} = {SIM_YE}{t("、逆元は ","; its inverse is ")}{Y}<sup>{q-SIM_E}</sup> mod {p} = {SIM_INV}{t(`（確認：${SIM_YE} × ${SIM_INV} = ${SIM_YE*SIM_INV} = ${p} × ${Math.floor(SIM_YE*SIM_INV/p)} + 1）`,` (check: ${SIM_YE} × ${SIM_INV} = ${SIM_YE*SIM_INV} = ${p} × ${Math.floor(SIM_YE*SIM_INV/p)} + 1)`)}</li>
         <li>a = {SIM_GZ} × {SIM_INV} mod {p} = {SIM_A}</li>
-        <li>{t("検査：","Check: ")}{g}<sup>{SIM_Z}</sup> = {SIM_GZ}、a × y<sup>e</sup> = {SIM_A} × {SIM_YE} = {SIM_A*SIM_YE} → {SIM_A*SIM_YE%p}　{t("一致","match")}</li>
+        <li>{t("検査：","Check: ")}{g}<sup>{SIM_Z}</sup> mod {p} = {SIM_GZ}、a × y<sup>e</sup> mod {p} = ({SIM_A} × {SIM_YE}) mod {p} = {SIM_A*SIM_YE%p}　{t("一致","match")}</li>
       </ol>
       <p><strong>{t("本物と同じ確率になる理由（数えてみる）","Why the probabilities match (count them)")}</strong></p>
       <ul>
@@ -142,20 +142,20 @@ export function SchnorrLesson({locale,initialStep=0}:{locale:"ja"|"en";initialSt
       <div style={box}>{t("シミュレーターは e を見てから a を決める「順番のずる」をしています。本物の会話では a を先に固定するので、このずるはできません。だからシミュレーターが作れても、証明が誰でも通るわけではありません。","The simulator cheats on order: it picks a after seeing e. In a real run a is fixed first, so this trick is unavailable — being simulatable does not make the proof passable by anyone.")}</div>
     </>},
     {title:t("ずるを見分ける（健全性）","Catching cheaters (soundness)"),body:<>
-      <p>{t("x を知らない人が通るには、a を送る前に e を当てるしかありません（当てた e で前のページのシミュレーターの作り方を使う）。e は a の後に均等に選ばれるので、当たる確率は 1/11 です。","Without x, the only way to pass is to guess e before sending a (and then use the simulator's trick for that e). Since e is chosen uniformly after a, the guess succeeds with probability 1/11.")}</p>
-      <p><strong>{t("なぜ当てずっぽう以外の方法がない？","Why is guessing the only way?")}</strong></p>
+      <p>{t("x を使わずに通る作戦を1つ考えます。a を送る前に e を予想し、その e でシミュレーターを使います。実際の e は a の後に均等に選ばれるので、この予想が当たる確率は 1/11 です。この模型では表から x を探す近道もあり、攻撃全体の成功率が 1/11 以下だという保証ではありません。","Consider one strategy without x: guess e before sending a and use the simulator for that guess. The real e is uniform and arrives after a, so the guess succeeds with probability 1/11. In this tiny model an attacker can also look x up; 1/11 is not a bound on all attacks.")}</p>
+      <p><strong>{t("違う質問にも答えられるなら？","What if two different challenges can be answered?")}</strong></p>
       <p>{t("同じ a に対して、2つの違う e に正しく答えられる人がいたとします。","Suppose someone can answer the same a correctly for two different challenges:")}</p>
       <p style={equation}>z = r + e × x,　z′ = r + e′ × x　(mod {q})</p>
       <p>{t("上から下を引くと r が消えます。","Subtracting removes r:")}</p>
       <p style={equation}>z − z′ = (e − e′) × x　→　x = (z − z′) × (e − e′){t("の逆元","⁻¹")} (mod {q})</p>
       <p>{t(`ここでの逆元は「掛けて ${q} で割った余りが 1 になる数」です。`,`Here the inverse is the number whose product has remainder 1 mod ${q}.`)}</p>
       <p>{t(`例：同じ r = ${R} で (e, z) = (${E}, ${Z}) と (${E2}, ${Z2}) に答えた。z − z′ = ${Z} − ${Z2} → ${DZ}（負なので ${q} を足した）、e − e′ = ${DE}。${DE} × ${DE_INV} = ${DE*DE_INV} = ${q} + 1 なので ${DE} の逆元は ${DE_INV}。x = ${DZ} × ${DE_INV} mod ${q} = ${EXTRACTED}。`,`Example: with the same r = ${R}, answers (e, z) = (${E}, ${Z}) and (${E2}, ${Z2}). z − z′ = ${Z} − ${Z2} → ${DZ} (add ${q} since negative), e − e′ = ${DE}. ${DE} × ${DE_INV} = ${DE*DE_INV} = ${q} + 1, so the inverse of ${DE} is ${DE_INV}. x = ${DZ} × ${DE_INV} mod ${q} = ${EXTRACTED}.`)}</p>
-      <p>{t("つまり「2つ以上の e に答えられる」なら、その人の答えから x を計算できる＝その人は x を知っているのと同じです。x を知らない人は、1つの a に対して高々1つの e にしか答えられず、当たる確率は 1/11 どまりです。","So anyone able to answer two or more challenges effectively knows x, because x can be computed from their answers. Someone without x can answer at most one e per a, so they pass with probability at most 1/11.")}</p>
+      <p>{t("つまり「2つ以上の e に答えられる」なら、その人の答えから x を計算できる＝その人は x を知っているのと同じです。これを特別健全性と呼びます。秘密を計算しにくい実用の設定では、秘密を知る証拠としてこの性質を使います。","So anyone able to answer two or more challenges effectively knows x, because x can be computed from their answers. This is special soundness. In practical groups where computing the secret is hard, this property supports a proof of knowledge.")}</p>
       <div style={box}>
         <p>{t("大事な結果が2つあります。","Two important consequences:")}</p>
         <ul>
           <li>{t("r を使い回すと、上の計算で誰でも x を取り出せます。r は毎回新しく選びます。","Reusing r lets anyone extract x with the calculation above. Always draw a fresh r.")}</li>
-          <li>{t("1回で 1/11 なら、独立に k 回繰り返すと、全部当て続ける確率は (1/11)ᵏ に下がります。ただし次のページのとおり、この模型の小さな数では別の近道があります。","If one round lets a cheater through with probability 1/11, k independent rounds give (1/11)ᵏ. But see the next page: in this tiny model there is a shortcut.")}</li>
+          <li>{t("毎回1つの e を予想する作戦では、独立に k 回繰り返すと、全部当て続ける確率は (1/11)ᵏ に下がります。ただし次のページのとおり、この模型の小さな数では別の近道があります。","For the strategy of guessing one e each time, k independent rounds give probability (1/11)ᵏ of guessing every challenge. But see the next page: in this tiny model there is a shortcut.")}</li>
         </ul>
       </div>
     </>},
@@ -164,8 +164,9 @@ export function SchnorrLesson({locale,initialStep=0}:{locale:"ja"|"en";initialSt
       <p>{t("公開値 y 以上を漏らさない性質（ゼロ知識性）と、秘密を知らずに通ることが難しい性質（健全性）は別物です。","Revealing nothing beyond y (zero knowledge) and making it hard to pass without the secret (soundness) are different properties.")}</p>
       <div style={box}>{t(`この模型では秘密の候補が最大11通りしかなく、道具のページの表で y から x を探せます。だから、x を知らなかった人も表で x を見つけてから正しく答えられ、健全性の安全はありません。同じ小さな数で何回繰り返しても、この候補の少なさは解消しません。Verify成功は秘密の復元ではなく、HUNTの得点にはしません。`,`With at most 11 possible secrets, the table on the tools page finds x from y. Anyone can look x up and then answer correctly, so this model provides no soundness security. Repeating rounds over the same tiny group does not fix that small search space. Verification does not recover the secret or award HUNT points.`)}</div>
       <p><strong>{t("実際に使う大きさ","Real-world sizes")}</strong></p>
-      <p>{t(`実用では ${p} や ${q} の代わりに、77桁ほど（2²⁵⁶ 前後）の数を使います。g を x 回掛けるのは速く計算できても、y から x を探すのは現実的な時間では終わらない大きさです。手順と式はこのお題とまったく同じです。`,`In practice ${p} and ${q} are replaced by numbers around 2²⁵⁶ (about 77 digits). Computing gˣ is fast, but finding x from y cannot finish in any realistic time. The protocol and the equations are exactly the same as here.`)}</p>
-      <p>{t("さらに、e を検証者に選んでもらう代わりに、a と送りたい文章から決まる「ハッシュ値」（データから計算する、予想できない固定長の数）を e に使うと、会話なしの1通のデータで同じことができます。これが Schnorr 署名で、電子署名の方式の土台になっています。","Further, instead of asking the verifier for e, you can set e to a hash value (an unpredictable fixed-length number computed from data) of a and a message. Then a single message replaces the conversation. That is the Schnorr signature, a foundation of digital signature schemes.")}</p>
+      <p>{t("実用では、検証された大きな数の組を使います。整数の掛け算を使う方式と、楕円曲線の点の足し算を使う方式では、必要な大きさが違います。23や11を単に256ビットの数へ変えれば安全になる、という意味ではありません。", "Practical systems use validated large groups. Finite-field multiplication and elliptic-curve point addition require different parameter sizes. Simply replacing 23 and 11 with 256-bit numbers does not make this model secure.")}</p>
+      <p>{t("Schnorr署名では、質問 e を、約束 a・公開鍵・署名する文章などからハッシュ関数で計算します。ハッシュ関数は入力から決まった長さの値を作る計算です。安全な仕様は入力の区別や乱数の作り方も定めており、この教材の式だけをそのまま署名に使うことはできません。", "Schnorr signatures derive e from the commitment, public key and message using a hash function, which maps inputs to fixed-length values. Secure specifications also define input separation and nonce generation; this lesson alone is not a signature implementation.")}</p>
+      <p>{t("仕様を読む：", "Specifications: ")}<a href="https://www.rfc-editor.org/rfc/rfc8235.html">RFC 8235</a> · <a href="https://bips.dev/340/">BIP 340</a></p>
     </>},
   ];
   const last=steps.length-1;
