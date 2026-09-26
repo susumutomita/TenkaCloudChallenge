@@ -9,8 +9,22 @@ require_lab
 backup_check() {
     # An absent key is NOT secure: independent receipt checks must also pass.
     as_role batch /usr/bin/test -f "$LAB/backup/settlement.key" || return 1
+    path_is_protected "$LAB/backup/settlement.key" || return 1
     if as_role auditor /usr/bin/test -r "$LAB/backup/settlement.key"; then return 1; fi
     return 0
+}
+
+read_output() {
+    # Inspect the complete regular file, or reject it before parsing any prefix.
+    # The controller lock excludes supported concurrent writes during grading.
+    as_role batch /bin/bash --noprofile --norc -s -- "$1" <<'READ_OUTPUT'
+set -euo pipefail
+file=$1
+[[ -f $file ]] || exit 1
+size=$(/usr/bin/stat -Lc '%s' -- "$file")
+[[ $size =~ ^[0-9]+$ ]] && (( size <= 1048576 )) || exit 1
+/usr/bin/cat -- "$file"
+READ_OUTPUT
 }
 
 service_check() {
@@ -31,8 +45,8 @@ service_check() {
     printf '%s\n' "$d,5,21" | deliver_unlocked >/dev/null 2>&1 || return 0
     tick_unlocked >/dev/null 2>&1 || return 0
     # Bounded reads, under the data owner's privileges; never follow a link as root.
-    content=$(as_role batch /usr/bin/head -c 1048576 "$LAB/orders/receipts.csv") || return 0
-    rejected_content=$(as_role batch /usr/bin/head -c 1048576 "$LAB/orders/rejected.csv") || return 0
+    content=$(read_output "$LAB/orders/receipts.csv") || return 0
+    rejected_content=$(read_output "$LAB/orders/rejected.csv") || return 0
     while IFS= read -r line; do
         IFS=, read -r id q p total digest rest <<< "$line"
         commas=${line//[^,]/}
@@ -83,10 +97,13 @@ while [[ -n $pending ]]; do
     if [[ -w $parent ]]; then
         # Sticky directories only permit replacing one's own entries, unless
         # the auditor owns the directory itself (or can create a missing entry).
-        if [[ ! -k $parent || -O $parent || -O $entry || ( ! -e $entry && ! -L $entry ) ]]; then
+        if [[ ! -k $parent || -O $parent || -O $entry || ( ! -e $entry && ! -L $entry ) ]] \
+            || [[ -L $entry && $(/usr/bin/stat -c '%u' -- "$entry") == "$EUID" ]]; then
             exit 1
         fi
     fi
+    # Owners can restore their own permissions with chmod, even at mode 0000.
+    [[ ! -O $entry ]] || exit 1
     if [[ -L $entry ]]; then
         links=$((links + 1)); (( links <= 40 )) || exit 1
         target=$(/usr/bin/readlink -- "$entry") || exit 1
@@ -107,12 +124,16 @@ CHECK_PATH
 }
 
 path_check() {
-    local batch_path directory candidate
+    local batch_path directory candidate hook
     # Config and startup code can change the next invocation's PATH even when
     # today's selected executable is protected.
     path_is_protected "$LAB/app/config/runtime.env" || return 1
     path_is_protected "$LAB/app/bin/process-orders.sh" || return 1
     path_is_protected "$LAB/app/startup.d" || return 1
+    for hook in "$LAB"/app/startup.d/*.sh; do
+        [[ -e $hook || -L $hook ]] || continue
+        path_is_protected "$hook" || return 1
+    done
     batch_path=$(/usr/bin/timeout --signal=TERM --kill-after=1 4 \
         /usr/bin/setpriv --reuid 1300 --regid 1400 --clear-groups --no-new-privs \
         /usr/bin/env -i PATH=/usr/bin:/bin HOME=/home/batch USER=batch LOGNAME=batch \

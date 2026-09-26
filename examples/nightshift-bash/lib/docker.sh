@@ -41,7 +41,8 @@ start_container() {
         return 1
     fi
     [[ ! -f $TEAM_DIR/session ]] || { printf '前の状態が残っています。reset --yes を使ってください。\n' >&2; return 1; }
-    docker image inspect "$IMAGE" >/dev/null 2>&1 || build_image
+    # Docker reuses unchanged layers, but the tag alone cannot identify source.
+    build_image
     session=$(random_hex); key=$(random_hex); proof=$(random_hex)
     printf '%s\n' "$session" > "$TEAM_DIR/session"
     printf '%s\n' "$key" > "$TEAM_DIR/settlement-key"

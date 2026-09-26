@@ -21,7 +21,7 @@ cd examples/nightshift-bash
 ./gameday.sh shell team1
 ```
 
-Inside the container, read `/srv/nightshift/START-HERE.en.md` (Japanese: `START-HERE.md`). For English hints, the organizer can run `./gameday.sh hint 1 1 en`; replace the two numbers with the mission and hint step. Image construction requires network access; the running exercise container has no network access.
+Inside the container, read `/srv/nightshift/START-HERE.en.md` (Japanese: `START-HERE.md`). For English hints, the organizer can run `./gameday.sh hint 1 1 en`; replace the two numbers with the mission and hint step. Each new exercise rebuilds from the checked-out source, reusing unchanged Docker layers instead of trusting an existing version tag. Image construction requires network access; the running exercise container has no network access.
 
 After collecting evidence, exit and run:
 
@@ -57,7 +57,7 @@ An optional Linux-root test backend is `sudo bash tests/run.sh namespace`. It us
 
 ## Verification status
 
-Docker build and the full integration suite passed on 2026-09-27 using Docker 29.6.1 on macOS/Colima: **56 assertions**, including a reference repair scoring **1000/1000** and two actual batch-service restarts. The application tmpfs explicitly allows execution of the exercise scripts; `/run` and `/tmp` remain `noexec`. The earlier Linux namespace results are retained in `docs/VERIFICATION.md`; current evidence and untested boundaries are in [PR verification](docs/PR-VERIFICATION.md).
+Docker build and the full integration suite passed on 2026-09-27 using Docker 29.6.1 on macOS/Colima: **65 assertions**, including a reference repair scoring **1000/1000** and two actual batch-service restarts. The application tmpfs explicitly allows execution of the exercise scripts; `/run` and `/tmp` remain `noexec`. The earlier Linux namespace results are retained in `docs/VERIFICATION.md`; current evidence and untested boundaries are in [PR verification](docs/PR-VERIFICATION.md).
 
 This package is **not integrated with TenkaCloud**. `docs/TENKACLOUD.md` describes the missing trusted host adapter; the score JSON is a standalone contract, not a supported TenkaCloud `/verify` response.
 

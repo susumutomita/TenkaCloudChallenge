@@ -18,6 +18,7 @@ cleanup() {
             docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
         fi
     fi
+    if [[ $backend == docker && $IMAGE == nightshift-bash:test-* ]]; then docker image rm "$IMAGE" >/dev/null 2>&1 || true; fi
     [[ $TEST_TEMP == */nightshift-tests.* ]] && rm -rf -- "$TEST_TEMP"
 }
 trap cleanup EXIT
@@ -25,6 +26,9 @@ if [[ $backend == docker ]]; then
     source "$PACKAGE_ROOT/lib/docker.sh"
     require_docker
     build_image
+    IMAGE="nightshift-bash:test-$$"
+    # Simulate an old existing tag; start must rebuild from the current sources.
+    printf 'FROM nightshift-bash:0.1.0\nLABEL org.tenkacloud.nightshift.stale=1\n' | docker build -t "$IMAGE" -
     NIGHTSHIFT_INTERVAL=0 start_container
 else
     [[ $EUID -eq 0 ]] || { echo 'namespace backend requires Linux root and unshare user mappings.' >&2; exit 1; }
@@ -48,6 +52,11 @@ grade() { SCORE_FORMAT=json; RESULT=$(collect_score); }
 reference_repair() { lab_exec 1200 /bin/bash -s < "$PACKAGE_ROOT/tests/reference-repair.sh"; }
 
 printf '# Nightshift integration / backend=%s\n' "$backend"
+if [[ $backend == docker ]]; then
+    stale=$(docker inspect --format '{{ index .Config.Labels "org.tenkacloud.nightshift.stale" }}' "$CONTAINER")
+    [[ $stale != 1 ]] || fail 'start reused a stale runtime image'
+    pass 'start rebuilds current sources even when its image tag already exists'
+fi
 english=$(lab_exec 1100 /usr/bin/cat /srv/nightshift/START-HERE.en.md)
 assert_contains "$english" 'Start with `id`' 'English participant introduction is readable in the container'
 for mission in 1 2 3; do
@@ -220,6 +229,57 @@ grade
 assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'replaceable ancestor of protected command is rejected'
 lab_exec 1200 /usr/bin/chmod 0755 /srv/nightshift/vendor
 reference_repair
+# Read-only does not mean protected when auditor still owns the inode.
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor/bin
+lab_exec 1100 /bin/bash -s <<'OWNED'
+set -euo pipefail
+cat > /srv/nightshift/vendor/bin/render-receipt <<'APP'
+#!/bin/bash
+exec /srv/nightshift/app/bin/render-receipt "$@"
+APP
+chmod 0555 /srv/nightshift/vendor/bin/render-receipt
+OWNED
+lab_exec 1200 /bin/bash -c 'chmod 0755 /srv/nightshift/vendor/bin; printf "export PATH=/srv/nightshift/vendor/bin:/srv/nightshift/app/bin:/usr/bin:/bin\n" > /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'auditor-owned read-only executable is rejected'
+reference_repair
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor/bin
+printf '%s\n' "$good_key" | lab_exec 1100 /bin/bash -c 'cat > /srv/nightshift/vendor/bin/key; chmod 0004 /srv/nightshift/vendor/bin/key'
+lab_exec 1200 /bin/bash -c 'chmod 0755 /srv/nightshift/vendor/bin; rm /srv/nightshift/backup/settlement.key; ln -s /srv/nightshift/vendor/bin/key /srv/nightshift/backup/settlement.key'
+grade
+assert_contains "$RESULT" '"backupProtected":0' 'auditor-owned unreadable backup target is rejected'
+lab_exec 1200 /usr/bin/rm /srv/nightshift/backup/settlement.key
+printf '%s\n' "$good_key" | lab_exec 1200 /bin/bash -c 'umask 027; cat > /srv/nightshift/backup/settlement.key'
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor/bin
+lab_exec 1100 /bin/bash -c 'printf "#!/bin/bash\ntrue\n" > /srv/nightshift/vendor/bin/startup; chmod 0555 /srv/nightshift/vendor/bin/startup'
+lab_exec 1200 /bin/bash -c 'chmod 0755 /srv/nightshift/vendor/bin; ln -s /srv/nightshift/vendor/bin/startup /srv/nightshift/app/startup.d/50-linked.sh'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'protected startup directory cannot hide an auditor-owned hook'
+lab_exec 1200 /usr/bin/rm /srv/nightshift/app/startup.d/50-linked.sh
+# Owner can re-enable search/write permissions on a locked directory too.
+lab_exec 1200 /usr/bin/chmod 0777 /srv/nightshift/vendor
+lab_exec 1100 /bin/bash -c 'mkdir /srv/nightshift/vendor/owned; chmod 0000 /srv/nightshift/vendor/owned'
+lab_exec 1200 /bin/bash -c 'chmod 0755 /srv/nightshift/vendor; printf "export PATH=/srv/nightshift/vendor/owned:/srv/nightshift/app/bin:/usr/bin:/bin\n" > /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'auditor-owned non-searchable PATH ancestor is rejected'
+reference_repair
+# Sticky directory removal uses the link inode owner, not its target owner.
+lab_exec 1100 /usr/bin/ln -s /srv/nightshift/app/bin/render-receipt /tmp/render-receipt
+lab_exec 1200 /bin/bash -c 'printf "export PATH=/tmp:/srv/nightshift/app/bin:/usr/bin:/bin\n" > /srv/nightshift/app/config/runtime.env'
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'auditor-owned symlink in sticky directory remains replaceable'
+lab_exec 1100 /usr/bin/rm /tmp/render-receipt
+reference_repair
+# A complete-file verdict must not silently grade only the first MiB.
+lab_exec 1300 /bin/bash -c 'head -c 1048577 /dev/zero | tr "\\0" " " >> /srv/nightshift/orders/receipts.csv'
+grade
+assert_contains "$RESULT" '"repair":0,"service":0' 'oversized receipts fail instead of grading a truncated prefix'
+lab_exec 1300 /bin/bash -c ': > /srv/nightshift/orders/receipts.csv; head -c 1048577 /dev/zero | tr "\\0" " " >> /srv/nightshift/orders/rejected.csv'
+grade
+assert_contains "$RESULT" '"repair":0,"service":0' 'oversized rejections fail instead of grading a truncated prefix'
+lab_exec 1300 /bin/bash -c ': > /srv/nightshift/orders/rejected.csv'
+grade
+assert_contains "$RESULT" '"score":1000,' 'complete output validation recovers after operator clears oversized fixtures'
 # A restart hook which breaks only on its second invocation must not keep stale points.
 lab_exec 1200 /bin/bash -s <<'FLAKY'
 set -euo pipefail
