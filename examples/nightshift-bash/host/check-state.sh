@@ -152,8 +152,12 @@ path_check() {
     done
     # This exercise config is data: one PATH assignment, comments and blanks.
     # Never evaluate arbitrary Bash/function/alias/hash overrides in the grader.
-    local config line value count=0
+    local config line value controls count=0
     config=$(read_output "$LAB/app/config/runtime.env") || return 1
+    # Bash only treats space/tab as assignment separators. CR/VT/FF must not
+    # be normalized by the regex into a different path than the worker uses.
+    controls=$(printf '%s' "$config" | /usr/bin/tr -d '\11\12')
+    [[ ! $controls =~ [[:cntrl:]] ]] || return 1
     local assignment='^[[:space:]]*(export[[:space:]]+)?PATH=([^[:space:]]+)[[:space:]]*$'
     while IFS= read -r line; do
         [[ $line =~ ^[[:space:]]*(#.*)?$ ]] && continue

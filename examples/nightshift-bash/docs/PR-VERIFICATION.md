@@ -7,8 +7,9 @@ Base: `susumutomita/TenkaCloudChallenge` main at `5704cee278ede234c103e8fe5c9a6e
 - Reproduced the Docker CI failure: the auditor-created command could not execute on the application tmpfs. Docker mounts tmpfs with `noexec` unless overridden.
 - Enabled `exec` only for `/srv/nightshift`, which intentionally contains executable exercise scripts. Kept `nosuid`, `nodev`, read-only rootfs, network isolation, and `/run` and `/tmp` `noexec`.
 - `make syntax`: passed for all Bash scripts and executables.
-- `bash tests/run.sh docker`: **80/80 passed**, using the real Docker build and runtime. Reference repair reached **1000/1000**, including two batch-service restarts. The grader rejects deleted keys, disabled processing, forged score files, and repairs that regress on restart.
+- `bash tests/run.sh docker`: **82/82 passed**, using the real Docker build and runtime. Reference repair reached **1000/1000**, including two batch-service restarts. The grader rejects deleted keys, disabled processing, forged score files, and repairs that regress on restart.
 - Additional cases reject owner-controlled read-only executables/configuration paths, backup targets, startup hooks and sticky-directory links; oversized outputs fail explicitly, and an existing stale image tag is rebuilt on start.
+- A CR-ended PATH assignment is rejected even when it runs valid service code from a different writable directory; this checks parser/worker byte agreement.
 - Batch daemons from the audit phase and background descendants of startup hooks are revoked. A separate real TTY CLI run kept a shell open: score and repair both failed with exit 75; after shell exit, both operations succeeded.
 - Transitive forwarding wrappers and modified workers fail protection checks. A real Docker auditor process holds a writable file descriptor across chmod; grading closes it before awarding the trusted repair.
 - Configuration-function/hash overrides, inaccessible path descendants and NUL-corrupted outputs are rejected; quoted PATH/comments and valid output recovery pass.

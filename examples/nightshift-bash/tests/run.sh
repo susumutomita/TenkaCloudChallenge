@@ -390,6 +390,13 @@ DAEMON
     assert_contains "$RESULT" '"score":1000,' 'trusted processing still completes after startup descendants are revoked'
     lab_exec 1200 /usr/bin/rm /srv/nightshift/app/startup.d/50-background.sh /home/operator/background-pid
 fi
+# CR is part of a Bash assignment, not ignorable trailing whitespace.
+lab_exec 1200 /bin/bash -c 'mkdir $'"'"'/srv/nightshift/app/bin\r'"'"'; chmod 0777 $'"'"'/srv/nightshift/app/bin\r'"'"'; printf "export PATH=/srv/nightshift/app/bin\r\n" > /srv/nightshift/app/config/runtime.env'
+lab_exec 1100 /bin/bash -c 'cp /opt/nightshift/seed/app/bin/render-receipt $'"'"'/srv/nightshift/app/bin\r/render-receipt'"'"'; chmod 0755 $'"'"'/srv/nightshift/app/bin\r/render-receipt'"'"''
+grade
+assert_contains "$RESULT" '"pathProtected":0,"durable":0' 'carriage-return PATH cannot validate an unrelated clean directory'
+assert_contains "$RESULT" '"validOrders":1,"deduplication":1,"invalidRejected":1' 'CR regression really executes working code from the unvalidated directory'
+reference_repair
 # A restart hook which breaks only on its second invocation must not keep stale points.
 lab_exec 1200 /bin/bash -s <<'FLAKY'
 set -euo pipefail
