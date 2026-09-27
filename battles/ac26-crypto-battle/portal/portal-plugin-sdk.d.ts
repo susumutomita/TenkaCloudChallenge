@@ -70,6 +70,8 @@ declare module "@tenkacloud/portal-plugin-sdk" {
      */
     readonly coordinationClient?: PortalCoordinationClient;
     readonly nowIso: string;
+    /** ISO 8601 scoring end time of the event; undefined when the event has no end time. */
+    readonly eventEndsAt?: string;
   }
 
   /**
