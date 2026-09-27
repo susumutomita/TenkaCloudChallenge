@@ -1,0 +1,35 @@
+# Nightshift integration / backend=namespace
+ok 01 - auditor cannot read batch-only proof token
+ok 02 - operator is not root and cannot read batch-only token
+ok 03 - auditor cannot modify the trusted runtime
+ok 04 - operator cannot modify the trusted runtime
+ok 05 - grader is absent from the participant image
+ok 06 - new deployment earns no points
+ok 07 - live environment cannot be initialized twice
+ok 08 - submission symlink does not grant supervisor-read authority
+ok 09 - all three real discoveries score 300
+ok 10 - repeated evidence submission is idempotent
+ok 11 - discovery submissions freeze when repair begins
+ok 12 - vulnerable but working service earns no repair points
+ok 13 - probe restores participant executable byte-for-byte
+ok 14 - temporary repair works before restart
+ok 15 - startup regression is detected after restart
+ok 16 - reference repair reaches 1000 with real receipts
+ok 17 - restart, free items, decimal padding, duplicates and malformed orders pass
+ok 18 - repeated scoring stays at 1000
+ok 19 - repaired key is unreadable by auditor
+ok 20 - repaired vendor directory is not writable by auditor
+ok 21 - chmod 000 is rejected because business processing fails
+ok 22 - a replaced key cannot forge expected receipts
+ok 23 - an always-successful but stopped worker earns no repair points
+ok 24 - deleting the key is not counted as securing it
+ok 25 - service can recover after deliberate destructive fixes
+ok 26 - participant-supplied score files have no authority
+ok 27 - existing writable executable defeats directory-only hardening
+ok 28 - in-place probe restores bytes and executable remains usable
+ok 29 - second-restart regression replaces the first snapshot
+ok 30 - a one-shot repair does not earn durability points
+ok 31 - full repair recovers after second-restart regression
+ok 32 - invalid team path is rejected before runtime access
+ok 33 - destructive reset requires --yes
+# PASS: 33 assertions; backend=namespace
