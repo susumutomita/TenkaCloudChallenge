@@ -232,6 +232,7 @@ export const FAST_MOVE_COPY = {
     ended: "MATCH ENDED",
     endedBody:
       "This match ran its full length and is over. Scores and the Public Ledger are kept as they finished. An organiser can start a fresh match for this event from the admin API; re-deploying the problem does not, on purpose, because it would wipe a match other teams are still playing.",
+    eventEndedBody: "The event has ended. Check the final ranking on the scoreboard.",
     waitingTitle: "WAITING FOR THE ROOM",
     waitingBody:
       "Nothing is running yet. The match begins once every team says it is ready — Orders start arriving then, and the clock starts with them. A match set up ahead of time costs you nothing while it waits.",
@@ -390,6 +391,7 @@ export const FAST_MOVE_COPY = {
     ended: "MATCH ENDED",
     endedBody:
       "この試合は時間いっぱい進んで終了しました。得点と Public Ledger は終了時のまま残ります。新しい試合を始めるには運営が admin API から reset します。問題を deploy し直しても再開しないのは意図的で、他チームが進行中の試合を消してしまうためです。",
+    eventEndedBody: "イベントは終了しました。最終順位はスコアボードで確認できます。",
     waitingTitle: "全員がそろうのを待っています",
     waitingBody:
       "まだ何も動いていません。全チームが準備完了になった時点で始まり、そこから ORDER が届き、時計も動きはじめます。先に用意しておいた試合が、待っているあいだに減点されることはありません。",
@@ -485,6 +487,17 @@ export function outcomeError(outcome: PortalCoordinationOutcome, locale: Locale)
   if (outcome.kind === "rejected" && (outcome.error === "submitted ciphertext does not decrypt to the requested sum" || outcome.error === "submitted ciphertext's first component is not the sum of the Order's first components")) {
     return locale === "ja" ? "暗号文の合計が一致しません。左どうし・右どうしを足し、それぞれ割った余りを確認してください。期限内なら再提出できます。" : "The encrypted total does not match. Add each column separately and check both remainders. You can retry before the deadline.";
   }
+  // The dispatcher returns `event_ended` both before the event starts and after it ends.
+  if (outcome.kind === "rejected" && outcome.error === "event_ended") {
+    return locale === "ja"
+      ? "現在は提出を受け付けていません。イベントの開始前か、終了後です。"
+      : "Submissions are closed. The event has not started yet or has already ended.";
+  }
+  if (outcome.kind === "rejected" && outcome.error === "scoring_locked") {
+    return locale === "ja"
+      ? "運営が採点を一時停止しています。再開してからもう一度送ってください。"
+      : "The organizer has paused scoring. Submit again after it resumes.";
+  }
   if (outcome.kind === "rejected") return rpsRejection(outcome.error, locale);
   if (outcome.kind === "not_configured") return locale === "ja" ? "coordination が未設定です。" : "Coordination is not configured.";
   return FAST_MOVE_COPY[locale].unavailable;
@@ -494,9 +507,17 @@ function liveProjection(outcome: PortalCoordinationOutcome): CryptoBattleProject
   return outcome.kind === "ok" && isCryptoBattleProjection(outcome.projection) ? outcome.projection : undefined;
 }
 
-function isClosed(projection: CryptoBattleProjection | null): boolean {
-  if (!projection || projection.phase === "waiting") return false;
-  return projection.phase === "ended" || (projection.matchRemainingMs ?? 1) <= 0;
+/** "event": the event's end time passed, whatever this team's match projection says. "match": the match clock ran out. */
+export type ClosedReason = "event" | "match" | null;
+
+export function closedReason(projection: CryptoBattleProjection | null, eventOver = false): ClosedReason {
+  if (eventOver) return "event";
+  if (!projection || projection.phase === "waiting") return null;
+  return projection.phase === "ended" || (projection.matchRemainingMs ?? 1) <= 0 ? "match" : null;
+}
+
+export function isClosed(projection: CryptoBattleProjection | null, eventOver = false): boolean {
+  return closedReason(projection, eventOver) !== null;
 }
 
 /** [Issue #677] Deployed, nobody has started it: the belt is empty on purpose. */
@@ -513,8 +534,8 @@ function matchMinutes(projection: CryptoBattleProjection): number {
   return (projection.matchRemainingMs ?? 0) / 60_000;
 }
 
-function openOrders(projection: CryptoBattleProjection | null): readonly ContractProjection[] {
-  if (!projection || isClosed(projection)) return [];
+function openOrders(projection: CryptoBattleProjection | null, eventOver = false): readonly ContractProjection[] {
+  if (!projection || isClosed(projection, eventOver)) return [];
   return projection.myContracts.filter((order) => order.status === "open" && order.remainingMs > 0);
 }
 
@@ -1055,6 +1076,19 @@ export function readyFeedback(next: CryptoBattleProjection | undefined, locale: 
   return { kind: "prove", title: copy.startSuccess, body: copy.startBody };
 }
 
+export function EndedView({ locale, reason }: { readonly locale: Locale; readonly reason: "event" | "match" }) {
+  const copy = FAST_MOVE_COPY[locale];
+  return (
+    <section className="tc-move-shell" aria-label="crypto-battle-ended">
+      <style>{CSS}</style>
+      <div className="tc-gate">
+        <strong className="tc-gate-title">{copy.ended}</strong>
+        <p className="tc-gate-body">{reason === "event" ? copy.eventEndedBody : copy.endedBody}</p>
+      </div>
+    </section>
+  );
+}
+
 export default function FastMovePanel(props: PortalSlotProps) {
   const locale: Locale = props.locale === "ja" ? "ja" : "en";
   const copy = FAST_MOVE_COPY[locale];
@@ -1134,7 +1168,11 @@ export default function FastMovePanel(props: PortalSlotProps) {
     [polledProjection, projectionAtMs, nowMs],
   );
 
-  const orders = useMemo(() => openOrders(projection), [projection]);
+  // The projection only knows the match clock, so an organizer's End Event arrives through
+  // `eventEndsAt`. A rejected `event_ended` cannot stand in for it: it is also returned before the start.
+  const eventEndsAtMs = props.eventEndsAt === undefined ? undefined : Date.parse(props.eventEndsAt);
+  const eventOver = eventEndsAtMs !== undefined && eventEndsAtMs <= nowMs;
+  const orders = useMemo(() => openOrders(projection, eventOver), [projection, eventOver]);
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0];
   const selectedCipher = selectedOrder?.task.kind === "caesar-shift" ? selectedOrder.task : undefined;
   const cipherFormatExample = selectedCipher?.plaintext
@@ -1229,6 +1267,9 @@ export default function FastMovePanel(props: PortalSlotProps) {
     run(task, success, selectedOrder);
 
   if (!client) return <p role="status">{locale === "ja" ? "試合に接続できません。ページを再読み込みし、直らなければ運営に連絡してください。" : "Cannot connect to the match. Reload the page; if the problem persists, contact the event organizer."}</p>;
+  // Before the waiting room: a team that never readied must not keep a READY button after the event ends.
+  const closed = closedReason(projection, eventOver);
+  if (closed) return <EndedView locale={locale} reason={closed} />;
   if (!projection) return <section className="tc-move-shell"><style>{CSS}</style><div role="status">{polled.status === null ? (locale === "ja" ? "最初の更新を待っています" : "Waiting for the first match update") : copy.unavailable}</div></section>;
   {/*
     [Issue #677] Two dead ends used to look identical: a match that had not
@@ -1279,17 +1320,6 @@ export default function FastMovePanel(props: PortalSlotProps) {
             >{copy.startAnyway}</button>
           ) : null}
           {feedback ? <p className="tc-gate-note">{feedback.body}</p> : null}
-        </div>
-      </section>
-    );
-  }
-  if (isClosed(projection)) {
-    return (
-      <section className="tc-move-shell" aria-label="crypto-battle-ended">
-        <style>{CSS}</style>
-        <div className="tc-gate">
-          <strong className="tc-gate-title">{copy.ended}</strong>
-          <p className="tc-gate-body">{copy.endedBody}</p>
         </div>
       </section>
     );
