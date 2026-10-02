@@ -31,6 +31,10 @@ No EC2 / VPC / public endpoint is created. SSM Standard tier is free.
 
 ## How to solve
 
+Start with **Tools -> SSO Credentials** and use only the access methods shown for this problem. The current cloud-hosting path provides CLI credentials for at most 15 minutes, restricted to this one parameter. It does not provide Console or CloudShell access. Follow the credential panel's setup instructions in a terminal with the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html), and check the displayed expiry. Do not share or commit the keys.
+
+The template retains its existing Console/CloudShell permissions for dedicated-account hosting. A platform can narrow those permissions with an inline STS policy; the template alone is not evidence that shared-account Console access is isolated. The screen steps below apply only when the corresponding Console entry is available.
+
 Open the `ParameterConsoleUrl` output from the Participant Portal. It lands directly on this stack's SSM Parameter detail page in the AWS Console. The `TC{…}` string in the Value field is the flag. Or use the CLI:
 
 ```bash

@@ -31,6 +31,10 @@ EC2 / VPC / 公開エンドポイントは作らない。 SSM Standard tier は�
 
 ## 解き方
 
+最初に **「ツール」 → 「SSO 資格情報」** を開き、この問題に表示される入口だけを使う。現在のクラウド開催では、このパラメータだけを読み取る CLI 用の鍵を最長 15 分で発行する。Console と CloudShell は提供しない。[AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) を用意した端末で資格情報パネルの設定手順を使い、表示された有効期限を確認する。鍵を他の人へ共有したり、commit したりしない。
+
+template には、専用 account での開催に使う既存の Console / CloudShell 権限を残している。基盤は STS の追加ポリシーで権限を狭めるため、template だけで共有 account の Console 分離を保証するものではない。以下の画面操作は Console の入口が表示される開催環境だけで使う。
+
 Participant Portal の `ParameterConsoleUrl` Output は deep link になっており、クリックすると AWS Console の SSM Parameter 詳細ページに直接着地する。Value 欄の `TC{…}` がそのまま flag。もしくは CLI:
 
 ```bash

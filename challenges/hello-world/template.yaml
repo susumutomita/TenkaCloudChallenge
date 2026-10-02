@@ -43,6 +43,19 @@ Resources:
   ParticipantViewerRole:
     Type: AWS::IAM::Role
     Properties:
+      # Public ownership metadata for the operator's AssumeRole permission boundary.
+      # ExternalId here is the deployment job ID, never the bootstrap/SSM secret.
+      Tags:
+        - Key: TenkaCloud:Purpose
+          Value: participant-viewer
+        - Key: TenkaCloud:ProblemId
+          Value: hello-world
+        - Key: TenkaCloud:JobId
+          Value: !Ref ExternalId
+        - Key: TenkaCloud:OperatorAccount
+          Value: !Ref TenkaCloudAccountId
+        - Key: TenkaCloud:StackId
+          Value: !Ref AWS::StackId
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
