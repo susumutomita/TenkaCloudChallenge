@@ -1,4 +1,4 @@
-# Split it, and still nobody knows
+# Secret Sharing: What Do Shares Reveal?
 
 > This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
 > It is not affiliated with or endorsed by the course or its operators. All problem statements,
