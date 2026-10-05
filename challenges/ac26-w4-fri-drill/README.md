@@ -1,4 +1,4 @@
-# Catch an altered polynomial fold
+# FRI: Detect Polynomial Tampering
 
 > Independent, unofficial companion to Advanced Cryptography Program 2026. Not affiliated with or endorsed by its operators.
 

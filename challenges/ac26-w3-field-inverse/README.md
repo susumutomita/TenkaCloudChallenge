@@ -1,4 +1,4 @@
-# Build the field before the curve
+# Finite Fields: Find the Inverse
 
 > Independent, unofficial companion to Advanced Cryptography Program 2026. Not affiliated with or endorsed by its course operators.
 

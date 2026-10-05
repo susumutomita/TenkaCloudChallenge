@@ -1,4 +1,4 @@
-# What did you leave out of the hash
+# Schnorr: Find the Missing Hash Input
 
 > This track is an independent, unofficial companion to the Advanced Cryptography Program 2026.
 > It is not affiliated with or endorsed by the course or its operators. All problem statements,
