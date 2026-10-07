@@ -4,12 +4,14 @@
 
 **AWSなしで動く日本語のローカル試作**です。TenkaCloudのカタログ・本体local hostには未登録です。[設計](DESIGN.ja.md)と[原稿・独立数学レビュー](RESEARCH.md)も参照してください。
 
+監査対象はプレイヤーの有限の主張で、研究原稿の間違い探しではありません。ゼロ・混合配置・片側の条件へ逃げ道を残さず道具を作る部分が、突破案の体験です。[本体競技としての登録変更と完了条件](INTEGRATION.ja.md)を明記しています。`_pi-siege`は本体のmetadata走査から外した暫定配置で、連携登録時に正規名へ移します。
+
 ## 遊ぶ
 
 Bunとブラウザを使います。AWS・外部API・有料処理は使いません。
 
 ```sh
-cd battles/pi-siege
+cd battles/_pi-siege
 make install
 make dev
 ```
@@ -47,6 +49,8 @@ make browser-test
 ```
 
 ブラウザ試験は`playwright-core`とインストール済みの対応Chromiumを使い、ダウンロードしません。必要なら`BROWSER_EXECUTABLE`へ実行ファイルを指定します。画像はgit対象外の`reports/browser/`へ出力し、`BROWSER_OUTPUT_DIR`で変更できます。
+
+専用GitHub Actionsは同じテストに加え、固定Playwright版のChromiumとLinux依存を明示的にインストールしてブラウザ対戦を実行します。ローカルの`make browser-test`自体はインストールしません。
 
 2つの独立ブラウザ席で画面だけを操作し、4ラウンド・8主張、公開前の非表示、再読み込み、受理後の応答喪失と同一再送、手計算の混合配置、精算・終了解説・スマホ幅を確認。別テストで分数演算、独立列挙、不正入力、同時書込み、監査再利用、券切れ、不変性、行枚数保存を検査します。独立数学レビューは丸め・負の整数・行列式・上限と実値の混同などの欠陥を発見し、修正しました。
 

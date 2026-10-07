@@ -1,6 +1,7 @@
-import { applyOp, initialState, projectForTeam, validateOp } from "../game/reducer.ts";
+import plugin from "../coordination/pi-siege.ts";
 import type { Op, State } from "../game/types.ts";
 const here = new URL(".", import.meta.url).pathname;
+const { applyOp, initialState, projectForTeam, validateOp } = plugin;
 const fresh = () => initialState({ eventId: "local-pi-siege", teamIds: ["alpha", "bravo"], teamNames: { alpha: "青チーム", bravo: "橙チーム" } });
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
 

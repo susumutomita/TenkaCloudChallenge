@@ -4,12 +4,14 @@ Two players build records and guarantees, then challenge gaps in each other's pu
 
 This is a runnable **local prototype with a Japanese interface**. It is not registered in the TenkaCloud catalog or native local host. English documentation does not imply an English Portal interface. See [日本語](README.ja.md), [design](DESIGN.ja.md) and [research/review](RESEARCH.md).
 
+Audits target players' finite claims, not errors in the manuscript. Constructing tools that cover zero, mixed arrangements and both parameter conditions is the experience of the proposed strategy. [Native competition integration and acceptance criteria](INTEGRATION.ja.md) specify the remaining work. `_pi-siege` is deliberately excluded from the native metadata-directory scan until coordinated registration.
+
 ## Play locally
 
 Requires Bun and a browser. The game uses no AWS account, cloud resources, external APIs or paid computation.
 
 ```sh
-cd battles/pi-siege
+cd battles/_pi-siege
 make install
 make dev
 ```
@@ -31,7 +33,7 @@ After playing, discuss: four type-0 cards have degrees 0,1,2,3, sum 6. Two of ea
 
 ## Runtime boundaries
 
-`coordination.ts` exposes the existing pure hook shape; `portal/StatusPanel.tsx` is the real Portal slot. The Bun harness composes the same authoritative reducer and component with an injected coordination client. SDK imports are type-only; no platform SDK runtime is bundled. The narrow declaration contract was copied from TenkaCloud `05ffed84`.
+`coordination/pi-siege.ts` exposes the existing pure hook shape; `portal/StatusPanel.tsx` is the real Portal slot. The Bun harness composes the same authoritative reducer and component with an injected coordination client. SDK imports are type-only; no platform SDK runtime is bundled. The narrow declaration contract was copied from TenkaCloud `05ffed84`.
 
 The server binds to `127.0.0.1`, checks Host/Origin and bounds operation bodies. Scores, tickets, turns and calculations are server-owned. Unknown fields and stale revisions are rejected. Identical request ID/body retries are idempotent even across rounds; changing that body is rejected. Experiments are private until publication. Row counts are captured with experiments, preventing later upgrades from retroactively strengthening a claim.
 
@@ -47,6 +49,8 @@ make browser-test
 ```
 
 The browser test uses `playwright-core` and an already installed matching Chromium; it never downloads a browser. Set `BROWSER_EXECUTABLE` to an installed Chrome/Chromium executable if needed. Screenshots go to ignored `reports/browser/`; override with `BROWSER_OUTPUT_DIR`.
+
+The dedicated GitHub Actions workflow explicitly installs pinned Playwright Chromium and Linux dependencies before running the same browser match. The local browser command itself still does not install them.
 
 The automated match drives visible controls in two isolated contexts: four rounds/eight claims, lost response and exact retry, private trial and refresh, a hand-calculated mixed arrangement, settlement/debrief, and mobile width. Unit tests cover exact arithmetic, independent enumeration, hostile inputs, concurrent stale writes, failed/repeated audits, exhaustion, immutability and row snapshots. Independent mathematical review found real defects and verified the repairs; see RESEARCH.md.
 

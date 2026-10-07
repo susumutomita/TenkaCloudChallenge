@@ -12,6 +12,6 @@
       "react-dom/server": ["node_modules/@types/react-dom/server"]
     }
   },
-  "include": ["game/**/*.ts", "portal/**/*.ts", "portal/**/*.tsx", "dev/**/*.ts", "dev/**/*.tsx", "tests/**/*.ts"],
+  "include": ["coordination/**/*.ts", "game/**/*.ts", "portal/**/*.ts", "portal/**/*.tsx", "dev/**/*.ts", "dev/**/*.tsx", "tests/**/*.ts"],
   "exclude": ["node_modules"]
 }

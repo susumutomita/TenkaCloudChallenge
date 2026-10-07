@@ -1,6 +1,5 @@
-:root { color-scheme: light; font-family: -apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif; background:#f4f1e8; color:#172f33; }
-* { box-sizing:border-box; }
-body { margin:0; }
+.pi-root,.pi-toolbar { color-scheme: light; font-family: -apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif; background:#f4f1e8; color:#172f33; box-sizing:border-box; }
+.pi-root *,.pi-toolbar * { box-sizing:border-box; }
 .pi-root { max-width:1000px; margin:auto; padding:24px; line-height:1.8; }
 .pi-heading { display:flex; align-items:center; justify-content:space-between; padding:8px 0 24px; }
 .pi-heading h1 { font-size:clamp(34px,6vw,56px); line-height:1.1; margin:0; letter-spacing:.05em; }

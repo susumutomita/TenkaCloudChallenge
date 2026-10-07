@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PortalCoordinationClient, PortalSlotProps } from "@tenkacloud/portal-plugin-sdk";
 import type { Claim, Op, Projection, Task } from "../game/types.ts";
 import { debrief, errors, rounds } from "./content.ts";
+import "./style.css";
 
 function isProjection(v: unknown): v is Projection {
   if (typeof v !== "object" || v === null) return false;
@@ -141,7 +142,7 @@ function Connected({ client }: { client: PortalCoordinationClient }) {
     <header className="pi-heading"><div><p className="pi-kicker">近づく記録と、逃げ道を塞ぐ競技</p><h1>π包囲戦</h1></div><div className="pi-circle" aria-hidden="true">π</div></header>
     <div className="pi-scoreboard"><div><span>{p.me.name}</span><strong>{p.me.score}<small>点</small></strong></div><div><span>{opponent?.name}</span><strong>{opponent?.score}<small>点</small></strong></div><div><span>自分の行動券</span><strong>{p.me.tickets}<small>枚</small></strong></div></div>
     {error && <div role="alert" className="pi-error">{error}{retry && <button disabled={busy} onClick={() => void deliver()}>同じ操作を再送</button>}</div>}
-    {p.phase === "waiting" && <section className="pi-intro"><h2>直径1の円を、分数で測る係になろう</h2><p>相手と記録を競い、公開された主張の逃げ道を突きます。後半は論文の「なぜ昔は難しかったか」「どう限界を示そうとしたか」を小さい数で体験します。</p><p>まず分数3/1を試すと、πからの誤差が返ります。4ラウンド、各6枚の券。試す・強化・公開・監査へどう配るかは自分で選びます。</p><p>公開された主張が成立すると+6、反例を示すと+4、誤った主張は−3。両者の有効な主張を比べ、強い方に+2。起動や待機では得点しません。</p><button disabled={busy || p.me.ready} onClick={() => void send({ kind: "ready" })}>{p.me.ready ? "相手の準備を待っています" : "準備完了"}</button><p>{p.me.ready ? "1" : "0"} / 1 自分の準備 · 相手は{opponent?.ready ? "準備完了" : "準備中"}</p></section>}
+    {p.phase === "waiting" && <section className="pi-intro"><h2>直径1の円を、分数で測る係になろう</h2><p>相手と記録を競い、公開された主張の逃げ道を突きます。後半は論文の「なぜ昔は難しかったか」「どう限界を示そうとしたか」を小さい数で体験します。</p><p>監査するのはプレイヤーの有限の主張です。研究原稿の誤りを見つける競技ではありません。突破案の体験は、ゼロ・混合配置・片側の条件に逃げ道を残さず道具を作ることです。</p><p>まず分数3/1を試すと、πからの誤差が返ります。4ラウンド、各6枚の券。試す・強化・公開・監査へどう配るかは自分で選びます。</p><p>公開された主張が成立すると+6、反例を示すと+4、誤った主張は−3。両者の有効な主張を比べ、強い方に+2。起動や待機では得点しません。</p><button disabled={busy || p.me.ready} onClick={() => void send({ kind: "ready" })}>{p.me.ready ? "相手の準備を待っています" : "準備完了"}</button><p>{p.me.ready ? "1" : "0"} / 1 自分の準備 · 相手は{opponent?.ready ? "準備完了" : "準備中"}</p></section>}
     {p.phase === "playing" && <>
       <nav className="pi-rounds" aria-label="試合の進行">{rounds.map((r, i) => <span aria-current={p.round === i ? "step" : undefined} key={r.title}>{i + 1}. {r.title}</span>)}</nav>
       <section className="pi-intro"><p className="pi-kicker">ROUND {p.round + 1} · {rounds[p.round].badge}</p><h2>{rounds[p.round].title}</h2><p>{rounds[p.round].story}</p><p className="pi-goal">{rounds[p.round].goal}</p><details><summary>無料の式と小さい例</summary><p>{rounds[p.round].rule}</p><p>{rounds[p.round].link}</p></details>
@@ -155,7 +156,7 @@ function Connected({ client }: { client: PortalCoordinationClient }) {
       </section>
       <button className="pi-secondary pi-pass" disabled={disabled} onClick={() => void send({ kind: "pass" })}>このラウンドの行動を終える（残りの券は持ち越さない）</button>
     </>}
-    {p.phase === "ended" && <section className="pi-debrief"><p className="pi-kicker">試合終了 · 有限の競技から論文へ</p><h2>{p.me.score === opponent?.score ? "引き分け" : p.me.score > (opponent?.score ?? 0) ? `${p.me.name}の勝ち` : `${opponent?.name}の勝ち`}</h2><p>得点はこの小さい模型での記録・保証・監査の結果です。πの定理を証明した得点ではありません。</p>{debrief.map((text, i) => <article key={text}><h3>{["記録と無限の問い", "歴史的な難所", "原稿の突破案", "二つの道を同時に塞ぐ", "なぜ2が境界に現れるか", "検証範囲"][i]}</h3><p>{text}</p></article>)}
+    {p.phase === "ended" && <section className="pi-debrief"><p className="pi-kicker">試合終了 · 有限の競技から論文へ</p><h2>{p.me.score === opponent?.score ? "引き分け" : p.me.score > (opponent?.score ?? 0) ? `${p.me.name}の勝ち` : `${opponent?.name}の勝ち`}</h2><p>得点はこの小さい模型での記録・保証・監査の結果です。πの定理を証明した得点ではありません。監査が成功しても、研究原稿の定理を反証したことにはなりません。</p>{debrief.map((text, i) => <article key={text}><h3>{["記録と無限の問い", "歴史的な難所", "原稿の突破案", "二つの道を同時に塞ぐ", "なぜ2が境界に現れるか", "検証範囲"][i]}</h3><p>{text}</p></article>)}
       <h3>自分たちの判断を振り返る</h3>{p.claims.map(c => <article key={c.id}><p>第{c.round + 1}ラウンド · {c.author === p.me.id ? "自分" : opponent?.name} · {c.status === "held" ? "成立" : "崩れた"}</p><ClaimSummary c={c} /><Lines lines={c.facts} /></article>)}
     </section>}
     {!!p.ledger.length && <details className="pi-score-log"><summary>得点と判定の記録</summary>{p.ledger.map((e, i) => <article key={i}><strong>R{e.round + 1} · {e.team === p.me.id ? "自分" : opponent?.name} · {e.points > 0 ? "+" : ""}{e.points}点</strong><Lines lines={e.text} /></article>)}</details>}

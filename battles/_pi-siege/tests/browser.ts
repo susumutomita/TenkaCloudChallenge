@@ -27,6 +27,7 @@ const table = async (p: Page, cells: string[]) => { for (let i = 0; i < cells.le
 try {
   await Promise.all([a.goto(`${url}/?team=alpha`), b.goto(`${url}/?team=bravo`)]);
   await visible(a, "まず分数3/1を試すと");
+  await visible(a, "研究原稿の誤りを見つける競技ではありません");
   await button(a, "準備完了").click(); await visible(a, "相手の準備を待っています");
   await visible(b, "相手は準備完了");
   await button(b, "準備完了").click();
@@ -102,6 +103,7 @@ try {
   assert.match(await a.locator(".pi-scoreboard").innerText(), /青チーム\s*1\s*点\s*橙チーム\s*27\s*点/);
   await visible(a, "有限のゲームがπの指数2を証明した意味でも");
   await visible(a, "検証済みの新定理とは断言しない");
+  await visible(a, "研究原稿の定理を反証したことにはなりません");
   assert.equal(await a.locator(".pi-debrief article").count(), 14);
   await a.screenshot({ path: `${output}/debrief-desktop.png`, fullPage: true });
   await a.setViewportSize({ width: 390, height: 844 });
