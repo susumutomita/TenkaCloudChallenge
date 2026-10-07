@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tenkacloud-session-defense-prototype",
+      "name": "tenkacloud-session-defense",
       "devDependencies": {
         "@types/bun": "1.3.11",
         "@types/react": "19.2.14",

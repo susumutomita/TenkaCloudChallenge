@@ -1,8 +1,8 @@
-# Session Defense Arena — local two-player prototype
+# Session Defense Arena — local two-team Battle
 
 Players alternate attacking and defending a fictional ad desk. Try supplied lab evidence, observe changes to dummy admins/customer links/budget, select defenses, then retest the same operations. Four rounds award points for damage and cost-effective defense. This does not reconstruct a real incident: its entry path is unknown.
 
-**Registration in the TenkaCloud host is unfinished.** This uses the existing coordination hook shape and real Portal slot component, but has not passed through host authentication, SQLite restart recovery or the official scoreboard. See [the required integration changes](docs/INTEGRATION.ja.md).
+This linked PR supplies the canonical `battles/session-defense/metadata.json`, coordination plugin and Portal slot. **It depends on the shared native schema/validator and host registration PR; host integration verification remains unfinished.** The commands below run the isolated exercise harness, not the host's authentication, SQLite recovery or official scoreboard. See [integration and completion criteria](docs/INTEGRATION.ja.md). Prototype PR901 is retained separately.
 
 ## Run
 
@@ -38,11 +38,11 @@ make test typecheck
 make browser-test
 # Read-only hook compatibility check against a prepared host checkout:
 TENKA_ROOT=/path/to/TenkaCloud bun tests/platform-smoke.ts
-# At catalog root:
+# At catalog root after integrating the shared native contract:
 make install
 make agent-gate
 ```
 
 Browser tests need dedicated Playwright Chromium: prepare it with `bun node_modules/playwright-core/cli.js install chromium`, or use `BROWSER=/path/to/dedicated/chromium make browser-test`. Tests create fresh ephemeral environments and use visible UI inputs. Browser bundles exclude the server's state/scoring implementation.
 
-See [evidence](docs/EVIDENCE.md), [security review](docs/SECURITY.md) and [design](docs/DESIGN.ja.md). Host registration, SQLite restart recovery, organizer UI, independent human playtesting and cloud hosting remain unverified. JSON state recovery and compatibility with the real host core were exercised.
+See [evidence](docs/EVIDENCE.md), [security review](docs/SECURITY.md), [design](docs/DESIGN.ja.md) and [connection contract](docs/NATIVE-CONTRACT.ja.md). Host registration, SQLite restart recovery, organizer UI, independent human playtesting and cloud hosting remain unverified. JSON state recovery and compatibility with the real host core were exercised. Exactly two teams are supported; the stateBudget is a fixed-roster envelope, not an extrapolation to larger rosters.

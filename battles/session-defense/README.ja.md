@@ -1,8 +1,8 @@
-# セッション防衛戦 — ローカル2人対戦の試作
+# セッション防衛戦 — ローカル2チームBattle
 
 架空の広告管理室で、ログイン後の証拠を使う攻撃役と、限られた予算で守る防衛役を交代する。用意された演習用の証拠を試す → 架空の管理者・顧客リンク・広告予算の変化を見る → 対策を選ぶ → 同じ操作を再試験する、という4ラウンドのゲーム。実際の事件の侵入原因は未特定であり、その再現ではない。
 
-**TenkaCloud本体への登録は未完了。** このPRは既存coordination hook形と実Portal slotを用いた試作を追加する。本体local hostの認証・SQLite復元・公式順位表まで通した意味ではない。[必要な本体登録変更](docs/INTEGRATION.ja.md)を参照。
+この連動PRは正規の `battles/session-defense/metadata.json`、coordination plugin、Portal slotを提供する。**共有schema/validator・本体登録PRへの依存があり、本体統合の検証は未完了。** 下記の起動は演習専用harness。本体local hostの認証・SQLite復元・公式順位表を検証した意味ではない。[本体登録と完了条件](docs/INTEGRATION.ja.md)を参照。試作PR901は独立して保持する。
 
 ## 起動
 
@@ -38,11 +38,11 @@ make test typecheck
 make browser-test
 # 本体hookとの互換性検証。準備済み本体checkoutを読み取るだけ。
 TENKA_ROOT=/path/to/TenkaCloud bun tests/platform-smoke.ts
-# カタログrootで
+# 共有native契約を統合したカタログrootで
 make install
 make agent-gate
 ```
 
 ブラウザ検証には専用のPlaywright Chromiumが必要。`bun node_modules/playwright-core/cli.js install chromium`で準備するか、`BROWSER=/path/to/dedicated/chromium make browser-test`を使う。新規の一時環境だけを作り、普段のprofileは読まない。ブラウザテストは画面の入力のみで対戦する。サーバー専用の状態・採点コードはブラウザbundleに含めない。
 
-[検証記録](docs/EVIDENCE.md)、[安全性レビュー](docs/SECURITY.md)、[設計](docs/DESIGN.ja.md)。本体連携、SQLite停止復元、主催者UI、第三者の人間による試遊、クラウド配布は未検証。純stateのJSON復元と本体coreへのhook互換性は検証済み。
+[検証記録](docs/EVIDENCE.md)、[安全性レビュー](docs/SECURITY.md)、[設計](docs/DESIGN.ja.md)、[接続契約](docs/NATIVE-CONTRACT.ja.md)。本体連携、SQLite停止復元、主催者UI、第三者の人間による試遊、クラウド配布は未検証。純stateのJSON復元と本体coreへのhook互換性は検証済み。対応人数は正確に2チームで、stateBudgetはこの固定人数用。3チーム以上へ外挿しない。
