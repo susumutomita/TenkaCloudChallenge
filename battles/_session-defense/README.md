@@ -29,6 +29,8 @@ Passkeys, a second-device owner check and independent reviewer login are **simul
 
 There is no access to real browser profiles/cookies, OS credential stores, Google/Microsoft authentication, production accounts, phishing, malware, arbitrary URL targets or OS network settings. Only this lab process's dummy data is affected.
 
+See [device binding and DBSC](docs/DBSC.md): copying cookies elsewhere differs from activity on the original device. DBSC requires a device-key proof to renew short-lived cookies, but does not guarantee device health. This game does not implement DBSC; shortening expiry alone is not DBSC.
+
 ## Verify
 
 ```sh

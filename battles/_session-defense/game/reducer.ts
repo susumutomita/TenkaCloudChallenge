@@ -12,7 +12,9 @@ export const cost = (cs: readonly Control[]) => cs.reduce((n,c) => n + CONTROLS[
 
 export function initialState(ctx: Context): State {
   if (ctx.teamIds.length !== 2 || new Set(ctx.teamIds).size !== 2 || ctx.teamIds.some(t => !/^[a-zA-Z0-9_-]{1,80}$/.test(t))) throw new Error("Exactly two distinct team IDs are required");
-  if (!ctx.matchSecret || !/^[a-f0-9]{64,}$/.test(ctx.matchSecret)) throw new Error("Server-generated matchSecret is required");
+  if (!ctx.matchSecret || !/^[a-f0-9]{64}$/.test(ctx.matchSecret)) throw new Error("Server-generated matchSecret is required");
+  if (!/^[a-zA-Z0-9_-]{1,80}$/.test(ctx.eventId)) throw new Error("Bounded host event ID is required");
+  if (ctx.teamIds.some(id => ctx.teamNames?.[id] !== undefined && (typeof ctx.teamNames[id] !== "string" || ctx.teamNames[id]!.length > 80))) throw new Error("Host team names must fit 80 UTF-16 units");
   const ids = [...ctx.teamIds].sort();
   return { schema:1, eventId:ctx.eventId, secret:ctx.matchSecret, ids, names:Object.fromEntries(ids.map(t => [t,ctx.teamNames?.[t] ?? t])), ready:[],revision:0,round:1,phase:"waiting",now:0,deadline:0,scores:Object.fromEntries(ids.map(t=>[t,0])),controls:[],sessions:[],grants:[],leak:"",baselineDamage:0,damage:0,done:[],tickets:0,legitimate:false,attackFinished:false,desk:freshDesk(),events:[],results:[],receipts:{} };
 }
