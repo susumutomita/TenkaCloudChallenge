@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "bun:test";
 import { initialState, projectForTeam, teamScores } from "../game/reducer.ts";
 import { playCapacityTrace, type CapacityRoute } from "./capacity-trace.ts";
 const routes: readonly CapacityRoute[] = ["audits","upgrades","held","experiments"];
 // Fixed 2-team profiles. Rounded measured envelope; not a multi-team forecast.
-const declared = {baseBytes:0,bytesPerTeam:32*1024};
+const declared: {baseBytes:number;bytesPerTeam:number} = JSON.parse(readFileSync(new URL("../metadata.json",import.meta.url),"utf8")).interTeamCoordination.stateBudget;
+test("metadata fixes the measured two-team envelope",()=>expect(declared).toEqual({baseBytes:0,bytesPerTeam:32768}));
 for(const route of routes) test(`2 teams / ${route}: complete legal histories, every transition and JSON restore`,()=>{
   const result=playCapacityTrace(route);
   console.info(JSON.stringify({route,peak:result.peak,final:result.final,transitions:result.transitions}));

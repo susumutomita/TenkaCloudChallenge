@@ -7,12 +7,12 @@ on:
   pull_request:
     paths:
       - 'battles/pi-siege/**'
-      - 'battles/_pi-siege/**'
+      - 'battles/pi-siege/**'
       - '.github/workflows/pi-siege.yml'
   push:
     branches: [main]
     paths:
-      - 'battles/_pi-siege/**'
+      - 'battles/pi-siege/**'
       - '.github/workflows/pi-siege.yml'
   workflow_dispatch:
 
@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: battles/_pi-siege
+        working-directory: battles/pi-siege
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -34,6 +34,9 @@ jobs:
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
         with:
           bun-version: '1.3.11'
+      - name: Validate native catalog and runtime contract
+        working-directory: .
+        run: make install agent-gate && bun test scripts/native-coordination.test.ts
       - name: Install locked dependencies without scripts
         run: make install
       - name: Arithmetic, reducer, HTTP, packaging, types and independent checks

@@ -647,6 +647,36 @@ function checkCompatibilityTokens(value: unknown, field: string): ValidationErro
   return errors;
 }
 
+/** Native host coordination uses the same pure plugin/Portal contract, not /verify.
+ * Host support still requires an explicit reviewed catalog entry in TenkaCloud.
+ */
+export function checkNativeCoordinationRefs(dir: string, meta: Metadata): ValidationError[] {
+  const runtime = jsonRecord(meta.runtime);
+  const coordination = jsonRecord(meta.interTeamCoordination);
+  const slots = jsonRecord(jsonRecord(meta.dashboard)?.slots);
+  const errors = [
+    ...checkInstructionsPresent(meta), ...checkDescriptionTranslations(meta),
+    ...checkWriteupTranslations(meta), ...checkHintTranslations(meta),
+    ...checkDashboardSlotFiles(meta, dir), ...checkCoordinationPluginFile(meta, dir),
+  ];
+  if (meta.category !== "Battle" || runtime?.provider !== "local" || runtime.engine !== "bun")
+    errors.push("native coordination requires a Battle with runtime.provider=local and engine=bun");
+  const plugin = coordination?.plugin;
+  if (typeof plugin !== "string" || !/^coordination\/[A-Za-z0-9._-]+\.ts$/.test(plugin) || runtime?.entry !== plugin)
+    errors.push("native runtime.entry must equal interTeamCoordination.plugin");
+  if (typeof slots?.StatusPanel !== "string") errors.push("native coordination requires dashboard.slots.StatusPanel");
+  for (const field of ["cfnTemplate", "cfnParameters", "scoring"]) if (meta[field] !== undefined)
+    errors.push(`native coordination must not declare ${field}; authoritative scoring belongs to its plugin`);
+  for (const field of ["verifyUrl", "challengeEndpoints", "terminal", "secretEnv", "compatibility"]) if (runtime?.[field] !== undefined)
+    errors.push(`native coordination must not declare runtime.${field}`);
+  if (!Array.isArray(meta.exposedPorts) || meta.exposedPorts.length !== 0) errors.push("native coordination has no exposed ports");
+  if (typeof plugin === "string" && existsSync(join(dir, plugin))) {
+    const stat = lstatSync(join(dir, plugin));
+    if (!stat.isFile() || stat.isSymbolicLink()) errors.push("native coordination plugin must be a regular non-symlink file");
+  }
+  return errors;
+}
+
 function checkContainerRefs(dir: string, meta: Metadata): CrossRefResult {
   const runtime = meta.runtime as { entry?: unknown } | undefined;
   const errors: ValidationError[] = [
@@ -996,6 +1026,9 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
     ...checkCourseAlignment(meta),
     ...checkNativeCompatibility(meta),
   ];
+  if (jsonRecord(meta.runtime)?.provider === "local") {
+    return {errors:[...runtimeAgnosticErrors,...checkNativeCoordinationRefs(dir,meta)],warnings:[]};
+  }
   if (isCompositeProblem(meta)) {
     const result = checkCompositeRefs(dir, meta);
     return { ...result, errors: [...runtimeAgnosticErrors, ...result.errors] };

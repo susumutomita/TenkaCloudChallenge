@@ -1,0 +1,62 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "pi-siege",
+  "name": "π包囲戦",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "40 分",
+  "shortDescription": "直径1の円を分数で測る記録から始め、ゼロ・混合配置・両立条件の逃げ道を塞ぐ2チーム対戦。公開した主張と反例で得点を競う。",
+  "description": "直径1の円を分数で測る記録から始め、ゼロ・混合配置・両立条件の逃げ道を塞ぐ2チーム対戦。公開した主張と反例で得点を競う。",
+  "instructions": "## 最初の一手\n\n分数と四則演算で遊ぶ2チーム・4ラウンドの対戦です。両者が「準備完了」を押し、最初はp=3、q=1のまま「分数を試す」。直径1の円の円周πからどれだけ離れるかが返ります。\n\n誤差はπと分数の正の距離。分母qの三乗の基準は1÷(q×q×q)。q=5なら1/125です。画面の式・小さい例・3段階ヒントは無料。\n\n各ラウンド6枚の行動券を試行・強化・公開・監査へ配ります。試行は公開するまで自分だけに見えます。成立した主張+6、成功監査+4、崩れた主張−3、両者成立なら強い主張+2。両者が終了すると精算し、4ラウンド後の高得点側が勝ちです。\n\n監査対象はこの有限ゲームで公開された主張です。ゲームの成功は原稿の定理の証明でも反証でもありません。公開原稿はπの近似に関する指数2の証明を主張していますが、ここでは全Leanビルド・公理監査・Comparatorを実行していません。採点は有限の分数計算だけを使います。",
+  "tags": [
+    "rational-approximation",
+    "fractions",
+    "determinants",
+    "proof-strategies",
+    "finite-model",
+    "battle"
+  ],
+  "exposedPorts": [],
+  "learningGoals": [
+    "πと分数の誤差を比較し、一回の記録と無限の主張を区別する",
+    "2×2の対角の積の差と整数化の下限を計算する",
+    "種類と次数の混合配置を手計算し、全配置の保証に反例を作る",
+    "二つの入口条件と二つの調整条件を同時に確認する"
+  ],
+  "runtime": {
+    "provider": "local",
+    "engine": "bun",
+    "entry": "coordination/pi-siege.ts"
+  },
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/pi-siege.ts",
+    "name": "π包囲戦",
+    "description": "公開主張・監査・ラウンド精算を共有する。2チームのみ。",
+    "publicHint": true,
+    "stateBudget": {
+      "bytesPerTeam": 32768,
+      "baseBytes": 0
+    }
+  },
+  "i18n": {
+    "en": {
+      "name": "Pi Siege",
+      "shortDescription": "A two-team battle from fraction records for a diameter-1 circle to nonzero differences, mixed arrangements and simultaneous conditions. Score through published claims and counterexamples.",
+      "description": "A two-team battle from fraction records for a diameter-1 circle to nonzero differences, mixed arrangements and simultaneous conditions. Score through published claims and counterexamples.",
+      "instructions": "## Your first move\n\nA two-team, four-round battle using fractions and arithmetic. Both teams press Ready; keep p=3 and q=1 and Try a fraction. You receive its distance from π, the circumference of a diameter-1 circle.\n\nError is the positive distance between π and the fraction. For denominator q, the cubic benchmark is 1÷(q×q×q); q=5 gives 1/125. Rules, small examples and three hint steps are free.\n\nSpend six action tickets each round on experiments, upgrades, publication and audits. Experiments stay private until publication. A held claim earns +6, a successful audit +4, a broken claim −3; if both hold, the stronger earns +2. Both finishing settles a round; highest score after four rounds wins.\n\nAudits target claims in this finite game. Success neither proves nor refutes the manuscript’s theorem. The manuscript claims a proof of the exponent-2 result for approximation of π; full Lean build, axiom audit and Comparator were not run here. Scoring uses finite fractional calculations only.",
+      "learningGoals": [
+        "Compare approximation errors and distinguish a finite record from an infinite claim",
+        "Calculate a 2×2 diagonal-product difference and its integer-derived floor",
+        "Hand-calculate mixed types/degrees and counterexample an all-arrangements guarantee",
+        "Check both entry conditions and both adjusted conditions together"
+      ]
+    }
+  }
+}
