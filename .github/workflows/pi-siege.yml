@@ -40,5 +40,7 @@ jobs:
         run: make test typecheck reference-test
       - name: Install pinned Playwright Chromium and Linux dependencies
         run: bun node_modules/playwright-core/cli.js install --with-deps --only-shell chromium
-      - name: Play four rounds using two actual browser seats
+      - name: Play four rounds using two Japanese browser seats
         run: make browser-test
+      - name: Play the same match in English, including feedback and history
+        run: BROWSER_LOCALE=en make browser-test

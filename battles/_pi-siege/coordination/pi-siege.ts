@@ -1,4 +1,3 @@
-import { applyOp, initialState, projectForTeam, teamScores, validateOp } from "../game/reducer.ts";
-// The existing coordination hook shape. The local prototype composes these same hooks.
-// No catalog metadata declares host support: native discovery is currently ID-specific.
-export default { initialState, validateOp, applyOp, projectForTeam, teamScores, stateSchemaVersion: 1 };
+import { applyOp, initialState, migrateState, projectForTeam, scoreReasons, STATE_SCHEMA_VERSION, teamScores, validateOp } from "../game/reducer.ts";
+// Structural existing CoordinationPlugin contract; no SDK runtime dependency.
+export default { initialState, validateOp, applyOp, projectForTeam, teamScores, scoreReasons, migrateState, stateSchemaVersion: STATE_SCHEMA_VERSION };

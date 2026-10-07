@@ -60,7 +60,7 @@ test("waiting, turn-taking, round settlement, and an actual two-player match", (
   expect(s.phase).toBe("ended"); expect(teamScores(s)).toEqual({ alpha: 1, bravo: 27 });
   expect(validateOp(s, "alpha", envelope(s, { kind: "upgrade" }))).toEqual({ ok: false, error: "match_ended" });
   expect(s.claims).toHaveLength(8);
-  expect(s.ledger.flatMap(e => e.text).some(t => t.includes("実際の項が非零・大きいという判定ではない"))).toBe(true);
+  expect(s.ledger.flatMap(e => e.text).some(t => t.ja.includes("実際の項が非零・大きいという判定ではない"))).toBe(true);
 });
 test("exact retries are no-ops even after a phase transition; reused IDs cannot change meaning", () => {
   let s = started(); const op = envelope(s, { kind: "inspect", task: { kind: "record", p: 3, q: 1 } });
@@ -148,4 +148,14 @@ test("positive entry margins alone cannot score; the comparison is the documente
   both = act(both, "bravo", { kind: "publish", sourceId: source(both, "bravo") });
   both = act(both, "alpha", { kind: "publish", sourceId: source(both, "alpha") });
   both = finish(both); expect(teamScores(both)).toEqual({ alpha: 8, bravo: 6 });
+});
+test("a negative table difference also fails the magnitude goal",()=>{
+  let s=finish(started());
+  s=act(s,"bravo",{kind:"inspect",task:{kind:"table",cells:[{n:1,d:1},{n:3,d:4},{n:1,d:1},{n:1,d:2}]}});
+  s=act(s,"alpha",{kind:"inspect",task:{kind:"table",cells:[{n:1,d:1},{n:1,d:2},{n:1,d:1},{n:5,d:8}]}});
+  s=act(s,"bravo",{kind:"publish",sourceId:source(s,"bravo"),floor:{n:1,d:16}});
+  s=act(s,"alpha",{kind:"audit",claimId:claim(s,"bravo"),reason:"large"});
+  expect(teamScores(s)).toEqual({alpha:4,bravo:-3});
+  expect(s.claims[0]!.facts[0]!.en).toContain("= -1/4");
+  expect(s.claims[0]!.facts[3]!.en).toContain("Magnitude at most 1/8: still too large");
 });

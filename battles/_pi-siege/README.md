@@ -2,9 +2,9 @@
 
 Two players build records and guarantees, then challenge gaps in each other's published reasoning. Four rounds turn one paper's strategy into finite experiments: rational approximation, a nonzero 2×2 determinant, mixed row arrangements, and simultaneous parameter constraints. Players allocate six action tickets per round to experiments, upgrades, publication and audits. Startup and waiting earn no points.
 
-This is a runnable **local prototype with a Japanese interface**. It is not registered in the TenkaCloud catalog or native local host. English documentation does not imply an English Portal interface. See [日本語](README.ja.md), [design](DESIGN.ja.md) and [research/review](RESEARCH.md).
+This is a runnable **local prototype with Japanese and English interfaces**. It is not registered in the TenkaCloud catalog or native local host. See [日本語](README.ja.md), [design](DESIGN.ja.md) and [research/review](RESEARCH.md).
 
-Audits target players' finite claims, not errors in the manuscript. Constructing tools that cover zero, mixed arrangements and both parameter conditions is the experience of the proposed strategy. [Native competition integration and acceptance criteria](INTEGRATION.ja.md) specify the remaining work. `_pi-siege` is deliberately excluded from the native metadata-directory scan until coordinated registration.
+Audits target players' claims in this finite game, not errors in the manuscript. Constructing tools that cover zero, mixed arrangements and both parameter conditions is the experience of the proposed strategy. [Native competition integration and acceptance criteria](INTEGRATION.ja.md) specify the remaining work. `_pi-siege` is deliberately excluded from the native metadata-directory scan until coordinated registration.
 
 ## Play locally
 
@@ -16,7 +16,7 @@ make install
 make dev
 ```
 
-Open `http://127.0.0.1:5655/?team=alpha` and `http://127.0.0.1:5655/?team=bravo` in two tabs or profiles. Both players press **準備完了**. First action: keep p=3, q=1 and press **分数を試す**. Its error estimate and comparison with 1/q³ appear. All required rules and worked examples are free, with three free hint levels per round.
+Open `http://127.0.0.1:5655/?team=alpha` and `http://127.0.0.1:5655/?team=bravo` in two tabs or profiles. Add `&locale=en` to either URL for English, including rules, hints, calculation feedback and score history. Both players press **準備完了** / **Ready**. First action: keep p=3, q=1 and press **分数を試す**. Its error estimate and comparison with 1/q³ appear. All required rules and worked examples are free, with three free hint levels per round.
 
 Turns alternate after each action; starting seats alternate each round. A player can finish early. Both finishing, or exhausting tickets, settles claims and advances the round. After the fourth settlement, the winner, published reasoning, historical difficulty, manuscript strategy and remaining proof limits appear.
 
@@ -46,12 +46,13 @@ The native host currently selects `ac26-crypto-battle` by ID. Another coordinati
 ```sh
 make test typecheck reference-test
 make browser-test
+BROWSER_LOCALE=en make browser-test
 ```
 
-The browser test uses `playwright-core` and an already installed matching Chromium; it never downloads a browser. Set `BROWSER_EXECUTABLE` to an installed Chrome/Chromium executable if needed. Screenshots go to ignored `reports/browser/`; override with `BROWSER_OUTPUT_DIR`.
+The browser test uses `playwright-core` and an already installed matching Chromium; it never downloads a browser. Set `BROWSER_EXECUTABLE` to an installed Chrome/Chromium executable if needed. Screenshots go to ignored `reports/browser-ja/` or `reports/browser-en/`; override with `BROWSER_OUTPUT_DIR`.
 
 The dedicated GitHub Actions workflow explicitly installs pinned Playwright Chromium and Linux dependencies before running the same browser match. The local browser command itself still does not install them.
 
-The automated match drives visible controls in two isolated contexts: four rounds/eight claims, lost response and exact retry, private trial and refresh, a hand-calculated mixed arrangement, settlement/debrief, and mobile width. Unit tests cover exact arithmetic, independent enumeration, hostile inputs, concurrent stale writes, failed/repeated audits, exhaustion, immutability and row snapshots. Independent mathematical review found real defects and verified the repairs; see RESEARCH.md.
+The automated match drives visible controls in two isolated contexts: four rounds/eight claims, lost response and exact retry, private trial and refresh, a hand-calculated mixed arrangement, settlement/debrief, and mobile width. Unit tests cover exact arithmetic, independent enumeration, hostile inputs, concurrent stale writes, failed/repeated audits, exhaustion, immutability and row snapshots. Bilingual state schema 2 replays the retained schema-1 operations and checks the old structure before accepting migration. Legacy score and mixed-audit fixtures retain signed points, tickets, receipt replay and the numerical counterexample in both languages. Four complete 50-operation storage traces measure every transition with maximum-length IDs and names; their maximum is 55,814 bytes. This is a measured set of supported two-team profiles, not an exhaustive global maximum or native storage test. Independent mathematical review found real defects and verified the repairs; see RESEARCH.md.
 
 Lean dependency build, axiom audit, Comparator execution, native host registration, live AWS and an independent human playtest were not run. Local tests do not verify the manuscript's infinite theorem.

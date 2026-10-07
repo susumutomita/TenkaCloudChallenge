@@ -24,3 +24,15 @@ The original head `2095033c` passed catalog CI, GitGuardian and Snyk; capacity w
 Actual TenkaCloud `hostBrowserProblemPaths` was called against a temporary `problems` symlink to this worktree. Before the fix it reproduced ENOENT on `battles/pi-siege/metadata.json`. After moving to non-catalog `battles/_pi-siege`, the same function read all 109 existing public paths, excluded the prototype and did not throw. A layout regression test protects that identity boundary.
 
 The coordination file now follows the required `coordination/<name>.ts` shape and is what the dev server invokes. The Portal imports its own CSS, whose global root/body rules were removed to avoid altering a native Portal shell. Updated browser assertions also verify that the first screen distinguishes player audits from finding manuscript errors, and the debrief says audits do not refute the research theorem. Native host gameplay remains unimplemented; [INTEGRATION.ja.md](INTEGRATION.ja.md) records concrete owners, paths and completion checks.
+
+## Bilingual integration preparation (separate worktree)
+
+PR900 and `math-lab` remain unchanged. `math-native` is based on PR900 head `de4dd02a` and contains only problem-specific preparation plus its own CI. The native host worktree is based on `05d29d12`; shared files are not edited pending the requested parent-thread coordination.
+
+- `make test`: 29 pass, 0 fail, 707 assertions; includes real schema-1 scope/mixed-audit fixtures, signed scores, receipts, corrupt-state refusal, bilingual evidence and 4 complete capacity routes.
+- `make typecheck` and `make reference-test`: pass.
+- `BROWSER_LOCALE=ja/en make browser-test`: each plays the same 4-round / 8-claim match using visible controls in two separate contexts and finishes 1–27. The English run checks translated rules, hints, feedback, audits, claims and debrief. Desktop and 390px mobile screenshots were inspected. Team names are participant data and remain as supplied.
+- Capacity traces with 80-character team/request IDs and 64-character maximally JSON-escaped names: audits 55,814 bytes; upgrades 51,996; valid held claims 44,516; experiments 34,502. Every trace has 50 accepted operations and retains all receipts; both audit routes retain 8 claims and 16 score entries. Every transition is JSON-restored and projection/score equality checked. The rounded 64KiB envelope covers these measured profiles; it is not an exhaustive global maximum or a native SQLite/score transaction result.
+- Independent bilingual math review caught negative-size wording, lost translated migration evidence, an omitted upper-bound target, and initial vocabulary gaps. Repairs are covered by source review and migration reproduction; full Lean verification remains unperformed.
+
+Native organizer selection, authenticated seats, official score/history delivery and host restart remain **unverified and unimplemented**. Existing coordination authentication and storage are intended for reuse. The English prototype browser does not certify them. No AWS, merge or release.
