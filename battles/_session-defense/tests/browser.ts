@@ -32,7 +32,7 @@ try {
     await wait(attacker,"再試験");await click(attacker,"演習用の証拠を入力へコピー");
     for(const name of actionNames){await click(attacker,name);await attacker.waitForTimeout(100);}
     if(round===1){await attacker.reload();await wait(attacker,"再試験");await attacker.screenshot({path:new URL("../docs/evidence/baseline-reuse.png",import.meta.url).pathname,fullPage:true});}
-    if(round===3){await defender.setViewportSize({width:390,height:844});await defender.screenshot({path:new URL("../docs/evidence/defense-mobile.png",import.meta.url).pathname,fullPage:true});assert(await defender.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await defender.setViewportSize({width:1280,height:900});}
+    if(round===3){await wait(defender,"実行された · +20");await defender.setViewportSize({width:390,height:844});await defender.screenshot({path:new URL("../docs/evidence/defense-mobile.png",import.meta.url).pathname,fullPage:true});assert(await defender.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await defender.setViewportSize({width:1280,height:900});}
     await click(attacker,"このラウンドを精算");
   }
   await wait(alpha!,"リプレイから何が分かる？");await wait(bravo!,"リプレイから何が分かる？");
