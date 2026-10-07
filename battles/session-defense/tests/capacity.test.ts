@@ -18,6 +18,7 @@ test("fixed two-team native metadata and bounded host inputs", () => {
     expect(() => initialState({ eventId: "x", teamIds: ids, matchSecret: "f".repeat(64), ...extra })).toThrow();
 });
 
+// The complete 296-match trace exceeds Bun's default 5s on Linux CI runners.
 test("every legal defense combination: all four rounds, receipts, maximum host fields, JSON restore", () => {
   let peak = 0, peakRoute = "", traces = 0;
   for (const controls of choices) for (const route of ["early-finish", "owner-first", "expired", "timeout"] as const) {
@@ -51,4 +52,4 @@ test("every legal defense combination: all four rounds, receipts, maximum host f
     expect(s.events.length).toBeLessThanOrEqual(56); traces++;
   }
   console.info(JSON.stringify({ traces, combinations: choices.length, peak, peakRoute, declaredTwoTeamBytes: 2 * budget.bytesPerTeam }));
-});
+}, 30_000);
