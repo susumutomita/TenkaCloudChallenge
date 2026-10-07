@@ -1,0 +1,62 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "session-defense",
+  "name": "セッション防衛戦",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "20 分",
+  "shortDescription": "提供された演習用セッションで被害を観察し、予算6で守り方を比較する2チーム対戦。",
+  "description": "2チーム・4ラウンドの対戦。両者が準備完了し、攻撃役は演習用の証拠を入力へコピーして管理操作を1つ試す。防衛役はダミーデータの被害を確認し、予算6以内で対策を選ぶ。再試験で攻撃役が同じ操作を試し、防衛役は正規の仕事を確認する。各段階75秒。攻撃点は再試験の被害、防衛点はmax(0,100−被害−使用予算×3−正規の仕事未確認なら20)。対策前・待機・無料の手がかりは0点。役割を交代し合計点を競う。\n\n演習内で提供する合成トークンとダミー管理室だけを使う。実事件の侵入原因は未特定であり、その再現ではない。パスキー・別担当者の独立ログインは模型。DBSCは未実装で、短期限だけをDBSCとは呼ばない。実Cookie・実アカウント・任意URLへの攻撃を扱わない。",
+  "instructions": "2チーム・4ラウンドの対戦。両者が準備完了し、攻撃役は演習用の証拠を入力へコピーして管理操作を1つ試す。防衛役はダミーデータの被害を確認し、予算6以内で対策を選ぶ。再試験で攻撃役が同じ操作を試し、防衛役は正規の仕事を確認する。各段階75秒。攻撃点は再試験の被害、防衛点はmax(0,100−被害−使用予算×3−正規の仕事未確認なら20)。対策前・待機・無料の手がかりは0点。役割を交代し合計点を競う。\n\n演習内で提供する合成トークンとダミー管理室だけを使う。実事件の侵入原因は未特定であり、その再現ではない。パスキー・別担当者の独立ログインは模型。DBSCは未実装で、短期限だけをDBSCとは呼ばない。実Cookie・実アカウント・任意URLへの攻撃を扱わない。",
+  "tags": [
+    "session-security",
+    "revocation",
+    "step-up",
+    "authorization",
+    "synthetic-lab",
+    "battle"
+  ],
+  "exposedPorts": [],
+  "learningGoals": [
+    "初回の本人確認と、ログイン後のセッション保護を区別する",
+    "管理権限を持つ証拠の再利用がダミー管理者・顧客リンク・予算に及ぼす影響を観察する",
+    "失効・期限・サーバー側の操作限定本人確認・別担当者承認・権限分離を再試験で比較する",
+    "別端末へのCookie再利用対策と、元の端末上の侵害対策の範囲を区別する"
+  ],
+  "runtime": {
+    "provider": "local",
+    "engine": "bun",
+    "entry": "coordination/session-defense.ts"
+  },
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/session-defense.ts",
+    "name": "セッション防衛戦",
+    "description": "正確に2チーム。演習用証拠の照合・対策・4ラウンドの精算はserver private stateで行う。",
+    "publicHint": true,
+    "stateBudget": {
+      "bytesPerTeam": 16384,
+      "baseBytes": 0
+    }
+  },
+  "i18n": {
+    "en": {
+      "name": "Session Defense Arena",
+      "shortDescription": "A two-team battle: observe damage from supplied lab sessions and compare defenses within a budget of 6.",
+      "description": "A two-team, four-round battle. Both teams press Ready. The attacker copies the supplied lab evidence to input and tries a management operation. The defender observes dummy-data damage and chooses controls within a budget of 6. Retest the same actions and check legitimate work. Each phase lasts 75 seconds. Attack points equal retest damage; defense points equal max(0,100−damage−cost×3−20 if legitimate work is unchecked). Waiting, baseline and free clues award zero. Swap roles and compete on total points.\n\nOnly supplied synthetic tokens and a dummy ad desk are used. The real incident entry path is unknown and is not reconstructed. Passkeys and independently authenticated reviewers are simulated. DBSC is not implemented; short expiry alone is not DBSC. No real cookies, accounts or arbitrary-target attacks.",
+      "instructions": "A two-team, four-round battle. Both teams press Ready. The attacker copies the supplied lab evidence to input and tries a management operation. The defender observes dummy-data damage and chooses controls within a budget of 6. Retest the same actions and check legitimate work. Each phase lasts 75 seconds. Attack points equal retest damage; defense points equal max(0,100−damage−cost×3−20 if legitimate work is unchecked). Waiting, baseline and free clues award zero. Swap roles and compete on total points.\n\nOnly supplied synthetic tokens and a dummy ad desk are used. The real incident entry path is unknown and is not reconstructed. Passkeys and independently authenticated reviewers are simulated. DBSC is not implemented; short expiry alone is not DBSC. No real cookies, accounts or arbitrary-target attacks.",
+      "learningGoals": [
+        "Distinguish initial authentication from session protection",
+        "Observe how reuse of administrative evidence changes dummy admins, customer links and budgets",
+        "Compare revocation, expiry, server-side action-bound owner grants, reviewer approval and role separation through retesting",
+        "Distinguish protections against cookie reuse on another device from compromise on the original device"
+      ]
+    }
+  }
+}
