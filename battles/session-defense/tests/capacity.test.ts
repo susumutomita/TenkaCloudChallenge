@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { initialState, applyOp, validateOp, projectForTeam, roles, teamScores, tick } from "../game/reducer.ts";
 import { ACTIONS, CONTROLS, type Control, type Op, type State } from "../game/types.ts";
 
-const metadata = JSON.parse(readFileSync(new URL("../docs/native-metadata.json", import.meta.url), "utf8"));
+const metadata = JSON.parse(readFileSync(new URL("../metadata.json", import.meta.url), "utf8"));
 const budget: { baseBytes: number; bytesPerTeam: number } = metadata.interTeamCoordination.stateBudget;
 const ids = ["a".repeat(80), "b".repeat(80)];
 const bytes = (s: State) => Buffer.byteLength(JSON.stringify(s));

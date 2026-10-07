@@ -1,9 +1,9 @@
-name: Session defense prototype
+name: Session defense arena
 on:
   pull_request:
-    paths: ['battles/_session-defense/**', '.github/workflows/session-defense.yml']
+    paths: ['battles/session-defense/**', '.github/workflows/session-defense.yml']
   push:
-    paths: ['battles/_session-defense/**', '.github/workflows/session-defense.yml']
+    paths: ['battles/session-defense/**', '.github/workflows/session-defense.yml']
 permissions:
   contents: read
 jobs:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: battles/_session-defense
+        working-directory: battles/session-defense
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -25,4 +25,4 @@ jobs:
         if: always()
         with:
           name: session-defense-browser-evidence
-          path: battles/_session-defense/docs/evidence/*.png
+          path: battles/session-defense/docs/evidence/*.png

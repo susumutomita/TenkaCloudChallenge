@@ -1,5 +1,5 @@
 {
-  "name": "tenkacloud-session-defense-prototype",
+  "name": "tenkacloud-session-defense",
   "private": true,
   "type": "module",
   "scripts": {"dev":"bun dev/server.ts","test":"bun test","typecheck":"tsc --noEmit","browser-test":"bun tests/browser.ts"},
