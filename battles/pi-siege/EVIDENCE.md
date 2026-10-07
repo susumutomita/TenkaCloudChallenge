@@ -1,38 +1,22 @@
-# Local verification evidence — 2026-10-07
+# Verification evidence
 
-Environment: macOS arm64, Bun 1.3.11, TypeScript 5.9.3, playwright-core 1.58.2 with already installed Chromium. Worktree based on TenkaCloudChallenge `aeacd121`; all changes are confined to this problem directory. Existing checkout modifications were preserved.
+Original checkouts were preserved. The standalone PR900 worktree remains at `de4dd02a`. Native catalog work uses independent `pi-siege-native-catalog`; the host uses `pi-siege-native-host`, based on TenkaCloud `05d29d12`, with a detached, pinned `problems` worktree.
 
-| Command / review | Observed result | Boundary |
-| --- | --- | --- |
-| `make test` | 18 tests pass, 0 fail, 583 assertions | Pure game, arithmetic, local HTTP and package placement/style behavior |
-| `make typecheck` | Pass | Narrow Portal type contract, not native loading |
-| `make reference-test` | Independent Fraction/Machin checks, candidate enumeration and finite Lemma 4.1 parameters pass | No infinite theorem |
-| `make browser-test` | Two isolated browser contexts; four rounds, eight claims; final blue 1 / orange 27; no page errors | Real Portal component and local server, not authentication |
-| Root `make install` + `make agent-gate` | All 126 existing metadata files valid | Prototype deliberately has no metadata registration |
-| Independent mathematical review | Real defects caught and repaired; final arithmetic/explanation check passed, with final β wording clarified | No full Lean build or independent human playtest |
+## Problem and mathematical checks
 
-The browser script only plays through visible inputs. It tests free rules and hints, an initially private 355/113 trial, reload recovery, three concrete mathematical audits and one scope audit, the types/degrees in a mixed arrangement, and the final explanation. To test an uncertain network outcome it lets the server accept an upgrade, drops its response, then presses the visible retry button: the two submitted bodies match and exactly one ticket is consumed. The script does not seed private state, read a solution oracle, or bypass player controls to play moves.
+- Pi Siege: 30 tests / 710 assertions, zero failures; typecheck; independent Python Fraction/Machin/candidate/parameter checks.
+- Actual schema-1 scope and mixed-audit fixtures migrate to schema 2 with scores, tickets, claims, English numerical evidence and idempotent receipts preserved. Corrupt/unsupported state is rejected.
+- Two prototype browser seats complete four rounds/eight claims in both JA and EN, including lost-response retry, private trials, hand-calculated mixed arrangement, history and 390px width.
+- Four complete 50-operation capacity traces retain all receipts, maximum-length IDs and bounded control-character names. Maximum measured state is 55,814 bytes, below the declared 64KiB two-team budget. Each transition is JSON-restored and compared. These profiles are not an exhaustive global maximum.
+- Independent mathematical reviews found and repaired six initial defects plus translation/migration/vocabulary omissions. See [research and review](RESEARCH.md). Finite computations do not verify the manuscript's infinite theorem.
 
-Screenshots are generated under ignored `reports/browser/`: `round-3-desktop.png`, `debrief-desktop.png`, `debrief-mobile.png`. Desktop and 390px mobile output were visually inspected; the browser also asserts no horizontal overflow. Re-run the script to reproduce them.
+## Native host evidence
 
-Not run: native TenkaCloud host registration/loading, event authentication, official scoring delivery, durable storage, AWS deployment, an independent human usability trial, full Lean dependency build, axiom audit or Comparator. No merge, release or cloud resource was performed.
+- Shared catalog: all 128 metadata files pass the agent gate. Three native-contract tests pass (14 assertions), including preserved legacy port requirements and rejected fake verifier/entry/slot declarations.
+- Host build resolves the actual Pi Siege and Session Defense Portal components. Executable catalog and browser module guards use explicit reviewed identities. Graders, reducers, dev harnesses and organizer documents are excluded from browser imports.
+- Real host HTTP and SQLite: exact two-seat admission, budget admission, team authentication, no points for ready, private trials, signed −3/+4 official ranking, score-event persistence, state restoration, exact retry with no second award, conflicting retry and scoring lock.
+- Real host browser: organizer catalog selection → two isolated authenticated seats → private 355/113 trial → accepted request with lost response and exact retry → a new host process/new browser contexts restore the same SQLite state → four rounds/eight claims → official 1–27 ranking. JA/EN feedback/history, 390px layout and no page errors pass.
+- Native browser command in TenkaCloud: `bun run test:host:pi-siege`. It drives visible controls; no reducer, private state seeding or answer oracle is used. Fixture credentials remain on a private pipe/in memory and are excluded from screenshots. Screenshots live under ignored `.tenkacloud/host-ui-review/pi-siege/`.
+- Session payload is taken only from the dedicated branch's problem/workflow commits through `de2797ce412ab13cb7d1ad1ef07386370969ac45`; shared schema/host ownership remains here. Its separate owner verifies the full native Session participant flow after receiving the integration SHA.
 
-## PR900 follow-up
-
-The original head `2095033c` passed catalog CI, GitGuardian and Snyk; capacity was skipped. GitHub submitted reviews, conversation comments, inline comments and head commit comments were empty. That green did not run this prototype's own tests. A dedicated workflow now runs them plus the real two-seat browser match; report its result against the updated head rather than treating the old catalog green as prototype evidence.
-
-Actual TenkaCloud `hostBrowserProblemPaths` was called against a temporary `problems` symlink to this worktree. Before the fix it reproduced ENOENT on `battles/pi-siege/metadata.json`. After moving to non-catalog `battles/_pi-siege`, the same function read all 109 existing public paths, excluded the prototype and did not throw. A layout regression test protects that identity boundary.
-
-The coordination file now follows the required `coordination/<name>.ts` shape and is what the dev server invokes. The Portal imports its own CSS, whose global root/body rules were removed to avoid altering a native Portal shell. Updated browser assertions also verify that the first screen distinguishes player audits from finding manuscript errors, and the debrief says audits do not refute the research theorem. Native host gameplay remains unimplemented; [INTEGRATION.ja.md](INTEGRATION.ja.md) records concrete owners, paths and completion checks.
-
-## Bilingual integration preparation (separate worktree)
-
-PR900 and `math-lab` remain unchanged. `math-native` is based on PR900 head `de4dd02a` and contains only problem-specific preparation plus its own CI. The native host worktree is based on `05d29d12`; shared files are not edited pending the requested parent-thread coordination.
-
-- `make test`: 29 pass, 0 fail, 707 assertions; includes real schema-1 scope/mixed-audit fixtures, signed scores, receipts, corrupt-state refusal, bilingual evidence and 4 complete capacity routes.
-- `make typecheck` and `make reference-test`: pass.
-- `BROWSER_LOCALE=ja/en make browser-test`: each plays the same 4-round / 8-claim match using visible controls in two separate contexts and finishes 1–27. The English run checks translated rules, hints, feedback, audits, claims and debrief. Desktop and 390px mobile screenshots were inspected. Team names are participant data and remain as supplied.
-- Capacity traces with 80-character team/request IDs and 64-character maximally JSON-escaped names: audits 55,814 bytes; upgrades 51,996; valid held claims 44,516; experiments 34,502. Every trace has 50 accepted operations and retains all receipts; both audit routes retain 8 claims and 16 score entries. Every transition is JSON-restored and projection/score equality checked. The rounded 64KiB envelope covers these measured profiles; it is not an exhaustive global maximum or a native SQLite/score transaction result.
-- Independent bilingual math review caught negative-size wording, lost translated migration evidence, an omitted upper-bound target, and initial vocabulary gaps. Repairs are covered by source review and migration reproduction; full Lean verification remains unperformed.
-
-Native organizer selection, authenticated seats, official score/history delivery and host restart remain **unverified and unimplemented**. Existing coordination authentication and storage are intended for reuse. The English prototype browser does not certify them. No AWS, merge or release.
+The problem CI certifies its own game and validator. Native host evidence belongs to the linked TenkaCloud PR. Use both pinned revisions together. Full Lean dependency build, axiom audit, Comparator, AWS execution and independent human playtest remain unperformed. No merge, release or AWS deployment was performed.

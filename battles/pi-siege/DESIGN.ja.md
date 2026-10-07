@@ -29,4 +29,4 @@
 
 既存暗号Battleの純粋なcoordinationモデル・projection・公開台帳・Portal slot・Bun harnessの構成を使った。別の問題単位に閉じ、本体SDKへの実行依存なし。
 
-本体local hostが暗号Battle IDを直接選ぶため、対応済みとしてカタログへ出さず、同じcomponentと採点hooksをつなぐローカル試作にした。2席の操作は再現できるが、認証・公式点・永続化・本体登録の証拠ではない。全LeanビルドやComparatorも未実施。原稿の証明主張と、検査した有限の数学を分ける。
+元の試作は同じcomponentと採点hooksをつなぐ練習入口だった。連動変更では正規metadataと本体のレビュー済みIDへ登録し、既存認証・公式点・SQLiteを再利用する。本体ブラウザで2席の4ラウンド、公式順位1対27、別プロセスへの再起動後の続行を確認した。全LeanビルドやComparatorも未実施。原稿の証明主張と、検査した有限の数学を分ける。

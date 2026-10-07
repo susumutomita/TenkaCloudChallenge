@@ -1,52 +1,44 @@
-# TenkaCloud競技として使うための残り
+# 本体ローカル競技の接続と検証
 
-このPRだけで、同じPortal componentとcoordination pluginを使った日英2席対戦をローカルで遊べる。4ラウンド、公開前の試行、券の配分、反例、精算、終了解説、通信再送まで確認した。**主催者が問題を選んでイベントを作り、参加者が本体の認証と公式得点で競う状態は未完成**。以下を満たす連携変更が完了条件である。
+正規pathは`battles/pi-siege`。日英metadata、`coordination/pi-siege.ts`、`portal/StatusPanel.tsx`を、連動するTenkaCloud本体branchのレビュー済みカタログへ登録する。問題だけのPRを既存本体へ適用しても実行対応にはならない。本体baseは`05d29d12`、問題試作の参照元は`05ffed84`。[実施記録](EVIDENCE.md)を参照。
 
 ## 監査と突破案の体験
 
-監査対象はプレイヤーの主張であり、原稿そのものではない。例えば「4枚を一種類に集めた指数6だから、すべての混ぜ方も6以上」というプレイヤーの一般化を、2種類に2枚ずつの指数4で破る。これは有限模型の保証の誤りで、原稿の定理の反例ではない。
+監査対象は有限ゲームのプレイヤーの主張であり、研究原稿そのものではない。一種類の4枚なら次数0,1,2,3で指数6。2種類へ2枚ずつなら種類の合計2と次数の合計2で指数4。「どの配置でも6以上」という一般化を破るが、実際の項が非零・大きいとは証明しない。
 
-原稿の突破案へつながる体験は、(1)ゼロではない数に整数由来の下限を付ける、(2)種類を集める場合と散らす場合の両方を扱う、(3)二つの評価が両立する配分を作る、という部分。πの近似をただ探すだけでは越えられない壁を小さい数で体験する。補間の定理、複数方向の共有予算、係数・全項の和・余り、無限の論証は移していない。
+原稿へつながるのは、非零数に整数由来の下限を付ける、集める場合と散らす場合を両方扱う、二つの評価が両立する配分を探す体験である。補間の定理、複数方向の共有予算、全項の和・余り、無限の論証は移していない。原稿は証明を主張し形式化ソースを公開しているが、全Lean依存ビルド・公理監査・Comparatorは未実施。採点は初等的な分数計算と有限条件だけに依存する。
 
-原稿は定理の証明を主張し形式化ソースを公開しているが、ここでは全Leanビルド・公理監査・Comparatorを実行していない。競技の採点は初等的な分数計算と有限の条件だけを使う。監査が成功しても原稿の反証にはならず、模型の構築に成功しても原稿の主定理を証明した意味にはならない。
+## 接続契約
 
-## 現行コードで確認した境界
+| 場所 | 実装 |
+| --- | --- |
+| 問題metadata | Battle / `local` / `bun`、pluginとruntime entryが同じ、StatusPanel、空exposedPorts、日英の操作・ゴール |
+| 本体coordination catalog | 明示したレビュー済みIDだけを、既存loaderでbundle。イベントに固定したbundle/digestを保持 |
+| 本体browser catalog | 公開metadata、実Portalと日英content/CSSのみ。game/math/reducer、dev、tests、運営資料は不許可 |
+| 共通schema/validator | `local/bun`専用の狭い分岐でplugin/slot/日英参照を検査。AWS/Composeの既存検査は保持 |
+| 本体イベント管理 | 作成・準備・開始・match初期化で正確に2チームと状態予算を検査。1イベントのcoordination Battleは1件 |
+| 認証・採点・保存 | 既存のteam-key認証、event queue、符号付き差分、SQLite transaction、終了/lock制限を再利用 |
 
-参照した本体: TenkaCloud `05ffed84`。本体は読取のみで変更していない。
+`initialState / validateOp / applyOp / projectForTeam / teamScores`とStatusPanelを再利用し、新しい数学専用APIや採点kindは追加しない。Private試行は本人のprojectionだけ、公開主張と台帳は共有。余計なidentity/clock/score入力は拒否する。
 
-| 現行の場所 | 現行動作 | 必要な変更 |
-| --- | --- | --- |
-| `scripts/local-host/coordination-runtime.ts:coordinationCatalog` | 暗号Battle 1件を固定IDでbundleし、既存`LocalPluginLoader`へ渡す | レビュー済みID一覧へ`pi-siege`を追加し、同じloaderで`coordination/pi-siege.ts`をbundleする |
-| `scripts/local-host/browser-metadata.ts` | 公開カタログ・native runtime表示・dashboard公開・Portal globとモジュール許可が暗号Battleだけ | レビュー済みπ問題だけを追加。Portalと公開content/CSSを許可し、`game/math.ts`・`game/reducer.ts`・tests・運営資料をブラウザへ入れない |
-| Challenge `SCHEMA.json` / `scripts/validate-problems.ts:checkCrossRefs` | `runtime`は形として予約を許すが、実検査はCFnかコンテナ。`local/bun`を宣言するだけでは使えない | 本体対応と同時にnative coordinationの狭い検査分岐を追加。既存plugin/slot相互参照を行い、AWS templateやDocker verifierを要求しない |
-| `scripts/local-host/service.ts` / `coordination.ts` | イベントにcoordination Battleは最大1件。認証、queue、SQLite状態と得点の同時保存、終了/lock制限は既存 | この2チームゲームのrosterを作成/開始前に検査。3チームで突然plugin例外になる経路を提供しない。初期化前に両者のjobをCOMPLETEにする |
-| `apps/participant-portal/src/plugins/loader.ts` / `PortalPluginSlots.tsx` | metadataのslotを実componentへ解決し、認証済みcoordination clientを注入 | πのmetadata/allowlistで実slotを解決する。本PRのcomponentとpluginを再利用し、`dev/app.tsx`の席URLやresetを本体へ持ち込まない |
-| `scripts/local-host/coordination-core.ts` / `score.ts` | 既存hookの`teamScores`から差分を保存。未指定floorは符号付き点を保持 | −3を含む試合でplugin・Portal・本体順位表・監査履歴の値を一致させる |
+## 状態形式と容量
 
-新しい採点kind、数学専用API、別reducerは不要。既存の`initialState / validateOp / applyOp / projectForTeam / teamScores`とStatusPanel slotを使う。既存hostの認証・状態保存・採点窓も再利用する。まずAWSなしの**本体local host**を対象とし、クラウド実行やAWS配布をこの完了条件に含めない。
+形式2は旧形式1の最大50受理操作を再生し、旧日本語・構造との一致を確認してから移行する。実旧版のscope監査と混合指数4<6のfixtureで、得点・履歴・同一再送を保持する。不一致や未対応形式を黙って初期化しない。
 
-## 問題側の登録変更
+最大長ID・名前を使い、全50操作を通る4合法ルートを各遷移でJSON復元・計測した。監査ルート55,814 bytes、強化51,996、成立44,516、試行34,502。64KiB（baseBytes 0 / bytesPerTeam 32,768 / 2チーム）の宣言をテストで固定する。測定したルートの上限であり、全入力の厳密な最大値とは扱わない。本体の実保存は既存2MiB guardで検査する。
 
-1. 本体の対応変更と同時に`battles/_pi-siege`を`battles/pi-siege`へ戻し、日英metadataを追加。学習内容の名前・タグ・背景・最初の操作・勝敗条件を記す。日本語画面だけである現状を登録時に解消し、localeによる日英画面・ヒント・feedbackを確認する。
-2. 既存の形で`interTeamCoordination.plugin = coordination/pi-siege.ts`、`dashboard.slots.StatusPanel = portal/StatusPanel.tsx`を指定。提案するnative宣言は`runtime = {provider: local, engine: bun, entry: coordination/pi-siege.ts}`だが、**本体/validator対応まで未登録**。free-form schemaを通っただけで実行対応とは扱わない。
-3. 2チーム・全4ラウンドの最大長合法履歴でstateのbyte量を各遷移で測り、測定に基づく`stateBudget`を固定。最大入力、監査成功/失敗、行・目盛り強化、replay履歴、得点台帳を含む。推定値をmetadataへ書かない。
-4. 起動・待機・無料ヒントで0点、未公開試行の非表示、公開後の証拠、終了解説、scoreReasonsの公開情報境界を本体の参加者経路で確認。問題を読み、無料例から手計算できることも確認する。
+## 本体で試す
 
-`_pi-siege`は暫定の非カタログ名である。通常名のmetadataなしディレクトリだと、本体browserカタログが全ディレクトリのmetadataを読む際にENOENTになる不良を確認した。underscoreはそのIDフィルタから外れるため既存カタログを壊さない。架空のmetadataで登録済みと見せず、連携PRでのみ正規名へ移す。
+1. 連動する本体branchと固定した`problems`revisionを使い、TenkaCloudで`make install`、`make local`。
+2. 主催者がπ包囲戦を選び、2チームを作成。各チームキーを渡し、問題を準備してScheduleを開始。
+3. 参加者はそれぞれのキーでPortalへログイン。π包囲戦を開き、両者が準備完了。
+4. 最初はp=3、q=1のまま分数を試す。誤差と1/q³の比較を読み、無料の例・3段階ヒントで次の手を考える。
+5. 途中終了は本体を停止。同じデータディレクトリで再起動すると続行できる。公式順位は本体Scoreboard、数学の根拠は競技内の得点・判定履歴で確認。
 
-## 競技としての完了条件
+## 確認できた経路
 
-- 本体の主催者カタログからπ包囲戦を選び、AWSなしで1イベント・2チームを作成/開始できる。暗号Battleを選んだ既存イベントも継続して動く。
-- 2つの別の参加者ログインから本体Portalで4ラウンドを完走する。席URLの変更では他人になれない。第三チーム・別イベント・未開始・終了後・lock中の操作を所定の理由で拒否する。
-- 待機/ヒント0点、券切れ、pass、正しい/誤った主張、成功/失敗監査、比較点、二重送信、同時書込みを検査する。pluginの符号付き得点と本体順位表・履歴が一致する。
-- hostを途中で停止/再起動し、状態・私的試行・公開主張・同一requestのreceiptが復元される。再送が二重加点にならない。終了・lock・teardownは既存hostの管理経路を通る。
-- participant bundleを検査し、採点関数・他人の試行・運営の期待値を含まない。日英・desktop/mobile・数学用語・ヒント・終了解説を確認する。
-- 問題側gateと本体側のcatalog/bundle/coordination HTTP/Portal/SQLite/browser検査が同じ登録済みrevisionで成功する。READMEの「登録済み」表記はこの証拠を得てから更新する。
+本体HTTP/SQLite試験は未認証・未開始・不正identity・1/3チーム・状態予算超過・lockを拒否し、監査の−3/+4を公式点へ反映。DBを閉じて開き直し、同じoperationの再送で二重加点がないことを確認した。
 
-本PR専用CIは問題テスト・型検査・独立計算・Linuxの実2席ブラウザを実行する。ただしそのgreenは上記の本体統合条件を満たした意味ではない。[実施記録](EVIDENCE.md)と区別する。
+本体実ブラウザは主催者の選択、独立した2席の認証、未公開試行の非表示、受理後の応答喪失と同一再送、別hostプロセス/新しいブラウザへの途中再起動、4ラウンド・8主張、公式順位1対27、得点履歴、日英切替、390px幅、page errorなしを確認した。練習入口は別の任意経路であり、URLで席を選ぶ無認証・メモリ内の動作を本体の証拠に使わない。
 
-## 問題固有の準備状況
-
-独立worktree `pi-siege-native-catalog`で日英の画面・ヒント・計算feedback・監査理由・履歴を実装し、両言語の4ラウンド完走を確認した。形式2移行は旧形式1の最大50受理操作を再生し、旧構造との一致を確認してから採用する。実旧版のscope監査と混合指数4<6監査fixtureで得点・履歴・再送を保持した。全50操作を使う4合法ルートの各遷移を計測し、最大55,814 bytes（名前/ID最大長、成功/失敗監査、強化、公開主張、台帳、全receipt）だった。2チーム用の計測範囲を64KiBへ丸めたテストを固定している。全可能入力の厳密な最大値や本体の保存検査とは扱わない。
-
-本体branch `pi-siege-native-host`は`05d29d12`から準備したが、共有ファイルは未編集。親スレッドへ予定パスを送る操作は自動承認レビューが別スレッド送信権限を確認できず拒否したため、明示許可を依頼している。許可後に並行セッション防衛作業とownershipを調整してから、上記の本体/validator/catalog/Portal登録を進める。
+AWS配布・全Lean検証・独立した人間の試遊は未実施。マージ・リリース・AWSデプロイは行わない。

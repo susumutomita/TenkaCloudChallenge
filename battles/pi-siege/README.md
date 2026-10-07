@@ -1,17 +1,21 @@
-# Pi Siege — local research battle prototype
+# Pi Siege — records and guarantees
 
 Two players build records and guarantees, then challenge gaps in each other's published reasoning. Four rounds turn one paper's strategy into finite experiments: rational approximation, a nonzero 2×2 determinant, mixed row arrangements, and simultaneous parameter constraints. Players allocate six action tickets per round to experiments, upgrades, publication and audits. Startup and waiting earn no points.
 
-This is a runnable **local prototype with Japanese and English interfaces**. It is not registered in the TenkaCloud catalog or native local host. See [日本語](README.ja.md), [design](DESIGN.ja.md) and [research/review](RESEARCH.md).
+This is a **Japanese/English native local Battle** when used with the linked TenkaCloud host change. Its metadata, coordination plugin and Portal component are registered at `battles/pi-siege`. See [日本語](README.ja.md), [design](DESIGN.ja.md) and [research/review](RESEARCH.md).
 
-Audits target players' claims in this finite game, not errors in the manuscript. Constructing tools that cover zero, mixed arrangements and both parameter conditions is the experience of the proposed strategy. [Native competition integration and acceptance criteria](INTEGRATION.ja.md) specify the remaining work. `_pi-siege` is deliberately excluded from the native metadata-directory scan until coordinated registration.
+Audits target players' claims in this finite game, not errors in the manuscript. Constructing tools that cover zero, mixed arrangements and both parameter conditions is the experience of the proposed strategy. [Native competition integration and evidence](INTEGRATION.ja.md) describe the coordinated host contract.
 
-## Play locally
+## Play in TenkaCloud
+
+Use the linked TenkaCloud host branch and its pinned `problems` revision. Run `make install` and `make local` in TenkaCloud, sign in to the organizer console, select **Pi Siege**, create exactly **two teams**, prepare jobs and start Schedule. Each player signs in at the participant Portal with their own team key and opens Pi Siege. Both press **Ready**. Scores and match state are saved to the host SQLite database; restart with the same host data directory to continue. One coordination Battle is allowed per event. No Docker or AWS is required for this Battle.
+
+## Standalone practice harness
 
 Requires Bun and a browser. The game uses no AWS account, cloud resources, external APIs or paid computation.
 
 ```sh
-cd battles/_pi-siege
+cd battles/pi-siege
 make install
 make dev
 ```
@@ -33,13 +37,13 @@ After playing, discuss: four type-0 cards have degrees 0,1,2,3, sum 6. Two of ea
 
 ## Runtime boundaries
 
-`coordination/pi-siege.ts` exposes the existing pure hook shape; `portal/StatusPanel.tsx` is the real Portal slot. The Bun harness composes the same authoritative reducer and component with an injected coordination client. SDK imports are type-only; no platform SDK runtime is bundled. The narrow declaration contract was copied from TenkaCloud `05ffed84`.
+`coordination/pi-siege.ts` exposes the existing pure hook shape; `portal/StatusPanel.tsx` is the real Portal slot. The Bun harness composes the same authoritative reducer and component with an injected coordination client. SDK imports are type-only; no platform SDK runtime is bundled. The narrow declaration contract was copied from TenkaCloud `05ffed84`; native integration uses host base `05d29d12`.
 
 The server binds to `127.0.0.1`, checks Host/Origin and bounds operation bodies. Scores, tickets, turns and calculations are server-owned. Unknown fields and stale revisions are rejected. Identical request ID/body retries are idempotent even across rounds; changing that body is rejected. Experiments are private until publication. Row counts are captured with experiments, preventing later upgrades from retroactively strengthening a claim.
 
-The harness has **no authentication**: either URL selects a seat, and local reset is available. Use it on one trusted machine. It proves local playability, not adversarial seat isolation, official scoring, durable state or native host discovery. State is in memory and disappears on process exit. Reload both tabs after reset. Stop with Ctrl-C. Resources are local CPU, memory and disk; none continues cloud billing.
+The **standalone practice harness** has no authentication: either URL selects a seat, and local reset is available. Use it on one trusted machine. It proves local playability, not the native host's authentication, official scoring or durability. State is in memory and disappears on process exit. Reload both tabs after reset. Stop with Ctrl-C. Resources are local CPU, memory and disk; none continues cloud billing.
 
-The native host currently selects `ac26-crypto-battle` by ID. Another coordination battle needs a coordinated TenkaCloud change. This directory intentionally has no `metadata.json`, invented Docker verifier or AWS template. The catalog gate checks the existing catalog and does not certify this prototype's host support.
+The coordinated host uses an explicit reviewed catalog. It authenticates team keys, enforces exactly two teams before event creation/preparation/start, pins the authoritative plugin bundle and stores state and signed score deltas transactionally. The browser includes only the reviewed Portal component, public bilingual content and CSS; reducers, arithmetic grading, development harness and organizer documents stay excluded. The native `local/bun` validator checks the real plugin and Portal references without a Docker verifier or AWS template.
 
 ## Verification
 
@@ -56,3 +60,5 @@ The dedicated GitHub Actions workflow explicitly installs pinned Playwright Chro
 The automated match drives visible controls in two isolated contexts: four rounds/eight claims, lost response and exact retry, private trial and refresh, a hand-calculated mixed arrangement, settlement/debrief, and mobile width. Unit tests cover exact arithmetic, independent enumeration, hostile inputs, concurrent stale writes, failed/repeated audits, exhaustion, immutability and row snapshots. Bilingual state schema 2 replays the retained schema-1 operations and checks the old structure before accepting migration. Legacy score and mixed-audit fixtures retain signed points, tickets, receipt replay and the numerical counterexample in both languages. Four complete 50-operation storage traces measure every transition with maximum-length IDs and names; their maximum is 55,814 bytes. This is a measured set of supported two-team profiles, not an exhaustive global maximum or native storage test. Independent mathematical review found real defects and verified the repairs; see RESEARCH.md.
 
 Lean dependency build, axiom audit, Comparator execution, native host registration, live AWS and an independent human playtest were not run. Local tests do not verify the manuscript's infinite theorem.
+
+Native verification in the linked TenkaCloud checkout: `bun run test:host:pi-siege`. The browser drives organizer selection and two team-key logins, restarts the host process and browser contexts against the same SQLite data, then finishes all four rounds and checks the official 1–27 ranking, bilingual history and mobile layout. [Evidence](EVIDENCE.md) separates this from the standalone harness and theorem verification.

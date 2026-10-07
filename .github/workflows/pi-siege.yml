@@ -1,4 +1,4 @@
-name: pi-siege-prototype
+name: pi-siege-native-catalog
 
 permissions:
   contents: read
@@ -7,7 +7,9 @@ on:
   pull_request:
     paths:
       - 'battles/pi-siege/**'
-      - 'battles/pi-siege/**'
+      - 'SCHEMA.json'
+      - 'scripts/native-coordination.test.ts'
+      - 'scripts/validate-problems.ts'
       - '.github/workflows/pi-siege.yml'
   push:
     branches: [main]
