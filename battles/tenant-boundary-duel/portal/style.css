@@ -1,0 +1,139 @@
+.tenant-duel {
+  font:
+    16px / 1.7 system-ui,
+    sans-serif;
+  color: #18324a;
+  max-width: 1180px;
+  margin: auto;
+  padding: 24px;
+  background: #f5f8fc;
+}
+.tenant-duel * {
+  box-sizing: border-box;
+}
+.tenant-duel header {
+  border-left: 5px solid #087b86;
+  padding-left: 20px;
+}
+.tenant-duel h1 {
+  font-size: clamp(1.6rem, 5vw, 2.6rem);
+  line-height: 1.3;
+}
+.tenant-duel h2 {
+  font-size: 1.25rem;
+}
+.tenant-duel section {
+  background: white;
+  padding: 20px;
+  border: 1px solid #ccdbe8;
+  border-radius: 12px;
+  margin: 18px 0;
+  min-width: 0;
+}
+.td-scores,
+.td-grid,
+.td-buttons {
+  display: flex;
+  gap: 16px;
+}
+.td-grid > section {
+  flex: 1;
+}
+.td-scores > div {
+  flex: 1;
+  padding: 14px;
+  background: #153c5b;
+  color: white;
+  border-radius: 10px;
+}
+.td-scores strong {
+  display: block;
+  font-size: 2rem;
+}
+.td-stage {
+  background: #d9eeef;
+  padding: 12px;
+  border-radius: 8px;
+}
+.tenant-duel label {
+  display: block;
+  margin: 16px 0;
+  font-weight: 600;
+}
+.tenant-duel input,
+.tenant-duel select,
+.tenant-duel textarea {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 12px;
+  font: inherit;
+  border: 1px solid #718699;
+  border-radius: 6px;
+}
+.tenant-duel textarea {
+  min-height: 120px;
+  font-family: monospace;
+  font-weight: 400;
+}
+.tenant-duel button {
+  font: inherit;
+  min-height: 44px;
+  background: #076b75;
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 16px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+.tenant-duel button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.tenant-duel code {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.88rem;
+}
+.tenant-duel article {
+  border-bottom: 1px solid #d7e3ed;
+  padding: 14px 0;
+}
+.tenant-duel [role="alert"] {
+  background: #fff0dc;
+  padding: 12px;
+  color: #722d00;
+}
+.tenant-duel summary {
+  cursor: pointer;
+  padding: 12px;
+}
+.tenant-duel :focus-visible {
+  outline: 3px solid #c26b00;
+  outline-offset: 3px;
+}
+.td-log {
+  max-height: 440px;
+  overflow: auto;
+}
+@media (max-width: 720px) {
+  .tenant-duel {
+    padding: 12px;
+  }
+  .td-grid,
+  .td-buttons {
+    display: block;
+  }
+  .tenant-duel section {
+    padding: 14px;
+  }
+  .td-scores {
+    gap: 8px;
+  }
+  .td-scores > div {
+    padding: 10px;
+    font-size: 0.9rem;
+  }
+}

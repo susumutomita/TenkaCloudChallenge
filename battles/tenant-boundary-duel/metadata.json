@@ -1,0 +1,62 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "tenant-boundary-duel",
+  "name": "テナント境界防衛戦",
+  "category": "Battle",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "25 分",
+  "shortDescription": "組織をまたぐノート操作を再現し、認可・検知の式を実装して再検証する2チーム対戦。",
+  "description": "独自の合成認可ゲーム。限定式言語で任意コードを実行せず、未知の組織・役割・停止済み本人と委任をサーバーで評価。session-defenseの対策選択を、認可と検知の実装で補完する。公式認定や講座課題の複製ではない。",
+  "instructions": "架空の共有ノートの開発者として、本人確認に成功した読者が別組織のノートを操作できる原因を調べよう。テナント＝データを分ける組織の単位。認可＝誰が何をしてよいかの判断。\n\n両者が準備完了。攻撃役は Orange notebook を選び「読む」。ログの allowed（操作を許したか）と組織名、ノートの読取回数を比べ、「証拠を渡す」。防衛役は画面の開発ルールと式の文法を読み、認可式・検知式を書き直す。「公開テスト」で失敗を観察して改善し、適用する。攻撃役は同じ操作と別の操作を再試験。防衛役は正規業務・境界・検知を再検証する。\n\n各段階180秒、4ラウンドで役割交代。攻撃点は再試験で通った不正なノート/操作の組に25点、同じ組は1回、最大100。防衛点は floor(40×境界成功率 + 40×正規業務成功率 + 20×検知成功率) − 被害、最低0。floor＝小数部分を捨てる。例：全検証成功・被害25なら75点。対策前の試行・式の適用・相手の再試験完了・再検証がすべて必要。起動・待機・公開テストは0点。合計点の高い側が勝ち、同点は引き分け。\n\nサーバー固定の本人情報と画面の組織の自己申告を区別する。後半は特定の人とノートへの読む操作だけを許す閲覧委任を追加し、未知の組織名・役割・停止済みの人で同じ修正を確認する。合成データ限定。実アカウント・任意プログラム・外部通信は使わない。クリアは実組織の安全を保証しない。",
+  "tags": [
+    "authorization",
+    "tenant-isolation",
+    "detection",
+    "code-repair",
+    "synthetic-lab",
+    "battle"
+  ],
+  "exposedPorts": [],
+  "learningGoals": [
+    "ログインとデータごとの認可を区別し、操作ログから越境を再現する",
+    "サーバー固定の本人・対象・役割と自己申告の境界を説明する",
+    "認可式と検知式を実装し、拒否と正規業務を同時に再検証する",
+    "閲覧委任・停止済みの人・未知の組織名で修正の限界を説明する"
+  ],
+  "runtime": {
+    "provider": "local",
+    "engine": "bun",
+    "entry": "coordination/tenant-boundary-duel.ts"
+  },
+  "dashboard": {
+    "slots": {
+      "StatusPanel": "portal/StatusPanel.tsx"
+    }
+  },
+  "interTeamCoordination": {
+    "plugin": "coordination/tenant-boundary-duel.ts",
+    "name": "テナント境界防衛戦",
+    "description": "Exactly two teams. Server-authoritative expression evaluation, unknown cases and scoring.",
+    "publicHint": true,
+    "stateBudget": {
+      "bytesPerTeam": 65536,
+      "baseBytes": 0
+    }
+  },
+  "i18n": {
+    "en": {
+      "name": "Tenant Boundary Duel",
+      "shortDescription": "Reproduce cross-tenant access, implement authorization and detection expressions, and retest in a two-team battle.",
+      "description": "Independent synthetic authorization game. Bounded expression interpreter and server-only unknown-case checks. Complements Session Defense Arena. No official affiliation or copied course tasks.",
+      "instructions": "You develop a fictional shared notebook. An authenticated reader can access another organization’s documents. A tenant separates an organization’s data. Authorization decides who may do what.\n\nBoth teams press Ready. The attacker selects Orange notebook and presses Read. Compare allowed (whether the action succeeded), tenant names and the document read count, then hand over evidence. The defender reads the visible development rules and bounded expression grammar, writes authorization and detection expressions, observes failures in Public tests and revises before deployment. The attacker retests the same and different operations; the defender rechecks legitimate work, boundaries and detection.\n\nEach phase lasts 180 seconds over four alternating rounds. Each unauthorized document/action pair allowed in retest earns 25 attack points, once per pair, up to 100. Defense points = floor(40×safety rate + 40×work rate + 20×detection rate) − damage, minimum zero. floor discards the fractional part. Example: all checks pass with damage 25 → 75 points. Defense requires a baseline attempt, deployed expressions, completed attacker retest and explicit recheck. Startup, waiting and public tests award zero. Highest total wins; ties draw.\n\nDistinguish server-bound identity from client tenant claims. Later rounds add person/document-bound read-only delegation. Check the same repair on unseen tenants, roles and inactive actors. Synthetic data only: no real accounts, arbitrary programs or external traffic. Clearing this model does not guarantee organizational safety.",
+      "learningGoals": [
+        "Distinguish authentication from object authorization and reproduce cross-tenant access from logs",
+        "Explain server-bound identity, resources and roles versus client claims",
+        "Implement authorization and detection expressions and recheck denials and legitimate work together",
+        "Explain repair limits using delegation, inactive actors and unseen tenants"
+      ]
+    }
+  }
+}
