@@ -84,3 +84,21 @@ test("native coordination validates real matching plugin paths without inventing
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("schema permits portless native Battles while preserving public runtime port requirements", async () => {
+  const { default: Ajv } = await import("ajv");
+  const { default: addFormats } = await import("ajv-formats");
+  const { readFileSync } = await import("node:fs");
+  const root = new URL("../", import.meta.url);
+  const ajv = new Ajv({ strict: false, allErrors: true });
+  addFormats(ajv);
+  const validate = ajv.compile(JSON.parse(readFileSync(new URL("SCHEMA.json", root), "utf8")));
+  const native = JSON.parse(readFileSync(new URL("battles/forensic-casebook/metadata.json", root), "utf8"));
+  const legacy = JSON.parse(readFileSync(new URL("battles/hello-world-battle/metadata.json", root), "utf8"));
+  expect(validate(native)).toBe(true);
+  expect(validate(legacy)).toBe(true);
+  expect(validate({ ...legacy, exposedPorts: [] })).toBe(false);
+  expect(validate({ ...native, exposedPorts: [{ port: 1, name: "fake" }] })).toBe(false);
+  expect(validate({ ...native, category: "Challenge" })).toBe(false);
+  expect(validate({ ...native, runtime: { ...native.runtime, engine: "compose" } })).toBe(false);
+});

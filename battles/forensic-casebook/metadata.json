@@ -18,12 +18,7 @@
     "recovery",
     "native-battle"
   ],
-  "exposedPorts": [
-    {
-      "port": 1,
-      "name": "No public endpoint; native coordination only (unused port)"
-    }
-  ],
+  "exposedPorts": [],
   "learningGoals": [
     "認証成功・技術上の権限・業務承認・人物への帰属を区別する",
     "時差・操作番号・内容指紋から時系列と確認済みの外部到達範囲を復元する",
