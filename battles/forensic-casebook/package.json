@@ -1,0 +1,22 @@
+{
+  "name": "@tenkacloud/forensic-casebook",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run dev/server.ts",
+    "test": "bun test tests game",
+    "test:browser": "bun run tests/browser.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.11",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "5.9.3",
+    "playwright-core": "1.56.1"
+  },
+  "trustedDependencies": [],
+  "packageManager": "bun@1.3.11"
+}
