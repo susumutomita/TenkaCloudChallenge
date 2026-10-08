@@ -11,7 +11,7 @@ const schema=ajv.compile(JSON.parse(readFileSync(join(root,"SCHEMA.json"),"utf8"
 
 test("native coordination needs no fake AWS template, port or Docker verifier",()=>{
   expect(schema(metadata)).toBe(true);
-  expect(checkNativeCoordinationRefs(dir,metadata)).toEqual([]);
+  expect(checkNativeCoordinationRefs(dir,metadata).errors).toEqual([]);
   expect(metadata.runtime.entry).toBe(metadata.interTeamCoordination.plugin);
 });
 test("schema retains the legacy port requirement and rejects unrelated local engines",()=>{
@@ -28,5 +28,5 @@ test("native cross-references fail for missing authority, slot, foreign scoring 
     {interTeamCoordination:{plugin:"coordination/missing.ts"}},
     {dashboard:{slots:{}}}, {scoring:{kind:"verify"}}, {cfnTemplate:"template.yaml"},
     {runtime:{...metadata.runtime,verifyUrl:"http://127.0.0.1/verify"}},
-  ]) expect(checkNativeCoordinationRefs(dir,{...metadata,...patch}).length).toBeGreaterThan(0);
+  ]) expect(checkNativeCoordinationRefs(dir,{...metadata,...patch}).errors.length).toBeGreaterThan(0);
 });
