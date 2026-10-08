@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "phase": "playing",
+  "round": 0,
+  "revision": 6,
+  "roster": [
+    "alpha",
+    "bravo"
+  ],
+  "teams": {
+    "alpha": {
+      "id": "alpha",
+      "name": "alpha",
+      "ready": true,
+      "score": -3,
+      "tickets": 4,
+      "passed": false,
+      "range": 7,
+      "rows": 4,
+      "grid": 10,
+      "previews": [
+        {
+          "id": "p_2",
+          "task": {
+            "kind": "record",
+            "p": 3,
+            "q": 1
+          },
+          "facts": [
+            "3/1: 誤差の目安は 約0.1415927。表示は丸めているが、判定は丸め前の分数区間で行う。",
+            "1/q³との比較: この一回は基準より良い",
+            "良い分数を一つ見つけても、いくら先でも続くとは言えない。公開する範囲を自分で選ぶ。"
+          ]
+        }
+      ],
+      "claimed": true,
+      "feedback": [
+        "主張を公開した。相手に材料が渡った。監査またはラウンド精算で判定される。まだ加点されない。"
+      ]
+    },
+    "bravo": {
+      "id": "bravo",
+      "name": "bravo",
+      "ready": true,
+      "score": 4,
+      "tickets": 4,
+      "passed": false,
+      "range": 7,
+      "rows": 4,
+      "grid": 10,
+      "previews": [
+        {
+          "id": "p_3",
+          "task": {
+            "kind": "record",
+            "p": 22,
+            "q": 7
+          },
+          "facts": [
+            "22/7: 誤差の目安は 約0.001264489。表示は丸めているが、判定は丸め前の分数区間で行う。",
+            "1/q³との比較: この一回は基準より良い",
+            "良い分数を一つ見つけても、いくら先でも続くとは言えない。公開する範囲を自分で選ぶ。"
+          ]
+        }
+      ],
+      "claimed": false,
+      "feedback": [
+        "監査成立。+4",
+        "有限の記録は、どこまでも続く根拠にならない。分数そのものが間違いという判定ではない。",
+        "3/1: 誤差の目安は 約0.1415927。表示は丸めているが、判定は丸め前の分数区間で行う。",
+        "1/q³との比較: この一回は基準より良い",
+        "良い分数を一つ見つけても、いくら先でも続くとは言えない。公開する範囲を自分で選ぶ。"
+      ]
+    }
+  },
+  "turn": "alpha",
+  "claims": [
+    {
+      "id": "c_4",
+      "author": "alpha",
+      "round": 0,
+      "task": {
+        "kind": "record",
+        "p": 3,
+        "q": 1
+      },
+      "status": "broken",
+      "challenged": [
+        "bravo"
+      ],
+      "facts": [
+        "3/1: 誤差の目安は 約0.1415927。表示は丸めているが、判定は丸め前の分数区間で行う。",
+        "1/q³との比較: この一回は基準より良い",
+        "良い分数を一つ見つけても、いくら先でも続くとは言えない。公開する範囲を自分で選ぶ。"
+      ],
+      "scope": "forever"
+    }
+  ],
+  "ledger": [
+    {
+      "round": 0,
+      "team": "bravo",
+      "points": 4,
+      "text": [
+        "反例・根拠不足の指摘が成立。+4",
+        "有限の記録は、どこまでも続く根拠にならない。分数そのものが間違いという判定ではない。",
+        "3/1: 誤差の目安は 約0.1415927。表示は丸めているが、判定は丸め前の分数区間で行う。",
+        "1/q³との比較: この一回は基準より良い",
+        "良い分数を一つ見つけても、いくら先でも続くとは言えない。公開する範囲を自分で選ぶ。"
+      ]
+    },
+    {
+      "round": 0,
+      "team": "alpha",
+      "points": -3,
+      "text": [
+        "公開主張が監査で崩れた。−3",
+        "有限の記録は、どこまでも続く根拠にならない。分数そのものが間違いという判定ではない。",
+        "3/1: 誤差の目安は 約0.1415927。表示は丸めているが、判定は丸め前の分数区間で行う。",
+        "1/q³との比較: この一回は基準より良い",
+        "良い分数を一つ見つけても、いくら先でも続くとは言えない。公開する範囲を自分で選ぶ。"
+      ]
+    }
+  ],
+  "receipts": [
+    {
+      "id": "legacy_0",
+      "team": "alpha",
+      "payload": "{\"kind\":\"ready\",\"requestId\":\"legacy_0\",\"revision\":0,\"round\":0}"
+    },
+    {
+      "id": "legacy_1",
+      "team": "bravo",
+      "payload": "{\"kind\":\"ready\",\"requestId\":\"legacy_1\",\"revision\":1,\"round\":0}"
+    },
+    {
+      "id": "legacy_2",
+      "team": "alpha",
+      "payload": "{\"kind\":\"inspect\",\"task\":{\"kind\":\"record\",\"p\":3,\"q\":1},\"requestId\":\"legacy_2\",\"revision\":2,\"round\":0}"
+    },
+    {
+      "id": "legacy_3",
+      "team": "bravo",
+      "payload": "{\"kind\":\"inspect\",\"task\":{\"kind\":\"record\",\"p\":22,\"q\":7},\"requestId\":\"legacy_3\",\"revision\":3,\"round\":0}"
+    },
+    {
+      "id": "legacy_4",
+      "team": "alpha",
+      "payload": "{\"kind\":\"publish\",\"sourceId\":\"p_2\",\"scope\":\"forever\",\"requestId\":\"legacy_4\",\"revision\":4,\"round\":0}"
+    },
+    {
+      "id": "legacy_5",
+      "team": "bravo",
+      "payload": "{\"kind\":\"audit\",\"claimId\":\"c_4\",\"reason\":\"scope\",\"requestId\":\"legacy_5\",\"revision\":5,\"round\":0}"
+    }
+  ]
+}

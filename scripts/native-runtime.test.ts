@@ -14,9 +14,12 @@ test("native coordination validates real matching plugin paths without inventing
   const dir = mkdtempSync(join(tmpdir(), "native-catalog-"));
   try {
     mkdirSync(join(dir, "coordination"));
+    mkdirSync(join(dir, "portal"));
+    writeFileSync(join(dir, "portal/StatusPanel.tsx"), "export default function StatusPanel() {}\n");
     writeFileSync(join(dir, "coordination/plugin.ts"), "export default {};\n");
     const meta = {
       category: "Battle",
+      dashboard: { slots: { StatusPanel: "portal/StatusPanel.tsx" } },
       instructions: "調査する",
       description: "運営向け",
       i18n: {

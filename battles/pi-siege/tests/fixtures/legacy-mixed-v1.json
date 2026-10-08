@@ -1,0 +1,174 @@
+{
+  "schema": 1,
+  "phase": "playing",
+  "round": 2,
+  "revision": 10,
+  "roster": [
+    "alpha",
+    "bravo"
+  ],
+  "teams": {
+    "alpha": {
+      "id": "alpha",
+      "name": "alpha",
+      "ready": true,
+      "score": -3,
+      "tickets": 4,
+      "passed": false,
+      "range": 7,
+      "rows": 4,
+      "grid": 10,
+      "previews": [
+        {
+          "id": "p_6",
+          "task": {
+            "kind": "terms",
+            "ones": 0
+          },
+          "facts": [
+            "種類0が 4 枚、種類1が 0 枚。",
+            "各種類の次数を0,1,2…とずらすと、種類の合計＋次数の合計 = 6。候補の上限は 1/64。",
+            "この配置で調べたことは、全配置を調べたことではない。相手は別の混ぜ方で反例を作れる。",
+            "これは係数の上限を1と置いた教育用模型。重複しない候補でも、実際にはゼロになる可能性がある。"
+          ],
+          "rows": 4
+        }
+      ],
+      "claimed": true,
+      "feedback": [
+        "主張を公開した。相手に材料が渡った。監査またはラウンド精算で判定される。まだ加点されない。"
+      ]
+    },
+    "bravo": {
+      "id": "bravo",
+      "name": "bravo",
+      "ready": true,
+      "score": 4,
+      "tickets": 4,
+      "passed": false,
+      "range": 7,
+      "rows": 4,
+      "grid": 10,
+      "previews": [
+        {
+          "id": "p_7",
+          "task": {
+            "kind": "terms",
+            "ones": 2
+          },
+          "facts": [
+            "種類0が 2 枚、種類1が 2 枚。",
+            "各種類の次数を0,1,2…とずらすと、種類の合計＋次数の合計 = 4。候補の上限は 1/16。",
+            "この配置で調べたことは、全配置を調べたことではない。相手は別の混ぜ方で反例を作れる。",
+            "これは係数の上限を1と置いた教育用模型。重複しない候補でも、実際にはゼロになる可能性がある。"
+          ],
+          "rows": 4
+        }
+      ],
+      "claimed": false,
+      "feedback": [
+        "監査成立。+4",
+        "相手が覆いきれなかった条件を、公開した材料から突いた。",
+        "種類1を 2 枚にした配置の指数は 4。主張の指数 6 未満なので、『全配置で指数 6 以上』という主張が崩れた。実際の項が非零・大きいという判定ではない。"
+      ]
+    }
+  },
+  "turn": "alpha",
+  "claims": [
+    {
+      "id": "c_8",
+      "author": "alpha",
+      "round": 2,
+      "task": {
+        "kind": "terms",
+        "ones": 0
+      },
+      "status": "broken",
+      "challenged": [
+        "bravo"
+      ],
+      "facts": [
+        "種類0が 4 枚、種類1が 0 枚。",
+        "各種類の次数を0,1,2…とずらすと、種類の合計＋次数の合計 = 6。候補の上限は 1/64。",
+        "この配置で調べたことは、全配置を調べたことではない。相手は別の混ぜ方で反例を作れる。",
+        "これは係数の上限を1と置いた教育用模型。重複しない候補でも、実際にはゼロになる可能性がある。"
+      ],
+      "exponent": 6,
+      "rows": 4
+    }
+  ],
+  "ledger": [
+    {
+      "round": 2,
+      "team": "bravo",
+      "points": 4,
+      "text": [
+        "反例・根拠不足の指摘が成立。+4",
+        "相手が覆いきれなかった条件を、公開した材料から突いた。",
+        "種類1を 2 枚にした配置の指数は 4。主張の指数 6 未満なので、『全配置で指数 6 以上』という主張が崩れた。実際の項が非零・大きいという判定ではない。"
+      ]
+    },
+    {
+      "round": 2,
+      "team": "alpha",
+      "points": -3,
+      "text": [
+        "公開主張が監査で崩れた。−3",
+        "相手が覆いきれなかった条件を、公開した材料から突いた。",
+        "種類1を 2 枚にした配置の指数は 4。主張の指数 6 未満なので、『全配置で指数 6 以上』という主張が崩れた。実際の項が非零・大きいという判定ではない。"
+      ]
+    }
+  ],
+  "receipts": [
+    {
+      "id": "legacy_0",
+      "team": "alpha",
+      "payload": "{\"kind\":\"ready\",\"requestId\":\"legacy_0\",\"revision\":0,\"round\":0}"
+    },
+    {
+      "id": "legacy_1",
+      "team": "bravo",
+      "payload": "{\"kind\":\"ready\",\"requestId\":\"legacy_1\",\"revision\":1,\"round\":0}"
+    },
+    {
+      "id": "legacy_2",
+      "team": "alpha",
+      "payload": "{\"kind\":\"pass\",\"requestId\":\"legacy_2\",\"revision\":2,\"round\":0}"
+    },
+    {
+      "id": "legacy_3",
+      "team": "bravo",
+      "payload": "{\"kind\":\"pass\",\"requestId\":\"legacy_3\",\"revision\":3,\"round\":0}"
+    },
+    {
+      "id": "legacy_4",
+      "team": "bravo",
+      "payload": "{\"kind\":\"pass\",\"requestId\":\"legacy_4\",\"revision\":4,\"round\":1}"
+    },
+    {
+      "id": "legacy_5",
+      "team": "alpha",
+      "payload": "{\"kind\":\"pass\",\"requestId\":\"legacy_5\",\"revision\":5,\"round\":1}"
+    },
+    {
+      "id": "legacy_6",
+      "team": "alpha",
+      "payload": "{\"kind\":\"inspect\",\"task\":{\"kind\":\"terms\",\"ones\":0},\"requestId\":\"legacy_6\",\"revision\":6,\"round\":2}"
+    },
+    {
+      "id": "legacy_7",
+      "team": "bravo",
+      "payload": "{\"kind\":\"inspect\",\"task\":{\"kind\":\"terms\",\"ones\":2},\"requestId\":\"legacy_7\",\"revision\":7,\"round\":2}"
+    },
+    {
+      "id": "legacy_8",
+      "team": "alpha",
+      "payload": "{\"kind\":\"publish\",\"sourceId\":\"p_6\",\"exponent\":6,\"requestId\":\"legacy_8\",\"revision\":8,\"round\":2}"
+    },
+    {
+      "id": "legacy_9",
+      "team": "bravo",
+      "payload": "{\"kind\":\"audit\",\"claimId\":\"c_8\",\"reason\":\"mixed\",\"ones\":2,\"cost\":4,\"requestId\":\"legacy_9\",\"revision\":9,\"round\":2}"
+    }
+  ]
+}

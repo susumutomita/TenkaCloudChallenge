@@ -615,6 +615,9 @@ export function checkNativeCoordinationRefs(
   ];
   if (meta.category !== "Battle")
     errors.push("native coordination requires category Battle");
+  const dashboard = meta.dashboard as { slots?: { StatusPanel?: unknown } } | undefined;
+  if (typeof dashboard?.slots?.StatusPanel !== "string")
+    errors.push("native coordination requires dashboard.slots.StatusPanel");
   if (
     ["scoring", "cfnTemplate", "cfnParameters", "endpoints", "disruptions", "phases"].some((key) => meta[key] !== undefined) ||
     Object.keys(runtime ?? {}).some((key) => !["provider", "engine", "entry"].includes(key))
