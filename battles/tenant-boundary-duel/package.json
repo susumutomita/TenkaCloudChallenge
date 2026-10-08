@@ -1,0 +1,21 @@
+{
+  "name": "tenkacloud-tenant-boundary-duel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun dev/server.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "browser-test": "bun tests/browser.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.11",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "typescript": "5.9.3",
+    "playwright-core": "1.58.2"
+  },
+  "trustedDependencies": []
+}
