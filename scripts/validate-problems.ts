@@ -589,9 +589,68 @@ function checkCompositeProbeOutputRefs(
  * [#2054] container 配信問題 (runtime.engine !== cloudformation、 例: docker/compose)。
  * CFn template を持たないため、 CFn cross-ref ではなく container 固有の整合性だけを検査する。
  */
+function isNativeCoordinationProblem(meta: Metadata): boolean {
+  const runtime = meta.runtime as
+    | { provider?: unknown; engine?: unknown }
+    | undefined;
+  return runtime?.provider === "local" && runtime.engine === "bun";
+}
+
+/** Native catalog contract only; the owning host still explicitly reviews executable plugins. */
+export function checkNativeCoordinationRefs(
+  dir: string,
+  meta: Metadata,
+): CrossRefResult {
+  const runtime = meta.runtime as Record<string, unknown> | undefined;
+  const coordination = meta.interTeamCoordination as
+    | Record<string, unknown>
+    | undefined;
+  const plugin = coordination?.plugin;
+  const errors = [
+    ...checkInstructionsPresent(meta),
+    ...checkWriteupTranslations(meta),
+    ...checkDescriptionTranslations(meta),
+    ...checkHintTranslations(meta),
+    ...checkDashboardSlotFiles(meta, dir),
+  ];
+  if (meta.category !== "Battle")
+    errors.push("native coordination requires category Battle");
+  if (
+    ["scoring", "cfnTemplate", "cfnParameters", "endpoints", "disruptions", "phases"].some((key) => meta[key] !== undefined) ||
+    Object.keys(runtime ?? {}).some((key) => !["provider", "engine", "entry"].includes(key))
+  )
+    errors.push(
+      "native coordination cannot declare infrastructure scoring, endpoints, disruptions or runtime options",
+    );
+  if (
+    typeof plugin !== "string" ||
+    !/^coordination\/[A-Za-z0-9._/-]+\.ts$/u.test(plugin) ||
+    plugin.split("/").includes("..") ||
+    runtime?.entry !== plugin
+  ) {
+    errors.push(
+      "native runtime.entry must match a safe interTeamCoordination.plugin TypeScript path",
+    );
+  } else {
+    const parts = plugin.split("/");
+    let path = dir;
+    const regular = parts.every((part, index) => {
+      path = join(path, part);
+      if (!existsSync(path)) return false;
+      const stat = lstatSync(path);
+      return index === parts.length - 1 ? stat.isFile() : stat.isDirectory();
+    });
+    if (!regular)
+      errors.push(
+        "native coordination plugin must be an existing regular file",
+      );
+  }
+  return { errors, warnings: checkParticipantVisibleSpoilerAdvisory(meta) };
+}
+
 function isContainerProblem(meta: Metadata): boolean {
   const runtime = meta.runtime as { engine?: unknown } | undefined;
-  return typeof runtime?.engine === "string" && runtime.engine !== "cloudformation";
+  return !isNativeCoordinationProblem(meta) && typeof runtime?.engine === "string" && runtime.engine !== "cloudformation";
 }
 
 /**
@@ -998,6 +1057,10 @@ function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   ];
   if (isCompositeProblem(meta)) {
     const result = checkCompositeRefs(dir, meta);
+    return { ...result, errors: [...runtimeAgnosticErrors, ...result.errors] };
+  }
+  if (isNativeCoordinationProblem(meta)) {
+    const result = checkNativeCoordinationRefs(dir, meta);
     return { ...result, errors: [...runtimeAgnosticErrors, ...result.errors] };
   }
   if (isContainerProblem(meta)) {
