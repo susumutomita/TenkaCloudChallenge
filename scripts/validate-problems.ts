@@ -616,13 +616,11 @@ export function checkNativeCoordinationRefs(
   if (meta.category !== "Battle")
     errors.push("native coordination requires category Battle");
   if (
-    meta.scoring !== undefined ||
-    meta.cfnTemplate !== undefined ||
-    runtime?.verifyUrl !== undefined ||
-    runtime?.challengeEndpoints !== undefined
+    ["scoring", "cfnTemplate", "cfnParameters", "endpoints", "disruptions", "phases"].some((key) => meta[key] !== undefined) ||
+    Object.keys(runtime ?? {}).some((key) => !["provider", "engine", "entry"].includes(key))
   )
     errors.push(
-      "native coordination cannot declare container scoring/endpoints or a CloudFormation template",
+      "native coordination cannot declare infrastructure scoring, endpoints, disruptions or runtime options",
     );
   if (
     typeof plugin !== "string" ||
@@ -634,8 +632,15 @@ export function checkNativeCoordinationRefs(
       "native runtime.entry must match a safe interTeamCoordination.plugin TypeScript path",
     );
   } else {
-    const path = join(dir, plugin);
-    if (!existsSync(path) || !lstatSync(path).isFile())
+    const parts = plugin.split("/");
+    let path = dir;
+    const regular = parts.every((part, index) => {
+      path = join(path, part);
+      if (!existsSync(path)) return false;
+      const stat = lstatSync(path);
+      return index === parts.length - 1 ? stat.isFile() : stat.isDirectory();
+    });
+    if (!regular)
       errors.push(
         "native coordination plugin must be an existing regular file",
       );

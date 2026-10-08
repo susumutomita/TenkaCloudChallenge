@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'battles/forensic-casebook/**'
+      - 'scripts/validate-problems.ts'
+      - 'scripts/native-runtime.test.ts'
+      - 'Makefile'
       - '.github/workflows/forensic-casebook.yml'
   workflow_dispatch:
 permissions:

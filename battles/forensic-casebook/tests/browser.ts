@@ -25,6 +25,8 @@ function watch(page: Page) {
 async function safeScreenshot(page: Page, filename: string) {
   const visible = await page.locator("body").innerText();
   for (const seat of harness.seats) assert.equal(visible.includes(seat.token), false, "Practice credentials must not appear in screenshots");
+  // Full-page capture must begin at the top so the sticky evidence pane stays aligned.
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${artifactDir}${filename}`, fullPage: true });
 }
 async function shown(page: Page, id: string) { await page.getByTestId(id).waitFor({ state: "visible" }); }
