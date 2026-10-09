@@ -1735,6 +1735,77 @@
           "description": "slot 名 → component path の map。 slot 名は portal が予約した literal (= StatusPanel / RegistrationPanel / HelpDrawer) のみ valid。 unknown slot 名は plugin loader が iterate しない (= 黙って drop) ので SCHEMA で reject する。 SDK の `PORTAL_SLOT_NAMES` literal と同期。"
         }
       }
+    },
+    "skillEvidence": {
+      "description": "Optional team-level evidence from an observable scorer result; learning goals and total points are not evidence.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "skillId",
+          "label",
+          "i18n",
+          "rule"
+        ],
+        "properties": {
+          "skillId": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "\\S"
+          },
+          "i18n": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "en"
+            ],
+            "properties": {
+              "en": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "\\S"
+                  }
+                }
+              }
+            }
+          },
+          "rule": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "result"
+            ],
+            "properties": {
+              "source": {
+                "enum": [
+                  "flag",
+                  "uptime"
+                ]
+              },
+              "result": {
+                "const": "ok"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "allOf": [

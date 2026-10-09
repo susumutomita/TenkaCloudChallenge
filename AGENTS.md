@@ -128,3 +128,11 @@ Use `track.id`, `track.order`, and `track.chapter` for participant ordering. Use
 ## Cost claims
 
 Do not maintain or quote a static AWS dollar table in this repository. In each problem README, enumerate cost-bearing resources, supported/default Region, expected session duration, teardown, and resources that continue billing until deletion. Exact estimates belong in current AWS pricing/billing tools and still depend on usage, Region, account discounts, and data transfer.
+
+## Optional Skill Evidence
+
+`learningGoals` describe intent; optional `skillEvidence` describes a narrow team-level observation. Each entry has a stable `skillId`, Japanese `label`, `i18n.en.label`, and `rule: { source, result: "ok" }`. Supported sources are `flag` for single `flag`/`verify`, and `uptime` for `uptime`/`uptime-flat`/`uptime-multi`. An accepted answer or successful probe proves only the stated observation, never every learning goal, recovery time, sustained availability, or an individual's ability. Keep labels free of answers and hidden checks.
+
+Multi-checkpoint, multi-flag, coordination, attack-detection, and phased sources are not assessable by this contract: report history does not uniformly expose their check identity or public success predicate. Unknown references and sources must fail validation. Do not introduce a second checkpoint or scorer definition. Missing history, timestamps, or the event's pinned catalog identity means insufficient evidence; undeclared legacy problems retain normal scoring and reporting.
+
+The hello-world examples are declarations, not claims of a completed AWS run: a correct `flag` result supports the parameter-reading observation; wrong results or total points alone do not. Hello-world Battle requires a successful `uptime` result; deployment alone, a failed probe, or unrelated score does not demonstrate it.
