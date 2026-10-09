@@ -40,7 +40,7 @@ export interface Result {
 export interface Projection {
 	teamId: string;
 	score: number;
-	maxScore: 300;
+	maxScore: 400;
 	revision: number;
 	generation: number;
 	lastResult: Result | null;
@@ -83,7 +83,7 @@ export interface TeamState {
 }
 /** SERVER ONLY. Never serialize State in an HTTP response or pass it to a Portal component. */
 export interface State {
-	schemaVersion: 1;
+	schemaVersion: 2;
 	eventId: string;
 	matchSecret: string;
 	generation: number;

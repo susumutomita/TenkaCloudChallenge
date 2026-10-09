@@ -1,8 +1,9 @@
 /** SERVER ONLY: evidence construction and answer predicates. Never import this from portal/. */
+import { endpointCase } from "./endpoint.ts";
 import { createHash, createHmac } from "node:crypto";
 import type { Case, Evidence, Localized, State } from "./types.ts";
 export const L = (ja: string, en: string): Localized => ({ ja, en });
-interface PrivateQuestion {
+export interface PrivateQuestion {
 	id: string;
 	prompt: Localized;
 	format: Localized;
@@ -20,7 +21,7 @@ export interface PrivateCase {
 	evidence: Evidence[];
 	questions: PrivateQuestion[];
 }
-const evidence = (
+export const evidence = (
 	id: string,
 	name: string,
 	description: Localized,
@@ -36,7 +37,7 @@ const evidence = (
 		sha256: createHash("sha256").update(content, "utf8").digest("hex"),
 	};
 };
-const q = (
+export const q = (
 	id: string,
 	points: number,
 	prompt: Localized,
@@ -63,7 +64,7 @@ const scopeFormat = L(
 );
 
 export function buildCases(
-	state: Pick<State, "eventId" | "matchSecret" | "generation">,
+	state: Pick<State, "eventId" | "matchSecret" | "generation"> & Partial<Pick<State, "teams">>,
 	teamId: string,
 ): PrivateCase[] {
 	// Domain-separated, length-unambiguous server secret derivation. No public-seed fallback.
@@ -934,7 +935,7 @@ export function buildCases(
 			),
 		],
 	};
-	return [identity, timeline, recovery];
+	return [identity, timeline, recovery, endpointCase(state, teamId, tag)];
 }
 
 /** Normalization accepts harmless spacing/case, not additional claims or substrings. */

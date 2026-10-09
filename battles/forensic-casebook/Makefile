@@ -5,7 +5,7 @@ install:
 dev:
 	$(BUN) run dev
 test:
-	$(BUN) test tests/game.test.ts tests/http.test.ts
+	$(BUN) test tests/game.test.ts tests/http.test.ts tests/endpoint.test.ts
 typecheck:
 	$(BUN) run typecheck
 browser-test:

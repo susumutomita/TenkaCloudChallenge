@@ -88,7 +88,7 @@ async function completeVisibleCases(page: Page, locale: "ja" | "en", injectLoss:
   await page.locator('[data-testid="result-account"][data-status="incorrect"]').waitFor();
   assert.equal(await page.getByTestId("answer-account").inputValue(), "wrong-account");
   assert.equal(await page.getByTestId("attempts-account").innerText(), "1");
-  assert.equal(await page.getByTestId("score").innerText(), "0 / 300");
+  assert.equal(await page.getByTestId("score").innerText(), "0 / 400");
 
   if (injectLoss) {
     const bodies: string[] = [];
@@ -112,7 +112,7 @@ async function completeVisibleCases(page: Page, locale: "ja" | "en", injectLoss:
     await page.unroute("**/api/op");
     expectedLostResponse = false;
   } else await solve(page, "account", login.account, ["I-IDP", "I-CLOUD"]);
-  assert.equal(await page.getByTestId("score").innerText(), "20 / 300");
+  assert.equal(await page.getByTestId("score").innerText(), "20 / 400");
   await hints(page, "authority");
   await solve(page, "authority", approval.approved_actions.includes(change.operation) ? "approved" : "unauthorized", ["I-CLOUD", "I-APPROVAL"]);
   assert.ok(limits.not_collected.includes("endpoint recording"));
@@ -164,8 +164,37 @@ async function completeVisibleCases(page: Page, locale: "ja" | "en", injectLoss:
   const loss = (time(firstDamage) - Date.parse(copy.checkpoint_utc)) / 60000;
   const ready = restore.unperformed.some((item: string) => item.includes("production cutover")) ? "no" : "yes";
   await solve(page, "assurance", `loss_window_minutes=${loss};production_ready=${ready}`, ["B-AUDIT", "B-CATALOG", "B-RESTORE"]);
-  assert.equal(await page.getByTestId("score").innerText(), "300 / 300");
+  assert.equal(await page.getByTestId("score").innerText(), "300 / 400");
   await safeScreenshot(page, `recovery-${locale}.png`);
+  await page.getByTestId("case-endpoint").click();
+  const inv = await evidence(page, "E-INVENTORY");
+  await downloadCurrent(page);
+  const approved = await evidence(page, "E-APPROVAL");
+  const hist = await evidence(page, "E-HISTORY");
+  await evidence(page, "E-PLAN");
+  const recurring = hist.events.find((e: Doc) => e.action === "recreate-file");
+  const bad = inv.tasks.find((t: Doc) => t.id === recurring.task && approved.unapproved_hashes.includes(t.hash));
+  assert.ok(bad);
+  await hints(page, "diagnose");
+  await solve(page, "diagnose", `suspect=${bad.id};unknown=${inv.unresolved_object}`, ["E-INVENTORY", "E-APPROVAL", "E-HISTORY"]);
+  await solve(page, "preserve", "snapshot", ["E-INVENTORY", "E-APPROVAL", "E-HISTORY", "E-PLAN"]);
+  const custody = await evidence(page, "E-OBSERVATION");
+  assert.equal(custody.custody.length, 3);
+  for (const saved of custody.custody) assert.equal(createHash("sha256").update(saved.original_content).digest("hex"), saved.sha256);
+  await fill(page, "contain", `disable=${approved.approved.task};quarantine=vendor-update;block=all`, ["E-INVENTORY", "E-APPROVAL", "E-HISTORY", "E-PLAN"]);
+  await page.getByTestId("submit-contain").click();
+  await page.locator('[data-testid="result-contain"][data-status="incorrect"]').waitFor();
+  await solve(page, "contain", `disable=${bad.id};quarantine=${bad.target};block=${bad.target}`, ["E-INVENTORY", "E-APPROVAL", "E-HISTORY", "E-PLAN"]);
+  const normal = inv.tasks.find((t: Doc) => t.id === approved.approved.task);
+  await solve(page, "restore", `restore=${normal.target};keep=${normal.id}`, ["E-INVENTORY", "E-APPROVAL", "E-PLAN"]);
+  await solve(page, "reboot", "reboot", ["E-OBSERVATION", "E-PLAN"]);
+  const obs = await evidence(page, "E-OBSERVATION");
+  assert.equal(obs.reboot_count, 1);
+  assert.equal(obs.post_reboot.suspect_execution_count, 0);
+  assert.equal(obs.post_reboot.normal_update, "success");
+  await solve(page, "assessment", `recurrence=${obs.post_reboot.recreated.length ? "yes" : "no"};normal=${obs.post_reboot.normal_update === "success" ? "yes" : "no"};scope=simulation`, ["E-OBSERVATION", "E-APPROVAL"]);
+  assert.equal(await page.getByTestId("score").innerText(), "400 / 400");
+  await safeScreenshot(page, `endpoint-${locale}.png`);
 }
 try {
   const firstContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
@@ -177,7 +206,7 @@ try {
   await shown(second, "case-identity");
   const otherInitialEvidence = (await second.getByTestId("evidence-content").textContent() ?? "");
   await completeVisibleCases(first, "ja", true);
-  assert.equal(await second.getByTestId("score").innerText(), "0 / 300", "One seat must not receive another seat's points");
+  assert.equal(await second.getByTestId("score").innerText(), "0 / 400", "One seat must not receive another seat's points");
   assert.equal(await second.getByTestId("attempts-account").innerText(), "0");
   await completeVisibleCases(second, "en", false);
   assert.equal(await second.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "390px viewport must have no horizontal page overflow");
@@ -186,14 +215,14 @@ try {
   const before = (await first.getByTestId("evidence-content").textContent() ?? "");
   await first.getByTestId("practice-reset").click();
   assert.equal(await first.getByTestId("confirm-reset").isDisabled(), true);
-  assert.equal(await first.getByTestId("score").innerText(), "300 / 300");
+  assert.equal(await first.getByTestId("score").innerText(), "400 / 400");
   await first.getByTestId("confirm-reset-checkbox").check();
   await first.getByTestId("confirm-reset").click();
   await first.getByTestId("answer-account").waitFor();
   assert.equal(await first.getByTestId("practice-generation").innerText(), "2");
-  assert.equal(await first.getByTestId("score").innerText(), "0 / 300");
+  assert.equal(await first.getByTestId("score").innerText(), "0 / 400");
   assert.notEqual((await first.getByTestId("evidence-content").textContent() ?? ""), before);
-  assert.equal(await second.getByTestId("score").innerText(), "300 / 300");
+  assert.equal(await second.getByTestId("score").innerText(), "400 / 400");
   await second.getByTestId("case-identity").click();
   await second.getByTestId("evidence-I-IDP").click();
   assert.equal((await second.getByTestId("evidence-content").textContent() ?? ""), otherInitialEvidence);
@@ -201,5 +230,5 @@ try {
   assert.equal(await first.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await safeScreenshot(first, "mobile-ja-fresh.png");
   assert.deepEqual(errors, [], "No unexpected browser errors");
-  console.log("PASS: participant-only evidence solves all 9 questions in JA and EN; exact lost-response retry, wrong-answer recovery, 3-rung hints, downloads+SHA256, two-seat isolation, confirmed fresh reset, 390px layout, no unexpected browser errors.");
+  console.log("PASS: participant-only evidence solves all 15 checkpoints in JA and EN; exact lost-response retry, wrong-answer recovery, 3-rung hints, downloads+SHA256, two-seat isolation, confirmed fresh reset, 390px layout, no unexpected browser errors.");
 } finally { await browser.close(); harness.server.stop(true); }
