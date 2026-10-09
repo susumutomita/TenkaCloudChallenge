@@ -40,7 +40,7 @@ export interface Result {
 export interface Projection {
 	teamId: string;
 	score: number;
-	maxScore: 400;
+	maxScore: 300 | 400;
 	revision: number;
 	generation: number;
 	lastResult: Result | null;

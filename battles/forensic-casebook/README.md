@@ -195,5 +195,8 @@ State schema is now 2. The native host requires a migration hook for versions
 above 1; `migrateState` explicitly refuses to rebuild or expand an in-progress
 v1 event. Existing events continue with their pinned v1 bundle; start a new event
 for v2 (400 maximum points). No new catalog entry or main-repository source change
-is needed. Full main-host HTTP persistence, deployment and live-event operation
-were not exercised for this edition.
+is needed. Native-host HTTP/SQLite and production Portal were exercised in disposable
+fixtures, including legacy pinned-bundle continuity and fresh-process restart.
+The current UI accepts both 300-point v1 and 400-point v2 projections. See
+`tests/host-integration/README.md` for the reproducible test-only patch. Deployment,
+real events and cloud persistence adapters were not exercised.

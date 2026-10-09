@@ -42,6 +42,40 @@
 
 ## 未検証・未実施
 
-本体全HTTP永続化/本体ブラウザ統合、配備、実イベント、実OS、長期観測、第三者プレイテスト。
+配備、実イベント、実OS、長期観測、第三者プレイテスト。本体の全問題・全HTTPやクラウド保存adapterは未検証。
 本体の全標準ゲートは本体変更がないため実行していない。
 push、PR作成、マージ、リリース、デプロイ、認証設定変更は実施していない。
+
+## 追加検証と保存互換性（同日）
+
+本体の独立clone、専用SQLite fixtureと別headless Chromeを使用し、既存ユーザーイベント・
+既存ブラウザに触れず実施した。既存依存を読み取りで再利用し、新しいモデルは取得していない。
+
+重要な発見：旧イベントのサーバーは固定済みbundleだが、UIは現在のbuildである。
+初版UIの満点400限定は旧projectionの300点を拒否したため、型と判定を300|400にし、
+ケース件数をprojectionから表示する修正を行った。現在metadataの短文も旧イベントの問題情報に
+使われるため、ケース件数を含めない説明にした。これは旧状態移行とは別の表示互換性である。
+
+保存経路の根拠：本体 `service.ts:createEvent` は選択したproblem定義をevent.problemsにコピーし、
+`store.ts:putEvent/event` がそのJSONをSQLiteに保存・再読込する。`coordination.ts` はeventの
+problemを使用し、`LocalPluginLoader.load` はその保存定義のbundle/digestを検証して読み込む。
+本体ローカルhostの再起動時に現在catalogの同名problemへ差し替える処理はない。旧版固定イベントには新版の
+migration関数は呼ばれない。新版pluginへ旧保存状態を強制差替えするケースだけ明示拒否する。
+
+- 既存本体 forensic HTTP / coordination-core / browser-metadata：15テスト3072 assertions成功。
+- 追加本体HTTP/SQLite：1テスト57 assertions成功。旧実bundleで新規fixtureイベント作成・
+  20点獲得→現catalog版2で再起動→旧projection完全一致・保存版1維持・追加30点成功。
+  別の版2イベントは端末6問100点、保全後・完了後再起動、受付再送無加点、別席0点、
+  保全内容、模擬再起動1回、公式5履歴を確認。
+- 本体UIビルド成功。既存Chromeの独立headless実走：実organizerで旧fixtureを作成・配備・
+  開始。現在Portalで300点旧3ケースを操作でき、別hostプロセス再起動後も継続。
+  新規版2イベントを同じ実UIで作成し、公開証拠だけで端末6問を完了。正常対象削除と全通信停止を
+  拒否、保全後の別プロセス再起動で内容保持、完了後も100/400・公式100点・5履歴・別席0点。
+  旧イベントも20/300のまま保持。pageerrorなし。
+- 独立Codex再レビュー：表示互換性変更に問題なし。型・game/endpoint 21件541検証成功。
+
+再現用は `tests/host-integration/README.md` と test-only `fixture.patch`。
+本体の正本ソース変更、既存DB移行、旧イベントのbundle差替えは不要。
+
+スクリーンショット追加時のfixture再撮影で、認証済みページに再ログインする遷移がタイムアウトした。
+既存認証でPortal内を移動するようtest-onlyコードを直し、最終本体ブラウザ全経路を再実行して成功。
