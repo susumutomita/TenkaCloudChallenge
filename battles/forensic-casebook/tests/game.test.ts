@@ -153,7 +153,7 @@ describe("server authority and preservation", () => {
 	test("plain plugin structurally exposes native hooks and no reset/tick", () => {
 		expect(plugin.initialState).toBe(initialState);
 		expect(plugin.projectForTeam).toBe(projectForTeam);
-		expect(plugin.stateSchemaVersion).toBe(1);
+		expect(plugin.stateSchemaVersion).toBe(2);
 		expect(Object.hasOwn(plugin, "reset")).toBe(false);
 	});
 	test("requires server secret, bounded valid roster and generation", () => {
@@ -218,7 +218,7 @@ describe("server authority and preservation", () => {
 		])
 			expect(serialized).not.toContain(forbidden);
 		for (const c of view.cases) {
-			expect(c.evidence.length).toBe(4);
+			expect(c.evidence.length).toBe(c.id === "endpoint" ? 5 : 4);
 			for (const e of c.evidence) {
 				expect(e.sha256).toBe(
 					createHash("sha256").update(e.content, "utf8").digest("hex"),
@@ -267,7 +267,7 @@ describe("evidence-based learning", () => {
 			expect(final.score).toBe(300);
 			expect(final.revision).toBe(9);
 			expect(
-				final.cases.every((c) =>
+				final.cases.filter((c) => c.id !== "endpoint").every((c) =>
 					c.questions.every((q) => q.solved && q.explanation),
 				),
 			).toBe(true);

@@ -23,7 +23,7 @@ export type {
 	State,
 	Validation,
 } from "./types.ts";
-export const STATE_SCHEMA_VERSION = 1 as const;
+export const STATE_SCHEMA_VERSION = 2 as const;
 export const MAX_RECEIPTS = 64;
 export const MAX_OPERATIONS_PER_TEAM = 1_000_000;
 const unsafeKey = (s: string) =>
@@ -36,6 +36,13 @@ const has = (o: object, key: string) => Object.hasOwn(o, key);
 const fail = (error: string): Validation => ({ ok: false, error });
 const progressKey = (caseId: string, questionId: string) =>
 	`${caseId}/${questionId}`;
+
+/** Host contract: never silently expand an in-progress v1 event or rebuild its state.
+ * Existing events keep their pinned v1 bundle. This edition starts new v2 matches.
+ */
+export function migrateState(_state: unknown, _fromVersion: number): State {
+  throw new Error("forensic_casebook_new_event_required");
+}
 
 /** Practice reset creates a NEW state with a NEW server secret/event; competition exposes no reset op. */
 export function initialState(
@@ -71,7 +78,7 @@ export function initialState(
 	)
 		throw new Error("invalid_generation");
 	const state: State = {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		eventId: ctx.eventId,
 		matchSecret: ctx.matchSecret,
 		generation,
@@ -197,6 +204,7 @@ export function validateOp(
 	teamId: string,
 	input: unknown,
 ): Validation {
+	if (state.schemaVersion !== STATE_SCHEMA_VERSION) return fail("incompatible_state");
 	if (!validTeam(teamId) || !has(state.teams, teamId))
 		return fail("unknown_team");
 	if (!shape(input)) return fail("invalid_operation");
@@ -258,7 +266,9 @@ export function applyOp(state: State, teamId: string, input: unknown): State {
 	} else {
 		p.attempts += 1;
 		const cited = [...op.evidenceIds].sort();
-		const correct =
+		const prior = c.questions.slice(0, c.questions.findIndex((entry) => entry.id === q.id));
+		const ready = c.id !== "endpoint" || prior.every((entry) => oldTeam.progress[progressKey(c.id, entry.id)]?.solved);
+		const correct = ready &&
 			answerMatches(q, op.answer) &&
 			JSON.stringify(cited) === JSON.stringify([...q.citations].sort());
 		p.solved = correct;
@@ -283,13 +293,14 @@ export function applyOp(state: State, teamId: string, input: unknown): State {
 	return { ...state, teams: { ...state.teams, [teamId]: team } };
 }
 export function projectForTeam(state: State, teamId: string): Projection {
+	if (state.schemaVersion !== STATE_SCHEMA_VERSION) throw new Error("incompatible_state");
 	if (!validTeam(teamId) || !has(state.teams, teamId))
 		throw new Error("unknown_team");
 	const team = state.teams[teamId]!;
 	return {
 		teamId,
 		score: team.score,
-		maxScore: 300,
+		maxScore: 400,
 		revision: team.revision,
 		generation: state.generation,
 		lastResult: team.lastResult ? structuredClone(team.lastResult) : null,
@@ -329,4 +340,5 @@ export default {
 	projectForTeam,
 	teamScores,
 	stateSchemaVersion: STATE_SCHEMA_VERSION,
+	migrateState,
 };

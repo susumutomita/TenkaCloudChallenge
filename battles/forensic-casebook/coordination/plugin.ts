@@ -8,6 +8,7 @@ import {
 	projectForTeam,
 	teamScores,
 	STATE_SCHEMA_VERSION,
+	migrateState,
 } from "../game/index.ts";
 export default {
 	initialState,
@@ -16,4 +17,5 @@ export default {
 	projectForTeam,
 	teamScores,
 	stateSchemaVersion: STATE_SCHEMA_VERSION,
+	migrateState,
 };

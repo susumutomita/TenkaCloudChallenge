@@ -13,7 +13,7 @@ administrative action. Then submit your conclusion **and the smallest sufficient
 set of evidence files**. A correct conclusion without its supporting evidence
 is not a successful checkpoint. Irrelevant extra citations also fail.
 
-The three connected cases follow the same incident and authority:
+The first three connected cases follow the same incident and authority:
 
 1. **A valid login. An approved change?** Distinguish authentication, technical
    permission, business approval, and what the records establish about a person.
@@ -25,8 +25,8 @@ The three connected cases follow the same incident and authority:
    control, choose an independently administered and tested recovery copy, and
    separate a demonstrated isolated restore from production readiness.
 
-Each case has an accessible observation checkpoint (20 points), a comparison
-checkpoint (30), and a synthesis checkpoint (50). All nine total **300 points**.
+Each of the first three cases has an accessible observation checkpoint (20 points), a comparison
+checkpoint (30), and a synthesis checkpoint (50). The original nine total **300 points**; endpoint response adds six checkpoints totaling **100 points** (one restart checkpoint has zero points), for **400 points** overall.
 There are no flags or attack endpoints. You do not modify a live service.
 
 ## Play locally
@@ -139,7 +139,7 @@ bunx playwright-core install chromium
 # Or point BROWSER at an existing Chromium binary.
 ```
 
-The game suite solves all nine checkpoints from public evidence over eight
+The game suite solves the original nine and six endpoint checkpoints from public evidence over eight
 generations, requires the correct citation sets, rejects overclaiming and
 mismatched/overlapping evidence shortcuts, verifies secret/team/event isolation,
 checks strict operation validation, JSON persistence, replay behavior,
@@ -149,11 +149,12 @@ the browser covers both languages, all questions, downloads, wrong/retry,
 lost-response replay, hints, seat isolation, confirmed reset, and a narrow
 viewport. These are local rehearsals, not an independent third-party playtest.
 
-Verification recorded in the authoring environment (2026-10-08): `make check`
-passed, including TypeScript and 22 game/HTTP tests with 377 assertions. Browser
-scripts are authored, but an actual browser run was not completed in this cloud
-environment because browser execution was blocked. Run the browser gate in a
-permitted host/CI environment before claiming the visual route verified.
+Local verification (2026-10-09): typecheck, game/HTTP/endpoint suites and catalog
+agent-gate passed. Existing Chrome exercised the real Portal component in JA and
+EN, all 15 checkpoints, downloads and fingerprints, wrong-answer recovery,
+lost-response retry, two-seat isolation, confirmed reset and 390px layout.
+Screenshots are generated under `dev/evidence/endpoint-ja.png` and `endpoint-en.png`.
+Real OS/cloud behavior, long-term observation and third-party playtesting were not run.
 
 From the repository root, also run `make install && make agent-gate`. Catalog
 validation proves catalog contracts only. The coordinated native-host change
@@ -170,9 +171,32 @@ Neither a live AWS event nor a cloud deployment is performed by this pack's test
 
 No EC2, S3, database service, external network destination, or other cloud
 resource is provisioned. Region is not applicable. A session is intended for
-60–90 minutes. Local CPU, memory and optional browser installation disk space are
+90–120 minutes. Local CPU, memory and optional browser installation disk space are
 used; an independently deployed host may have its own existing service costs.
 Stop the practice process with Ctrl-C to remove its in-memory runs and credentials.
 Generated screenshots under `dev/evidence/` can be deleted. No resource in this
 pack continues cloud billing after local shutdown. Do not publish practice seat
 credentials, server state, or test/operator-only materials as participant assets.
+
+## Endpoint response and compatibility
+
+Case 04, **The deleted updater returns**, adds ordered diagnosis, pre-change
+custody of original content and SHA-256, targeted containment, approved-updater
+recovery, simulated restart and assessment. File-only deletion, normal-object
+removal, global traffic blocking, insufficient citations and skipped steps fail
+without advancing simulated response state. Incorrect attempts remain recorded.
+Restart itself awards zero; evidence-supported absence of recurrence and normal
+update success earns the final 30 points. An unobserved helper stays unknown.
+One simulated restart does not establish real eradication or long-term safety.
+Team points never certify an individual. No malware, OS settings, credentials or
+external communication are used.
+
+State schema is now 2. The native host requires a migration hook for versions
+above 1; `migrateState` explicitly refuses to rebuild or expand an in-progress
+v1 event. Existing events continue with their pinned v1 bundle; start a new event
+for v2 (400 maximum points). No new catalog entry or main-repository source change
+is needed. Native-host HTTP/SQLite and production Portal were exercised in disposable
+fixtures, including legacy pinned-bundle continuity and fresh-process restart.
+The current UI accepts both 300-point v1 and 400-point v2 projections. See
+`tests/host-integration/README.md` for the reproducible test-only patch. Deployment,
+real events and cloud persistence adapters were not exercised.

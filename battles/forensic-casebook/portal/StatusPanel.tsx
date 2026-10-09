@@ -7,7 +7,7 @@ type Locale = "ja" | "en";
 type Copy = { ja: string; en: string };
 const words = {
   title: { ja: "証拠から、結論へ。", en: "From evidence to conclusion." },
-  lead: { ja: "あなたは調査担当です。3つの架空の事件で記録を読み、分かることと分からないことを分けます。まず事件01のファイルを開き、根拠を選んで最初の問いに答えましょう。", en: "You are the investigator. Read the records in three fictional cases and separate what they prove from what remains unknown. Start by opening a file in case 01, then cite your evidence and answer the first question." },
+  lead: { ja: "あなたは調査担当です。架空の事件の記録を読み、分かることと分からないことを分けます。まず事件01のファイルを開き、根拠を選んで最初の問いに答えましょう。", en: "You are the investigator. Read the records in fictional cases and separate what they prove from what remains unknown. Start by opening a file in case 01, then cite your evidence and answer the first question." },
   score: { ja: "獲得ポイント", en: "Points earned" },
   read: { ja: "記録を読む", en: "Read the records" },
   cite: { ja: "根拠を選ぶ", en: "Cite your evidence" },
@@ -40,7 +40,7 @@ function isProjection(value: unknown): value is Projection {
   if (!value || typeof value !== "object") return false;
   const localized = (text: unknown): text is Copy => !!text && typeof text === "object" && typeof (text as Copy).ja === "string" && typeof (text as Copy).en === "string";
   const p = value as Projection;
-  return Array.isArray(p.cases) && p.cases.length > 0 && Number.isSafeInteger(p.revision) && Number.isSafeInteger(p.generation) && typeof p.teamId === "string" && typeof p.score === "number" && p.maxScore === 300 && p.cases.every((c) =>
+  return Array.isArray(p.cases) && p.cases.length > 0 && Number.isSafeInteger(p.revision) && Number.isSafeInteger(p.generation) && typeof p.teamId === "string" && typeof p.score === "number" && (p.maxScore === 300 || p.maxScore === 400) && p.cases.every((c) =>
     !!c && typeof c.id === "string" && localized(c.title) && localized(c.intro) && Array.isArray(c.evidence) && c.evidence.every((e) =>
       !!e && typeof e.id === "string" && typeof e.name === "string" && typeof e.content === "string" && typeof e.sha256 === "string" && localized(e.description)) &&
     Array.isArray(c.questions) && c.questions.every((q) => !!q && typeof q.id === "string" && localized(q.prompt) && localized(q.format) && Array.isArray(q.hints) && q.hints.every(localized) && typeof q.solved === "boolean" && typeof q.attempts === "number" && typeof q.unlockedHints === "number" && q.totalHints === 3 && (!q.explanation || localized(q.explanation)))) &&
@@ -136,7 +136,7 @@ export default function StatusPanel(props: PortalSlotProps) {
   const locked = busy || !!pending;
   return <div className="fc" data-testid="forensic-casebook">
     <style>{styles}</style>
-    <header className="fc-head"><div><div className="fc-kicker">FORENSIC CASEBOOK · 3 CASES</div><h1>{words.title[locale]}</h1><p className="fc-lead">{words.lead[locale]}</p></div><div className="fc-score"><strong data-testid="score">{projection?.score ?? 0}<small> / {projection?.maxScore ?? 300}</small></strong><small>{words.score[locale]}</small></div></header>
+    <header className="fc-head"><div><div className="fc-kicker">FORENSIC CASEBOOK · {projection?.cases.length ?? 4} CASES</div><h1>{words.title[locale]}</h1><p className="fc-lead">{words.lead[locale]}</p></div><div className="fc-score"><strong data-testid="score">{projection?.score ?? 0}<small> / {projection?.maxScore ?? 400}</small></strong><small>{words.score[locale]}</small></div></header>
     <div className="fc-method"><span><b>01</b>{words.read[locale]}</span><span><b>02</b>{words.cite[locale]}</span><span><b>03</b>{words.conclude[locale]}</span></div>
     {!client && <p role="status">{words.unwired[locale]}</p>}
     {client && !projection && !error && <p role="status">{words.loading[locale]}</p>}
