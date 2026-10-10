@@ -1735,6 +1735,31 @@
           "description": "slot 名 → component path の map。 slot 名は portal が予約した literal (= StatusPanel / RegistrationPanel / HelpDrawer) のみ valid。 unknown slot 名は plugin loader が iterate しない (= 黙って drop) ので SCHEMA で reject する。 SDK の `PORTAL_SLOT_NAMES` literal と同期。"
         }
       }
+    },
+    "authors": {
+      "type": "array",
+      "description": "Optional public display credits in authored order. Display only; never identity or authorization. Omit for legacy problems.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "description": "Public display name chosen by the author."
+          },
+          "profileUrl": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://(?:\\[[0-9a-fA-F:.]+\\]|[^:\\s/@\\\\?#]+)(?::(?:6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|6[0-4][0-9]{3}|[1-5][0-9]{4}|[0-9]{1,4}))?(?:[/?#][^\\s\\\\]*)?$",
+            "description": "Optional absolute HTTP(S) profile URL; no credentials, whitespace or backslashes."
+          }
+        }
+      }
     }
   },
   "allOf": [

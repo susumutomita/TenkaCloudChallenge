@@ -39,3 +39,24 @@ This checks metadata, bilingual README presence, simulation overlays and catalog
 ## License
 
 [Apache-2.0](LICENSE).
+
+## Public author credits
+
+Problem metadata may include optional `authors` in display order:
+
+```json
+{
+  "authors": [
+    { "name": "Your public name", "profileUrl": "https://example.com/profile" },
+    { "name": "共同作者" }
+  ]
+}
+```
+
+`name` is a nonblank public display name. `profileUrl` is optional and must be an
+absolute HTTP(S) URL without credentials, whitespace or backslashes. Multiple
+authors are supported. Omit `authors` (or use `[]`) to keep existing uncredited
+behavior. Use only credits each author explicitly wants published; never infer
+names or emails from Git history. Credits are public display data, including for
+private problems shown to authorized participants, and confer no permissions or
+verified identity. Public discovery continues to exclude private problems.
