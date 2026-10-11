@@ -110,5 +110,20 @@
   "simulationOverlay": {
     "schemaVersion": "1",
     "entry": "simulation.json"
-  }
+  },
+  "skillEvidence": [
+    {
+      "skillId": "service.endpoint.probe",
+      "label": "登録したサービスの成功probe",
+      "i18n": {
+        "en": {
+          "label": "Successful probe of the registered services"
+        }
+      },
+      "rule": {
+        "source": "uptime",
+        "result": "ok"
+      }
+    }
+  ]
 }

@@ -1050,12 +1050,31 @@ export function checkCourseAlignment(meta: Metadata): ValidationError[] {
   return errors;
 }
 
+/** Only sources whose public result identifies this problem's success are assessable. */
+export function checkSkillEvidence(meta: Metadata): ValidationError[] {
+  if (!Array.isArray(meta.skillEvidence)) return [];
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  const kind = (meta.scoring as { kind?: unknown } | undefined)?.kind;
+  for (const raw of meta.skillEvidence) {
+    const entry = raw as { skillId: string; rule: { source: string } };
+    if (seen.has(entry.skillId)) errors.push(`skillEvidence duplicates skillId: ${entry.skillId}`);
+    seen.add(entry.skillId);
+    const supported = entry.rule.source === "flag"
+      ? kind === "flag" || kind === "verify"
+      : entry.rule.source === "uptime" && (kind === "uptime-flat" || kind === "uptime-multi" || kind === "uptime");
+    if (!supported) errors.push(`skillEvidence ${entry.skillId}: source ${entry.rule.source} is not observable for scoring.kind=${String(kind)}`);
+  }
+  return errors;
+}
+
 function checkCrossRefs(metaPath: string, meta: Metadata): CrossRefResult {
   const dir = dirname(metaPath);
   // runtime (CFn / container / composite) に関係なく全問題へ効く検証。
   const runtimeAgnosticErrors = [
     ...checkSimulationOverlay(metaPath, meta),
     ...checkCourseAlignment(meta),
+    ...checkSkillEvidence(meta),
     ...checkNativeCompatibility(meta),
   ];
   if (isCompositeProblem(meta)) {

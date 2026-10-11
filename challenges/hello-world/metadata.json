@@ -73,5 +73,20 @@
   "simulationOverlay": {
     "schemaVersion": "1",
     "entry": "simulation.json"
-  }
+  },
+  "skillEvidence": [
+    {
+      "skillId": "aws.parameter.read",
+      "label": "配置したParameter値の取得と正答提出",
+      "i18n": {
+        "en": {
+          "label": "Retrieve the deployed parameter and submit an accepted answer"
+        }
+      },
+      "rule": {
+        "source": "flag",
+        "result": "ok"
+      }
+    }
+  ]
 }
