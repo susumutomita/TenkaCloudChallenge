@@ -33,7 +33,7 @@ import {initialState,applyOp,tick,validateOp,STREAMING_ORDER_CONFIG,migrateState
 import {isCryptoBattleProjection} from '../../portal/coordination.ts';
 import {scoreReasons} from './score-reasons.ts';
 test('owned STARK orders grade arithmetic, reject replay and expiry, and record the score reason',()=>{
- let s=applyOp(initialState({eventId:'stark',teamIds:['a','b'],matchSecret:'stark-test'},STREAMING_ORDER_CONFIG),'a',{kind:'start'});
+ let s=applyOp(initialState({eventId:'stark',teamIds:['a','b'],matchSecret:'stark-test'},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined}),'a',{kind:'start'});
  for(let t=0;t<=1_200_000;t+=30_000){s=tick(s,t);if(s.contracts.some(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='stark-trace'))break;}
  const order=s.contracts.find(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='stark-trace')!;
  expect(order).toBeDefined();if(order.task.kind!=='stark-trace')throw new Error('wrong task');

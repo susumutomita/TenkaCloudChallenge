@@ -59,11 +59,16 @@ describe("paired issue and clock", () => {
     for (let i=1;i<13;i++) { s=tick(s, DEFAULT_CONFIG.onboardingFollowUpMs+i*DEFAULT_CONFIG.contractIntervalMs); for(const c of s.contracts) if(c.teamId==="a") kinds.add(c.task.kind); }
     expect(kinds).toEqual(new Set(["reveal-share", "caesar-shift", "rsa-encrypt", "rotor-encrypt", "homomorphic-sum", "masked-total", "zk-sudoku", "rps-duel"]));
   });
-  test("a late tick skips unseen expired pairs and never charges for them", () => {
+  test("a late tick replays the same pairs and penalties as frequent polling", () => {
     const idle=tick(initialState({eventId:"late",teamIds:["a","b"]}),0);
     let s=applyOp(idle,"a",{kind:"start"});
-    s=tick(s,DEFAULT_CONFIG.onboardingFollowUpMs+4*DEFAULT_CONFIG.contractIntervalMs);
-    expect(s.contracts.filter(c=>c.task.kind==="rps-duel")).toHaveLength(2);
+    const end = DEFAULT_CONFIG.onboardingFollowUpMs+4*DEFAULT_CONFIG.contractIntervalMs;
+    let frequent = s;
+    for (let t = 0; t < end; t += 5000) frequent = tick(frequent, t);
+    frequent = tick(frequent, end);
+    s=tick(s,end);
+    expect(s).toEqual(frequent);
+    expect(s.contracts.filter(c=>c.task.kind==="rps-duel" && c.status === "open")).toHaveLength(2);
     expect(Object.values(s.teams).every(t=>t.score===0)).toBe(true);
   });
 });
@@ -202,6 +207,8 @@ test("a delayed tick still classifies a forfeit after pruning the completed DUEL
   expect(s.teams.a!.completedContractIds).toContain(prior.id);
   const waiting = duel(s, "a");
   s = {...s, contracts: s.contracts.filter(order => order.task.kind === "rps-duel")};
+  // Prevent later ordinary expirations from obscuring this forfeit reward.
+  s = { ...s, nextContractAtMs: s.startedAtMs! + s.config.matchDurationMs };
   const next = tick(s, waiting.expiresAtMs + 11 * 60_000);
   expect(next.contracts.some(order => order.id === waiting.id)).toBe(false);
   expect(projectForTeam(next, "a").vault.completedContractIds).toContain(waiting.id);

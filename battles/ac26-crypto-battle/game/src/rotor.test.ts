@@ -352,7 +352,7 @@ describe("Rotor: public wheels, evolving positions, private calculation", () => 
   test("real Portal materials keep formulas free and show only opened, own staged hints", () => {
     const host = fresh(),
       own = order(host),
-      baseline = projectForTeam(host.state, "bravo");
+      baseline = projectForTeam(tick(host.state, NOW + 2), "bravo");
     for (const locale of ["ja", "en"] as const) {
       const html = renderToStaticMarkup(
         createElement(RotorMaterials, { task: own.task, locale }),

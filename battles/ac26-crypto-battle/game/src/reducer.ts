@@ -848,22 +848,39 @@ function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleS
 }
 
 export function tick(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
-  const state = withMigratedContracts(persistedState);
-  // Migrate legacy rows even when this clock snapshot is stale.
+  let state = withMigratedContracts(persistedState);
   if (state.nowMs !== undefined && eventNowMs < state.nowMs) return state;
+  if (state.startedAtMs === undefined) return tickAtTime(state, eventNowMs);
+
+  // Replay arrivals and deadlines in time order so capacity, score floors,
+  // duel settlements and endgame rankings do not depend on polling (#897).
+  while (true) {
+    const now = state.nowMs ?? state.startedAtMs!;
+    const matchEnd = state.startedAtMs! + state.config.matchDurationMs;
+    let at = eventNowMs;
+    const arrival = state.nextContractAtMs ?? state.startedAtMs!;
+    if (arrival >= now && arrival < matchEnd) at = Math.min(at, arrival);
+    for (const order of state.contracts) {
+      if (order.status === "open" && order.expiresAtMs > now) at = Math.min(at, order.expiresAtMs);
+    }
+    const boundary = boosterStartAt(state);
+    if ((state.endgameBooster?.status === "pending" || state.endgameLightning?.status === "pending") &&
+        boundary !== undefined && boundary >= now) at = Math.min(at, boundary);
+    state = tickEvent(state, at);
+    if (at === eventNowMs) return state;
+  }
+}
+
+function tickEvent(state: CryptoBattleState, eventNowMs: number): CryptoBattleState {
+  const advanced = tickAtTime(state, eventNowMs);
   const boundary = boosterStartAt(state);
-  if ((state.endgameBooster?.status === "pending" || state.endgameLightning?.status === "pending") && boundary !== undefined && eventNowMs >= boundary) {
-    // Only read the boundary ranking. Carrying this intermediate tick forward
-    // would issue unseen Orders and then charge them on a delayed tick, breaking
-    // the existing no-catch-up-penalty rule. The actual transition stays intact.
-    const atBoundary = tickAtTime(state, boundary);
-    const advanced = eventNowMs === boundary ? atBoundary : tickAtTime(state, eventNowMs);
+  if (boundary !== undefined && eventNowMs >= boundary) {
     return settleLightning({ ...advanced,
-      endgameBooster: state.endgameBooster?.status === "pending" ? awardBooster(atBoundary) : state.endgameBooster,
-      endgameLightning: state.endgameLightning?.status === "pending" ? awardLightning(atBoundary) : state.endgameLightning,
+      endgameBooster: state.endgameBooster?.status === "pending" ? awardBooster(advanced) : state.endgameBooster,
+      endgameLightning: state.endgameLightning?.status === "pending" ? awardLightning(advanced) : state.endgameLightning,
     });
   }
-  return settleLightning(tickAtTime(state, eventNowMs));
+  return settleLightning(advanced);
 }
 
 function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -952,14 +969,12 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
       if (opponentTeamId !== undefined) {
         const duelId = `${nextContractAtMs}:${sequenceIndex}:${pairs.indexOf(pair!)}`;
         const expiresAtMs = Math.min(nextContractAtMs + state.config.contractTtlMs, matchEndAtMs);
-        if (expiresAtMs > eventNowMs) {
         issued.push({
           id: `${teamId}-c${sequenceIndex}`, teamId, kind: "standard", points: state.config.scores.duelWin, leakPoints: 0,
           task: { kind: "rps-duel", duelId, opponentTeamId }, issuedAtMs: nextContractAtMs, expiresAtMs,
           status: "open", privacyConstraint: "none", allowedMethods: ["duel"],
         });
         openCountByTeam.set(teamId, (openCountByTeam.get(teamId) ?? 0) + 1);
-        }
         issuedCountByTeam.set(teamId, sequenceIndex + 1);
         duelCountByTeam.set(teamId, (duelCountByTeam.get(teamId) ?? 0) + 1);
         continue;
@@ -972,27 +987,9 @@ function tickAtTime(persistedState: CryptoBattleState, eventNowMs: number): Cryp
       if(state.config.snarkOrders && sequenceIndex%17===16)plan={...plan,taskKind:"snark-constraints",privacyConstraint:"no-raw-disclosure",requestedShareIndices:[]};
       if (state.config.evolutionOrders) plan = curriculumPlan(state.seed, sequenceIndex - (duelCountByTeam.get(teamId) ?? 0), plan, fieldConfig.shareCount);
       const ttlMs = plan.kind === "rush" ? state.config.rushContractTtlMs : state.config.contractTtlMs;
-      // [Issue #659] Never issue an Order whose deadline has already passed.
-      //
-      // `tick` catches up on every batch it missed, which before #659 was
-      // harmless -- a stale Order arrived already expired and simply sat there.
-      // With an expiry penalty it stops being harmless: a dispatcher that
-      // stalls for twenty minutes would, on its next tick, hand every team two
-      // dozen Orders they never had a chance to see and then charge them
-      // `expiredOrder` for each one. A platform hiccup would decide the match.
-      //
-      // The slot is CONSUMED either way. Skipping without advancing
-      // `sequenceIndex` re-rolls the identical plan on the next iteration, and
-      // since the belt is a pure function of the index, it is stale again and
-      // skips again -- the batch dies at its first dead slot and, once the
-      // index is frozen on one, the belt never issues anything again. A rush
-      // slot (2.5 min) going stale would take the five standard slots behind
-      // it, which would still have been live, down with it.
+      // tick replays this arrival at its scheduled time, then processes its
+      // deadline. Delayed hosts therefore deliver and charge the same Orders.
       const expiresAtMs = Math.min(nextContractAtMs + ttlMs, matchEndAtMs);
-      if (expiresAtMs <= eventNowMs) {
-        issuedCountByTeam.set(teamId, sequenceIndex + 1);
-        continue;
-      }
       const contractId = `${teamId}-c${sequenceIndex}`;
       if (state.scoreSteal?.players[teamId]?.status === "waiting" && nextContractAtMs - startedAtMs >= 5 * 60_000 &&
           !issued.some(c => c.teamId === teamId && c.task.kind === "ssm-decrypt")) {
