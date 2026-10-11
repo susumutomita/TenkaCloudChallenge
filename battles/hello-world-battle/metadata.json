@@ -114,10 +114,10 @@
   "skillEvidence": [
     {
       "skillId": "service.endpoint.probe",
-      "label": "登録したサービスの成功probe",
+      "label": "登録したサービスの1つのエンドポイントの成功probe",
       "i18n": {
         "en": {
-          "label": "Successful probe of the registered services"
+          "label": "Successful probe of a registered service endpoint"
         }
       },
       "rule": {

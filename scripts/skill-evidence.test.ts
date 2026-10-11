@@ -32,3 +32,17 @@ test("empty, unknown, mistyped and hidden rule fields fail the schema", () => {
   expect(validate({ ...challenge, skillEvidence: [] })).toBe(false);
   expect(validate({ ...challenge, skillEvidence: [{ ...challenge.skillEvidence[0], label: " " }] })).toBe(false);
 });
+
+test("supported scorer variants and authors retain independent contracts", () => {
+  for (const kind of ["flag", "verify"]) {
+    expect(checkSkillEvidence({ ...challenge, scoring: { kind } })).toEqual([]);
+  }
+  for (const kind of ["uptime", "uptime-flat", "uptime-multi"]) {
+    expect(checkSkillEvidence({ ...battle, scoring: { kind } })).toEqual([]);
+  }
+  expect(validate({ ...challenge, authors: [{ name: "Example Author", profileUrl: "https://example.com/profile" }] })).toBe(true);
+  expect(validate({ ...challenge, authors: [{ name: " " }] })).toBe(false);
+  for (const extra of [{ individualId: "member" }, { level: "expert" }, { totalScore: 100 }]) {
+    expect(validate({ ...challenge, skillEvidence: [{ ...challenge.skillEvidence[0], ...extra }] })).toBe(false);
+  }
+});
