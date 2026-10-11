@@ -38,7 +38,7 @@ import {initialState,applyOp,tick,validateOp,STREAMING_ORDER_CONFIG,migrateState
 import {isCryptoBattleProjection} from '../../portal/coordination.ts';
 import {scoreReasons} from './score-reasons.ts';
 test('owned iO orders grade arithmetic, reject replay and expiry, and record the score reason',()=>{
- let s=applyOp(initialState({eventId:'io',teamIds:['a','b'],matchSecret:'io-test'},STREAMING_ORDER_CONFIG),'a',{kind:'start'});
+ let s=applyOp(initialState({eventId:'io',teamIds:['a','b'],matchSecret:'io-test'},{...STREAMING_ORDER_CONFIG,maxOpenOrdersPerTeam:undefined}),'a',{kind:'start'});
  for(let t=0;t<=1_200_000;t+=30_000){s=tick(s,t);if(s.contracts.some(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='io-equivalence'))break;}
  const order=s.contracts.find(c=>c.teamId==='a'&&c.status==='open'&&c.task.kind==='io-equivalence')!;
  expect(order).toBeDefined();if(order.task.kind!=='io-equivalence')throw new Error('wrong task');

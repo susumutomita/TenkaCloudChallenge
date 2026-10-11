@@ -449,6 +449,7 @@ export function buildScenario(id: ScenarioId): Scenario {
       for(let i=0;i<150;i++) {
         const found=driver.host.state.contracts.some(c=>c.teamId==="alpha"&&c.status==="open"&&c.task.kind==="ec-add"&&c.task.left&&c.task.right&&c.task.left[0]!==c.task.right[0]);
         if(found)break;
+        serveComputationOrders(driver, "alpha");
         driver.advance(30_000);
         if(i===149)throw new Error("no EC worksheet reached");
       }

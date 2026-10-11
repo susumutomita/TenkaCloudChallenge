@@ -48,7 +48,10 @@ for (const [scores, expected] of [
   [{ alpha: 100, bravo: 100, charlie: 200 }, ["alpha", "bravo"]],
   [{ alpha: 100 }, []],
 ] as const) test(`lowest tied teams only: ${JSON.stringify(scores)}`, () => {
-  const state = tick(match(scores).state, BOUNDARY);
+  // Isolate ranking from the preceding Order economy.
+  const host = match(scores);
+  host.state = { ...host.state, config: { ...host.state.config, scores: { ...host.state.config.scores, expiredOrder: 0 } } };
+  const state = tick(host.state, BOUNDARY);
   expect(state.endgameBooster).toEqual({ status: "awarded", teamIds: expected });
   for (const id of Object.keys(scores)) {
     expect(projectForTeam(state, id).hintBooster?.status).toBe((expected as readonly string[]).includes(id) ? "active" : "ineligible");

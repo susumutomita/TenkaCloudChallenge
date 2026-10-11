@@ -220,7 +220,7 @@ describe("small textbook RSA, with public encryption and a separate recovery key
     host.state = { ...host.state, contracts: host.state.contracts.map(c => c.task.kind === "rotor-encrypt" ? { ...c,
       task: { kind: "caesar-shift" as const, rung: "vigenere" as const, keyPosition: 0, plaintext: derivePlaintext(host.state.seed, c.id, "vigenere") },
     } : c) };
-    const oldOrder = host.state.contracts.find(c => c.teamId === "alpha" && c.task.kind === "caesar-shift")!;
+    const oldOrder = host.state.contracts.find(c => c.teamId === "alpha" && c.status === "open" && c.task.kind === "caesar-shift")!;
     if (oldOrder.task.kind !== "caesar-shift") throw new Error("expected old Vigenere");
     expect(submitOp(host, "alpha", { kind: "cipher", contractId: oldOrder.id, answer: ["0"] }, 56 * MINUTE).kind).toBe("ok");
     // One may equal zero. Ensure a well-formed failure on this real Order.

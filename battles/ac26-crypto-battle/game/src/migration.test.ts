@@ -300,16 +300,17 @@ describe("a delayed tick issues the Orders that are still live", () => {
     }
   });
 
-  test("no Order is ever issued already past its own deadline", () => {
-    // The property the skip exists for: a team is only ever answerable for
-    // Orders it had a chance to see.
+  test("catch-up Orders are issued at their scheduled time and expire at their deadline", () => {
+    // Delayed reads retain recent expired history, but never expose a stale
+    // Order as open; the schedule does not depend on those reads.
     let state = tick(startedMatch({ eventId: "delayed-2", teamIds: ["teamA"] }), 0);
     for (let batchIndex = 1; batchIndex <= 8; batchIndex += 1) {
       const atMs = batchIndex * DEFAULT_CONFIG.contractIntervalMs + GAP_MS;
       const before = new Set(state.contracts.map((c) => c.id));
       state = tick(state, atMs);
       for (const c of state.contracts.filter((c) => !before.has(c.id))) {
-        expect(c.expiresAtMs).toBeGreaterThan(atMs);
+        expect(c.expiresAtMs).toBeGreaterThan(c.issuedAtMs);
+        expect(c.status).toBe(c.expiresAtMs <= atMs ? "expired" : "open");
       }
     }
   });
