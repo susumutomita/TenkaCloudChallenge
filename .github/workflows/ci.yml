@@ -101,8 +101,9 @@ jobs:
         working-directory: battles/ac26-crypto-battle/dev
         run: bun test && bun run typecheck
 
-  # Complete legal-transition traces exceed the five-minute metadata/unit budget.
-  # Keep every case, splitting the three large rosters into independent jobs.
+  # Pull requests run the declared bounds and the rosters up to 13 teams (about a
+  # minute). Each 99-team trace takes 12-20 minutes, so those run after merge on
+  # main and from workflow_dispatch with run_battle_capacity, one job per route.
   battle-capacity:
     needs: changes
     if: needs.changes.outputs.capacity == 'true'
@@ -112,15 +113,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - profile: small-rosters
-            pattern: 'keeps the existing|12 teams /|the same forecast'
-          - profile: rapid-leak-99
-            pattern: '99 teams / rapid-leak:'
-          - profile: rapid-prove-99
-            pattern: '99 teams / rapid-prove:'
-          - profile: reuse-99
-            pattern: '99 teams / reuse:'
+        profile: ${{ fromJSON(github.event_name == 'pull_request' && '["small-rosters"]' || '["small-rosters","rapid-leak-99","rapid-prove-99","reuse-99"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -136,5 +129,11 @@ jobs:
       - name: Check complete retained histories and every transition size
         working-directory: battles/ac26-crypto-battle/game
         env:
-          CASE_PATTERN: ${{ matrix.pattern }}
-        run: bun test src/state-size.test.ts --test-name-pattern "$CASE_PATTERN"
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          case "$PROFILE" in
+            small-rosters) pattern='keeps the existing|12 teams /|the same forecast' ;;
+            *-99) pattern="99 teams / ${PROFILE%-99}:" ;;
+            *) echo "Unknown capacity profile: $PROFILE" >&2; exit 1 ;;
+          esac
+          bun test src/state-size.test.ts --test-name-pattern "$pattern"
