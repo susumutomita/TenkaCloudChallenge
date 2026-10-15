@@ -1,5 +1,0 @@
-.state/
-.test-rootfs/
-.test-output/
-*.tar.gz
-*.zip
