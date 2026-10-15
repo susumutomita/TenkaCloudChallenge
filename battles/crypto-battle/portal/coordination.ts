@@ -2,7 +2,7 @@ import { isEvolutionTaskShape } from "../game/src/evolution-model.ts";
 import { rotorRow, rotorPositions } from "../game/src/rotor.ts";
 import { isRsaPublicKey } from "../game/src/rsa.ts";
 /**
- * Shared portal-plugin helpers for ac26-crypto-battle (Issue #486, PR4).
+ * Shared portal-plugin helpers for crypto-battle (Issue #486, PR4).
  *
  * `StatusPanel.tsx` and `RegistrationPanel.tsx` both need the exact same two
  * things: a live-polled, narrowed `CryptoBattleProjection` (StatusPanel to

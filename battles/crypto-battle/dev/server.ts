@@ -218,5 +218,5 @@ const server = Bun.serve({
   },
 });
 
-console.log(`ac26-crypto-battle dev harness: http://localhost:${server.port}`);
+console.log(`crypto-battle dev harness: http://localhost:${server.port}`);
 console.log("Local preview only. Not the competition trust boundary; no score here is official.");

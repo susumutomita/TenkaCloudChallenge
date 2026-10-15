@@ -21,7 +21,7 @@ Vigenèreは3個の鍵、Rotorは車輪の初期位置a・b、RSAはnの異な�
 
 ## 確認
 
-追加回帰テスト：`cd battles/ac26-crypto-battle/game && bun test src/information-flow.test.tsx`。
+追加回帰テスト：`cd battles/crypto-battle/game && bun test src/information-flow.test.tsx`。
 通常のゲーム・ハーネス回帰と型検査は既存CIの対象です。
 
 ローカルでは追加した実コンポーネントをReact 18.2.0とChromiumで独立表示し、日本語・英語、2種類の説明例、折り畳みとキーボード操作、390px幅での横はみ出しなし、44px以上の例切替ボタン、ブラウザpageerror 0件を確認しました。既存HuntGuideも同じ固定シェアで表示しました。これは新しい説明UIの確認であり、実ポータル全体、オンライン採点、認証、AWSデプロイの検証ではありません。リポジトリ全体のローカル実行は行っていません。

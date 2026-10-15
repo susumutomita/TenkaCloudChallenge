@@ -82,7 +82,6 @@ Some endgame teams receive hint support or a one-use calculation multiplier. An 
 
 | Need | Guide |
 | --- | --- |
-| Plan an event, roles and preparation | [Event-host rehearsal](../../challenges/event-host-rehearsal/README.md) |
 | Set deadlines, understand scoring, upgrades and cleanup | [Operator guide](OPERATOR.md) |
 | Run and check the real game components locally | [Development preview](dev/README.md) |
 | Understand the cryptographic models | [Model guide](docs/MODELS.md) |
@@ -97,7 +96,7 @@ From the repository root, validate the catalog, game and preview:
 ```bash
 make install
 make agent-gate
-cd battles/ac26-crypto-battle/game
+cd battles/crypto-battle/game
 bun install --frozen-lockfile --ignore-scripts
 bun test
 bun run typecheck

@@ -1,0 +1,149 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.tenkacloud.dev/challenge/simulation-overlay-v1.json",
+  "title": "TenkaCloud Simulator problem overlay",
+  "description": "IaC、IAM、metadata から導出できない Simulator capability/workload だけを補う version 1 overlay。scoring、answer、secret、environment、host mount は schema 上表現できない。",
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+          "maxLength": 256,
+          "description": "Problem directory 内の regular file。symlink component と `..` は validator が拒否する。"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Artifact file bytes の lowercase SHA-256。"
+        }
+      }
+    },
+    "targetId": {
+      "type": "string",
+      "pattern": "^(default|[a-z][a-z0-9-]{0,31})$"
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetId",
+        "service",
+        "resourceType",
+        "operation",
+        "fidelity",
+        "plane"
+      ],
+      "properties": {
+        "targetId": { "$ref": "#/$defs/targetId" },
+        "service": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9.-]{0,63}$"
+        },
+        "resourceType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9.:_-]{0,127}$"
+        },
+        "fidelity": {
+          "type": "string",
+          "enum": ["L0", "L1", "L2", "L3", "L4"]
+        },
+        "plane": {
+          "type": "string",
+          "enum": [
+            "deploy",
+            "participant",
+            "workload",
+            "scoring",
+            "operator",
+            "access"
+          ]
+        },
+        "artifact": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "targetId",
+        "resourceRef",
+        "image",
+        "containerPort"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "targetId": { "$ref": "#/$defs/targetId" },
+        "resourceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "image": {
+          "type": "string",
+          "pattern": "^(?:[a-z0-9][a-z0-9._/-]*/)?[a-z0-9][a-z0-9._/-]*@sha256:[a-f0-9]{64}$",
+          "description": "OCI registry reference pinned by immutable digest."
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "containerPort": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "healthPath": {
+          "type": "string",
+          "pattern": "^/[^?#\\s]*$",
+          "maxLength": 256
+        },
+        "artifact": { "$ref": "#/$defs/artifact" }
+      }
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion"],
+  "anyOf": [
+    { "required": ["requirements"] },
+    { "required": ["workloads"] }
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Editor completion reference; validation uses repository SIMULATION_SCHEMA.json."
+    },
+    "schemaVersion": { "const": "1" },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/requirement" }
+    },
+    "workloads": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/workload" }
+    }
+  }
+}

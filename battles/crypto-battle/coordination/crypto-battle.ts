@@ -43,7 +43,7 @@
  * `path.resolve(binDir, "..", "..", "problems")`
  * (`TenkaCloud/infrastructure/lib/app-config/resolve.ts:336`) -- i.e. this
  * file's real on-disk path when esbuild runs is
- * `TenkaCloud/problems/battles/ac26-crypto-battle/coordination/crypto-battle.ts`.
+ * `TenkaCloud/problems/battles/crypto-battle/coordination/crypto-battle.ts`.
  * esbuild's bare-specifier resolution walks up parent directories'
  * `node_modules` from there, past the submodule boundary (a filesystem walk
  * does not stop at a `.git` boundary), and finds

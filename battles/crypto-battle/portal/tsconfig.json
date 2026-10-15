@@ -19,7 +19,7 @@
   //     but not reliably for automatic-JSX-runtime subpath imports like
   //     "react/jsx-dev-runtime" -- Bun's `paths` glob substitution does not
   //     re-run full module resolution, i.e. extension lookup, on the result).
-  //   - a `battles/ac26-crypto-battle/package.json` declaring
+  //   - a `battles/crypto-battle/package.json` declaring
   //     `"workspaces": ["game"]`, hoping `bun install --cwd game`'s
   //     ancestor-workspace detection would hoist a shared node_modules here.
   //     It does NOT: Bun's linker only ever creates the named `react` /

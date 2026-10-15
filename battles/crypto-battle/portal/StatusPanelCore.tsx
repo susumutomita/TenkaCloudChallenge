@@ -1,5 +1,5 @@
 /**
- * Issue #486 PR4: ac26-crypto-battle StatusPanel plugin -- the participant's
+ * Issue #486 PR4: crypto-battle StatusPanel plugin -- the participant's
  * main 1-screen view of a live match: Score / Time / Phase header, then
  * three lanes (Contract Queue / My Vault / Public Ledger).
  *

@@ -1,4 +1,4 @@
-# Local development harness — ac26-crypto-battle
+# Local development harness — crypto-battle
 
 Runs this Battle's **real** game model and **real** Portal components in a
 browser on your machine. No AWS account, no credentials, no deploy.
@@ -10,7 +10,7 @@ a reload.
 [Play guide](../README.md) · [Operator guide](../OPERATOR.md)
 
 ```bash
-cd battles/ac26-crypto-battle/dev
+cd battles/crypto-battle/dev
 bun install --frozen-lockfile --ignore-scripts
 bun run dev          # http://localhost:5644  (PORT=... to change)
 ```

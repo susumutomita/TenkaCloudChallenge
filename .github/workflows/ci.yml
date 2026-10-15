@@ -79,12 +79,12 @@ jobs:
 
       - name: Install ac26 crypto battle test dependencies
         if: needs.changes.outputs.battle == 'true'
-        working-directory: battles/ac26-crypto-battle/game
+        working-directory: battles/crypto-battle/game
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Test and typecheck ac26 crypto battle
         if: needs.changes.outputs.battle == 'true'
-        working-directory: battles/ac26-crypto-battle/game
+        working-directory: battles/crypto-battle/game
         run: bun test $(find src \( -name "*.test.ts" -o -name "*.test.tsx" \) ! -name "state-size.test.ts") && bun run typecheck
 
       # Issue #644: the local development harness. Its own package, so its own
@@ -93,12 +93,12 @@ jobs:
       # failure mode #643 found in the problem-local tests before PR #648.
       - name: Install ac26 crypto battle dev harness dependencies
         if: needs.changes.outputs.battle == 'true'
-        working-directory: battles/ac26-crypto-battle/dev
+        working-directory: battles/crypto-battle/dev
         run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Test and typecheck ac26 crypto battle dev harness
         if: needs.changes.outputs.battle == 'true'
-        working-directory: battles/ac26-crypto-battle/dev
+        working-directory: battles/crypto-battle/dev
         run: bun test && bun run typecheck
 
   # Pull requests run the declared bounds and the rosters up to 13 teams (about a
@@ -124,10 +124,10 @@ jobs:
         with:
           bun-version: "1.3.11"
       - name: Install game dependencies
-        working-directory: battles/ac26-crypto-battle/game
+        working-directory: battles/crypto-battle/game
         run: bun install --frozen-lockfile --ignore-scripts
       - name: Check complete retained histories and every transition size
-        working-directory: battles/ac26-crypto-battle/game
+        working-directory: battles/crypto-battle/game
         env:
           PROFILE: ${{ matrix.profile }}
         run: |

@@ -195,7 +195,7 @@ function Harness() {
   const slotProps = useMemo<PortalSlotProps>(
     () => ({
       team: { teamId: team, teamName: team, eventId: session?.eventId },
-      problemId: "ac26-crypto-battle",
+      problemId: "crypto-battle",
       jobId: "local-dev-harness",
       score: 0,
       locale,
