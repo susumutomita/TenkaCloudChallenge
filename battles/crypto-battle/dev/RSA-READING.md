@@ -177,7 +177,7 @@ participant/browser evidence above covers the unchanged RSA action surface.
 Commands run from this candidate:
 
 ```sh
-cd battles/ac26-crypto-battle/game
+cd battles/crypto-battle/game
 bun run typecheck
 bun test
 cd ../dev

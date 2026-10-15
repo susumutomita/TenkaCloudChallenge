@@ -19,7 +19,7 @@
     // it well enough for `tsc --noEmit` to typecheck the same JSX shape.
     "jsx": "react-jsx",
     // @types/react(-dom) live only in ./node_modules (installed here, not at
-    // battles/ac26-crypto-battle/ or repo root -- see game/package.json's
+    // battles/crypto-battle/ or repo root -- see game/package.json's
     // devDependencies doc comment). `tsc -p` type-checks every file in
     // "include" below (game/src/*.ts AND ../portal/*.tsx) against this ONE
     // config's compilerOptions -- a nested tsconfig.json inside portal/

@@ -8,7 +8,7 @@ import FastMovePanel, { EndedView, FAST_MOVE_COPY, closedReason, isClosed, outco
 function minimalProps(locale: "ja" | "en", overrides: Partial<PortalSlotProps> = {}): PortalSlotProps {
   return {
     team: { teamName: "Test Team" },
-    problemId: "ac26-crypto-battle",
+    problemId: "crypto-battle",
     jobId: "job-1",
     score: 0,
     locale,

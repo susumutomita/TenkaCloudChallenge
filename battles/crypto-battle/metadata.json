@@ -1,6 +1,6 @@
 {
   "$schema": "../../SCHEMA.json",
-  "id": "ac26-crypto-battle",
+  "id": "crypto-battle",
   "name": "暗号バトル",
   "category": "Battle",
   "status": "draft",

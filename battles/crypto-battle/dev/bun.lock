@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tenkacloud-ac26-crypto-battle-dev",
+      "name": "tenkacloud-crypto-battle-dev",
       "devDependencies": {
         "@types/bun": "1.3.11",
         "@types/react": "^19",

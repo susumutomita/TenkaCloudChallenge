@@ -238,7 +238,7 @@ function fixtureProjection(overrides: Partial<CryptoBattleProjection> = {}): Cry
 function baseProps(overrides: Partial<PortalSlotProps> = {}): PortalSlotProps {
   return {
     team: { teamId: "blue", teamName: "Blue Team", eventId: "evt-486-pr4" },
-    problemId: "ac26-crypto-battle",
+    problemId: "crypto-battle",
     jobId: "job-1",
     score: 0,
     locale: "en",

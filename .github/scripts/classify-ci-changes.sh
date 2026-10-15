@@ -5,11 +5,11 @@ battle=false
 capacity=false
 while IFS= read -r path; do
   case "$path" in
-    .github/workflows/ci.yml|.github/scripts/classify-ci-changes*|battles/ac26-crypto-battle/*)
+    .github/workflows/ci.yml|.github/scripts/classify-ci-changes*|battles/crypto-battle/*)
       battle=true ;;
   esac
   case "$path" in
-    .github/workflows/ci.yml|.github/scripts/classify-ci-changes*|battles/ac26-crypto-battle/metadata.json|battles/ac26-crypto-battle/game/src/*|battles/ac26-crypto-battle/game/package.json|battles/ac26-crypto-battle/game/bun.lock*|battles/ac26-crypto-battle/game/tsconfig*.json)
+    .github/workflows/ci.yml|.github/scripts/classify-ci-changes*|battles/crypto-battle/metadata.json|battles/crypto-battle/game/src/*|battles/crypto-battle/game/package.json|battles/crypto-battle/game/bun.lock*|battles/crypto-battle/game/tsconfig*.json)
       capacity=true ;;
   esac
 done

@@ -113,7 +113,7 @@ function projection(overrides: Partial<CryptoBattleProjection> = {}): CryptoBatt
 function slotProps(locale: "ja" | "en") {
   return {
     team: { teamId: "blue", teamName: "Blue", eventId: "event" },
-    problemId: "ac26-crypto-battle",
+    problemId: "crypto-battle",
     jobId: "job",
     score: 0,
     locale,

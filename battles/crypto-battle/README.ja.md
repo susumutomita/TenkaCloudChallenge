@@ -96,7 +96,7 @@ Schnorrの最初の計算では、0〜22の整数を入力すればボタンを�
 ```bash
 make install
 make agent-gate
-cd battles/ac26-crypto-battle/game
+cd battles/crypto-battle/game
 bun install --frozen-lockfile --ignore-scripts
 bun test
 bun run typecheck

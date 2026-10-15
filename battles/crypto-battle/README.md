@@ -96,7 +96,7 @@ From the repository root, validate the catalog, game and preview:
 ```bash
 make install
 make agent-gate
-cd battles/ac26-crypto-battle/game
+cd battles/crypto-battle/game
 bun install --frozen-lockfile --ignore-scripts
 bun test
 bun run typecheck

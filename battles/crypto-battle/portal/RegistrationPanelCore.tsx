@@ -1,5 +1,5 @@
 /**
- * Issue #486 PR4: ac26-crypto-battle RegistrationPanel plugin -- the
+ * Issue #486 PR4: crypto-battle RegistrationPanel plugin -- the
  * participant's op submission form for LEAK / PROVE / HUNT / ROTATE.
  *
  * Deliberately does NOT compute anything cryptographic on the participant's

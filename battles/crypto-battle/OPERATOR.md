@@ -135,7 +135,7 @@ make agent-gate
 For game or participant-flow changes, run the owning packages:
 
 ```bash
-cd battles/ac26-crypto-battle/game
+cd battles/crypto-battle/game
 bun install --frozen-lockfile --ignore-scripts
 bun test
 bun run typecheck
