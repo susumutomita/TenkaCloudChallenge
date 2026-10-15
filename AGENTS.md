@@ -44,7 +44,7 @@ A Battle earns uptime points only after participants register or configure the t
 
 ### §11 Disruptions
 
-`effect` is scoring pressure only. `action` is a real, reversible platform fault. Never declare both. A disruption with neither, driven by an operator probe in `parameters.probe`, is also valid and belongs in the operator runbook. A problem with more than one disruption needs `redteam/README.md`.
+`effect` is scoring pressure only. `action` is a real, reversible platform fault. Never declare both. A disruption with neither, driven by an operator probe in `parameters.probe`, is also valid and belongs in the operator runbook. A problem with more than one disruption needs `redteam/README.md` covering targeting, recovery, revert and a pre-event smoke test.
 
 ### §12 Participant instructions
 
