@@ -15,8 +15,6 @@ Start with a problem's README for its scenario, prerequisites and verification s
 
 To run an event or start the platform locally, follow the [TenkaCloud setup guide](https://github.com/susumutomita/TenkaCloud#quickstart).
 
-If you are new, start with the StackStack course. It has 14 local problems that run in containers on your machine, solved in order from [Your First Request](challenges/stackstack-first-request/README.md).
-
 ## Add or update a problem
 
 Follow the [authoring contract](AGENTS.md). Keep a problem's metadata, bilingual READMEs, runtime, fixtures and tests in its own directory. Start from a problem with the same runtime and scoring contract.

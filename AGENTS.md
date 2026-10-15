@@ -36,11 +36,11 @@ Keep literal `/` characters in Console deep-link fragments, and open the link in
 
 ### §9 Battle participant-action gate
 
-A Battle earns uptime points only after participants register or configure the target. Score-target defaults stay empty. `battles/hello-world-battle` is the reference.
+A Battle earns uptime points only after participants register or configure the target. Score-target endpoints have empty defaults and `overridable: true`. `battles/hello-world-battle` is the reference.
 
 ### §10 Participant-visible content
 
-`shortDescription`, `instructions`, endpoint labels, hints, `scoring.checks[].label` and public phase or disruption text name the symptom, asset, first action and goal. They never reveal vulnerability names, hidden predicates, hardened state, surprise timing or answers. `description` is for authors and operators.
+`shortDescription`, `instructions`, endpoint labels and descriptions, hints, `scoring.checks[].label` and public phase or disruption text name the symptom, asset, first action and goal. They never reveal vulnerability names, hidden predicates, hardened state, surprise timing or answers. The top-level `description` is for authors and operators.
 
 ### §11 Disruptions
 
@@ -77,6 +77,10 @@ A failed `kind: "code"` checkpoint may return `message`, naming the stated prope
 ## Course placement
 
 Order problems with `track.id`, `track.order` and `track.chapter`. Use `courseAlignment` only for a pinned external-course mapping.
+
+## Skill evidence
+
+Optional `skillEvidence` claims only the team-level observation its `rule` proves. It never claims an individual's ability, sustained availability or every learning goal, and its labels carry no answers or hidden checks.
 
 ## Cost claims
 
