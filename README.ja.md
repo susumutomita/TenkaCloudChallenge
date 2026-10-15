@@ -15,6 +15,8 @@
 
 イベントの開催やプラットフォームのローカル起動は、[TenkaCloudのセットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/README.ja.md#クイックスタート)を参照してください。
 
+初めての人はStackStackコースから始めてください。手元のコンテナで動くローカル問題14問を、[はじめてのリクエスト](challenges/stackstack-first-request/README.ja.md)から順に解きます。
+
 ## 問題を追加・修正する
 
 [作成ルール](AGENTS.md)に従い、問題ごとのディレクトリに、メタデータ・日英README・実行コード・検証用データ・テストをまとめます。実行環境と採点方法が近い既存問題を出発点にしてください。
