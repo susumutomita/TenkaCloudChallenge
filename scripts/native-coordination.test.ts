@@ -4,7 +4,7 @@ import { join } from "node:path";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import { checkNativeCoordinationRefs } from "./validate-problems";
-const root=new URL("..",import.meta.url).pathname,dir=join(root,"battles/pi-siege");
+const root=new URL("..",import.meta.url).pathname,dir=join(root,"battles/forensic-casebook");
 const metadata=JSON.parse(readFileSync(join(dir,"metadata.json"),"utf8"));
 const ajv=new Ajv({strict:false,allErrors:true});addFormats(ajv);
 const schema=ajv.compile(JSON.parse(readFileSync(join(root,"SCHEMA.json"),"utf8")));
