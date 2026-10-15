@@ -9,7 +9,7 @@ make install     # bun install --frozen-lockfile --ignore-scripts
 make agent-gate  # what CI runs: metadata, bilingual READMEs, cross-references, root tests
 ```
 
-`make agent-gate` does not prove that a stack deploys, a container becomes reachable, or a verifier rejects shortcuts. Also run the problem's own tests from its README, Makefile or package.json.
+`make agent-gate` does not prove that a stack deploys, a container becomes reachable, or a verifier rejects shortcuts. Also run the problem's own tests from its README, Makefile or package.json. A real AWS event or a third-party playtest is an optional rehearsal, not a merge gate.
 
 ## Repository boundary
 
@@ -26,7 +26,7 @@ make agent-gate  # what CI runs: metadata, bilingual READMEs, cross-references, 
 2. Copy the closest problem with the same runtime and scoring: `challenges/hello-world` (AWS flag), `battles/hello-world-battle` (uptime Battle), `challenges/sqli-demo` (local `verify`) or `challenges/wp-exposed-backup` (local `multi-verify`).
 3. Change every identity and contract field: directory, `id`, Japanese text, `i18n.en`, runtime, endpoints, scoring and hints. Leave no starter answers behind.
 4. Write `README.md` and `README.ja.md` as regular files: story, components, participant route, scoring evidence, safety boundary, cost-bearing resources, teardown and local verification. Claim only behavior you ran.
-5. Run the problem's tests and `make agent-gate`. Keep one problem per PR.
+5. Run the problem's tests and `make agent-gate`. Keep one problem per PR. A shared-runtime change may cover its affected consumers in one PR if it lists each consumer's evidence.
 
 ## Rules
 
@@ -36,7 +36,7 @@ Keep literal `/` characters in Console deep-link fragments, and open the link in
 
 ### §9 Battle participant-action gate
 
-A Battle earns uptime points only after participants register or configure the target. Score-target endpoints have empty defaults and `overridable: true`. `battles/hello-world-battle` is the reference.
+A Battle earns uptime points only after participants register or configure the target. Score-target endpoints have empty defaults and `overridable: true`. When participants cannot otherwise find the target, expose a non-scoring host hint. `battles/hello-world-battle` is the reference (`Ec2HostHint`).
 
 ### §10 Participant-visible content
 
@@ -44,7 +44,7 @@ A Battle earns uptime points only after participants register or configure the t
 
 ### §11 Disruptions
 
-`effect` is scoring pressure only. `action` is a real, reversible platform fault. Declare one or the other, never both. A problem with more than one disruption needs `redteam/README.md`.
+`effect` is scoring pressure only. `action` is a real, reversible platform fault. Never declare both. A disruption with neither, driven by an operator probe in `parameters.probe`, is also valid and belongs in the operator runbook. A problem with more than one disruption needs `redteam/README.md`.
 
 ### §12 Participant instructions
 
@@ -64,7 +64,7 @@ Hints climb from the mechanism, to a formula or example on small numbers, to ste
 
 ### §13 Local-play containers
 
-Declare `runtime.provider: "docker"`, `runtime.engine: "compose"` and a real `runtime.entry`, and score with `verify` or `multi-verify`. Derive answers from injected per-run secrets. Never commit them or copy hidden or reference material into the participant image. Bind published ports to `127.0.0.1`, add a real health check, run as non-root, and keep the participant surface apart from verifier authority.
+Declare `runtime.provider: "docker"`, `runtime.engine: "compose"` and a real `runtime.entry`, and score with `verify` or `multi-verify`. A `multi-verify` `/verify` echoes the submitted `checkpointId`. Derive answers from injected per-run secrets. Never commit them or copy hidden or reference material into the participant image. Bind published ports to `127.0.0.1`, add a real health check, run as non-root, and keep the participant surface apart from verifier authority.
 
 ### §14 Challenge scoring
 
@@ -72,11 +72,11 @@ Points and penalties follow [SCORING.md](SCORING.md). The validator enforces the
 
 ### §15 Verify failure feedback
 
-A failed `kind: "code"` checkpoint may return `message`, naming the stated property that broke, truncated to 1900 characters. It never carries hidden fixtures, expected values, seeds, flags or paid-hint content.
+A failed `kind: "code"` checkpoint may return `message`, naming the stated property that broke, truncated to 1900 characters. It never carries hidden fixtures, expected values, seeds, flags or paid-hint content. Other checkpoints never return a reason, because a reason narrows the expected value.
 
 ## Course placement
 
-Order problems with `track.id`, `track.order` and `track.chapter`. Use `courseAlignment` only for a pinned external-course mapping.
+Order problems with `track.id`, `track.order` and `track.chapter`. Use `courseAlignment` only for a pinned external-course mapping. Do not add a second prerequisite graph.
 
 ## Skill evidence
 
