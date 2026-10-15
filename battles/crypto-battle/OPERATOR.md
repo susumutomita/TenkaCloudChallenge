@@ -2,7 +2,7 @@
 
 [Play guide (English)](README.md) · [遊び方（日本語）](README.ja.md) · [Local preview](dev/README.md)
 
-This guide describes current operation. Historical implementation and validation results remain in Git, Issues and the dated records under `dev/`.
+This guide describes current operation. For scheduling, staffing and event preparation, use the [event-host rehearsal](../../challenges/event-host-rehearsal/README.md). Historical implementation and validation results remain in Git, Issues and the dated records under `dev/`.
 
 ## Before an event
 

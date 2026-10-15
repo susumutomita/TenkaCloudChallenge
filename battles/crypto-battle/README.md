@@ -82,6 +82,7 @@ Some endgame teams receive hint support or a one-use calculation multiplier. An 
 
 | Need | Guide |
 | --- | --- |
+| Plan an event, roles and preparation | [Event-host rehearsal](../../challenges/event-host-rehearsal/README.md) |
 | Set deadlines, understand scoring, upgrades and cleanup | [Operator guide](OPERATOR.md) |
 | Run and check the real game components locally | [Development preview](dev/README.md) |
 | Understand the cryptographic models | [Model guide](docs/MODELS.md) |

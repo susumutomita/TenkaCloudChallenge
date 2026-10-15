@@ -23,9 +23,9 @@ Without an invitation, follow the [local preview](dev/README.md). It requires Bu
 1. 完了画面から「なぜ開けずに計算できる？図で見る」へ。中身の合計と、その合計を隠した暗号文を比べます。
 2. 「一桁の穴埋めで練習」で別の仕組みへ。本戦では締切と減点があります。
 3. [問題集](../../README.md)で次の問題を探す。
-4. 参加日程や会場は招待元の運営者に確認してください。ここに募集中イベントの一覧はありません。
+4. 開催するなら [運営リハーサル](../../challenges/event-host-rehearsal/README.ja.md)へ。参加日程や会場は招待元の運営者に確認してください。ここに募集中イベントの一覧はありません。
 
-After practice, view the diagrams, try another exercise, or explore the [catalog](../../README.md). Ask your organizer about registration and dates.
+After practice, view the diagrams, try another exercise, explore the [catalog](../../README.md), or use the [host rehearsal](../../challenges/event-host-rehearsal/README.md). Ask your organizer about registration and dates.
 
 ## 告知文案 / Announcement draft
 
