@@ -1,0 +1,89 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "greeting-expression-lab",
+  "name": "あいさつ工房の合言葉",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "25 分",
+  "shortDescription": "名前を入れるとあいさつを返す工房の画面。表示の仕組みを調べ、この環境だけの架空の合言葉を見つけよう。",
+  "instructions": "## 状況\n\nあなたは「あいさつ工房」の動作確認を頼まれた。名前を入れるとあいさつを表示する画面で、担当者だけが知る架空の合言葉も同じアプリ内に保管されている。その合言葉を見つけ、提出しよう。\n\n## 最初の一手\n\nこの問題で「起動 / 再開」を押し、アクセス先の Web を開く。まず Ada などの名前を入れ、出力と画面にあるテンプレートを比べよう。テンプレートとは、入力を埋めてから動かす命令のひな形だ。\n\nこの教材は小さな専用言語を使う。`\"青\"` のように二重引用符で囲むと文字列（文字の並び）、`+` は連結、`print(...)` は表示、`;` は命令の終わり。`print(\"赤\" + \"青\");` は `赤青` を表示する。`env` はプログラムへ渡す名前付き設定を表す教材用辞書で、`print(env[\"COLOR\"]);` は公開値 `blue` を表示する。合言葉は、この環境の辞書の `FLAG` という名前で保管されている。\n\n## 提出とゴール\n\n名前欄だけを使って画面の動きを調べ、見つけた `TC{...}` の文字列を Portal の Flag 提出欄へそのまま送る。正解は100点、不正解は1回5点の減点。ヒントも減点があり、得点は負になることがある。\n\n対象はこの Web 画面だけ。実OSの命令・ファイル・ネットワーク・メモリを操作する言語ではなく、外部の秘密情報は使わない。",
+  "description": "制限付き教材言語へのコードインジェクションで模擬環境変数のFLAGを表示する入門演習。実OSコード実行やメモリダンプは行わない。",
+  "writeup": "## 原因と取得経路\n\n名前を `print(\"Hello, <name>!\");` のコード文字列へ直接連結してから解析していた。入力 `\");print(env[\"FLAG\"]);print(\"` は引用符を閉じて表示命令を追加し、後続の引用符も整合させる。追加命令が教材用辞書の架空FLAGを読み、出力へ返す。これはデータが構文として扱われるコードインジェクションで、メモリダンプ・カーネル脆弱性・実OSの環境変数探索ではない。\n\n## 安全な修正\n\nこの画面にはコードの実行自体が不要だ。`safeGreeting(name)` のように `return \"Hello, \" + name + \"!\"` と値を直接組み立て、教材インタプリタへ渡さない。`local/tests/lab.test.mjs` は同じ入力が修正後には文字列のまま表示され、架空FLAGを出さないことを確認する。HTMLへ出すときは別途HTMLエスケープも必要で、この画面は入力と出力の両方をエスケープする。\n\n## 演習の境界\n\n限定言語は文字列・連結・表示・許可した辞書参照だけを実装し、JavaScriptのeval/Function/vm、属性参照、ファイル、シェル、通信のAPIを持たない。入力・命令数・式・出力に上限がある。FLAGは主催者が注入する実行環境ごとのランダムseedから作る架空値で、教材用辞書はprocess.envではない。採点は別コンテナ・別internal networkで行う。この仕組みを一般的なコード実行サンドボックスと呼んだり、本物の秘密を入れたりしてはいけない。",
+  "tags": [
+    "web-security",
+    "code-injection",
+    "local-play",
+    "container",
+    "environment"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (organizer only)"
+    }
+  ],
+  "learningGoals": [
+    "入力データがコードの構文になる原因を、テンプレートと出力から説明する",
+    "教材の環境値を読む経路と、メモリダンプを区別する",
+    "コード実行を避ける修正とHTMLエスケープを別々の対策として確認する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "The Greeting Workshop Passphrase",
+      "shortDescription": "A workshop page greets a name. Investigate its output and find this instance’s fictional passphrase.",
+      "instructions": "## Situation\n\nYou are testing the Greeting Workshop. Its page greets a name, and the same application holds a fictional passphrase intended for its operator. Find that passphrase and submit it.\n\n## First move\n\nSelect Start / resume for this problem and open Web under Access URLs. Try a name such as Ada and compare the output with the template on the page. A template is a pattern of instructions filled with your input before it runs.\n\nThis exercise uses a tiny teaching language. Double quotes make a string (a sequence of characters), `+` joins strings, `print(...)` displays a value, and `;` ends an instruction. `print(\"red\" + \"blue\");` displays `redblue`. `env` is a teaching dictionary of named settings passed to the program: `print(env[\"COLOR\"]);` displays the public value `blue`. This instance's passphrase is stored under the name `FLAG` in that dictionary.\n\n## Submission and goal\n\nUse only the name field to investigate the page. Submit the discovered `TC{...}` string unchanged in the Portal's flag field. A correct answer earns 100 points; each wrong answer costs 5. Hints also cost points and the score may become negative.\n\nOnly this Web page is in scope. The language cannot operate real OS commands, files, networks or memory, and no external secrets are used.",
+      "description": "An introductory code-injection exercise using a deliberately limited teaching language and simulated environment FLAG. No real OS code execution or memory dump.",
+      "writeup": "## Cause and retrieval path\n\nThe application concatenates the name into `print(\"Hello, <name>!\");` before parsing it. The input `\");print(env[\"FLAG\"]);print(\"` closes a quoted value, adds a display instruction and balances the remaining quote. That instruction reads the fictional FLAG from the teaching dictionary into output. This is code injection: data becomes syntax. It is not a memory dump, kernel exploit or traversal of real OS environment variables.\n\n## Safe repair\n\nThis greeting page does not need code execution. Build the value directly, as `safeGreeting(name)` does with `return \"Hello, \" + name + \"!\"`, and never pass it to the interpreter. The regression in `local/tests/lab.test.mjs` proves the same input stays literal after the repair and does not reveal the fictional flag. HTML escaping is a separate requirement; both input and output are escaped by this page.\n\n## Exercise boundary\n\nThe miniature language implements only strings, concatenation, printing and allowlisted dictionary lookup. It exposes no JavaScript eval/Function/vm, property traversal, files, shell or communication APIs. Inputs, instructions, expressions and output are bounded. A per-environment injected random seed derives a fictional flag; the teaching dictionary is not process.env. A separate container on a separate internal network owns verification. This is not a general-purpose sandbox and must never contain real secrets.",
+      "learningGoals": [
+        "Explain how input becomes code syntax using the template and output",
+        "Distinguish reading a teaching environment value from dumping memory",
+        "Verify a repair that avoids code execution, separately from HTML escaping"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "Quotes mark where a string begins and ends. Put one quote in a name and write out the resulting template. Which characters still belong to the original string?"
+        },
+        {
+          "id": "hint-2",
+          "content": "In this language, `print(\"A\");print(\"B\");` displays two lines. How could a name close the first string, add another display instruction, and leave the final `!\");` syntactically valid?"
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "画面にある引用符は文字列の始まりと終わりを表す。名前に引用符を1つ含めた場合、元のテンプレートのどこが文字列として残るかを紙に書いてみよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "この言語では `print(\"A\");print(\"B\");` は2行を表示する。テンプレートの最初の文字列を閉じた後に別の表示命令を置き、最後に残る `!\");` も文法に合うようにするには、名前をどう組み立てればよいだろう。",
+        "penalty": 30
+      }
+    ]
+  }
+}
