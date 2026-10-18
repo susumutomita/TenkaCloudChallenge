@@ -396,6 +396,7 @@ function openApiDocument(scenarioName, lang) {
             },
           }
         : {}),
+      ...(scenario.openApiPaths?.(lang) ?? {}),
     },
   };
 }
@@ -415,12 +416,6 @@ function docsPage(lang) {
 <style>
 :root{color-scheme:light}
 body{margin:0;background:#fff;color:#0f141a}#note{font-family:system-ui;padding:.8rem 1.2rem;background:#eef4ff;line-height:1.6}
-#request-workbench{font-family:system-ui;margin:1rem;padding:1rem;border:1px solid #ccd5e1;border-radius:.5rem}
-#request-workbench label{display:block;font-weight:600;margin-top:.7rem}
-#request-workbench input,#request-workbench select,#request-workbench textarea{box-sizing:border-box;width:100%;padding:.55rem;font:inherit}
-#request-workbench textarea{min-height:5rem;font-family:ui-monospace,monospace}
-#request-send{margin-top:.8rem;padding:.6rem 1rem;font:inherit}
-#request-response{white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;color:#f9fafb;padding:.8rem;min-height:3rem}
 </style>
 </head><body>
 <div id="note">${bi(
@@ -430,50 +425,10 @@ body{margin:0;background:#fff;color:#0f141a}#note{font-family:system-ui;padding:
   )}
  <a href="./?lang=${lang}">${bi(lang, "板に戻る", "Back to the board")}</a> ·
  <a href="docs?lang=${other}">${bi(lang, "English", "日本語")}</a></div>
-<section id="request-workbench">
-<h2>${bi(lang, "任意の API を試す", "Try any API")}</h2>
-<p>${bi(
-    lang,
-    "下の一覧にない問題固有の API も、ここから同じブラウザ内で実行できます。ターミナルは要りません。",
-    "Run scenario-specific APIs here even when they are not listed below. No terminal is required.",
-  )}</p>
-<label for="request-method">${bi(lang, "メソッド", "Method")}</label>
-<select id="request-method"><option>GET</option><option>POST</option><option>PATCH</option><option>PUT</option><option>DELETE</option></select>
-<label for="request-path">${bi(lang, "パス (query を含められます)", "Path (query allowed)")}</label>
-<input id="request-path" value="/posture" spellcheck="false">
-<label for="request-headers">${bi(lang, "ヘッダー (JSON)", "Headers (JSON)")}</label>
-<textarea id="request-headers" spellcheck="false">{}</textarea>
-<label for="request-body">${bi(lang, "body (必要なときだけ)", "Body (only when needed)")}</label>
-<textarea id="request-body" spellcheck="false"></textarea>
-<button id="request-send" type="button">${bi(lang, "実行", "Send")}</button>
-<pre id="request-response" aria-live="polite"></pre>
-</section>
 <div id="ui"></div>
 <script src="vendor/swagger/swagger-ui-bundle.js"></script>
 <script>
-SwaggerUIBundle({ url: "openapi.json?lang=${lang}", dom_id: "#ui", tryItOutEnabled: true, defaultModelsExpandDepth: -1 });
-document.getElementById("request-send").addEventListener("click", async () => {
-  const output = document.getElementById("request-response");
-  output.textContent = ${JSON.stringify(bi(lang, "実行中…", "Sending…"))};
-  try {
-    const method = document.getElementById("request-method").value;
-    const asked = document.getElementById("request-path").value.trim();
-    const path = asked.startsWith("/") ? asked : "/" + asked;
-    const target = new URL(path, window.location.origin);
-    if (target.origin !== window.location.origin) throw new Error(${JSON.stringify(
-      bi(lang, "同じアプリ内のパスを入力してください", "Enter a path inside this app"),
-    )});
-    const headers = JSON.parse(document.getElementById("request-headers").value || "{}");
-    const body = document.getElementById("request-body").value;
-    const options = { method, headers };
-    if (body !== "" && method !== "GET" && method !== "HEAD") options.body = body;
-    const response = await fetch(target.pathname + target.search, options);
-    const text = await response.text();
-    output.textContent = response.status + " " + response.statusText + ${JSON.stringify("\n\n")} + text;
-  } catch (error) {
-    output.textContent = ${JSON.stringify(bi(lang, "実行できません: ", "Could not send: "))} + error.message;
-  }
-});
+SwaggerUIBundle({ url: "openapi.json?lang=${lang}", dom_id: "#ui", defaultModelsExpandDepth: -1 });
 </script>
 </body></html>`;
 }
