@@ -13,7 +13,7 @@ stackstack-route の章 0。 Web アプリと HTTP で会話した経験がゼ�
 | **自分のマシン (Docker)** | StackStack 共通の **ベースアプリ** ── 小さな Node 製掲示板 |
 | `127.0.0.1:18080` | 掲示板 (参加者が使うアプリ) |
 | `127.0.0.1:18081` | TenkaCloud の採点が委譲する loopback `/verify` |
-| 板の `docs` (API コンソール) | 「任意の API を試す」 ── この問題の 3 経路をここから実行する |
+| 板の `docs` (API コンソール) | 各 API の **Try it out → Execute** から実行する |
 
 image は StackStack 系問題が共有する [`runtimes/stackstack/`](../../runtimes/stackstack) から作る (`SCENARIO=first-request`)。 postcard の合言葉・door token・guestbook receipt・一周の token はすべて、 deploy ごとにランダムな `FLAG_SEED` からコンテナ内で導出する。 だから答えはこのリポジトリに存在せず、 2 つの deploy が同じ答えを持つこともない。 公開ポートはどちらも `127.0.0.1` のみ。
 
@@ -40,9 +40,9 @@ image は StackStack 系問題が共有する [`runtimes/stackstack/`](../../run
 
 2. ポータルに空でない鍵でログインし、 `Web` endpoint から板を開く。 板に CTO の投稿が 2 つあり、 今夜の宿題 (3 経路) が書いてある。 板の `docs` を開く。
 
-3. 「任意の API を試す」で `GET /api/postcard` を実行する。 レスポンスの `token` を **葉書を読む** に提出する。
+3. 各 API の **Try it out → Execute** から `GET /api/postcard` を実行する。 レスポンスの `token` を **葉書を読む** に提出する。
 
-4. `GET /api/door` を実行する。 400 が返るが、 `detail` に直し方が書いてある ── パスを `/api/door?key=<葉書の token>` にしてもう一度。 200 の `token` を **断られて、 直す** に提出する。
+4. `GET /api/door` を実行する。 400 が返るが、 `detail` に直し方が書いてある ── `key` 欄に葉書の token を入れて **Execute** でもう一度。 200 の `token` を **断られて、 直す** に提出する。
 
    ターミナル派なら同じことがこうなる (必須ではない)。
 
@@ -86,6 +86,10 @@ image は StackStack 系問題が共有する [`runtimes/stackstack/`](../../run
 板そのものの経路 (`/api/board`、 `/api/logs`、 `/posture`、 `/docs` など) は [`stackstack-onboarding`](../stackstack-onboarding) と同じ。 この問題では設定編集は要らない (出荷設定で投稿は最初から開いている)。
 
 コンテナを再起動すると gate は実測なので全部 false に戻る。 すでに正解したチェックポイントの得点はポータル側に残るが、 一周の証明にはもう一度 3 つの gate を緑にする必要がある。
+
+## ローカル検証
+
+このカタログのルートで `bun install --frozen-lockfile --ignore-scripts` の後、 `node --test challenges/stackstack-first-request/contract.test.mjs` を実行する。 ランダムな seed の隔離 HTTP fixture でレスポンスの schema と 4 checkpoint の採点を確認し、 共有ランタイムの全 10 利用先で Swagger の表示契約を確認する。 実行中の参加者コンテナは使わない。
 
 ## 採点
 

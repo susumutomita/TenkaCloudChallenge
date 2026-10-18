@@ -13,7 +13,7 @@ There is no puzzle. The goal is to complete three conversations — read, get re
 | **your machine (Docker)** | the StackStack family's shared **base app** — a small Node message board |
 | `127.0.0.1:18080` | the board (the app you use) |
 | `127.0.0.1:18081` | the loopback `/verify` TenkaCloud's scorer delegates to |
-| the board's `docs` (API console) | **Try any API** — the three routes of this problem run from here |
+| the board's `docs` (API console) | **Try it out → Execute** on each listed operation |
 
 The image builds from the shared [`runtimes/stackstack/`](../../runtimes/stackstack) (`SCENARIO=first-request`). The postcard password, the door token, the guestbook receipt and the round-trip token are all derived inside the container from the per-deploy random `FLAG_SEED`, so no answer exists in this repository and no two deploys agree. Both published ports bind to `127.0.0.1` only.
 
@@ -40,9 +40,9 @@ Four checkpoints, 25 points each.
 
 2. Log in to the portal with any non-empty key and open the board via the `Web` endpoint. Two posts from the CTO spell out tonight's homework (the three routes). Open the board's `docs`.
 
-3. In **Try any API**, run `GET /api/postcard`. Submit the response's `token` to **Read the postcard**.
+3. Open the operation and use **Try it out → Execute** to run `GET /api/postcard`. Submit the response's `token` to **Read the postcard**.
 
-4. Run `GET /api/door`. The 400 that comes back tells you the fix in `detail` — change the path to `/api/door?key=<the postcard token>` and send again. Submit the 200 response's `token` to **Get refused, then fix it**.
+4. Run `GET /api/door`. The 400 that comes back tells you the fix in `detail` — enter the postcard token in the `key` field and press **Execute** again. Submit the 200 response's `token` to **Get refused, then fix it**.
 
    If you prefer a terminal, the same trip looks like this (not required):
 
@@ -86,6 +86,10 @@ Four checkpoints, 25 points each.
 The board's own routes (`/api/board`, `/api/logs`, `/posture`, `/docs`, ...) are the same as in [`stackstack-onboarding`](../stackstack-onboarding). No config editing is needed here — the shipped config accepts posts from the start.
 
 Restarting the container resets every gate to false (they are measured, not remembered). Points already earned stay with the portal, but the full-lap token needs all three gates green again.
+
+## Local verification
+
+From this catalog checkout, run `bun install --frozen-lockfile --ignore-scripts`, then `node --test challenges/stackstack-first-request/contract.test.mjs`. It starts isolated HTTP fixtures with random seeds, checks response schemas and all four verifier checkpoints, and checks the shared Swagger surface for all ten runtime consumers. No running participant container is used.
 
 ## Scoring
 

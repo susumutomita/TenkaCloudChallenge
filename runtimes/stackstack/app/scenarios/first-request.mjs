@@ -53,7 +53,7 @@ export const seedPosts = [
   {
     author: "cto",
     title: "今夜の宿題: この板と 3 回話す",
-    body: "板の docs (API コンソール) の「任意の API を試す」から、次の 3 つを実行してみてください。(1) GET /api/postcard — 葉書を読む。(2) GET /api/door — 扉を開ける。最初は断られますが、返ってきたエラーが開け方を教えてくれます。(3) POST /api/guestbook — 芳名帳に一言。body は {\"name\":\"...\",\"message\":\"...\"} です。3 つ終わったら GET /posture で確かめてください。",
+    body: "板の docs (API コンソール) の各項目を開き、Try it out と Execute から、次の 3 つを実行してみてください。(1) GET /api/postcard — 葉書を読む。(2) GET /api/door — 扉を開ける。最初は断られますが、返ってきたエラーが開け方を教えてくれます。(3) POST /api/guestbook — 芳名帳に一言。body は {\"name\":\"...\",\"message\":\"...\"} です。3 つ終わったら GET /posture で確かめてください。",
     at: "2026-04-05T19:05:00.000Z",
   },
 ];
@@ -221,3 +221,87 @@ export const routes = {
     return sendJson(response, 201, { receipt: GUESTBOOK_RECEIPT, entry, total: entries.length });
   },
 };
+
+/** The exercise's Swagger contract lives beside its handlers, without instance values. */
+export function openApiPaths(lang) {
+  const L = (ja, en) => lang === "en" ? en : ja;
+  const object = (properties) => ({ type: "object", required: Object.keys(properties), properties });
+  const string = { type: "string" };
+  const response = (description, schema) => ({
+    description, content: { "application/json": { schema } },
+  });
+  const error = object({ error: string, detail: string });
+  const entry = object({ name: string, message: string, at: { type: "string", format: "date-time" } });
+  return {
+    "/api/postcard": {
+      get: {
+        summary: L("葉書を読む", "Read the postcard"),
+        responses: {
+          200: response(L("token と次のお願いの案内", "The token and guidance for your next request"), object({
+            from: { type: "string", enum: ["cto"] }, message: string,
+            token: { type: "string", pattern: "^postcard-[0-9a-f]{12}$" },
+          })),
+        },
+      },
+    },
+    "/api/door": {
+      get: {
+        summary: L("断られて、直す", "Get refused, then fix it"),
+        description: L("最初は key を空にして Execute。400 の detail を読んで直してください。", "First Execute with key empty. Read the 400's detail and fix the request."),
+        parameters: [{
+          name: "key", in: "query", required: false, schema: string,
+          description: L("葉書の token。前後の空白は取り除かれます。", "The postcard's token. Leading and trailing whitespace is trimmed."),
+        }],
+        responses: {
+          200: response(L("扉が開いた", "The door opened"), object({
+            message: string, token: { type: "string", pattern: "^TC\\{door_[0-9a-f]{16}\\}$" },
+          })),
+          400: response(L("key が無い・空・不一致。detail に直し方", "Missing, blank or wrong key; detail explains the fix"), {
+            ...error, properties: { ...error.properties, error: { type: "string", enum: ["key_required", "wrong_key"] } },
+          }),
+        },
+      },
+    },
+    "/api/guestbook": {
+      get: {
+        summary: L("芳名帳を見る", "Read the guestbook"),
+        responses: { 200: response(L("受け付けた書き込み", "Accepted entries"), object({ entries: { type: "array", items: entry } })) },
+      },
+      post: {
+        summary: L("芳名帳に書く", "Sign the guestbook"),
+        requestBody: {
+          required: true,
+          description: L("空白だけの値は不可。長さは前後の空白を含む UTF-16 コード単位数、本文全体は最大 16384 バイトです。受理後は前後の空白が取り除かれます。", "Whitespace-only values are refused. Lengths count UTF-16 code units before trimming; the whole body is limited to 16384 bytes. Accepted fields are trimmed."),
+          content: { "application/json": { schema: {
+            ...object({
+              name: { type: "string", minLength: 1, description: L("空白以外を含む、1〜200 UTF-16 コード単位。", "Must contain non-whitespace, 1–200 UTF-16 code units.") },
+              message: { type: "string", minLength: 1, description: L("空白以外を含む、1〜2000 UTF-16 コード単位。", "Must contain non-whitespace, 1–2000 UTF-16 code units.") },
+            }),
+            example: { name: L("あなたの名前", "you"), message: L("ひとこと", "hello") },
+          } } },
+        },
+        responses: {
+          201: response(L("受け付けた書き込みと receipt", "The accepted entry and its receipt"), object({
+            receipt: { type: "string", pattern: "^TC\\{guestbook_[0-9a-f]{16}\\}$" }, entry,
+            total: { type: "integer", minimum: 1 },
+          })),
+          400: response(L("JSON または name/message が不正。detail に直し方", "Invalid JSON or name/message; detail explains the fix"), {
+            ...error, properties: { ...error.properties, error: { type: "string", enum: ["rejected"] } },
+          }),
+          413: response(L("本文が 16384 バイトを超えている", "The body exceeds 16384 bytes"), object({ error: string })),
+        },
+      },
+    },
+    "/posture": {
+      get: {
+        summary: L("一周の証明", "Prove the full lap"),
+        responses: { 200: response(L("3 つの gate が true になると readyToken が現れます", "readyToken appears when all three gates are true"), object({
+          gates: object({ postcard_read: { type: "boolean" }, door_opened: { type: "boolean" }, message_left: { type: "boolean" } }),
+          ready: { type: "boolean" },
+          readyToken: { type: "string", nullable: true, pattern: "^TC\\{ready_[0-9a-f]+\\}$" },
+          configError: { type: "string", nullable: true },
+        })) },
+      },
+    },
+  };
+}

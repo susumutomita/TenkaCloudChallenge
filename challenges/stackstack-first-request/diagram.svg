@@ -10,7 +10,7 @@
 <text x="95" y="138" text-anchor="middle" font-size="12.5" font-weight="700" fill="#FFFFFF">Your browser</text>
 <text x="95" y="166" text-anchor="middle" font-size="10.5" fill="#334155">the board and its</text>
 <text x="95" y="181" text-anchor="middle" font-size="10.5" fill="#334155">API console (/docs)</text>
-<text x="95" y="196" text-anchor="middle" font-size="10.5" fill="#334155">— Try any API —</text>
+<text x="95" y="196" text-anchor="middle" font-size="10.5" fill="#334155">— Try it out / Execute —</text>
 <text x="95" y="221" text-anchor="middle" font-size="10.5" fill="#64748B">no terminal needed</text>
 
 <rect x="238" y="66" width="200" height="242" rx="10" fill="#FFFFFF" stroke="#0F172A" stroke-width="1.5" stroke-dasharray="4 3"/>
