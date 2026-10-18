@@ -1,9 +1,11 @@
 # Local-play problem stack for wp-exposed-backup.
 #
-# A REAL WordPress + MariaDB, run in an isolated environment for teaching. The
+# A REAL WordPress + MariaDB, run in a local Docker stack for teaching. The
 # problem is NOT vulnerable code — it is an operational-neglect scenario: a
-# database backup the previous operator left in the public web root. Everything is
-# bound to 127.0.0.1 only and never leaves the box.
+# database backup the previous operator left in the public web root.
+# Published ports bind to 127.0.0.1 only. This limits inbound access to those ports;
+# it does not block container egress to the host or LAN. Outbound reachability
+# depends on Docker and host routing unless an external isolation policy applies.
 #
 # Services:
 #   db          real MariaDB (dummy data only)

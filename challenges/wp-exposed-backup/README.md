@@ -3,7 +3,7 @@
 > TenkaCloud Challenge · `challenges/wp-exposed-backup` · difficulty 1 (introductory) · ~30 min · `multi-verify` scoring (4 checkpoints, 100 pts)
 
 A local, **AWS-free** teaching problem built on a **real, current WordPress + MariaDB**
-running in an isolated Docker stack. It is aimed at non-engineers who operate a WordPress
+running in a local Docker stack. It is aimed at non-engineers who operate a WordPress
 site. The point is *not* a code vulnerability and *not* an old, deliberately-vulnerable
 build — it reproduces the most common **operational-neglect** pattern: the previous
 operator left several files in the public web root during a migration and never removed
@@ -11,6 +11,12 @@ them.
 
 This is the WordPress companion to the SaaS (Wix) operational-neglect problem: same
 message — the software is fine; your setup and operations are what leak.
+
+The Compose file publishes ports on `127.0.0.1`. This limits inbound access to those
+ports; it does not block container egress to the host or LAN. The file does not
+declare an internal network or install a host firewall. Outbound reachability
+depends on Docker and host routing unless a separate isolation policy applies.
+Connecting participants through Tailscale does not establish that isolation.
 
 ## Checkpoints (multi-verify)
 
