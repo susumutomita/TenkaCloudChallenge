@@ -1,0 +1,89 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "greeting-expression-lab",
+  "name": "来訪者カード、公開してよい？",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "25 分",
+  "shortDescription": "公開前の名前プレビューに不具合報告。正常な挙動と入力による変化を比べ、公開してよいかを根拠付きで判断しよう。",
+  "instructions": "## 依頼\n\nあなたは、小さな会社の社内ツールを引き継いだ保守担当です。受付向けの「来訪者カード」は、入力した表示名からあいさつ文を作ります。明日の公開を前に、受付から「記号を含む名前でプレビューが止まる」「別の入力では、あいさつ以外の行まで出た」という報告が届きました。担当者は表示だけの問題だと考えていますが、そのまま公開してよいか判断する証拠が必要です。\n\n## 調査できるもの\n\n問題を起動し、Web の名前欄・プレビュー・画面内の「引き継ぎメモ」を調べてください。メモには現在の表示処理の断片と、この試作で使う小さな言語の説明があります。隠された URL や未公開の文法を当てる必要はありません。\n\nまず普通の名前で正常な出力を確認します。次に、一度に変える文字を絞り、送る前の予想と実際の出力を比べてください。エラーを出せただけで調査を終えず、入力が表示処理へどう影響したかを確かめましょう。\n\n## 達成条件と提出\n\n調査完了には、次の証拠をそろえます。\n\n- 正常な入力と、挙動が変わる入力、その出力の比較\n- プレビューに出してはいけない運用確認コードが漏れるかの確認。取得できた `TC{...}` を Portal に提出\n- 原因と、名前を不必要に制限せず直す方法を、比較結果を根拠に二〜三文で説明\n\nコードの正解提出は100点、不正解は1回5点減点です。ヒントも減点があり、得点は負になることがあります。原因説明は演習ノートに残して主催者と確認します。自動採点はコード提出のみです。\n\n## 許可範囲\n\n対象は、この問題の Web 画面とリンクされた資料、名前欄への入力だけです。実在する社内システムや主催者ホストは対象外です。設定値も実行機能も限定した模擬環境で、本物の秘密、OS操作、ファイル、外部通信、メモリ読み取りは扱いません。",
+  "description": "制限付き教材言語へのコードインジェクションで模擬環境変数のFLAGを表示する入門演習。実OSコード実行やメモリダンプは行わない。",
+  "writeup": "## 調査の読み解き方\n\n`Ada` と `Ada;Bob` がそのまま表示され、`Blue \"Team\"` が失敗する比較から、「記号全般が禁止」という仮説は崩れる。さらに `Ada\" + \"Bob` が `Hello, AdaBob!` を返すと、引用符と連結記号が表示文字ではなく構文として働いた証拠になる。HTML表示だけの問題なら、この文字列連結の結果は説明できない。\n\n次に、追加の `print` で無害な固定文字列を別の行へ出し、処理が変わることを検証する。引き継ぎメモに公開された辞書参照の文法と設定一覧から、公開値COLORで予測を確かめた後、非公開の運用確認コードへの影響を調べられる。秘密のキー名や隠し構文を当てる問題ではない。\n\n## 原因と取得経路\n\n名前を `print(\"Hello, <name>!\");` のコード文字列へ直接連結してから解析していた。入力 `\");print(env[\"FLAG\"]);print(\"` は引用符を閉じて表示命令を追加し、後続の引用符も整合させる。追加命令が教材用辞書の架空FLAGを読み、出力へ返す。これはデータが構文として扱われるコードインジェクションで、メモリダンプ・カーネル脆弱性・実OSの環境変数探索ではない。\n\n## 安全な修正\n\nこの画面にはコードの実行自体が不要だ。`safeGreeting(name)` のように `return \"Hello, \" + name + \"!\"` と値を直接組み立て、教材インタプリタへ渡さない。`local/tests/lab.test.mjs` は同じ入力が修正後には文字列のまま表示され、架空FLAGを出さないことを確認する。HTMLへ出すときは別途HTMLエスケープも必要で、この画面は入力と出力の両方をエスケープする。\n\n## 演習の境界\n\n限定言語は文字列・連結・表示・許可した辞書参照だけを実装し、JavaScriptのeval/Function/vm、属性参照、ファイル、シェル、通信のAPIを持たない。入力・命令数・式・出力に上限がある。FLAGは主催者が注入する実行環境ごとのランダムseedから作る架空値で、教材用辞書はprocess.envではない。採点は別コンテナ・別internal networkで行う。この仕組みを一般的なコード実行サンドボックスと呼んだり、本物の秘密を入れたりしてはいけない。\n\n## 引き継ぐ修正・回帰観点\n\n正常名、セミコロンを含む名、引用符を含む正当な名を修正後もそのまま表示する。今回の入力が命令や辞書参照として実行されないこと、HTMLはescapeされることを別々に確認する。調査メモには「入力・予想・結果・解釈」を残し、再現だけでなく原因と修正の対応を説明する。コードのみが自動採点で、説明の質を自動採点したとは扱わない。",
+  "tags": [
+    "web-security",
+    "debugging",
+    "input-handling",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (organizer only)"
+    }
+  ],
+  "learningGoals": [
+    "正常な入力と小さな変更の出力を比較し、予想した原因を検証する",
+    "表示不具合と予定外の処理を証拠から区別し、非公開情報への影響を説明する",
+    "名前を不必要に制限しない修正と、再発を防ぐテストを提案する"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Visitor Cards: Ready to Ship?",
+      "shortDescription": "Reception reports broken name previews before release. Compare normal and changed behavior, then make an evidence-based release recommendation.",
+      "instructions": "## Request\n\nYou maintain a small company's internal tools. Reception's new Visitor Card page builds a greeting from a display name. Before tomorrow's release, reception reports that names containing punctuation can break the preview, and another input produced lines beyond the greeting. The previous maintainer thinks this is only a display issue. You need evidence to decide whether it is safe to release.\n\n## Available evidence\n\nStart the problem and open Web. Investigate the name field, preview, and the linked Maintainer handover. The handover contains a fragment of the current implementation and a reference for this prototype's small language. No hidden URL or undocumented syntax needs guessing.\n\nEstablish normal behavior with an ordinary name. Change a small part of the input at a time, predict the result before submitting, and compare the actual output. Producing an error is not the end of the investigation: determine how the input affects the preview processing.\n\n## Completion and submission\n\nCollect the following evidence:\n\n- A normal input, an input that changes behavior, and a comparison of their outputs.\n- Whether the private operational check code, which must never appear on a card, can leak into the preview. Submit the recovered `TC{...}` in Portal.\n- Two or three sentences explaining the cause and a repair that does not unnecessarily restrict people's names, supported by your comparison.\n\nA correct code earns 100 points; each incorrect submission costs 5. Hints also cost points, and the score may become negative. Keep the explanation in your exercise notes and review it with the organizer. Only the code submission is automatically scored.\n\n## Scope\n\nOnly this problem's Web page, its linked documents, and input through the name field are authorized. Real company systems and the organizer host are out of scope. Settings and execution capabilities are a limited teaching simulation: no real secrets, OS operations, files, external communication or memory reading are involved.",
+      "description": "An introductory code-injection exercise using a deliberately limited teaching language and simulated environment FLAG. No real OS code execution or memory dump.",
+      "writeup": "## Reading the investigation evidence\n\n`Ada` and `Ada;Bob` display literally, while `Blue \"Team\"` fails. This rules out \"all punctuation is forbidden.\" Next, `Ada\" + \"Bob` produces `Hello, AdaBob!`: quotes and concatenation have acted as syntax, rather than displayed characters. An HTML-only rendering issue does not explain this evaluated concatenation.\n\nAn extra print of a harmless constant tests whether processing can change. The handover's documented dictionary syntax and settings list then allow a prediction using public COLOR before assessing the private operational check code. No secret key name or hidden syntax must be guessed.\n\n## Cause and retrieval path\n\nThe application concatenates the name into `print(\"Hello, <name>!\");` before parsing it. The input `\");print(env[\"FLAG\"]);print(\"` closes a quoted value, adds a display instruction and balances the remaining quote. That instruction reads the fictional FLAG from the teaching dictionary into output. This is code injection: data becomes syntax. It is not a memory dump, kernel exploit or traversal of real OS environment variables.\n\n## Safe repair\n\nThis greeting page does not need code execution. Build the value directly, as `safeGreeting(name)` does with `return \"Hello, \" + name + \"!\"`, and never pass it to the interpreter. The regression in `local/tests/lab.test.mjs` proves the same input stays literal after the repair and does not reveal the fictional flag. HTML escaping is a separate requirement; both input and output are escaped by this page.\n\n## Exercise boundary\n\nThe miniature language implements only strings, concatenation, printing and allowlisted dictionary lookup. It exposes no JavaScript eval/Function/vm, property traversal, files, shell or communication APIs. Inputs, instructions, expressions and output are bounded. A per-environment injected random seed derives a fictional flag; the teaching dictionary is not process.env. A separate container on a separate internal network owns verification. This is not a general-purpose sandbox and must never contain real secrets.\n\n## Repair handover and regressions\n\nPreserve ordinary names and legitimate names containing semicolons or quotes. Prove that the investigative input no longer becomes instructions or dictionary reads, and independently verify HTML escaping. Record input, prediction, observation and interpretation so the proposed repair addresses the demonstrated cause. Only the code is automatically scored; explanation quality is not automatically assessed.",
+      "learningGoals": [
+        "Test a hypothesis by comparing ordinary input with a small controlled change",
+        "Distinguish a display issue from unintended processing and explain the impact on private information",
+        "Propose a repair and regressions that preserve legitimate names"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "\"Punctuation breaks it\" is not yet a precise explanation. Compare an ordinary name, one containing a semicolon, and one containing a double quote. Substitute each into the handover fragment on paper. What changes?"
+        },
+        {
+          "id": "hint-2",
+          "content": "A string boundary and a statement boundary are different. First try to produce an extra line containing a harmless fixed string. Balance the opening and trailing quotes so the result has two instructions, like `print(\"A\");print(\"B\");` in the language reference. Once the extra line is observable, test your lookup prediction against the public setting in the handover, then assess the value that must not be displayed."
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "「記号があると失敗する」だけでは原因を絞れない。普通の名前、セミコロンを含む名前、二重引用符を含む名前を比べよう。引き継ぎメモの断片へ、それぞれの入力を埋めた文字列を書き出すと、どこが違うだろう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "文字列の区切りと、文の区切りは別だ。まず非公開値ではなく、固定の文字列をもう1行出す実験を考えよう。メモの `print(\"A\");print(\"B\");` に相当する2つの命令ができるよう、先頭と末尾の引用符を整える。追加行を確認できたら、メモの設定一覧にある公開値で参照の予想を検証し、表示してはいけない値への影響を調べる。",
+        "penalty": 30
+      }
+    ]
+  }
+}
