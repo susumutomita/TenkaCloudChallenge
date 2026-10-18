@@ -1,11 +1,23 @@
-# Greeting Workshop Passphrase
+# Visitor Cards: Ready to Ship?
 
 **Draft — deployment review required.** On the validation host (Docker Engine29.6.1 / Compose5.3.1), the two internal-network services became healthy but did not publish usable host ports (`NetworkSettings.Ports` was null). Do not schedule this problem in a live event until the platform ingress path is verified without weakening internal networking. Internal HTTP verification is separate from Portal/host-port reachability.
 
-An introductory Challenge: investigate a name-to-greeting page and recover its
-fictional per-environment passphrase. Start with a normal name, inspect the visible
-template and the language examples, then submit the discovered `TC{...}` in Portal.
-A correct submission earns 100 points; a wrong submission costs 5. Hints cost 20/30.
+An introductory investigation for the new maintainer of reception's visitor-card
+preview. Punctuation sometimes breaks it; another input reportedly added a line.
+Decide whether this is merely a display defect or a release-blocking disclosure.
+The opening brief does not name the injection mechanism or the private setting key.
+
+Players first observe the normal UI, then follow its **Maintainer handover** link.
+That page exposes the actual string-building fragment, the complete small-language
+reference, and a settings inventory with a public value and a private value omitted.
+Nothing requires guessing a hidden route or undocumented syntax. A controlled sequence
+can distinguish ordinary punctuation, broken quoting, evaluated concatenation, extra
+output, a public-setting read and the impact on a private operational code.
+
+Completion requires a normal/changed-input comparison, the recovered code and a short
+cause/repair explanation supported by observations. The code earns 100 points; a wrong
+submission costs 5. Hints cost 20/30. **Only the code is automatically scored.** Keep the
+reasoning in exercise notes for organizer review; no automatic prose grading is claimed.
 
 ## Run through TenkaCloud
 
@@ -24,7 +36,7 @@ Do not change VPN/firewall settings or expose the verifier to make this problem 
 ## Components and safety boundary
 
 - `local/app/lab.mjs`: participant HTTP page and a deliberately limited interpreter.
-  It builds `print("Hello, <name>!");` by unsafe string concatenation. The interpreter
+  The front page is a normal name/preview UI; the linked `/handover` page contains implementation and language clues. It builds `print("Hello, <name>!");` by unsafe string concatenation. The interpreter
   supports only strings, `+`, `print` and two allowlisted dictionary keys. No JavaScript
   eval/Function/vm, property traversal, OS environment access, filesystem, shell, network
   or memory-reading capability is available to submitted programs. Limits apply to
@@ -72,7 +84,7 @@ node --test challenges/greeting-expression-lab/local/tests/lab.test.mjs
 
 Use Node 22 or newer for the problem tests (the image uses Node 22). Tests use only
 synthetic seeds and ephemeral loopback listeners. No browser, Docker, AWS or real secret
-is needed. The HTTP test solves through the visible name field, checks the separate
+is needed. The HTTP tests follow the visible handover link and compare normal input, harmless punctuation, quote failure, evaluated concatenation, extra output, public lookup and private impact. They also check the separate
 verifier, rejects another instance's flag, tests malformed/oversized input, and confirms
 that the page does not expose verifier/file routes or unescaped HTML.
 

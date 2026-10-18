@@ -66,7 +66,9 @@ test("participant HTTP surface: visible route solves, verifier/files/real APIs s
     const initial = await fetch(origin);
     const page = await initial.text();
     assert.equal(initial.status, 200);
-    assert.ok(page.includes('print(env["COLOR"])'));
+    assert.ok(page.includes('href="/handover"'));
+    assert.ok(!page.includes("FLAG"));
+    assert.ok(!page.includes("env["));
     assert.ok(!page.includes(environment.FLAG));
     const solve = await fetch(`${origin}/greet`, { method: "POST", body: new URLSearchParams({ name: payload }) });
     assert.ok((await solve.text()).includes(environment.FLAG));
@@ -80,7 +82,7 @@ test("participant HTTP surface: visible route solves, verifier/files/real APIs s
     assert.ok(escaped.headers.get("content-security-policy").includes("default-src 'none'"));
     const malformed = await fetch(`${origin}/greet`, { method: "POST", body: new URLSearchParams({ name: '");print(process.env.FLAG);print("' }) });
     const rejected = await malformed.text();
-    assert.ok(rejected.includes("Invalid lab program."));
+    assert.ok(rejected.includes("Preview could not be generated."));
     assert.ok(!rejected.includes(environment.FLAG));
     assert.equal((await fetch(`${origin}/greet`, { method: "POST", body: "x".repeat(5000) })).status, 413);
   });
@@ -114,4 +116,54 @@ test("packaging separates judge authority and excludes answers/tests from the pa
   const participant = dockerfile.split("FROM base AS challenge")[1].split("FROM base AS verifier")[0];
   assert.ok(participant.includes("app/lab.mjs"));
   for (const forbidden of ["verifier.mjs", "ingress.mjs", "tests", "README", "metadata.json", "COPY ."]) assert.ok(!participant.includes(forbidden));
+});
+
+
+const displayedPreview = (html) => html.match(/<h2>Preview \/ プレビュー<\/h2><pre>([\s\S]*?)<\/pre>/)[1];
+
+test("public handover supports observation, competing hypotheses and impact assessment without a hidden grammar", async () => {
+  await withServer(challengeServer(environment), async (origin) => {
+    const home = await (await fetch(origin)).text();
+    const path = home.match(/href="([^"]+)"/)[1];
+    assert.equal(path, "/handover");
+    const handover = await (await fetch(`${origin}${path}`)).text();
+    assert.ok(handover.includes('print(env["COLOR"])'));
+    assert.ok(handover.includes('print("A");print("B");'));
+    assert.ok(handover.includes("FLAG"));
+    assert.ok(!handover.includes(environment.FLAG));
+    assert.ok(!handover.includes(payload));
+    const snippet = handover.match(/<pre>([\s\S]*?)<\/pre>/)[1]
+      .replaceAll("&quot;", '"').replaceAll("&#39;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+    for (const line of snippet.split("\n")) assert.ok(vulnerableGreeting.toString().includes(line.trim()));
+    const preview = async (name) => displayedPreview(await (await fetch(`${origin}/greet`, {
+      method: "POST", body: new URLSearchParams({ name }),
+    })).text());
+    assert.equal(await preview("Ada"), "Hello, Ada!");
+    assert.equal(await preview("Ada;Bob"), "Hello, Ada;Bob!");
+    assert.ok((await preview('Blue "Team"')).includes("Preview could not be generated."));
+    assert.equal(await preview('Ada" + "Bob'), "Hello, AdaBob!");
+    assert.equal(await preview('");print("NOTE");print("'), "Hello, \nNOTE\n!");
+    assert.equal(await preview('");print(env["COLOR"]);print("'), "Hello, \nblue\n!");
+    assert.equal(await preview(payload), `Hello, \n${environment.FLAG}\n!`);
+  });
+});
+
+test("repair preserves legitimate punctuation while preventing code interpretation", () => {
+  for (const name of ["Ada", "Ada;Bob", 'Blue "Team"', "O'Neil"]) assert.equal(safeGreeting(name), `Hello, ${name}!`);
+  for (const name of [payload, 'Ada" + "Bob', '");print("NOTE");print("']) {
+    assert.equal(safeGreeting(name), `Hello, ${name}!`);
+    assert.ok(!safeGreeting(name).includes(environment.FLAG));
+  }
+});
+
+test("Japanese and English opening briefs require evidence without naming the mechanism or setting key", () => {
+  const metadata = JSON.parse(readFileSync(new URL("../../metadata.json", import.meta.url), "utf8"));
+  for (const text of [metadata.instructions, metadata.i18n.en.instructions]) {
+    assert.ok(!/\benv\b|\bFLAG\b|環境変数|コードインジェクション|code injection|environment variable/i.test(text));
+    assert.ok(text.includes("TC{...}"));
+  }
+  assert.ok(metadata.instructions.includes("予想と実際の出力"));
+  assert.ok(metadata.instructions.includes("自動採点はコード提出のみ"));
+  assert.ok(metadata.i18n.en.instructions.includes("Only the code submission is automatically scored"));
+  assert.ok(!metadata.tags.includes("code-injection"));
 });
