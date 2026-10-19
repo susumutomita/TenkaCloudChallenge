@@ -915,6 +915,11 @@ export function checkMultiVerifyTranslations(meta: Metadata): ValidationError[] 
       );
       continue;
     }
+    const jaWriteup = typeof check.writeup === "string" && check.writeup.trim().length > 0;
+    const enWriteup = typeof en.writeup === "string" && en.writeup.trim().length > 0;
+    if (jaWriteup !== enWriteup) {
+      errors.push(`scoring.checks[].id="${id}" writeup must have both JA and EN translations (ja/en parity)`);
+    }
     // per-check hints parity: canonical hint id ⊆/⊇ en hint id
     const hintIds = (Array.isArray(check.hints) ? check.hints : [])
       .map((h) => (h as { id?: unknown }).id)
