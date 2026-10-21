@@ -5,7 +5,7 @@
 # and bind-mounts its own config/ over /app/config.
 #
 # The compose file of each problem binds every port to 127.0.0.1 only.
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 
 WORKDIR /app
 
