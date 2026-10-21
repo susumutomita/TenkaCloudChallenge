@@ -1,0 +1,374 @@
+{
+  "mode": "normal",
+  "input": "B",
+  "old": {
+    "slot": 0,
+    "generation": 1,
+    "owner": "upload",
+    "kind": "progress"
+  },
+  "control": {
+    "slot": 1,
+    "generation": 1,
+    "owner": "app",
+    "kind": "control"
+  },
+  "read": "25%",
+  "rejected": false,
+  "selected": "A",
+  "output": "A: 青いカードを表示",
+  "log": [
+    {
+      "step": 1,
+      "event": "allocate progress",
+      "handle": {
+        "slot": 0,
+        "generation": 1,
+        "owner": "upload",
+        "kind": "progress"
+      },
+      "slots": [
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "25%"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "event": "allocate control",
+      "handle": {
+        "slot": 1,
+        "generation": 1,
+        "owner": "app",
+        "kind": "control"
+      },
+      "slots": [
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "25%"
+        },
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "event": "read through old handle",
+      "read": "25%",
+      "slots": [
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "25%"
+        },
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "event": "write through old handle",
+      "written": "B",
+      "slots": [
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "B"
+        },
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "event": "dispatch current control",
+      "selected": "A",
+      "output": "A: 青いカードを表示",
+      "slots": [
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "B"
+        },
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    }
+  ]
+}
+{
+  "mode": "buggy",
+  "input": "B",
+  "old": {
+    "slot": 0,
+    "generation": 1,
+    "owner": "upload",
+    "kind": "progress"
+  },
+  "control": {
+    "slot": 0,
+    "generation": 2,
+    "owner": "app",
+    "kind": "control"
+  },
+  "read": "A",
+  "rejected": false,
+  "selected": "B",
+  "output": "B: 黄色いカードを表示",
+  "log": [
+    {
+      "step": 1,
+      "event": "allocate progress",
+      "handle": {
+        "slot": 0,
+        "generation": 1,
+        "owner": "upload",
+        "kind": "progress"
+      },
+      "slots": [
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "25%"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "event": "release progress; old handle remains",
+      "handle": {
+        "slot": 0,
+        "generation": 1,
+        "owner": "upload",
+        "kind": "progress"
+      },
+      "slots": [
+        {
+          "live": false,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "25%"
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "event": "allocate control",
+      "handle": {
+        "slot": 0,
+        "generation": 2,
+        "owner": "app",
+        "kind": "control"
+      },
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "event": "read through old handle",
+      "read": "A",
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "event": "write through old handle",
+      "written": "B",
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "B"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "event": "dispatch current control",
+      "selected": "B",
+      "output": "B: 黄色いカードを表示",
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "B"
+        }
+      ]
+    }
+  ]
+}
+{
+  "mode": "fixed",
+  "input": "B",
+  "old": {
+    "slot": 0,
+    "generation": 1,
+    "owner": "upload",
+    "kind": "progress"
+  },
+  "control": {
+    "slot": 0,
+    "generation": 2,
+    "owner": "app",
+    "kind": "control"
+  },
+  "rejected": true,
+  "selected": "A",
+  "output": "A: 青いカードを表示",
+  "log": [
+    {
+      "step": 1,
+      "event": "allocate progress",
+      "handle": {
+        "slot": 0,
+        "generation": 1,
+        "owner": "upload",
+        "kind": "progress"
+      },
+      "slots": [
+        {
+          "live": true,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "25%"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "event": "release progress; old handle remains",
+      "handle": {
+        "slot": 0,
+        "generation": 1,
+        "owner": "upload",
+        "kind": "progress"
+      },
+      "slots": [
+        {
+          "live": false,
+          "generation": 1,
+          "owner": "upload",
+          "kind": "progress",
+          "value": "25%"
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "event": "allocate control",
+      "handle": {
+        "slot": 0,
+        "generation": 2,
+        "owner": "app",
+        "kind": "control"
+      },
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "event": "read rejected",
+      "reason": "comparison rejected: handle.generation == slot.generation",
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "event": "write rejected",
+      "reason": "comparison rejected: handle.generation == slot.generation",
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "event": "dispatch current control",
+      "selected": "A",
+      "output": "A: 青いカードを表示",
+      "slots": [
+        {
+          "live": true,
+          "generation": 2,
+          "owner": "app",
+          "kind": "control",
+          "value": "A"
+        }
+      ]
+    }
+  ]
+}
