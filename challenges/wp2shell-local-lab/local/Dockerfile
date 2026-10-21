@@ -8,7 +8,7 @@
 # The compose file binds this service to 127.0.0.1 only and attaches it to an
 # `internal: true` network -- never expose it off loopback, and it could not reach
 # the public internet even if it tried.
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 
 WORKDIR /app
 COPY app/ ./

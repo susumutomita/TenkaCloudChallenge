@@ -4,7 +4,7 @@
 # secret — for each checkpoint it HTTP-probes the live WordPress container over the
 # compose network and judges the hole CLOSED by the response. Bound to 127.0.0.1 only
 # by the compose file.
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 
 WORKDIR /app
 COPY server.mjs ./
