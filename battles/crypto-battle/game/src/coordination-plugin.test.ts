@@ -61,7 +61,7 @@ import { buildProveSudokuOp, startedMatch } from "./playtest.ts";
 import type { CryptoBattleOp, CryptoBattleProjection, CryptoBattleState, StoredShare } from "./types.ts";
 // Type-only: resolved via ../../coordination/coordination-plugin-sdk.d.ts's
 // ambient declaration (see that file), not a real installed dependency.
-import type { CoordinationPlugin, DispatchResult } from "@tenkacloud/coordination-plugin-sdk";
+import type { CoordinationPlugin, CoordinationTiming, DispatchResult } from "@tenkacloud/coordination-plugin-sdk";
 
 type CryptoBattlePlugin = CoordinationPlugin<CryptoBattleState, CryptoBattleOp, CryptoBattleProjection>;
 
@@ -77,8 +77,8 @@ mock.module("@tenkacloud/coordination-plugin-sdk", () => ({
     if (!verdict.ok) return { ok: false, error: verdict.error };
     return { ok: true, state: plugin.applyOp(state, teamId, op) };
   },
-  runTick: (plugin: { tick?: (...a: unknown[]) => unknown }, state: unknown, eventNowMs: number) =>
-    plugin.tick ? plugin.tick(state, eventNowMs) : state,
+  runTick: (plugin: { tick?: (...a: unknown[]) => unknown }, state: unknown, eventNowMs: number, timing?: unknown) =>
+    plugin.tick ? plugin.tick(state, eventNowMs, timing) : state,
 }));
 
 const pluginModule = (await import("../../coordination/crypto-battle.ts")) as {
@@ -100,7 +100,7 @@ const sdk = (await import("@tenkacloud/coordination-plugin-sdk")) as {
     teamId: string,
     op: CryptoBattleOp,
   ) => DispatchResult<CryptoBattleState>;
-  runTick: (plugin: CryptoBattlePlugin, state: CryptoBattleState, eventNowMs: number) => CryptoBattleState;
+  runTick: (plugin: CryptoBattlePlugin, state: CryptoBattleState, eventNowMs: number, timing?: CoordinationTiming) => CryptoBattleState;
 };
 const { dispatchOp, runTick } = sdk;
 
@@ -172,7 +172,7 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
     const created = plugin.initialState({ ...CTX, matchDurationMs: 600_000 });
     expect(plugin.projectForTeam(created, "blue").matchRemainingMs).toBe(600_000);
     const started = expectDispatched(dispatchOp(plugin, created, "blue", { kind: "start" }));
-    const moved = plugin.tick!(started, 60_000, { matchDurationMs: 1_200_000 });
+    const moved = runTick(plugin, started, 60_000, { matchDurationMs: 1_200_000 });
     expect(plugin.projectForTeam(moved, "blue").matchRemainingMs).toBe(1_140_000);
   });
 
