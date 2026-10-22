@@ -155,6 +155,15 @@ test("real component and prices age together, while malformed/mixed-version proj
   expect(submitted).toMatchObject({ kind: "reveal-hint", expectedCost: 0 });
 });
 
+test("before the endgame, the notice names the period a short match actually leaves [Issue #926]", () => {
+  const notice = (matchDurationMs: number | undefined, locale: "ja" | "en") => renderToStaticMarkup(createElement(HintBooster, {
+    projection: projectForTeam(initialState({ eventId: "short", teamIds: ["alpha", "bravo"], matchSecret: "short-test", matchDurationMs }), "alpha"), locale }));
+  expect(notice(10 * 60_000, "ja")).toContain("開始から 6:40 で、最下位のチームは試合終了までヒントの減点なし。");
+  expect(notice(10 * 60_000, "en")).toContain("At 6:40 after the start, last-place teams receive no hint penalties until the match ends.");
+  expect(notice(undefined, "ja")).toContain("開始から 60:00 で、最下位のチームは10分間ヒントの減点なし。");
+  expect(notice(undefined, "en")).toContain("At 60:00 after the start, last-place teams receive 10 minutes without hint penalties.");
+});
+
 test("an operation at the boundary fixes eligibility before its score change", () => {
   const host = match({ alpha: 100, bravo: 110 });
   // Equal deadlines isolate the operation/phase ordering from per-team rush rolls.

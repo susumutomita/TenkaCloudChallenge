@@ -1,3 +1,4 @@
+import { HINT_BOOSTER_MS } from "../game/src/booster.ts";
 import type { CryptoBattleProjection } from "../game/src/types.ts";
 
 const clock = (ms: number) => `${Math.floor(Math.ceil(ms / 1000) / 60)}:${String(Math.ceil(ms / 1000) % 60).padStart(2, "0")}`;
@@ -9,6 +10,11 @@ export default function HintBooster({ projection, locale }: {
   const booster = projection.hintBooster;
   if (!booster) return null; // Mixed-version server: no claim about a benefit.
   const ja = locale === "ja";
+  // [Issue #926] A short match ends before the full period does.
+  const untilEnd = projection.matchRemainingMs !== undefined
+    && projection.matchRemainingMs - (booster.startsInMs ?? booster.startAfterMs) < HINT_BOOSTER_MS;
+  const period = ja ? untilEnd ? "試合終了まで" : "10分間"
+    : untilEnd ? "no hint penalties until the match ends" : "10 minutes without hint penalties";
   const message = booster.status === "active"
     ? ja ? `ヒントの減点なし · 残り ${clock(booster.remainingMs)}` : `No hint penalty · ${clock(booster.remainingMs)} left`
     : booster.status === "unavailable"
@@ -20,8 +26,8 @@ export default function HintBooster({ projection, locale }: {
         : booster.status === "ineligible"
           ? ja ? "終盤のヒント支援は配布済みです。このチームは通常の減点です。"
             : "Endgame hint support has been distributed. Regular penalties apply to this team."
-          : ja ? `開始から ${clock(booster.startAfterMs)} で、最下位のチームは10分間ヒントの減点なし。同点は全員対象、1チームの練習は対象外です。${booster.startsInMs === 0 ? "配布結果を更新中です。" : ""}`
-            : `At ${clock(booster.startAfterMs)} after the start, last-place teams receive 10 minutes without hint penalties. Ties qualify; solo practice does not.${booster.startsInMs === 0 ? " Updating the distribution result." : ""}`;
+          : ja ? `開始から ${clock(booster.startAfterMs)} で、最下位のチームは${period}ヒントの減点なし。同点は全員対象、1チームの練習は対象外です。${booster.startsInMs === 0 ? "配布結果を更新中です。" : ""}`
+            : `At ${clock(booster.startAfterMs)} after the start, last-place teams receive ${period}. Ties qualify; solo practice does not.${booster.startsInMs === 0 ? " Updating the distribution result." : ""}`;
   return <p className="tc-card-hint" data-testid="hint-booster" style={{ margin: "6px 0" }}>{message}</p>;
 }
 
