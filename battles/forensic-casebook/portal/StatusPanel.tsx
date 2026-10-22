@@ -36,6 +36,10 @@ const words = {
   footer: { ja: "証拠を読む → 答えと根拠を送る → 結果と解説を確認。間違えても再挑戦できます。追加の点数は、各問いの最初の正解時だけ加算されます。", en: "Read → submit your answer with evidence → review the result and explanation. You can try again after a wrong answer. Each question awards points only on its first correct answer." },
 } satisfies Record<string, Copy>;
 
+// crypto.randomUUID is missing on plain-HTTP LAN pages (not a secure context); getRandomValues is not.
+function operationId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 function isProjection(value: unknown): value is Projection {
   if (!value || typeof value !== "object") return false;
   const localized = (text: unknown): text is Copy => !!text && typeof text === "object" && typeof (text as Copy).ja === "string" && typeof (text as Copy).en === "string";
@@ -151,14 +155,14 @@ export default function StatusPanel(props: PortalSlotProps) {
         return <section className="fc-question" data-testid={`question-${q.id}`} data-solved={q.solved} key={q.id}>
           <div className="fc-question-header"><span className="fc-kicker">QUESTION 0{index + 1}</span><span className="fc-badge">{q.solved ? `✓ ${words.solved[locale]}` : `${q.points} PT`}</span></div>
           <p className="fc-question-prompt">{q.prompt[locale]}</p><p className="fc-format">{q.format[locale]}</p>
-          {!q.solved && <form onSubmit={(event) => { event.preventDefault(); if (!locked) void send({ kind: "answer", id: crypto.randomUUID(), generation: projection.generation, revision: projection.revision, caseId: c.id, questionId: q.id, answer: draft.answer, evidenceIds: draft.evidenceIds }); }}>
+          {!q.solved && <form onSubmit={(event) => { event.preventDefault(); if (!locked) void send({ kind: "answer", id: operationId(), generation: projection.generation, revision: projection.revision, caseId: c.id, questionId: q.id, answer: draft.answer, evidenceIds: draft.evidenceIds }); }}>
             <label className="fc-label" htmlFor={`fc-answer-${q.id}`}>{words.answer[locale]}</label><textarea id={`fc-answer-${q.id}`} data-testid={`answer-${q.id}`} required maxLength={512} value={draft.answer} disabled={locked} onChange={(e) => edit(key, { answer: e.target.value })} />
             <fieldset disabled={locked}><legend>{words.citations[locale]}</legend>{c.evidence.map((file) => <label className="fc-citation" key={file.id}><input type="checkbox" data-testid={`cite-${q.id}-${file.id}`} checked={draft.evidenceIds.includes(file.id)} onChange={(event) => edit(key, { evidenceIds: event.target.checked ? [...draft.evidenceIds, file.id] : draft.evidenceIds.filter((id) => id !== file.id) })} /><span>{file.id} · {file.name}</span></label>)}</fieldset>
             <div className="fc-actions"><button className="fc-primary" type="submit" data-testid={`submit-${q.id}`} disabled={locked || !draft.answer.trim() || draft.evidenceIds.length === 0}>{words.submit[locale]} →</button><span className="fc-small">{words.attempts[locale]}: <span data-testid={`attempts-${q.id}`}>{q.attempts}</span></span></div>
           </form>}
           {result?.kind === "answer" && <div className="fc-feedback" data-testid={`result-${q.id}`} data-status={result.status} role="status">{result.message[locale]}</div>}
           {q.solved && q.explanation && <div className="fc-explanation" data-testid={`explanation-${q.id}`}><strong>{words.explanation[locale]}</strong>{q.explanation[locale]}</div>}
-          <div className="fc-hints"><p className="fc-label">{words.hintTitle[locale]}</p><p className="fc-small">{words.hintHelp[locale]}</p>{q.hints.length > 0 && <ol data-testid={`hints-${q.id}`}>{q.hints.map((hint, i) => <li key={i}>{hint[locale]}</li>)}</ol>}{q.unlockedHints < q.totalHints && <button type="button" data-testid={`hint-${q.id}`} disabled={locked} onClick={() => void send({ kind: "hint", id: crypto.randomUUID(), generation: projection.generation, revision: projection.revision, caseId: c.id, questionId: q.id, rung: (q.unlockedHints + 1) as 1 | 2 | 3 })}>{words.hint[locale]} {q.unlockedHints + 1} / {q.totalHints}</button>}</div>
+          <div className="fc-hints"><p className="fc-label">{words.hintTitle[locale]}</p><p className="fc-small">{words.hintHelp[locale]}</p>{q.hints.length > 0 && <ol data-testid={`hints-${q.id}`}>{q.hints.map((hint, i) => <li key={i}>{hint[locale]}</li>)}</ol>}{q.unlockedHints < q.totalHints && <button type="button" data-testid={`hint-${q.id}`} disabled={locked} onClick={() => void send({ kind: "hint", id: operationId(), generation: projection.generation, revision: projection.revision, caseId: c.id, questionId: q.id, rung: (q.unlockedHints + 1) as 1 | 2 | 3 })}>{words.hint[locale]} {q.unlockedHints + 1} / {q.totalHints}</button>}</div>
         </section>;
       })}</div></div>
     </>}
