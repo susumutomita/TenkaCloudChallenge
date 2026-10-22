@@ -77,7 +77,7 @@
         },
         {
           "id": "board-open-for-posts",
-          "label": "Open the board for posts",
+          "label": "Open the board for posts and submit the title of your own post",
           "hints": [
             {
               "id": "board-open-for-posts-1",
@@ -159,7 +159,7 @@
       },
       {
         "id": "board-open-for-posts",
-        "label": "投稿を受け付ける",
+        "label": "投稿を受け付け、自分の投稿のタイトルを提出する",
         "points": 25,
         "wrongAnswerPenalty": 1,
         "hints": [
