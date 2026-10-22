@@ -196,6 +196,38 @@ describe("the platform's match length", () => {
       ["ended", 720_000, { buildToPressureMs: 400_000, pressureToEndgameMs: 540_000 }]);
   });
 
+  test("a length change between two hosts' ticks gives the same match at any polling cadence", () => {
+    // 9:01 is on the 5-second grid but not on the 90-second one.
+    const changeAt = 9 * MIN + 1_000, end = 12 * MIN;
+    const lengthAt = (ms: number) => ({ matchDurationMs: ms < changeAt ? 20 * MIN : 12 * MIN });
+    const play = (stepMs: number) => {
+      let state = start(create(lengthAt(0)));
+      for (let at = 0; at <= end; at += stepMs) {
+        state = tick(state, at, lengthAt(at));
+        if (at % (3 * MIN) === 0) state = leakAll(leakAll(state, "alpha"), at % (6 * MIN) === 0 ? "bravo" : "alpha");
+      }
+      const { nowMs: _clock, ...gameplay } = state;
+      return gameplay;
+    };
+    const frequent = play(5_000);
+    expect(play(90_000)).toEqual(frequent);
+    expect([frequent.phase, frequent.config.matchDurationMs]).toEqual(["ended", 720_000]);
+  });
+
+  test("an extension a sparse host first sees after the old end keeps the match open", () => {
+    const lengthAt = (ms: number) => ({ matchDurationMs: ms < 9 * MIN + 30_000 ? 10 * MIN : 20 * MIN });
+    const play = (stepMs: number) => {
+      let state = start(create(lengthAt(0)));
+      for (let at = 0; at <= 10 * MIN; at += stepMs) state = tick(state, at, lengthAt(at));
+      return state;
+    };
+    const sparse = play(MIN);
+    expect(view(sparse)).toEqual(["endgame", 600_000]);
+    const { nowMs: _sparse, ...sparsePlay } = sparse;
+    const { nowMs: _frequent, ...frequentPlay } = play(5_000);
+    expect(sparsePlay).toEqual(frequentPlay);
+  });
+
   test("a v23 row migrates unchanged and then follows a reported length", () => {
     const v23 = JSON.parse(JSON.stringify(tick(start(create()), 95_000)));
     const migrated = migrateState(v23, 23);
