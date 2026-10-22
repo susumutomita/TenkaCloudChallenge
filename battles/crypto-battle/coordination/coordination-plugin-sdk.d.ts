@@ -39,6 +39,17 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
      * `resolveMatchSeed` for what this Battle does in that case.
      */
     readonly matchSecret?: string;
+    /**
+     * [Issue #926 / TenkaCloud#3453] Match length on the same clock as `eventNowMs`.
+     * Absent while no end is scheduled. Mirrors `CoordinationTiming.matchDurationMs`.
+     */
+    readonly matchDurationMs?: number;
+  }
+
+  /** [Issue #926 / TenkaCloud#3453] What the platform knows about the match clock at one tick. */
+  export interface CoordinationTiming {
+    /** Match length on the same clock as `eventNowMs`. Absent while no end is scheduled. */
+    readonly matchDurationMs?: number;
   }
 
   /** operation の受理可否。 不可のとき error は機械可読な短い理由コード。 */
@@ -50,7 +61,7 @@ declare module "@tenkacloud/coordination-plugin-sdk" {
     validateOp(state: State, teamId: string, op: Op): ValidateResult;
     applyOp(state: State, teamId: string, op: Op): State;
     readonly tickOnRequest?: boolean;
-    tick?(state: State, eventNowMs: number): State;
+    tick?(state: State, eventNowMs: number, timing?: CoordinationTiming): State;
     projectForTeam(state: State, teamId: string): Projection;
     /**
      * [Issue #659] 各 team の現在得点 (絶対値)。宣言すると platform の scoreboard へ反映される。

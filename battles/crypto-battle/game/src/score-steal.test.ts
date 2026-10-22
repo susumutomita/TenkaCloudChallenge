@@ -66,7 +66,7 @@ describe("deployment-backed optional score item", () => {
     );
     expect(old.scoreSteal).toBeUndefined();
     expect(migrateState(old, 22).scoreSteal).toBeUndefined();
-    expect(STATE_SCHEMA_VERSION).toBe(23);
+    expect(STATE_SCHEMA_VERSION).toBe(24);
   });
   test("requires consistent trusted deployment inputs", () => {
     expect(() =>

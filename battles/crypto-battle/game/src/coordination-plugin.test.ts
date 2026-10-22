@@ -164,8 +164,16 @@ describe("coordination/crypto-battle.ts plugin wiring (Issue #486 PR3)", () => {
    */
   it("declares the current stateSchemaVersion with reducer.ts's migrateState wired [Issue #679, #709]", () => {
     expect(plugin.stateSchemaVersion).toBe(STATE_SCHEMA_VERSION);
-    expect(STATE_SCHEMA_VERSION).toBe(23);
+    expect(STATE_SCHEMA_VERSION).toBe(24);
     expect(plugin.migrateState).toBe(migrateState);
+  });
+
+  it("follows the platform's match length from initialState and from tick's timing [Issue #926]", () => {
+    const created = plugin.initialState({ ...CTX, matchDurationMs: 600_000 });
+    expect(plugin.projectForTeam(created, "blue").matchRemainingMs).toBe(600_000);
+    const started = expectDispatched(dispatchOp(plugin, created, "blue", { kind: "start" }));
+    const moved = plugin.tick!(started, 60_000, { matchDurationMs: 1_200_000 });
+    expect(plugin.projectForTeam(moved, "blue").matchRemainingMs).toBe(1_140_000);
   });
 
   /**

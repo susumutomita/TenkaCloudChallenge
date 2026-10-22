@@ -88,7 +88,22 @@ export interface CoordinationContext {
    * used for a real event.
    */
   readonly matchSecret?: string;
+  /**
+   * [Issue #926 / TenkaCloud#3453] Match length on the same clock as
+   * `eventNowMs`: the platform closes the match when that clock reaches it.
+   * Absent while no end is scheduled. See `match-length.ts`.
+   */
+  readonly matchDurationMs?: number;
 }
+
+/** [Issue #926 / TenkaCloud#3453] What the platform knows about the match clock at one tick. */
+export interface CoordinationTiming {
+  /** Match length on the same clock as `eventNowMs`. Absent while no end is scheduled. */
+  readonly matchDurationMs?: number;
+}
+
+/** [Issue #926] Why the platform's latest match length was not used. Public: it names no value. */
+export type MatchDurationRejection = "not-a-number" | "out-of-range";
 
 export type ValidateResult = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
@@ -190,7 +205,9 @@ export interface PhaseBoundaries {
 
 /**
  * Tunable game parameters, fixed once at `initialState()` and immutable for
- * the rest of the match.
+ * the rest of the match. The exception is `matchDurationMs` and
+ * `phaseBoundaries`, which follow the length the platform reports
+ * (`match-length.ts`).
  *
  * These are the Issue #486 playtest seed values, not a locked-in balance
  * spec -- operators are expected to tune `scores` / cooldowns / intervals
@@ -927,6 +944,14 @@ export interface CryptoBattleState {
   /** #659 §9: immutable endgame distribution; omitted only by older rows. */
   readonly endgameBooster?: EndgameBooster;
   readonly config: CryptoBattleConfig;
+  /**
+   * [Issue #926] The last match length the platform reported and this match
+   * accepted, on the `eventNowMs` clock. Absent while the platform has reported
+   * none: the match then runs `config.matchDurationMs` from its own start.
+   */
+  readonly platformMatchDurationMs?: number;
+  /** [Issue #926] Set when the latest report was refused; the next accepted one clears it. */
+  readonly matchDurationRejection?: MatchDurationRejection;
   readonly seed: string;
   readonly phase: Phase;
   /** Wall-clock time of the most recent tick(); undefined before the first tick. */
