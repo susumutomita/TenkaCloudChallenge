@@ -852,16 +852,13 @@ function withMigratedContracts(persistedState: CryptoBattleState): CryptoBattleS
 }
 
 /**
- * [Issue #926] `timing` is the platform's report for this tick. It applies
- * once `advance` has replayed the clock to `eventNowMs` under the length
- * already in force -- see `match-length.ts`. A stale clock carries a stale
- * report, so both are ignored.
+ * [Issue #926] `timing` is the platform's report for this tick. It sets the end
+ * before `advance` replays the clock to `eventNowMs` -- see `match-length.ts`.
+ * A stale clock carries a stale report, so both are ignored.
  */
 export function tick(persistedState: CryptoBattleState, eventNowMs: number, timing?: CoordinationTiming): CryptoBattleState {
-  const advanced = advance(persistedState, eventNowMs);
-  if (eventNowMs < (persistedState.nowMs ?? eventNowMs)) return advanced;
-  const timed = withMatchDuration(advanced, timing?.matchDurationMs);
-  return timed === advanced || timed.startedAtMs === undefined ? timed : advance(timed, eventNowMs);
+  if (eventNowMs < (persistedState.nowMs ?? eventNowMs)) return advance(persistedState, eventNowMs);
+  return advance(withMatchDuration(withMigratedContracts(persistedState), timing?.matchDurationMs), eventNowMs);
 }
 
 function advance(persistedState: CryptoBattleState, eventNowMs: number): CryptoBattleState {
@@ -882,7 +879,7 @@ function advance(persistedState: CryptoBattleState, eventNowMs: number): CryptoB
     }
     const boundary = boosterStartAt(state);
     if ((state.endgameBooster?.status === "pending" || state.endgameLightning?.status === "pending") &&
-        boundary !== undefined && boundary >= now) at = Math.min(at, boundary);
+        boundary !== undefined && boundary >= now && boundary < matchEnd) at = Math.min(at, boundary);
     state = tickEvent(state, at);
     if (at === eventNowMs) return state;
   }
@@ -891,7 +888,8 @@ function advance(persistedState: CryptoBattleState, eventNowMs: number): CryptoB
 function tickEvent(state: CryptoBattleState, eventNowMs: number): CryptoBattleState {
   const advanced = tickAtTime(state, eventNowMs);
   const boundary = boosterStartAt(state);
-  if (boundary !== undefined && eventNowMs >= boundary) {
+  // [Issue #926] An end moved before the endgame means the endgame never came.
+  if (boundary !== undefined && eventNowMs >= boundary && boundary < state.startedAtMs! + state.config.matchDurationMs) {
     return settleLightning({ ...advanced,
       endgameBooster: state.endgameBooster?.status === "pending" ? awardBooster(advanced) : state.endgameBooster,
       endgameLightning: state.endgameLightning?.status === "pending" ? awardLightning(advanced) : state.endgameLightning,
@@ -2810,6 +2808,7 @@ function applyStart(state: CryptoBattleState): CryptoBattleState {
   const startedAtMs = state.nowMs ?? 0;
   // [Issue #926] A platform length ends the match at a fixed point on the
   // event clock, so the span left after START is what the phases divide.
+  // They stay fixed from here; later reports move only the end.
   const started = { ...state, startedAtMs, nextContractAtMs: startedAtMs, phase: "build" as const };
   return tick(startedTiming(started), startedAtMs);
 }

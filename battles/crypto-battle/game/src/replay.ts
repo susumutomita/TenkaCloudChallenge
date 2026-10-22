@@ -306,11 +306,15 @@ export function buildReplay(state: CryptoBattleState): ReplayEvent[] {
   }
 
   if (state.startedAtMs !== undefined) {
-    const boundaries: readonly { readonly atMs: number; readonly phase: Phase }[] = [
+    // [Issue #926] A reported end can come before a boundary fixed at START;
+    // that phase never began.
+    const endAtMs = state.startedAtMs + state.config.matchDurationMs;
+    const scheduled: readonly { readonly atMs: number; readonly phase: Phase }[] = [
       { atMs: state.startedAtMs + state.config.phaseBoundaries.buildToPressureMs, phase: "pressure" },
       { atMs: state.startedAtMs + state.config.phaseBoundaries.pressureToEndgameMs, phase: "endgame" },
-      { atMs: state.startedAtMs + state.config.matchDurationMs, phase: "ended" },
+      { atMs: endAtMs, phase: "ended" },
     ];
+    const boundaries = scheduled.filter((boundary) => boundary.phase === "ended" || boundary.atMs < endAtMs);
     for (const boundary of boundaries) {
       // Only include a transition that has actually elapsed by the match's
       // most recent tick -- these boundary timestamps are exact regardless

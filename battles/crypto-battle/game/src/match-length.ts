@@ -5,21 +5,27 @@ import type { Contract, CryptoBattleConfig, CryptoBattleState, MatchDurationReje
  * how this Battle follows it.
  *
  * The platform closes the match when its `eventNowMs` clock reaches the
- * reported length. The local host even stops that clock there. So this match
- * ends at that same instant, however late the teams pressed START: the battle
- * runs `length - startedAtMs`, and its phases split that span into thirds.
- * With no report the match keeps its configured length, counted from START.
+ * reported length, and the local host stops that clock there. So the match
+ * ends at that same instant, however late the teams pressed START.
  *
- * A report applies from the tick that carries it, after the clock has been
- * replayed up to that tick under the length already in force. Ticks that carry
- * an unchanged length change nothing, so the polling cadence stays immaterial
- * (#897). A boundary the match has already crossed stays where it was, and a
- * boundary or end that would now lie in the past is crossed at this tick.
+ * Two parts of the length behave differently, which is what keeps the polling
+ * cadence immaterial (#897):
+ *
+ *  - Everything that fires at an instant (phase boundaries, and with them the
+ *    booster, Lightning and the phase-dependent Order plan) is fixed once at
+ *    START, from the length in force then: thirds of the time left, or the
+ *    configured 90 minutes when nothing was reported. Nothing recomputes it.
+ *  - The latest accepted report sets only the end and the countdown. `tick`
+ *    applies it before replaying the clock, so every event is judged against
+ *    the same end however often the host ticks. The end only matters within
+ *    one answer window of it, and the platform never moves its end into the
+ *    past, so a host that sees a report late replays nothing differently.
+ *
+ * The local host also reports a shorter length after each scoring-lock pause,
+ * so a length that changes after START is routine, not an edge case.
  */
 export const MIN_MATCH_DURATION_MS = 5 * 60_000;
 export const MAX_MATCH_DURATION_MS = 240 * 60_000;
-
-type MatchTiming = Pick<CryptoBattleConfig, "matchDurationMs" | "phaseBoundaries">;
 
 function readMatchDuration(value: unknown):
   | { readonly ok: true; readonly durationMs: number }
@@ -29,16 +35,8 @@ function readMatchDuration(value: unknown):
   return { ok: true, durationMs: value };
 }
 
-function battleTiming(state: CryptoBattleState, platformDurationMs: number): MatchTiming {
-  const start = state.startedAtMs;
-  const length = Math.max(0, platformDurationMs - (start ?? 0));
-  const target = [Math.floor(length / 3), Math.floor((2 * length) / 3), length] as const;
-  const { phaseBoundaries, matchDurationMs } = state.config;
-  const current = [phaseBoundaries.buildToPressureMs, phaseBoundaries.pressureToEndgameMs, matchDurationMs] as const;
-  const elapsed = start === undefined ? undefined : (state.nowMs ?? start) - start;
-  const [buildToPressureMs, pressureToEndgameMs, end] = target.map((ms, i) =>
-    elapsed === undefined ? ms : current[i]! <= elapsed ? current[i]! : Math.max(elapsed, ms));
-  return { matchDurationMs: end!, phaseBoundaries: { buildToPressureMs: buildToPressureMs!, pressureToEndgameMs: pressureToEndgameMs! } };
+function thirds(lengthMs: number): Pick<CryptoBattleConfig, "matchDurationMs" | "phaseBoundaries"> {
+  return { matchDurationMs: lengthMs, phaseBoundaries: { buildToPressureMs: Math.floor(lengthMs / 3), pressureToEndgameMs: Math.floor((2 * lengthMs) / 3) } };
 }
 
 /** Open Orders keep the deadline they would have had under the new end. */
@@ -70,10 +68,11 @@ function rescheduled(state: CryptoBattleState, config: CryptoBattleConfig): Part
 /**
  * Applies one platform report. `undefined` is no report and changes nothing; a
  * value outside 5..240 minutes keeps the length in force and records why.
- * An ended match ignores reports: its clock has already run out.
+ * Before START the phases follow the report provisionally; after START only
+ * the end moves.
  */
 export function withMatchDuration(state: CryptoBattleState, reported: unknown): CryptoBattleState {
-  if (reported === undefined || state.phase === "ended") return state;
+  if (reported === undefined) return state;
   const read = readMatchDuration(reported);
   if (!read.ok) {
     return state.matchDurationRejection === read.rejection ? state : { ...state, matchDurationRejection: read.rejection };
@@ -81,22 +80,25 @@ export function withMatchDuration(state: CryptoBattleState, reported: unknown): 
   const { matchDurationRejection: _accepted, ...rest } = state;
   const accepted = state.platformMatchDurationMs === read.durationMs && state.matchDurationRejection === undefined
     ? state : { ...rest, platformMatchDurationMs: read.durationMs };
-  return retimed(accepted, read.durationMs);
+  const start = accepted.startedAtMs;
+  if (start === undefined) {
+    const provisional = thirds(read.durationMs);
+    return provisional.matchDurationMs === accepted.config.matchDurationMs
+      && provisional.phaseBoundaries.buildToPressureMs === accepted.config.phaseBoundaries.buildToPressureMs
+      && provisional.phaseBoundaries.pressureToEndgameMs === accepted.config.phaseBoundaries.pressureToEndgameMs
+      ? accepted : { ...accepted, config: { ...accepted.config, ...provisional } };
+  }
+  const matchDurationMs = Math.max(0, read.durationMs - start);
+  if (matchDurationMs === accepted.config.matchDurationMs) return accepted;
+  const config = { ...accepted.config, matchDurationMs };
+  return { ...accepted, ...rescheduled(accepted, config), config };
 }
 
-/** At START the accepted length, if any, divides the span left after START. */
+/** At START the phases are fixed for the rest of the match from the time left. */
 export function startedTiming(state: CryptoBattleState): CryptoBattleState {
-  return state.platformMatchDurationMs === undefined ? state : retimed(state, state.platformMatchDurationMs);
-}
-
-function retimed(state: CryptoBattleState, platformDurationMs: number): CryptoBattleState {
-  const timing = battleTiming(state, platformDurationMs);
-  const { matchDurationMs, phaseBoundaries } = state.config;
-  if (timing.matchDurationMs === matchDurationMs
-    && timing.phaseBoundaries.buildToPressureMs === phaseBoundaries.buildToPressureMs
-    && timing.phaseBoundaries.pressureToEndgameMs === phaseBoundaries.pressureToEndgameMs) return state;
-  const config = { ...state.config, ...timing };
-  return { ...state, ...rescheduled(state, config), config };
+  const reported = state.platformMatchDurationMs;
+  return reported === undefined || state.startedAtMs === undefined ? state
+    : { ...state, config: { ...state.config, ...thirds(Math.max(0, reported - state.startedAtMs)) } };
 }
 
 /** What the waiting screen shows: how long the match can still run if it starts now. */

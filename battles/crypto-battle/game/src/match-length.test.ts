@@ -105,24 +105,28 @@ describe("the platform's match length", () => {
     expect(view(tick(state, 600_000, { matchDurationMs: 10 * MIN }))).toEqual(["ended", 0]);
   });
 
-  test("lengthening during the build phase moves the boundaries and the countdown from that tick", () => {
+  test("lengthening during the build phase moves the end and the countdown, not the phases fixed at START", () => {
     let state = tick(start(create({ matchDurationMs: 10 * MIN })), 125_000, { matchDurationMs: 10 * MIN });
     expect(view(state)).toEqual(["build", 475_000]);
     state = tick(state, 130_000, { matchDurationMs: 20 * MIN });
     expect(view(state)).toEqual(["build", 1_070_000]);
-    expect(state.config.phaseBoundaries).toEqual({ buildToPressureMs: 400_000, pressureToEndgameMs: 800_000 });
+    expect(state.config.phaseBoundaries).toEqual({ buildToPressureMs: 200_000, pressureToEndgameMs: 400_000 });
+    expect(view(tick(state, 200_000, { matchDurationMs: 20 * MIN }))).toEqual(["pressure", 1_000_000]);
   });
 
-  test("shortening past the endgame boundary starts the endgame at that tick and pulls deadlines in", () => {
+  test("shortening below the endgame boundary pulls deadlines in and ends the match before any endgame", () => {
     let state = start(create({ matchDurationMs: 90 * MIN }));
     for (let at = 0; at <= 8 * MIN; at += 10_000) state = tick(state, at, { matchDurationMs: 90 * MIN });
     const before = openOrders(state).map((c) => [c.id, c.issuedAtMs]);
     state = tick(state, 8 * MIN, { matchDurationMs: 10 * MIN });
-    expect(view(state)).toEqual(["endgame", 120_000]);
-    expect(state.config.phaseBoundaries).toEqual({ buildToPressureMs: 480_000, pressureToEndgameMs: 480_000 });
-    expect(state.endgameBooster).toEqual({ status: "awarded", teamIds: ["alpha", "bravo"] });
+    expect(view(state)).toEqual(["build", 120_000]);
+    expect(state.config.phaseBoundaries).toEqual({ buildToPressureMs: 1_800_000, pressureToEndgameMs: 3_600_000 });
     expect(openOrders(state).map((c) => [c.id, c.issuedAtMs])).toEqual(before);
     expect(openOrders(state).map((c) => c.expiresAtMs)).toEqual(before.map(([, issued]) => Math.min(Number(issued) + 180_000, 600_000)));
+    state = tick(state, 61 * MIN, { matchDurationMs: 10 * MIN });
+    expect(view(state)).toEqual(["ended", 0]);
+    expect([state.endgameBooster, state.endgameLightning]).toEqual([{ status: "pending" }, { status: "pending" }]);
+    expect(buildReplay(state).filter((e) => e.kind === "phase-change").map((e) => [e.atMs, e.detail])).toEqual([[600_000, { phase: "ended" }]]);
   });
 
   test("shortening to an end already passed ends the match at that tick, like any other end", () => {
@@ -156,16 +160,13 @@ describe("the platform's match length", () => {
     expect(projectForTeam(state, "alpha").hintBooster).toEqual({ status: "active", startAfterMs: 400_000, startsInMs: 0, remainingMs: 460_000 });
   });
 
-  test("an ended match and a stale clock ignore the report", () => {
-    const ended = tick(start(create({ matchDurationMs: 10 * MIN })), 600_000, { matchDurationMs: 10 * MIN });
-    expect(JSON.stringify(tick(ended, 600_000, { matchDurationMs: 20 * MIN }))).toBe(JSON.stringify(tick(ended, 600_000)));
+  test("a stale clock ignores the report", () => {
     const running = tick(start(create({ matchDurationMs: 10 * MIN })), 300_000, { matchDurationMs: 10 * MIN });
     expect(tick(running, 200_000, { matchDurationMs: 20 * MIN })).toBe(running);
   });
 
   test("the same timing history gives the same match at any polling cadence", () => {
-    // The report changes at 9:00 to a length whose endgame boundary (8:00) a
-    // sparse host's last earlier tick (7:30) has not reached yet.
+    // The report at 9:00 ends the match before the endgame fixed at START (13:20).
     const changeAt = 9 * MIN, end = 12 * MIN;
     const lengthAt = (ms: number) => ({ matchDurationMs: ms < changeAt ? 20 * MIN : 12 * MIN });
     const gameplay = ({ nowMs: _clock, ...state }: CryptoBattleState) => state;
@@ -193,7 +194,7 @@ describe("the platform's match length", () => {
     expect(play([...irregular].sort((a, b) => a - b))).toEqual(frequent);
     const last = frequent.at(-1)!;
     expect([last.phase, last.config.matchDurationMs, last.config.phaseBoundaries]).toEqual(
-      ["ended", 720_000, { buildToPressureMs: 400_000, pressureToEndgameMs: 540_000 }]);
+      ["ended", 720_000, { buildToPressureMs: 400_000, pressureToEndgameMs: 800_000 }]);
   });
 
   test("a length change between two hosts' ticks gives the same match at any polling cadence", () => {
