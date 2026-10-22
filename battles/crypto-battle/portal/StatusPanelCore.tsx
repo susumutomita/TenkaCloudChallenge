@@ -304,8 +304,8 @@ function formatDuration(ms: number): string {
  * out `HH:MM:SS` happens to be exactly correct here BECAUSE `Date`'s epoch
  * is 1970-01-01T00:00:00Z: `new Date(elapsedMs).toISOString()`'s
  * `HH:MM:SS` segment IS that duration's hours/minutes/seconds, as long as
- * it stays under 24h -- always true here, since `elapsedMs <=
- * matchDurationMs` (90 min, `DEFAULT_CONFIG` in `../game/src/reducer.ts`).
+ * it stays under 24h -- always true here, since a match lasts at most
+ * 240 minutes (`MAX_MATCH_DURATION_MS` in `../game/src/match-length.ts`).
  * Do not "fix" this into `new Date(ms).toLocaleTimeString()` or similar --
  * that would render this problem's OWN Deploy-time wall clock, not elapsed
  * match time, for every viewer.

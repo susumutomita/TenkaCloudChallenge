@@ -4,7 +4,7 @@
 
 Solve small cryptography puzzles by hand, then use an opponent's public clues to recover a secret. Choose between calculating an answer and publishing information for an immediate reward. Published information can also help an opponent attack. The highest final score wins.
 
-Bring a browser, paper and a pen. Start with addition, subtraction, multiplication and division remainders; each Order supplies its formulas and examples. The game is designed around four-person teams. The default match lasts 90 minutes, with at most three open Orders per team and three minutes per Order.
+Bring a browser, paper and a pen. Start with addition, subtraction, multiplication and division remainders; each Order supplies its formulas and examples. The game is designed around four-person teams. The organizer chooses the match length at the start; without a choice it lasts 90 minutes. By default each team holds at most three open Orders, with three minutes per Order.
 
 ## Try it before the match
 
@@ -110,6 +110,6 @@ The full game suite includes long capacity traces. For interactive checks, run `
 
 ## Resources and cleanup
 
-- Each team deployment creates a participant viewer IAM role. Enabling the optional item also creates one Standard/String Parameter Store parameter per team. The default Region is `ap-northeast-1`; allow 90 minutes of play plus event preparation.
+- Each team deployment creates a participant viewer IAM role. Enabling the optional item also creates one Standard/String Parameter Store parameter per team. The default Region is `ap-northeast-1`; allow the chosen match length (90 minutes without a choice) plus event preparation.
 - The existing platform's API/Lambda calls, score/state storage, logs, hosting and network usage can incur costs. The optional item adds no dedicated Lambda, KMS key or S3 bucket. A zero total bill is not guaranteed.
 - After the event, delete the problem stacks through TenkaCloud to remove the roles and parameters; remove the match state and its secret through the platform lifecycle when no longer needed. Shared hosting, logs and storage remain until their own retention or teardown removes them and may continue billing. See the [operator guide](OPERATOR.md) for details.

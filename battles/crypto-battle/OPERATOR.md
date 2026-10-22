@@ -7,7 +7,7 @@ This guide describes current operation. Historical implementation and validation
 ## Before an event
 
 1. Use compatible versions of TenkaCloud and this problem pack. The platform must support the coordination plugin, score delivery and team projections.
-2. Allocate teams within the backend limits below. Default play is 90 minutes, designed around four-person teams; allow additional time for joining, the first mission and debriefing.
+2. Allocate teams within the backend limits below. The organizer chooses the match length when starting the event; without a chosen length, play lasts 90 minutes. The game is designed around four-person teams; allow additional time for joining, the first mission and debriefing.
 3. Choose pacing and whether to enable the optional score-steal exercise **before** deploying the pack. Complete all team deployments before creating the match.
 4. Rehearse the first mission, one completed Order, one HUNT, an expiry and the official scoreboard. Check both Japanese and English if the event needs them.
 5. Start a fresh match. Ready normally starts play only after all teams are ready. The waiting room also provides an explicit action to start without everyone.
@@ -20,6 +20,18 @@ These steps describe operator work; the commands below run only local validation
 | libSQL / Turso | 99 (the catalog maximum) |
 
 These are deployment admission limits for standard platform-generated team IDs. The [metadata](metadata.json) declares a state budget of `31 KiB × teams + 1,536 bytes`. TenkaCloud reserves space below DynamoDB's 400 KiB item ceiling and adds its own score envelope; 12 teams fit. SQL uses a default 4 MiB **platform policy**, not a libSQL/Turso product limit, permitting the catalog maximum of 99. The problem's budget calculation is covered by [state-size.test.ts](game/src/state-size.test.ts). Before assigning teams on SQL, check whether the platform environment overrides `COORDINATION_STATE_MAX_BYTES`; a smaller configured budget can admit fewer teams. Choose the backend before allocating a larger roster; deployment preflight checks the actual roster and configured budget and rejects teams above that limit.
+
+## Match length
+
+TenkaCloud passes the length the organizer chose at start (TenkaCloud#3453). The platform alone closes the match, at that length. The game follows the same end point:
+
+- The phases split the time left after play starts into thirds: build, pressure and endgame. The Portal counts down to the platform's end, even when play starts late.
+- A platform that passes no length, or an event with no end scheduled, keeps the previous behavior: 90 minutes from the start of play, with phases at minutes 30 and 60.
+- Lengths from 5 to 240 minutes are accepted. Any other value is ignored, and the length already in force stays. The saved match state then records `matchDurationRejection` as `out-of-range` or `not-a-number`. A later accepted value clears it.
+- Moving the end reservation during play takes effect at the next platform tick. A phase already reached stays reached. A boundary that would fall in the past is reached at that tick. Open Orders keep the deadline they would have had under the new end. An end moved into the past ends the match at that tick, and unanswered Orders lapse as they do at any end.
+- After the match has ended, a new end reservation is ignored. Reopening an ended match is not supported.
+
+The pacing below does not scale with the length. [match-length-pacing.test.ts](game/src/match-length-pacing.test.ts) checks that a 10-minute match still issues Orders in every phase and that a team answering one Order every 90 seconds scores in every phase and can use a Lightning card. The final second is the exception: every unanswered Order lapses with the usual deduction, so a team holding three open Orders loses up to 45 points at the end at any length. That weighs more in a short match.
 
 ## Pacing and topic selection
 
@@ -60,9 +72,9 @@ HUNT prices differ by method. Shamir and Rotor use the shared per-attacker/targe
 
 ## Endgame support
 
-At the configured endgame boundary (normally minute 60), eligibility is fixed from scores at that boundary:
+At the endgame boundary (two-thirds of the match; minute 60 without a chosen length), eligibility is fixed from scores at that boundary:
 
-- Lowest-ranked teams, including ties, receive ten minutes without hint deductions. Solo practice is excluded.
+- Lowest-ranked teams, including ties, receive ten minutes without hint deductions, or until the end if the match ends sooner. Solo practice is excluded.
 - The bottom two teams receive one Lightning card; ties at the distribution boundary are included. For two teams only the lower-ranked team qualifies; solo practice is excluded.
 - Lightning must be declared for an eligible calculation Order. It does not double LEAK, HUNT, RPS outcomes or deductions, and does not extend a deadline.
 
@@ -80,7 +92,7 @@ Disabled by default. In [metadata.json](metadata.json), operators can set:
 
 Use a dedicated AWS account per team. Complete every team deployment with consistent settings before starting a new match. This requires platform SDK 0.2 deployment-input support and filtering of `CoordinationPrivate` outputs; do not use the template alone against an older platform.
 
-After five minutes, the exercise can replace an ordinary arrival with queue room. It is offered once per team, counts toward the three-Order cap and uses the normal deadline. The participant opens their own Parameter Store value, pastes the full value containing `key` and `receipt`, and decrypts one digit. The receipt is checked by the server and is not part of the arithmetic.
+After five minutes, the exercise can replace an ordinary arrival with queue room; a match of five minutes never offers it. It is offered once per team, counts toward the three-Order cap and uses the normal deadline. The participant opens their own Parameter Store value, pastes the full value containing `key` and `receipt`, and decrypts one digit. The receipt is checked by the server and is not part of the arithmetic.
 
 Acquisition alone gives no points. Using the item transfers up to 10 of an opponent's remaining points to the holder. Acquisition and use are each limited to once per team per match; a victim can be charged once, and a zero-score target is ineligible. Consumption and both score changes are saved together through the existing coordination path. See [score-steal.ts](game/src/score-steal.ts).
 
@@ -119,7 +131,7 @@ A legacy v2 row with an unspent nonce-reuse HUNT is deliberately rejected by mig
 
 The [template](template.yaml) normally creates a participant viewer IAM role. The optional item adds one **Standard/String Parameter Store parameter per team**, scoped value reads and metadata-only `ssm:DescribeParameters` listing. It adds no item-specific Lambda, KMS key or S3 bucket. `ExternalId` remains required for the participant role.
 
-The default operating region is `ap-northeast-1`; check the event deployment region. Expected play lasts 90 minutes. Existing platform API/Lambda invocations, score/state storage, logs and any hosting/network usage still contribute to the event's costs; CloudShell usage is also separate from game arithmetic. A zero total bill is not guaranteed. Use current account billing tools for estimates rather than a fixed price table.
+The default operating region is `ap-northeast-1`; check the event deployment region. Play lasts the length the organizer chooses, or 90 minutes without a chosen length. Existing platform API/Lambda invocations, score/state storage, logs and any hosting/network usage still contribute to the event's costs; CloudShell usage is also separate from game arithmetic. A zero total bill is not guaranteed. Use current account billing tools for estimates rather than a fixed price table.
 
 After the event, the operator deletes the problem stacks through TenkaCloud's supported lifecycle, removing the parameter and viewer role, and removes the match state/secret when no longer needed. Deleting this problem does not delete shared platform hosting, logs or storage; those can continue billing under the platform's retention and teardown policy.
 
