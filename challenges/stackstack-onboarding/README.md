@@ -34,7 +34,7 @@ Four checkpoints, 25 points each:
 | --- | --- | --- |
 | Reach the board | The board's serial | printed on the board |
 | Read the app's log | The value in the boot log line | `GET /api/logs` |
-| Open the board for posts and submit the title of your own post | The title of a message you posted | you choose it |
+| Open the board for posts (answer: your own post's title) | The title of a message you posted | you choose it |
 | Sign-off | The environment sign-off token | `GET /posture`, once every gate is green |
 
 ## Steps
