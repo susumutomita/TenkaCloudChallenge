@@ -4,7 +4,7 @@
 
 Solve small cryptography puzzles by hand, then use an opponent's public clues to recover a secret. Choose between calculating an answer and publishing information for an immediate reward. Published information can also help an opponent attack. The highest final score wins.
 
-Bring a browser, paper and a pen. Start with addition, subtraction, multiplication and division remainders; each Order supplies its formulas and examples. The game is designed around four-person teams. The organizer chooses the match length at the start; without a choice it lasts 90 minutes. By default each team holds at most three open Orders, with three minutes per Order.
+Bring a browser, paper and a pen. Start with addition, subtraction, multiplication and division remainders; each Order supplies its formulas and examples. The game is designed around four-person teams. The organizer chooses the match length at the start; without a choice it lasts 90 minutes. Changing the end reservation during a match moves the end and the countdown, not the phase boundaries. By default each team holds at most three open Orders, with three minutes per Order.
 
 ## Try it before the match
 

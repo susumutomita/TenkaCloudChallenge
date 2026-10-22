@@ -25,11 +25,12 @@ These are deployment admission limits for standard platform-generated team IDs. 
 
 TenkaCloud passes the length the organizer chose at start (TenkaCloud#3453). The platform alone closes the match, at that length. The game follows the same end point:
 
-- The phases split the time left after play starts into thirds: build, pressure and endgame. The Portal counts down to the platform's end, even when play starts late.
-- A platform that passes no length, or an event with no end scheduled, keeps the previous behavior: 90 minutes from the start of play, with phases at minutes 30 and 60.
-- Lengths from 5 to 240 minutes are accepted. Any other value is ignored, and the length already in force stays. The saved match state then records `matchDurationRejection` as `out-of-range` or `not-a-number`. A later accepted value clears it.
-- Moving the end reservation during play takes effect at the next platform tick. A phase already reached stays reached. A boundary that would fall in the past is reached at that tick. Open Orders keep the deadline they would have had under the new end. An end moved into the past ends the match at that tick, and unanswered Orders lapse as they do at any end.
-- After the match has ended, a new end reservation is ignored. Reopening an ended match is not supported.
+- When play starts, the phases are fixed for the rest of the match: the time left is split into thirds, build, pressure and endgame. The Portal counts down to the platform's end, even when play starts late.
+- When no length has been reported by the time play starts, the phases are fixed from 90 minutes, at minutes 30 and 60. The match then ends 90 minutes after play starts, unless a length arrives later.
+- Lengths from 5 to 240 minutes are accepted. Any other value is ignored, and the length already in force stays. The saved match state then records `matchDurationRejection` as `out-of-range` or `not-a-number`. A later accepted value clears it. If reports stop arriving, the last accepted length stays.
+- Changing the end reservation during play moves only the end and the Portal countdown, from the next platform tick. The phase boundaries, endgame support and phase-dependent Orders stay where they were fixed at the start of play. A match whose end moves before its endgame boundary ends without an endgame. Open Orders take the deadline they would have had under the new end.
+- The local host subtracts scoring-lock pauses from the reported length, so the end moves after each unlock in the same way.
+- Both hosts refuse to move an end that has already passed, so an ended match stays ended.
 
 The pacing below does not scale with the length. [match-length-pacing.test.ts](game/src/match-length-pacing.test.ts) checks that a 10-minute match still issues Orders in every phase and that a team answering one Order every 90 seconds scores in every phase and can use a Lightning card. The final second is the exception: every unanswered Order lapses with the usual deduction, so a team holding three open Orders loses up to 45 points at the end at any length. That weighs more in a short match.
 
@@ -72,7 +73,7 @@ HUNT prices differ by method. Shamir and Rotor use the shared per-attacker/targe
 
 ## Endgame support
 
-At the endgame boundary (two-thirds of the match; minute 60 without a chosen length), eligibility is fixed from scores at that boundary:
+At the endgame boundary (fixed when play starts at two-thirds of the time left; minute 60 without a chosen length), eligibility is fixed from scores at that boundary. A match that ends first has no endgame support:
 
 - Lowest-ranked teams, including ties, receive ten minutes without hint deductions, or until the end if the match ends sooner. Solo practice is excluded.
 - The bottom two teams receive one Lightning card; ties at the distribution boundary are included. For two teams only the lower-ranked team qualifies; solo practice is excluded.

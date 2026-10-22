@@ -205,9 +205,9 @@ export interface PhaseBoundaries {
 
 /**
  * Tunable game parameters, fixed once at `initialState()` and immutable for
- * the rest of the match. The exception is `matchDurationMs` and
- * `phaseBoundaries`, which follow the length the platform reports
- * (`match-length.ts`).
+ * the rest of the match. The exceptions come from the length the platform
+ * reports (`match-length.ts`): START fixes `phaseBoundaries` from it, and
+ * every later report moves `matchDurationMs`.
  *
  * These are the Issue #486 playtest seed values, not a locked-in balance
  * spec -- operators are expected to tune `scores` / cooldowns / intervals
