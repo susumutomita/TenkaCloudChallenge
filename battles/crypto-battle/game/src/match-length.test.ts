@@ -93,6 +93,27 @@ describe("the platform's match length", () => {
     expect([unknown.config.matchDurationMs, unknown.platformMatchDurationMs, unknown.matchDurationRejection]).toEqual([5_400_000, undefined, "out-of-range"]);
   });
 
+  test("a scoring-lock pause that shortens a 5-minute match to 4 minutes ends it at 4:00 and settles the end", () => {
+    let state = start(create({ matchDurationMs: 5 * MIN }));
+    for (let at = 0; at <= 3 * MIN; at += 5_000) {
+      state = tick(state, at, { matchDurationMs: 5 * MIN });
+      if (at % MIN === 0) state = leakAll(state, "alpha");
+    }
+    for (let at = 3 * MIN + 5_000; at < 4 * MIN; at += 5_000) state = tick(state, at, { matchDurationMs: 4 * MIN });
+    state = tick(state, 4 * MIN - 1, { matchDurationMs: 4 * MIN });
+    expect([view(state), state.matchDurationRejection, state.teams.alpha!.score]).toEqual([["endgame", 1], undefined, 15]);
+    expect(state.endgameLightning).toEqual({ status: "awarded", cards: { bravo: { status: "available" } } });
+    expect(openOrders(state).map((c) => [c.id, c.expiresAtMs])).toEqual([["alpha-c3", 240_000], ["alpha-c7", 240_000], ["bravo-c7", 240_000]]);
+    state = tick(state, 4 * MIN, { matchDurationMs: 4 * MIN });
+    expect([view(state), openOrders(state), state.teams.alpha!.score]).toEqual([["ended", 0], [], 0]);
+    expect(state.endgameLightning).toEqual({ status: "awarded", cards: { bravo: { status: "unused-expired" } } });
+    expect(buildReplay(state).filter((e) => e.kind === "phase-change").map((e) => [e.atMs, e.detail])).toEqual([
+      [100_000, { phase: "pressure" }],
+      [200_000, { phase: "endgame" }],
+      [240_000, { phase: "ended" }],
+    ]);
+  });
+
   test("a length reported after creation ends the match on the platform's clock, however late START is", () => {
     let state = tick(create(), 0, {});
     expect(projectForTeam(state, "alpha").matchRemainingMs).toBe(5_400_000);
