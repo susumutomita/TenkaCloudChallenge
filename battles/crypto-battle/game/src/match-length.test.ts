@@ -165,6 +165,24 @@ describe("the platform's match length", () => {
     expect(tick(running, 200_000, { matchDurationMs: 20 * MIN })).toBe(running);
   });
 
+  test("an ended match stays ended when a later report is longer", () => {
+    let state = start(create({ matchDurationMs: 10 * MIN }));
+    for (let at = 0; at <= 10 * MIN; at += 5_000) {
+      state = tick(state, at, { matchDurationMs: 10 * MIN });
+      if (at % MIN === 0) state = leakAll(state, "alpha");
+    }
+    expect(view(state)).toEqual(["ended", 0]);
+    let unchanged = state;
+    for (const at of [10 * MIN + 5_000, 15 * MIN]) {
+      state = tick(state, at, { matchDurationMs: 20 * MIN });
+      unchanged = tick(unchanged, at, { matchDurationMs: 10 * MIN });
+      expect(view(state)).toEqual(["ended", 0]);
+      expect(validateOp(state, "alpha", { kind: "rotate" })).toEqual({ ok: false, error: "match has ended" });
+      expect(state).toEqual(unchanged);
+    }
+    expect([state.config.matchDurationMs, state.platformMatchDurationMs]).toEqual([600_000, 600_000]);
+  });
+
   test("the same timing history gives the same match at any polling cadence", () => {
     // The report at 9:00 ends the match before the endgame fixed at START (13:20).
     const changeAt = 9 * MIN, end = 12 * MIN;
