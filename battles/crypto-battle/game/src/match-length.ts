@@ -30,8 +30,8 @@ import type { Contract, CryptoBattleConfig, CryptoBattleState, MatchDurationReje
  * `ended` is terminal. By then the end-of-match Order expiries and the
  * Lightning settlement have happened, so no later report reopens the match.
  * This relies on the platform never reporting a stale length: the local host
- * refuses to move an end that has passed, and the cloud reads the length from
- * the live event at every tick.
+ * already refuses to move an end that has passed, and the cloud must read the
+ * length from the live event at every tick (the TenkaCloud follow-up to #3455).
  */
 export const MAX_MATCH_DURATION_MS = 240 * 60_000;
 
