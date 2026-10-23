@@ -23,6 +23,12 @@ import type { Contract, CryptoBattleConfig, CryptoBattleState, MatchDurationReje
  *
  * The local host also reports a shorter length after each scoring-lock pause,
  * so a length that changes after START is routine, not an edge case.
+ *
+ * `ended` is terminal. By then the end-of-match Order expiries and the
+ * Lightning settlement have happened, so no later report reopens the match.
+ * This relies on the platform never reporting a stale length: the local host
+ * refuses to move an end that has passed, and the cloud reads the length from
+ * the live event at every tick.
  */
 export const MIN_MATCH_DURATION_MS = 5 * 60_000;
 export const MAX_MATCH_DURATION_MS = 240 * 60_000;
@@ -66,13 +72,14 @@ function rescheduled(state: CryptoBattleState, config: CryptoBattleConfig): Part
 }
 
 /**
- * Applies one platform report. `undefined` is no report and changes nothing; a
- * value outside 5..240 minutes keeps the length in force and records why.
+ * Applies one platform report. `undefined` is no report and changes nothing,
+ * and neither does any report once the match has ended. A value outside
+ * 5..240 minutes keeps the length in force and records why.
  * Before START the phases follow the report provisionally; after START only
  * the end moves.
  */
 export function withMatchDuration(state: CryptoBattleState, reported: unknown): CryptoBattleState {
-  if (reported === undefined) return state;
+  if (reported === undefined || state.phase === "ended") return state;
   const read = readMatchDuration(reported);
   if (!read.ok) {
     return state.matchDurationRejection === read.rejection ? state : { ...state, matchDurationRejection: read.rejection };

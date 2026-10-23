@@ -30,7 +30,7 @@ TenkaCloud passes the length the organizer chose at start (TenkaCloud#3453). The
 - Lengths from 5 to 240 minutes are accepted. Any other value is ignored, and the length already in force stays. The saved match state then records `matchDurationRejection` as `out-of-range` or `not-a-number`. A later accepted value clears it. If reports stop arriving, the last accepted length stays.
 - Changing the end reservation during play moves only the end and the Portal countdown, from the next platform tick. The phase boundaries, endgame support and phase-dependent Orders stay where they were fixed at the start of play. A match whose end moves before its endgame boundary ends without an endgame. Open Orders take the deadline they would have had under the new end.
 - The local host subtracts scoring-lock pauses from the reported length, so the end moves after each unlock in the same way.
-- Both hosts refuse to move an end that has already passed, so an ended match stays ended.
+- An ended match stays ended. The game ignores every report that arrives after the end, so the final Order expiries and the Lightning settlement stand. Both hosts refuse to move an end that has already passed.
 
 The pacing below does not scale with the length. [match-length-pacing.test.ts](game/src/match-length-pacing.test.ts) checks that a 10-minute match still issues Orders in every phase and that a team answering one Order every 90 seconds scores in every phase and can use a Lightning card. The final second is the exception: every unanswered Order lapses with the usual deduction, so a team holding three open Orders loses up to 45 points at the end at any length. That weighs more in a short match.
 
