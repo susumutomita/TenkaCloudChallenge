@@ -1,0 +1,88 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "memory-slot-lab",
+  "name": "古い受付票と入れ替わる箱",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "30 分",
+  "shortDescription": "使い終わった箱を、前の持ち主が書き換えてしまったら？ まず動かして、箱の中身とカードの色を見てみよう。",
+  "instructions": "## その箱、もう別の人のもの\n\n使い終わった箱を別の人が使っているのに、前の持ち主が場所を覚えたまま書き換えてしまう。中身が「次にやること」だったら、違う処理が動いてしまいます。\n\nこれは安全な模型です。実際のメモリ破壊や、話題のCVEの再現ではありません。\n\n## まず動かしてみよう\n\nPortal で起動し、アクセス先 URL の Web を開きます。画面の「まず動かしてみる」を押して、カードの色を見比べてください。予想欄は空のままでも大丈夫です。次につまみを左へ戻すと、箱の中身が変わる様子を順番に見られます。左は別の箱を使った場合、真ん中は使い終わった箱を使い直した場合、右はあなたの直し方を試す場所です。最初はまだ直していません。\n\n箱はメモリの領域、場所を覚えたままの受付票は古い参照です。ここでは A は青、B は黄色のカードを出すだけです。\n\n## 次は、古い受付票を止めてみよう\n\n画面の「条件の書き方を見る」を開き、読む前・書く前に確かめる条件を作ります。「この条件で試す」を押したら、正しい受付票は使えて、古い受付票は止まるか見てみましょう。\n\n目標は、箱を返したあと、使い直したあと、別の担当や別の種類の箱への読み書きを止めること。同じ人が同じ種類の箱を使い直す場合も対象です。止めたあとは処理 A を保ち、正常な読み書きは続けられるようにします。\n\nうまくいったら、書いた JSON 全体を Portal の提出欄へ貼り付けます。正解100点、誤答1回5点減点。ヒントは順に20点、30点です。画面の例以外でも確認するので、青になれば必ず正解とは限りません。\n\n## 条件の書き方（画面にもあります）\n\nJSON は、配列を角括弧で、文字列を二重引用符で囲む書き方です。形は {\"guards\":[[左辺,\"==\" または \"!=\",右辺], ...]}。左右には画面で定義したフィールド名（値の取り出し先）か true / false を置きます。すべての式が正しいときだけ読み書きを通し、1つでも誤りなら止めます。\n\n例えば [\"slot.live\",\"==\",true] は使用中の箱だけを通します。箱の利用番号（世代）は使い始めるたび1増えます。番号1の受付票と番号2の箱は別の物なので、handle.generation == slot.generation を満たさず止めるべきです。担当と種類は、呼び出した処理が求める値と比べてください。技術的なコード解説や実際の事故との違いは、画面下の補足で読めます。",
+  "description": "解放済み参照とスロット再利用、制御データの誤更新を安全な意味論で学ぶ。実Cメモリ破壊や php2shell / CVE-2026-109618、109619 の再現ではない。2026-10-21の公式公開内容との対応・相違はREADMEに記載。",
+  "writeup": "解放で受付票のコピーは消えない。箱0の世代1を解放し、同じ箱に世代2の制御オブジェクトを確保すると、箱番号だけの参照は別の物に届く。古い受付票で読むと進捗25%ではなく制御値Aが見え、Bを書くと制御値が変わり固定の処理Bが選ばれる。解答は {\"guards\":[[\"slot.live\",\"==\",true],[\"handle.generation\",\"==\",\"slot.generation\"],[\"slot.owner\",\"==\",\"caller.owner\"],[\"slot.kind\",\"==\",\"caller.kind\"]]}。resolve が全読み書き前に使用中・世代・呼び出し元の所有者・期待種類を検査する。比較式の順序や左右の入替えは任意。自己比較や逆の演算子は適切な性質を保証しない。使用中の印だけでは再利用を検出できず、種類と所有者だけでは同じ種類と所有者の再利用を検出できない。正常処理は通す。所有権や参照の寿命を設計で守る方法もあるが、この教材の比較式モデルは明示検査に限定する。",
+  "tags": [
+    "memory-safety",
+    "simulation",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web"
+    },
+    {
+      "port": 18081,
+      "name": "Verifier (host only)"
+    }
+  ],
+  "learningGoals": [
+    "解放・再利用・古い参照の読み書きを状態とログで説明する",
+    "データの誤更新から制御情報と処理選択が変わる因果を追う",
+    "正常処理を保ち世代と所有権を検査する修正を作る"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "verify",
+    "points": 100,
+    "wrongAnswerPenalty": 5,
+    "hints": [
+      {
+        "id": "hint-1",
+        "content": "箱が今も使われているだけでは、最初に入れた物と同じとは限らない。受付票の印と箱の印を比べてみよう。",
+        "penalty": 20
+      },
+      {
+        "id": "hint-2",
+        "content": "画面の比較式を読み、左右に何を置くか考えよう。箱の所有者・種類は受付票自身ではなく呼び出し元の必要値と比べる。世代も同じ値の自己比較では検査にならない。",
+        "penalty": 30
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Old Tickets, Reused Boxes",
+      "shortDescription": "What if a previous user writes to a box that someone else now uses? Run the model and watch the contents and card colors.",
+      "instructions": "## That box belongs to someone else now\n\nSomeone returns a box, another person uses it, and the previous user still remembers where it was. What if the old user writes into it? If the contents say what to do next, a different action may run. This is a safe model, not real memory corruption or a reproduction of the CVEs being discussed.\n\n## Try it first\n\nStart the problem in Portal and open Web under Access URLs. Select 「まず動かしてみる」 (Try it first), compare card colors, then move the slider left to follow what changed. The prediction box is optional. The left column uses a separate box, the middle reuses a returned box, and the right tries your repair. It starts unrepaired. A box represents a memory region; a ticket that still remembers its location represents an old reference. A displays a blue card and B a yellow card, nothing more. The interactive page is in Japanese.\n\n## Stop the old ticket\n\nOpen 「条件の書き方を見る」 (How to write conditions), write checks to run before reads and writes, and select 「この条件で試す」 (Try these conditions). Current valid tickets should still work. Reject reads and writes after return or reuse, including same-owner/same-kind reuse, and reject mismatched owners and kinds. Keep action A after rejection. Paste the entire JSON into Portal. Correct: 100 points; wrong: 5-point penalty; sequential hints: 20 and 30. Passing the visible example alone does not guarantee a correct submission.\n\n## Writing conditions\n\nJSON uses square brackets for arrays and double quotes for strings. Use {\"guards\":[[left,\"==\" or \"!=\",right], ...]}. Operands are documented field names or true/false; all comparisons must hold to allow access. For example [\"slot.live\",\"==\",true] permits only live boxes. A box generation increases whenever it is allocated; generation-1 tickets do not match generation-2 boxes, so require handle.generation == slot.generation. Compare owner and kind with caller requirements. Code details, the full field list and the safety explanation remain available in the page's expandable notes.",
+      "description": "Safe semantic model of stale references, reuse and control-data changes; not a reproduction of PHP or any CVE.",
+      "writeup": "A released ticket remains copied. Reusing its slot for a control object makes slot-only access reach a different object. Reading leaks A instead of progress 25%; writing B changes the fixed action selection. Solution: {\"guards\":[[\"slot.live\",\"==\",true],[\"handle.generation\",\"==\",\"slot.generation\"],[\"slot.owner\",\"==\",\"caller.owner\"],[\"slot.kind\",\"==\",\"caller.kind\"]]}. Apply all checks before every read and write. Live alone misses reuse; owner/type alone miss same-owner/same-type reuse. Valid current handles still work.",
+      "learningGoals": [
+        "Explain release, reuse and stale access from state logs",
+        "Trace unintended writes through control data to action selection",
+        "Preserve legitimate access while checking generation and ownership"
+      ],
+      "hints": [
+        {
+          "id": "hint-1",
+          "content": "A box being in use does not mean it still contains the original object. Compare marks on the ticket and box."
+        },
+        {
+          "id": "hint-2",
+          "content": "Choose comparison operands carefully. Compare slot owner and kind with caller requirements, and compare ticket generation with slot generation. A value compared with itself proves nothing."
+        }
+      ]
+    }
+  }
+}
