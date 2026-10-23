@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { isCryptoBattleProjection } from "../../portal/coordination.ts";
+import HintBooster from "../../portal/HintBooster.tsx";
+import Lightning from "../../portal/Lightning.tsx";
 import { applyOp, initialState, migrateState, projectForTeam, STREAMING_ORDER_CONFIG, tick, validateOp } from "./reducer.ts";
 import { buildReplay } from "./replay.ts";
 import type { CoordinationContext, CryptoBattleState } from "./types.ts";
@@ -149,6 +154,24 @@ describe("the platform's match length", () => {
     expect(view(state)).toEqual(["ended", 0]);
     expect([state.endgameBooster, state.endgameLightning]).toEqual([{ status: "pending" }, { status: "pending" }]);
     expect(buildReplay(state).filter((e) => e.kind === "phase-change").map((e) => [e.atMs, e.detail])).toEqual([[600_000, { phase: "ended" }]]);
+  });
+
+  test("an end at or before the endgame boundary reports no endgame support, during play and after the end", () => {
+    const support = (state: CryptoBattleState) => {
+      const projection = projectForTeam(state, "alpha");
+      return [projection.hintBooster?.status, projection.lightning?.status];
+    };
+    let state = tick(start(create({ matchDurationMs: 10 * MIN })), 150_000, { matchDurationMs: 6 * MIN });
+    expect(support(state)).toEqual(["unavailable", "unavailable"]);
+    state = tick(state, 200_000, { matchDurationMs: 10 * MIN });
+    expect(support(state)).toEqual(["scheduled", "scheduled"]);
+    expect(support(tick(state, 210_000, { matchDurationMs: 400_000 }))).toEqual(["unavailable", "unavailable"]);
+    state = tick(tick(state, 220_000, { matchDurationMs: 6 * MIN }), 6 * MIN, { matchDurationMs: 6 * MIN });
+    expect([view(state), support(state)]).toEqual([["ended", 0], ["unavailable", "unavailable"]]);
+    const projection = projectForTeam(state, "alpha");
+    expect(isCryptoBattleProjection(projection)).toBe(true);
+    expect(renderToStaticMarkup(createElement(HintBooster, { projection, locale: "en" }))).toContain("No endgame hint support in this match.");
+    expect(renderToStaticMarkup(createElement(Lightning, { projection, locale: "en" }))).toContain("No Lightning card in this match.");
   });
 
   test("shortening to an end already passed ends the match at that tick, like any other end", () => {
