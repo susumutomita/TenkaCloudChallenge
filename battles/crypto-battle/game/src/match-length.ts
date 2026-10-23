@@ -22,7 +22,10 @@ import type { Contract, CryptoBattleConfig, CryptoBattleState, MatchDurationReje
  *    past, so a host that sees a report late replays nothing differently.
  *
  * The local host also reports a shorter length after each scoring-lock pause,
- * so a length that changes after START is routine, not an edge case.
+ * so a length that changes after START is routine, not an edge case. For the
+ * same reason any length above 0 is accepted: a 5-minute match paused for one
+ * minute reports 4 minutes. The organizer's 5-minute floor is the platform's
+ * to enforce, on the length chosen at start.
  *
  * `ended` is terminal. By then the end-of-match Order expiries and the
  * Lightning settlement have happened, so no later report reopens the match.
@@ -30,14 +33,13 @@ import type { Contract, CryptoBattleConfig, CryptoBattleState, MatchDurationReje
  * refuses to move an end that has passed, and the cloud reads the length from
  * the live event at every tick.
  */
-export const MIN_MATCH_DURATION_MS = 5 * 60_000;
 export const MAX_MATCH_DURATION_MS = 240 * 60_000;
 
 function readMatchDuration(value: unknown):
   | { readonly ok: true; readonly durationMs: number }
   | { readonly ok: false; readonly rejection: MatchDurationRejection } {
   if (typeof value !== "number" || !Number.isFinite(value)) return { ok: false, rejection: "not-a-number" };
-  if (value < MIN_MATCH_DURATION_MS || value > MAX_MATCH_DURATION_MS) return { ok: false, rejection: "out-of-range" };
+  if (value <= 0 || value > MAX_MATCH_DURATION_MS) return { ok: false, rejection: "out-of-range" };
   return { ok: true, durationMs: value };
 }
 
@@ -73,8 +75,8 @@ function rescheduled(state: CryptoBattleState, config: CryptoBattleConfig): Part
 
 /**
  * Applies one platform report. `undefined` is no report and changes nothing,
- * and neither does any report once the match has ended. A value outside
- * 5..240 minutes keeps the length in force and records why.
+ * and neither does any report once the match has ended. A value of 0 or less,
+ * or above 240 minutes, keeps the length in force and records why.
  * Before START the phases follow the report provisionally; after START only
  * the end moves.
  */

@@ -69,12 +69,12 @@ describe("the platform's match length", () => {
     expect(JSON.stringify(tick(state, 30_000, { matchDurationMs: undefined }))).toBe(JSON.stringify(tick(state, 30_000)));
   });
 
-  test("a length outside 5..240 minutes keeps the one in force and records why", () => {
+  test("a length of 0 or less, or over 240 minutes, keeps the one in force and records why", () => {
     const state = create({ matchDurationMs: 10 * MIN });
     for (const [value, reason] of [
-      [5 * MIN - 1, "out-of-range"],
-      [240 * MIN + 1, "out-of-range"],
+      [0, "out-of-range"],
       [-1, "out-of-range"],
+      [240 * MIN + 1, "out-of-range"],
       [Number.NaN, "not-a-number"],
       [Number.POSITIVE_INFINITY, "not-a-number"],
       ["600000", "not-a-number"],
@@ -84,12 +84,13 @@ describe("the platform's match length", () => {
       expect([next.config.matchDurationMs, next.platformMatchDurationMs, next.matchDurationRejection]).toEqual([600_000, 600_000, reason]);
       expect(JSON.stringify(projectForTeam(next, "alpha"))).not.toContain(reason);
     }
-    expect(tick(state, 0, { matchDurationMs: 5 * MIN }).config.matchDurationMs).toBe(300_000);
+    expect(tick(state, 0, { matchDurationMs: 5 * MIN - 1 }).config.matchDurationMs).toBe(299_999);
+    expect(tick(state, 0, { matchDurationMs: 1 }).config.matchDurationMs).toBe(1);
     expect(tick(state, 0, { matchDurationMs: 240 * MIN }).config.matchDurationMs).toBe(14_400_000);
     const refused = tick(state, 0, { matchDurationMs: 0 });
     const accepted = tick(refused, 1_000, { matchDurationMs: 20 * MIN });
     expect([accepted.matchDurationRejection, accepted.config.matchDurationMs]).toEqual([undefined, 1_200_000]);
-    const unknown = create({ matchDurationMs: 1 });
+    const unknown = create({ matchDurationMs: 0 });
     expect([unknown.config.matchDurationMs, unknown.platformMatchDurationMs, unknown.matchDurationRejection]).toEqual([5_400_000, undefined, "out-of-range"]);
   });
 
