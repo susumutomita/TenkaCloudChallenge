@@ -15,7 +15,7 @@ export default function Lightning({ projection, order, locale, busy, onDeclare, 
     {ja ? `開始から ${clock(card.startAfterMs)} で下位2チームにライトニング（計算回答の得点を1問だけ2倍）。同点は配布境界まで全員、2チーム戦は最下位のみ、1チームは対象外。`
       : `At ${clock(card.startAfterMs)} after start, the bottom two teams get one lightning card: double one calculation reward. Ties at the cutoff qualify; two-team matches award only last place, solo practice none.`}
   </p>;
-  if (card.status === "unavailable") return <p className="tc-card-hint" data-testid="lightning">{ja ? "ライトニング対象外：旧版で終盤を迎えたため、配布時の順位が不明です。" : "Lightning unavailable: this older match has no saved endgame ranking."}</p>;
+  if (card.status === "unavailable") return <p className="tc-card-hint" data-testid="lightning">{ja ? "この試合ではライトニングを配りません。" : "No Lightning card in this match."}</p>;
   if (card.status === "ineligible") return <p className="tc-card-hint" data-testid="lightning">{ja ? "ライトニング配布済み · このチームは対象外です。" : "Lightning distributed · this team did not qualify."}</p>;
   if (card.status === "unused-expired") return <p className="tc-card-hint" data-testid="lightning">{ja ? "ライトニング失効 · 試合が終了しました。" : "Lightning expired · the match has ended."}</p>;
   if (card.status === "spent") {

@@ -12,8 +12,8 @@ export default function HintBooster({ projection, locale }: {
   const message = booster.status === "active"
     ? ja ? `ヒントの減点なし · 残り ${clock(booster.remainingMs)}` : `No hint penalty · ${clock(booster.remainingMs)} left`
     : booster.status === "unavailable"
-      ? ja ? "この試合は旧版から継続中です。終盤開始時の順位が残っていないため、ヒントは通常の減点です。"
-        : "This match continued from an older version without the endgame ranking. Regular hint penalties apply."
+      ? ja ? "この試合では終盤のヒント支援を配りません。ヒントは通常の減点です。"
+        : "No endgame hint support in this match. Regular hint penalties apply."
       : booster.status === "expired"
         ? ja ? "ヒントの減点なし期間は終了しました。次のヒントの減点を確認してください。"
           : "The no-penalty period has ended. Check the next hint's penalty."
