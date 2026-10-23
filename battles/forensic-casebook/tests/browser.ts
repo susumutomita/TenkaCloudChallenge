@@ -9,7 +9,7 @@ import { chromium, type Page } from "playwright-core";
 import { startHarness } from "../dev/server.ts";
 
 type Doc = Record<string, any>;
-const harness = await startHarness({ port: 0 });
+const harness = await startHarness({ port: 0, seatIds: ["analyst-a", "analyst-b", "analyst-c"] });
 const executable = Bun.env.BROWSER ?? (await Bun.file("/usr/bin/chromium").exists() ? "/usr/bin/chromium" : undefined);
 const browser = await chromium.launch({ ...(executable ? { executablePath: executable } : {}), headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
 const artifactDir = new URL("../dev/evidence/", import.meta.url).pathname;
@@ -196,7 +196,28 @@ async function completeVisibleCases(page: Page, locale: "ja" | "en", injectLoss:
   assert.equal(await page.getByTestId("score").innerText(), "400 / 400");
   await safeScreenshot(page, `endpoint-${locale}.png`);
 }
+async function insecureContextOperations() {
+  // A plain-HTTP LAN page is not a secure context, so the browser has no crypto.randomUUID there.
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await context.addInitScript(() => { delete (Crypto.prototype as { randomUUID?: unknown }).randomUUID; });
+  const page = await context.newPage(); watch(page);
+  const operations: Doc[] = [];
+  page.on("request", (request) => { if (request.url().endsWith("/api/op")) operations.push(JSON.parse(request.postData() ?? "{}")); });
+  await page.goto(harness.seats[2]!.url);
+  await shown(page, "case-identity");
+  assert.equal(await page.evaluate(() => typeof crypto.randomUUID), "undefined");
+  await fill(page, "account", "wrong-account", ["I-IDP", "I-CLOUD"]);
+  await page.getByTestId("submit-account").click();
+  await page.locator('[data-testid="result-account"][data-status="incorrect"]').waitFor();
+  await page.getByTestId("hint-account").click();
+  await page.getByTestId("hints-account").locator("li").nth(0).waitFor();
+  assert.deepEqual(operations.map((operation) => operation.kind), ["answer", "hint"]);
+  for (const operation of operations) assert.match(String(operation.id), /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/);
+  assert.notEqual(operations[0]!.id, operations[1]!.id);
+  await context.close();
+}
 try {
+  await insecureContextOperations();
   const firstContext = await browser.newContext({ viewport: { width: 1280, height: 900 }, acceptDownloads: true });
   const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 }, acceptDownloads: true });
   const first = await firstContext.newPage(); watch(first);
