@@ -28,18 +28,22 @@ test("long-running order rotation preserves earned points apart from explicit ex
   expect(state.contracts.some(c => c.id === "a-c0")).toBe(false);
   expect(state.teams.a!.score).toBe(earned);
 });
-test("99-team streaming match retains accepted history within the declared SQL budget", () => {
+// [Issue #926] 90 minutes is also the no-report default; 10 is the shortest length an organizer is expected to pick.
+for (const minutes of [10, 90]) test(`99-team ${minutes}-minute streaming match retains accepted history within the declared SQL budget`, () => {
+  const length = minutes === 90 ? undefined : { matchDurationMs: minutes * 60_000 };
   const teamIds = Array.from({length: 99}, (_, i) => `team-${i}`);
-  let state = applyOp(initialState({ eventId: "streaming-capacity", teamIds, matchSecret: "streaming-test" }, STREAMING_ORDER_CONFIG), teamIds[0]!, {kind: "start"});
+  let state = applyOp(initialState({ eventId: "streaming-capacity", teamIds, matchSecret: "streaming-test", ...length }, STREAMING_ORDER_CONFIG), teamIds[0]!, {kind: "start"});
   let peak = 0;
-  for (let time = 0; time <= 90 * 60_000; time += 30_000) {
-    state = tick(state, time);
+  for (let time = 0; time <= minutes * 60_000; time += 30_000) {
+    state = tick(state, time, length);
     for (const contract of state.contracts.filter(c => c.status === "open")) {
       const op = {kind: "leak" as const, contractId: contract.id};
       if (validateOp(state, contract.teamId, op).ok) state = applyOp(state, contract.teamId, op);
     }
     peak = Math.max(peak, new TextEncoder().encode(JSON.stringify(state)).length);
   }
+  console.info(JSON.stringify({ minutes, peak, phase: state.phase }));
+  expect(state.phase).toBe("ended");
   expect(peak).toBeLessThan(3 * 1024 * 1024);
   expect(state.teams[teamIds[0]!]!.score).toBeGreaterThanOrEqual(0);
 }, 120_000);
@@ -116,5 +120,5 @@ test("v21 rows retain their unlimited queue during v22 migration",()=>{
  const upgraded=migrateState(JSON.parse(JSON.stringify(old)),21);
  expect(upgraded.config.maxOpenOrdersPerTeam).toBeUndefined();
  expect(upgraded.contracts).toEqual(old.contracts);
- expect(()=>migrateState(old,23)).toThrow();
+ expect(()=>migrateState(old,24)).toThrow();
 });
