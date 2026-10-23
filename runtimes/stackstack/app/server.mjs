@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { addPost, allPosts, resetBoard, validatePost } from "./board.mjs";
 import { applyConfigChange, CONFIG_FILE, readConfig, resetConfigChanges } from "./config.mjs";
 import { log, recentLines } from "./log.mjs";
+import { PROBLEM_NAMES } from "./names.mjs";
 import {
   clearOverride,
   clearSource,
@@ -283,7 +284,7 @@ function openApiDocument(scenarioName, lang) {
   return {
     openapi: "3.0.3",
     info: {
-      title: `StackStack board (${scenarioName})`,
+      title: L(PROBLEM_NAMES[scenarioName].ja, PROBLEM_NAMES[scenarioName].en),
       version: "1.0.0",
       description:
         L(
