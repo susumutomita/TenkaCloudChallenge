@@ -14,7 +14,9 @@ FROM wordpress:php8.3-apache@sha256:d42f63cb89ad0eab272c4b393164e63830d0df270009
 # then hands off to the stock WordPress entrypoint. Running it first guarantees the
 # investigation surface exists the instant Apache serves.
 COPY seed-and-start.sh /usr/local/bin/seed-and-start.sh
-RUN chmod +x /usr/local/bin/seed-and-start.sh
+# Fresh WordPress volumes inherit this fixed bundle; existing wp_data is separate.
+RUN chmod +x /usr/local/bin/seed-and-start.sh \
+ && cp /etc/ssl/certs/ca-certificates.crt /usr/src/wordpress/wp-includes/certificates/ca-bundle.crt
 
 ENTRYPOINT ["seed-and-start.sh"]
 CMD ["apache2-foreground"]
