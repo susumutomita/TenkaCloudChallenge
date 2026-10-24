@@ -90,7 +90,8 @@ services:
     restart: "no"
 
   wpinit:
-    image: wordpress:cli-php8.3@sha256:661db880e953da051abcac6c0a769767b995a82cd52101c003ca7438dd427d7d
+    build:
+      context: ../../../runtimes/wordpress-cli
     # Match the debian WordPress image's www-data uid so WP-CLI can use the shared
     # docroot volume and its generated wp-config.php.
     user: "33:33"

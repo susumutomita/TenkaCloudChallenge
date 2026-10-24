@@ -23,7 +23,9 @@ FROM wordpress:php8.3-apache@sha256:d42f63cb89ad0eab272c4b393164e63830d0df270009
 # WP_DEBUG off to close the debug-log checkpoint) takes effect immediately instead of
 # after the default 2s window — otherwise a re-scan right after the fix confusingly still
 # reports the hole open.
-RUN printf 'opcache.revalidate_freq=0\n' > /usr/local/etc/php/conf.d/zz-revalidate.ini
+# Fresh WordPress volumes inherit this fixed bundle; existing wp_data is separate.
+RUN printf 'opcache.revalidate_freq=0\n' > /usr/local/etc/php/conf.d/zz-revalidate.ini \
+ && cp /etc/ssl/certs/ca-certificates.crt /usr/src/wordpress/wp-includes/certificates/ca-bundle.crt
 
 # Directory listing for /internal only (scoped, not global). Written to conf-available and
 # enabled here, so `a2disconf zz-internal-autoindex` remains a valid fix for the
