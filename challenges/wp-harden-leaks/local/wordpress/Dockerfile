@@ -17,7 +17,7 @@
 # Planting now happens from the one-shot `wpinit` service, which does not share its image
 # with anybody, so this stage is stock WordPress plus two pieces of configuration that are
 # part of the scenario and discoverable from inside anyway.
-FROM wordpress:php8.3-apache AS participant
+FROM wordpress:php8.3-apache@sha256:d42f63cb89ad0eab272c4b393164e63830d0df270009907919f7dcce52b1a20b AS participant
 
 # Revalidate opcache every request so an edit to wp-config.php (e.g. the player turning
 # WP_DEBUG off to close the debug-log checkpoint) takes effect immediately instead of

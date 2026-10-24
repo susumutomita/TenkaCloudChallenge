@@ -7,7 +7,7 @@
 # login and no exploit. The wrapper entrypoint below plants the externally
 # observable signals (a served access log and an abandoned plugin readme) before
 # Apache starts. The compose file binds it to 127.0.0.1 only.
-FROM wordpress:php8.3-apache
+FROM wordpress:php8.3-apache@sha256:d42f63cb89ad0eab272c4b393164e63830d0df270009907919f7dcce52b1a20b
 
 # The wrapper plants the file-based signals (access log, orphan plugin readme) and
 # enables the standard WordPress rewrite so the REST API answers at /wp-json/...,

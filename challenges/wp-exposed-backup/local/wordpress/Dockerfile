@@ -4,7 +4,7 @@
 # build — it is the official current image. The teaching scenario is operational
 # neglect (a DB backup left in the public web root), added by the wrapper
 # entrypoint below. The compose file binds it to 127.0.0.1 only.
-FROM wordpress:php8.3-apache
+FROM wordpress:php8.3-apache@sha256:d42f63cb89ad0eab272c4b393164e63830d0df270009907919f7dcce52b1a20b
 
 # The wrapper writes the neglected backup file (and a robots.txt that "hides" it)
 # into the docroot, then hands off to the stock WordPress entrypoint. Running it

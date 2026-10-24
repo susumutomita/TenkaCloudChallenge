@@ -1,6 +1,8 @@
 services:
   mysql:
-    image: mysql:8.0
+    build:
+      context: .
+      dockerfile: mysql.Dockerfile
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-adminadmin}
       MYSQL_DATABASE: cavsdb
@@ -17,7 +19,9 @@ services:
       - ${PROBLEM_ROOT:-..}/local/mysql-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
 
   api:
-    image: python:3.11-slim
+    build:
+      context: .
+      dockerfile: api.Dockerfile
     working_dir: /app
     depends_on:
       mysql:
@@ -33,14 +37,14 @@ services:
     volumes:
       - ${PROBLEM_ROOT:-..}/api:/app:rw
       - ${PROBLEM_ROOT:-..}/frontend:/frontend:ro
-    command: >
-      sh -lc "pip install --no-cache-dir flask boto3 pymysql requests &&
-      python api.py"
+    command: ["python", "api.py"]
     ports:
       - "${API_PORT:-8080}:80"
 
   frontend:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: nginx.Dockerfile
     volumes:
       - ${PROBLEM_ROOT:-..}/frontend:/usr/share/nginx/html:ro
     ports:
