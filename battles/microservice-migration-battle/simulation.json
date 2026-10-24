@@ -21,7 +21,7 @@
       "healthPath": "/healthz",
       "artifact": {
         "path": "services/simulator/Dockerfile",
-        "sha256": "ed10e2eaf7dab95da26bdc131f88371d1c1e2383286f8db530c48bba72c788ce"
+        "sha256": "8132b026323a3a5d0f4eae69211e706cde828ba5cd61614e76e14e8c1841bc81"
       }
     }
   ]

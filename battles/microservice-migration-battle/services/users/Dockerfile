@@ -7,13 +7,13 @@
 #
 # 競技中の再デプロイ高速化のため、依存と src を別レイヤに分けている。
 
-FROM oven/bun:1-alpine AS deps
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS deps
 WORKDIR /app
 # committed の bun.lock で再現性のある install (repo tooling は bun)。
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
-FROM oven/bun:1-alpine AS runtime
+FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
