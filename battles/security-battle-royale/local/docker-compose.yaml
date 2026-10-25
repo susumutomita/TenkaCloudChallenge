@@ -37,7 +37,9 @@ services:
     volumes:
       - ${PROBLEM_ROOT:-..}/api:/app:rw
       - ${PROBLEM_ROOT:-..}/frontend:/frontend:ro
-    command: ["python", "api.py"]
+    command: >
+      sh -lc "pip install --no-cache-dir flask boto3 pymysql requests certifi==2026.10.19 &&
+      python api.py"
     ports:
       - "${API_PORT:-8080}:80"
 
