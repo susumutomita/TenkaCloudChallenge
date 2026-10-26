@@ -1063,6 +1063,21 @@ export function rpsOrderReward(order: ContractProjection | undefined): number | 
   return order.task.outcome === "draw" ? order.task.drawPoints : order.task.outcome === "loss" ? 0 : order.points;
 }
 
+/** Acceptance is not a score: a private opening can wait until the deadline. */
+export function rpsSubmissionFeedback(order: ContractProjection | undefined, kind: string, locale: Locale): FeedbackDraft {
+  const ja = locale === "ja";
+  if (!order || order.task.kind !== "rps-duel") return { kind: "error", title: ja ? "結果を確認できません" : "Result unavailable", body: FAST_MOVE_COPY[locale].unavailable };
+  const reward = rpsOrderReward(order);
+  if (reward !== undefined) return { kind: "prove", reward, title: ja ? "じゃんけんが決着しました" : "Duel settled", body: ja ? "勝敗と、この対戦で獲得した点数を上に表示します。他のお題の期限切れ減点は別に計算されます。" : "The result and this duel's award appear above. Deadline penalties from other Orders are counted separately." };
+  return {
+    kind: "hint",
+    title: ja ? (kind === "rps-commit" ? "数字を受け付けました・まだ未採点です" : "手を預かりました・まだ未採点です") : (kind === "rps-commit" ? "Number accepted — not scored yet" : "Opening accepted — not scored yet"),
+    body: order.task.myOpening
+      ? (ja ? `自分の操作は完了です。相手の開封で決着し、応答がなければこのお題の期限に不戦勝 +${order.points}点です。別のお題へ進めます。他のお題の期限切れ減点は別に計算されます。` : `Your actions are complete. The opponent's opening settles the duel; no response earns a forfeit win of +${order.points} at this Order's deadline. Continue with another Order. Other deadline penalties are counted separately.`)
+      : (ja ? "控えた手と隠す数を、次に審判へ渡してください。相手がまだ封じていなくても預けられます。相手待ちの不戦勝は、このお題の期限に判定します。" : "Next give the judge your recorded hand and hiding number, even if the opponent has not sealed. A forfeit is decided at this Order's deadline."),
+  };
+}
+
 /** Side actions must not claim an Order completed by the same server tick. */
 export function completionReceipt(submitted: ContractProjection | undefined, next: CryptoBattleProjection | undefined, points: number | undefined): OrderReceipt | undefined {
   if (!submitted || submitted.status !== "open" || points === undefined) return undefined;
@@ -1628,7 +1643,7 @@ export default function FastMovePanel(props: PortalSlotProps) {
         opponentName={projection.teams[selectedOrder.task.opponentTeamId]?.teamName ?? selectedOrder.task.opponentTeamId}
         prediction={<RpsOrderPrediction order={selectedOrder} projection={projection} locale={locale} submitting={submitting}
           onSubmit={op => run(() => client.submitOp(op), next => next ? ({ kind: "hunt", title: locale === "ja" ? "予測を預けました" : "Prediction submitted", body: locale === "ja" ? "まだ採点していません。回答欄で開封の進み具合を確認できます。" : "Not scored yet. The answer area shows opening progress." }) : ({ kind: "error", title: copy.rejected, body: copy.unavailable }))} />}
-        onSubmit={op => runOrder(() => client.submitOp(op), next => next ? ({ kind: "prove", reward: rpsOrderReward(next.myContracts.find(c => c.id === selectedOrder.id)), title: locale === "ja" ? (op.kind === "rps-commit" ? "数字を封じました" : "手を審判へ渡しました") : (op.kind === "rps-commit" ? "Number sealed" : "Opening submitted"), body: locale === "ja" ? "じゃんけんの進み具合は回答欄、決着した勝敗と点数は上に表示されます。" : "The answer area shows progress; a settled result and points appear above." }) : ({ kind: "error", title: locale === "ja" ? "結果を確認できません" : "Result unavailable", body: copy.unavailable }))}
+        onSubmit={op => runOrder(() => client.submitOp(op), next => rpsSubmissionFeedback(next?.myContracts.find(c => c.id === selectedOrder.id), op.kind, locale))}
       />}
 
       {selectedOrder?.task.kind === "ssm-decrypt" && <ScoreItemOrder key={`score-item:${selectedOrder.id}`} task={selectedOrder.task} contractId={selectedOrder.id} busy={submitting} locale={locale} onSubmit={op=>void runOrder(()=>client.submitOp(op),next=>next?.scoreSteal?.held ? {kind:"prove",title:locale==="ja"?"横取りアイテム獲得！":"Score item acquired!",body:locale==="ja"?"相手を選び、好きなタイミングで1回使えます。":"Choose an opponent and use it once.",reward:0}:{kind:"error",title:locale==="ja"?"AWSの値と計算を確認してください":"Check the AWS value and calculation",body:next ? (locale==="ja"?`不正解。${projection.wrongProveCost}点の減点（最低0点）。`:`Incorrect; ${projection.wrongProveCost} point penalty, floored at0.`):copy.unavailable})}/>}
