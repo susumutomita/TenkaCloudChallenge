@@ -2,6 +2,7 @@ import { SchnorrLesson } from "./SchnorrLesson.tsx";
 import { useEffect, useState } from "react";
 import type { ContractProjection, CryptoBattleOp } from "../game/src/types.ts";
 import { power } from "../game/src/schnorr.ts";
+import { schnorrWitness } from "./schnorr-witness.ts";
 
 /** Private values stay in this tab; the player calculates each result. */
 export function SchnorrResponseSteps({r,x,e,locale}:{r:number;x:number;e:number;locale:"ja"|"en"}) {
@@ -52,21 +53,16 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
     if(proof.pending) {
       if(secret!==null && nonce!==null && power(2,secret)===proof.pending.y && power(2,nonce)===proof.pending.a) return;
       setSecret(null); setNonce(null); setZ("");
-      let stored: string | null = null;
-      try { stored=sessionStorage.getItem(storageKey); } catch { return; }
-      if(stored) {
-        try {
-          const saved=JSON.parse(stored);
-          if(Number.isInteger(saved.x)&&saved.x>=1&&saved.x<=10&&Number.isInteger(saved.r)&&saved.r>=0&&saved.r<11&&power(2,saved.r)===proof.pending.a&&power(2,saved.x)===proof.pending.y) {
-            setNonce(saved.r);setSecret(saved.x);
-          }
-        } catch { /* No usable local witness: show the recovery guidance below. */ }
-      }
-      return;
     }
     const draw=()=>{const bytes=new Uint8Array(1);do {crypto.getRandomValues(bytes);} while(bytes[0]!>=253);return bytes[0]!%11;};
-    const x=Array.from({length:11},(_,i)=>i).find(i=>power(2,i)===proof.y);
-    setSecret(x??null);setNonce(draw());
+    let stored: string | null = null;
+    try { stored=sessionStorage.getItem(storageKey); } catch { /* This tab can still calculate. */ }
+    const witness=schnorrWitness(proof,stored,draw);
+    setSecret(witness?.x??null);setNonce(witness?.r??null);
+    if(witness) {
+      // Preserve the displayed r when the player visits another Order or reloads.
+      try { sessionStorage.setItem(storageKey,JSON.stringify(witness)); } catch { /* Current tab can continue using its witness. */ }
+    }
   },[storageKey,proof.y,proof.pending?.a,proof.pending?.y]);
   const matchesPending = nonce!==null && secret!==null && (!proof.pending || (power(2,nonce)===proof.pending.a && power(2,secret)===proof.pending.y));
   const valid=(v:string,max=10)=>/^\d+$/.test(v)&&Number(v)<=max;
