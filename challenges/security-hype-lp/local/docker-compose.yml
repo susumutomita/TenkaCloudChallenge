@@ -1,0 +1,48 @@
+# Local-play stack for security-hype-lp.
+# Bound to 127.0.0.1 only: the landing page and /verify never leave the box.
+# The page collects nothing: its form posts back to this container, which discards the body.
+name: security-hype-lp
+services:
+  web:
+    build:
+      context: .
+      target: challenge
+    environment:
+      VERIFIER_ORIGIN: "http://verifier:8081"
+    depends_on:
+      verifier:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:18080:8080" # challenge surface
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 32
+    mem_limit: 128m
+    cpus: "0.50"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+  verifier:
+    build:
+      context: .
+      target: verifier
+    environment:
+      FLAG_SEED: "${FLAG_SEED:?per-run FLAG_SEED is required}"
+    ports:
+      - "127.0.0.1:18081:8081" # loopback /verify
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 32
+    mem_limit: 128m
+    cpus: "0.50"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"

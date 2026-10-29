@@ -1,0 +1,263 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "security-hype-lp",
+  "name": "ストップ高の LP を疑え",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "40 分",
+  "shortDescription": "話題の「AI セキュリティ」企業を名乗る無料診断の案内が届いた。LP と転送された資料を突き合わせ、内容を確かめ、申し込みを判断する材料を証拠で示そう。",
+  "instructions": "## 状況\n\n最近、「AI セキュリティ」をうたう会社の株が、中身が確認されないまま話題だけで連日ストップ高 (1 日に上がってよい上限まで株価が上がること) になっている。そんな中、あなたの会社 (架空の「ひなた食品」) の経理部に、話題の一社「カゲロウシールド」を名乗るメールが届いた。経理部の同僚は「無料でセキュリティ診断してくれるらしい。申し込んでいい?」と聞いてきている。\n\nあなたは社内のセキュリティ担当として、その会社の LP (ランディングページ = 広告やメールのリンク先として作られた、申し込みを促すための 1 枚の Web ページ) と、同僚が転送してきた資料を調べる。申し込みを判断するため、会社についての表示や連絡先、案内の内容を資料と突き合わせる。表示や案内が資料で裏付けられるかを調べ、判断の根拠となる値を示そう。\n\n登場する会社・人物・製品・ドメイン (Web サイトやメールアドレスの `@` の後ろにある名前) はすべて架空のもの。実在の会社や銘柄とは関係ない。\n\n## 最初の一手\n\nParticipant Portal で「起動」を押すと、あなた専用の環境が立ち上がる。「アクセス先 URL」に `Web` が出たら開く。表示されるのが LP だ。ページの一番下には「会社概要」「IR 情報」(会社が投資家向けに公表する情報) と、同僚から転送された資料一覧へのリンクがある。\n\nまずは LP を上から下まで読み、「本当だろうか」と思った数字や表示をメモしよう。ブラウザの「ページのソースを表示」(Ctrl+U、Mac は ⌘+Option+U) も使ってよい。\n\nLP のフォームには実在する ID・パスワード・個人情報を絶対に入力しないこと。このフォームは訓練用で、送信しても内容は保存されないが、そもそも入力しないのが正しい対応だ。\n\n## 提出するもの\n\nチェックポイントは 6 つ。それぞれ、調査の根拠になる値 (数字、登録番号、電話番号、ドメインなど) を、そのチェックポイントの入力欄に提出する。どの値を出すかは各チェックポイントの名前と、このあとの説明で判断する。\n\n- キャンペーンの残り時間: ページを開き直すたびに表示される残り時間は何分から始まるか (分の数)\n- 導入実績の数字: 実際に有償で契約している法人は何社か\n- 認証バッジ: LP の認証表示を台帳と照合し、確認が必要と判断した登録番号\n- お客様の声: お客様の声の裏付けを調べ、確認対象と判断した顔写真の素材番号 (4 桁)\n- サポート窓口: 案内と会社資料を照合し、確認対象と判断した電話番号\n- 診断案内メール: 差出人の情報と会社資料を照合し、確認対象と判断したドメイン\n\n正解するとそのチェックポイントの点数 (15 点または 20 点、合計 100 点) が入る。間違えると 1 回につき 1 点引かれる (合計が 0 点未満になることがある)。ヒントにもそれぞれ減点がある。\n\n## ゴール\n\n6 つの値をすべて正しく提出できたら終わり。最後に、同僚へ申し込みについてどう助言するかを、見つけた証拠を使って 2〜3 文で説明できるようにしておこう (説明は自動採点されない)。",
+  "description": "AI セキュリティ銘柄の過熱 (いわゆるセキュリティ株バブル) を題材にした防御側の分析演習。架空ベンダーの LP が使う信頼の演出 (水増しした導入社数とロゴ、台帳と合わない認証バッジ、素材写真を使い回したお客様の声、開くたびにリセットされるカウントダウン、根拠のない「AI」表現、背景色に溶けた注記) と、そこからつながるソーシャルエンジニアリング (偽サポート電話への誘導、管理者パスワードとワンタイムコードを求める無料診断フォーム、紹介を装った案内メール、公式に似せたドメイン) を、資料の突き合わせで証明する。6 つの答えはすべて実行ごとの FLAG_SEED から導出される。フォームはコンテナ自身にだけ送信され、本文は読み捨てられて保存・転送されない。",
+  "writeup": "## 何が起きていたか\n\nLP は「数字」「第三者のお墨付き」「他人の評価」「時間の圧力」で信頼と焦りを作り、最後に「サポート」や「無料診断」の形で、パスワードやワンタイムコードを差し出させる流れになっていた。株価の急騰を宣伝文句に使うこと自体も、製品の中身ではなく話題性で判断させる演出だ。\n\n- **残り時間**: カウントダウンはページを開いた時刻から一定の分数を足しているだけで、開き直すたびに同じ値へ戻る。「残り 3 社」も固定の文字列。本物の締め切りは時刻で示され、開き直しても動かない。\n- **導入社数**: 「12,000 社突破」は無料診断・資料請求の登録数の累計で、注記 ※1 は背景とほぼ同じ色の小さな文字で書かれていた。IR 情報が示す有償契約数は数十社。※2 の「99.9% 遮断」も既知の検体 200 件だけの社内測定で、※3 の「AI」はルールベース判定を含む呼び名、※4 のロゴは検討中の企業を含む。\n- **認証バッジ**: マークは誰でも描ける。発行元の台帳で登録番号を引くと、1 つは別の事業者・別の種類の認証の番号だった。\n- **お客様の声**: 名前も会社も違う 2 人に、同じ素材写真 (同じ番号の画像) が使われていた。※5 は「イメージです」と書いている。\n- **サポート窓口**: チャットは「代表は混んでいる」と言って、会社が公表していない直通番号へ誘導し、電話で管理者パスワードとワンタイムコードを聞き出そうとしていた。IR 情報は「パスワードを伺うことはない」と明言している。\n- **案内メール**: 差出人の表示名は本物らしいが、ドメインは公式によく似た別物 (whois では 3 日前に登録)。「情報システム部から紹介された」「共有済みなので返信不要」という一文は、社内に確認させないための口実づくり (プリテキスティング) だ。フォームの隠しフィールドも同じドメインを指していた。ヘッダーの `spf=pass` は「そのドメインの持ち主が送った」ことしか示さず、似せたドメインを取った攻撃者なら当然 pass する。\n\n## 見抜き方と対策\n\n数字は注記と一次資料 (IR・台帳) で裏を取る。認証は発行元の台帳で番号・事業者・種類まで照合する。写真は画像の出どころ (ファイル名、画像検索) を見る。連絡先は、相手が示した番号やリンクではなく、自分で調べた公式の窓口から確かめる。メールは表示名ではなくドメインを 1 文字ずつ見る。そして「無料診断」でもパスワードとワンタイムコードは誰にも渡さない。組織としては、外部への資格情報入力を止める仕組み (パスワードマネージャーの自動入力が別ドメインで働かないこと、フィッシングに強い認証方式) と、迷ったら報告できる窓口を用意する。",
+  "tags": [
+    "social-engineering",
+    "phishing-awareness",
+    "osint",
+    "landing-page",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web (challenge surface)"
+    },
+    {
+      "port": 18081,
+      "name": "/verify (loopback admin)"
+    }
+  ],
+  "learningGoals": [
+    "LP の数字・ロゴ・認証マーク・お客様の声を、注記や一次資料 (IR・発行元の台帳) と突き合わせて確かめられるようになる",
+    "カウントダウンや「残りわずか」の表示が、判断を急がせる演出かどうかを自分で確かめられるようになる",
+    "偽のサポート窓口・資格情報を求めるフォーム・紹介を装うメール・似せたドメインが、一つの誘導の流れになっていることを説明できるようになる"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Question the Limit-Up Landing Page",
+      "shortDescription": "A free-diagnosis offer arrived from a hyped \"AI security\" company. Cross-check its landing page with the forwarded material and collect evidence to decide whether to sign up.",
+      "instructions": "## The situation\n\nLately, shares in companies that advertise \"AI security\" have been hitting limit-up day after day (rising by the maximum a stock is allowed to rise in one day) on hype alone, before anyone checks what the products do. In the middle of this, the accounting team at your company (the fictional \"Hinata Foods\") received an email from someone claiming to be one of those hot companies, \"Kagero Shield\". A colleague in accounting asks: \"They're offering a free security check. Should I sign up?\"\n\nAs your company's security person, you examine that company's LP (landing page: a single web page built as the target of an ad or email link, designed to get you to sign up) and the material your colleague forwarded. Compare the company claims, contact details and instructions with the material to decide whether to sign up. Submit the values that support your findings.\n\nEvery company, person, product and domain (the name in a web address, or after the `@` in an email address) in this problem is fictional and has nothing to do with any real company or stock.\n\n## First move\n\nIn Participant Portal, select **起動 (Start)**. Your own environment starts. When `Web` appears under **Access URLs**, open it: that is the LP. At the bottom of the page are links to the company profile, IR information (what the company publishes for investors) and the list of material your colleague forwarded.\n\nRead the LP from top to bottom and note every number or claim that makes you think \"is that really true?\" You may also use the browser's **View Page Source** (Ctrl+U, or Cmd+Option+U on a Mac).\n\nNever type a real ID, password or personal details into the LP's form. The form is a training form and stores nothing, but not filling it in at all is the correct response.\n\n## What you submit\n\nThere are six checkpoints. For each, submit the value that supports your investigation (a number, a registration number, a phone number, a domain and so on) in that checkpoint's field. Use each checkpoint's name and the list below to decide which value it asks for.\n\n- The campaign timer: how many minutes the countdown starts from each time the page is reopened (the number of minutes)\n- The customer count: how many companies actually hold a paid contract\n- The certification badges: the registration number you identify for follow-up after comparing the LP with the registry\n- Customer testimonials: the stock-image number (4 digits) you identify for follow-up after examining the testimonials\n- The support line: the phone number you identify for follow-up after comparing the contact details\n- The diagnosis email: the domain you identify for follow-up after comparing the sender details with company information\n\nA correct answer earns that checkpoint's points (15 or 20, 100 in total). Each wrong answer costs 1 point, and the total can go below zero. Hints also cost points.\n\n## Goal\n\nYou are done when all six values are submitted correctly. Finally, be ready to explain to your colleague in two or three sentences, using the evidence you found, what you advise about signing up (the explanation is not automatically scored).",
+      "description": "A defender-side analysis exercise themed on the overheated market for \"AI security\" stocks (the so-called security-stock bubble). Participants prove, by cross-checking material, the trust tricks on a fictional vendor's LP (an inflated customer count and logo wall, certification badges the registry does not back, testimonials reusing one stock portrait, a countdown that resets on every load, vague \"AI\" claims, fine print rendered in the background colour) and the social engineering it funnels into (steering to a fake support phone line, a free-diagnosis form that asks for admin passwords and one-time codes, a pretexting email that claims an internal referral, a lookalike domain). All six answers derive from the per-run FLAG_SEED. The form posts only to the container itself, which discards the body without storing or forwarding it.",
+      "writeup": "## What was going on\n\nThe LP built trust and urgency with numbers, third-party endorsement, other people's opinions and time pressure, then funnelled visitors into handing over passwords and one-time codes under the banner of \"support\" or a \"free diagnosis\". Advertising the stock's surge is itself part of the act: it invites you to judge the company by hype instead of by its product.\n\n- **Timer**: the countdown just adds a fixed number of minutes to the moment the page loads, so it resets to the same value on every reload. \"3 slots left\" is a fixed string. A real deadline is a point in time and does not move when you reload.\n- **Customer count**: \"12,000 companies\" is the cumulative number of free-diagnosis and brochure sign-ups; footnote ※1 was tiny text nearly the same colour as the background. IR information gives a paid-customer count of a few dozen. ※2's \"99.9% blocked\" is an in-house test on 200 known samples, ※3's \"AI\" includes rule-based checks, and ※4's logos include companies only considering the product.\n- **Badges**: anyone can draw a seal. Looking the registration numbers up in the issuer's registry shows one belongs to a different company and a different kind of certification.\n- **Testimonials**: two people with different names and companies share the same stock portrait (the same image number). ※5 says the testimonials are \"for illustration\".\n- **Support line**: the chat claims the main line is busy and steers you to an unpublished direct number, where it tries to get admin passwords and one-time codes by phone. The IR page states the company never asks for passwords.\n- **Email**: the sender's display name looks genuine but the domain is a lookalike of the official one (registered three days earlier according to whois). \"Your IT department referred us\" and \"already shared with them, no need to reply\" are a pretext to stop you checking internally. The form's hidden field points at the same domain. The header's `spf=pass` only shows that the domain's owner sent it, and an attacker who registered the lookalike passes trivially.\n\n## How to spot it and defend\n\nCheck numbers against footnotes and primary sources (IR, registries). Verify certifications in the issuer's registry down to number, holder and scheme. Check where photos come from (file names, reverse image search). Confirm contacts through an official channel you looked up yourself, never the number or link you were given. Read the email domain character by character, not the display name. And never hand passwords or one-time codes to anyone, \"free diagnosis\" or not. As an organization, make credential entry on foreign sites hard (password-manager autofill that refuses other domains, phishing-resistant authentication) and give people an easy place to report when in doubt.",
+      "learningGoals": [
+        "Check an LP's numbers, logos, certification seals and testimonials against footnotes and primary sources (IR, the issuer's registry)",
+        "Test for yourself whether a countdown or \"only a few left\" is a device to rush your decision",
+        "Explain how a fake support line, a credential-collecting form, a pretext email and a lookalike domain form one funnel"
+      ],
+      "checks": [
+        {
+          "id": "campaign-timer",
+          "label": "The campaign timer",
+          "hints": [
+            {
+              "id": "campaign-timer-1",
+              "content": "[Observe] If the deadline were real, the time left would keep shrinking even when you reopen the page. Open the LP twice a few minutes apart and compare the time left."
+            },
+            {
+              "id": "campaign-timer-2",
+              "content": "[Confirm] Read the display (hours:minutes:seconds) right after a reload. If it always starts from the same value, submit just the minutes (for example, 23 for 00:23:00). The timer element in the page source shows the same value."
+            }
+          ]
+        },
+        {
+          "id": "customer-count",
+          "label": "The customer count",
+          "hints": [
+            {
+              "id": "customer-count-1",
+              "content": "[Observe] The small mark next to the big number (※1) means there is a footnote somewhere. The footnotes at the very bottom are written in almost the background colour. Select all (Ctrl+A) to highlight them, or read them in the page source."
+            },
+            {
+              "id": "customer-count-2",
+              "content": "[Confirm] Footnote ※1 says the number of paying corporate customers is published elsewhere. Open \"IR 情報\" (IR information) at the bottom of the page and submit just that number."
+            }
+          ]
+        },
+        {
+          "id": "cert-badges",
+          "label": "The certification badges",
+          "hints": [
+            {
+              "id": "cert-badges-1",
+              "content": "[Observe] Anyone can draw a certification seal. The way to check one is to look its registration number up in the registry the issuer publishes. A copy of that registry is in the forwarded material."
+            },
+            {
+              "id": "cert-badges-2",
+              "content": "[Confirm] Look up each of the three badge numbers on the LP in the registry. Compare the company name and certification type too, then submit the number you identify for follow-up, in the form `FS-12345`."
+            }
+          ]
+        },
+        {
+          "id": "customer-voices",
+          "label": "Customer testimonials",
+          "hints": [
+            {
+              "id": "customer-voices-1",
+              "content": "[Observe] Read footnote ※5 next to the testimonials heading. Then compare the three portraits. Different names, different companies, and yet...?"
+            },
+            {
+              "id": "customer-voices-2",
+              "content": "[Confirm] Right-click a portrait and choose \"Open image in new tab\": the address contains a 4-digit number. Map each portrait to its named customer and decide which 4-digit image number to submit."
+            }
+          ]
+        },
+        {
+          "id": "support-line",
+          "label": "The support line",
+          "hints": [
+            {
+              "id": "support-line-1",
+              "content": "[Observe] \"If it's urgent, call this number instead\" is a classic way to pull people away from the real contact point. The company profile and IR information list the contacts the company itself publishes."
+            },
+            {
+              "id": "support-line-2",
+              "content": "[Confirm] Compare the phone number the chat gives (bottom right of the LP and chat-log.txt) with the main number in the company profile and IR information. Use the comparison to choose which number to submit, including hyphens."
+            }
+          ]
+        },
+        {
+          "id": "mail-sender",
+          "label": "The diagnosis email",
+          "hints": [
+            {
+              "id": "mail-sender-1",
+              "content": "[Observe] The sender's display name in an email is whatever the sender types. What matters is the domain after the `@`. IR information states the domain the company uses for email."
+            },
+            {
+              "id": "mail-sender-2",
+              "content": "[Confirm] Compare what follows the `@` on mail.eml's From line with the official domain, one character at a time (watch for 0 vs o, 1 vs l, rn vs m, swapped letters, extra hyphens or words). Check its registration date in whois.txt, then submit that domain."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "checks": [
+      {
+        "id": "campaign-timer",
+        "label": "キャンペーンの残り時間",
+        "points": 15,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "campaign-timer-1",
+            "content": "【観察】締め切りの表示が本物なら、ページを開き直しても残り時間は減り続けるはず。数分あけて LP を 2 回開き、表示された残り時間を比べよう。",
+            "penalty": 3
+          },
+          {
+            "id": "campaign-timer-2",
+            "content": "【確認】再読み込みした直後の表示 (時:分:秒) を読む。毎回同じ値から始まるなら、その分の数だけを提出する (例: 00:23:00 なら 23)。ページのソースで timer の要素を見ても同じ値がわかる。",
+            "penalty": 4
+          }
+        ]
+      },
+      {
+        "id": "customer-count",
+        "label": "導入実績の数字",
+        "points": 15,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "customer-count-1",
+            "content": "【観察】大きな数字の右上の小さな記号 (※1) は、どこかに注記があるという印。ページ最下部の注記は背景とほぼ同じ色で書かれている。全選択 (Ctrl+A) で文字を反転させるか、ページのソースで読もう。",
+            "penalty": 3
+          },
+          {
+            "id": "customer-count-2",
+            "content": "【確認】注記 ※1 は、有償で契約中の法人数を別の資料で示すと書いている。ページ下部の「IR 情報」を開き、その社数の数字だけを提出する。",
+            "penalty": 4
+          }
+        ]
+      },
+      {
+        "id": "cert-badges",
+        "label": "認証バッジ",
+        "points": 15,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "cert-badges-1",
+            "content": "【観察】認証マークの絵や文字は誰でも作れる。確かめる方法は、発行元が公開している台帳で登録番号を引くこと。転送された資料の中に台帳の写しがある。",
+            "penalty": 3
+          },
+          {
+            "id": "cert-badges-2",
+            "content": "【確認】LP の 3 つのバッジの登録番号を、台帳で 1 つずつ探す。事業者名と認証の種類も比べ、提出対象と判断した番号を `FS-12345` の形で記す。",
+            "penalty": 4
+          }
+        ]
+      },
+      {
+        "id": "customer-voices",
+        "label": "お客様の声",
+        "points": 15,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "customer-voices-1",
+            "content": "【観察】お客様の声の見出しにある ※5 の注記を読もう。次に、3 人の顔写真を見比べる。名前も会社も違うのに…?",
+            "penalty": 3
+          },
+          {
+            "id": "customer-voices-2",
+            "content": "【確認】顔写真を右クリックして「画像を新しいタブで開く」と、アドレスに 4 桁の番号がある。各画像と人物の対応を整理し、提出対象の 4 桁を判断する。",
+            "penalty": 4
+          }
+        ]
+      },
+      {
+        "id": "support-line",
+        "label": "サポート窓口",
+        "points": 20,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "support-line-1",
+            "content": "【観察】「お急ぎの方はこちらへ」と別の窓口へ誘導するのは、本物の窓口から引き離すための典型的なやり方。会社概要と IR 情報には、会社自身が公表している窓口が載っている。",
+            "penalty": 4
+          },
+          {
+            "id": "support-line-2",
+            "content": "【確認】チャット (LP 右下と chat-log.txt) が案内する電話番号と、会社概要・IR 情報の代表電話を比べる。資料で照合した結果に基づき、提出対象の番号をハイフン付きで記す。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "mail-sender",
+        "label": "診断案内メール",
+        "points": 20,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "mail-sender-1",
+            "content": "【観察】メールの差出人の表示名は、送る人が自由に書ける。見るべきなのは `@` の後ろのドメイン。IR 情報には、会社がメールに使うドメインが書いてある。",
+            "penalty": 4
+          },
+          {
+            "id": "mail-sender-2",
+            "content": "【確認】mail.eml の From 行の `@` の後ろを、公式ドメインと 1 文字ずつ比べる (0 と o、1 と l、rn と m、つづりの入れ替わり、余分なハイフンや単語に注意)。whois.txt で登録日も確かめ、そのドメインを提出する。",
+            "penalty": 6
+          }
+        ]
+      }
+    ]
+  }
+}
