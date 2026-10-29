@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NetBoot lab — EDK-toy ICMP collector</title>
+<style>
+  :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, sans-serif; }
+  body { max-width: 52rem; margin: 1.5rem auto; padding: 0 1rem; line-height: 1.55; }
+  h1 { font-size: 1.4rem; margin-bottom: .2rem; }
+  h2 { font-size: 1.1rem; margin-top: 1.6rem; }
+  .muted { opacity: .75; font-size: .92rem; }
+  code, pre, textarea, input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9rem; }
+  pre, textarea { width: 100%; box-sizing: border-box; background: #1112; border: 1px solid #8884; border-radius: 6px; padding: .6rem .8rem; white-space: pre-wrap; word-break: break-all; }
+  textarea { min-height: 4.5rem; }
+  button { margin: .3rem .4rem .3rem 0; padding: .35rem .8rem; cursor: pointer; }
+  .card { border: 1px solid #8884; border-radius: 8px; padding: .8rem 1rem; margin: .6rem 0; }
+  .ok { color: #0a7; } .bad { color: #c33; }
+  label { display: block; margin: .4rem 0 .15rem; font-size: .9rem; }
+</style>
+</head>
+<body>
+  <h1>NetBoot lab — EDK-toy ICMP collector</h1>
+  <p class="muted">安全な模型です。本物のファームウェアや CVE-2026-97631 の再現ではありません。PXE 起動中に受け取る ICMP エラーを、固定サイズの領域へコピーする処理だけを真似ています。</p>
+
+  <h2>1. 構造を読む</h2>
+  <p><code>GET /spec</code> が返す構造体の形が、このラボの地図です。まず開いてみましょう。</p>
+  <button id="btn-spec">/spec を読む</button>
+  <pre id="spec-out" class="muted">（まだ読んでいません）</pre>
+
+  <h2>2. ICMP エラーを送る</h2>
+  <p>断片を 1 つ以上、hex（または base64）で送ります。応答には書き込み位置・バッファを超えたか・隣接フィールドの状態が入ります。条件を満たすと <code>flag</code> が返ります。</p>
+  <div class="card">
+    <label for="encoding">encoding</label>
+    <select id="encoding"><option value="hex" selected>hex</option><option value="base64">base64</option></select>
+    <label for="fragments">fragments（1 行 = 1 断片。空行は無視）</label>
+    <textarea id="fragments" placeholder="例: 00 を 504 個並べた hex（空白なし）"></textarea>
+    <button id="btn-fill504">504 バイトの 00 を入れる</button>
+    <button id="btn-icmp">POST /icmp</button>
+    <pre id="icmp-out" class="muted">（まだ送っていません）</pre>
+  </div>
+
+  <h2>3. 範囲と影響のクイズ</h2>
+  <p>ネットワーク起動以外では届かない理由と、ハングとコード実行の違いを、短いクイズで確認します。</p>
+  <div id="quiz" class="muted">読み込み中…</div>
+
+  <h2>補足（技術メモ）</h2>
+  <details>
+    <summary>この模型が真似ているもの / 真似ていないもの</summary>
+    <ul>
+      <li>真似ている: 固定 504 バイトの <code>Mode.IcmpError</code>、断片を累計長で進める壊れたコピー、隣接フィールドへの到達。</li>
+      <li>真似ていない: 本物の UEFI / EDK II、Secure Boot、TPM、ネットワーク上の実パケット、機種ごとのアドレス合わせ。実 CVE の悪用には PXE 起動の数秒間と LAN 到達性が要る。</li>
+      <li>送ったバイト列はリクエスト処理のあいだだけメモリに置き、永続化しません。</li>
+    </ul>
+  </details>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const show = (el, value, ok) => { el.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); el.className = ok === true ? 'ok' : ok === false ? 'bad' : ''; };
+
+$('btn-spec').onclick = async () => {
+  const res = await fetch('/spec');
+  show($('spec-out'), await res.json());
+};
+
+$('btn-fill504').onclick = () => {
+  const enc = $('encoding').value;
+  $('fragments').value = enc === 'hex' ? '00'.repeat(504) : btoa(String.fromCharCode(...new Uint8Array(504)));
+};
+
+$('btn-icmp').onclick = async () => {
+  const fragments = $('fragments').value.split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const body = { encoding: $('encoding').value, fragments };
+  const res = await fetch('/icmp', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json();
+  show($('icmp-out'), data, Boolean(data.flag));
+};
+
+async function loadQuiz() {
+  const res = await fetch('/quiz');
+  const { quiz } = await res.json();
+  const root = $('quiz');
+  root.className = '';
+  root.innerHTML = '';
+  for (const [id, q] of Object.entries(quiz)) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<p><strong>${id}</strong> — ${q.question}</p>`;
+    for (const [opt, text] of Object.entries(q.options)) {
+      const btn = document.createElement('button');
+      btn.textContent = `${opt}. ${text}`;
+      btn.onclick = async () => {
+        const r = await fetch('/quiz', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ quiz: id, option: opt }) });
+        const data = await r.json();
+        const out = document.createElement('pre');
+        show(out, data, Boolean(data.flag));
+        card.appendChild(out);
+      };
+      card.appendChild(btn);
+    }
+    root.appendChild(card);
+  }
+}
+loadQuiz().catch(err => { $('quiz').textContent = String(err); });
+</script>
+</body>
+</html>

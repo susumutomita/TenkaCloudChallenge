@@ -1,0 +1,250 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "pxe-icmp-oob",
+  "name": "PXE 起動中の ICMP を疑え",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "40 分",
+  "shortDescription": "ネットワーク起動の数秒間だけ動く受け取り口に、壊れたコピーがある。安全な模型で、固定サイズの箱と隣のメモ欄を確かめてみよう。",
+  "instructions": "## はじめに\n\nあなたは架空のファームウェア研究所 「NetBoot lab」 の調査員です。ここには **EDK-toy** という、ネットワーク起動（PXE＝マシンがディスクではなくネットワークから起動する仕組み）中に ICMP エラー（「届かなかったよ」という短い返事）を受け取る処理の、安全な模型があります。\n\n本物のファームウェアや、話題の CVE の再現ではありません。コピーのやり方だけを真似ています。実世界では、PXE 起動の数秒間にそのマシンへ ICMP を届け、機種ごとの番地を合わせる必要があります。このラボにはそのどれもありません。\n\n## 最初の一手\n\nPortal で起動し、アクセス先 URL の **Web** を開きます。\n\n1. 画面の 「/spec を読む」 を押すか、`GET /spec` を開く。返ってくる数が、固定サイズの箱の大きさです。\n2. 画面の入力欄か `POST /icmp` に、断片（かけら）を hex（16進数）または base64 で送る。応答には「どこに書いたか」「箱を超えたか」「隣の欄はどうなったか」が入ります。\n3. 条件を満たすと応答に `flag`（`TC{...}` 形式の合言葉）が付きます。Portal の対応する提出欄に貼ってください。\n4. 下のクイズ 2 問も、同じように合言葉を返します。\n\n送ったバイト列は、そのリクエストのあいだだけメモリに置かれ、保存されません。\n\n## 書き込み位置の読み方\n\nバイトはデータの長さの単位で、位置は 0 から数えます。断片 i の長さを `L_i`、ここまでの累計長を `C_i`、その断片の書き込み開始位置を `p_i` とします。最初は `C_0 = 0`、`p_1 = 0` です。この模型の進み方は `C_i = C_{i-1} + L_i`、`p_{i+1} = p_i + C_i`。つまり、書いた後に「今回の長さ」ではなく「ここまでの合計」だけ進みます。通常の断片ごとの進み方は `p_{i+1} = p_i + L_i` です。\n\n小さな例として長さ 2・3・1 の断片なら、累計長は 2・5・6、書き込み開始位置は 0・2・7 になります。最後の断片は位置 7 の 1 バイトなので、書いた範囲の終端は 8（終端そのものは含まない）。送った合計長は 6 バイトです。応答の `writes[].offset` と `maxEnd` を、この計算と比べてください。\n\n## 答えるもの ── チェックポイントは 5 つ\n\nチェックポイントごとに専用の入力欄と **「提出 (+点数)」** ボタンがあります。見つけた合言葉を貼って押すと、その場で正誤が判定されます。5 つは独立に採点されます。\n\n1. **buffer-shape** (15 点) ── 固定サイズちょうどの断片を送り、箱をちょうど満たす。\n2. **cumulative-advance** (25 点) ── 合計は箱に収まるのに、後の断片が箱の外に着地する送り方を見つける。\n3. **overwrite-secret** (30 点) ── 隣の制御欄を、模型が教える値に書き換える。\n4. **boot-scope** (15 点) ── ディスクだけから起動するマシンが範囲外である理由を選ぶ。\n5. **impact-class** (15 点) ── ハングとコード実行の違いを選ぶ。\n\n間違えて提出しても書き直して再提出できます（誤答 1 回ごとの減点は小さく、合計が 0 点を下回ることがあります）。ヒントは合計で満点の半分まで減点されます。手が止まったら開いて構いません。\n\n## ゴール\n\n5 つの合言葉をすべて提出すると満点です。解き終えたら README の writeup を読み、本物のバグで何が追加で必要かを自分の言葉で説明できるようにしておきましょう。",
+  "description": "EDK II PXE パスの ICMP エラー固定バッファ（504 バイト）と、断片を累計長で進める壊れたコピーを、安全な Node 模型で学ぶ。CVE-2026-97631 の仕組みの教材化であり、本物の UEFI / Secure Boot / TPM / 実パケットの再現ではない。実悪用には PXE 起動ウィンドウ・LAN 到達性・機種ごとのアドレス合わせが要る。",
+  "writeup": "## 固定 504 バイトの箱（buffer-shape）\n\n`GET /spec` の `icmpErrorSize` が 504。ちょうど 504 バイトの断片を 1 つ送ると、箱を満たして溢れず、合言葉が返る。本物の `Mode.IcmpError` も同じサイズの固定領域だった。\n\n## 累計で進むポインタ（cumulative-advance）\n\n壊れたコピーは、断片ごとに「この断片の長さ」ではなく「ここまでの合計長」で書き込み位置を進める。例えば 200 + 200 + 100（合計 500 ≤ 504）でも、2 つ目のあとに位置が 400 進み、3 つ目は 600 から書き始める。合計は箱に収まるのに箱の外へ着地する —— 正しい「断片ごとの進み」では起きない現象で、合言葉が返る。\n\n## 隣の制御欄（overwrite-secret）\n\n箱の直後に検査用クッキー、その先に制御欄 `handlerTag`（初期値 `idle.`）がある。箱を大きく超える 1 断片で、制御欄の位置に `debug` を書くと合言葉が返る。模型ではこれで「隣のフィールドを好きな値にできた」と分かる。本物では、その先の実行経路を機種ごとに合わせる必要がある。\n\n## 範囲（boot-scope）\n\nこの壊れたコピーはネットワーク起動（PXE）の経路にだけある。ローカルディスクだけから起動するマシンは、その経路に入らないので範囲外。答えは「PXE のときだけ動くから」。\n\n## 影響のクラス（impact-class）\n\n溢れて止まればサービス拒否（DoS）。溢れた先の制御を攻撃者の選んだ振る舞いに Steer できればコード実行の話になる。後者はビルドごとの番地合わせが要る。答えは「ハング＝DoS、制御の Steer＝コード実行（要チューニング）」。\n\n## 本物との違い（必ず読む）\n\n- 本物は OS も Secure Boot も起動する前の ring 0 で動き、TPM にも触れることがある。\n- 悪用には PXE 起動の数秒間に ICMP をそのマシンへ届ける必要があり、家庭や小さなオフィスのディスク起動マシンは関係しない。\n- このラボはコピーのバグだけを見せる安全な模型。送ったデータは永続化しない。",
+  "tags": [
+    "memory-safety",
+    "firmware",
+    "parser-bug",
+    "local-play",
+    "container",
+    "multi-verify",
+    "simulation"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web"
+    },
+    {
+      "port": 18081,
+      "name": "Verifier (host only)"
+    }
+  ],
+  "learningGoals": [
+    "固定サイズの受信バッファと隣接フィールドの配置を、応答ログから説明できる",
+    "断片ごとの進みと累計の進みの違いを、自分で送った断片の着地位置で示せる",
+    "PXE 起動ウィンドウとディスク起動の範囲の違い、DoS とコード実行の概念差を言葉にできる"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "sequential",
+    "checks": [
+      {
+        "id": "buffer-shape",
+        "label": "箱ちょうどの断片",
+        "points": 15,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "buffer-shape-1",
+            "content": "【観察】 まず GET /spec を開き、icmpErrorSize の数をメモしよう。その数ちょうどバイトの断片を 1 つ送る。",
+            "penalty": 2
+          },
+          {
+            "id": "buffer-shape-2",
+            "content": "【確認】 画面の「504 バイトの 00 を入れる」を使うか、hex で 00 を icmpErrorSize 個並べて POST /icmp。overflowedBuffer が false なら箱をちょうど満たしている。",
+            "penalty": 5
+          }
+        ]
+      },
+      {
+        "id": "cumulative-advance",
+        "label": "合計は収まるのに外へ着地",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "cumulative-advance-1",
+            "content": "【観察】 応答の writes[].offset を見る。断片を複数に分けると、次の書き込み位置が「この断片の長さ」より大きく進んでいないか。",
+            "penalty": 3
+          },
+          {
+            "id": "cumulative-advance-2",
+            "content": "【仮説】 壊れたコピーは「ここまでの合計長」で位置を進める。合計が 504 以下なのに、どれかの offset が 504 以上になる組み合わせを試そう（例: 200 + 200 + 100）。",
+            "penalty": 5
+          },
+          {
+            "id": "cumulative-advance-3",
+            "content": "【確認】 200・200・100 バイトの 3 断片を送ると、3 つ目の offset が 600 付近になる。合計 500 ≤ 504 なのに箱の外 —— それがこのチェックポイント。",
+            "penalty": 4
+          }
+        ]
+      },
+      {
+        "id": "overwrite-secret",
+        "label": "隣の制御欄を書き換える",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "overwrite-secret-1",
+            "content": "【観察】 /spec の handlerTagOffset と handlerTagValues を読む。隣の欄の初期値は idle.。模型が教えるもう一つの値に変えたい。",
+            "penalty": 3
+          },
+          {
+            "id": "overwrite-secret-2",
+            "content": "【仮説】 1 つの大きな断片で、handlerTagOffset の位置から handlerTagValues のもう一方（debug）の文字を書けばよい。hex ならそのオフセットまで 00 を並べ、続けて 6465627567（\"debug\"）を付ける。",
+            "penalty": 6
+          },
+          {
+            "id": "overwrite-secret-3",
+            "content": "【確認】 長さが handlerTagOffset + 5 の断片を送り、応答の handlerTag が debug・guardIntact が false なら合言葉が付く。",
+            "penalty": 6
+          }
+        ]
+      },
+      {
+        "id": "boot-scope",
+        "label": "ディスク起動は範囲外",
+        "points": 15,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "boot-scope-1",
+            "content": "【観察】 画面のクイズ boot-scope を読む。壊れたコピーはどの起動経路に付いているかが鍵。",
+            "penalty": 2
+          },
+          {
+            "id": "boot-scope-2",
+            "content": "【比較】 各選択肢の前提を、画面に書かれた処理の流れと照らし合わせよう。説明にある事実と、暗号化や実装言語についての思い込みを分けて確認する。",
+            "penalty": 5
+          }
+        ]
+      },
+      {
+        "id": "impact-class",
+        "label": "ハングとコード実行の違い",
+        "points": 15,
+        "wrongAnswerPenalty": 1,
+        "hints": [
+          {
+            "id": "impact-class-1",
+            "content": "【観察】 クイズ impact-class を読む。溢れた先で何が起きるかで、影響のクラスが変わる。",
+            "penalty": 2
+          },
+          {
+            "id": "impact-class-2",
+            "content": "【比較】 各選択肢について、観測できた結果と、その結果だけでは言い切れない追加の前提を分けて考えよう。異なる結果を同じものとして扱っていないかも確かめる。",
+            "penalty": 5
+          }
+        ]
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Suspect ICMP during PXE boot",
+      "shortDescription": "A broken copy lives in a receive path that runs only for a few seconds of network boot. In a safe model, inspect the fixed-size box and the adjacent note field.",
+      "instructions": "## Introduction\n\nYou are an investigator at the fictional firmware lab **NetBoot lab**. It hosts **EDK-toy**, a safe model of the path that receives ICMP errors (short \"did not arrive\" replies) during network boot (PXE — the machine starts from the network instead of a local disk).\n\nThis is not real firmware and not a reproduction of the CVE under discussion. It only recreates the copy loop. In the real world you would need the PXE window of a few seconds, LAN reach to that machine, and per-build address tuning. None of that exists here.\n\n## First move\n\nStart the problem in Portal and open **Web** under Access URLs.\n\n1. Select 「/spec を読む」 or open `GET /spec`. The number it returns is the fixed box size.\n2. Send one or more fragments (pieces) as hex or base64 via the page or `POST /icmp`. The response shows where bytes landed, whether the box overflowed, and what happened to the adjacent field.\n3. When the condition for a checkpoint is met, the response includes a `flag` (`TC{...}`). Paste it into the matching Portal field.\n4. The two quizzes below also return a flag the same way.\n\nSubmitted bytes live only for that request and are never persisted.\n\n## Reading write positions\n\nA byte measures data length; positions start at 0. Let `L_i` be fragment i's length, `C_i` the cumulative length so far, and `p_i` its starting write position. Initially `C_0 = 0` and `p_1 = 0`. This model uses `C_i = C_{i-1} + L_i` and `p_{i+1} = p_i + C_i`: after each write, it advances by the total so far rather than just the current length. Ordinary per-fragment advance would use `p_{i+1} = p_i + L_i`.\n\nFor a small example with lengths 2, 3 and 1, cumulative lengths are 2, 5 and 6, and starting positions are 0, 2 and 7. The final one-byte fragment starts at 7, so the written extent ends at 8 (exclusive); the total submitted length is 6 bytes. Compare `writes[].offset` and `maxEnd` in the response with this calculation.\n\n## What you submit — 5 checkpoints\n\nEach checkpoint has its own field and a **Submit (+points)** button. Paste the flag and press the button; it is graded on the spot. The five are scored independently.\n\n1. **buffer-shape** (15 points) — send a fragment that fills the fixed-size box exactly.\n2. **cumulative-advance** (25 points) — find a multi-fragment send whose total fits the box, yet a later fragment lands past it.\n3. **overwrite-secret** (30 points) — rewrite the adjacent control field to the value the model documents.\n4. **boot-scope** (15 points) — choose why a disk-only boot machine is out of scope.\n5. **impact-class** (15 points) — choose how a hang differs from code execution.\n\nWrong submissions can be corrected (small per-try penalties; totals can go below zero). Opening every hint costs at most half the score. Use them if you get stuck.\n\n## Goal\n\nSubmit all five flags for full marks. Afterwards, read the README writeup and be able to explain, in your own words, what else a real exploit would need.",
+      "description": "Safe Node model of the EDK II PXE ICMP-error fixed 504-byte buffer and the cumulative-length copy bug. Teaches the mechanism behind CVE-2026-97631; not a reproduction of real UEFI, Secure Boot, TPM, or on-wire packets. Real abuse needs a PXE window, LAN reach, and per-build tuning.",
+      "writeup": "## The fixed 504-byte box (buffer-shape)\n\n`GET /spec`'s `icmpErrorSize` is 504. One fragment of exactly 504 bytes fills the box without overflow and returns the flag. The real `Mode.IcmpError` was the same fixed size.\n\n## Cumulative pointer advance (cumulative-advance)\n\nThe buggy copy advances the write pointer by the running *cumulative* length, not this fragment's length. With 200 + 200 + 100 (total 500 ≤ 504), the destination jumps by 400 after the second fragment, so the third starts at 600. The total fits, yet a write lands past the box — impossible with a correct per-fragment advance — and the flag returns.\n\n## Adjacent control field (overwrite-secret)\n\nPast the box sit a guard cookie and a `handlerTag` (starts as `idle.`). One oversized fragment that writes `debug` at the documented offset returns the flag. In the model that proves an adjacent field is attacker-writable; a real exploit still needs per-build steering of the execution path.\n\n## Scope (boot-scope)\n\nThe broken copy lives only on the network-boot (PXE) path. A machine that boots only from local disk never enters that path. The correct choice is \"it only runs during PXE.\"\n\n## Impact class (impact-class)\n\nOverflow that hangs or crashes is denial-of-service. Steering the overwritten control field into attacker-chosen behavior is the code-execution outcome, and it needs per-build tuning. Pick that distinction.\n\n## What this lab is not\n\n- Real firmware runs at ring 0 before OS and Secure Boot, and may reach the TPM.\n- Abuse needs ICMP delivered during the few seconds of PXE boot; disk-only home or small-office machines are out of scope.\n- This lab only shows the copy bug. Submitted data is never persisted.",
+      "learningGoals": [
+        "Explain the fixed receive buffer and adjacent fields from response logs",
+        "Show the difference between per-fragment and cumulative advance with your own fragments",
+        "State why disk-only boot is out of scope, and how DoS differs from code execution"
+      ],
+      "checks": [
+        {
+          "id": "buffer-shape",
+          "label": "A fragment that fills the box",
+          "hints": [
+            {
+              "id": "buffer-shape-1",
+              "content": "[Observe] Open GET /spec and note icmpErrorSize. Send one fragment of exactly that many bytes."
+            },
+            {
+              "id": "buffer-shape-2",
+              "content": "[Confirm] Use the page's 「504 バイトの 00 を入れる」 or hex 00 repeated icmpErrorSize times via POST /icmp. overflowedBuffer false means you filled the box."
+            }
+          ]
+        },
+        {
+          "id": "cumulative-advance",
+          "label": "Total fits, yet a write lands past the box",
+          "hints": [
+            {
+              "id": "cumulative-advance-1",
+              "content": "[Observe] Look at writes[].offset. With several fragments, does the next write advance by more than this fragment's length?"
+            },
+            {
+              "id": "cumulative-advance-2",
+              "content": "[Hypothesize] The buggy copy advances by the running cumulative length. Try a mix whose total is ≤ 504 yet some offset is ≥ 504 (e.g. 200 + 200 + 100)."
+            },
+            {
+              "id": "cumulative-advance-3",
+              "content": "[Confirm] Three fragments of 200, 200 and 100 bytes put the third near offset 600. Total 500 ≤ 504, yet past the box — that is this checkpoint."
+            }
+          ]
+        },
+        {
+          "id": "overwrite-secret",
+          "label": "Rewrite the adjacent control field",
+          "hints": [
+            {
+              "id": "overwrite-secret-1",
+              "content": "[Observe] Read handlerTagOffset and handlerTagValues from /spec. The field starts as idle.; change it to the other documented value."
+            },
+            {
+              "id": "overwrite-secret-2",
+              "content": "[Hypothesize] One large fragment that writes debug (hex 6465627567) starting at handlerTagOffset. Pad with 00 up to that offset."
+            },
+            {
+              "id": "overwrite-secret-3",
+              "content": "[Confirm] Send a fragment of length handlerTagOffset + 5. When handlerTag is debug and guardIntact is false, the flag is attached."
+            }
+          ]
+        },
+        {
+          "id": "boot-scope",
+          "label": "Disk-only boot is out of scope",
+          "hints": [
+            {
+              "id": "boot-scope-1",
+              "content": "[Observe] Read the boot-scope quiz. Which boot path carries the broken copy?"
+            },
+            {
+              "id": "boot-scope-2",
+              "content": "[Compare] Check each option against the processing path described on the page. Separate stated facts from assumptions about encryption or implementation language."
+            }
+          ]
+        },
+        {
+          "id": "impact-class",
+          "label": "Hang vs code execution",
+          "hints": [
+            {
+              "id": "impact-class-1",
+              "content": "[Observe] Read the impact-class quiz. What happens past the overflow decides the impact class."
+            },
+            {
+              "id": "impact-class-2",
+              "content": "[Compare] For each option, separate the observed result from additional assumptions it would need. Check whether it incorrectly treats distinct outcomes as the same."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
