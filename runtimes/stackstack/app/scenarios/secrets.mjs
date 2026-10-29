@@ -611,6 +611,14 @@ function opsPage() {
 <h1>運用コンソール</h1>
 <p>板の運用 API です。 板そのものは <code>GET /</code>、 実測は <code>GET /posture</code>。</p>
 
+<ol style="background:#f6f8fa;border:1px solid #ddd;border-radius:8px;padding:0.8rem 0.8rem 0.8rem 2rem">
+  <li><strong>発行</strong> — 新しい運用キーを 1 本出す。 secret は応答の 1 回だけ。</li>
+  <li><strong>identity 切替</strong> — settings の <code>identity</code> をその新しい keyId にする (値ではなく名前)。</li>
+  <li><strong>失効</strong> — 古い鍵を失効させる。</li>
+  <li><strong>grants を絞る</strong> — settings の <code>grants</code> を、夜間ダイジェストが本当に要る action だけにする。</li>
+</ol>
+<p>提出するのは受領証や合言葉の文字列だけです。 <code>key=</code> は付けないでください。</p>
+
 <h2>鍵</h2>
 <table border="1" cellpadding="6" cellspacing="0"><tr><th>keyId</th><th>status</th><th>fingerprint</th><th>createdAt</th><th>revocationReceipt</th></tr>
 ${keyRows}</table>
