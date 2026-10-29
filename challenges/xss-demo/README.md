@@ -15,11 +15,10 @@ make local PROBLEM=xss-demo   # from the TenkaCloud repo root
 # opens the Participant Portal; log in with any non-empty key
 ```
 
-- **Challenge surface:** <http://127.0.0.1:18080> — an "Acme Staff Bulletin Board".
-- **Goal:** anyone can post a note; a simulated security reviewer checks new posts
-  via `POST /admin/report`. Get the reviewer's session to leak through a post's
-  contents, read it back from `GET /admin/captured`, then submit the flag it
-  reveals in the portal.
+- **Challenge surface:** <http://127.0.0.1:18080> — Japanese "スタッフ掲示板" with in-board
+  **巡回を依頼** (`POST /admin/report`) and **受信ログ** (`GET /admin/captured`) controls.
+- **Goal:** post a note, request a review from the board, read the capture log, and submit
+  only the `TC{...}` passphrase to the portal (no `session=` / `flag=` prefix).
 
 ## How scoring works
 

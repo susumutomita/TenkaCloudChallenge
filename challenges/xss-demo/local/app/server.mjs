@@ -51,18 +51,43 @@ function renderBoard() {
     .map((p) => `<li><strong>${p.name}</strong>: ${p.message}</li>`)
     .join("\n");
   return `<!doctype html>
-<html lang="en"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>Staff Bulletin Board</title></head>
-<body style="font-family:system-ui;max-width:32rem;margin:3rem auto">
-<h1>Acme Staff Bulletin Board</h1>
-<p>Post a note for the team. A security reviewer checks new notes periodically.</p>
+<html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><title>スタッフ掲示板</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:36rem;margin:2.5rem auto;padding:0 1rem;line-height:1.5}
+  h1{font-size:1.4rem;margin-bottom:.4rem}
+  .muted{color:#555;font-size:.95rem}
+  .panel{border:1px solid #ccc;border-radius:8px;padding:1rem;margin:1.25rem 0;background:#fafafa}
+  .panel h2{font-size:1.05rem;margin:0 0 .6rem}
+  button{font:inherit;padding:.4rem .8rem;cursor:pointer}
+  .note{font-size:.9rem;color:#333;margin:.4rem 0 .8rem}
+  code{font-size:.9em}
+</style>
+</head>
+<body>
+<h1>Acme スタッフ掲示板</h1>
+<p class="muted">チームへのメモを投稿できます。セキュリティ担当が新しい投稿を確認します。</p>
 <form method="post" action="/post">
-  <p><label>Name <input name="name"></label></p>
-  <p><label>Message <input name="message"></label></p>
-  <p><button type="submit">Post</button></p>
+  <p><label>名前 <input name="name"></label></p>
+  <p><label>メッセージ <input name="message" style="width:100%"></label></p>
+  <p><button type="submit">投稿する</button></p>
 </form>
 <ul>
 ${items}
 </ul>
+
+<section class="panel" aria-labelledby="review-heading">
+  <h2 id="review-heading">セキュリティ担当の巡回</h2>
+  <p class="note">担当は自動では回りません。下のボタンで巡回を依頼してください。担当のブラウザは投稿の中の <code>&lt;script&gt;...&lt;/script&gt;</code> だけを実行し、その中で呼ばれた <code>fetch</code> の内容だけを受信ログに残します（他のタグやイベント属性は扱いません）。</p>
+  <form method="post" action="/admin/report">
+    <button type="submit">巡回を依頼</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="captured-heading">
+  <h2 id="captured-heading">受信ログ</h2>
+  <p class="note">巡回中にスクリプトが送った <code>fetch</code> の記録です。合言葉は <code>TC{...}</code> の形です。ポータルの提出欄には <code>TC{...}</code> だけを入れてください。</p>
+  <p><a href="/admin/captured">受信ログを開く</a></p>
+</section>
 </body></html>`;
 }
 
@@ -145,6 +170,12 @@ function send(response, status, contentType, body) {
   response.end(body);
 }
 
+/** Browser form navigations send Accept: text/html; curl/API clients usually prefer JSON. */
+function wantsHtml(request) {
+  const accept = String(request.headers.accept ?? "");
+  return accept.includes("text/html");
+}
+
 const challenge = createServer(async (request, response) => {
   const url = requestUrl(request.url, "http://127.0.0.1");
   if (request.method === "GET" && url.pathname === "/healthz") {
@@ -160,13 +191,42 @@ const challenge = createServer(async (request, response) => {
       return send(response, 400, "application/json", JSON.stringify({ error: "invalid_post" }));
     }
     posts.push({ name, message });
+    if (wantsHtml(request)) {
+      response.writeHead(303, { location: "/" });
+      return response.end();
+    }
     return send(response, 200, "application/json", JSON.stringify({ ok: true }));
   }
   if (request.method === "POST" && url.pathname === "/admin/report") {
     const scriptCount = runReviewerSession();
+    if (wantsHtml(request)) {
+      const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><title>巡回完了</title>
+<body style="font-family:system-ui;max-width:36rem;margin:2rem auto;padding:0 1rem">
+<h1>巡回完了</h1>
+<p>実行された script 数: ${scriptCount}</p>
+<p><a href="/admin/captured">受信ログを開く</a> · <a href="/">掲示板に戻る</a></p>
+</body></html>`;
+      return send(response, 200, "text/html; charset=utf-8", html);
+    }
     return send(response, 200, "application/json", JSON.stringify({ ok: true, scriptCount }));
   }
   if (request.method === "GET" && url.pathname === "/admin/captured") {
+    if (wantsHtml(request)) {
+      const rows = capturedRequests.length === 0
+        ? "<p>(まだ記録はありません。掲示板で巡回を依頼すると、スクリプトが呼んだ fetch がここに残ります。)</p>"
+        : "<ol>" + capturedRequests.map((c) =>
+            `<li><div>url: <code>${String(c.url).replaceAll("<","&lt;")}</code></div>` +
+            `<div>body: <code>${String(c.body ?? "(なし)").replaceAll("<","&lt;")}</code></div></li>`
+          ).join("") + "</ol>";
+      const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><title>受信ログ</title>
+<body style="font-family:system-ui;max-width:36rem;margin:2rem auto;padding:0 1rem">
+<h1>受信ログ</h1>
+<p>合言葉は <code>TC{...}</code> の形です。ポータルにはその部分だけ提出してください。</p>
+${rows}
+<p><a href="/">掲示板に戻る</a></p>
+</body></html>`;
+      return send(response, 200, "text/html; charset=utf-8", html);
+    }
     return send(response, 200, "application/json", JSON.stringify({ captured: capturedRequests }));
   }
   return send(response, 404, "application/json", JSON.stringify({ error: "not_found" }));
@@ -183,7 +243,11 @@ const verify = createServer(async (request, response) => {
   } catch {
     submission = "";
   }
-  const correct = submission.trim() === FLAG;
+  let value = submission.trim();
+  // Accept accidental key=/flag=/session= wrappers without revealing the answer.
+  const prefixed = value.match(/^(?:key|flag|session)\s*=\s*(.+)$/i);
+  if (prefixed) value = prefixed[1].trim();
+  const correct = value === FLAG;
   // The failure message must not leak the expected flag or scoring internals.
   send(
     response,
