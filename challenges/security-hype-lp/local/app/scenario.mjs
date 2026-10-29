@@ -38,9 +38,15 @@ const pad = (value, width) => String(value).padStart(width, "0");
 
 export function scenarioFor(seed) {
   assertSeed(seed);
-  const badgeNumbers = [0, 1, 2].map((i) => `FS-${pad(draw(seed, `badge-${i}`, 10000, 99999), 5)}`);
-  // Keep the three numbers distinct so "which one" always has one answer.
-  if (new Set(badgeNumbers).size !== 3) badgeNumbers[2] = `FS-${pad(((Number(badgeNumbers[0].slice(3)) + 4321) % 90000) + 10000, 5)}`;
+  // Repair every collision against all preceding choices, within the five-digit range.
+  // At most two increments are needed because only three numbers are selected.
+  const usedBadges = new Set();
+  const badgeNumbers = [0, 1, 2].map((i) => {
+    let number = draw(seed, `badge-${i}`, 10000, 99999);
+    while (usedBadges.has(number)) number = number === 99999 ? 10000 : number + 1;
+    usedBadges.add(number);
+    return `FS-${pad(number, 5)}`;
+  });
   const stockId = draw(seed, "stock-id", 1000, 9999);
   const otherStockId = stockId === 9999 ? 1000 : stockId + 1 + draw(seed, "stock-gap", 0, 9999 - stockId - 1);
   const officialPhone = `03-${pad(draw(seed, "phone-official-a", 1000, 9999), 4)}-${pad(draw(seed, "phone-official-b", 0, 9999), 4)}`;
@@ -57,17 +63,5 @@ export function scenarioFor(seed) {
     officialPhone,
     supportPhone,
     lookalikeDomain: LOOKALIKE_DOMAINS[draw(seed, "lookalike", 0, LOOKALIKE_DOMAINS.length - 1)],
-  });
-}
-
-/** checkpointId → the value this run expects, in its normalized comparison form. */
-export function expectedAnswers(scenario) {
-  return Object.freeze({
-    "campaign-timer": String(scenario.countdownMinutes),
-    "customer-count": String(scenario.paidCustomers),
-    "cert-badges": scenario.badgeNumbers[scenario.fakeBadgeIndex].replace(/[^A-Z0-9]/g, ""),
-    "customer-voices": String(scenario.stockId),
-    "support-line": scenario.supportPhone.replace(/\D/g, ""),
-    "mail-sender": scenario.lookalikeDomain,
   });
 }

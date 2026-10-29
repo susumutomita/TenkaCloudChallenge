@@ -1,6 +1,8 @@
 import { createServer } from "node:http";
 import { pathToFileURL } from "node:url";
-import { expectedAnswers, scenarioFor } from "./scenario.mjs";
+import { scenarioFor } from "./scenario.mjs";
+import { expectedAnswers } from "./answers.mjs";
+import { surfaceFor } from "./presentation.mjs";
 
 /**
  * security-hype-lp — the `/verify` the TenkaCloud scorer delegates to (:8081).
@@ -82,6 +84,13 @@ export function verifierServer(seed) {
   const known = new Set(Object.keys(expectedAnswers(scenario)));
   const server = createServer(async (request, response) => {
     if (request.method === "GET" && request.url === "/healthz") return send(response, 200, { status: "ok" });
+    if (request.method === "GET" && request.url?.startsWith("/surface?")) {
+      const target = new URL(request.url, "http://verifier");
+      const artifact = surfaceFor(scenario, target.searchParams.get("path"));
+      if (!artifact) return send(response, 404, { error: "not_found" });
+      response.writeHead(200, { "content-type": artifact[0], "cache-control": "no-store" });
+      return response.end(artifact[1]);
+    }
     if (request.method !== "POST" || request.url !== "/verify") return send(response, 404, { error: "not_found" });
     let body;
     try {

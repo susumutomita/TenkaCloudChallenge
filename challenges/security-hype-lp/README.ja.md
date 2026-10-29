@@ -23,10 +23,11 @@
 
 ## 構成
 
-- `local/app/scenario.mjs`: 実行ごとの値 (分数、有償社数、バッジ番号とどれが偽か、素材番号、電話番号、似せたドメイン) を `FLAG_SEED` から HMAC-SHA256 で導出する。答えも既定の seed もコミットしていない。seed が無い・形式が違う場合は起動しない。
-- `local/app/site.mjs`: `:8080` の参加者向け画面。LP、`/company`、`/ir`、`/evidence/` (メール、チャット記録、台帳の写し、whois) と顔写真を返す。利用者の入力をページに反映しない。
+- `local/app/scenario.mjs` (verifier イメージのみ): 実行ごとの値 (分数、有償社数、バッジ番号とどれが偽か、素材番号、電話番号、似せたドメイン) を `FLAG_SEED` から HMAC-SHA256 で導出する。答えも既定の seed もコミットしていない。seed が無い・形式が違う場合は起動しない。
+- `local/app/site.mjs`: `:8080` の参加者向け中継。許可した公開 HTML・テキスト・顔写真だけを verifier から受け取り、参加者のヘッダー・本文は転送せず、リダイレクトや任意の取得先 URL も受け付けない。seed・シナリオ生成・回答表を持たず、取得できなければ 503 を返す。
+- `local/app/presentation.mjs` と `answers.mjs` (verifier イメージのみ): 公開資料の描画と非公開の採点対応表を担う。verifier の `/surface` は読み取り専用の描画資料を返し、参加者側の中継は `/verify` を転送しない。
 - `local/app/verifier.mjs`: `:8081` の別コンテナ。`POST /verify` で `{ checkpointId, submission, context }` を受け、`{ checkpointId, correct, message }` を返す。未知のチェックポイントや壊れた本文は 4xx。message に期待値は含めない。全角数字、`23分`、`00:23:00`、ドメインを含む URL やメールアドレスといった書き方の違いは正規化する。
-- `local/Dockerfile`: 2 つの target。`challenge` イメージには `scenario.mjs` と `site.mjs` だけを入れ、verifier・テスト・metadata・writeup は入れない。
+- `local/Dockerfile`: 2 つの target。`challenge` イメージには `site.mjs` だけを入れ、scenario・presentation・answers・verifier・テスト・metadata・writeup は入れない。`FLAG_SEED` は verifier だけに渡す。
 - `local/tests/site.test.mjs`: 複数の seed で 6 つすべてを HTTP の画面だけから解き、受け付ける書き方、おとりの拒否、フォームが何も保存しないこと、`.example` 以外のドメインが出ないことを確かめる。
 
 ## 安全の境界

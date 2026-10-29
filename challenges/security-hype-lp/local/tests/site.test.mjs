@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { OFFICIAL_DOMAIN, scenarioFor } from "../app/scenario.mjs";
 import { siteServer } from "../app/site.mjs";
+import { renderLanding } from "../app/presentation.mjs";
 import { judge, verifierServer } from "../app/verifier.mjs";
 
 const SEED = "a".repeat(64);
@@ -13,10 +16,10 @@ async function listen(server) {
 }
 
 async function withServers(seed, fn) {
-  const site = siteServer(seed);
   const verifier = verifierServer(seed);
-  const web = await listen(site);
   const judgeUrl = await listen(verifier);
+  const site = siteServer(judgeUrl);
+  const web = await listen(site);
   try {
     await fn(web, judgeUrl);
   } finally {
@@ -208,4 +211,74 @@ test("only fictional .example domains appear on the surface", async () => {
     }
     assert.ok(hosts >= 10);
   });
+});
+
+test("participant image contains only the forwarding surface, not scenario or grading material", () => {
+  const root = new URL("../", import.meta.url);
+  const docker = readFileSync(new URL("Dockerfile", root), "utf8");
+  const participant = docker.split("FROM base AS challenge")[1].split("FROM base AS verifier")[0];
+  assert.deepEqual([...participant.matchAll(/^COPY.*$/gm)].map((m) => m[0]), ["COPY --chown=node:node app/site.mjs ./"]);
+  const surface = readFileSync(new URL("app/site.mjs", root), "utf8");
+  assert.ok(!/FLAG_SEED|expectedAnswers|scenarioFor|fakeBadgeIndex/.test(surface));
+  assert.ok(!/from\s+["']\.\//.test(surface), "no transitive private module import");
+  const compose = readFileSync(new URL("docker-compose.yml", root), "utf8");
+  const web = compose.split("  web:")[1].split("  verifier:")[0];
+  assert.ok(!web.includes("FLAG_SEED"));
+  assert.ok(web.includes('VERIFIER_ORIGIN: "http://verifier:8081"'));
+});
+
+test("collision seed retains three distinct badges and exactly one unsupported visible registration", async () => {
+  const seed = "1d21c".padStart(64, "0");
+  assert.equal(new Set(scenarioFor(seed).badgeNumbers).size, 3);
+  await withServers(seed, async (web, judgeUrl) => {
+    const answers = await solveFromVisibleSurfaces(web);
+    assert.equal((await verify(judgeUrl, "cert-badges", answers["cert-badges"])).body.correct, true);
+  });
+});
+
+test("initial countdown and each second boundary agree with the starting-minute answer", () => {
+  const scenario = scenarioFor(SEED);
+  const script = /<script>([\s\S]*?)<\/script>/.exec(renderLanding(scenario))[1];
+  const duration = scenario.countdownMinutes * 60 * 1000;
+  for (const offset of [0, 1, 999, 1000, duration, duration + 1]) {
+    let calls = 0;
+    const timer = { dataset: { windowMinutes: scenario.countdownMinutes }, textContent: "" };
+    runInNewContext(script, {
+      document: { getElementById: () => timer },
+      Date: { now: () => calls++ === 0 ? 0 : offset },
+      setInterval: () => {},
+    });
+    const seconds = Math.max(0, Math.ceil((duration - offset) / 1000));
+    assert.equal(timer.textContent, [Math.floor(seconds / 3600), Math.floor(seconds % 3600 / 60), seconds % 60].map((n) => String(n).padStart(2, "0")).join(":"));
+    if (offset < 1000) assert.ok(judge(scenario, "campaign-timer", timer.textContent));
+  }
+});
+
+test("forwarder fails closed when presentation is unavailable and never forwards grading or arbitrary routes", async () => {
+  let requests = 0;
+  const upstream = (await import("node:http")).createServer((_request, response) => {
+    requests++;
+    response.writeHead(302, { location: "http://outside.example/" });
+    response.end();
+  });
+  const origin = await listen(upstream);
+  const site = siteServer(origin);
+  const web = await listen(site);
+  try {
+    for (const path of ["/verify", "/surface?path=/verify", "/app/answers.mjs", "/%76erify"]) {
+      assert.equal((await fetch(web + path)).status, 404);
+    }
+    assert.equal(requests, 0);
+    assert.equal((await fetch(web + "/")).status, 503, "redirect is never followed");
+    assert.equal(requests, 1);
+  } finally { site.close(); upstream.close(); }
+});
+
+test("participant instructions and hints describe an investigation without announcing its conclusions", () => {
+  const metadata = JSON.parse(readFileSync(new URL("../../metadata.json", import.meta.url), "utf8"));
+  assert.equal(metadata.status, "draft");
+  for (const [instructions, checks] of [[metadata.instructions, metadata.scoring.checks], [metadata.i18n.en.instructions, metadata.i18n.en.checks]]) {
+    const content = instructions + checks.flatMap((c) => c.hints.map((h) => h.content)).join("\n");
+    assert.ok(!/使い回されている|台帳で裏付けが取れない|公式に似せたドメイン|2 人に同じ番号|portrait reused|registry does not back up|Two people share the same number/.test(content));
+  }
 });

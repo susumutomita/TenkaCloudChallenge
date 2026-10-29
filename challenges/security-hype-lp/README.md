@@ -23,10 +23,11 @@ The timer is earnable from the first screen (low floor). The email checkpoint ne
 
 ## Components
 
-- `local/app/scenario.mjs`: derives every per-run value (minutes, paid count, badge numbers and which one is fake, stock ids, phone numbers, lookalike domain) from `FLAG_SEED` with HMAC-SHA256. No answer or default seed is committed; a missing or malformed seed stops startup.
-- `local/app/site.mjs`: participant surface on `:8080`. Serves the LP, `/company`, `/ir`, `/evidence/` (email, chat log, registry copy, whois) and the portraits. No user input is reflected.
+- `local/app/scenario.mjs` (verifier image only): derives every per-run value (minutes, paid count, badge numbers and which one is fake, stock ids, phone numbers, lookalike domain) from `FLAG_SEED` with HMAC-SHA256. No answer or default seed is committed; a missing or malformed seed stops startup.
+- `local/app/site.mjs`: participant forwarding surface on `:8080`. It requests only allowlisted public HTML, text and portraits from the verifier, without forwarding participant headers or bodies, following redirects or accepting arbitrary upstream URLs. It has no seed, scenario generator or answer mapping. Missing presentation returns 503.
+- `local/app/presentation.mjs` and `answers.mjs` (verifier image only): render the public artifacts and own the private checkpoint mapping. The verifier serves read-only artifacts at its internal `/surface` route; the participant forwarder cannot reach `/verify`.
 - `local/app/verifier.mjs`: separate container on `:8081`. Accepts `{ checkpointId, submission, context }` at `POST /verify` and returns `{ checkpointId, correct, message }`. Unknown checkpoints and malformed bodies get a 4xx. The message never carries the expected value. Spelling variants (full-width digits, `23分`, `00:23:00`, a URL or email address containing the domain) are normalised.
-- `local/Dockerfile`: two targets. The `challenge` image copies only `scenario.mjs` and `site.mjs`; the verifier, tests, metadata and writeup stay out of it.
+- `local/Dockerfile`: two targets. The `challenge` image copies only `site.mjs`; scenario, presentation, answers, verifier, tests, metadata and writeup stay out of it. Only the verifier receives `FLAG_SEED`.
 - `local/tests/site.test.mjs`: solves all six checkpoints from the HTTP surface across several seeds, checks accepted spellings, decoy rejection, the form's no-store behaviour and the `.example`-only rule.
 
 ## Safety boundary
