@@ -619,6 +619,25 @@ GET/PATCH/DELETE api/settings  方針を見る・変える・初期状態へ戻�
 GET  api/drill               走り続けている計測の内訳
 GET  posture                 5 つの gate と受領証</pre>
 <p>計測: ${state.roundsCompleted} ラウンド完了 / 直近 ${state.window.rounds} ラウンドを採点 / 連続良好 ${Math.round(state.cleanForMs / 1000)} 秒 (必要 ${Math.round(state.holdMs / 1000)} 秒)</p>
+
+<h2>方針を直すときの下書き</h2>
+<p><strong>いまの方針をコピーする:</strong> <a href="/api/settings"><code>GET /api/settings</code></a> を開き、 返ってきた JSON の <code>settings</code> オブジェクトを
+  <a href="docs">/docs</a> の <code>PATCH /api/settings</code> の body にそのまま貼れます。</p>
+<p><strong>穴埋めテンプレ</strong> (コメントは送る前に消す。 正しい rules は書いていない):</p>
+<pre>{
+  "enabled": true,
+  "readsPerRound": 200,
+  "rules": [
+    {
+      "effect": "allow",
+      "actions": ["read"],
+      "actor": { "role": "moderator" },
+      "resource": "*"
+    }
+  ]
+}</pre>
+<p>rule 1 行の形の例 (読み取り・解答ではない): <code>{"effect":"allow","actions":["read"],"actor":{"id":"u-guest"},"resource":{"ownerIs":"actor"}}</code>
+  ─ 使える鍵の一覧は <a href="/api/policy"><code>GET /api/policy</code></a> の <code>grammar</code> にあります。</p>
 </body></html>`;
 }
 
@@ -1236,8 +1255,18 @@ export const checks = {
 export const editableSettings = {
   name: SETTINGS_NAME,
   summary: { ja: "アクセスポリシー", en: "access policy" },
-  // Swagger の Try it out にそのまま入る例。 この policy が実際に受け付けるキーを使い、
-  // 解答 (rules の絞り込み) はここに書かない — 例が答えになる例は例ではない。
-  example: { readsPerRound: 100 },
+  // Swagger の Try it out に入る形の見本。 正しい rules は書かない (例が答えになってはいけない)。
+  example: {
+    enabled: true,
+    readsPerRound: 200,
+    rules: [
+      {
+        effect: "allow",
+        actions: ["read"],
+        actor: { role: "moderator" },
+        resource: "*",
+      },
+    ],
+  },
   read: () => loadPolicy(),
 };
