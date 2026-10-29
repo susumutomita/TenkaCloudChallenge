@@ -73,9 +73,10 @@ FLAG_SEED=local-fixture-only docker compose -p pxe-icmp-oob -f local/docker-comp
 ```
 
 Ports bind to `127.0.0.1`. Images run as non-root, read-only, with `cap_drop: ALL` and a
-health check. The services share an internal Compose network; only web and `/verify`
-ports are published on loopback. The evaluator has a bounded body and the surface uses a
-3-second timeout, returning 503 when it is unavailable. Status is `draft` until this smoke test has been run on a Docker host.
+health check. The services share a project-scoped bridge network; only web and `/verify`
+ports are published on loopback. Port 8082 is not published. This network does not restrict
+outbound internet access; it is not an egress-isolation boundary. The evaluator has a bounded body and the surface uses a
+3-second timeout, returning 503 when it is unavailable. Status remains `draft`; container reachability alone does not validate the complete exercise.
 
 ## Cost-bearing resources and teardown
 
@@ -88,4 +89,7 @@ None. Local Docker only; no AWS / cloud resources. Tear down with `docker compos
 - `make agent-gate`: catalog validation and root contracts passed.
 - Existing nonempty out-of-bounds model cases and the full five-checkpoint HTTP solve were
   not re-executed during this defensive review fix. Their import/startup wiring was updated.
-- Docker build/run — **not verified** on the authoring box (no Docker); keep `draft`.
+- Docker 29.6.1 / Colima / Compose 5.6.1: cached build, both health checks, host GET
+  `/healthz`, `/spec`, `/quiz` and a benign incorrect quiz passed. The evaluator port is
+  unpublished and each smoke project was removed. The full five-checkpoint solve remains
+  unverified; keep `draft`.

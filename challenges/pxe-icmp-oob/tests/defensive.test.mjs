@@ -32,7 +32,10 @@ test("participant image includes no grading authority or per-run seed", async ()
   assert.doesNotMatch(publicService, /FLAG_SEED/);
   assert.match(publicService, /http:\/\/verifier:8082/);
   assert.doesNotMatch(compose, /127\.0\.0\.1:[^\n]*:8082/);
-  assert.match(compose, /internal: true/);
+  assert.match(compose, /lab:\n    driver: bridge/);
+  assert.match(compose, /ports: \["127\.0\.0\.1:18080:8080"\]/);
+  assert.match(compose, /ports: \["127\.0\.0\.1:18081:8081"\]/);
+  assert.doesNotMatch(compose, /network_mode: host|internal: true/);
 });
 
 test("empty fragments are rejected and cannot extend write extent or earn a checkpoint", () => {

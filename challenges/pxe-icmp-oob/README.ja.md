@@ -69,9 +69,10 @@ FLAG_SEED=local-fixture-only docker compose -p pxe-icmp-oob -f local/docker-comp
 ```
 
 ポートは `127.0.0.1` にバインド。非 root・read-only・`cap_drop: ALL`・ヘルスチェック付き。
-サービス間は内部 Compose ネットワークを使い、8082 はホストへ公開しません。表面は 3 秒で
+サービス間はプロジェクト専用の bridge ネットワークを使い、8082 はホストへ公開しません。
+このネットワークは外向きのインターネット接続を制限しません。表面は 3 秒で
 評価待ちを打ち切り、採点側が使えなければ 503 を返します。
-Docker ホストでのスモークが通るまで `status: draft` のままにします。
+コンテナへの到達確認だけで問題全体を検証したとはせず、`status: draft` を維持します。
 
 ## コストのある資源と解体
 
@@ -84,4 +85,6 @@ Docker ホストでのスモークが通るまで `status: draft` のままに�
 - `make agent-gate`: カタログ検証と root 契約テストが成功。
 - 非空の範囲外書き込みを行う既存模型テストと、全 5 問を解く HTTP 試験は今回再実行していません。
   import と起動方法だけを新しい分離構成に合わせています。
-- Docker の build/run — 執筆環境に Docker が無いため **未検証**。`draft` を維持。
+- Docker 29.6.1 / Colima / Compose 5.6.1: キャッシュ済み build、両サービスの health、
+  ホストからの `/healthz`・`/spec`・`/quiz` の GET と通常の不正解クイズを確認。
+  評価ポートは非公開で、検証プロジェクトは撤収済み。全 5 問の解法は未検証のため `draft` を維持。
