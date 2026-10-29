@@ -12,14 +12,15 @@ EDK II の PXE ICMP エラーバッファ溢れ（CVE-2026-97631）の「壊れ�
 
 ```sh
 node --test tests/*.test.mjs
-FLAG_SEED=local-fixture-only node local/app/server.mjs
+EVALUATOR_URL=http://127.0.0.1:8082 node local/app/server.mjs
 # 別ターミナル:
 FLAG_SEED=local-fixture-only node local/verify/server.mjs
 ```
 
 `http://127.0.0.1:8080` を開き、`/spec` を読み、`POST /icmp` に断片を送り、クイズに答えます。
-Ctrl+C で停止。`FLAG_SEED` は TenkaCloud が `secretEnv` で注入する実行ごとの種で、表面
-（合言葉の開示）と verifier（採点）が同じ値を導出します。平文の合言葉はコミットしません。
+Ctrl+C で停止。`FLAG_SEED` は TenkaCloud が `secretEnv` で注入する実行ごとの種で、採点側だけに渡します。表面は元の入力だけを内部ポート 8082 へ転送し、判定・合言葉導出は
+秘密を持つ採点側で実行します。送信前に採点側を起動してください。表面から計算済み判定や
+種を指定することはできません。公開する採点ポート 8081 は `/verify` のみを扱います。
 
 ## 物語・参加者ルート・期待動作
 
@@ -41,9 +42,10 @@ Ctrl+C で停止。`FLAG_SEED` は TenkaCloud が `secretEnv` で注入する実
 
 ## 構成
 
-- `local/app/model.mjs` — サイズ、壊れたコピー、クイズ正解、`flagFor`。
+- `local/app/model.mjs` — 公開模型・入力デコード・クイズの問題と選択肢。
+- `local/verify/grading.mjs` — 非公開の判定条件・クイズ正解・合言葉導出。
 - `local/app/server.mjs` + `index.html` — 参加者表面（`/`・`/spec`・`/icmp`・`/quiz`）。
-- `local/verify/server.mjs` — 隔離された `/verify`。表面イメージには含まれない。
+- `local/verify/server.mjs` — 8081 の `/verify` と内部専用 8082 の入力評価。秘密と採点コードは表面イメージに含めない。
 - `tests/*.test.mjs` — 模型の性質と、HTTP で 5 チェックポイントを解く結合試験。
 
 ## 安全境界と CVE-2026-97631 との関係
@@ -67,6 +69,8 @@ FLAG_SEED=local-fixture-only docker compose -p pxe-icmp-oob -f local/docker-comp
 ```
 
 ポートは `127.0.0.1` にバインド。非 root・read-only・`cap_drop: ALL`・ヘルスチェック付き。
+サービス間は内部 Compose ネットワークを使い、8082 はホストへ公開しません。表面は 3 秒で
+評価待ちを打ち切り、採点側が使えなければ 503 を返します。
 Docker ホストでのスモークが通るまで `status: draft` のままにします。
 
 ## コストのある資源と解体
@@ -75,5 +79,9 @@ Docker ホストでのスモークが通るまで `status: draft` のままに�
 
 ## ローカル検証の主張
 
-- `node --test tests/*.test.mjs`（model + HTTP）— PR 本文の Validation を参照。
+- `node --test tests/defensive*.test.mjs`: 防御・静的境界・通常入力の HTTP 6 件が成功。
+- 既存模型テストのうち、合言葉導出・範囲内 504 バイトの充填・クイズ採点の 3 件が成功。
+- `make agent-gate`: カタログ検証と root 契約テストが成功。
+- 非空の範囲外書き込みを行う既存模型テストと、全 5 問を解く HTTP 試験は今回再実行していません。
+  import と起動方法だけを新しい分離構成に合わせています。
 - Docker の build/run — 執筆環境に Docker が無いため **未検証**。`draft` を維持。

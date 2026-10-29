@@ -11,6 +11,6 @@ WORKDIR /lab
 COPY app/model.mjs ./app/model.mjs
 COPY verify/ ./verify/
 USER node
-EXPOSE 8081
+EXPOSE 8081 8082
 ENV BIND=0.0.0.0
 CMD ["node", "verify/server.mjs"]

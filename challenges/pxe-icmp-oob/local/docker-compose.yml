@@ -4,8 +4,12 @@ services:
       context: .
       target: surface
     environment:
-      FLAG_SEED: "${FLAG_SEED:?Set a local fixture seed}"
+      EVALUATOR_URL: "http://verifier:8082"
+    depends_on:
+      verifier:
+        condition: service_healthy
     ports: ["127.0.0.1:18080:8080"]
+    networks: [lab]
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -21,6 +25,7 @@ services:
     environment:
       FLAG_SEED: "${FLAG_SEED:?Set a local fixture seed}"
     ports: ["127.0.0.1:18081:8081"]
+    networks: [lab]
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -29,3 +34,7 @@ services:
       interval: 2s
       timeout: 3s
       retries: 20
+
+networks:
+  lab:
+    internal: true

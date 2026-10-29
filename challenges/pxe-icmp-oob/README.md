@@ -13,15 +13,17 @@ From this problem directory, with Node.js 22 or newer and no dependencies:
 
 ```sh
 node --test tests/*.test.mjs
-FLAG_SEED=local-fixture-only node local/app/server.mjs
+EVALUATOR_URL=http://127.0.0.1:8082 node local/app/server.mjs
 # other terminal:
 FLAG_SEED=local-fixture-only node local/verify/server.mjs
 ```
 
 Open `http://127.0.0.1:8080`. Read `/spec`, send fragments to `POST /icmp`, answer the
 quizzes. Stop with Ctrl+C. `FLAG_SEED` is a per-run fixture seed TenkaCloud injects through
-`secretEnv`; both the surface (to reveal flags) and the verifier (to grade them) derive the
-same values. Never commit plaintext flags.
+`secretEnv`; only the private authority receives it. The surface forwards original input to the
+internal evaluator on port 8082; it cannot supply an answer, computed checkpoint, analysis, or seed.
+Start the authority before submitting through the surface. The published verifier port serves
+only `/verify` and never the internal evaluation routes. Never commit plaintext flags.
 
 ## Story, participant route and expected behavior
 
@@ -44,9 +46,10 @@ points or the expected flag.
 
 ## Components
 
-- `local/app/model.mjs` — buffer sizes, the buggy copy, quiz keys, `flagFor(checkpoint, seed)`.
+- `local/app/model.mjs` — public buffer simulator, input decoder and quiz questions/options.
+- `local/verify/grading.mjs` — private checkpoint predicates, quiz keys and flag derivation.
 - `local/app/server.mjs` + `index.html` — participant surface (`/`, `/spec`, `/icmp`, `/quiz`).
-- `local/verify/server.mjs` — isolated `/verify` authority; not served by the surface image.
+- `local/verify/server.mjs` — `/verify` on 8081 and raw-input evaluation on internal-only 8082; neither grading module nor seed is in the surface image.
 - `tests/*.test.mjs` — model properties and an HTTP end-to-end solve of all five checkpoints.
 
 ## Safety boundary and relation to CVE-2026-97631
@@ -70,7 +73,9 @@ FLAG_SEED=local-fixture-only docker compose -p pxe-icmp-oob -f local/docker-comp
 ```
 
 Ports bind to `127.0.0.1`. Images run as non-root, read-only, with `cap_drop: ALL` and a
-health check. Status is `draft` until this smoke test has been run on a Docker host.
+health check. The services share an internal Compose network; only web and `/verify`
+ports are published on loopback. The evaluator has a bounded body and the surface uses a
+3-second timeout, returning 503 when it is unavailable. Status is `draft` until this smoke test has been run on a Docker host.
 
 ## Cost-bearing resources and teardown
 
@@ -78,5 +83,9 @@ None. Local Docker only; no AWS / cloud resources. Tear down with `docker compos
 
 ## Local verification claimed
 
-- `node --test tests/*.test.mjs` (model + HTTP) — see Validation in the PR body.
+- `node --test tests/defensive*.test.mjs`: six defensive/static/benign HTTP tests passed.
+- Selected existing model tests: flag derivation, in-bounds 504-byte fill and quiz grading passed.
+- `make agent-gate`: catalog validation and root contracts passed.
+- Existing nonempty out-of-bounds model cases and the full five-checkpoint HTTP solve were
+  not re-executed during this defensive review fix. Their import/startup wiring was updated.
 - Docker build/run — **not verified** on the authoring box (no Docker); keep `draft`.

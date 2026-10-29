@@ -17,27 +17,6 @@ export const REGION_SIZE = 640; // physical region we allocate so the toy never 
 
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 
-// checkpointId -> flag, derived from the per-run FLAG_SEED. The surface reveals a
-// flag only when the lab mechanics are solved; the verifier derives the same value
-// independently and grades it. Nothing plaintext is ever committed.
-const FLAG_PREFIX = {
-  "buffer-shape": "pxebuf",
-  "cumulative-advance": "pxecum",
-  "overwrite-secret": "pxehij",
-  "boot-scope": "pxescope",
-  "impact-class": "pxeimpact",
-};
-
-export function flagFor(checkpointId, seed) {
-  const prefix = FLAG_PREFIX[checkpointId];
-  if (!prefix || !seed) return null;
-  return `TC{${prefix}_${sha(`flag:${checkpointId}:${seed}`).slice(0, 20)}}`;
-}
-
-export function isCheckpoint(checkpointId) {
-  return Object.hasOwn(FLAG_PREFIX, checkpointId);
-}
-
 // The per-run guard cookie placed immediately after the 504-byte buffer. Its bytes
 // are never returned to the participant; only whether it is still intact is shown.
 export function guardCookie(seed) {
@@ -71,11 +50,11 @@ export function collectIcmpError(fragments, seed) {
   for (const frag of fragments) {
     cumulative += frag.length;
     const end = offset + frag.length;
-    if (end > BUF_SIZE) overflow = true; // BUG 1: observed, but the copy proceeds anyway
+    if (frag.length > 0 && end > BUF_SIZE) overflow = true; // BUG 1: observed, but the copy proceeds anyway
     const writable = Math.max(0, Math.min(frag.length, REGION_SIZE - offset));
     if (writable > 0) frag.copy(region, offset, 0, writable);
     writes.push({ offset, len: frag.length });
-    maxEnd = Math.max(maxEnd, Math.min(end, REGION_SIZE));
+    if (writable > 0) maxEnd = Math.max(maxEnd, offset + writable);
     offset += cumulative; // BUG 2: advance by cumulative, not frag.length
   }
 
@@ -84,31 +63,11 @@ export function collectIcmpError(fragments, seed) {
   const handlerTag = region
     .toString("ascii", HANDLER_OFFSET, HANDLER_OFFSET + HANDLER_MAGIC.length)
     .replace(/[^\x20-\x7e].*$/, "");
-  // Signature of BUG 2: a fragment landed at/after offset 504 even though the total
-  // submitted bytes fit under 504 — impossible with a correct per-fragment advance.
-  const cumulativeSignature = total <= BUF_SIZE && writes.some((w) => w.offset >= BUF_SIZE);
-
-  return { total, writes, maxEnd, overflow, guardIntact, handlerTag, cumulativeSignature };
+  return { total, writes, maxEnd, overflow, guardIntact, handlerTag };
 }
 
-// Which checkpoint (if any) a submission to the ICMP collector earns. Order runs
-// from most specific (adjacent-field overwrite) to least.
-export function earnedByCopy(analysis, fragments) {
-  if (!analysis.guardIntact && analysis.handlerTag === HANDLER_MAGIC) return "overwrite-secret";
-  if (analysis.cumulativeSignature && analysis.overflow) return "cumulative-advance";
-  if (fragments.length === 1 && fragments[0].length === BUF_SIZE && !analysis.overflow) {
-    return "buffer-shape";
-  }
-  return null;
-}
-
-// Two conceptual checkpoints delivered as a short quiz. The question + options are
-// public (served by the surface); only the answer key lives here, next to the flag
-// mapping, so a correct choice reveals the matching flag.
 export const QUIZ = {
   "boot-scope": {
-    checkpoint: "boot-scope",
-    answer: "b",
     question:
       "This bug lives in the network-boot (PXE) path. Why is a machine that boots only from its local disk out of scope?",
     options: {
@@ -118,8 +77,6 @@ export const QUIZ = {
     },
   },
   "impact-class": {
-    checkpoint: "impact-class",
-    answer: "c",
     question:
       "A crafted blob overwrites the adjacent control field. Conceptually, how do you tell a denial-of-service outcome from a code-execution outcome?",
     options: {
@@ -130,15 +87,35 @@ export const QUIZ = {
   },
 };
 
-export function earnedByQuiz(quizId, option) {
-  const quiz = QUIZ[quizId];
-  if (!quiz || typeof option !== "string") return null;
-  return option.trim().toLowerCase() === quiz.answer ? quiz.checkpoint : null;
+export function publicQuiz() {
+  return QUIZ;
 }
 
-// Public view of the quiz: questions and options, never the answer key.
-export function publicQuiz() {
-  return Object.fromEntries(
-    Object.entries(QUIZ).map(([id, q]) => [id, { question: q.question, options: q.options }]),
-  );
+// Accept fragments as hex or base64 strings, or a single blob. Returns Buffer[].
+export function decodeFragments(body) {
+  const encoding = body?.encoding === "base64" ? "base64" : "hex";
+  const list = Array.isArray(body?.fragments)
+    ? body.fragments
+    : typeof body?.payload === "string"
+      ? [body.payload]
+      : null;
+  if (!list || list.length === 0 || list.length > 64) return null;
+  const fragments = [];
+  for (const item of list) {
+    if (typeof item !== "string" || item.length === 0 || item.length > 4096) return null;
+    let buf;
+    try {
+      buf = Buffer.from(item, encoding);
+    } catch {
+      return null;
+    }
+    if (buf.length === 0) return null;
+    // Reject blobs that do not round-trip (malformed hex/base64) so feedback is honest.
+    // Hex is compared case-insensitively; base64 ignores trailing padding '='.
+    const round = buf.toString(encoding).replace(/=+$/, "");
+    const given = (encoding === "hex" ? item.toLowerCase() : item).replace(/=+$/, "");
+    if (round !== given || (encoding === "hex" && item.length % 2 !== 0)) return null;
+    fragments.push(buf);
+  }
+  return fragments;
 }

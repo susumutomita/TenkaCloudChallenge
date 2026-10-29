@@ -1,20 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  BUF_SIZE,
-  HANDLER_MAGIC,
-  HANDLER_OFFSET,
-  collectIcmpError,
-  earnedByCopy,
-  earnedByQuiz,
-  flagFor,
-  isCheckpoint,
-} from "../local/app/model.mjs";
+import { BUF_SIZE, HANDLER_MAGIC, HANDLER_OFFSET, collectIcmpError } from "../local/app/model.mjs";
+import { earnedByCopy, earnedByQuiz, flagFor, isCheckpoint } from "../local/verify/grading.mjs";
 
 const SEED = "model-fixture";
 
 test("flags are derived from FLAG_SEED and never collide across checkpoints", () => {
-  const ids = ["buffer-shape", "cumulative-advance", "overwrite-secret", "boot-scope", "impact-class"];
+  const ids = [
+    "buffer-shape",
+    "cumulative-advance",
+    "overwrite-secret",
+    "boot-scope",
+    "impact-class",
+  ];
   const flags = ids.map((id) => flagFor(id, SEED));
   for (const f of flags) assert.match(f, /^TC\{[a-z]+_[0-9a-f]{20}\}$/);
   assert.equal(new Set(flags).size, ids.length);
@@ -40,7 +38,7 @@ test("cumulative pointer advance lands a later fragment past 504 even when total
   const analysis = collectIcmpError(fragments, SEED);
   assert.equal(analysis.total, 500);
   assert.equal(analysis.overflow, true);
-  assert.equal(analysis.cumulativeSignature, true);
+
   assert.equal(analysis.writes[2].offset, 600);
   assert.equal(analysis.guardIntact, true); // third fragment starts past the guard
   assert.equal(earnedByCopy(analysis, fragments), "cumulative-advance");

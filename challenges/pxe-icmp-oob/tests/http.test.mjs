@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { BUF_SIZE, HANDLER_MAGIC, HANDLER_OFFSET, flagFor } from "../local/app/model.mjs";
+import { BUF_SIZE, HANDLER_MAGIC, HANDLER_OFFSET } from "../local/app/model.mjs";
+import { flagFor } from "../local/verify/grading.mjs";
 
 const SEED = "http-fixture";
 
@@ -12,14 +13,17 @@ async function start(entry, env = {}) {
     [
       "--input-type=module",
       "-e",
-      `const {server}=await import(${JSON.stringify(new URL(entry, import.meta.url).href)}); server.on('listening',()=>console.log(server.address().port));`,
+      `const {server,evaluator}=await import(${JSON.stringify(new URL(entry, import.meta.url).href)}); await Promise.all([server,evaluator].filter(Boolean).map(s=>s.listening?Promise.resolve():new Promise(r=>s.once("listening",r)))); console.log(JSON.stringify({port:server.address().port,evaluatorPort:evaluator?.address().port}));`,
     ],
-    { env: { ...process.env, PORT: "0", ...env }, stdio: ["ignore", "pipe", "pipe"] },
+    {
+      env: { ...process.env, PORT: "0", EVALUATOR_PORT: "0", ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
   );
   let error = "";
   child.stderr.on("data", (d) => (error += d));
   const port = await Promise.race([
-    once(child.stdout, "data").then(([d]) => Number(d.toString().trim())),
+    once(child.stdout, "data").then(([d]) => JSON.parse(d.toString().trim())),
     once(child, "exit").then(() => {
       throw Error(error);
     }),
@@ -28,12 +32,18 @@ async function start(entry, env = {}) {
       t.unref();
     }),
   ]);
-  return { child, base: `http://127.0.0.1:${port}` };
+  return {
+    child,
+    base: `http://127.0.0.1:${port.port}`,
+    evaluatorBase: `http://127.0.0.1:${port.evaluatorPort}`,
+  };
 }
 
 test("surface reveals FLAGS_SEED-derived flags; isolated verifier grades them; surface hides authority", async () => {
-  const surface = await start("../local/app/server.mjs", { FLAG_SEED: SEED });
   const verify = await start("../local/verify/server.mjs", { FLAG_SEED: SEED });
+  const surface = await start("../local/app/server.mjs", {
+    EVALUATOR_URL: verify.evaluatorBase,
+  });
   try {
     assert.equal((await fetch(surface.base + "/")).status, 200);
     assert.equal((await fetch(surface.base + "/healthz")).status, 200);
@@ -47,7 +57,10 @@ test("surface reveals FLAGS_SEED-derived flags; isolated verifier grades them; s
     const fill = await fetch(surface.base + "/icmp", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ encoding: "hex", fragments: ["00".repeat(BUF_SIZE)] }),
+      body: JSON.stringify({
+        encoding: "hex",
+        fragments: ["00".repeat(BUF_SIZE)],
+      }),
     }).then((r) => r.json());
     assert.equal(fill.checkpoint, "buffer-shape");
     assert.equal(fill.flag, flagFor("buffer-shape", SEED));
@@ -70,7 +83,10 @@ test("surface reveals FLAGS_SEED-derived flags; isolated verifier grades them; s
     const hij = await fetch(surface.base + "/icmp", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ encoding: "hex", fragments: [payload.toString("hex")] }),
+      body: JSON.stringify({
+        encoding: "hex",
+        fragments: [payload.toString("hex")],
+      }),
     }).then((r) => r.json());
     assert.equal(hij.checkpoint, "overwrite-secret");
     assert.equal(hij.flag, flagFor("overwrite-secret", SEED));
@@ -92,10 +108,22 @@ test("surface reveals FLAGS_SEED-derived flags; isolated verifier grades them; s
 
     // Verifier grades each flag and rejects junk. Echoes checkpointId.
     const post = (body) =>
-      fetch(verify.base + "/verify", { method: "POST", body: JSON.stringify(body) });
+      fetch(verify.base + "/verify", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     assert.equal((await fetch(verify.base + "/healthz")).status, 200);
-    for (const id of ["buffer-shape", "cumulative-advance", "overwrite-secret", "boot-scope", "impact-class"]) {
-      const ok = await post({ checkpointId: id, submission: flagFor(id, SEED) });
+    for (const id of [
+      "buffer-shape",
+      "cumulative-advance",
+      "overwrite-secret",
+      "boot-scope",
+      "impact-class",
+    ]) {
+      const ok = await post({
+        checkpointId: id,
+        submission: flagFor(id, SEED),
+      });
       assert.equal(ok.status, 200);
       assert.deepEqual(await ok.json(), {
         checkpointId: id,
@@ -107,12 +135,25 @@ test("surface reveals FLAGS_SEED-derived flags; isolated verifier grades them; s
       assert.equal((await bad.json()).correct, false);
     }
     assert.equal((await post({ checkpointId: "nope", submission: "x" })).status, 400);
-    assert.equal((await post({ checkpointId: "buffer-shape", submission: "x".repeat(500) })).status, 400);
+    assert.equal(
+      (
+        await post({
+          checkpointId: "buffer-shape",
+          submission: "x".repeat(500),
+        })
+      ).status,
+      400,
+    );
     assert.equal((await fetch(verify.base + "/verify", { method: "POST", body: "{" })).status, 400);
     {
       let status;
       try {
-        status = (await fetch(verify.base + "/verify", { method: "POST", body: "x".repeat(70 * 1024) })).status;
+        status = (
+          await fetch(verify.base + "/verify", {
+            method: "POST",
+            body: "x".repeat(70 * 1024),
+          })
+        ).status;
       } catch {
         status = 413; // undici may surface a closed socket when the server stops reading
       }
@@ -123,7 +164,10 @@ test("surface reveals FLAGS_SEED-derived flags; isolated verifier grades them; s
     const again = await fetch(surface.base + "/icmp", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ encoding: "hex", fragments: ["00".repeat(BUF_SIZE)] }),
+      body: JSON.stringify({
+        encoding: "hex",
+        fragments: ["00".repeat(BUF_SIZE)],
+      }),
     }).then((r) => r.json());
     assert.equal(again.checkpoint, "buffer-shape");
   } finally {
