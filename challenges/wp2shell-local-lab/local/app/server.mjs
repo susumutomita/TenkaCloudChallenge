@@ -284,6 +284,22 @@ const challenge = createServer(async (request, response) => {
   }
 
   // The batch bundling endpoint. Body: { requests: [{ method, path, body }] }.
+  if (request.method === "GET" && pathname === "/wp-json/batch/v1") {
+    return send(response, 200, {
+      description: "Bundle up to 5 sub-requests into one POST.",
+      example: {
+        requests: [
+          {
+            method: "GET",
+            path: "/wp2shell-lab/v1/reports",
+            body: { category: "general" },
+          },
+        ],
+      },
+      note: "Compare how a single GET to /wp-json/wp2shell-lab/v1/reports reads its path with how a batch sub-request does.",
+    });
+  }
+
   if (request.method === "POST" && pathname === "/wp-json/batch/v1") {
     const parsed = await readJson(request);
     const requests = Array.isArray(parsed.requests) ? parsed.requests : [];
@@ -299,6 +315,26 @@ const challenge = createServer(async (request, response) => {
   }
 
   // ---- SRE console (the same participant, now defending instead of attacking) ----
+  if (request.method === "GET" && (pathname === "/admin" || pathname === "/admin/")) {
+    return send(response, 200, {
+      console: "sre",
+      token: currentToken,
+      saltVersion: state.saltVersion,
+      howToAuth: "Authorization: Bearer <token>",
+      endpoints: {
+        "GET /admin/audit": "current incident state",
+        "POST /admin/action": "run a remediation action (see actions)",
+      },
+      actions: [
+        "remove-rogue-admin",
+        "remove-persistence",
+        "rotate-salts",
+        "set-config",
+      ],
+      setConfigFields: ["routeIsolation", "parameterizedQueries"],
+      note: "Flag checkpoints expect TC{...} only. State checkpoints accept any non-empty submission once the live condition holds.",
+    });
+  }
   if (request.method === "GET" && pathname === "/admin/audit") {
     if (!isAuthorized(request.headers)) return send(response, 401, { error: "unauthorized" });
     return send(response, 200, {
@@ -333,7 +369,15 @@ const challenge = createServer(async (request, response) => {
         return send(response, 200, { ok: true, config: state.config });
       }
       default:
-        return send(response, 400, { error: "unknown_action" });
+        return send(response, 400, {
+          error: "unknown_action",
+          actions: [
+            "remove-rogue-admin",
+            "remove-persistence",
+            "rotate-salts",
+            "set-config",
+          ],
+        });
     }
   }
 
@@ -367,12 +411,19 @@ const ROUTE_CONFUSION_PAYLOADS = [
 ];
 const SQLI_PAYLOAD = "x' UNION SELECT id, audit_token, note FROM vault -- ";
 
+function normalizeFlagSubmission(submission) {
+  let value = String(submission ?? "").trim();
+  const prefixed = value.match(/^(?:key|flag|session)\s*=\s*(.+)$/i);
+  if (prefixed) value = prefixed[1].trim();
+  return value;
+}
+
 async function checkChainDiscovery(submission) {
-  return submission.trim() === FLAG_CHAIN;
+  return normalizeFlagSubmission(submission) === FLAG_CHAIN;
 }
 
 async function checkCompromiseProof(submission) {
-  return submission.trim() === FLAG_VAULT;
+  return normalizeFlagSubmission(submission) === FLAG_VAULT;
 }
 
 async function checkFixRoute() {
