@@ -63,7 +63,7 @@
             },
             {
               "id": "backup-3",
-              "content": "`docker compose exec wordpress rm /var/www/html/wp-content/backups/db-backup.sql`, then re-scan. Backups should never sit where the web server can serve them."
+              "content": "In the container terminal: `rm /var/www/html/wp-content/backups/db-backup.sql`, then re-scan. Backups should never sit where the web server can serve them."
             }
           ]
         },
@@ -81,7 +81,7 @@
             },
             {
               "id": "config-3",
-              "content": "`docker compose exec wordpress rm /var/www/html/wp-config.php.bak`, then re-scan. Keep such copies off the server, and rotate any credential that leaked."
+              "content": "In the container terminal: `rm /var/www/html/wp-config.php.bak`, then re-scan. Keep such copies off the server, and rotate any credential that leaked."
             }
           ]
         },
@@ -99,7 +99,7 @@
             },
             {
               "id": "listing-3",
-              "content": "e.g. `docker compose exec wordpress a2disconf zz-internal-autoindex && docker compose exec wordpress apachectl graceful`, or `docker compose exec wordpress rm -r /var/www/html/internal`. Re-scan (give the reload a moment); it passes once the listing is gone."
+              "content": "e.g. In the container terminal: `a2disconf zz-internal-autoindex && In the container terminal: apachectl graceful`, or In the container terminal: `rm -r /var/www/html/internal`. Re-scan (give the reload a moment); it passes once the listing is gone."
             }
           ]
         },
@@ -117,7 +117,7 @@
             },
             {
               "id": "debug-3",
-              "content": "In production the right fix is to turn `WP_DEBUG` itself off. Set it to false in `wp-config.php`, e.g. `docker compose exec wordpress sed -i \"s/define( 'WP_DEBUG', .*/define( 'WP_DEBUG', false );/\" /var/www/html/wp-config.php`, then `docker compose exec wordpress rm /var/www/html/wp-content/debug.log`. Deleting it while debug is on regenerates it, so order matters. Re-scan to pass."
+              "content": "In production the right fix is to turn `WP_DEBUG` itself off. Set it to false in `wp-config.php`, e.g. In the container terminal: `sed -i \"s/define( 'WP_DEBUG', .*/define( 'WP_DEBUG', false );/\" /var/www/html/wp-config.php`, then In the container terminal: `rm /var/www/html/wp-content/debug.log`. Deleting it while debug is on regenerates it, so order matters. Re-scan to pass."
             }
           ]
         }
@@ -161,7 +161,7 @@
           },
           {
             "id": "backup-3",
-            "content": "`docker compose exec wordpress rm /var/www/html/wp-content/backups/db-backup.sql` で削除し、 再スキャンする。 バックアップはそもそも Web から届く場所に置かない。",
+            "content": "コンテナターミナルで `rm /var/www/html/wp-content/backups/db-backup.sql` で削除し、 再スキャンする。 バックアップはそもそも Web から届く場所に置かない。",
             "penalty": 8
           }
         ]
@@ -184,7 +184,7 @@
           },
           {
             "id": "config-3",
-            "content": "`docker compose exec wordpress rm /var/www/html/wp-config.php.bak` で削除し、 再スキャンする。 控えはサーバの外で管理し、 漏れた認証情報はローテーションする。",
+            "content": "コンテナターミナルで `rm /var/www/html/wp-config.php.bak` で削除し、 再スキャンする。 控えはサーバの外で管理し、 漏れた認証情報はローテーションする。",
             "penalty": 8
           }
         ]
@@ -207,7 +207,7 @@
           },
           {
             "id": "listing-3",
-            "content": "例: `docker compose exec wordpress a2disconf zz-internal-autoindex && docker compose exec wordpress apachectl graceful`。 または `docker compose exec wordpress rm -r /var/www/html/internal`。 再スキャンで一覧が消えていれば通る (reload に少し時間がかかることがある)。",
+            "content": "例: コンテナターミナルで `a2disconf zz-internal-autoindex && コンテナターミナルで apachectl graceful`。 または コンテナターミナルで `rm -r /var/www/html/internal`。 再スキャンで一覧が消えていれば通る (reload に少し時間がかかることがある)。",
             "penalty": 10
           }
         ]
@@ -230,7 +230,7 @@
           },
           {
             "id": "debug-3",
-            "content": "本番では `WP_DEBUG` 自体を切るのが正しい。 `wp-config.php` の `WP_DEBUG` を false にする。 例: `docker compose exec wordpress sed -i \"s/define( 'WP_DEBUG', .*/define( 'WP_DEBUG', false );/\" /var/www/html/wp-config.php` → その後 `docker compose exec wordpress rm /var/www/html/wp-content/debug.log`。 有効なまま消すと再生成されるので順序が重要。 再スキャンで通る。",
+            "content": "本番では `WP_DEBUG` 自体を切るのが正しい。 `wp-config.php` の `WP_DEBUG` を false にする。 例: コンテナターミナルで `sed -i \"s/define( 'WP_DEBUG', .*/define( 'WP_DEBUG', false );/\" /var/www/html/wp-config.php` → その後 コンテナターミナルで `rm /var/www/html/wp-content/debug.log`。 有効なまま消すと再生成されるので順序が重要。 再スキャンで通る。",
             "penalty": 14
           }
         ]
