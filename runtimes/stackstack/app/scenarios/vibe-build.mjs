@@ -54,7 +54,11 @@ export const editableSource = {
   basePath: FEATURE_PATH,
   summary: { ja: "検索機能の source", en: "search feature source" },
   example:
-    "export function search({ query, posts }) { return { status: 200, body: { query, matches: posts } }; }\n",
+    "export function search({ query, posts }) {\n" +
+    "  const q = typeof query === \"string\" ? query.trim() : \"\";\n" +
+    "  const matches = posts.map((post) => ({ at: post.at, author: post.author, id: post.id, title: post.title }));\n" +
+    "  return { status: 200, body: { query: q, matches } };\n" +
+    "}\n",
 };
 
 const ORIGIN = `http://127.0.0.1:${Number(process.env.CHALLENGE_PORT ?? 8080)}`;
@@ -1245,7 +1249,7 @@ function sendPage(response, status, fragment) {
   });
   response.end(`<!doctype html>
 <html lang="ja"><head><meta name="color-scheme" content="light dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>archive search</title></head>
+<title>アーカイブ検索</title></head>
 <body style="font-family:system-ui;max-width:44rem;margin:2.5rem auto;line-height:1.7;padding:0 1rem">
 <h1>アーカイブ検索</h1>
 <p>この下は <code>renderResults</code> が返した HTML をそのまま置いた領域です。</p>
@@ -1386,8 +1390,8 @@ button{font:inherit;padding:.4rem 1rem;margin:0 .5rem .5rem 0}
 <p style="text-align:right"><a href="editor?lang=${other}">${bi(lang, "English", "日本語")}</a></p>
 <h1>${L("検索機能のエディタ", "Feature editor")}</h1>
 <p>${L(
-    'ここに書いたコードが、 走っている板の検索機能になります。 保存は API 経由でコンテナの中にだけ置かれ、 <strong>リポジトリのファイルは書き換わりません</strong>。 破棄するかコンテナを作り直せば、 初期状態のコードに戻ります。 要件は <a href="api/spec">GET /api/spec</a> (R1〜R9) にあります。',
-    'What you write here becomes the running board\'s search feature. A save is stored through the API inside the container only — <strong>no repository file is ever written</strong>. Discard, or rebuild the container, and you are back at the starting code. The requirements live at <a href="api/spec">GET /api/spec</a> (R1–R9).',
+    'ここに書いた <strong>JavaScript</strong> が、 走っている板の検索機能になります。 保存は API 経由でコンテナの中にだけ置かれ、 <strong>リポジトリのファイルは書き換わりません</strong>。 破棄するかコンテナを作り直せば、 初期状態のコードに戻ります。 要件は <a href="api/spec">GET /api/spec</a> (R1〜R9) にあります。',
+    'The <strong>JavaScript</strong> you write here becomes the running board\'s search feature. A save is stored through the API inside the container only — <strong>no repository file is ever written</strong>. Discard, or rebuild the container, and you are back at the starting code. The requirements live at <a href="api/spec">GET /api/spec</a> (R1–R9).',
   )}</p>
 <textarea id="source" spellcheck="false" autocomplete="off"></textarea>
 <p>
@@ -1486,6 +1490,29 @@ el("check").addEventListener("click", check);
 load();
 </script>
 </body></html>`;
+}
+
+
+/** Code-shaped nudges for a failed rule. Never the full answer — just the shape. */
+const RULE_FRAGMENTS = {
+  R1: "hint R1: if (!q) return { status: 400, body: { error: \"query_required\" } };",
+  R2: "hint R2: if (q.length > 64) return { status: 400, body: { error: \"query_too_long\" } };",
+  R3: "hint R3: return { status: 200, body: { query: q, matches } }; // q = trim(query)",
+  R4: "hint R4: matches.push({ at, author, id, title }); // exactly these four keys",
+  R5: "hint R5: haystack.toLowerCase().includes(q.toLowerCase())",
+  R6: "hint R6: if (post.visibility !== \"public\") continue;",
+  R7: "hint R7: matches.sort((a, b) => b.id - a.id).slice(0, 10)",
+  R8: "hint R8: zero hits still return status 200 with matches: []",
+  R9: "hint R9: show query/title/author as text; replace markup-sensitive characters with entities",
+};
+
+function ruleFragmentsFor(notes) {
+  const found = new Set();
+  for (const note of notes) {
+    const match = String(note).match(/\bR([1-9])\b/);
+    if (match) found.add(`R${match[1]}`);
+  }
+  return [...found].map((id) => RULE_FRAGMENTS[id]).filter(Boolean);
 }
 
 export const routes = {
@@ -1602,11 +1629,13 @@ export const routes = {
       feature: FEATURE_LABEL,
       featureError: report.featureError,
       allGreen: GATE_NAMES.every((name) => report.gates[name] === true),
-      checks: GATE_NAMES.map((name) => ({
-        gate: name,
-        ok: report.gates[name] === true,
-        notes: report.notes[name] ?? [],
-      })),
+      checks: GATE_NAMES.map((name) => {
+        const notes = [...(report.notes[name] ?? [])];
+        if (report.gates[name] !== true) {
+          for (const frag of ruleFragmentsFor(notes)) notes.push(frag);
+        }
+        return { gate: name, ok: report.gates[name] === true, notes };
+      }),
       next: "全部 ok になったら GET /posture の tokens に受領印が出ます。",
     });
   },

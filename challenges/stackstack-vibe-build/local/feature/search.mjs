@@ -1,5 +1,5 @@
 /**
- * 掲示板アーカイブの検索機能。
+ * 掲示板アーカイブの検索機能 (JavaScript)。
  *
  * 要件は走っているアプリが持っています: `GET /api/spec` (R1〜R9)。
  * このファイルは読み取り専用でコンテナにマウントされ、 変更するたびに読み直されます。
@@ -16,8 +16,16 @@
  * @returns {{ status: number, body: object }}
  */
 export function search({ query, posts }) {
-  // まだ何も実装していません。 R1〜R8 を満たすように書き換えてください。
-  return { status: 200, body: { query: "", matches: [] } };
+  // R3 / R4 の土台: 検索語を trim して echo し、 matches は 4 キーだけにする。
+  // まだ: R1/R2 の断り、 R5 の一致判定、 R6 の公開範囲、 R7 の並びと件数、 R8 の 0 件。
+  const q = typeof query === "string" ? query.trim() : "";
+  const matches = posts.map((post) => ({
+    at: post.at,
+    author: post.author,
+    id: post.id,
+    title: post.title,
+  }));
+  return { status: 200, body: { query: q, matches } };
 }
 
 /**
@@ -25,6 +33,6 @@ export function search({ query, posts }) {
  * @returns {string} 検索結果ページに埋め込む HTML
  */
 export function renderResults({ query, matches }) {
-  // まだ何も実装していません。 R9 を満たすように書き換えてください。
+  // まだ R9 は未実装。 検索語と title / author を文字として出すこと。
   return "<p>検索結果の表示はまだ実装されていません。</p>";
 }
