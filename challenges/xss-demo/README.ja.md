@@ -15,10 +15,9 @@ TenkaCloudリポジトリのルートで実行します。
 make local PROBLEM=xss-demo
 ```
 
-- 攻略対象: <http://127.0.0.1:18080> の「Acme Staff Bulletin Board」
-- ゴール: 誰でも投稿できる掲示板に投稿し、`POST /admin/report`で疑似セキュリティ担当に
-  巡回させる。担当のセッションを投稿内容だけで漏えいさせ、`GET /admin/captured`で
-  読み取り、そこに現れるフラグをPortalへ提出する
+- 攻略対象: <http://127.0.0.1:18080> の日本語「スタッフ掲示板」
+- ゴール: 掲示板に投稿し、ページ上の「巡回を依頼」(`POST /admin/report`)で疑似セキュリティ担当に
+  巡回させ、ページ上の「受信ログ」(`GET /admin/captured`)で合言葉を読み取り、`TC{...}` だけをPortalへ提出する
 
 ## 採点の仕組み
 

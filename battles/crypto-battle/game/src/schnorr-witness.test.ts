@@ -19,11 +19,12 @@ test("visiting another Order before submitting preserves the displayed calculati
   }
 });
 
-test("missing, malformed or mismatching notes never replace a submitted proof", () => {
+test("missing, malformed or mismatching notes recover the submitted proof instead of replacing it", () => {
   const proof = { y: power(2, 7), pending: { y: power(2, 7), a: power(2, 3) } };
   for (const saved of [null, "{", "null", "[]", '{"x":7,"r":4}', '{"x":8,"r":3}', '{"x":7,"r":11}', '{"x":"7","r":3}']) {
-    expect(schnorrWitness(proof, saved, () => { throw Error("cannot redraw a pending proof"); })).toBeUndefined();
+    expect(schnorrWitness(proof, saved, () => { throw Error("cannot redraw a pending proof"); })).toEqual({ x: 7, r: 3, recovered: true });
   }
+  expect(schnorrWitness({ y: 5, pending: { y: 5, a: power(2, 3) } }, null, () => { throw Error("invalid statement"); })).toBeUndefined();
 });
 
 test("another statement gets its own fresh calculation, including a zero nonce", () => {

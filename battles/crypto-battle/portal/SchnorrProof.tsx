@@ -47,6 +47,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
   const [a,setA]=useState("");
   const [z,setZ]=useState("");
   const [commitError,setCommitError]=useState(false);
+  const [recovered,setRecovered]=useState(false);
   const storageKey=`tc-schnorr:${teamId}:${order.id}`;
   useEffect(()=>{
     setCommitError(false);
@@ -58,8 +59,8 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
     let stored: string | null = null;
     try { stored=sessionStorage.getItem(storageKey); } catch { /* This tab can still calculate. */ }
     const witness=schnorrWitness(proof,stored,draw);
-    setSecret(witness?.x??null);setNonce(witness?.r??null);
-    if(witness) {
+    setSecret(witness?.x??null);setNonce(witness?.r??null);setRecovered(witness?.recovered===true);
+    if(witness && !witness.recovered) {
       // Preserve the displayed r when the player visits another Order or reloads.
       try { sessionStorage.setItem(storageKey,JSON.stringify(witness)); } catch { /* Current tab can continue using its witness. */ }
     }
@@ -103,6 +104,7 @@ export function SchnorrProof({order,teamId,locale,busy,onSubmit}:{order:Contract
       <h4>{ja?"送信 2 / 2：届いたeを使って、最後の答えを計算":"Submission 2 / 2: calculate the final answer using the returned e"}</h4>
       <p>a = {proof.pending.a} → <strong>e = {proof.pending.e}</strong></p>
       {!matchesPending ? <p role="alert">{ja?"この端末に開始時の乱数 r がありません。証明を開始したタブで続けてください。":"The original private r is missing. Continue in the tab where you started."}</p> : <>
+        {recovered && <p role="note">{ja?`このタブには送信1で使った乱数 r の記録がありません（再読み込み、別のタブや端末など）。この教材は数が小さいので、送った a = ${proof.pending.a} から表で r = ${nonce} を探し直しました。実用の大きさでは r を失うと証明を続けられません。`:`This tab has no record of the random r from submission 1 (after a reload, or in another tab or device). This tiny model lets the table find r = ${nonce} again from the submitted a = ${proof.pending.a}. At practical sizes, losing r means the proof cannot be finished.`}</p>}
         <h4>{ja?"掛けて、足して、11で割った余りを入力":"Multiply, add, then enter the remainder modulo 11"}</h4>
         <SchnorrResponseValues r={nonce!} x={secret!} e={proof.pending.e} locale={locale} />
         <SchnorrResponseGuide r={nonce!} x={secret!} e={proof.pending.e} locale={locale} hints={order.hints} />
