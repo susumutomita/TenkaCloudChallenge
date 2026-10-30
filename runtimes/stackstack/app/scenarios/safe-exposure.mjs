@@ -247,7 +247,7 @@ const REFUSED_REQUIREMENTS = [
 
 function requirementProblem(requirement) {
   if (typeof requirement !== "string" || requirement.trim() === "") {
-    return "a requirement must be a non-empty string";
+    return "require の各要素は空でない文字列であること";
   }
   for (const [pattern, why] of REFUSED_REQUIREMENTS) {
     if (pattern.test(requirement)) return `"${requirement}" is not a requirement this policy has — ${why}`;
@@ -310,7 +310,7 @@ export function validatePolicy(raw) {
     }
     const require = rule.require ?? [];
     if (!Array.isArray(require)) {
-      problems.push(`${where}.require must be an array (an empty one means "no requirement")`);
+      problems.push(`${where}.require は配列であること (空配列は 「条件なし」)`);
     } else {
       for (const requirement of require) {
         const problem = requirementProblem(requirement);
