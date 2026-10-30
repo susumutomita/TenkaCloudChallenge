@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>寿命の切れたメモ / Stale request note</title>
+<style>
+  :root { color-scheme: light; }
+  body { font-family: system-ui, sans-serif; max-width: 56rem; margin: 1.25rem auto; padding: 0 1rem 3rem; line-height: 1.55; color: #18181b; }
+  h1 { font-size: 1.45rem; margin-bottom: .35rem; }
+  h2 { font-size: 1.1rem; margin-top: 1.6rem; border-bottom: 1px solid #e4e4e7; padding-bottom: .25rem; }
+  .muted { color: #52525b; font-size: .95rem; }
+  .card { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 10px; padding: .9rem 1rem; margin: .75rem 0; }
+  button, .btn { appearance: none; border: 1px solid #3f3f46; background: #18181b; color: #fff; border-radius: 8px; padding: .45rem .85rem; cursor: pointer; font: inherit; }
+  button.secondary { background: #fff; color: #18181b; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  pre { background: #0c0c0e; color: #e4e4e7; padding: .75rem; border-radius: 8px; overflow: auto; font-size: .82rem; max-height: 18rem; white-space: pre-wrap; }
+  .flag { font-family: ui-monospace, monospace; background: #ecfdf5; border: 1px solid #6ee7b7; padding: .35rem .55rem; border-radius: 6px; display: inline-block; }
+  label.choice { display: block; margin: .35rem 0; padding: .35rem .5rem; border-radius: 6px; }
+  label.choice:hover { background: #f4f4f5; }
+  .ok { color: #047857; font-weight: 600; }
+  .bad { color: #b91c1c; font-weight: 600; }
+  ol.steps > li { margin: .4rem 0; }
+</style>
+<h1>寿命の切れたメモ / Stale request note</h1>
+<p class="muted">小さな C プログラムを隔離コンテナで動かし、解放あとの参照・スタックとヒープ・直し方を観測します。実 PHP の攻撃や CVE の再現ではありません。<a href="/notes">補足ノート</a></p>
+
+<div class="card">
+  <strong>進め方</strong>
+  <ol class="steps">
+    <li>下のボタンで「壊れた版」を ASan 付きで動かし、診断と OBS 行を読む。</li>
+    <li>（任意）gdb の一括表示で、ポインタ変数と指し先の違いを見る。</li>
+    <li>クイズに答える。</li>
+    <li>教材用の無害関数 <code>record_lab_event</code> をハーネス経由で呼ぶ。</li>
+    <li>修正版で「拒否＋正常系」を確認する。</li>
+    <li>各ステップで出た <code>TC{...}</code> を Portal の対応チェックポイントへ提出する。</li>
+  </ol>
+  <p class="muted">答えの形はどれも <code>TC{</code> に続く英数字です。ヒント無しでも画面の結果だけで提出できます。</p>
+</div>
+
+<h2>1. 予測してから観測（ASan）</h2>
+<p>ワーカーが、前のリクエストのヒープメモへの印を残したまま解放し、次の処理で読んでしまう版です。動かす前に予想してください。</p>
+<p><label>予想（任意） <input id="predict" maxlength="200" style="width:min(100%,28rem)" placeholder="例: 解放あとの印を読んで不正になる"></label></p>
+<p>
+  <button id="btn-observe" type="button">壊れた版を ASan で動かす</button>
+</p>
+<div id="observe-out" class="card" hidden></div>
+
+<h2>2. gdb で場所を見る（任意）</h2>
+<p>非対話の gdb で、停止位置のフレーム・ローカル・ポインタ変数を表示します。失敗しても本編は進められます。</p>
+<p><button id="btn-gdb" class="secondary" type="button">gdb 一括表示</button></p>
+<div id="gdb-out" class="card" hidden></div>
+
+<h2>3. スタックとヒープ</h2>
+<p>次の説明のうち、正しいものを選んでください。</p>
+<form id="quiz-form" class="card">
+  <label class="choice"><input type="radio" name="answer" value="stack-object-freed"> 解放されたのはスタック上の <code>RequestNote</code> 本体で、ヒープは関係ない。</label>
+  <label class="choice"><input type="radio" name="answer" value="heap-freed-pointer-kept"> 解放されたのはヒープ上の文字列。ワーカーが持つのはそのアドレスを覚えたポインタ変数で、印が残っていても指し先はもう無効。</label>
+  <label class="choice"><input type="radio" name="answer" value="return-addr"> この教材のバグは、スタックの戻り先アドレスを上書きしている。</label>
+  <label class="choice"><input type="radio" name="answer" value="same-thing"> ポインタ変数の住所と、指し先のヒープ領域は同じ物なので、片方を消すともう片方も必ず消える。</label>
+  <p style="margin-top:.75rem"><button type="submit">クイズを提出</button></p>
+</form>
+<div id="quiz-out" class="card" hidden></div>
+
+<h2>4. 無害な教材イベント</h2>
+<p>あらかじめ用意した <code>record_lab_event("checkpoint")</code> を、ハーネスが意図的に実行します。脆弱性を使った制御奪取ではありません。ハーネスが fd 3 で受け取った記録だけが証拠です。</p>
+<p><button id="btn-event" type="button">record_lab_event を実行</button></p>
+<div id="event-out" class="card" hidden></div>
+
+<h2>5. 修正版の回帰</h2>
+<p>修正版は、リクエスト終了時に保持ポインタを消します。同じ手順のあとに拒否し、正常な確保→利用→後片付けは残ることを確認します。</p>
+<p><button id="btn-fix" type="button">修正版を試す</button></p>
+<div id="fix-out" class="card" hidden></div>
+
+<script>
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
+  return data;
+}
+function show(id, html) {
+  const el = document.getElementById(id);
+  el.hidden = false;
+  el.innerHTML = html;
+}
+function flagBlock(flag) {
+  return flag ? `<p class="ok">提出用フラグ: <span class="flag">${flag}</span></p>` : `<p class="bad">まだフラグはありません。出力を読み直してください。</p>`;
+}
+
+document.getElementById("btn-observe").onclick = async (ev) => {
+  ev.target.disabled = true;
+  try {
+    const data = await post("/api/observe");
+    show("observe-out", `
+      <p>${data.correct ? '<span class="ok">ASan が heap-use-after-free を検出</span>' : '<span class="bad">未検出</span>'} — ${data.note}</p>
+      <p><strong>OBS</strong></p><pre>${(data.obsLines || []).join("\n") || "(なし)"}</pre>
+      <p><strong>ASan stderr（末尾）</strong></p><pre>${data.stderrTail || ""}</pre>
+      ${flagBlock(data.flag)}`);
+  } catch (e) {
+    show("observe-out", `<p class="bad">${e.message}</p>`);
+  } finally { ev.target.disabled = false; }
+};
+
+document.getElementById("btn-gdb").onclick = async (ev) => {
+  ev.target.disabled = true;
+  try {
+    const data = await post("/api/gdb");
+    show("gdb-out", `<p>${data.hint}</p><pre>${data.output || ""}</pre>`);
+  } catch (e) {
+    show("gdb-out", `<p class="bad">${e.message}</p>`);
+  } finally { ev.target.disabled = false; }
+};
+
+document.getElementById("quiz-form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const answer = new FormData(ev.target).get("answer");
+  if (!answer) { show("quiz-out", `<p class="bad">選択肢を選んでください。</p>`); return; }
+  try {
+    const data = await post("/api/quiz", { answer });
+    show("quiz-out", `<p>${data.correct ? '<span class="ok">正解</span>' : '<span class="bad">不正解</span>'}</p>${flagBlock(data.flag)}`);
+  } catch (e) {
+    show("quiz-out", `<p class="bad">${e.message}</p>`);
+  }
+};
+
+document.getElementById("btn-event").onclick = async (ev) => {
+  ev.target.disabled = true;
+  try {
+    const data = await post("/api/lab-event");
+    show("event-out", `
+      <p>${data.correct ? '<span class="ok">ハーネスが記録を受け取りました</span>' : '<span class="bad">記録なし</span>'} — ${data.note}</p>
+      <p>events: <code>${(data.events || []).join(", ") || "(なし)"}</code></p>
+      <pre>${data.stdout || ""}</pre>
+      ${flagBlock(data.flag)}`);
+  } catch (e) {
+    show("event-out", `<p class="bad">${e.message}</p>`);
+  } finally { ev.target.disabled = false; }
+};
+
+document.getElementById("btn-fix").onclick = async (ev) => {
+  ev.target.disabled = true;
+  try {
+    const data = await post("/api/fix");
+    show("fix-out", `
+      <p>${data.correct ? '<span class="ok">拒否と正常系の両方を確認</span>' : '<span class="bad">条件未達</span>'} — ${data.note}</p>
+      <p><strong>修正版・解放あとの手順</strong></p><pre>${(data.staleObs || []).join("\n")}</pre>
+      <p><strong>修正版・正常系</strong></p><pre>${(data.normalObs || []).join("\n")}
+events: ${(data.normalEvents || []).join(", ")}</pre>
+      ${flagBlock(data.flag)}`);
+  } catch (e) {
+    show("fix-out", `<p class="bad">${e.message}</p>`);
+  } finally { ev.target.disabled = false; }
+};
+</script>
+</html>

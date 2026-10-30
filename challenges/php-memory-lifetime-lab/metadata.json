@@ -1,0 +1,209 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "php-memory-lifetime-lab",
+  "name": "寿命の切れたメモ",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 2,
+  "estimatedDuration": "40 分",
+  "shortDescription": "小さな C プログラムを隔離環境で動かし、解放あとの参照と直し方を ASan とログで観測しよう。",
+  "instructions": "## 依頼\n\nあなたは、進捗メモを扱う小さな教材プログラムの保守担当です。ワーカーが前の処理のメモへの印を残したまま次の処理に進む、という報告があります。実サービスへの攻撃ではなく、隔離された教材で寿命と所有権を観測してください。\n\n## まずやること\n\nPortal で起動し、アクセス先 URL の Web を開きます。画面の手順どおりに進めてください。\n\n1. 動かす前に短い予想を書いてから、「壊れた版を ASan で動かす」を押す。\n2. 出てきた OBS 行と AddressSanitizer の診断を読む（任意で gdb 一括表示も可）。\n3. スタックとヒープのクイズに答える。\n4. あらかじめ用意された無害関数 `record_lab_event` を、画面のボタンからハーネス経由で実行する。\n5. 修正版で、解放あとの参照が拒まれ、正常な処理は残ることを確認する。\n\n## 提出\n\n各ステップで画面に出る `TC{...}` を、Portal の対応チェックポイントへ貼ります。形はどれも `TC{` に続く英数字です。クラッシュしただけでは合格になりません。ヒントは減点あり。画面の結果だけで解けます。\n\n## 用語（初出）\n\n- **ヒープ**: `malloc` などで確保し、自分で返す（free する）メモリ。\n- **スタック**: 関数の作業用の枠。ローカル変数や、アドレスを覚えるポインタ変数そのものが置かれる。\n- **ポインタ**: 別の場所の住所を書いた紙。紙が残っていても、住所先がすでに片付け済みなら読んでいけない。\n- **ASan (AddressSanitizer)**: 不正なメモリ利用を見つけやすくする診断付きの実行。止まっても、普段の実行と必ず同じとは限らない。\n\n## 許可範囲\n\n対象はこの問題の Web と、そこで起動する教材プログラムだけです。実 PHP への攻撃、OS コマンド、外部通信、ホストの秘密は対象外です。",
+  "description": "隔離コンテナ内の小さな C プログラムで、リクエスト所有ヒープへの解放後参照を ASan / OBS / gdb で観測し、保持ポインタのクリアによる修正と無害な record_lab_event を独立に確認する。PHP CVE の再現や実 exploit ではない。#923 memory-slot-lab（JS 模型）の実測版。",
+  "writeup": "## 観測の読み方\n\n壊れた版は、リクエスト終了後もワーカー大域がヒープ文字列へのポインタを保持し、次の処理で読む。OBS の `after_free retained_still=... stale=1` のあと、ASan が `heap-use-after-free` を報告する。スタック上にあるのはポインタ変数側で、解放されたのはヒープ上の文字列である。戻り先アドレスの上書きではない。\n\n## 無害イベントと修正\n\n`record_lab_event` は教材があらかじめ用意した記録用関数で、ハーネスが fd 3 で受け取る。脆弱性を使った制御奪取ではない。修正版は解放時に保持ポインタと世代を消し、同じ手順では `consume_rejected` になり、正常系の確保・利用・後片付けは残る。\n\n## PHP との関係（背景）\n\n公式告知 CVE-2026-109618 / 109619 は寿命・初期化・ワーカー状態の話の入口。照合済み修正コミットは `3584a98bda0f2c0d367255b046798b0d3a221a19`（Avoid state corruption via bailout）。教材の NULL クリアは PHP パッチと同一視しない。memory-slot-lab は安全な JS 模型で、本問は実 C 観測を担当する。",
+  "tags": [
+    "memory-safety",
+    "debugging",
+    "local-play",
+    "container"
+  ],
+  "exposedPorts": [
+    {
+      "port": 18080,
+      "name": "Web"
+    },
+    {
+      "port": 18081,
+      "name": "Verifier (host only)"
+    }
+  ],
+  "learningGoals": [
+    "解放あとの参照を OBS と ASan で説明できる",
+    "スタック上のポインタ変数とヒープ上の対象を区別できる",
+    "無害な教材イベント記録と、修正による拒否＋正常系維持を分けて確認できる"
+  ],
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": [
+      "FLAG_SEED"
+    ]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "sequential",
+    "checks": [
+      {
+        "id": "observe-asan",
+        "label": "診断で不正な参照を見る",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "input": "text",
+        "hints": [
+          {
+            "id": "observe-asan-1",
+            "content": "【観察】 「壊れた版を ASan で動かす」を押し、OBS の phase=after_free と stderr の ERROR 行を読もう。",
+            "penalty": 3
+          },
+          {
+            "id": "observe-asan-2",
+            "content": "【確認】 heap-use-after-free と stale=1 がそろったら、画面の TC{...} をこのチェックへ提出する。落ちただけでは足りない。",
+            "penalty": 9
+          }
+        ],
+        "writeup": "ASan が heap-use-after-free を報告し、OBS が解放後も retained が残ったことを示す。クラッシュ申告だけでは不合格。"
+      },
+      {
+        "id": "stack-heap",
+        "label": "住所メモと実体の場所",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "input": "text",
+        "hints": [
+          {
+            "id": "stack-heap-1",
+            "content": "【観察】 OBS の stack_local と heap、または gdb の worker_retained_note を見比べる。どちらが「紙」でどちらが「荷物」か。",
+            "penalty": 3
+          },
+          {
+            "id": "stack-heap-2",
+            "content": "【確認】 解放されたのはヒープの文字列。ワーカーが持つのはその住所を書いたポインタ。戻り先上書きではない選択肢を選ぶ。",
+            "penalty": 9
+          }
+        ],
+        "writeup": "正解は「ヒープ上の文字列が解放され、ワーカーのポインタ変数だけが古い住所を保持」。スタック戻り先上書きではない。"
+      },
+      {
+        "id": "lab-event",
+        "label": "教材イベントを記録する",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "input": "text",
+        "hints": [
+          {
+            "id": "lab-event-1",
+            "content": "【観察】 「record_lab_event を実行」を押す。画面に events: checkpoint と出るか見る。",
+            "penalty": 3
+          },
+          {
+            "id": "lab-event-2",
+            "content": "【確認】 ハーネスが受け取った記録に対して出る TC{...} を提出する。メモリエラーの観測とは別のチェックポイント。",
+            "penalty": 9
+          }
+        ],
+        "writeup": "あらかじめ用意した record_lab_event をハーネスが実行し fd 3 で記録した。exploit による制御奪取ではない。"
+      },
+      {
+        "id": "fix-ok",
+        "label": "直して正常も残す",
+        "points": 25,
+        "wrongAnswerPenalty": 1,
+        "input": "text",
+        "hints": [
+          {
+            "id": "fix-ok-1",
+            "content": "【観察】 「修正版を試す」を押し、consume_rejected と normal の result=ok を両方確認する。",
+            "penalty": 3
+          },
+          {
+            "id": "fix-ok-2",
+            "content": "【確認】 拒否だけ・停止だけでは不合格。正常系の LAB_EVENT も残ってから出る TC{...} を提出する。",
+            "penalty": 9
+          }
+        ],
+        "writeup": "解放時に保持ポインタを消すと stale 手順は拒否され、正常な確保・利用・後片付けは維持される。"
+      }
+    ]
+  },
+  "i18n": {
+    "en": {
+      "name": "Stale Request Note",
+      "shortDescription": "Run a tiny C program in isolation and observe a use-after-free style stale reference with ASan and logs.",
+      "instructions": "## Request\n\nYou maintain a tiny teaching program that keeps progress notes. A report says a worker still holds a mark pointing at a previous request's note. This is not an attack on a real service: observe lifetime and ownership inside the isolated lab.\n\n## First steps\n\nStart the problem in Portal and open Web under Access URLs. Follow the on-page steps:\n\n1. Write a short prediction, then run the buggy build under AddressSanitizer.\n2. Read the OBS lines and the sanitizer diagnosis (optional gdb batch view).\n3. Answer the stack-versus-heap quiz.\n4. Run the predeclared harmless `record_lab_event` through the harness button.\n5. Confirm the fixed build rejects the stale path while keeping the normal path.\n\n## Submission\n\nPaste each on-screen `TC{...}` into the matching Portal checkpoint. Every answer looks like `TC{` plus hex digits. A crash alone is not enough. Hints cost points. The page alone is enough to solve.\n\n## Terms\n\n- **Heap**: memory from `malloc` that you must free.\n- **Stack**: a function's work frame; locals and pointer variables themselves live here.\n- **Pointer**: a slip of paper with an address. Keeping the paper does not keep the destination valid.\n- **ASan**: a diagnostic build that makes bad memory use easier to spot; its stop is not identical to ordinary runs.\n\n## Scope\n\nOnly this problem's Web UI and its teaching programs. No attacks against real PHP, no OS commands, no external network, and no host secrets.",
+      "description": "Isolated C lab observing stale heap references with ASan/OBS/gdb, a cleared retained pointer fix, and a harness-recorded record_lab_event. Not a PHP CVE reproduction. Complements memory-slot-lab.",
+      "writeup": "## Reading the observation\n\nThe buggy build retains a worker pointer into freed request heap and reads it next. OBS shows stale retention; ASan reports heap-use-after-free. The pointer variable is on the process data/stack side; the freed object is heap. This is not a stack return-address overwrite.\n\n## Harmless event and fix\n\n`record_lab_event` is a predeclared recorder; the harness captures fd 3. It is not control hijack via a vulnerability. The fix clears the retained pointer on request end, rejects the stale path, and keeps normal allocate/use/cleanup.\n\n## PHP background\n\nCVE-2026-109618 / 109619 motivate the lifetime theme. Verified fix commit: `3584a98bda0f2c0d367255b046798b0d3a221a19`. The lab's NULL clear is not the PHP patch. memory-slot-lab remains the safe JS model; this problem owns real C observation.",
+      "learningGoals": [
+        "Explain a stale reference from OBS and ASan",
+        "Distinguish a stack-resident pointer variable from a heap object",
+        "Separately confirm a harness lab event and a fix that rejects stale use while keeping the normal path"
+      ],
+      "checks": [
+        {
+          "id": "observe-asan",
+          "label": "See the bad reference in a diagnosis",
+          "writeup": "ASan reports heap-use-after-free and OBS shows retention after free. A crash claim alone fails.",
+          "hints": [
+            {
+              "id": "observe-asan-1",
+              "content": "[Observe] Run the buggy ASan build. Read OBS phase=after_free and the ERROR lines on stderr."
+            },
+            {
+              "id": "observe-asan-2",
+              "content": "[Confirm] When heap-use-after-free and stale=1 both appear, submit the on-screen TC{...}. A crash alone is not enough."
+            }
+          ]
+        },
+        {
+          "id": "stack-heap",
+          "label": "Address slip versus the object",
+          "writeup": "Correct: the heap string was freed; the worker still holds a pointer variable with the old address. Not a return-address overwrite.",
+          "hints": [
+            {
+              "id": "stack-heap-1",
+              "content": "[Observe] Compare OBS stack_local vs heap, or gdb's worker_retained_note. Which is the slip of paper?"
+            },
+            {
+              "id": "stack-heap-2",
+              "content": "[Confirm] Choose the option where the heap string is freed and the worker keeps only a stale address — not return-address overwrite."
+            }
+          ]
+        },
+        {
+          "id": "lab-event",
+          "label": "Record the teaching event",
+          "writeup": "The harness intentionally runs predeclared record_lab_event and records it on fd 3. Not exploit-based control hijack.",
+          "hints": [
+            {
+              "id": "lab-event-1",
+              "content": "[Observe] Press the record_lab_event button and look for events: checkpoint."
+            },
+            {
+              "id": "lab-event-2",
+              "content": "[Confirm] Submit the TC{...} shown for the harness record. This checkpoint is separate from memory-error observation."
+            }
+          ]
+        },
+        {
+          "id": "fix-ok",
+          "label": "Fix without breaking the happy path",
+          "writeup": "Clearing the retained pointer on free rejects the stale path while normal allocate/use/cleanup remains.",
+          "hints": [
+            {
+              "id": "fix-ok-1",
+              "content": "[Observe] Run the fixed build and confirm both consume_rejected and normal result=ok."
+            },
+            {
+              "id": "fix-ok-2",
+              "content": "[Confirm] Rejection-only or stop-only fails. Submit the TC{...} after the normal LAB_EVENT remains."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
