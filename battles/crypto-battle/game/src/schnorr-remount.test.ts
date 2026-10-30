@@ -3,6 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from "rea
 import { createElement } from "react";
 import { SchnorrProof } from "../../portal/SchnorrProof.tsx";
 import { applyOp, initialState, projectForTeam, STREAMING_ORDER_CONFIG, validateOp } from "./reducer.ts";
+import { power } from "./schnorr.ts";
 import type { ContractProjection, CryptoBattleOp } from "./types.ts";
 
 const previousStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
@@ -60,13 +61,27 @@ test("the real proof component keeps the displayed calculation across other Orde
   expect(draws()).toBe(2);
 });
 
-test("unavailable storage does not reroll an accepted commitment on remount", () => {
+test("a tab without notes recovers the accepted commitment and can finish the proof", () => {
   const draws = setup({ getItem: () => { throw Error("storage unavailable"); }, setItem: () => { throw Error("storage unavailable"); } });
-  const state = applyOp(initialState({ eventId: "missing-notes", teamIds: ["a", "b"], matchSecret: "unit-fixture" }, STREAMING_ORDER_CONFIG), "a", { kind: "start" });
-  const order = projectForTeam(state, "a").myContracts[0]!;
-  const pending = { ...order, schnorr: { ...order.schnorr!, pending: { y: order.schnorr!.y, a: 8, e: 5 } } };
-  act(() => { renderer = create(createElement(SchnorrProof, { order: pending, teamId: "a", locale: "ja", busy: false, onSubmit: () => { throw Error("cannot submit without notes"); } })); });
-  expect(text(renderer!.root)).toContain("証明を開始したタブで続けてください");
-  expect(renderer!.root.findAllByProps({ "aria-label": "Schnorr z" })).toHaveLength(0);
+  let state = applyOp(initialState({ eventId: "missing-notes", teamIds: ["a", "b"], matchSecret: "unit-fixture" }, STREAMING_ORDER_CONFIG), "a", { kind: "start" });
+  const order = () => projectForTeam(state, "a").myContracts[0]!;
+  const r = 4;
+  const commit: CryptoBattleOp = { kind: "schnorr-commit", contractId: order().id, y: order().schnorr!.y, a: power(2, r) };
+  expect(validateOp(state, "a", commit)).toEqual({ ok: true });
+  state = applyOp(state, "a", commit);
+  const submit = (op: CryptoBattleOp) => {
+    expect(validateOp(state, "a", op)).toEqual({ ok: true });
+    state = applyOp(state, "a", op);
+  };
+  act(() => { renderer = create(createElement(SchnorrProof, { order: order(), teamId: "a", locale: "ja", busy: false, onSubmit: submit })); });
+  expect(text(renderer!.root)).toContain(`表で r = ${r} を探し直しました`);
+  expect(text(renderer!.root)).not.toContain("証明を開始したタブで続けてください");
+  const pending = order().schnorr!.pending!;
+  const x = Array.from({ length: 11 }, (_, i) => i).find(i => power(2, i) === pending.y)!;
+  const z = (r + pending.e * x) % 11;
+  act(() => renderer!.root.findByProps({ "aria-label": "Schnorr z" }).props.onChange({ target: { value: String(z) } }));
+  act(() => renderer!.root.findAllByType("button").find(button => String(button.props.children).startsWith("②"))!.props.onClick());
+  expect(order().schnorr!.pending!.outcome).toBe("hit");
+  expect(state.teams.a!.score).toBe(order().points);
   expect(draws()).toBe(0);
 });
