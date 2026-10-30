@@ -92,7 +92,7 @@ regresses (`scripts/wp2shell-local-lab.test.ts`):
 1. `make local PROBLEM=wp2shell-local-lab` starts the stack, the scoring API, and the
    portal.
 2. Log in to the portal with any non-empty key.
-3. `docker compose logs wp2shell-local-lab` for the SRE console token (you will need it
+3. Open `http://127.0.0.1:18080/admin` (browser or curl) for the SRE console token and action list (you will need it
    for stage 2 — write it down now).
 4. **Stage 1**: `curl http://127.0.0.1:18080/wp-json/` to see the namespaces, then work out
    how a bundled (batch) request can reach the internal-only report unauthenticated, and
