@@ -83,7 +83,7 @@ export function challengeServer(seed) {
           ok: !result.timedOut && (sawPointer || sawBreakpoint),
           output: text.slice(-8000),
           hint:
-            "スタック上にあるのはポインタ変数そのもの。指し先の文字列はヒープ側です。ポインタが残っていることと、指し先がまだ有効なことは別です。",
+            "ポインタ変数 worker_retained_note は、ヒープの外にあるワーカーのグローバル変数で、住所（アドレス）を覚えているだけ。指し先の文字列はヒープ側です。ポインタが残っていることと、指し先がまだ有効なことは別です。",
         });
       }
 
@@ -142,7 +142,8 @@ function notesPage() {
 <p>この教材の C プログラムは、PHP 本体でも CVE の再現でもありません。ワーカーがリクエスト所有メモリへの参照を残す、という寿命の話を小さな独立プログラムで観測します。</p>
 <h2>スタックとヒープ</h2>
 <ul>
-<li><strong>スタック</strong>: 関数のローカル変数（例: <code>RequestNote req</code> やポインタ変数そのもの）。呼び出しが終わると枠ごと消える。</li>
+<li><strong>スタック</strong>: 関数のローカル変数（例: <code>RequestNote req</code>）。呼び出しが終わると枠ごと消える。</li>
+<li><strong>グローバル変数</strong>: 関数の外で宣言した変数（例: ポインタ変数 <code>worker_retained_note</code>）。プログラムが動いている間ずっと残る。ヒープの外にあり、ヒープの住所を覚えているだけ。</li>
 <li><strong>ヒープ</strong>: <code>malloc</code>/<code>strdup</code> で確保した領域。自分で <code>free</code> するまで残る。解放後に読むと不正。</li>
 <li>ポインタ変数が「アドレスを覚えている」ことと、そのアドレス先がまだ有効なことは別です。</li>
 </ul>

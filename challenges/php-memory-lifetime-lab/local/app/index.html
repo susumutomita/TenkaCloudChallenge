@@ -32,7 +32,7 @@
     <li>クイズに答える。</li>
     <li>教材用の無害関数 <code>record_lab_event</code> をハーネス経由で呼ぶ。</li>
     <li>修正版で「拒否＋正常系」を確認する。</li>
-    <li>各ステップで出た <code>TC{...}</code> を Portal の対応チェックポイントへ提出する。</li>
+    <li>各ステップで出た <code>TC{...}</code> を Portal の対応チェックポイントへ提出する（フラグの下に提出先のチェック名が出ます）。</li>
   </ol>
   <p class="muted">答えの形はどれも <code>TC{</code> に続く英数字です。ヒント無しでも画面の結果だけで提出できます。</p>
 </div>
@@ -82,13 +82,33 @@ async function post(path, body) {
   if (!res.ok) throw new Error(data.detail || data.error || res.statusText);
   return data;
 }
+// Command output (gdb, ASan, OBS, stdout) contains text such as
+// <worker_retained_note> or <optimized out>; escape it before innerHTML.
+function esc(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+// Portal check titles from metadata.json scoring.checks[].label (ja) and i18n.en.checks[].label.
+const PORTAL_CHECKS = {
+  "observe-asan": { ja: "診断で不正な参照を見る", en: "See the bad reference in a diagnosis" },
+  "stack-heap": { ja: "住所メモと実体の場所", en: "Address slip versus the object" },
+  "lab-event": { ja: "教材イベントを記録する", en: "Record the teaching event" },
+  "fix-ok": { ja: "直して正常も残す", en: "Fix without breaking the happy path" },
+};
 function show(id, html) {
   const el = document.getElementById(id);
   el.hidden = false;
   el.innerHTML = html;
 }
-function flagBlock(flag) {
-  return flag ? `<p class="ok">提出用フラグ: <span class="flag">${flag}</span></p>` : `<p class="bad">まだフラグはありません。出力を読み直してください。</p>`;
+function flagBlock(flag, checkId) {
+  if (!flag) return `<p class="bad">まだフラグはありません。出力を読み直してください。</p>`;
+  const check = PORTAL_CHECKS[checkId];
+  return `<p class="ok">提出用フラグ: <span class="flag">${esc(flag)}</span></p>
+      <p class="portal-check">→ Portal『${esc(check.ja)}』へ <span class="muted">(Portal check: "${esc(check.en)}")</span></p>`;
 }
 
 document.getElementById("btn-observe").onclick = async (ev) => {
@@ -96,12 +116,12 @@ document.getElementById("btn-observe").onclick = async (ev) => {
   try {
     const data = await post("/api/observe");
     show("observe-out", `
-      <p>${data.correct ? '<span class="ok">ASan が heap-use-after-free を検出</span>' : '<span class="bad">未検出</span>'} — ${data.note}</p>
-      <p><strong>OBS</strong></p><pre>${(data.obsLines || []).join("\n") || "(なし)"}</pre>
-      <p><strong>ASan stderr（末尾）</strong></p><pre>${data.stderrTail || ""}</pre>
-      ${flagBlock(data.flag)}`);
+      <p>${data.correct ? '<span class="ok">ASan が heap-use-after-free を検出</span>' : '<span class="bad">未検出</span>'} — ${esc(data.note)}</p>
+      <p><strong>OBS</strong></p><pre>${esc((data.obsLines || []).join("\n") || "(なし)")}</pre>
+      <p><strong>ASan stderr（末尾）</strong></p><pre>${esc(data.stderrTail)}</pre>
+      ${flagBlock(data.flag, "observe-asan")}`);
   } catch (e) {
-    show("observe-out", `<p class="bad">${e.message}</p>`);
+    show("observe-out", `<p class="bad">${esc(e.message)}</p>`);
   } finally { ev.target.disabled = false; }
 };
 
@@ -109,9 +129,9 @@ document.getElementById("btn-gdb").onclick = async (ev) => {
   ev.target.disabled = true;
   try {
     const data = await post("/api/gdb");
-    show("gdb-out", `<p>${data.hint}</p><pre>${data.output || ""}</pre>`);
+    show("gdb-out", `<p>${esc(data.hint)}</p><pre>${esc(data.output)}</pre>`);
   } catch (e) {
-    show("gdb-out", `<p class="bad">${e.message}</p>`);
+    show("gdb-out", `<p class="bad">${esc(e.message)}</p>`);
   } finally { ev.target.disabled = false; }
 };
 
@@ -121,9 +141,9 @@ document.getElementById("quiz-form").onsubmit = async (ev) => {
   if (!answer) { show("quiz-out", `<p class="bad">選択肢を選んでください。</p>`); return; }
   try {
     const data = await post("/api/quiz", { answer });
-    show("quiz-out", `<p>${data.correct ? '<span class="ok">正解</span>' : '<span class="bad">不正解</span>'}</p>${flagBlock(data.flag)}`);
+    show("quiz-out", `<p>${data.correct ? '<span class="ok">正解</span>' : '<span class="bad">不正解</span>'}</p>${flagBlock(data.flag, "stack-heap")}`);
   } catch (e) {
-    show("quiz-out", `<p class="bad">${e.message}</p>`);
+    show("quiz-out", `<p class="bad">${esc(e.message)}</p>`);
   }
 };
 
@@ -132,12 +152,12 @@ document.getElementById("btn-event").onclick = async (ev) => {
   try {
     const data = await post("/api/lab-event");
     show("event-out", `
-      <p>${data.correct ? '<span class="ok">ハーネスが記録を受け取りました</span>' : '<span class="bad">記録なし</span>'} — ${data.note}</p>
-      <p>events: <code>${(data.events || []).join(", ") || "(なし)"}</code></p>
-      <pre>${data.stdout || ""}</pre>
-      ${flagBlock(data.flag)}`);
+      <p>${data.correct ? '<span class="ok">ハーネスが記録を受け取りました</span>' : '<span class="bad">記録なし</span>'} — ${esc(data.note)}</p>
+      <p>events: <code>${esc((data.events || []).join(", ") || "(なし)")}</code></p>
+      <pre>${esc(data.stdout)}</pre>
+      ${flagBlock(data.flag, "lab-event")}`);
   } catch (e) {
-    show("event-out", `<p class="bad">${e.message}</p>`);
+    show("event-out", `<p class="bad">${esc(e.message)}</p>`);
   } finally { ev.target.disabled = false; }
 };
 
@@ -146,13 +166,13 @@ document.getElementById("btn-fix").onclick = async (ev) => {
   try {
     const data = await post("/api/fix");
     show("fix-out", `
-      <p>${data.correct ? '<span class="ok">拒否と正常系の両方を確認</span>' : '<span class="bad">条件未達</span>'} — ${data.note}</p>
-      <p><strong>修正版・解放あとの手順</strong></p><pre>${(data.staleObs || []).join("\n")}</pre>
-      <p><strong>修正版・正常系</strong></p><pre>${(data.normalObs || []).join("\n")}
-events: ${(data.normalEvents || []).join(", ")}</pre>
-      ${flagBlock(data.flag)}`);
+      <p>${data.correct ? '<span class="ok">拒否と正常系の両方を確認</span>' : '<span class="bad">条件未達</span>'} — ${esc(data.note)}</p>
+      <p><strong>修正版・解放あとの手順</strong></p><pre>${esc((data.staleObs || []).join("\n"))}</pre>
+      <p><strong>修正版・正常系</strong></p><pre>${esc((data.normalObs || []).join("\n"))}
+events: ${esc((data.normalEvents || []).join(", "))}</pre>
+      ${flagBlock(data.flag, "fix-ok")}`);
   } catch (e) {
-    show("fix-out", `<p class="bad">${e.message}</p>`);
+    show("fix-out", `<p class="bad">${esc(e.message)}</p>`);
   } finally { ev.target.disabled = false; }
 };
 </script>
