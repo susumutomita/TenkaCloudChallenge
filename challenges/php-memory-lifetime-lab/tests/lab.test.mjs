@@ -175,3 +175,30 @@ test(
     });
   },
 );
+
+test("lab page escapes command output and names the matching Portal check", () => {
+  const page = readFileSync(join(ROOT, "local/app/index.html"), "utf8");
+  const metadata = JSON.parse(readFileSync(join(ROOT, "metadata.json"), "utf8"));
+
+  const escSource = /function esc\(value\) \{[\s\S]*?\n\}/.exec(page)?.[0];
+  assert.ok(escSource, "index.html defines esc()");
+  const esc = new Function(`${escSource}; return esc;`)();
+  assert.equal(
+    esc("$1 = (char *) 0x0 <worker_retained_note> & <optimized out>"),
+    "$1 = (char *) 0x0 &lt;worker_retained_note&gt; &amp; &lt;optimized out&gt;",
+  );
+  for (const raw of ["data.output", "data.stderrTail", "data.stdout", "data.hint", "data.note", "e.message"]) {
+    assert.ok(!page.includes(`\${${raw}`), `${raw} is inserted without esc()`);
+  }
+
+  const mapSource = /const PORTAL_CHECKS = (\{[\s\S]*?\n\});/.exec(page)?.[1];
+  assert.ok(mapSource, "index.html defines PORTAL_CHECKS");
+  const portalChecks = new Function(`return ${mapSource};`)();
+  const enChecks = Object.fromEntries(metadata.i18n.en.checks.map((c) => [c.id, c.label]));
+  assert.deepEqual(Object.keys(portalChecks).sort(), metadata.scoring.checks.map((c) => c.id).sort());
+  for (const check of metadata.scoring.checks) {
+    assert.equal(portalChecks[check.id].ja, check.label);
+    assert.equal(portalChecks[check.id].en, enChecks[check.id]);
+    assert.ok(page.includes(`flagBlock(data.flag, "${check.id}")`), `${check.id} flag shows its Portal check`);
+  }
+});
