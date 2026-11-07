@@ -117,6 +117,8 @@ hosting tier は `GET /meta` の申告で決まり、 score engine はこれを�
 
 `services/<name>/Dockerfile` は 3 種 hosting にそのまま流用可能。 配線だけが異なる。
 
+**実行ロール。** 実行ロール (Lambda 実行ロール、 ECS タスク実行ロール、 App Runner の ECR アクセスロール) を作るときは、 stack Output の `ExecutionRoleBoundaryArn` を permissions boundary に付けて作る。 例: `aws iam create-role --role-name <NamePrefix>-... --assume-role-policy-document ... --permissions-boundary <ExecutionRoleBoundaryArn>` (Console のロール作成ウィザードにも同じ欄がある)。 付けないとロールの作成は拒否される。 attach するのは hosting ごとの AWS 管理ポリシー (`AWSLambdaBasicExecutionRole` / `AmazonECSTaskExecutionRolePolicy` / `AWSAppRunnerServicePolicyForECRAccess`)。
+
 ### Lambda + API Gateway
 
 1. Hono を `hono/aws-lambda` adapter で wrap (handler を export)
@@ -148,6 +150,19 @@ hosting tier は `GET /meta` の申告で決まり、 score engine はこれを�
 | 主な学び     | event-driven, 非同期     | orchestration, 永続化, network      | managed container, source deploy    |
 
 Lambda (関数) ↔ App Runner (managed container) ↔ ECS (orchestrated container) のスペクトラムを 1 競技で歩く設計。
+
+## 検証
+
+```bash
+make install && make agent-gate                                    # カタログ契約
+node --test battles/microservice-migration-battle/iam-boundary.test.mjs   # template.yaml の IAM boundary 契約
+```
+
+`iam-boundary.test.mjs` は `template.yaml` を読み、 `ExecutionRoleBoundary` managed policy が許可済み 3 管理ポリシーぶんの権限だけで存在すること、 参加者ロールで `iam:CreateRole` / `iam:PutRolePolicy` / `iam:AttachRolePolicy` を許可する全 statement がその boundary を条件にしていること、 `iam:PutRolePermissionsBoundary` / `iam:DeleteRolePermissionsBoundary` を許可していないこと、 `Outputs.ExecutionRoleBoundaryArn` があることを検査する。 `cfn-lint` は template を通過する。
+
+### 未検証事項
+
+- 実 AWS アカウントでの通し確認: 参加者ロールで boundary なしの `create-role` が拒否され、 boundary 付きなら通ること、 そのロールを使った Lambda / ECS Fargate / App Runner が稼働して採点されること。 これは merge 条件ではなく、 イベント前リハーサルとして残っている。
 
 ## コスト
 
