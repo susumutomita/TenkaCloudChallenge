@@ -117,6 +117,8 @@ curl http://localhost/catalog/score
 
 The repo ships a Dockerfile for every service. The same image works on all three managed runtimes — only the wiring differs.
 
+**Execution roles.** Whenever you create an execution role (Lambda execution role, ECS task execution role, App Runner ECR access role), create it with the stack Output `ExecutionRoleBoundaryArn` as its permissions boundary, e.g. `aws iam create-role --role-name <NamePrefix>-... --assume-role-policy-document ... --permissions-boundary <ExecutionRoleBoundaryArn>` (the Console role wizard has the same field). Role creation is denied without it. Attach the AWS-managed policy the hosting tier expects (`AWSLambdaBasicExecutionRole`, `AmazonECSTaskExecutionRolePolicy` or `AWSAppRunnerServicePolicyForECRAccess`).
+
 ### Lambda + API Gateway
 
 1. Wrap Hono with the `hono/aws-lambda` adapter (export the handler).
@@ -148,6 +150,19 @@ The repo ships a Dockerfile for every service. The same image works on all three
 | Main takeaway    | event-driven, async      | orchestration, persistence, network | managed container, source deploy    |
 
 The whole point is to walk the spectrum from function → managed container → orchestrated container in a single sitting.
+
+## Verification
+
+```bash
+make install && make agent-gate                                    # catalog contracts
+node --test battles/microservice-migration-battle/iam-boundary.test.mjs   # IAM boundary contract in template.yaml
+```
+
+`iam-boundary.test.mjs` parses `template.yaml` and checks that the `ExecutionRoleBoundary` managed policy exists with only the permissions of the three allowed managed policies, that every participant-role statement granting `iam:CreateRole`, `iam:PutRolePolicy` or `iam:AttachRolePolicy` requires that boundary, that `iam:PutRolePermissionsBoundary` / `iam:DeleteRolePermissionsBoundary` are never granted, and that `Outputs.ExecutionRoleBoundaryArn` is present. `cfn-lint` passes on the template.
+
+### Unverified
+
+- End-to-end on a real AWS account: that the participant role is denied `create-role` without the boundary, is allowed with it, and that a Lambda / ECS Fargate / App Runner service using such a role runs and scores. This remains an event rehearsal, not a merge gate.
 
 ## Cost
 

@@ -9,4 +9,5 @@ validate:
 agent-gate: validate
 	bun test scripts/native-runtime.test.ts scripts/native-coordination.test.ts scripts/authors.test.ts scripts/skill-evidence.test.ts scripts/checkpoint-writeups.test.ts
 	node --test challenges/stackstack-first-request/contract.test.mjs
+	node --test battles/microservice-migration-battle/iam-boundary.test.mjs
 	node --test runtimes/stackstack/names.test.mjs

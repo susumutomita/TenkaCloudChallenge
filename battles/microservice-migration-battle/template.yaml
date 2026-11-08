@@ -145,7 +145,49 @@ Resources:
         - Key: TenkaCloud:NamePrefix
           Value: !Ref NamePrefix
 
-  # ----- IAM (SSM Session Manager only) -----
+  # ----- IAM -----
+  # Permissions boundary for every execution role a participant creates (#951).
+  # The participant role below may create / inline-policy / attach only roles that
+  # carry THIS boundary (iam:PermissionsBoundary Condition), and it is never granted
+  # iam:PutRolePermissionsBoundary / iam:DeleteRolePermissionsBoundary, so a
+  # participant-made role can never exceed the statements here, whatever inline
+  # policy is put on it. The boundary is the union of the three AWS-managed
+  # policies AttachOnlySafeManagedPolicies allows -- AWSLambdaBasicExecutionRole,
+  # AmazonECSTaskExecutionRolePolicy and AWSAppRunnerServicePolicyForECRAccess --
+  # which is exactly what the Lambda / ECS Fargate / App Runner migration route
+  # needs from its execution roles. No iam:* inside.
+  #
+  # AWS::IAM::ManagedPolicy has no Tags property in CloudFormation, so the team
+  # identity lives in the policy name (${NamePrefix}) instead of a
+  # TenkaCloud:NamePrefix tag.
+  ExecutionRoleBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${NamePrefix}-execution-role-boundary"
+      Description: !Sub "Permissions boundary for execution roles created by the ${NamePrefix} participant role (Lambda / ECS Fargate / App Runner migration)."
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # = AWSLambdaBasicExecutionRole (+ the ECS task execution role's log writes).
+          - Sid: WriteRuntimeLogs
+            Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: "*"
+          # = AmazonECSTaskExecutionRolePolicy / AWSAppRunnerServicePolicyForECRAccess
+          # image pulls. ecr:GetAuthorizationToken does not accept a resource ARN.
+          - Sid: PullContainerImages
+            Effect: Allow
+            Action:
+              - ecr:GetAuthorizationToken
+              - ecr:BatchCheckLayerAvailability
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:DescribeImages
+            Resource: "*"
+
   ParticipantViewerRole:
     Type: AWS::IAM::Role
     Properties:
@@ -299,14 +341,28 @@ Resources:
                   - lambda:GetFunctionUrlConfig
                   - lambda:InvokeFunction
                 Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${NamePrefix}*"
-              - Sid: ManageOwnExecutionRoles
+              # #951: every action that can widen a participant-made role
+              # (CreateRole / PutRolePolicy / AttachRolePolicy) is conditioned on the
+              # role carrying ExecutionRoleBoundary. `aws iam create-role` without
+              # `--permissions-boundary <ExecutionRoleBoundaryArn>` is denied, and the
+              # role's effective permissions can never exceed the boundary.
+              # iam:PutRolePermissionsBoundary / iam:DeleteRolePermissionsBoundary stay
+              # ungranted so the boundary cannot be swapped or removed afterwards.
+              - Sid: CreateOwnBoundedExecutionRoles
                 Effect: Allow
                 Action:
                   - iam:CreateRole
+                  - iam:PutRolePolicy
+                Resource: !Sub "arn:aws:iam::${AWS::AccountId}:role/${NamePrefix}*"
+                Condition:
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref ExecutionRoleBoundary
+              - Sid: ManageOwnExecutionRoles
+                Effect: Allow
+                Action:
                   - iam:DeleteRole
                   - iam:GetRole
                   - iam:UpdateRoleDescription
-                  - iam:PutRolePolicy
                   - iam:DeleteRolePolicy
                   - iam:GetRolePolicy
                   - iam:ListRolePolicies
@@ -326,6 +382,8 @@ Resources:
                       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
                       - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
                       - arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess
+                  StringEquals:
+                    iam:PermissionsBoundary: !Ref ExecutionRoleBoundary
               - Sid: PassExecutionRoleToServiceSelf
                 Effect: Allow
                 Action: iam:PassRole
@@ -681,3 +739,6 @@ Outputs:
   ParticipantViewerRoleArn:
     Description: Role ARN that competitors AssumeRole to access their own stack via AWS Console.
     Value: !GetAtt ParticipantViewerRole.Arn
+  ExecutionRoleBoundaryArn:
+    Description: Permissions boundary for execution roles you create during the migration. Pass it as --permissions-boundary to `aws iam create-role` (or set it in the Console's role wizard) when making a Lambda / ECS / App Runner execution role; creation is denied without it.
+    Value: !Ref ExecutionRoleBoundary
