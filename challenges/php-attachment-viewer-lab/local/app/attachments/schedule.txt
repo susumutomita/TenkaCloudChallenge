@@ -1,0 +1,5 @@
+Office schedule (schedule.txt)
+==============================
+
+Mon-Fri  09:00-17:00 JST  support office hours
+Tue      02:00-03:00 JST  planned maintenance window
