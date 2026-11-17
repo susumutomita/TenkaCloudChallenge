@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>漏えいを止める一問 | TenkaCloud</title
+  ><link rel="stylesheet" href="/style.css" />
+  <script src="/app.js" defer></script>
+  <body>
+    <main>
+      <p class="brand">TENKACLOUD · 実HTTP演習</p>
+      <h1>ニュースで聞く情報漏えい、<br />どうやって起こるの？</h1>
+      <p class="lead">3分で体験する、セキュリティインシデント。</p>
+      <p>漏えいの仕組みを知り、手を動かして止めてみよう。</p>
+      <p class="note">
+        3分は目標です。初見者での時間計測はまだ行っていません。すべて架空データです。実行中のNodeサーバで認可設定を変更します。AWS・実VMの操作ではありません。
+      </p>
+      <p>
+        ログインは「誰か」の確認。<strong>認可</strong>は「その情報を見てよいか」の確認です。今回のルールは「本人だけが自分の情報を読める」です。
+      </p>
+      <p class="note">
+        開始すると専用の演習枠を最大5分使います。同じブラウザのタブは同じ枠です。リロードで続けられます。ローカル実行にはクラウドアカウント不要。公開サービスの料金は運営条件によります。
+      </p>
+      <div class="toolbar">
+        <button id="start">開始</button
+        ><button id="stop" hidden>終了して枠を返す</button
+        ><span id="clock"></span>
+      </div>
+      <p id="message" role="status" aria-live="polite"></p>
+      <section id="exercise" hidden>
+        <h2>1. 自分と他人を比べる</h2>
+        <p>
+          あなたは架空の会員Aとしてログイン中です。同じ利用者のまま、対象IDだけを変えてみます。
+        </p>
+        <div class="row">
+          <button id="self">自分（A）の情報をHTTPで読む</button
+          ><button id="other">他人（B）の情報をHTTPで読む</button>
+        </div>
+        <pre id="response" tabindex="0" aria-label="HTTP結果">
+ここにリクエストと応答が出ます。</pre>
+        <p id="observation"></p>
+        <h2>2. 閲覧ルールを修正する</h2>
+        <p>URLやIDを知っていることは、閲覧を許可する理由になるでしょうか？</p>
+        <details>
+          <summary>ヒント（すぐ読めます）</summary>
+          <p>
+            情報には所有者がいます。要求した利用者と、情報の所有者を比べて判断しましょう。画面で隠すだけではサーバへの要求は止まりません。
+          </p>
+        </details>
+        <label for="scope">サーバで適用するルール</label
+        ><select id="scope">
+          <option value="all">ログインしていれば全員の情報を許可</option>
+          <option value="owner">要求者と情報の所有者が同じときだけ許可</option>
+          <option value="deny">全員の閲覧を拒否</option>
+          <option value="off">サービスを停止</option>
+          <option value="observed">今あるIDだけ許可</option>
+          <option value="throttle">すべての要求を制限</option></select
+        ><button id="save">このルールを適用</button>
+        <p id="saved"></p>
+        <h2>3. 漏えい停止と正常利用を確認する</h2>
+        <p>
+          本人の200（成功）と、他人の403（権限がないため拒否）を同時に確かめます。新しく作る情報でも両方向を試します。停止・全拒否は成功に含めません。
+        </p>
+        <button id="verify">HTTPで確認する</button>
+        <div id="checks"></div>
+        <p id="learning" hidden>
+          <strong>修正後の不正閲覧を止め、本人の利用を確認できました。</strong
+          ><br />認証だけでは足りません。情報を返すたびに、要求者と所有者の関係を確かめる認可が必要です。すでに漏れたデータを回収したわけではありません。<br /><a
+            href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/stackstack-defend"
+            >本編：サービスを動かしながら守る練習へ</a
+          >
+        </p>
+        <button id="retry">最初からやり直す（今の枠を終了）</button>
+      </section>
+      <footer>
+        個人情報や実際の認証情報を入力する欄はありません。外部への計測送信はありません。
+      </footer>
+    </main>
+  </body>
+</html>

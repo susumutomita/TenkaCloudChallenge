@@ -2,6 +2,10 @@
 
 > TenkaCloud Challenge · `challenges/stackstack-defend` · difficulty 3 · ~45–60 min · `multi-verify` scoring
 
+## Short introduction (local preview)
+
+For the beginner-facing one-question HTTP experience, see [intro/README.md](intro/README.md). Three minutes is a target, not a measured completion time; public hosting is not configured. The five-checkpoint challenge below is unchanged.
+
 The board is up. It grew a drafts feature while you were not looking, and the drafts
 feature is showing people things they are not supposed to see. You cannot take it down:
 somebody is writing tomorrow's all-hands announcement on it right now.
