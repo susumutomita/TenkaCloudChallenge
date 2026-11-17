@@ -48,6 +48,16 @@ Deploy しただけでは得点しない。URL を portal に登録した瞬間�
 
 障害と復旧は、対象チームの 1 EC2 内で完結する。
 
+## ローカル開催 (TenkaCloud Simulator の Battle 実行環境)
+
+主催者が `make local` で TenkaCloud Simulator の Battle 実行環境 (ローカルの QEMU 上で Amazon Linux を 1 チーム 1 台起動する仕組み) を用意すると、この問題をそのままのテンプレートで選べます。実 AWS アカウントもクラウド料金も使いません。
+
+- `Ec2HostHint` は `.simulator.invalid` で終わる予約名で、名前解決できません。参加者は実 AWS と同じく `http://<Ec2HostHint>` と `http://<Ec2HostHint>:8080` を登録します。TenkaCloud はその URL を取りに行かず、Simulator の持ち主限定の probe で同じサービスを採点します。
+- サーバの中には、Participant Portal の「SSO Credentials」にある「サーバの中に入る (ゲスト端末)」から入ります。2 つの URL を登録して採点が始まると、1 回だけ使えるコードを発行でき、ブラウザの端末ページで `sudo systemctl start nginx` を実行できます。
+- 運営の `frontend-down` は、Simulator 内の別のコマンド専用ロールが同じ `AWS-RunShellScript` を実行します。
+
+実行環境の準備は TenkaCloud の README と TenkaCloudSimulator の `test/battle/README.md` を参照してください。採点の時計は同じマシンの壁時計です。
+
 ## デプロイされるもの
 
 ```

@@ -48,6 +48,16 @@ Deploying alone earns nothing. The Battle begins when you register the URLs in t
 
 The disruption and recovery stay inside the selected team's EC2.
 
+## Local play (TenkaCloud Simulator Battle runtime)
+
+When the organizer runs `make local` with the TenkaCloud Simulator Battle runtime (one Amazon Linux guest per team on local QEMU), this problem can be chosen with its unchanged template. No real AWS account and no cloud charges are involved.
+
+- `Ec2HostHint` is a reserved name ending in `.simulator.invalid` that does not resolve. Participants register `http://<Ec2HostHint>` and `http://<Ec2HostHint>:8080` exactly as on real AWS; TenkaCloud does not fetch those URLs and instead scores the same services through the Simulator's owner-bound probes.
+- Participants get into the server through **Get inside the server (guest terminal)** in the Participant Portal's SSO Credentials. Once both URLs are registered and scoring has begun, it issues a one-use code for a browser terminal page where they can run `sudo systemctl start nginx`.
+- The organizer's `frontend-down` runs the same `AWS-RunShellScript` through a separate command-only role inside the Simulator.
+
+See the TenkaCloud README and TenkaCloudSimulator `test/battle/README.md` to set up the runtime. Scoring uses the same machine's wall clock.
+
 ## What gets deployed
 
 ```
