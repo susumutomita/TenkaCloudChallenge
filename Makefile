@@ -11,3 +11,4 @@ agent-gate: validate
 	node --test challenges/stackstack-first-request/contract.test.mjs
 	node --test battles/microservice-migration-battle/iam-boundary.test.mjs
 	node --test runtimes/stackstack/names.test.mjs
+	node --test challenges/stackstack-defend/intro/*.test.mjs
