@@ -63,13 +63,74 @@
         </p>
         <button id="verify">HTTPで確認する</button>
         <div id="checks"></div>
-        <p id="learning" hidden>
-          <strong>修正後の不正閲覧を止め、本人の利用を確認できました。</strong
-          ><br />認証だけでは足りません。情報を返すたびに、要求者と所有者の関係を確かめる認可が必要です。すでに漏れたデータを回収したわけではありません。<br /><a
-            href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/stackstack-defend"
-            >本編：サービスを動かしながら守る練習へ</a
-          >
-        </p>
+        <div id="learning" hidden>
+          <p>
+            <strong>修正後の不正閲覧を止め、本人の利用を確認できました。</strong
+            ><br />
+            認証だけでは足りません。情報を返すたびに、要求者と所有者の関係を確かめる認可が必要です。すでに漏れたデータを回収したわけではありません。
+          </p>
+          <details id="work-bridge">
+            <summary>実務ではどう実装する？（完了後の補足）</summary>
+            <p>
+              今回の設定は、実際に動いているサーバの次の判定へつながっています。以下は<strong>この演習の実装・テストからの抜粋</strong>です。架空の業務コード例ではありません。
+            </p>
+            <h3>ルール → サーバの判定</h3>
+            <p>
+              「要求者と所有者が同じときだけ許可」は、所有者を要求者と比べる設定
+              <code>{"ownerIs":"actor"}</code>
+              に変換されます。HTTPを処理するworkerは共通評価器
+              <code>decide</code> を呼びます。
+            </p>
+            <pre><code>// intro/worker.mjs のHTTP処理で呼ぶ判定
+// actor: ログイン中の利用者、record: 取得対象の情報
+decide(policy, actor, "read", record)
+
+// runtimes/stackstack/app/access-policy.mjs の比較部分
+// draft.ownerId: 取得対象の所有者、actor.id: 要求者
+if (matcher.ownerIs === "actor") return draft.ownerId === actor.id;</code></pre>
+            <p>
+              同じIDなら許可、違えば拒否です。修正は「このIDを隠す」ではなく、情報を返すサーバが毎回この関係を確かめることでした。
+            </p>
+            <h3>判定 → 正のテスト・負のテスト</h3>
+            <p>
+              正のテストは「許可すべき利用が成功するか」、負のテストは「許可してはいけない利用が拒否されるか」です。<code
+                >intro/intro.test.mjs</code
+              >
+              では修正後に次の両方を確かめます。
+            </p>
+            <pre><code>// 正: Aが自分を読める
+assert.equal((await read("self")).status, 200);
+// 負: 同じAが他人を読めない
+assert.equal((await read("other")).status, 403);</code></pre>
+            <p>
+              さらにworkerの実HTTP確認で、B本人の成功とB→Aの拒否、新規IDでも同じ結果になること、成功時の本文が正しいことを確かめています。拒否だけをテストすると、全員を止めた不具合を見逃します。
+            </p>
+            <h3>自分の業務で確かめること</h3>
+            <ul>
+              <li>
+                <strong>確認:</strong>
+                どの情報を、誰が、何のために読んだり変更したりするかを一覧にする。所有者・会社やチームへの所属・管理者の例外を明文化する。
+              </li>
+              <li>
+                <strong>設計:</strong>
+                利用者はサーバで認証した情報から決め、画面や送信された利用者IDを信用して権限を与えない。情報を返す直前に認可し、不明な場合は拒否する。この一問には所属や管理者の例外は実装していない。
+              </li>
+              <li>
+                <strong>テスト:</strong>
+                本人と他人、同じ所属と別の所属、許可された役割とそれ以外を対で試す。新しいID、一覧・詳細・更新の各APIでも、成功する本文と拒否を確認する。
+              </li>
+            </ul>
+            <p>
+              自分のサービスの「誰が何をできるか」を一行書き、許可と拒否のテストを一つずつ作るところから始められます。この演習の成功が、業務システム全体の安全性を保証するわけではありません。
+            </p>
+          </details>
+          <p>
+            <a
+              href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/stackstack-defend"
+              >本編：サービスを動かしながら守る練習へ</a
+            >
+          </p>
+        </div>
         <button id="retry">最初からやり直す（今の枠を終了）</button>
       </section>
       <footer>

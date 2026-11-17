@@ -33,3 +33,5 @@ Human unaided timing and learning evaluation, funnel instrumentation, LP integra
 See [the detailed Japanese runbook](README.ja.md) for safety boundaries, operational prerequisites and replay instructions.
 
 Validation runtime: Node 22.23.5 and Node 26.13.0 on the connected Mac. The authenticated end operation remains available when the global rate budget is exhausted.
+
+After completion, an optional collapsed “実務ではどう実装する？” supplement connects the selected ownership rule to the actual HTTP handler/shared evaluator, exact positive/negative test snippets, and concise workplace requirements/design/test prompts. Source correspondence is tested. It does not claim to implement organization/role rules.

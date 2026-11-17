@@ -121,3 +121,40 @@ test("UI expiry returns to start and does not claim completion", async () => {
   assert.equal(f.node("exercise").hidden, true);
   assert.match(f.node("message").textContent, /期限切れ/);
 });
+
+test("post-completion bridge is optional and its snippets match actual server and test code", async () => {
+  const html = await readFile(new URL("index.html", import.meta.url), "utf8");
+  const worker = await readFile(new URL("worker.mjs", import.meta.url), "utf8");
+  const policy = await readFile(
+    new URL(
+      "../../../runtimes/stackstack/app/access-policy.mjs",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const integration = await readFile(
+    new URL("intro.test.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    html,
+    /<div id="learning" hidden>[\s\S]*<details id="work-bridge">/,
+  );
+  assert.match(
+    html,
+    /<details id="work-bridge">\s*<summary>実務ではどう実装する？/,
+  );
+  for (const [snippet, source] of [
+    ['decide(policy, actor, "read", record)', worker],
+    [
+      'if (matcher.ownerIs === "actor") return draft.ownerId === actor.id;',
+      policy,
+    ],
+    ['assert.equal((await read("self")).status, 200);', integration],
+    ['assert.equal((await read("other")).status, 403);', integration],
+  ]) {
+    assert.ok(html.includes(snippet));
+    assert.ok(source.includes(snippet));
+  }
+  assert.match(html, /この一問には所属や管理者の例外は実装していない/);
+});
