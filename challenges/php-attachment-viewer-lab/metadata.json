@@ -1,0 +1,278 @@
+{
+  "$schema": "../../SCHEMA.json",
+  "id": "php-attachment-viewer-lab",
+  "name": "資料棚の点検",
+  "category": "Challenge",
+  "status": "draft",
+  "visibility": "public",
+  "difficulty": 3,
+  "estimatedDuration": "60 分",
+  "shortDescription": "社内ポータルの資料閲覧について、 セキュリティベンダーから 『閲覧の経路に、 資料棚の外へ出られる抜け道がある』 という勧告が届いた。 本番を触る前に、 同じ構成の使い捨てラボで抜け道を自分の手でたどり、 直し方を証明してから来い ── それが SRE への指示だ。",
+  "instructions": "## はじめに\n\nあなたは小さな会社 Example Co の、 社内ポータルを預かる SRE (サイト信頼性エンジニア。 サービスを止めずに動かし続ける係) だ。 セキュリティベンダーから、 こんな趣旨の勧告が届いた ── 「ポータルの資料閲覧の経路に、 資料棚の外にあるファイルまで読めてしまう抜け道がある」。 本番に手を出す前に、 まったく同じ構成を再現したあなた専用の使い捨てラボ (コンテナ ── あなた専用に用意される、 プログラムを動かす小さなコンピュータ) で、 まず自分の手で抜け道をたどり、 直し方を証明してから来い、 というのが指示だ。\n\nこのラボは外の世界と通信しない。 攻撃も修正も、 この箱の中だけで完結する。\n\n## 言葉 (この問題に出てくるものだけ)\n\n- **URL とクエリ** ── ブラウザのアドレス欄に入れる文字列。 `?` より後ろの `名前=値` の部分をクエリと呼び、 ページに渡す指示になる。 たとえば `/attachment?file=manual.txt` は 「`file` という名前で `manual.txt` を渡す」 という意味。\n- **フォルダとパス** ── ファイルの置き場所をフォルダ (入れ物) で分け、 `/portal/attachments/manual.txt` のように `/` で区切って書いたものをパスと呼ぶ。\n- **`..` (ドット 2 つ)** ── パスの中で 「一つ上のフォルダ」 を表す特別な名前。 `/portal/attachments/../private` は、 `attachments` の一つ上 (= `/portal`) にある `private` のこと。 つまり `/portal/private` と同じ場所になる。\n- **トークン** ── 「正しい担当者からの操作だ」 と示すための文字列。 持っていないと内部用の操作は断られる。\n- **`curl`** ── ターミナルから URL を開き、 返ってきた中身を文字で表示するコマンド。 ブラウザでも同じことはできるが、 この問題では `curl` のほうが楽な場面が多い。\n\n## ポータルの作り (資料棚の `manual.txt` にも同じことが書いてある)\n\n資料閲覧のページは、 `file=` で受け取った名前を、 資料棚のフォルダの後ろにそのままつなげて開く。 棚が `/portal/attachments` で名前が `manual.txt` なら、 開くのは `/portal/attachments/manual.txt` だ。 棚のすぐ隣 (一つ上のフォルダの中) には `private/` という設定用のフォルダがあり、 `private/config.ini` に監査用のトークンが入っている。 閲覧ページは棚の中しか見せない **はず** だ。\n\n## この問題は 2 つの段階に分かれている\n\n**第 1 段階 (攻める)**: 資料閲覧ページから出発して、 棚の外にある設定ファイルの中身を読む。 そこに合言葉 (`TC{...}`) がある。 その合言葉は内部用の監査 API を開く鍵でもあり、 開くと前回この抜け道を使われた痕跡が見える。\n\n**第 2 段階 (守る)**: SRE コンソール (`/admin`) の設定を変えて抜け道を塞ぎ、 痕跡 (見覚えのないアカウント) を片付け、 漏れた鍵を作り直す。 最後にもう一度同じ手口を試して弾かれること、 普段の閲覧が壊れていないことを確かめる。\n\n**順番が大事**: 第 1 段階を終わらせてから第 2 段階に進むこと。 先に塞ぐと、 第 1 段階の合言葉はもう取り出せない。\n\n## 最初の一手 ── ターミナルを開く\n\n`make local` を実行したのと同じパソコンで、 もう一つターミナル (文字でコマンドを打つ画面。 Windows なら PowerShell、 Mac なら 「ターミナル」 アプリ) を開こう。\n\n1. 問題ページの **「アクセス先 URL」** を控え、 `BASE=<アクセス先URL>` のように変数に入れる。\n2. ブラウザか `curl \"$BASE/\"` でトップページを開き、 資料棚の一覧と、 閲覧ページの URL の形を確かめる。\n3. `curl \"$BASE/attachment?file=manual.txt\"` で `manual.txt` を開く。 ポータルの作りと、 棚の隣にある `private/` のことが書いてある。\n4. `curl \"$BASE/admin\"` で SRE コンソールの JSON を開き、 コンソール用トークンと使える操作の一覧を控える (第 2 段階の `/admin/*` は、 このトークンを `Authorization: Bearer …` ヘッダに付けて呼ぶ)。\n\n`TC{...}` を含む URL を `curl` に渡すときは `curl -g` を付ける (`{}` を特別扱いさせないため)。\n\n## 提出のしかた\n\n- `read-outside` は読み取った `TC{...}` をそのまま提出する。\n- 残りのチェックポイントは、 ラボの **今の状態** を採点側が実際にたたいて判定する。 提出欄には何か 1 文字以上入れればよい。 設定値や合言葉の見た目ではなく、 実際の挙動だけが見られる。",
+  "description": "[管理者/作者向け] 参加者は架空企業の社内ポータル SRE。 自作の小さな PHP アプリ (php:8 公式イメージ、 ダイジェスト固定。 実在の CMS や CVE のコードは使っていない) の資料閲覧 `/attachment?file=NAME` が、 NAME を資料棚のパスへそのまま連結して開くため、 `../private/config.ini` のようなパストラバーサルで棚の外の設定ファイル (監査トークン = 第 1 段階のフラグ) が読める。 第 2 段階は SRE コンソールの `set-config` で `pathPolicy` を切り替える。 `strip-dotdot` (`../` を 1 回消すだけ) は `....//` で回り込まれる不十分な修正で、 `realpath` (解決後のパスが棚の中かを検査) が正解。 採点は設定値を読まず、 5 通りの書き方で生きたビューアを再現攻撃して全部断られることと、 正規の資料が開くことを見る。 あわせて前回侵入の痕跡 (残置アカウント) の削除と、 漏れた監査トークンの作り直し (旧トークンが 401 になること) を生きた状態で検証する。 フラグとトークンはすべて FLAG_SEED から導出し、 既定値は無い。 参加者面 (PHP) と検証器 (Node) は別コンテナで、 共有するのは FLAG_SEED だけ。",
+  "writeup": "## 何が起きていたか\n\n資料閲覧ページは、 受け取った名前を資料棚のパスの後ろにつなげて、 そのまま開いていた。 パスの中の `..` は 「一つ上のフォルダ」 という意味を持つので、 `../private/config.ini` という名前は、 棚のすぐ隣にある設定フォルダの中を指す。 閲覧ページは 「棚の中のファイルだけを見せる」 つもりで書かれていたが、 名前が最終的にどこを指すかを一度も確かめていなかった。 これが抜け道の正体だ。\n\n読めてしまった設定ファイルには監査トークンが入っていた。 トークンは内部用の監査 API を開く鍵なので、 ファイルが 1 つ読めただけで、 本来は内部の担当者しか見られないアカウント一覧まで届いてしまう。 そしてそこには、 前回同じ手口を使った誰かが残したアカウントが混じっていた。\n\n## 直し方\n\nSRE コンソールには 3 つの方針があった。 `none` は何もしない (壊れた状態)。 `strip-dotdot` は名前から `../` を 1 回消す ── 一見もっともらしいが、 `....//` のように 「消した後に `../` が現れる」 書き方で回り込まれる。 文字の見た目で判定する直し方は、 名前が最終的にどこを指すかを見ていないので、 書き方を変えられたら終わりだ。 `realpath` は、 名前をつないだパスを最後まで解決してから 「その場所は棚の中か」 を確かめる。 書き方がどうであれ、 最終的な場所が棚の外なら断る ── これが根本対応だ。 採点はあなたが選んだ設定値を読まず、 何通りかの書き方で実際に棚の外を開こうとして、 全部断られて、 かつ正規の資料は開けることだけを見ていた。\n\n抜け道を塞いだ後も、 残置アカウントは自動では消えないし、 既にコピーされた監査トークンは有効なままだ。 アカウントを消し、 トークンを作り直して古いものを無効化し、 最後に 「直す前と同じ手口が通らない」 「普段の閲覧は壊れていない」 の両方を実際にたたいて確かめる。 そこまでやって初めて 『直った』 と言える。",
+  "tags": [
+    "php",
+    "web",
+    "file-access",
+    "input-validation",
+    "incident-response",
+    "remediation",
+    "local-play",
+    "container",
+    "multi-verify"
+  ],
+  "exposedPorts": [
+    { "port": 18080, "name": "Web (portal + SRE console)" },
+    { "port": 18081, "name": "/verify (loopback scorer)" }
+  ],
+  "learningGoals": [
+    "外から受け取った名前をそのままパスにつなげると、 `..` によって意図したフォルダの外へ出られることを、 自分の手で再現して理解する。",
+    "特定の文字列を消すだけの修正が、 別の書き方で回り込まれることを体感し、 『解決後の場所が許可された範囲の中か』 を確かめる根本対応と区別できるようになる。",
+    "抜け道を塞ぐだけでは終わらないこと ── 残された痕跡の片付けと、 漏れた鍵の作り直しが、 根本対応と並んで必須の後始末であることを説明できるようになる。",
+    "『同じ手口をもう一度試して弾かれる』 『普段の利用は壊れていない』 の両方を実際に確かめて初めて是正が完了したと言える、 という手順を身につける。"
+  ],
+  "i18n": {
+    "en": {
+      "name": "Inspecting the Document Shelf",
+      "shortDescription": "A security vendor's advisory says the company portal's document viewer has a way out of the document shelf. Before anyone touches production, the SRE is told to walk that route in a disposable lab with the same layout, then prove the fix.",
+      "instructions": "## Introduction\n\nYou are the SRE (site reliability engineer: the person who keeps a service running) in charge of the staff portal at Example Co, a small company. A security vendor's advisory says, in short: \"the portal's document viewer has a route that reaches files outside the document shelf\". Before anyone touches production, you are told to reproduce it yourself in a disposable lab (a container: a small computer set up just for you) with exactly the same layout, then prove the fix.\n\nThe lab never talks to the outside world. Both the attack and the fix stay inside this box.\n\n## Terms (only the ones this problem uses)\n\n- **URL and query** -- the text you put in a browser's address bar. The `name=value` part after `?` is the query; it passes an instruction to the page. `/attachment?file=manual.txt` means \"pass `manual.txt` under the name `file`\".\n- **Folder and path** -- files are grouped into folders, and a location written with `/` separators, such as `/portal/attachments/manual.txt`, is a path.\n- **`..` (two dots)** -- a special name inside a path meaning \"one folder up\". `/portal/attachments/../private` is the `private` folder one level above `attachments` (that is, inside `/portal`), so it is the same place as `/portal/private`.\n- **Token** -- a string that shows an operation comes from the right person. Without it, internal operations are refused.\n- **`curl`** -- a terminal command that opens a URL and prints what came back as text. A browser works too, but `curl` is easier for most of this problem.\n\n## How the portal is built (the shelf's `manual.txt` says the same)\n\nThe document viewer takes the name it receives in `file=`, appends it to the shelf folder's path, and opens the result. If the shelf is `/portal/attachments` and the name is `manual.txt`, it opens `/portal/attachments/manual.txt`. Right next to the shelf (inside the folder one level up) there is a settings folder, `private/`, and `private/config.ini` holds the audit token. The viewer is **supposed** to show only what is on the shelf.\n\n## Two stages\n\n**Stage 1 (attack)**: start from the document viewer and read the settings file outside the shelf. It contains a passphrase (`TC{...}`). That passphrase also opens the internal audit API, which shows traces of someone who used the same route before.\n\n**Stage 2 (defend)**: change settings in the SRE console (`/admin`) to close the route, clean up the trace (an account nobody remembers creating), and re-issue the leaked key. Finally, retry the same trick and confirm it is refused, and confirm normal reading still works.\n\n**Order matters.** Finish stage 1 before stage 2: once the route is closed, the stage-1 passphrase is out of reach.\n\n## First move -- open a terminal\n\nOn the same computer where you ran `make local`, open another terminal (a window where you type commands: PowerShell on Windows, the Terminal app on a Mac).\n\n1. Note the **access URL** on the problem page and keep it in a variable such as `BASE=<access URL>`.\n2. Open the home page in a browser or with `curl \"$BASE/\"`; note the shelf listing and the shape of the viewer URL.\n3. `curl \"$BASE/attachment?file=manual.txt\"` opens `manual.txt`. It describes the portal's layout and the `private/` folder next to the shelf.\n4. `curl \"$BASE/admin\"` opens the SRE console JSON; note the console token and the list of actions (stage-2 calls to `/admin/*` carry that token in an `Authorization: Bearer ...` header).\n\nWhen a URL you pass to `curl` contains `TC{...}`, add `curl -g` so the braces are not treated specially.\n\n## How to submit\n\n- `read-outside` takes the `TC{...}` you read, as is.\n- Every other checkpoint is judged by probing the lab's **current state**. Type at least one character into the submission box. Only live behaviour counts, never the look of a setting or a passphrase.",
+      "description": "[For operators/authors] The participant is the SRE of a fictional company's staff portal. A small from-scratch PHP app (official php:8 image pinned by digest; no real CMS or CVE code) serves `/attachment?file=NAME` by concatenating NAME onto the shelf path, so a path traversal such as `../private/config.ini` reads the settings file outside the shelf (its audit token is the stage-1 flag). Stage 2 switches `pathPolicy` through the SRE console's `set-config`: `strip-dotdot` (deletes `../` once) is the incomplete patch beaten by `....//`; `realpath` (resolve, then require the result to sit inside the shelf) is the sound fix. The scorer never reads the setting: it replays five spellings against the live viewer and requires all to be refused while a legitimate document still opens. It also verifies, live, that the leftover account from the previous intrusion is removed and that the leaked audit token is rotated (the old one returns 401). Every flag and token derives from FLAG_SEED with no default. The participant surface (PHP) and the verifier (Node) are separate containers sharing only FLAG_SEED.",
+      "writeup": "## What was happening\n\nThe document viewer appended the name it received to the shelf path and opened the result as it was. Inside a path, `..` means \"one folder up\", so the name `../private/config.ini` points into the settings folder right next to the shelf. The viewer was written to \"show only files on the shelf\", but it never once checked where the name finally pointed. That was the whole route.\n\nThe settings file it exposed held the audit token. The token is the key to the internal audit API, so reading one file was enough to reach an account list that only internal staff should see. And that list contained an account left behind by whoever used the same route last time.\n\n## The fix\n\nThe SRE console offered three policies. `none` does nothing (the broken state). `strip-dotdot` deletes `../` from the name once; it looks reasonable, but a spelling such as `....//`, which turns into `../` after the deletion, walks straight past it. A fix that judges the look of the characters never checks where the name finally points, so a different spelling defeats it. `realpath` resolves the joined path to its final location and then asks \"is that inside the shelf?\". Whatever the spelling, a final location outside the shelf is refused: that is the root fix. The scorer never read the value you chose; it tried several spellings against the live viewer and passed only when every one was refused and a legitimate document still opened.\n\nClosing the route does not remove the leftover account, and a copied audit token stays valid. Remove the account, re-issue the token so the old one dies, and finally confirm both that the original trick no longer works and that everyday reading still does. Only then can you say it is fixed.",
+      "learningGoals": [
+        "Reproduce, by hand, how appending an untrusted name to a path lets `..` climb out of the intended folder.",
+        "Experience how a fix that merely deletes one pattern is defeated by another spelling, and distinguish it from the root fix of checking that the resolved location lies inside the allowed folder.",
+        "Explain why closing the route is not the end: removing leftover traces and re-issuing a leaked key are mandatory follow-through alongside the root fix.",
+        "Adopt the habit of proving both that the same trick is now refused and that normal use still works before calling a fix complete."
+      ],
+      "checks": [
+        {
+          "id": "read-outside",
+          "label": "The settings file outside the shelf",
+          "hints": [
+            {
+              "id": "read-outside-1",
+              "content": "The viewer appends whatever `file=` carries to the shelf folder's path and opens the result. `..` is the name for \"one folder up\". `manual.txt` tells you what sits next to the shelf."
+            },
+            {
+              "id": "read-outside-2",
+              "content": "A small example: if the shelf is `/portal/attachments` and the name is `../private/config.ini`, the joined path is `/portal/attachments/../private/config.ini`, which is the same place as `/portal/private/config.ini`: inside the `private/` folder one level above the shelf."
+            },
+            {
+              "id": "read-outside-3",
+              "content": "Run `curl -g \"$BASE/attachment?file=../private/config.ini\"`. The line `audit_token = \"TC{...}\"` holds the passphrase; submit the `TC{...}` part."
+            }
+          ]
+        },
+        {
+          "id": "fix-viewer",
+          "label": "The viewer shows only the shelf",
+          "hints": [
+            {
+              "id": "fix-viewer-1",
+              "content": "`set-config` in the SRE console offers three `pathPolicy` values. The scorer does not read the value: it tries several spellings of \"climb out of the shelf\" against the live viewer and passes only when every one is refused while `manual.txt` still opens."
+            },
+            {
+              "id": "fix-viewer-2",
+              "content": "A fix that deletes `../` once can be defeated by a spelling that only becomes `../` after the deletion (`....//`, for example). Judging the look of the characters never checks where the name finally points; checking the resolved location does."
+            },
+            {
+              "id": "fix-viewer-3",
+              "content": "Send `{\"action\":\"set-config\",\"pathPolicy\":\"realpath\"}` to `POST /admin/action` with the console token. Afterwards `file=../private/config.ini` and `file=....//private/config.ini` both return 403, and `file=manual.txt` still returns 200."
+            }
+          ]
+        },
+        {
+          "id": "cleanup-leftover",
+          "label": "The account nobody remembers",
+          "hints": [
+            {
+              "id": "cleanup-leftover-1",
+              "content": "Open `GET /internal/audit?token=...` with the audit token from stage 1 (remember `curl -g`). The account list shows one entry nobody on the team remembers creating."
+            },
+            {
+              "id": "cleanup-leftover-2",
+              "content": "The `actions` list in `GET /admin` has an action dedicated to removing that account."
+            },
+            {
+              "id": "cleanup-leftover-3",
+              "content": "Send `{\"action\":\"remove-leftover-account\"}` to `POST /admin/action`, then confirm the entry is gone from `/internal/audit`."
+            }
+          ]
+        },
+        {
+          "id": "rotate-token",
+          "label": "Make the leaked key useless",
+          "hints": [
+            {
+              "id": "rotate-token-1",
+              "content": "Fixing the viewer does not undo stage 1: any copy of the audit token that was already made still works. A leaked key is handled by replacing the key itself."
+            },
+            {
+              "id": "rotate-token-2",
+              "content": "The `actions` list in `GET /admin` has an action that re-issues the audit token. The old one stops working immediately and the new one is returned in the response."
+            },
+            {
+              "id": "rotate-token-3",
+              "content": "Send `{\"action\":\"rotate-audit-token\"}` to `POST /admin/action`. Then `/internal/audit` with the old token returns 401 and with the new token returns 200."
+            }
+          ]
+        },
+        {
+          "id": "site-healthy",
+          "label": "Still works as usual",
+          "hints": [
+            {
+              "id": "site-healthy-1",
+              "content": "Check that the fix did not break everyday use: the home page, the shelf listing, `manual.txt` and the `/admin` console."
+            },
+            {
+              "id": "site-healthy-2",
+              "content": "A plain shelf name (`file=manual.txt`) must still return 200 with its content after the fix. The resolved-location check only asks whether a shelf file's final location is inside the shelf, so legitimate names pass."
+            },
+            {
+              "id": "site-healthy-3",
+              "content": "If `GET /`, `GET /documents`, `GET /attachment?file=manual.txt` and `GET /admin` all return 200, this checkpoint passes (type at least one character into the submission box)."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "runtime": {
+    "provider": "docker",
+    "engine": "compose",
+    "entry": "local/docker-compose.yml",
+    "challengeEndpoints": {
+      "Web": "http://127.0.0.1:18080"
+    },
+    "verifyUrl": "http://127.0.0.1:18081/verify",
+    "secretEnv": ["FLAG_SEED"]
+  },
+  "scoring": {
+    "kind": "multi-verify",
+    "hintReveal": "flat",
+    "checks": [
+      {
+        "id": "read-outside",
+        "label": "棚の外にある設定ファイル",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "read-outside-1",
+            "content": "閲覧ページは `file=` で受け取った名前を、 資料棚のフォルダのパスの後ろにそのままつなげて開く。 `..` は 「一つ上のフォルダ」 を表す名前だ。 棚の隣に何があるかは `manual.txt` に書いてある。",
+            "penalty": 0
+          },
+          {
+            "id": "read-outside-2",
+            "content": "小さな例: 棚が `/portal/attachments` で、 名前が `../private/config.ini` なら、 つないだパスは `/portal/attachments/../private/config.ini`。 これは `/portal/private/config.ini` と同じ場所 ── 棚の一つ上にある `private/` フォルダの中だ。",
+            "penalty": 7
+          },
+          {
+            "id": "read-outside-3",
+            "content": "`curl -g \"$BASE/attachment?file=../private/config.ini\"` を実行する。 `audit_token = \"TC{...}\"` の行が合言葉で、 `TC{...}` の部分を提出する。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "fix-viewer",
+        "label": "閲覧ページが棚の中だけを見せる",
+        "points": 50,
+        "wrongAnswerPenalty": 3,
+        "hints": [
+          {
+            "id": "fix-viewer-1",
+            "content": "SRE コンソールの `set-config` には `pathPolicy` が 3 種類ある。 採点は設定値を読まない。 「棚の外へ出る」 書き方を何通りか実際の閲覧ページに送り、 全部断られて、 かつ `manual.txt` は開けるときだけ通る。",
+            "penalty": 0
+          },
+          {
+            "id": "fix-viewer-2",
+            "content": "`../` を 1 回消すだけの直し方は、 消した後に `../` が現れる書き方 (たとえば `....//`) で回り込まれる。 文字の見た目で判定する直し方は、 名前が最終的にどこを指すかを見ていない。 解決後の場所を確かめる直し方は見ている。",
+            "penalty": 7
+          },
+          {
+            "id": "fix-viewer-3",
+            "content": "コンソール用トークンを付けて `POST /admin/action` に `{\"action\":\"set-config\",\"pathPolicy\":\"realpath\"}` を送る。 その後 `file=../private/config.ini` と `file=....//private/config.ini` はどちらも 403 になり、 `file=manual.txt` は 200 のままになる。",
+            "penalty": 18
+          }
+        ]
+      },
+      {
+        "id": "cleanup-leftover",
+        "label": "見覚えのないアカウント",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "cleanup-leftover-1",
+            "content": "第 1 段階で手に入れた監査トークンで `GET /internal/audit?token=...` を開く (`curl -g` を忘れずに)。 アカウント一覧に、 チームの誰も作った覚えがないものが 1 つ混じっている。",
+            "penalty": 0
+          },
+          {
+            "id": "cleanup-leftover-2",
+            "content": "`GET /admin` の `actions` に、 そのアカウントを消す専用の操作がある。",
+            "penalty": 4
+          },
+          {
+            "id": "cleanup-leftover-3",
+            "content": "`POST /admin/action` に `{\"action\":\"remove-leftover-account\"}` を送り、 `/internal/audit` の一覧から消えたことを確認する。",
+            "penalty": 11
+          }
+        ]
+      },
+      {
+        "id": "rotate-token",
+        "label": "漏れた鍵を使えなくする",
+        "points": 30,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "rotate-token-1",
+            "content": "閲覧ページを直しても、 第 1 段階は無かったことにならない。 既にコピーされた監査トークンはそのまま使える。 漏れた鍵は、 鍵の側を取り替えて対処する。",
+            "penalty": 0
+          },
+          {
+            "id": "rotate-token-2",
+            "content": "`GET /admin` の `actions` に、 監査トークンを作り直す操作がある。 実行すると古いトークンはその場で使えなくなり、 新しいトークンは応答に返る。",
+            "penalty": 4
+          },
+          {
+            "id": "rotate-token-3",
+            "content": "`POST /admin/action` に `{\"action\":\"rotate-audit-token\"}` を送る。 その後、 古いトークンで `/internal/audit` を開くと 401、 新しいトークンなら 200 になる。",
+            "penalty": 11
+          }
+        ]
+      },
+      {
+        "id": "site-healthy",
+        "label": "普段どおりに動いている",
+        "points": 40,
+        "wrongAnswerPenalty": 2,
+        "hints": [
+          {
+            "id": "site-healthy-1",
+            "content": "直したことで普段の利用まで壊れていないか確かめよう。 トップページ、 棚の一覧、 `manual.txt`、 そして `/admin` コンソール。",
+            "penalty": 0
+          },
+          {
+            "id": "site-healthy-2",
+            "content": "棚の名前をそのまま指定した閲覧 (`file=manual.txt`) は、 直した後も 200 で中身が返るはずだ。 解決後の場所を確かめる方式は 「棚のファイルの最終的な場所が棚の中か」 を見るだけなので、 正規の名前は通る。",
+            "penalty": 5
+          },
+          {
+            "id": "site-healthy-3",
+            "content": "`GET /`、 `GET /documents`、 `GET /attachment?file=manual.txt`、 `GET /admin` の 4 つがすべて 200 なら、 このチェックポイントは通る (提出欄には何か 1 文字以上入れる)。",
+            "penalty": 14
+          }
+        ]
+      }
+    ]
+  },
+  "track": {
+    "id": "stackstack-route",
+    "order": 85,
+    "chapter": "3. 運用で直す"
+  }
+}

@@ -1,0 +1,8 @@
+Welcome to Example Co (welcome.txt)
+===================================
+
+We are a 12-person company that helps small teams run their internal
+tools. This portal is where staff pick up the day's documents.
+
+Nothing on this shelf is confidential. Confidential settings live
+outside the shelf, where the viewer should not be able to reach.

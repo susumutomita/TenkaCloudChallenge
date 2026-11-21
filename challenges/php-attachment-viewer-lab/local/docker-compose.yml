@@ -1,0 +1,58 @@
+# Local-play containers for php-attachment-viewer-lab.
+#
+# Safety boundary:
+#   - Both published ports bind to 127.0.0.1 only.
+#   - `surface` (the participant-facing PHP portal) and `verifier` (the /verify
+#     scorer) are separate containers. They share nothing but FLAG_SEED; the
+#     verifier reaches the surface over the compose network by service name.
+#   - FLAG_SEED is mandatory (`${FLAG_SEED:?}`) and has no default: every run is
+#     seeded by the host, nothing secret is committed, and a missing seed fails
+#     the start instead of silently reusing a known value.
+#   - Non-root, read-only root filesystem, every capability dropped,
+#     no-new-privileges, no host bind mounts, no docker.sock. The only writable
+#     paths are two tmpfs mounts the portal writes its state into.
+#   - The app never runs a shell or another program and never makes an outbound
+#     call; tests/boundary.test.mjs greps the shipped source for both.
+name: php-attachment-viewer-lab
+services:
+  surface:
+    build:
+      context: .
+      target: surface
+    environment:
+      FLAG_SEED: "${FLAG_SEED:?Set FLAG_SEED to a per-run random secret (for example: openssl rand -hex 32)}"
+    ports:
+      - "127.0.0.1:18080:8080" # portal: document viewer + SRE console
+    read_only: true
+    tmpfs:
+      - /app/private
+      - /app/state
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8080/healthz') === false ? 1 : 0);"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+  verifier:
+    build:
+      context: .
+      target: verifier
+    environment:
+      FLAG_SEED: "${FLAG_SEED:?Set FLAG_SEED to a per-run random secret (for example: openssl rand -hex 32)}"
+      SURFACE_URL: "http://surface:8080"
+    ports:
+      - "127.0.0.1:18081:8081" # loopback /verify the TenkaCloud scorer delegates to
+    depends_on:
+      surface:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"

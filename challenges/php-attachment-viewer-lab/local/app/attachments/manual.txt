@@ -1,0 +1,18 @@
+Example Co Portal -- Document shelf: how to use (manual.txt)
+=============================================================
+
+This shelf holds the files staff read every day. Open one from the
+portal home page, or directly with the viewer:
+
+    /attachment?file=manual.txt
+
+Layout of the portal, for whoever maintains it next:
+
+    attachments/   the document shelf (what the viewer is meant to show)
+    private/       portal settings. Next to the shelf, not inside it.
+                   private/config.ini holds the audit token.
+
+The viewer is only supposed to show files on the shelf. If you can
+read anything from private/ through it, report it to the SRE on call.
+
+Admin console for the SRE: /admin (JSON).
